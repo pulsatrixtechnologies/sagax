@@ -35,6 +35,8 @@ declare global {
 /** Fork version inlined by Vite. Official base is __BASE_VERSION__. */
 const __APP_VERSION__: string;
 const __BASE_VERSION__: string;
+/** The build day (YYYY-MM-DD, UTC), inlined by Vite (#4097). */
+const __BUILD_DATE__: string;
 
   type DesktopSharedFolder = import("../../electron/computer-sharing.mjs").SharedFolder;
   type DesktopComputerSharing = import("../../electron/computer-sharing.mjs").SharingState;

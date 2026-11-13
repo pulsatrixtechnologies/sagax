@@ -256,7 +256,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
           <ul className={cn(PLUGINS.grid, "mt-1")}>
             {skills.map((skill) => (
               <li key={skill.key}>
-                <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-[14px] px-3 py-[11px] text-left hover:bg-hover">
+                <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-2xl px-3 py-3 text-left">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
                   <span className="min-w-0 flex-1">
                     <span className={PLUGINS.rowName} title={skill.name}>{skill.name}</span>
@@ -288,7 +288,7 @@ function skillLine(skill: { source: string; description?: string }, sourceLabel:
 export function InstalledRow({ entry, onOpen, actions }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions }) {
   const icon = entryIcon(entry);
   return (
-    <div className="group flex items-center gap-2 py-[11px]" data-installed-entry={entry.key}>
+    <div className="group flex items-center gap-2 py-3" data-installed-entry={entry.key}>
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
         <PluginIcon item={icon} className="size-10 rounded-[10px]" />
         <span className="min-w-0 flex-1">
@@ -324,7 +324,7 @@ export function AccountInstalledRow({ row, onOpen }: { row: AccountConnectorRow;
     ],
   };
   return (
-    <div className="group flex items-center gap-2 py-[11px]" data-installed-entry={`account:${row.key}`} data-harness-connector={row.key}>
+    <div className="group flex items-center gap-2 py-3" data-installed-entry={`account:${row.key}`} data-harness-connector={row.key}>
       <span className="flex min-w-0 flex-1 items-center gap-3">
         {onOpen ? (
           <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>

@@ -32,6 +32,9 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(forkVersion),
     __BASE_VERSION__: JSON.stringify(baseVersion),
+    // About's "Built <date>" (#4097): the day of the build, UTC, or the
+    // reproducible build's own date when SOURCE_DATE_EPOCH is set
+    __BUILD_DATE__: JSON.stringify(new Date(process.env.SOURCE_DATE_EPOCH ? Number(process.env.SOURCE_DATE_EPOCH) * 1000 : Date.now()).toISOString().slice(0, 10)),
   },
   // Two pages: the app, and the bar around a published page that a reader
   // opens from its link (page-reader.html, src/page-reader/). The server

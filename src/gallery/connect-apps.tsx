@@ -132,6 +132,8 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "example-ops", source: "example-org/ops-marketplace", visibility: "org", mine: true, hasToken: true, credential: { chosen: { id: "gt_0000000000000011", label: "Second GitHub organization", owner: "mine" }, used: { via: "credential", label: "Second GitHub organization", at: 1 } }, plugins: [
       { name: "ops-flow", description: "Service desk routines", installed: true, servers: [], skills: ["triage", "dispatch", "time-review"], category: "productivity", homepage: "https://www.wikipedia.org" },
       { name: "ops-flow-tenant", description: "This organization's boards and rules", installed: true, servers: [], skills: ["tenant-rules"], category: "productivity" },
+      // #4097: a long name, for the rows' second line and truncation
+      { name: "quarterly-reporting-and-dashboards-assistant", description: "Builds the quarter's reports and dashboards from the service desk's tickets", installed: false, servers: [], skills: ["quarterly-report"], category: "productivity" },
     ] },
     // #2759: Cursor's official plugins, converted (what did not convert is on the plugin's page)
     { name: "cursor-plugins", source: "cursor/plugins", visibility: "org", plugins: [

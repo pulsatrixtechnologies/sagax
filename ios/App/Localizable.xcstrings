@@ -16667,16 +16667,6 @@
         }
       }
     },
-    "Calls": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Appels"
-          }
-        }
-      }
-    },
     "Calls need a realtime voice": {
       "localizations": {
         "fr": {
@@ -17543,28 +17533,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Discussion"
-          }
-        }
-      }
-    },
-    "Chat & Composer": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat & Composer"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Conversation et saisie"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Conversa e compositor"
           }
         }
       }
@@ -19743,28 +19711,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fechar conversa"
-          }
-        }
-      }
-    },
-    "Close active drawer, modal, or find bar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Close active drawer, modal, or find bar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fermer le panneau, la fenêtre ou la barre de recherche ouverte"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fechar o painel, a janela ou a barra de busca aberta"
           }
         }
       }
@@ -29401,16 +29347,6 @@
         }
       }
     },
-    "Edit last message (when composer is empty)": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifier le dernier message (champ vide)"
-          }
-        }
-      }
-    },
     "Edit name": {
       "localizations": {
         "en": {
@@ -36385,16 +36321,6 @@
         }
       }
     },
-    "Hang up a Live call": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Raccrocher un appel en direct"
-          }
-        }
-      }
-    },
     "Haptics": {
       "localizations": {
         "en": {
@@ -39175,28 +39101,6 @@
         }
       }
     },
-    "Insert new line without sending": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Insert new line without sending"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aller à la ligne sans envoyer"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Inserir nova linha sem enviar"
-          }
-        }
-      }
-    },
     "Inspect latest git changes and patches": {
       "localizations": {
         "fr": {
@@ -40619,28 +40523,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ir para o bot %lld"
-          }
-        }
-      }
-    },
-    "Jump to bot 1 to 9 in the roster": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jump to bot 1 to 9 in the roster"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aller au bot 1 à 9 de la liste"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ir para o bot 1 a 9 da lista"
           }
         }
       }
@@ -44619,16 +44501,6 @@
         }
       }
     },
-    "Management & Groups": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gestion et groupes"
-          }
-        }
-      }
-    },
     "Manual": {
       "localizations": {
         "en": {
@@ -47185,16 +47057,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couper le micro"
-          }
-        }
-      }
-    },
-    "Mute or unmute a Live call": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couper ou rétablir le micro d’un appel en direct"
           }
         }
       }
@@ -57164,28 +57026,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir a citação: %@"
-          }
-        }
-      }
-    },
-    "Open command palette (switcher & transcript search)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open command palette (switcher & transcript search)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir la palette de commandes (changer de bot, chercher dans les conversations)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Abrir a paleta de comandos (seletor e busca nas conversas)"
           }
         }
       }
@@ -67218,16 +67058,6 @@
         }
       }
     },
-    "Reorder sidebar sections (focus a section heading)": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Réordonner les sections de la barre latérale (focus sur un en-tête de section)"
-          }
-        }
-      }
-    },
     "Repeat a prompt in this chat": {
       "localizations": {
         "fr": {
@@ -70980,16 +70810,6 @@
         }
       }
     },
-    "Save group instruction changes": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enregistrer les instructions du groupe"
-          }
-        }
-      }
-    },
     "Save key": {
       "localizations": {
         "en": {
@@ -72246,28 +72066,6 @@
         }
       }
     },
-    "Search or create a bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search or create a bot"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chercher ou créer un bot"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Buscar ou criar um bot"
-          }
-        }
-      }
-    },
     "Search people": {
       "localizations": {
         "en": {
@@ -73274,28 +73072,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enviar a área de transferência ao computador"
-          }
-        }
-      }
-    },
-    "Send message": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send message"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envoyer le message"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enviar mensagem"
           }
         }
       }
@@ -75452,28 +75228,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mostrar chave"
-          }
-        }
-      }
-    },
-    "Show keyboard shortcuts cheat sheet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show keyboard shortcuts cheat sheet"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Afficher les raccourcis clavier"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mostrar a lista de atalhos de teclado"
           }
         }
       }
@@ -80372,28 +80126,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mude para Acesso seguro pelo telefone (HTTPS) ou Tailscale e tente de novo. Você ainda pode concluir esta solicitação no seu computador."
-          }
-        }
-      }
-    },
-    "Switch to previous / next bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switch to previous / next bot"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Passer au bot précédent ou suivant"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alternar para o bot anterior / próximo"
           }
         }
       }
@@ -117062,6 +116794,566 @@
           "stringUnit": {
             "state": "translated",
             "value": "Em uma conversa individual, os balões e cartões do bot usam a cor dele. Desativado, ficam na cor do tema."
+          }
+        }
+      }
+    },
+    "shortcuts.group.essentials": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Essentials"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’essentiel"
+          }
+        }
+      }
+    },
+    "shortcuts.group.chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversation"
+          }
+        }
+      }
+    },
+    "shortcuts.group.navigation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigation"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigation"
+          }
+        }
+      }
+    },
+    "shortcuts.group.panels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panels"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panneaux"
+          }
+        }
+      }
+    },
+    "shortcuts.group.calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calls"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appels"
+          }
+        }
+      }
+    },
+    "shortcuts.group.management": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sidebar & groups"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barre latérale et groupes"
+          }
+        }
+      }
+    },
+    "shortcuts.item.commandPalette": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher"
+          }
+        }
+      }
+    },
+    "shortcuts.item.searchEverything": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search messages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chercher dans les messages"
+          }
+        }
+      }
+    },
+    "shortcuts.item.newBot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau bot"
+          }
+        }
+      }
+    },
+    "shortcuts.item.sendMessage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer"
+          }
+        }
+      }
+    },
+    "shortcuts.item.jumpBot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aller au bot"
+          }
+        }
+      }
+    },
+    "shortcuts.item.toggleSidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sidebar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barre latérale"
+          }
+        }
+      }
+    },
+    "shortcuts.item.cheatSheet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyboard shortcuts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raccourcis clavier"
+          }
+        }
+      }
+    },
+    "shortcuts.item.focusComposer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Focus message"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aller au message"
+          }
+        }
+      }
+    },
+    "shortcuts.item.findConversation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find in chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chercher dans la conversation"
+          }
+        }
+      }
+    },
+    "shortcuts.item.dictate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dicter"
+          }
+        }
+      }
+    },
+    "shortcuts.item.quoteSelection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quote selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Citer la sélection"
+          }
+        }
+      }
+    },
+    "shortcuts.item.editLastMessage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit last message"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier le dernier message"
+          }
+        }
+      }
+    },
+    "shortcuts.item.switchBot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous / next bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot précédent ou suivant"
+          }
+        }
+      }
+    },
+    "shortcuts.item.newGroup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New group"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau groupe"
+          }
+        }
+      }
+    },
+    "shortcuts.item.closePanel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close panel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer le panneau"
+          }
+        }
+      }
+    },
+    "shortcuts.item.liveCallMute": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute or unmute"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper ou rétablir le micro"
+          }
+        }
+      }
+    },
+    "shortcuts.item.liveCallHangUp": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hang up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raccrocher"
+          }
+        }
+      }
+    },
+    "shortcuts.item.saveBulletin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save instructions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer les instructions"
+          }
+        }
+      }
+    },
+    "shortcuts.item.reorderSection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move section"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déplacer une section"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.commandPalette": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bots and commands"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bots et commandes"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.newBot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or find one"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ou en trouver un"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.toggleSidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show or hide"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher ou masquer"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.cheatSheet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "? outside a text field"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "? hors d’un champ de texte"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.dictate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Again to stop"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encore pour arrêter"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.editLastMessage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empty message field"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Champ du message vide"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.closePanel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or dialog, find bar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ou fenêtre, recherche"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.saveBulletin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groupe"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.reorderSection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On its heading"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur son en-tête"
+          }
+        }
+      }
+    },
+    "shortcuts.hint.sendNewLine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ for new line"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ pour aller à la ligne"
           }
         }
       }

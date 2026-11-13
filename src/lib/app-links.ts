@@ -36,6 +36,11 @@ export function baseVersion(): string {
   return typeof __BASE_VERSION__ === "string" ? __BASE_VERSION__ : "dev";
 }
 
+/** The day this build was made (YYYY-MM-DD), or null outside the bundler. */
+export function buildDate(): string | null {
+  return typeof __BUILD_DATE__ === "string" && /^\d{4}-\d{2}-\d{2}$/.test(__BUILD_DATE__) ? __BUILD_DATE__ : null;
+}
+
 const PLATFORM_NAMES: Record<string, string> = {
   darwin: "macOS",
   win32: "Windows",

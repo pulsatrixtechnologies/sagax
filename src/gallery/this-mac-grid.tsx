@@ -25,7 +25,7 @@ createRoot(document.getElementById("root")!).render(
         <ul className={`${PLUGINS.grid} mt-1`}>
           {neighbours.map((name) => (
             <li key={name}>
-              <div className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-[14px] px-3 py-[11px] text-left hover:bg-hover">
+              <div className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-2xl px-3 py-3 text-left">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary">{name[0]}</span>
                 <span className="min-w-0 flex-1">
                   <span className={PLUGINS.rowName}>{name}</span>

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  filterShortcutGroups,
   SHORTCUT_GROUPS,
   shortcutGroupsFor,
   shouldOpenKeyboardShortcuts,
@@ -22,7 +21,8 @@ describe("keyboard-shortcuts", () => {
 
         expect(item.description.length).toBeGreaterThan(0);
         expect(item.macKeys.length).toBeGreaterThan(0);
-        expect(item.winKeys.length).toBeGreaterThan(0);
+        // Settings is the macOS app menu's ⌘, and has no chord elsewhere
+        if (item.id !== "settings") expect(item.winKeys.length).toBeGreaterThan(0);
       }
     }
   });
@@ -39,19 +39,15 @@ describe("keyboard-shortcuts", () => {
     expect(shortcutKeysForPlatform(sampleItem, false)).toEqual(["Ctrl", "K"]);
   });
 
-  it("filters shortcut groups by search query", () => {
-    const all = filterShortcutGroups(SHORTCUT_GROUPS, "");
-    expect(all.length).toBe(SHORTCUT_GROUPS.length);
-
-    const nav = filterShortcutGroups(SHORTCUT_GROUPS, "palette");
-    expect(nav.length).toBe(1);
-    expect(nav[0]?.items[0]?.id).toBe("command-palette");
-
-    const byKey = filterShortcutGroups(SHORTCUT_GROUPS, "Esc", true);
-    expect(byKey.some((g) => g.items.some((i) => i.id === "close-panel"))).toBe(true);
-
-    const empty = filterShortcutGroups(SHORTCUT_GROUPS, "nonexistent-query-12345");
-    expect(empty.length).toBe(0);
+  it("orders the groups the reference's way, Essentials first (#4097)", () => {
+    expect(SHORTCUT_GROUPS.map((group) => group.id)).toEqual(["essentials", "chat", "navigation", "panels", "window", "calls", "management"]);
+    // the reference's Essentials: search, new bot, send, go to bot, sidebar, settings, keyboard shortcuts
+    expect(SHORTCUT_GROUPS[0]!.items.map((item) => item.id)).toEqual(["command-palette", "search-everything", "new-bot", "send-message", "jump-bot", "toggle-sidebar", "settings", "shortcuts-cheat-sheet"]);
+    expect(SHORTCUT_GROUPS[0]!.items.find((item) => item.id === "settings")).toMatchObject({ description: "Settings", macKeys: ["⌘", ","], winKeys: [] });
+    // short labels, the precision in a grey hint
+    const dictate = SHORTCUT_GROUPS.flatMap((group) => group.items).find((item) => item.id === "dictate")!;
+    expect(dictate.description).toBe("Dictate");
+    expect(dictate.hint).toBe("Again to stop");
   });
 
   it("lists the Live call chords", () => {
@@ -73,7 +69,7 @@ describe("keyboard-shortcuts", () => {
     expect(row(mod, "new-line")).toMatchObject({ macKeys: ["Return"], winKeys: ["Enter"] });
     for (const groups of [shift, mod]) {
       expect(row(groups, "save-bulletin")).toBe(row(SHORTCUT_GROUPS, "save-bulletin"));
-      expect(row(groups, "send-message").description).toBe("Send message");
+      expect(row(groups, "send-message").description).toBe("Send");
       expect(groups.map((group) => group.items.map((item) => item.id))).toEqual(SHORTCUT_GROUPS.map((group) => group.items.map((item) => item.id)));
     }
   });
@@ -191,12 +187,14 @@ describe("the reference design's app-wide chords", () => {
     try {
       setLocale("fr");
       const items = SHORTCUT_GROUPS.flatMap((group) => group.items);
-      expect(items.find((item) => item.id === "toggle-sidebar")?.description).toBe("Replier ou déplier la barre latérale");
-      expect(SHORTCUT_GROUPS[0].category).toBe("Navigation");
-      expect(SHORTCUT_GROUPS[1].category).toBe("Conversation et saisie");
+      expect(items.find((item) => item.id === "toggle-sidebar")?.description).toBe("Barre latérale");
+      expect(items.find((item) => item.id === "toggle-sidebar")?.hint).toBe("Afficher ou masquer");
+      expect(SHORTCUT_GROUPS[0].category).toBe("L’essentiel");
+      expect(SHORTCUT_GROUPS[1].category).toBe("Conversation");
       setLocale("en");
-      expect(items.find((item) => item.id === "toggle-sidebar")?.description).toBe("Collapse or expand the sidebar");
-      expect(SHORTCUT_GROUPS[1].category).toBe("Chat & Composer");
+      expect(items.find((item) => item.id === "toggle-sidebar")?.description).toBe("Sidebar");
+      expect(items.find((item) => item.id === "toggle-sidebar")?.hint).toBe("Show or hide");
+      expect(SHORTCUT_GROUPS[1].category).toBe("Chat");
     } finally {
       setLocale("en");
     }

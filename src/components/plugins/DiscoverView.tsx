@@ -107,7 +107,7 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
           <SectionHead title={t("connectApps.section.fromSagax")} onViewAll={ours.length > FROM_SAGAX ? onViewInstalled : undefined} />
           <div className={PLUGINS.grid}>
             {ours.slice(0, FROM_SAGAX).map((row) => (
-              <div key={row.key} data-plugin-row={row.key} className="py-[13px]">
+              <div key={row.key} data-plugin-row={row.key} className="py-3">
                 <button type="button" onClick={() => onOpenFromSagax?.(row)} className="flex w-full min-w-0 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>
                   <PluginIcon item={row.item} className="size-10 rounded-[10px]" />
                   <span className="min-w-0 flex-1">
@@ -125,14 +125,14 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
         <section key={group.id} data-plugins-section={`from-${group.id}`} data-harness-group={group.id} className="mt-[30px]">
           <SectionHead title={t("connectApps.section.fromProvider", { provider: group.source })}
             link={{ label: t("connectApps.providers.manage", { provider: group.name }), onClick: () => openAccountManage(group.manageUrl), manage: group.id }} />
-          {group.id === "grok" && rows.length > 0 && <p className={cn(PLUGINS.rowSub, "whitespace-normal")} data-harness-grok-note>{t("connectApps.capabilities.grokOrg")}</p>}
+          {group.id === "grok" && rows.length > 0 && <p className={cn(PLUGINS.rowSub, "pl-3")} data-harness-grok-note>{t("connectApps.capabilities.grokOrg")}</p>}
           <div className={PLUGINS.grid}>
             {notice && <AccountNoticeRow group={notice} refreshing={accountsRefreshing} onRefresh={onAccountsRefresh} onSetUp={onAccountsSetUp} manageInHead />}
             {rows.map((row) => {
               const open = onOpenAccount?.(row);
               const body = <AccountConnectorBody row={row} />;
               return (
-                <div key={row.key} data-plugin-row={`account:${row.key}`} data-harness-connector={row.key} className="flex min-w-0 items-center gap-3 py-[13px]">
+                <div key={row.key} data-plugin-row={`account:${row.key}`} data-harness-connector={row.key} className="flex min-w-0 items-center gap-3 py-3">
                   {open ? (
                     <button type="button" onClick={open} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
                   ) : <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>}
@@ -197,7 +197,7 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
 
 function SectionHead({ title, id, onViewAll, link }: { title: string; id?: string; onViewAll?: () => void; link?: { label: string; onClick: () => void; manage: string } }) {
   return (
-    <div className="mb-1 flex items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3">
       <h3 className={PLUGINS.sectionTitle}>{title}</h3>
       {link && (
         <button type="button" data-harness-manage={link.manage} className={PLUGINS.sectionLink} onClick={link.onClick}>

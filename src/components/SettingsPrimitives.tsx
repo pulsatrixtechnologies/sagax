@@ -616,7 +616,9 @@ export function PillSelect<T extends string>({
   };
   const shown = current?.label ?? (mixed ? (mixedLabel ?? t("bulkEdit.mixed")) : value);
   return (
-    <div ref={rootRef} className={fill ? "relative flex w-full min-w-0" : "relative inline-flex justify-end"}>
+    // min-w-0 / max-w-full: in a row that runs out of room the pill gives way
+    // and its text ends with an ellipsis, never its neighbour's label (#4194)
+    <div ref={rootRef} className={fill ? "relative flex w-full min-w-0" : "relative inline-flex min-w-0 max-w-full justify-end"}>
       <button
         ref={triggerRef}
         type="button"
@@ -638,7 +640,7 @@ export function PillSelect<T extends string>({
         }}
         data-pill-select=""
         data-pill-mixed={mixed || value === undefined ? "" : undefined}
-        className={fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2")}
+        className={fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 min-w-0 max-w-[min(240px,100%)] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2")}
       >
         <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{shown}</span>
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />

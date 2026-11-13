@@ -464,7 +464,6 @@ routines.editor.titlePlaceholder
 routines.editor.when
 routines.editor.who
 routines.failureStreak
-routines.latestRun
 routines.logsFor
 routines.neverRun
 routines.newRoutine

@@ -10,12 +10,12 @@
 //
 // - General: section cards with their controls in place (#3398). Settings
 //   (the switches "Collaborators can create routines" and "Notify me", then
-//   the rows Personality, Model, Before it acts), the Channels card, the Bot
-//   accounts card, More (Shared with, Rules, When it acts alone, Voice,
-//   Advanced settings, Versions).
-// - Appearance: the whole mascot editor (character, shape, colour, style,
-//   moves, Play a move, Randomize); the character picked previews in the
-//   hero.
+//   the rows Personality, Model, Appearance, Before it acts), the Channels
+//   card, the Bot accounts card, More (Shared with, Rules, When it acts
+//   alone, Voice, Advanced settings, Versions). The Appearance row opens the
+//   whole mascot editor (character, shape, colour, style, moves, Play a
+//   move, Randomize) as its sub-page, no tab of its own (#4147); the
+//   character picked previews in the hero.
 // - Knowledge (#3400): To review (the learnings that wait, approved or
 //   declined in place) and Skills in place, then Its work (Routines, Folder
 //   and memory).
@@ -150,7 +150,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // A tab with nothing to show this viewer (Stats in Simple mode) is not
   // listed; a link to it lands on General.
   const tabShown = (id: BotProfileTab) =>
-    id === "outcomes" ? true : id === "stats" ? shown("usage") : id === "appearance" ? shown("appearance") : botProfileTabPages(id).some(subPageShown);
+    id === "outcomes" ? true : id === "stats" ? shown("usage") : botProfileTabPages(id).some(subPageShown);
   const resolveTab = (next: BotProfileTab): BotProfileTab => (tabShown(next) ? next : "general");
   const tabOf = (id: PersonaCategory): BotProfileTab => resolveTab(botProfileTabOf(resolve(id)) ?? "general");
   const pageOf = (id: PersonaCategory): BotProfileSubPage | null => resolvePage(botProfileSubPageOf(resolve(id)));
@@ -189,8 +189,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     return card ? `[data-settings-group="${BOT_PROFILE_CARD_GROUP[card]}"]` : null;
   };
 
-  // Where a section lives: the header (identity), the Appearance tab, a
-  // card of the General tab, or a block on its sub-page.
+  // Where a section lives: the header (identity), a card of the General
+  // tab, or a block on its sub-page.
   const placeOf = (target: BotSettingsSection): { category: PersonaCategory | null; selector: string | null } => {
     const category = personaCategoryForSection(target);
     if (!category) return { category, selector: null };
@@ -265,12 +265,13 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   };
 
   // The sub-page on screen drives what the hook fetches: the server
-  // overview with Personality and the lists, the history with Versions.
+  // overview with Personality, Appearance and the lists, the history with
+  // Versions.
   const hookSection: BotSettingsSection = page
     ? page === "versions" ? "history"
       : page === "routines" ? "routines"
         : page === "folder" ? "skills"
-            : page === "personality" || page === "sharing" ? "overview"
+            : page === "personality" || page === "sharing" || page === "appearance" ? "overview"
               : "model"
     : tab === "stats" ? "usage" : tab === "knowledge" ? "skills" : "overview";
   const { renderSectionBody, dialogs, derived } = useBotSectionContent(bot, {
@@ -398,6 +399,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         return <>{block("summary")}{block("soul")}</>;
       case "model":
         return <>{block("model")}{block("worksOn")}</>;
+      case "appearance":
+        return block("appearance");
       case "beforeActing":
         return permissions("beforeActing");
       case "sharing":
@@ -674,9 +677,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
                       <BotUsageBreakdownSection bot={bot} />
                     </>
                   )
-                : tab === "appearance"
-                  ? block("appearance")
-                  : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
+                : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
             </div>
           )}
         </div>

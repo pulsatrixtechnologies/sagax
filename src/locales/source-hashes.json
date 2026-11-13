@@ -17172,7 +17172,6 @@
       "myToolAccess.scope.billing": "3ac8bbca9a74cfbd627307e9d650a132610e64f42f984817a488daf5f2f3d750",
       "myToolAccess.scope.people": "7db20897053bb2780b9b706e5505227b005de80c236e4a4836aab37a3a7bb298",
       "myToolAccess.scope.settings": "74a883a037bc227f91891ab654a753d3a99f31ab06ae5b5d2b6e594a692b41f8",
-      "botProfile.tab.appearance": "3907fa7f80722a6fc58cd8c1bd30abf7638095d6774f183b6e831b7093957d1b",
       "connectApps.add": "9fd728c66c9a256b121472dabf32a34317aed01d8427d70ec830289cf23a7cc8",
       "orgCapabilities.member.loadFailed": "e2cb7bd959ff2a1336e015994e0c91d6b3621d28d2c2e36996c17d1950affd6b",
       "orgCapabilities.member.retry": "d8b8392e2c542950ca64867168e4ef87d4ad606882d5898f826b51c6d553988f",
@@ -18559,7 +18558,11 @@
       "botPanel.skills.needsReview": "07297fa94a997d0f807bd37c61993a8821ca406b5e4498e4f0759e50ab154dd4",
       "botPanel.skills.detailShared": "e3c4b39d6d5013477c98cd58236fed455f37aa7017b7168ce1980a449aaf438a",
       "botPanel.skills.detailPrivate": "99aeb45c7f2a72793df99f468807a8f8b395fc52dff3269501b68f268b4eae5b",
-      "settings.toolCalls.description": "fe6e2b4794633e49a3bff12a475e2c747eb0e01e51368ea6fc8b6e2ed5712eff"
+      "settings.toolCalls.description": "fe6e2b4794633e49a3bff12a475e2c747eb0e01e51368ea6fc8b6e2ed5712eff",
+      "botProfile.v6.page.appearance.title": "3907fa7f80722a6fc58cd8c1bd30abf7638095d6774f183b6e831b7093957d1b",
+      "botProfile.v6.page.appearance.desc": "c9fe54a6cc4c22a2b6f73fdae4053e7ed43ca2e1ffc40d7823ee487175e86c27",
+      "botProfile.v6.page.appearance.intro": "0c63d747bb42643648f5934b55784ccf81af7a5d43a3ac29d8d5d3546dfa2a90",
+      "botProfile.v6.value.picture": "9a1c54f55e7cfb1cc2cdad2991525037bc475a509fa37262e123c44e958d2d36"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

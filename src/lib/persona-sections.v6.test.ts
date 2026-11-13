@@ -21,13 +21,13 @@ import {
 const count = <T,>(items: readonly T[]) => items.reduce((map, item) => map.set(item, (map.get(item) ?? 0) + 1), new Map<T, number>());
 
 describe("V6 bot page map", () => {
-  it("puts each setting on exactly one sub-page or card in place (the header, Appearance and Stats aside)", () => {
+  it("puts each setting on exactly one sub-page or card in place (the header and Stats aside)", () => {
     const placed = count([
       ...BOT_PROFILE_SUBPAGES.flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
       ...BOT_PROFILE_CARDS.flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
     ]);
     for (const category of PERSONA_CATEGORIES) {
-      const expected = (HEADER_SECTIONS as readonly string[]).includes(category) || category === "usage" || category === "appearance" ? 0 : 1;
+      const expected = (HEADER_SECTIONS as readonly string[]).includes(category) || category === "usage" ? 0 : 1;
       expect(placed.get(category) ?? 0, category).toBe(expected);
       if (!expected) continue;
       const page = botProfileSubPageOf(category);
@@ -55,6 +55,17 @@ describe("V6 bot page map", () => {
       expect(botProfileSubPageOf(id), id).toBeNull();
       expect(botProfileTabOf(id), id).toBe("general");
     }
+  });
+
+  // #4147 (the owner 2026-11-13, "to reduce the number of tabs"): Appearance
+  // is no tab any more but a row of General > Settings, right after
+  // Personality and Model, that opens its sub-page.
+  it("regression #4147: Appearance is a row of General > Settings after Personality and Model, not a tab", () => {
+    expect(BOT_PROFILE_TABS).toEqual(["general", "outcomes", "knowledge", "stats"]);
+    expect(BOT_PROFILE_TAB_GROUPS.general.find((group) => group.id === "settings")!.pages).toEqual(["personality", "model", "appearance", "beforeActing"]);
+    expect(BOT_PROFILE_SUBPAGE_SECTIONS.appearance).toEqual(["appearance"]);
+    expect(botProfileSubPageOf("appearance")).toBe("appearance");
+    expect(botProfileTabOf("appearance")).toBe("general");
   });
 
   // #3400: Knowledge is To review and Skills in place, then Its work

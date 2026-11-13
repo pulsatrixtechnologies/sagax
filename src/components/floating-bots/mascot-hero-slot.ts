@@ -2,7 +2,7 @@
 // bot's profile page puts the mascot (MascotLookPreview in hero mode) large
 // over its banner, no card, with the bot's name and label stacked under it.
 // The page provides this slot; the mascot editor, while it is open in the
-// page's Appearance tab, draws its hero into the slot (a portal) so the
+// page's Appearance sub-page, draws its hero into the slot (a portal) so the
 // character picked in the grid still previews at the top, and the page
 // draws the hero for the bot's own look otherwise.
 import { createContext, useContext, type ReactNode } from "react";

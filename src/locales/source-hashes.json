@@ -10371,7 +10371,6 @@
       "chat.verify.verifiedCount": "9767d41cc7ca31a0ecfa0b2804638ffb40fe7042153b2e97d82103a5a78fee26",
       "chat.verify.verifiedTag": "1c34f88707b55e6104c4eb20e71ffa3d33e414b71ef689a15fad0640d0ac58cb",
       "chat.viaCall": "9b89606d4ea107e9a6f77dc54cc4bfb2eee5b2a0caf67d71dc27aa1a8f599983",
-      "chat.viaSms": "a098c97ae2dff9217c6f3def7dec5c51c0c51ac45d3778bb8c03756061255d19",
       "chat.voiceNote.onLiveCall": "6a0b11834850d6f4930052f34f67f73282d9327230595315af72b67a7ec6fb99",
       "chat.voiceNote.pause": "e01c5d16178bcd77f7136220aaefefd11591af5bff26fb3b9e3ff77b45c1afed",
       "chat.voiceNote.play": "89ce2d7c999657f7337089a1a8eba598fede5b0147185368887f73b31decf1f7",
@@ -18524,7 +18523,11 @@
       "shortcuts.item.settings": "74a883a037bc227f91891ab654a753d3a99f31ab06ae5b5d2b6e594a692b41f8",
       "shortcuts.item.zoom": "509c517ede79fef060a5f3a109fd1f45951eef2c7970b25c20992011e36a4070",
       "shortcuts.hint.zoom": "c7d11a3764205b8a90c1726d0c50271b5f3221ff3d0297cb8b1afb4d889a74af",
-      "shortcuts.item.fullScreen": "674fe2acd0d5f47b46180dd66e26e349cd9c9db215046f5e86ea2f5728d18117"
+      "shortcuts.item.fullScreen": "674fe2acd0d5f47b46180dd66e26e349cd9c9db215046f5e86ea2f5728d18117",
+      "chat.incoming.textMessage": "885f4dd0be4dea986860c8c805ce97a7f888fd47ca9ed9e0f37accf330fb8591",
+      "chat.incoming.textMessageFrom": "767fdcdb3e38d99bb5ebfecc045f44a558ff2fa0305545651a272dc198fa9dbb",
+      "chat.incoming.phoneCall": "1f0a0e26945de77d9fa26431484d8fe42a9d5318b6fa3f86579b08ef0ab468d5",
+      "chat.incoming.phoneCallFrom": "cc5209559d7b8c7fd27d352e6ba20e13a5b29ed2a090f3a51c9a5585a99f6d41"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

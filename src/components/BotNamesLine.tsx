@@ -9,12 +9,15 @@
 // from (HandoffRow's IncomingLine). Never a quoted request on the line.
 // A name is never cut: a narrow row draws fewer names and a larger "and N
 // others" (lib/messaged-line messagedLineNames), the count always whole.
+// A party with a detail (a phone line's number, #4112) keeps it whole too:
+// on a narrow row only the words before it (the source, "Text Message")
+// give way, and the names give way before the line's tail.
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Bot } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { mausInk, type MausColor } from "@/lib/mascot";
-import { conjunctionParts, messagedLineNames, type NamesFit } from "@/lib/messaged-line";
+import { conjunctionParts, messagedLineNames, tailOnOwnLine, type NamesFit } from "@/lib/messaged-line";
 import { QUIET_LINE, QUIET_LINE_ROW, QuietLineParty } from "./ConversationLink";
 
 const MORE_BUTTON = "-mx-1 shrink-0 rounded-full px-1 font-medium text-ink hover:bg-raised";
@@ -34,6 +37,14 @@ export interface LineParty {
   label?: string;
   /** Attributes of the name (what it opens, for tests and captures). */
   data?: Record<string, string>;
+  /** Words after the name that never give way (a phone line's number,
+   * "(555 010-0142)"): on a narrow row only the name before them is cut. */
+  detail?: string;
+}
+
+/** The party's whole name, its detail included. */
+function fullName(party: Pick<LineParty, "name" | "detail">): string {
+  return party.detail ? `${party.name} ${party.detail}` : party.name;
 }
 
 /** The names, as the locale lists them ("A, B and C", "A, B et C"). */
@@ -54,14 +65,17 @@ function PartyFace({ party, bots, nameClassName }: { party: LineParty; bots: rea
   const bot = party.botId ? bots.find((candidate) => candidate.id === party.botId) : bots.find((candidate) => candidate.name === party.name);
   const color = inkColor(bot?.color ?? party.color);
   return (
-    <QuietLineParty
-      bot={bot ?? { name: party.name, color }}
-      agentId={party.botId}
-      name={party.name}
-      color={color}
-      tone="neutral"
-      nameClassName={nameClassName ?? "min-w-0 max-w-[16rem] truncate"}
-    />
+    <>
+      <QuietLineParty
+        bot={bot ?? { name: party.name, color }}
+        agentId={party.botId}
+        name={party.name}
+        color={color}
+        tone="neutral"
+        nameClassName={nameClassName ?? "min-w-0 max-w-[16rem] truncate"}
+      />
+      {party.detail ? <span data-line-detail="" className="-ms-[3px] shrink-0 font-medium text-ink">{party.detail}</span> : null}
+    </>
   );
 }
 
@@ -69,7 +83,7 @@ function PartyFace({ party, bots, nameClassName }: { party: LineParty; bots: rea
 function PartyName({ party, bots, testId }: { party: LineParty; bots: readonly Bot[]; testId: string }) {
   if (!party.onOpen) {
     return (
-      <span data-testid={testId} {...party.data} title={party.title ?? party.name} className="flex min-w-0 items-center gap-1.5">
+      <span data-testid={testId} {...party.data} title={party.title ?? fullName(party)} className="flex min-w-0 items-center gap-1.5">
         <PartyFace party={party} bots={bots} />
       </span>
     );
@@ -79,8 +93,8 @@ function PartyName({ party, bots, testId }: { party: LineParty; bots: readonly B
       type="button"
       data-testid={testId}
       {...party.data}
-      title={party.title ?? party.name}
-      aria-label={party.label ?? t("sendReceipt.open", { name: party.name })}
+      title={party.title ?? fullName(party)}
+      aria-label={party.label ?? t("sendReceipt.open", { name: fullName(party) })}
       onClick={party.onOpen}
       className={NAME_BUTTON}
     >
@@ -112,12 +126,14 @@ interface Measured {
   widths: number[];
   others: number[];
   available: number;
+  /** The tail's width with its dot, when the line has one. */
+  tail: number;
 }
 
 /** What the folded line has room for (messagedLineNames decides from it):
  * each name whole with its face and the words that join it, each count,
  * and the row's width less the verb and the tail. */
-function measureLine(row: HTMLElement, line: HTMLElement, verb: HTMLElement, names: readonly string[], othersLabel: (count: number) => string, locale: string): Measured | null {
+function measureLine(row: HTMLElement, line: HTMLElement, verb: HTMLElement, names: readonly Pick<LineParty, "name" | "detail">[], othersLabel: (count: number) => string, locale: string): Measured | null {
   const rowStyle = getComputedStyle(row);
   const style = getComputedStyle(line);
   const room = row.clientWidth - parseFloat(rowStyle.paddingLeft || "0") - parseFloat(rowStyle.paddingRight || "0");
@@ -135,23 +151,30 @@ function measureLine(row: HTMLElement, line: HTMLElement, verb: HTMLElement, nam
   }
   const tail = line.querySelector<HTMLElement>("[data-line-tail]");
   const tailWidth = tail ? 2 * gap + (word("·", style.fontWeight) ?? 0) + (word(tail.textContent ?? "", style.fontWeight) ?? 0) : 0;
-  // a name: the gap before it, its face, a gap, its words; joined to the one before
-  const widths = names.map((name, index) => (index > 0 ? join : 0) + gap + FACE + gap + Math.min(NAME_MAX, word(name) ?? 0));
+  // a name: the gap before it, its face, a gap, its words (and its detail
+  // after a gap); joined to the one before
+  const widths = names.map((name, index) => (index > 0 ? join : 0) + gap + FACE + gap + Math.min(NAME_MAX, word(name.name) ?? 0)
+    + (name.detail ? gap + (word(name.detail) ?? 0) : 0));
   const others = names.map((_, count) => (count === 0 ? 0 : join + gap + (word(othersLabel(count)) ?? 0)));
   const padding = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
   // a little room to spare, so rounding never cuts the last letter
   const available = Math.floor(room - padding - verb.getBoundingClientRect().width - tailWidth - 4);
-  return { widths: widths.map(Math.ceil), others: others.map(Math.ceil), available };
+  return { widths: widths.map(Math.ceil), others: others.map(Math.ceil), available, tail: Math.ceil(tailWidth) };
 }
 
-const measuredKey = (measured: Measured | null) => (measured ? `${measured.available}|${measured.widths.join(",")}|${measured.others.join(",")}` : "");
+const measuredKey = (measured: Measured | null) => (measured ? `${measured.available}|${measured.tail}|${measured.widths.join(",")}|${measured.others.join(",")}` : "");
 
-/** What the line still says after the names: a state, a failure. */
-function Tail({ children, tone }: { children: ReactNode; tone?: "danger" | "accent" }) {
+/** What the line still says after the names: a state, a failure, a count.
+ * It gives way only once the names before it have (#4112). */
+function Tail({ children, tone, own = false }: { children: ReactNode; tone?: "danger" | "accent"; own?: boolean }) {
+  const toneClass = cn(tone === "danger" && "text-danger", tone === "accent" && "text-accent-text");
+  // its own line under the names, whole, when even one name and the count
+  // of the others leave it no room on theirs
+  if (own) return <span data-line-tail="" data-line-tail-own="" className={cn("basis-full", toneClass)}>{children}</span>;
   return (
     <>
       <span aria-hidden="true" className="shrink-0">·</span>
-      <span data-line-tail="" className={cn("min-w-0 truncate", tone === "danger" && "text-danger", tone === "accent" && "text-accent-text")}>{children}</span>
+      <span data-line-tail="" className={cn("min-w-0 shrink-[0.01] truncate", toneClass)}>{children}</span>
     </>
   );
 }
@@ -198,21 +221,26 @@ export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, da
     const line = lineRef.current;
     const verbBox = verbRef.current;
     const next = !expanded && width > 0 && row && line && verbBox
-      ? measureLine(row, line, verbBox, parties.map((party) => party.name), othersText, locale)
+      ? measureLine(row, line, verbBox, parties, othersText, locale)
       : null;
     setMeasured((current) => (measuredKey(current) === measuredKey(next) ? current : next));
   });
+  // #4112: one name whole and the count of the others leave the tail no room
+  // (a phone line's number on a phone-width row): the tail takes a line of
+  // its own under the names instead of being cut
+  const others = (count: number) => measured?.others[count] ?? measured?.others.at(-1) ?? 0;
+  const ownTail = !expanded && measured !== null && tailOnOwnLine(parties.length, { widths: measured.widths, available: measured.available, others }, Boolean(tail) && measured.tail > 0);
   const fit: NamesFit | undefined = measured
-    ? { widths: measured.widths, available: measured.available, others: (count) => measured.others[count] ?? measured.others.at(-1) ?? 0 }
+    ? { widths: measured.widths, available: measured.available + (ownTail ? measured.tail : 0), others }
     : undefined;
-  const { shown, others } = messagedLineNames(parties, expanded, fit);
-  const othersLabel = others > 0 ? othersText(others) : null;
+  const { shown, others: hidden } = messagedLineNames(parties, expanded, fit);
+  const othersLabel = hidden > 0 ? othersText(hidden) : null;
   const parts = conjunctionParts(shown.length + (othersLabel ? 1 : 0), locale);
   // opened (only a folded line opens): the whole list, then the control that folds it back
   const foldable = expanded;
   return (
     <div ref={rowRef} className={cn(QUIET_LINE_ROW, align === "start" && "justify-start", className)} data-testid={testId} data-mid={mid} {...data}>
-      <div ref={lineRef} className={cn(QUIET_LINE, "min-w-0 max-w-full", align === "start" && "px-0", expanded ? cn("flex-wrap", align === "start" ? "justify-start" : "justify-center") : "overflow-hidden whitespace-nowrap")}>
+      <div ref={lineRef} className={cn(QUIET_LINE, "min-w-0 max-w-full", align === "start" && "px-0", expanded || ownTail ? cn("flex-wrap", align === "start" ? "justify-start text-start" : "justify-center text-center") : "overflow-hidden whitespace-nowrap", ownTail && "gap-y-0.5 overflow-hidden whitespace-nowrap")}>
         <span ref={verbRef} className="shrink-0">{verb}</span>
         {parts.map((part, index) => {
           if (part.type === "literal") {
@@ -228,7 +256,7 @@ export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, da
               type="button"
               data-testid={`${testId}-more`}
               aria-expanded={false}
-              title={parties.slice(shown.length).map((entry) => entry.name).join(", ")}
+              title={parties.slice(shown.length).map(fullName).join(", ")}
               onClick={() => setExpanded(true)}
               className={MORE_BUTTON}
             >
@@ -241,7 +269,7 @@ export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, da
             {t("chat.showLess")}
           </button>
         )}
-        {tail ? <Tail tone={tailTone}>{tail}</Tail> : null}
+        {tail ? <Tail tone={tailTone} own={ownTail}>{tail}</Tail> : null}
       </div>
       {children}
     </div>

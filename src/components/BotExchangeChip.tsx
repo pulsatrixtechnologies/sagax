@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeftRight } from "lucide-react";
 import { formatTime, type Bot } from "@/state/store";
 import { ConversationLink } from "./ConversationLink";
-import { PartyAvatar, isAgentParty } from "./PartyAvatar";
+import { PartyAvatar } from "./PartyAvatar";
 import { activeLocale, t } from "@/lib/i18n";
 import { MAUS_COLORS, mausInk, type MausColor } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
@@ -352,7 +352,7 @@ export function ExchangeSheet({
           return (
             <div key={message.id} className="contents">
               {stamp}
-              {!joinsAbove && <ClusterLabel bot={bot as Bot} name={speaker.name} color={bot.color} end={end} agent={isAgentParty(speaker.id)} />}
+              {!joinsAbove && <ClusterLabel bot={bot as Bot} name={speaker.name} color={bot.color} end={end} partyId={speaker.id} />}
               <div
                 data-mid={message.id}
                 data-side={end ? "end" : "start"}

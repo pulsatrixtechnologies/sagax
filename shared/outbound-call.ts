@@ -87,6 +87,14 @@ export function formatPhone(e164: string): string {
   return match ? `+1 ${match[1]} ${match[2]} ${match[3]}` : e164;
 }
 
+/** "514 555-0142": a North American number as a person reads it on a chat
+ * line, from its E.164 form or from formatPhone's. Anything else (a name, a
+ * number from elsewhere) comes back as it is. */
+export function readablePhone(label: string): string {
+  const match = /^\+1\s?(\d{3})\s?(\d{3})\s?(\d{4})$/.exec(label.trim());
+  return match ? `${match[1]} ${match[2]}-${match[3]}` : label.trim();
+}
+
 /** Zero-width and bidi controls: they hide or reorder what the card shows. */
 const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g;
 

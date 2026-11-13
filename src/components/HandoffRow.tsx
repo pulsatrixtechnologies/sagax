@@ -10,9 +10,11 @@
 // answer whose receipt is not on this page, "Message from [face] Wren" for a
 // notice another bot's thread surfaced. A run folds into one line, one name
 // per party and "5 requests" when there are more requests than names
-// (lib/incoming-line). A name opens that party's exchanges of the line,
-// newest first: the request, then the answer, in the bot-to-bot sheet over
-// this column. Never a thread link: everything stays in this chat (#2901).
+// (lib/incoming-line). #4112: a line the person sent on their phone line is
+// the same row, "Asked by [phone] Text Message (514 555-0142)", the bot's
+// answer kept behind it as a teammate's is. A name opens that party's
+// exchanges of the line, newest first: the request, then the answer, in the
+// bot-to-bot sheet over this column. Never a thread link: everything stays in this chat (#2901).
 import { lazy, memo, Suspense, useState } from "react";
 import type { Bot, Message } from "@/state/store";
 import { useStoreSelector } from "@/state/store-selector";
@@ -36,10 +38,22 @@ const VERB: Record<IncomingLineItem["verb"], LocaleKey> = {
   answerFrom: "chat.incoming.answerFrom",
 };
 
-type Party = Pick<Bot, "id" | "name"> & { color?: string };
+/** `lead` and `detail`: a phone line's name split for the line, the source
+ * ("Text Message") that may give way and the number that never does (#4112). */
+type Party = Pick<Bot, "id" | "name"> & { color?: string; lead?: string; detail?: string };
 
 /** The party as the line and the sheet name it. */
-function partyOf(party: Pick<IncomingParty, "botId" | "name" | "color" | "agent" | "key">, bots: readonly Bot[]): Party {
+function partyOf(party: Pick<IncomingParty, "botId" | "name" | "color" | "agent" | "key" | "phone">, bots: readonly Bot[]): Party {
+  // #4112: the person's phone line, "Text Message (514 555-0142)", its key
+  // drawing the phone glyph in place of a mascot (PartyAvatar)
+  if (party.phone) {
+    const call = party.phone === "call";
+    const lead = t(call ? "chat.incoming.phoneCall" : "chat.incoming.textMessage");
+    const name = party.name ? t(call ? "chat.incoming.phoneCallFrom" : "chat.incoming.textMessageFrom", { label: party.name }) : lead;
+    // the locale's words after the source ("(555 010-0142)") stay whole on a narrow row
+    const detail = name !== lead && name.startsWith(lead) ? name.slice(lead.length).trim() : "";
+    return detail ? { id: party.key, name, lead, detail } : { id: party.key, name };
+  }
   if (party.agent) return { id: `${AGENT_OPENER_PREFIX}${party.name ?? ""}`, name: party.name ?? t("chat.peer.aiClientName") };
   const bot = party.botId ? bots.find((candidate) => candidate.id === party.botId) : party.name ? bots.find((candidate) => candidate.name === party.name) : undefined;
   return { id: bot?.id ?? party.botId ?? party.key, name: bot?.name ?? party.name ?? t("chat.askLine.aTeammate"), color: bot?.color ?? party.color };
@@ -82,7 +96,8 @@ export const IncomingLine = memo(function IncomingLine({ line, self, bots, mid }
     return {
       key: party.key,
       botId: who.id,
-      name: who.name,
+      name: who.lead ?? who.name,
+      ...(who.detail ? { detail: who.detail } : {}),
       color: who.color,
       onOpen: () => setOpen({ key: party.key, index: 0 }),
       label: t("sendReceipt.open", { name: who.name }),

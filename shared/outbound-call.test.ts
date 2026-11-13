@@ -8,6 +8,7 @@ import {
   maskPhone,
   ownerCallToPlaceArgs,
   parseOutboundCall,
+  readablePhone,
 } from "./outbound-call.ts";
 
 const good = { to: "514-555-0142", from: "+1 438 555 0100", purpose: "Confirmer le rendez-vous", message: "Jean confirme le rendez-vous de mardi à 10 h." };
@@ -77,5 +78,16 @@ describe("outbound call", () => {
     expect(ownerCallToPlaceArgs({ questions: [] })).toMatch(/at least one/);
     expect(ownerCallToPlaceArgs({ questions: ["ok"], to: "+1 212 555 0142" })).toMatch(/Only Canadian/);
     expect(ownerCallToPlaceArgs(null)).toMatch(/needs questions/);
+  });
+});
+
+describe("readablePhone (#4112)", () => {
+  it("reads a North American number the local way, from either form", () => {
+    expect(readablePhone("+15550100142")).toBe("555 010-0142");
+    expect(readablePhone("+1 555 010 0142")).toBe("555 010-0142");
+  });
+  it("leaves a name or another number as it is", () => {
+    expect(readablePhone(" Sam Example ")).toBe("Sam Example");
+    expect(readablePhone("+33 1 23 45 67 89")).toBe("+33 1 23 45 67 89");
   });
 });

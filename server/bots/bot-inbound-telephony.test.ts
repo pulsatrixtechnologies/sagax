@@ -20,6 +20,7 @@ import {
   createBotInboundTelephonyRoute,
   parseTelephonyEvent,
   telephonySenderLabel,
+  ownLineLabel,
   telephonyTriggerEvent,
   type TelephonyRouteDeps,
 } from "./bot-inbound-telephony.ts";
@@ -562,7 +563,7 @@ describe("the person texting or speaking to their own bot (#2194)", () => {
     expect(state.queued).toHaveLength(0);
     expect(ownTexts).toEqual([{
       ownerPrincipalId: "pr_owner", sub: "u_123", botId: "bot_abc", from: "+15145550100",
-      text: "Rappelle le fournisseur pour la livraison de jeudi.", label: "Alex Example", via: "sms",
+      text: "Rappelle le fournisseur pour la livraison de jeudi.", label: "+1 514 555 0100", via: "sms",
     }]);
     expect(JSON.stringify(rows)).not.toContain("fournisseur");
     // the same text twice: once
@@ -585,7 +586,7 @@ describe("the person texting or speaking to their own bot (#2194)", () => {
     expect(state.queued).toHaveLength(0);
     expect(ownTexts).toEqual([{
       ownerPrincipalId: "pr_owner", sub: "u_123", botId: "bot_abc", from: "+15145550100",
-      text: "Quel est le statut du billet 4421 ?", label: "Alex Example", via: "call",
+      text: "Quel est le statut du billet 4421 ?", label: "+1 514 555 0100", via: "call",
     }]);
   });
 
@@ -612,16 +613,22 @@ describe("the person texting or speaking to their own bot (#2194)", () => {
     expect(state.queued).toHaveLength(1);
   });
 
-  it("own SMS carries the human sender label into ownText (never the raw person id as the label)", async () => {
+  it("own SMS carries the number it came from as the label, never the owner's name nor a raw id (#4112)", async () => {
     ownTexts = [];
     expect((await post(fresh("sms", { sender: "owner_mobile", person: { id: "u_123", name: "Osprey" } }), token("u_123"))).body)
       .toMatchObject({ conversation: true, delivered: 1 });
     expect(ownTexts).toEqual([{
       ownerPrincipalId: "pr_owner", sub: "u_123", botId: "bot_abc", from: "+15145550100",
-      text: "Rappelle le fournisseur pour la livraison de jeudi.", label: "Osprey", via: "sms",
+      text: "Rappelle le fournisseur pour la livraison de jeudi.", label: "+1 514 555 0100", via: "sms",
     }]);
-    expect(ownTexts![0]!.label).toBe("Osprey");
+    expect(ownTexts![0]!.label).not.toBe("Osprey");
     expect(ownTexts![0]!.label).not.toBe("u_123");
+  });
+
+  it("own-line label: the formatted number, else the caller label (#4112)", () => {
+    expect(ownLineLabel({ from: "+15550100142", person: { id: "u_123", name: "Osprey" } })).toBe("+1 555 010 0142");
+    expect(ownLineLabel({ from: "***0142", person: { id: "u_123", name: "Osprey" } })).toBe("Osprey");
+    expect(ownLineLabel({ from: "***0142" })).toBe("***0142");
   });
 
   it("allowlisted SMS gets the contact persona in the trigger and a summary notice for the owner", async () => {

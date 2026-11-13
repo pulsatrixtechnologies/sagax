@@ -1,5 +1,7 @@
 // A request spoken on a Live call is an ordinary user message with a small
-// "via call" line under it; typed messages have none. A finished call leaves
+// "via call" line under it; typed messages have none. A line that came in on
+// the person's phone line (a text, a call request) is the "Asked by" row a
+// teammate's request uses, never the person's bubble (#4112). A finished call leaves
 // one compact record row in the chat, which is not a message the chat reads
 // its working line from.
 import { createElement } from "react";
@@ -42,7 +44,7 @@ const bot = (messages: Message[]): Bot => ({
 describe("via call label", () => {
   it("marks a request spoken on a Live call, and only that one", () => {
     const markup = renderToStaticMarkup(createElement(ChatView, {
-      bot: bot([message("m1", "typed words"), message("m2", "spoken words", { via: "call" })]),
+      bot: bot([message("m1", "typed words"), message("m2", "spoken words", { via: "call", callId: "c1" })]),
     }));
     expect(markup).toContain("typed words");
     expect(markup).toContain("spoken words");
@@ -51,13 +53,43 @@ describe("via call label", () => {
     expect(markup.indexOf(">via call<")).toBeGreaterThan(markup.indexOf("spoken words"));
   });
 
-  it("marks a text the person sent from their own number", () => {
+  it("draws texts from the person's phone line and the bot's answers as one Asked by row, never a bubble (#4112)", () => {
+    const texted = (id: string, words: string, number: string) =>
+      message(id, words, { via: "sms", sender: { name: number, id: "person-1" } } as Partial<Message>);
+    const answer = (id: string, words: string, line: string) =>
+      ({ ...message(id, words), role: "bot", requestMessageId: line }) as Message;
+    // the live order: each text is answered before the next lands
     const markup = renderToStaticMarkup(createElement(ChatView, {
-      bot: bot([message("m1", "typed words"), message("m2", "texted words", { via: "sms" })]),
+      bot: bot([
+        message("m1", "typed words"),
+        texted("m2", "texted words", "+1 555 010 0142"), answer("a2", "first answer words", "m2"),
+        texted("m3", "more texted words", "+1 555 010 0142"), answer("a3", "second answer words", "m3"),
+        texted("m4", "other texted words", "+1 555 010 0199"), answer("a4", "third answer words", "m4"),
+      ]),
     }));
-    expect(markup.match(/data-via="sms"/g)).toHaveLength(1);
-    expect(markup).toContain(">via text message<");
-    expect(markup.indexOf("via text message")).toBeGreaterThan(markup.indexOf("texted words"));
+    expect(markup.match(/data-testid="incoming-line"/g)).toHaveLength(1);
+    expect(markup).toContain("Asked by");
+    expect(markup).toContain("Text Message");
+    expect(markup).toContain("(555 010-0142)");
+    expect(markup).toContain("(555 010-0199)");
+    expect(markup).toContain("3 requests");
+    expect(markup.match(/data-phone-avatar="sms"/g)).toHaveLength(2);
+    // the words and the answers open from the row: none of them is a bubble
+    expect(markup).toContain("typed words");
+    expect(markup).not.toContain("texted words");
+    expect(markup).not.toContain("answer words");
+    expect(markup).not.toContain("via text message");
+  });
+
+  it("draws a call request on the phone line with its own label", () => {
+    const markup = renderToStaticMarkup(createElement(ChatView, {
+      bot: bot([message("m1", "called words", { via: "call", sender: { name: "+1 555 010 0142", id: "person-1" } } as Partial<Message>)]),
+    }));
+    expect(markup).toContain("Phone call");
+    expect(markup).toContain("(555 010-0142)");
+    expect(markup).toContain('data-phone-avatar="call"');
+    expect(markup).not.toContain("called words");
+    expect(markup).not.toContain(">via call<");
   });
 
   it("shows no label without a call", () => {

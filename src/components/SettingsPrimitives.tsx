@@ -743,8 +743,11 @@ export function DescribedRow({
   below,
   rowId,
   keywords,
+  labelClassName,
 }: {
   label: string;
+  /** The label's type when a page's headline row needs its own figures (Usage: tabular). */
+  labelClassName?: string;
   description?: React.ReactNode;
   /** The longer explanation, behind an info button after the label. */
   help?: React.ReactNode;
@@ -768,7 +771,7 @@ export function DescribedRow({
             : <SettingsIconTile>{icon}</SettingsIconTile>)}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <div id={labelId} className={cn("text-ink", plain ? "text-[14px] leading-5" : "text-[13px] leading-[18px]")}>{label}</div>
+              <div id={labelId} className={cn("text-ink", plain ? "text-[14px] leading-5" : "text-[13px] leading-[18px]", labelClassName)}>{label}</div>
               {help && <HelpTip label={t("settings.moreAbout", { title: label })}>{help}</HelpTip>}
             </div>
             {description && <div className="mt-0.5 text-[12px] leading-4 text-ink-secondary">{description}</div>}

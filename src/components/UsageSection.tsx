@@ -229,6 +229,11 @@ function barTone(percent: number, warn: boolean, exceeded: boolean): string {
  * spending limit). With neither a cost nor a plan
  * window, one quiet line with Try again instead of a card per missing
  * figure; while the first answer is on its way, one loading line. */
+/** The page's headline (the renewal row of My plan) keeps the Settings type
+ * scale, 13/18 regular with tabular figures (owner rule 2026-11-08); only the
+ * large percent and cost figures use 22/28, as figures (#4113, #4123). */
+export const USAGE_HEADLINE_TYPE = "text-[13px] font-normal leading-[18px] tabular-nums text-ink";
+
 export function UsagePlan({ usage, error, hasPlan = false, planLoading = false, now = Date.now(), onRetry }: {
   usage: PersonalUsage | null;
   error: PersonalUsageError | null;
@@ -251,7 +256,7 @@ export function UsagePlan({ usage, error, hasPlan = false, planLoading = false, 
         ) : loading ? (
           <p role="status" className="px-3.5 py-2.5 text-[13px] text-ink-secondary">{t("planUsage.loading")}</p>
         ) : usage ? (
-          <DescribedRow label={t("usage.headline.renews", { date: renewalDay(new Date(now)) })} rowId="renewal" />
+          <DescribedRow label={t("usage.headline.renews", { date: renewalDay(new Date(now)) })} rowId="renewal" labelClassName={USAGE_HEADLINE_TYPE} />
         ) : null}
       </SettingsGroup>
     </div>

@@ -2658,3 +2658,39 @@ describe("the approval details read in the card reader's language (#2805)", () =
     }
   });
 });
+
+describe("the /goal line on routine cards (#4098)", () => {
+  it("says a goal written as a line once on the card and creates the goal from it", async () => {
+    const { service, routines } = harness();
+    const proposed = await service.propose({
+      botId: "bot-a", threadId: "thread-a",
+      proposal: createProposal({ instructions: "/goal Queue at zero\n\nSummarize the overnight support queue." }),
+    });
+    expect(proposed.detail).toContain("Goal: Queue at zero;");
+    expect(proposed.detail).not.toMatch(/^\/goal /m);
+    expect(proposed.detail).toContain("Summarize the overnight support queue.");
+    expect(service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: proposed.requestId, behavior: "allow" }).state).toBe("applied");
+    expect(routines.listRoutines()[0]).toMatchObject({ prompt: "/goal Queue at zero\n\nSummarize the overnight support queue.", goal: { text: "Queue at zero", status: "active" } });
+  });
+
+  it("an update of the instructions without the line keeps the goal the card says, a line in them replaces it", async () => {
+    const { service, routines, clock } = harness();
+    const created = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ goal: { text: "Queue at zero" } }) });
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: created.requestId, behavior: "allow" });
+    const routineId = routines.listRoutines()[0]!.id;
+    expect(routines.listRoutines()[0]!.prompt).toBe("/goal Queue at zero\n\nSummarize the overnight support queue.");
+
+    clock.now += 1;
+    const kept = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId, changes: { instructions: "Summarize the queue and the backlog." } } });
+    expect(kept.detail).toContain("Goal: Queue at zero;");
+    expect(service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: kept.requestId, behavior: "allow" }).state).toBe("applied");
+    expect(routines.listRoutines()[0]).toMatchObject({ prompt: "/goal Queue at zero\n\nSummarize the queue and the backlog.", goal: { text: "Queue at zero" } });
+
+    clock.now += 1;
+    const replaced = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId, changes: { instructions: "/goal Backlog under 10\nSummarize the backlog." } } });
+    expect(replaced.detail).toContain("Goal: Backlog under 10;");
+    expect(replaced.detail).not.toContain("Queue at zero");
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: replaced.requestId, behavior: "allow" });
+    expect(routines.listRoutines()[0]!.goal).toMatchObject({ text: "Backlog under 10" });
+  });
+});

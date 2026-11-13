@@ -258,6 +258,19 @@ starts fresh; null clears it. Not for room goals. The editor (Goal section),
 HTTP API, propose_routine, propose_routine_action and update_routine carry it.
 Coverage: `shared/routine-goal.test.ts`, `server/routines/routine-goal.test.ts`.
 
+The goal line (#4098). A bot routine's goal is written in its instructions as
+a line `/goal <text>`, with an optional `/deadline <date>` line under it.
+`readRoutineGoalLines` finds them and `parseRoutineGoal` reads them at save
+into the same `Routine.goal` record (same words and deadline keep the
+progress, wherever the line sits); removing the line removes the goal. The
+run reads its instructions without these lines (`routineRunInstructions`):
+the goal block already carries them. A `goal` input (released apps, the
+phone, the bots' tools) still works and lands as the line
+(`writeRoutineGoalLines`); a stored goal is written into its line once at
+load, progress and revision kept. On a routine card the goal is said once
+(the `Goal:` line, the instructions shown without the goal lines), and an
+update whose new instructions carry no line keeps the goal.
+
 ## Routine reasoning effort (#1999, 2026-11-04)
 
 `Routine.effort` and `RoutineRun.effort` follow the model override, using

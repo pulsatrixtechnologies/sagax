@@ -71,7 +71,8 @@ export function parseRoutineGoal(value: unknown, previous?: RoutineGoal): { ok: 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: ROUTINE_GOAL_INVALID };
   const { text, deadline } = raw as { text?: unknown; deadline?: unknown };
   if (typeof text !== "string") return { ok: false, error: ROUTINE_GOAL_INVALID };
-  const clean = text.trim();
+  // One line: the goal is written as `/goal <text>` in the instructions.
+  const clean = routineGoalText(text);
   if (!clean) return { ok: true };
   if (clean.length > ROUTINE_GOAL_MAX_CHARS) return { ok: false, error: ROUTINE_GOAL_INVALID };
   const parsed = parseDeadline(deadline);
@@ -79,6 +80,72 @@ export function parseRoutineGoal(value: unknown, previous?: RoutineGoal): { ok: 
   if (previous && previous.text === clean && previous.deadline === parsed.deadline) return { ok: true, goal: { ...previous } };
   // A new or reworded goal starts fresh.
   return { ok: true, goal: { text: clean, status: "active", ...(parsed.deadline ? { deadline: parsed.deadline } : {}) } };
+}
+
+/** A goal's words on one line, as its `/goal` line holds them. */
+export function routineGoalText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * #4098: the goal is written in the instructions, as a line `/goal <text>`
+ * with an optional `/deadline <date>` line under it. Every goal line (and
+ * the deadline line right under it) leaves the instructions the run reads;
+ * the first one is the goal, read by `parseRoutineGoal` like any other input.
+ */
+export interface RoutineGoalLines {
+  goal?: RoutineGoalInput;
+  /** The instructions without the goal lines. */
+  instructions: string;
+}
+
+const GOAL_LINE = /^[ \t]*\/goal[ \t]+(\S.*?)[ \t]*$/i;
+const DEADLINE_LINE = /^[ \t]*\/deadline[ \t]+(\S.*?)[ \t]*$/i;
+
+export function readRoutineGoalLines(prompt: string): RoutineGoalLines {
+  const lines = prompt.split(/\r?\n/);
+  const kept: string[] = [];
+  let goal: RoutineGoalInput | undefined;
+  for (let index = 0; index < lines.length; index += 1) {
+    const text = GOAL_LINE.exec(lines[index]!)?.[1];
+    if (text === undefined) { kept.push(lines[index]!); continue; }
+    // The deadline is the next written line, when it is one.
+    let next = index + 1;
+    while (next < lines.length && !lines[next]!.trim()) next += 1;
+    const deadline = next < lines.length ? DEADLINE_LINE.exec(lines[next]!)?.[1] : undefined;
+    if (deadline !== undefined) index = next;
+    goal ??= { text, ...(deadline !== undefined ? { deadline } : {}) };
+  }
+  if (!goal) return { instructions: prompt };
+  return { goal, instructions: kept.join("\n").replace(/\n{3,}/g, "\n\n").trim() };
+}
+
+/** What a run reads as its instructions: the goal block carries the goal. */
+export function routineRunInstructions(prompt: string): string {
+  return readRoutineGoalLines(prompt).instructions;
+}
+
+/** The goal the instructions' lines say, read by the one parser. */
+export function routineGoalOfLines(prompt: string, previous?: RoutineGoal): ReturnType<typeof parseRoutineGoal> {
+  return parseRoutineGoal(readRoutineGoalLines(prompt).goal, previous);
+}
+
+/** Whether the instructions already say this goal (or no goal for none). */
+export function routineGoalLinesSay(prompt: string, goal: Pick<RoutineGoal, "text" | "deadline"> | undefined): boolean {
+  const read = routineGoalOfLines(prompt);
+  if (!read.ok) return false;
+  if (!read.goal || !goal) return !read.goal && !goal;
+  return read.goal.text === routineGoalText(goal.text) && read.goal.deadline === goal.deadline;
+}
+
+/** The instructions carrying this goal as their first lines (none removes
+ * them); unchanged when they already say it. */
+export function writeRoutineGoalLines(prompt: string, goal: Pick<RoutineGoal, "text" | "deadline"> | undefined): string {
+  if (routineGoalLinesSay(prompt, goal)) return prompt;
+  const body = routineRunInstructions(prompt);
+  if (!goal) return body;
+  const lines = [`/goal ${routineGoalText(goal.text)}`, ...(goal.deadline ? [`/deadline ${new Date(goal.deadline).toISOString()}`] : [])].join("\n");
+  return body ? `${lines}\n\n${body}` : lines;
 }
 
 function finiteTime(value: unknown): number | undefined {
@@ -95,7 +162,7 @@ export function loadRoutineGoal(value: unknown): RoutineGoal | undefined {
   const goal = value as Partial<RoutineGoal>;
   if (typeof goal.text !== "string" || !goal.text.trim() || goal.text.length > ROUTINE_GOAL_MAX_CHARS) return undefined;
   const status: RoutineGoalStatus = goal.status === "achieved" || goal.status === "expired" ? goal.status : "active";
-  const out: RoutineGoal = { text: goal.text.trim(), status };
+  const out: RoutineGoal = { text: routineGoalText(goal.text), status };
   const fields = {
     deadline: finiteTime(goal.deadline),
     achievedAt: finiteTime(goal.achievedAt),

@@ -11,18 +11,58 @@ import UIKit
 
 // MARK: - Card
 
+/// The side margin a profile card takes when its caller names none: the
+/// screen's `Theme.Profile.cardMargin`, or 0 inside a column that already
+/// sits at that margin (the phone bot panel, #4101). A card padded by its
+/// column AND by itself drew twice the margin, narrower than its title.
+private struct ProfileCardMarginKey: EnvironmentKey {
+    static let defaultValue: CGFloat = Theme.Profile.cardMargin
+}
+
+private struct ProfileCardOutlinedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var profileCardMargin: CGFloat {
+        get { self[ProfileCardMarginKey.self] }
+        set { self[ProfileCardMarginKey.self] = newValue }
+    }
+
+    /// The phone bot panel's cards carry the reference's faint outline (#4101).
+    var profileCardOutlined: Bool {
+        get { self[ProfileCardOutlinedKey.self] }
+        set { self[ProfileCardOutlinedKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// The column's one side margin: every card, footer and control inside
+    /// draws flush, so titles, cards and controls share one left and one
+    /// right edge (#4101).
+    func profileColumn(margin: CGFloat = Theme.Profile.cardMargin) -> some View {
+        environment(\.profileCardMargin, 0).padding(.horizontal, margin)
+    }
+}
+
 /// A #202020 card, radius 16, `margin` from the screen edges.
 struct ProfileCard<Content: View>: View {
     @Environment(\.themePalette) var themePalette
-    var margin: CGFloat = Theme.Profile.cardMargin
+    @Environment(\.profileCardMargin) private var columnMargin
+    @Environment(\.profileCardOutlined) private var outlined
+    var margin: CGFloat? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous)
         VStack(spacing: 0, content: content)
             .frame(maxWidth: .infinity)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-            .padding(.horizontal, margin)
+            .background(Theme.card, in: shape)
+            .clipShape(shape)
+            .overlay {
+                if outlined { shape.strokeBorder(Theme.hairline, lineWidth: Theme.PhonePanel.cardOutline) }
+            }
+            .padding(.horizontal, margin ?? columnMargin)
     }
 }
 
@@ -39,8 +79,9 @@ struct ProfileDivider: View {
 /// "Character", "Routines", "Schedule": 12 pt grey, 18 pt into the card.
 struct ProfileSectionLabel: View {
     @Environment(\.themePalette) var themePalette
+    @Environment(\.profileCardMargin) private var columnMargin
     let text: LocalizedStringKey
-    var margin: CGFloat = Theme.Profile.cardMargin
+    var margin: CGFloat? = nil
 
     var body: some View {
         Text(text)
@@ -48,7 +89,7 @@ struct ProfileSectionLabel: View {
             .foregroundStyle(Theme.textTertiary)
             // the line box of the measured 12 pt, whatever the ink size
             .frame(maxWidth: .infinity, minHeight: 14.3, maxHeight: 14.3, alignment: .topLeading)
-            .padding(.leading, margin + Theme.Profile.textInset)
+            .padding(.leading, (margin ?? columnMargin) + Theme.Profile.textInset)
             .padding(.bottom, Theme.Profile.labelToCard)
     }
 }
@@ -56,6 +97,7 @@ struct ProfileSectionLabel: View {
 /// The grey sentence under a card.
 struct ProfileFooter: View {
     @Environment(\.themePalette) var themePalette
+    @Environment(\.profileCardMargin) private var margin
     let text: LocalizedStringKey
 
     var body: some View {
@@ -63,8 +105,8 @@ struct ProfileFooter: View {
             .font(Theme.Profile.labelFont)
             .foregroundStyle(Theme.textTertiary)
             .frame(maxWidth: .infinity, minHeight: 14.3, alignment: .topLeading)
-            .padding(.leading, Theme.Profile.cardMargin + Theme.Profile.textInset)
-            .padding(.trailing, Theme.Profile.cardMargin)
+            .padding(.leading, margin + Theme.Profile.textInset)
+            .padding(.trailing, margin)
             .padding(.top, Theme.Profile.footerTop)
             .offset(y: 0.63)
     }

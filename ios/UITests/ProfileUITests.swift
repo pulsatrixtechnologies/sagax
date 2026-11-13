@@ -27,7 +27,7 @@ final class ProfileUITests: XCTestCase {
         self.endpoint = endpoint
         self.token = token
         environment = env["PARITY_ENVIRONMENT"].flatMap { $0.isEmpty ? nil : $0 }
-        // the phone's bot panel (profile-name, panel-gear, mascot) and its profile page; the iPad shows
+        // the phone's bot panel (profile-name, panel-edit, mascot) and its profile page; the iPad shows
         // the desktop panel and the persona window, covered by testIPad* and the Desktop* suites
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad && !name.contains("testIPad"),
                       "the phone's bot panel; the iPad's desktop panel is covered by testIPad* and Desktop* suites")
@@ -88,22 +88,22 @@ final class ProfileUITests: XCTestCase {
         return app
     }
 
-    /// The gear's long press opens the bot's menu (#2157).
+    /// The more control opens the bot's menu (#2157, #4101).
     private func openBotMenu(in app: XCUIApplication) {
-        let gear = element("panel-gear", in: app)
-        XCTAssertTrue(gear.waitForExistence(timeout: 10))
-        gear.press(forDuration: 1.0)
+        let more = element("panel-more", in: app)
+        XCTAssertTrue(more.waitForExistence(timeout: 10))
+        more.tap()
     }
 
     private func element(_ id: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)[id].firstMatch
     }
 
-    /// Upcoming's All routines opens the bot's routines page (#2157).
+    /// The Routines row opens the bot's routines page (#2157, #4101).
     private func openRoutines(in app: XCUIApplication) {
-        let all = element("panel-upcoming-all", in: app)
-        XCTAssertTrue(all.waitForExistence(timeout: 15), "Upcoming offers All routines")
-        all.tap()
+        let row = element("panel-row.routines", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "the panel offers its Routines row")
+        row.tap()
         XCTAssertTrue(element("profile-add-routine", in: app).waitForExistence(timeout: 15))
     }
 
@@ -352,7 +352,7 @@ final class ProfileUITests: XCTestCase {
         let app = launchProfile()
 
         // the gear's bot profile > General > Personality (#2157, #3017)
-        element("panel-gear", in: app).tap()
+        element("panel-edit", in: app).tap()
         let general = element("bot-profile-tab.general", in: app)
         XCTAssertTrue(general.waitForExistence(timeout: 15))
         general.tap()
@@ -380,7 +380,7 @@ final class ProfileUITests: XCTestCase {
     /// The gear's bot profile, on General.
     @MainActor
     private func openBotProfile(in app: XCUIApplication) {
-        element("panel-gear", in: app).tap()
+        element("panel-edit", in: app).tap()
         let general = element("bot-profile-tab.general", in: app)
         XCTAssertTrue(general.waitForExistence(timeout: 15))
         general.tap()
@@ -537,7 +537,7 @@ final class ProfileUITests: XCTestCase {
     func testLinksOpenInTheAppAndComputerLinksCopy() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's panel: testIPadLibraryShowsTheLinks")
         let app = launchProfile()
-        element("panel-tab.library", in: app).tap()
+        element("panel-row.library", in: app).tap()
         let chip = element("thread-files-chip.links", in: app)
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         chip.tap()
@@ -598,7 +598,7 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 30))
         name.tap()
         XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 10))
-        element("panel-tab.library", in: app).tap()
+        element("panel-row.library", in: app).tap()
         let chip = element("thread-files-chip.links", in: app)
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         chip.tap()
@@ -644,7 +644,7 @@ final class ProfileUITests: XCTestCase {
     @MainActor
     func testLibraryChipsShowFilesByKindAndTheLinks() throws {
         let app = launchProfile()
-        element("panel-tab.library", in: app).tap()
+        element("panel-row.library", in: app).tap()
         XCTAssertTrue(element("thread-files", in: app).waitForExistence(timeout: 10))
 
         let links = element("thread-files-chip.links", in: app)
@@ -657,7 +657,7 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(element("profile-link.2", in: app).waitForExistence(timeout: 10))
 
         // Files holds the pictures and the documents together (#1112: the Images chip was folded in)
-        let files = element("thread-files-chip.files", in: app)
+        let files = element("thread-files-chip.all", in: app)
         XCTAssertTrue(files.waitForExistence(timeout: 10))
         files.tap()
         XCTAssertTrue(element("thread-file.report.md", in: app).waitForExistence(timeout: 10))

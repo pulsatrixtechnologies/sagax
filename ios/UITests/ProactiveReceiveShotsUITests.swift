@@ -113,9 +113,9 @@ final class ProactiveReceiveShotsUITests: XCTestCase {
         let app = launch()
         openPixel(app)
         app.buttons["chat-name"].tap()
-        let gear = element("panel-gear", in: app)
-        XCTAssertTrue(gear.waitForExistence(timeout: 10), "the profile's gear")
-        gear.tap()
+        let edit = element("panel-edit", in: app)
+        XCTAssertTrue(edit.waitForExistence(timeout: 10), "the panel's Edit pill")
+        edit.tap()
         let general = element("bot-profile-tab.general", in: app)
         if general.waitForExistence(timeout: 10) { general.tap() }
         let actsAlone = element("bot-profile-more.acts-alone", in: app)

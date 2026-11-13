@@ -14,23 +14,26 @@ struct ComputerImmersiveShell<Top: View, Bottom: View, Content: View>: View {
     var body: some View {
         GeometryReader { proxy in
             let landscape = proxy.size.width > proxy.size.height
-            let topPad = proxy.safeAreaInsets.top
-            let bottomPad = proxy.safeAreaInsets.bottom
             ZStack {
                 Theme.bgComputer.ignoresSafeArea()
                 content()
                     .frame(width: proxy.size.width, height: proxy.size.height)
                 VStack(spacing: 0) {
-                    chromeBar {
+                    // the proxy already sits inside the safe area: the bars pad
+                    // from its edge only (#4101: adding the inset again put the
+                    // top bar a status bar lower than the reference's; the
+                    // reference's controls centre 31 pt under the safe area at
+                    // the page margin)
+                    chromeBar(landscape: landscape) {
                         top()
-                            .padding(.horizontal, Theme.Metric.screenEdge)
-                            .padding(.top, topPad + 6)
+                            .padding(.horizontal, Theme.PhonePanel.margin)
+                            .padding(.top, Theme.PhonePanel.barCentre - Theme.Metric.glassLarge / 2)
                     }
                     Spacer(minLength: 0)
-                    chromeBar {
+                    chromeBar(landscape: landscape) {
                         bottom()
-                            .padding(.horizontal, Theme.Metric.screenEdge)
-                            .padding(.bottom, bottomPad + Theme.Computer.buttonsBottom)
+                            .padding(.horizontal, Theme.PhonePanel.margin)
+                            .padding(.bottom, Theme.Computer.buttonsBottom)
                     }
                 }
                 .opacity(showsChrome(landscape: landscape) ? 1 : 0)
@@ -64,14 +67,18 @@ struct ComputerImmersiveShell<Top: View, Bottom: View, Content: View>: View {
     }
 
     @ViewBuilder
-    private func chromeBar<Inner: View>(@ViewBuilder _ inner: () -> Inner) -> some View {
+    private func chromeBar<Inner: View>(landscape: Bool, @ViewBuilder _ inner: () -> Inner) -> some View {
         inner()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.92)
-                    .ignoresSafeArea(edges: .horizontal)
+                // portrait: the bars sit on the black page, no band (the
+                // reference); landscape: they float over the picture
+                if landscape {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.92)
+                        .ignoresSafeArea()
+                }
             }
     }
 }

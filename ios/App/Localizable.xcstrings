@@ -3989,9 +3989,21 @@
           }
         },
         "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld actives"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld active"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld actives"
+                }
+              }
+            }
           }
         },
         "pt-BR": {
@@ -12891,6 +12903,22 @@
         }
       }
     },
+    "Artifact": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefact"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefato"
+          }
+        }
+      }
+    },
     "As %@": {
       "localizations": {
         "en": {
@@ -13309,6 +13337,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vous demande avant chaque commande, modification de fichier ou outil. Vos règles passent d'abord : « Autoriser automatiquement » passe sans carte, « Refuser » refuse."
+          }
+        }
+      }
+    },
+    "Asleep": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En veille"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Em repouso"
           }
         }
       }
@@ -14215,6 +14259,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avatares, títulos e a última mensagem."
+          }
+        }
+      }
+    },
+    "Awake": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Éveillé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativo"
           }
         }
       }
@@ -16249,6 +16309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "CONFIDENTIEL"
+          }
+        }
+      }
+    },
+    "Configure bot": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurer le bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar bot"
           }
         }
       }
@@ -28095,6 +28171,22 @@
         }
       }
     },
+    "Document": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Document"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Documento"
+          }
+        }
+      }
+    },
     "Documentation": {
       "localizations": {
         "fr": {
@@ -37793,6 +37885,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Estou executando agora."
+          }
+        }
+      }
+    },
+    "Image": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imagem"
           }
         }
       }
@@ -54335,6 +54443,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Via MCP"
+          }
+        }
+      }
+    },
+    "Video": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vídeo"
           }
         }
       }

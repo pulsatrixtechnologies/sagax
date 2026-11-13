@@ -246,10 +246,59 @@ changement de surface. En haut à droite : partager (export) et fermer, boutons 
   icône de dossier et une phrase qui dit ce qui apparaîtra ici.
 - **Ordinateur** : voir 2.6.
 
-**iPhone.** Le panneau est une page poussée : retour rond à gauche, partager et « … » à
-droite, mascotte, nom, bouton pilule Modifier, les trois onglets. Les sections de
-Détails sont des cartes groupées ; un compteur bleu à droite du titre de section
-(« 1 actif ») ; « Ajouter une routine » en lien bleu avec un +.
+**iPhone (#4101, mesuré sur les photos du propriétaire, téléphone de 430 pt).** Règle
+de toutes les pages du téléphone : le contrôle de sortie (retour ou fermer, rond) est
+toujours en haut à gauche ; les actions (partager, « … », aide) sont en haut à droite.
+Jamais d'engrenage ni de fermeture à droite.
+
+- Panneau du bot : retour rond à gauche ; partager puis « … » à droite (le menu du
+  bot). Pas d'engrenage : la page de profil qu'il ouvrait est la pilule Modifier.
+  Mascotte centrée, nom en gras sur une ligne, pilule Modifier sous le nom. Puis des
+  cartes groupées, toutes au même bord gauche et droit. Carte 1 : Bibliothèque,
+  Ordinateur (son état en gris), Activité. Titre gris « Configurer le bot », puis
+  carte 2 : les canaux qu'on a (Slack, adresse courriel), Clavardage vocal, Routines
+  (« N actives »). Carte 3 : Notifications avec interrupteur, note grise sous la carte.
+  Chaque rangée pousse sa page ; pas d'onglets Activité / Bibliothèque. Rien n'est
+  perdu : suggestions, tâches et travail de code dans Activité, les routines à venir
+  dans Routines.
+- Mesures (pt) : marge de page 17 pour les cartes, les puces et les boutons du haut ;
+  centre des boutons du haut à 31 sous la zone sûre, 13 entre partager et « … ». Mascotte
+  104, 14 sous la barre ; nom 20 semi-gras ; pilule Modifier 40 de haut, 11 de
+  côté, 15 medium ; 26 entre la pilule et la première carte et entre deux groupes.
+  Rangée 52, icône contour centrée à 33 du bord de la carte, libellé et filet à 57,
+  chevron qui finit à 24 du bord ; libellé et valeur 16, valeur grise. Titre de groupe
+  et note 13 gris, à 20 du bord de la carte, 8,7 entre le titre et sa carte, note à 10
+  sous la carte. Rangée à interrupteur 61, interrupteur 66 x 30 à 20 du bord. Rayon de
+  carte 16, filet de contour pâle de 0,75 autour de chaque carte du panneau et de ses
+  pages. Icône de Bibliothèque : un dossier qui tient des livres (dessinée, 21, trait
+  1,2), pas la rangée de livres seule.
+- Barre d'une page poussée (Bibliothèque, Routines, Activité, Clavardage vocal,
+  adresse courriel) : la nôtre, pas celle du système. Retour rond de 44 sur la marge
+  de 17, centré à 31 sous la zone sûre ; titre centré 16 medium sur une ligne ;
+  claire sur la page, matière floue dès que la liste passe dessous ; le glissement
+  vers la droite ramène en arrière.
+- Bibliothèque : retour rond, titre centré ; puces Tous, Médias, Liens (35 de haut,
+  texte 12 medium à 14 du bord, 8 entre elles, la choisie blanche, centrées à 61,5
+  sous le centre de la barre), seulement celles qui ont du contenu ; titre de
+  groupe daté gris (« Plus ancien ») ; rangées de 69 : vignette arrondie de 26 à 19 du
+  bord, nom sur une ligne coupé par « … » à 55, deuxième ligne grise 14 (genre et date,
+  ou l'hôte seul pour un lien). Tous liste tout : les liens du bot parmi les fichiers,
+  artefacts et pages, dans les mêmes groupes datés, du plus récent au plus ancien ;
+  Médias garde images et vidéos ; Liens garde sa liste paginée. Aucun compteur sur
+  les puces. « Afficher plus » centré, gris, sous la carte (puis, sur Tous, la page de
+  liens suivante). Les actions d'une rangée sont dans son appui long.
+- Ordinateur : page noire ; retour rond, petite mascotte et nom sur une ligne coupé,
+  aide ronde à droite ; roue et phrase d'état centrées au démarrage. Les boutons du
+  haut et ceux du bas (presse-papiers, clavier) sur la marge de 17, comptée une seule
+  fois (la barre n'ajoute pas son propre bord), centrés à 31 sous la zone sûre (la zone
+  sûre comptée une seule fois) ; en portrait, aucune bande de matière derrière les
+  barres, seulement en paysage où elles flottent sur l'image. Écrans d'organisation
+  (environnement serveur, VM locale, navigateur) : le choix d'écran, l'étiquette et
+  l'image commencent sous le retour, jamais dessous, sur la même marge de 17.
+- Routines : retour rond, titre centré, la barre floute la liste. Une carte ; chaque
+  rangée : nom sur une ligne coupé, horaire en mots et état en gris 14 sur deux lignes
+  au plus, interrupteur à droite ; filets pleine largeur. Puis Ajouter une routine,
+  Trier par préfixe, Journaux d'exécution.
 
 ### 2.3b Panneau d'une personne
 

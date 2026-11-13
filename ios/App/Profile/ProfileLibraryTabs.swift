@@ -23,9 +23,6 @@ struct LinksTab: View {
     @ObservedObject var loader: LibraryLoader<BotLink>
     /// Show the link's message in its conversation; the host closes what covers it.
     var onShowMessage: ((BotLink) -> Void)? = nil
-    @ObservedObject private var previews = LinkPreviewStore.shared
-    @State private var opened: IdentifiedURL?
-    @State private var sharing: IdentifiedURL?
     @State private var status: String?
     @State private var statusClear: Task<Void, Never>?
 
@@ -34,8 +31,8 @@ struct LinksTab: View {
             if let page = loader.page, !page.items.isEmpty {
                 ProfileCard {
                     ForEach(Array(page.items.enumerated()), id: \.element.id) { index, link in
-                        if index > 0 { ProfileDivider() }
-                        row(link, index: index)
+                        if index > 0 { PanelRowDivider(leading: Theme.PhonePanel.listTextColumn) }
+                        LibraryLinkButton(bot: bot, link: link, subtitle: .full, identifier: "profile-link.\(index)", onShowMessage: onShowMessage) { copied() }
                     }
                 }
                 if page.hasMore { ShowMoreButton(loading: loader.loading) { loader.loadMore() } }
@@ -57,47 +54,79 @@ struct LinksTab: View {
                     .accessibilityIdentifier("profile-links-status")
             }
         }
-        .sheet(item: $opened) { link in
-            CloudDesktopBrowser(url: link.url).ignoresSafeArea()
-        }
-        .sheet(item: $sharing) { item in ProfileShareSheet(items: [item.url]) }
     }
 
-    private func row(_ link: BotLink, index: Int) -> some View {
+    private func copied() {
+        withAnimation { status = String(localized: "Link copied") }
+        statusClear?.cancel()
+        statusClear = Task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation { status = nil }
+        }
+    }
+}
+
+/// One of the bot's links as a Library row, on the Links chip and among the
+/// files on All (#4101): a tap opens a web page in the in-app browser
+/// (SFSafariViewController), or copies an address that only answers on the
+/// computer; a long press offers Open, Open in Safari, Copy Link, Share and
+/// Go to Message. The host shows "Link copied" (`onCopied`).
+struct LibraryLinkButton: View {
+    /// Under the title: on Links the host, the day and the conversation;
+    /// on All the host alone, as the reference's All page draws a link.
+    enum Subtitle { case full, host }
+
+    let bot: Bot
+    let link: BotLink
+    let subtitle: Subtitle
+    let identifier: String
+    var onShowMessage: ((BotLink) -> Void)? = nil
+    let onCopied: () -> Void
+    @ObservedObject private var previews = LinkPreviewStore.shared
+    @State private var opened: IdentifiedURL?
+    @State private var sharing: IdentifiedURL?
+
+    var body: some View {
         let computer = link.reach == .computer
         let preview = computer ? nil : link.webURL.flatMap(previews.preview(for:))
-        return Button {
+        let line = subtitleText(computer: computer)
+        Button {
             Haptics.selection()
             if computer {
-                copy(link)
+                copy()
             } else if let url = link.webURL {
                 opened = IdentifiedURL(url: url)
             }
         } label: {
-            LinkRow(link: link, preview: preview, subtitle: subtitle(link, computer: computer), computer: computer)
+            LinkRow(link: link, preview: preview, subtitle: line, computer: computer)
         }
         .buttonStyle(.plain)
-        .contextMenu { menu(link, computer: computer) }
+        .contextMenu { menu(computer: computer) }
         .onAppear { if !computer, let url = link.webURL { previews.load(url) } }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: accessibilityText(link, preview: preview, computer: computer)))
+        .accessibilityLabel(Text(verbatim: [LinkRow.title(link, preview: preview, computer: computer), line, link.readableAddress].joined(separator: ", ")))
         .accessibilityHint(computer ? Text("Copies the link") : Text("Opens the page"))
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: Text("Copy link")) { copy(link) }
+        .accessibilityAction(named: Text("Copy link")) { copy() }
         .accessibilityAction(named: Text("Share")) { if let url = link.webURL { sharing = IdentifiedURL(url: url) } }
         .accessibilityAction(named: Text("Go to message")) { onShowMessage?(link) }
-        .accessibilityIdentifier("profile-link.\(index)")
+        .accessibilityIdentifier(identifier)
+        .sheet(item: $opened) { item in
+            CloudDesktopBrowser(url: item.url).ignoresSafeArea()
+        }
+        .sheet(item: $sharing) { item in ProfileShareSheet(items: [item.url]) }
     }
 
     @ViewBuilder
-    private func menu(_ link: BotLink, computer: Bool) -> some View {
+    private func menu(computer: Bool) -> some View {
         if !computer, let url = link.webURL {
             Button { opened = IdentifiedURL(url: url) } label: { Label("Open", systemImage: "safari") }
                 .accessibilityIdentifier("link-menu.open")
             Button { UIApplication.shared.open(url) } label: { Label("Open in Safari", systemImage: "arrow.up.forward.app") }
                 .accessibilityIdentifier("link-menu.safari")
         }
-        Button { copy(link) } label: { Label("Copy link", systemImage: "doc.on.doc") }
+        Button { copy() } label: { Label("Copy link", systemImage: "doc.on.doc") }
             .accessibilityIdentifier("link-menu.copy")
         if let url = link.webURL {
             Button { sharing = IdentifiedURL(url: url) } label: { Label("Share", systemImage: "square.and.arrow.up") }
@@ -109,17 +138,16 @@ struct LinksTab: View {
         }
     }
 
-    /// "example.com · Oct 12 · Migration plan", or "On the computer · ..."
-    private func subtitle(_ link: BotLink, computer: Bool) -> String {
-        var parts = [computer ? String(localized: "On the computer") : link.domain]
+    /// "example.com · Oct 12 · Migration plan" on Links, "example.com" on
+    /// All; "On the computer" in place of the host for a local address.
+    private func subtitleText(computer: Bool) -> String {
+        let host = computer ? String(localized: "On the computer") : link.domain
+        guard subtitle == .full else { return host }
+        var parts = [host]
         if link.at > 0 { parts.append(Self.day(link.at)) }
         let thread = link.threadId.flatMap { id in bot.tasks?.first { $0.threadId == id }?.title }
         if let thread, !thread.isEmpty { parts.append(thread) } else if link.threadId != bot.threadId || bot.tasks == nil { parts.append(bot.name) }
         return parts.joined(separator: " \u{00B7} ")
-    }
-
-    private func accessibilityText(_ link: BotLink, preview: LinkPreview?, computer: Bool) -> String {
-        [LinkRow.title(link, preview: preview, computer: computer), subtitle(link, computer: computer), link.readableAddress].joined(separator: ", ")
     }
 
     private static func day(_ at: Double) -> String {
@@ -129,15 +157,9 @@ struct LinksTab: View {
         return sameYear ? date.formatted(.dateTime.month(.abbreviated).day()) : date.formatted(.dateTime.year().month(.abbreviated).day())
     }
 
-    private func copy(_ link: BotLink) {
+    private func copy() {
         UIPasteboard.general.string = link.webURL?.absoluteString ?? link.url
-        withAnimation { status = String(localized: "Link copied") }
-        statusClear?.cancel()
-        statusClear = Task {
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation { status = nil }
-        }
+        onCopied()
     }
 }
 
@@ -155,42 +177,44 @@ struct LinkRow: View {
         return preview?.title ?? link.fallbackTitle
     }
 
+    /// The reference's Library row (#4101): a 26 pt rounded thumbnail, the
+    /// page's name on one line cut at its end, the host and the day muted.
     var body: some View {
         HStack(spacing: 0) {
             thumbnail
-                .frame(width: Theme.Profile.iconColumn, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: Theme.PhonePanel.thumbnail, height: Theme.PhonePanel.thumbnail)
+                .padding(.leading, Theme.PhonePanel.thumbnailLeading)
+                .frame(width: Theme.PhonePanel.listTextColumn, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: Self.title(link, preview: preview, computer: computer))
-                    .font(Theme.Font.body)
+                    .font(Theme.PhonePanel.rowFont)
                     .foregroundStyle(computer ? Theme.textSecondary : Theme.textPrimary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(verbatim: subtitle)
-                    .font(Theme.Profile.labelFont)
+                    .font(Theme.PhonePanel.subtitleFont)
                     .foregroundStyle(computer ? Theme.textTertiary : Theme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if computer, link.title != nil {
                     Text(verbatim: link.readableAddress)
-                        .font(Theme.Profile.labelFont.monospaced())
+                        .font(Theme.PhonePanel.subtitleFont.monospaced())
                         .foregroundStyle(Theme.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 12)
             if computer {
                 Image(systemName: "doc.on.doc")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.textTertiary)
-                    .padding(.trailing, Theme.Profile.chevronTrailing)
-            } else {
-                ProfileChevronTrailing()
+                    .padding(.leading, 12)
             }
         }
+        .padding(.trailing, Theme.PhonePanel.textInset)
         .padding(.vertical, 12)
-        .frame(minHeight: Theme.Profile.linkRow)
+        .frame(minHeight: Theme.PhonePanel.listRow)
         .contentShape(Rectangle())
     }
 
@@ -200,12 +224,14 @@ struct LinkRow: View {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 34, height: 34)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.hairline))
-                .padding(.leading, Theme.Profile.iconCentre - 17)
+                .frame(width: Theme.PhonePanel.thumbnail, height: Theme.PhonePanel.thumbnail)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.hairline))
         } else {
-            ProfileRowIcon(systemImage: computer ? "desktopcomputer" : "globe", size: 17.5, color: computer ? Theme.textTertiary : Theme.iconGrey)
+            Image(systemName: computer ? "desktopcomputer" : "globe")
+                .font(.system(size: 17.5))
+                .foregroundStyle(computer ? Theme.textTertiary : Theme.iconGrey)
+                .accessibilityHidden(true)
         }
     }
 }

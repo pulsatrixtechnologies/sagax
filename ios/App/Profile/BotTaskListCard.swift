@@ -90,7 +90,8 @@ struct BotTaskListCard: View {
     let bot: Bot
     /// Opens a conversation of this bot (the task's, else the bot's main one).
     let openThread: (String) -> Void
-    /// The phone panel's own margins, only while the section shows.
+    /// The phone panel's gap above the section, only while it shows (the
+    /// side margin is the panel column's, #4101).
     var insets = false
 
     @State private var tasks: [BotTodo]?
@@ -126,7 +127,6 @@ struct BotTaskListCard: View {
                 content
             }
         }
-        .padding(.horizontal, insets && !isHidden ? 16 : 0)
         .padding(.top, insets && !isHidden ? 12 : 0)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("panel-tasks")

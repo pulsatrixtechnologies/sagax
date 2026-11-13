@@ -70,7 +70,7 @@ struct BotSuggestionsCard: View {
                             .accessibilityIdentifier("panel-suggestion.\(item.id)")
                         }
                     }
-                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
                 }
             }
         }

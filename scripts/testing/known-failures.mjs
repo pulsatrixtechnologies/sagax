@@ -472,8 +472,52 @@ export function isGreen(item, { failedOn, platforms, ranEverywhere }) {
   return coversEveryPlatform(platforms) && ranEverywhere.has(item.file);
 }
 
+/** The runners a sighting failed on, for a sighting recorded before the
+ * sightings kept them (#4102): without them, isGreen asks for a run whose
+ * jobs all ran its file on every platform, which a run with one cancelled
+ * macOS shard never gives, so its issue never closed. `runsAt(sha)` gives the
+ * CI runs of main at a commit, each `{ platforms, failing }`: `failing` maps
+ * a test's identityKey to the runners it failed on in that run (its results),
+ * or is null when they are not at hand; a run on one platform then names that
+ * platform. A sighting that keeps its runners, or whose runs say nothing, is
+ * left as it is. */
+export function recoverFailedOn(sightings, runsAt) {
+  if (!sightings?.tests) return sightings;
+  const tests = {};
+  for (const [key, entry] of Object.entries(sightings.tests)) {
+    if (entry?.failedOn?.length) {
+      tests[key] = entry;
+      continue;
+    }
+    const runners = new Set();
+    for (const sha of new Set([entry?.firstSha, entry?.lastSha].filter(Boolean))) {
+      for (const run of runsAt(sha) ?? []) {
+        if (run.failing) for (const os of run.failing.get(key) ?? []) runners.add(os);
+        else if (run.platforms?.length === 1) runners.add(run.platforms[0]);
+      }
+    }
+    tests[key] = runners.size ? { ...entry, failedOn: [...runners].sort() } : entry;
+  }
+  return { ...sightings, tests };
+}
+
 const CHECK_LINE = /^- \[( |x)\] .*(<!-- known-failures: .*? -->)\s*$/;
 const MARKER = /<!-- known-failures: .*? -->/g;
+
+/** The test a marker names, as written (a `--` in it reads `- -`). */
+export const markerTest = (marker) => {
+  const key = marker.replace(/^<!-- known-failures: /, "").replace(/ -->$/, "");
+  const at = key.indexOf(" > ");
+  return at < 0 ? { file: key, test: "" } : { file: key.slice(0, at), test: key.slice(at + 3) };
+};
+
+/** The markers of an open regression issue's tests: those in its body and
+ * those of the sightings tied to it. */
+export function issueMarkers(issue, sightings) {
+  const markers = new Set([...String(issue.body ?? "").matchAll(MARKER)].map((match) => match[0]));
+  for (const [key, entry] of Object.entries(sightings?.tests ?? {})) if (entry?.issue === issue.number) markers.add(markerOfKey(key));
+  return markers;
+}
 
 /** What a run on main does to each open regression issue (#4037, #4052),
  * shared by the rail and the close by hand. An issue's tests are the markers
@@ -485,15 +529,22 @@ const MARKER = /<!-- known-failures: .*? -->/g;
  * test is done; `reason` says why one stays: "other" (no test of the rail),
  * "fail" (a test failed in this run) or "not-green" (a test did not run, or
  * not on each runner it failed on).
- * @returns {{ number: number, title?: string, body: string | null, ticked: number, close: boolean, reason?: "other" | "fail" | "not-green" }[]} */
-export function planRegressionUpdates(open, { results, platforms = [], sightings }) {
+ * The Swift package tests' marker (SWIFT_IDENTITY) is done when `swift`,
+ * swiftOutcome's state for this run, is "pass", and failed when it is "fail"
+ * (#4102). `gone` maps the marker of a test that no longer exists on main to
+ * the commit that removed or renamed it: such a test is done, and the plan
+ * lists it in `gone` for the closing comment.
+ * @returns {{ number: number, title?: string, body: string | null, ticked: number, close: boolean, gone?: { test: string, commit: string }[], reason?: "other" | "fail" | "not-green" }[]} */
+export function planRegressionUpdates(open, { results, platforms = [], sightings, swift = null, gone = new Map() }) {
   const index = indexRun(results, platforms);
   const ranEverywhere = filesRunOn(results ?? [], platforms ?? []);
   const recorded = sightings?.tests ?? {};
   const byMarker = new Map([...index.values()].map((item) => [regressionMarker(item), item]));
+  const swiftMarker = regressionMarker(SWIFT_IDENTITY);
+  if (swift === "fail") byMarker.set(swiftMarker, { ...SWIFT_IDENTITY, failed: true, passedOn: new Set() });
   const failedOn = new Map(Object.entries(recorded).map(([key, entry]) => [markerOfKey(key), entry?.failedOn]));
-  const tied = Map.groupBy(Object.entries(recorded).filter(([, entry]) => entry?.issue), ([, entry]) => entry.issue);
-  const green = (marker) => isGreen(byMarker.get(marker), { failedOn: failedOn.get(marker), platforms, ranEverywhere });
+  // One `swift test` job covers the package: its own step says pass or fail.
+  const green = (marker) => marker === swiftMarker ? swift === "pass" : isGreen(byMarker.get(marker), { failedOn: failedOn.get(marker), platforms, ranEverywhere });
   const plans = [];
   for (const issue of open ?? []) {
     if (issue.pull_request) continue;
@@ -510,14 +561,16 @@ export function planRegressionUpdates(open, { results, platforms = [], sightings
       ticks.set(match[2], mark === "x");
       return mark === match[1] ? line : line.replace(/^- \[( |x)\]/, `- [${mark}]`);
     }).join("\n");
-    const markers = new Set([...body.matchAll(MARKER)].map((match) => match[0]));
-    for (const [key] of tied.get(issue.number) ?? []) markers.add(markerOfKey(key));
+    const markers = issueMarkers(issue, sightings);
     // A tied test the body does not list, green now, counts as passing again.
     for (const marker of markers) if (!ticks.has(marker) && body.includes(RUN_MARKER) && green(marker)) ticked += 1;
-    const done = (marker) => green(marker) || (ticks.get(marker) === true && !byMarker.get(marker)?.failed);
+    // A test that ran in this run is judged by it; only one that did not can be gone.
+    const removed = (marker) => !byMarker.has(marker) && gone.has(marker);
+    const done = (marker) => green(marker) || removed(marker) || (ticks.get(marker) === true && !byMarker.get(marker)?.failed);
     const close = markers.size > 0 && [...markers].every(done);
     const reason = close ? undefined : markers.size === 0 ? "other" : [...markers].some((marker) => byMarker.get(marker)?.failed) ? "fail" : "not-green";
-    plans.push({ number: issue.number, title: issue.title, body: next === body ? null : next, ticked: body.includes(RUN_MARKER) ? ticked : close ? markers.size : 0, close, ...(reason ? { reason } : {}) });
+    const goneTests = close ? [...markers].filter(removed).map((marker) => ({ test: identityKey(markerTest(marker)), commit: gone.get(marker) })) : [];
+    plans.push({ number: issue.number, title: issue.title, body: next === body ? null : next, ticked: body.includes(RUN_MARKER) ? ticked : close ? markers.size : 0, close, ...(goneTests.length ? { gone: goneTests } : {}), ...(reason ? { reason } : {}) });
   }
   return plans;
 }
@@ -526,13 +579,22 @@ export function planRegressionUpdates(open, { results, platforms = [], sightings
 export const greenEvidence = ({ runUrl, sha }) =>
   `Passes on main in ${runUrl}${sha ? ` (commit ${sha})` : ""}, so this regression issue is closed. A new failure of the test opens a new one.`;
 
+/** The comment that closes a regression issue from a plan: the green run, and
+ * each test that no longer exists with the commit that removed or renamed it. */
+export function closingEvidence({ runUrl, sha, gone = [], tests = 0 }) {
+  if (!gone.length) return greenEvidence({ runUrl, sha });
+  const lines = gone.map((item) => `- \`${inline(item.test)}\`: removed or renamed in commit ${item.commit}`);
+  const rest = tests > gone.length ? ` Its other tests pass on main in ${runUrl}${sha ? ` (commit ${sha})` : ""}.` : "";
+  return [`Test no longer exists on main, so this regression issue is closed.${rest}`, "", ...lines].join("\n");
+}
+
 /** The open regression issues whose tests passed in this run on main
  * (#4037), as planRegressionUpdates decides: a run's issue gets its lines
  * ticked or unticked, and an issue closes, with the run as evidence, once
  * every test tied to it is green. A test that did not run leaves its line as
  * it is.
  * @returns {Promise<{ issue: number, ticked: number, closed: boolean }[]>} */
-export async function updateRegressionIssues(open, { results, platforms, sightings, runUrl, sha, repo, token, fetch: fetchImpl = fetch, apiUrl = "https://api.github.com" }) {
+export async function updateRegressionIssues(open, { results, platforms, sightings, swift = null, runUrl, sha, repo, token, fetch: fetchImpl = fetch, apiUrl = "https://api.github.com" }) {
   const close = async (number) => {
     const comment = await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/issues/${number}/comments`, { body: greenEvidence({ runUrl, sha }) });
     if (comment.status !== 201) throw new Error(`HTTP ${comment.status} commenting on #${number}`);
@@ -540,7 +602,7 @@ export async function updateRegressionIssues(open, { results, platforms, sightin
     if (closed.status !== 200) throw new Error(`HTTP ${closed.status} closing #${number}`);
   };
   const updates = [];
-  for (const plan of planRegressionUpdates(open, { results, platforms, sightings })) {
+  for (const plan of planRegressionUpdates(open, { results, platforms, sightings, swift })) {
     if (plan.body !== null) {
       const { status } = await github(fetchImpl, apiUrl, token, "PATCH", `/repos/${repo}/issues/${plan.number}`, { body: plan.body });
       if (status !== 200) throw new Error(`HTTP ${status} updating #${plan.number}`);
@@ -751,7 +813,9 @@ async function openIssues(options) {
   // The regression issues whose tests pass again: ticked or closed (#4037).
   if (open) {
     try {
-      for (const { issue, ticked, closed } of await updateRegressionIssues(open, { results, platforms, sightings, runUrl: options["run-url"], sha: String(options.sha), repo, token, apiUrl })) {
+      // The Swift package tests' issue closes on a run whose Swift step passed (#4102).
+      const swift = swiftOutcome(readJsonLines(options.jobs))?.state ?? null;
+      for (const { issue, ticked, closed } of await updateRegressionIssues(open, { results, platforms, sightings, swift, runUrl: options["run-url"], sha: String(options.sha), repo, token, apiUrl })) {
         console.log(`${closed ? "Closed" : "Updated"}: #${issue}, ${ticked} test(s) passing again.`);
       }
     } catch (error) {

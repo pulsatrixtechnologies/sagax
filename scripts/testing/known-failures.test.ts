@@ -10,11 +10,13 @@ import {
   classify,
   closingEvidence,
   coversEveryPlatform,
+  entryPlatforms,
   EVERY_PLATFORM,
   extractResults,
   failingSwiftTests,
   filesRunOn,
   GROUP_ABOVE,
+  GUARD_FOLDERS,
   greenEvidence,
   jobsWithoutRunner,
   identityKey,
@@ -67,7 +69,16 @@ describe("the known-failures list", () => {
     const list = JSON.parse(readFileSync(listPath, "utf8"));
     expect(typeof list.$comment).toBe("string");
     expect(Array.isArray(list.tests)).toBe(true);
-    for (const test of list.tests) expect(Object.keys(test).sort()).toEqual(["file", "owner", "reason", "since", "test"]);
+    for (const test of list.tests) expect(Object.keys(test).sort()).toEqual(["file", "owner", "platforms", "reason", "since", "test"]);
+  });
+
+  it("names the runners each entry fails on, from the runs, never every platform by default (#3569)", () => {
+    const list = JSON.parse(readFileSync(listPath, "utf8"));
+    for (const test of list.tests) {
+      expect(test.platforms.length, identityKey(test)).toBeGreaterThan(0);
+      expect(test.platforms, identityKey(test)).toEqual([...new Set(test.platforms as string[])].sort());
+      for (const os of test.platforms) expect(EVERY_PLATFORM, identityKey(test)).toContain(os);
+    }
   });
 
   it("names no guard test: a guard test is fixed on every platform, never listed (#3558)", () => {
@@ -80,6 +91,14 @@ describe("the known-failures list", () => {
       "scripts/testing/agents-md.guard.test.ts > (whole file) is a guard test: fix it, never list it in scripts/testing/known-failures.json",
     ]);
     expect(listedGuardTests(list, ["server/a.test.ts"])).toHaveLength(1);
+  });
+
+  it("refuses every test of the safety folder, guard tests list or not (#3569)", () => {
+    expect(GUARD_FOLDERS).toContain("server/safety/");
+    const list = { tests: [entry("server/safety/sensitive-path.test.ts", "refuses /proc secrets"), entry("server/safety-net.test.ts", "x")] };
+    expect(listedGuardTests(list, [])).toEqual([
+      "server/safety/sensitive-path.test.ts > refuses /proc secrets is a guard test: fix it, never list it in scripts/testing/known-failures.json",
+    ]);
   });
 });
 
@@ -140,6 +159,33 @@ describe("classify and shrink", () => {
     const both = [{ file: "a.test.ts", test: "listed and fixed", state: "pass" }, { file: "a.test.ts", test: "listed and fixed", state: "fail" }];
     expect(classify(list, both).fixed).toEqual([]);
   });
+
+  it("takes a failure on a runner its entry does not name as a new failure (#3569)", () => {
+    const windowsOnly = [{ ...entry("a.test.ts", "fails on windows"), platforms: ["windows-latest"] }];
+    const onWindows = classify(windowsOnly, [{ file: "a.test.ts", test: "fails on windows", state: "fail", os: "windows-latest" }]);
+    expect(onWindows.newFailures).toEqual([]);
+    expect(onWindows.listedFailing).toHaveLength(1);
+    const onLinux = classify(windowsOnly, [
+      { file: "a.test.ts", test: "fails on windows", state: "fail", os: "windows-latest" },
+      { file: "a.test.ts", test: "fails on windows", state: "fail", os: "ubuntu-latest" },
+    ]);
+    expect(onLinux.newFailures).toEqual([{ file: "a.test.ts", test: "fails on windows" }]);
+    // An entry from before #3569 names no runner: every platform.
+    expect(entryPlatforms(entry("a.test.ts", "old"))).toEqual(EVERY_PLATFORM);
+    expect(classify([entry("a.test.ts", "old")], [{ file: "a.test.ts", test: "old", state: "fail", os: "ubuntu-latest" }]).newFailures).toEqual([]);
+  });
+
+  it("drops the runners a listed test passed on, and the entry once none is left (#3569)", () => {
+    const tests = [{ ...entry("a.test.ts", "two runners"), platforms: ["macos-latest", "windows-latest"] }, { ...entry("a.test.ts", "one runner"), platforms: ["windows-latest"] }];
+    const run = [
+      { file: "a.test.ts", test: "two runners", state: "pass" as const, os: "windows-latest" },
+      { file: "a.test.ts", test: "two runners", state: "pass" as const, os: "ubuntu-latest" },
+      { file: "a.test.ts", test: "one runner", state: "pass" as const, os: "windows-latest" },
+    ];
+    const { fixed } = classify(tests, run);
+    expect(fixed.map((item: { test: string; passedOn: string[] }) => [item.test, item.passedOn])).toEqual([["two runners", ["windows-latest"]], ["one runner", ["windows-latest"]]]);
+    expect(shrink({ $comment: "c", tests }, fixed).tests).toEqual([{ ...tests[0], platforms: ["macos-latest"] }]);
+  });
 });
 
 describe("filesRunOn and jobsWithoutRunner (#3672)", () => {
@@ -186,6 +232,16 @@ describe("onlyShrinks", () => {
     expect(onlyShrinks(base, { ...base, seeded: "run 2", tests: [...base.tests, entry("c.test.ts", "again")] })).toHaveLength(1);
   });
 
+  it("refuses an entry that gained a runner, and accepts one that names fewer than before (#3569)", () => {
+    const old = { $comment: "c", seeded: "run 1", tests: [entry("a.test.ts", "one")] };
+    const narrowed = { ...old, tests: [{ ...entry("a.test.ts", "one"), platforms: ["windows-latest"] }] };
+    expect(onlyShrinks(old, narrowed)).toEqual([]);
+    expect(onlyShrinks(narrowed, { ...old, tests: [{ ...entry("a.test.ts", "one"), platforms: ["ubuntu-latest", "windows-latest"] }] })).toEqual([
+      "a.test.ts > one gained ubuntu-latest in scripts/testing/known-failures.json; the list can only shrink",
+    ]);
+    expect(onlyShrinks(narrowed, old)).toHaveLength(1);
+  });
+
   it("refuses a list file that was removed", () => {
     expect(onlyShrinks(base, null)).toEqual(["scripts/testing/known-failures.json was removed"]);
   });
@@ -195,7 +251,16 @@ describe("seedList", () => {
   it("lists every failure once, with the run that saw it", () => {
     const seeded = seedList({ $comment: "c", tests: [] }, [{ file: "a.test.ts", test: "x" }, { file: "a.test.ts", test: "x" }], { runUrl: "https://example.test/run/1", since: "2026-11-10" });
     expect(seeded.seeded).toBe("https://example.test/run/1");
-    expect(seeded.tests).toEqual([{ file: "a.test.ts", test: "x", owner: "unassigned", reason: "Failing when the list was first filled by https://example.test/run/1.", since: "2026-11-10" }]);
+    expect(seeded.tests).toEqual([{ file: "a.test.ts", test: "x", platforms: EVERY_PLATFORM, owner: "unassigned", reason: "Failing when the list was first filled by https://example.test/run/1.", since: "2026-11-10" }]);
+  });
+
+  it("records the runners each failure was seen on (#3569)", () => {
+    const seeded = seedList({ $comment: "c", tests: [] }, [
+      { file: "a.test.ts", test: "x", os: "windows-latest" },
+      { file: "a.test.ts", test: "x", os: "macos-latest" },
+      { file: "a.test.ts", test: "x", os: "windows-latest" },
+    ], { runUrl: "u", since: "2026-11-13" });
+    expect(seeded.tests.map((test: { platforms: string[] }) => test.platforms)).toEqual([["macos-latest", "windows-latest"]]);
   });
 });
 
@@ -760,7 +825,7 @@ describe("the command line", () => {
     expect(JSON.parse(readFileSync(join(out, "new-failures.json"), "utf8"))).toEqual([{ file: "a.test.ts", test: "planted" }]);
   });
 
-  it("keeps a listed test that passed in a run on Linux only, since it may still fail on Windows or macOS", () => {
+  it("keeps a listed test that passed in a run on Linux only for the runners that run did not reach", () => {
     const dir = tempDir();
     const list = join(dir, "list.json");
     const tests = [entry("a.test.ts", "fails on windows only"), entry("a.test.ts", "still failing")];
@@ -772,9 +837,12 @@ describe("the command line", () => {
     const out = join(dir, "out");
     const result = run(["report", "--results", join(dir, "results"), "--expect", "1", "--list", list, "--platforms", '["ubuntu-latest"]', "--out", out]);
     expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, "known-failures.json"), "utf8")).tests.map((test: { test: string }) => test.test)).toEqual(["fails on windows only", "still failing"]);
+    const after = JSON.parse(readFileSync(join(out, "known-failures.json"), "utf8")).tests;
+    expect(after.map((test: { test: string }) => test.test)).toEqual(["fails on windows only", "still failing"]);
+    expect(after[0].platforms).toEqual(["macos-latest", "windows-latest"]);
     expect(result.stdout).not.toContain("Known failure passed");
-    expect(result.stdout).toContain("1 listed test(s) passed on ubuntu-latest only; they stay in the list");
+    expect(result.stdout).toContain("1 listed test(s) passed on some of their runners");
+    expect(result.stdout).toContain("passed on ubuntu-latest, still listed for macos-latest, windows-latest");
     // The nightly run on every platform then sees it fail on Windows: still listed, still green.
     shardResults(join(dir, "results"), "windows-latest-1", [{ file: "a.test.ts", test: "fails on windows only", state: "fail" }]);
     const nightly = run(["report", "--results", join(dir, "results"), "--expect", "2", "--list", join(out, "known-failures.json"), "--platforms", JSON.stringify(EVERY_PLATFORM), "--out", join(dir, "nightly")]);
@@ -782,7 +850,20 @@ describe("the command line", () => {
     expect(JSON.parse(readFileSync(join(dir, "nightly", "new-failures.json"), "utf8"))).toEqual([]);
   });
 
-  it("shrinks only for a run that covered every platform", () => {
+  it("turns red when a test listed for one runner fails on another (#3569)", () => {
+    const dir = tempDir();
+    const list = join(dir, "list.json");
+    writeFileSync(list, JSON.stringify({ $comment: "c", seeded: "s", tests: [{ ...entry("a.test.ts", "windows only"), platforms: ["windows-latest"] }] }));
+    shardResults(join(dir, "results"), "windows-latest-1", [{ file: "a.test.ts", test: "windows only", state: "fail" }]);
+    expect(run(["report", "--results", join(dir, "results"), "--expect", "1", "--list", list, "--out", join(dir, "o1")]).status).toBe(0);
+    shardResults(join(dir, "results"), "ubuntu-latest-1", [{ file: "a.test.ts", test: "windows only", state: "fail" }]);
+    const red = run(["report", "--results", join(dir, "results"), "--expect", "2", "--list", list, "--out", join(dir, "o2")]);
+    expect(red.status).toBe(1);
+    expect(red.stdout).toContain("| `a.test.ts` > windows only | ubuntu-latest |");
+    expect(JSON.parse(readFileSync(join(dir, "o2", "new-failures.json"), "utf8"))).toEqual([{ file: "a.test.ts", test: "windows only" }]);
+  });
+
+  it("knows a run on every platform, the one that may forget a sighting", () => {
     expect(coversEveryPlatform(["ubuntu-latest"])).toBe(false);
     expect(coversEveryPlatform(["ubuntu-latest", "windows-latest"])).toBe(false);
     expect(coversEveryPlatform(undefined)).toBe(false);
@@ -822,8 +903,9 @@ describe("the command line", () => {
     expect(nightly.stdout).toContain("5 of 6 test jobs sent results.");
     expect(nightly.stdout).toContain("1 test job(s) of macos-latest got no runner (shard 2): GitHub never gave them a machine, so their tests did not run on macos-latest. This is not a test failure");
     expect(nightly.stdout).not.toContain("crashed");
-    expect(nightly.stdout).toContain("1 listed test(s) passed but did not run on every platform");
-    expect(JSON.parse(readFileSync(join(dir, "out", "known-failures.json"), "utf8")).tests.map((test: { test: string }) => test.test)).toEqual(["passes where it ran"]);
+    // The runner that got no machine stays on the entry; the others leave it (#3569).
+    expect(nightly.stdout).toContain("passed on ubuntu-latest, windows-latest, still listed for macos-latest");
+    expect(JSON.parse(readFileSync(join(dir, "out", "known-failures.json"), "utf8")).tests).toEqual([{ ...entry("two.test.ts", "passes where it ran"), platforms: ["macos-latest"] }]);
     // Without the run's job list, a missing job still reads as a crash: red.
     const crash = run([...args, "--out", join(dir, "crash")]);
     expect(crash.status).toBe(1);
@@ -843,6 +925,7 @@ describe("the command line", () => {
     const seeded = JSON.parse(readFileSync(join(dir, "out", "known-failures.json"), "utf8"));
     expect(seeded.seeded).toBe("https://example.test/run/9");
     expect(seeded.tests.map((test: { test: string }) => test.test)).toEqual(["red today"]);
+    expect(seeded.tests[0].platforms).toEqual(["linux"]);
   });
 
   it("extracts a shard's results from a vitest JSON report", () => {

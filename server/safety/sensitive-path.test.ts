@@ -2,13 +2,19 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { ownEnvironmentSensitiveRead } from "../people/member-environment.ts";
 import { credentialLocation, procSecretPath, resolvedReadRefusal, sensitiveEnvironmentPath } from "./sensitive-path.ts";
 import { callUserSandboxTool, type ToolExec } from "../sandbox/user-sandbox-tools.ts";
 
 const hasPython = spawnSync("python3", ["-c", "print(1)"]).status === 0;
+// The environment these tools reach is a Linux machine (USER_SANDBOX_TOOLS:
+// sh, head, ls, /proc, O_NOFOLLOW on a POSIX path). The cases below run it
+// here, on this host's own folders; a Windows host cannot stand in for it:
+// its paths do not start at "/", so the resolution fails closed on every
+// path and no case of a link, a hard link or a swap can be built (#3569).
+const NOT_A_POSIX_HOST = "a Windows host cannot stand in for the Linux environment these tools reach (no sh, no /proc, no POSIX paths)";
 
 describe("process secrets and credential locations (2026-10-17)", () => {
   it("names every /proc environ, cmdline and mem, with or without a task", () => {
@@ -56,6 +62,7 @@ describe("process secrets and credential locations (2026-10-17)", () => {
 });
 
 describe.skipIf(!hasPython)("reads in the environment follow no link into a credential location (real folders)", () => {
+  const windowsHost = process.platform === "win32";
   let root: string;
   let workspace: string;
   let home: string;
@@ -74,7 +81,10 @@ describe.skipIf(!hasPython)("reads in the environment follow no link into a cred
   });
   const body = (result: { content: Array<{ type: string; text?: string }> }) => result.content.map((part) => part.text ?? "").join("");
 
+  beforeEach((context) => context.skip(windowsHost, NOT_A_POSIX_HOST));
+
   beforeAll(() => {
+    if (windowsHost) return;
     root = realpathSync(mkdtempSync(join(tmpdir(), "sagax-sensitive-path-")));
     workspace = join(root, "workspace");
     home = join(root, "home");
@@ -91,7 +101,9 @@ describe.skipIf(!hasPython)("reads in the environment follow no link into a cred
     symlinkSync(join(workspace, "real-docs"), join(workspace, "docs"));
     symlinkSync("/proc/self", join(workspace, "me"));
   });
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  afterAll(() => {
+    if (root) rmSync(root, { recursive: true, force: true });
+  });
 
   it("refuses a file link to .git-credentials, a folder link to .ssh and a link to a dotfile", async () => {
     for (const path of ["notes.txt", `${workspace}/notes.txt`, "keys/config", "keys/id_rsa", "keys/not-there-yet", "docs/../keys/config", "rc"]) {

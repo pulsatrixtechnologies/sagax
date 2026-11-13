@@ -429,10 +429,11 @@ jobs:
           expected="$(node -e 'console.log(JSON.parse(process.env.VITEST_OS).length * 20)')"
           seed=""
           if [ "$SEED" = "true" ]; then seed="--seed"; fi
-          # --platforms: only a run on every platform (schedule, dispatch)
-          # drops a listed test that passed; a push runs Linux only.
+          # Each entry names the runners it fails on (#3569): a listed test
+          # leaves a runner once it passes there, so a push on Linux only
+          # shrinks the Linux runner and nothing else.
           node scripts/testing/known-failures.mjs report --results "$RUNNER_TEMP/vitest-results" --expect "$expected" \
-            --platforms "$VITEST_OS" --jobs "$RUNNER_TEMP/vitest-jobs.jsonl" --out "$RUNNER_TEMP/known-failures" --run-url "$RUN_URL" $seed
+            --jobs "$RUNNER_TEMP/vitest-jobs.jsonl" --out "$RUNNER_TEMP/known-failures" --run-url "$RUN_URL" $seed
       - name: Upload the list as this run leaves it
         # The shrunk list (or, with fill_known_failures, the first fill):
         # commit it as scripts/testing/known-failures.json.
@@ -638,28 +639,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - name: Install package validation and native smoke tools
-        # One failed fetch must not end the job, and a resolver that stops
-        # answering must not eat it whole (#3672): in November 2026 one push
-        # run failed on "Temporary failure resolving" and a nightly run spent
-        # its 25 minutes here, about 20 seconds per package per mirror. apt
-        # retries each fetch, each attempt is bounded, and the step tries
-        # three times with a pause; the step's own cap bounds the rest.
+        # Retried and bounded (#3672): scripts/ci/install-linux-smoke-tools.sh.
         timeout-minutes: 13
-        shell: bash
-        run: |
-          packages=(at-spi2-core dbus-x11 desktop-file-utils libxi6 libxkbcommon0 openbox squashfs-tools x11-utils xdotool xvfb)
-          apt=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          for attempt in 1 2 3; do
-            sudo dpkg --configure -a || true
-            if timeout 90 sudo apt-get "${apt[@]}" update && timeout 150 sudo apt-get "${apt[@]}" install -y "${packages[@]}"; then
-              exit 0
-            fi
-            echo "::warning::Package install attempt $attempt of 3 failed; trying again."
-            sudo resolvectl flush-caches || true
-            sleep $((attempt * 15))
-          done
-          echo "::error::The smoke tools could not be installed after three attempts (package mirror or name resolution)."
-          exit 1
+        run: bash scripts/ci/install-linux-smoke-tools.sh
       - run: pnpm install --frozen-lockfile
       - name: Stage the pinned CUA runtime
         run: pnpm build:cua:linux

@@ -340,11 +340,11 @@ private struct BotEditCards: View {
         let value = summaries.value(item)
         let accessory: SettingsRow.Accessory = value.map { .valueChevron($0) } ?? .chevron
         if item.destructive {
-            SettingsRow(title: item.title, style: .destructive, height: 44, identifier: item.identifier) {
+            SettingsRow(title: item.title, style: .destructive, identifier: item.identifier) {
                 item == .archive ? actions.archive() : actions.delete()
             }
         } else {
-            SettingsRow(title: item.title, accessory: accessory, height: 44, identifier: item.identifier,
+            SettingsRow(title: item.title, accessory: accessory, identifier: item.identifier,
                         accessibilityValueText: value) { open(item) }
         }
     }

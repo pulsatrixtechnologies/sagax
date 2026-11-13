@@ -13707,6 +13707,16 @@
         }
       }
     },
+    "Authorize": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser"
+          }
+        }
+      }
+    },
     "Auto": {
       "localizations": {
         "en": {
@@ -16325,6 +16335,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Configurar bot"
+          }
+        }
+      }
+    },
+    "Connect Apps": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter des apps"
+          }
+        }
+      }
+    },
+    "Connect Apps: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter des apps : les plugins, les compétences, les serveurs MCP et les connecteurs des comptes de tes moteurs. Allons voir."
           }
         }
       }
@@ -37274,7 +37304,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Comment chaque bot vous joint hors de l'app, et quand."
+            "value": "Comment chaque bot te joint hors de l'app, et quand."
           }
         },
         "pt-BR": {
@@ -40604,7 +40634,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joignez l'ordinateur de votre bot à votre tailnet privé."
+            "value": "Joins l'ordinateur de ton bot à ton tailnet privé."
           }
         }
       }
@@ -43742,7 +43772,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connexions, cartes et coordonnées que vos bots peuvent utiliser"
+            "value": "Connexions, cartes et coordonnées que tes bots peuvent utiliser"
           }
         },
         "pt-BR": {
@@ -44403,6 +44433,16 @@
         }
       }
     },
+    "Manage in Connect Apps": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer dans Connecter des apps"
+          }
+        }
+      }
+    },
     "Manage in Perspicax": {
       "localizations": {
         "en": {
@@ -44421,22 +44461,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gerenciar no Perspicax"
-          }
-        }
-      }
-    },
-    "Manage in Plugins": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manage in Plugins"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gérer dans Plugins"
           }
         }
       }
@@ -50479,18 +50503,12 @@
         }
       }
     },
-    "No marketplace yet. Add one in Plugins > Sources.": {
+    "No marketplace yet. Add one in Connect Apps > Sources.": {
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No marketplace yet. Add one in Plugins > Sources."
-          }
-        },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune marketplace pour l'instant. Ajoutez-en une dans Plugins > Sources."
+            "value": "Aucune marketplace pour l'instant. Ajoutes-en une dans Connecter des apps > Sources."
           }
         }
       }
@@ -54213,6 +54231,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conversations parallèles"
+          }
+        }
+      }
+    },
+    "Switched off in Connect Apps > Installed. Test it and turn it on there first.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé dans Connecter des apps > Installées. Teste-le et active-le là d'abord."
+          }
+        }
+      }
+    },
+    "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Connect Apps pill sits right beside it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le pied de la barre latérale : ton avatar ouvre la Carte de l’équipe, les Automatisations, Parcourir les bots et tes réglages. La pilule Connecter des apps est juste à côté."
           }
         }
       }
@@ -60805,7 +60843,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supprime définitivement votre compte Sagax. Cette action est irréversible."
+            "value": "Supprime définitivement ton compte Sagax. Cette action est irréversible."
           }
         },
         "pt-BR": {
@@ -62228,22 +62266,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plugins, ferramentas e habilidades"
-          }
-        }
-      }
-    },
-    "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plugins : les plugins, les compétences, les serveurs MCP et les connecteurs des comptes de vos moteurs. Allons voir."
           }
         }
       }
@@ -65429,7 +65451,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recommandés pour vous"
+            "value": "Recommandés pour toi"
           }
         },
         "pt-BR": {
@@ -71881,7 +71903,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rechercher dans les applications et les compétences"
+            "value": "Chercher apps et compétences"
           }
         },
         "pt-BR": {
@@ -76453,7 +76475,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connectez votre propre abonnement aux moteurs que votre organisation offre."
+            "value": "Connecte ton propre abonnement aux moteurs que ton organisation offre."
           }
         }
       }
@@ -80292,22 +80314,6 @@
         }
       }
     },
-    "Switched off in Plugins > Installed. Test it and turn it on there first.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switched off in Plugins > Installed. Test it and turn it on there first."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Désactivé dans Plugins > Installées. Teste-le et active-le là d'abord."
-          }
-        }
-      }
-    },
     "Switched off under Plugins. Test it and turn it on there first.": {
       "localizations": {
         "en": {
@@ -83541,22 +83547,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les fichiers qu'il garde et ce dont il se souvient."
-          }
-        }
-      }
-    },
-    "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le pied de la barre latérale : votre avatar ouvre la Carte de l’équipe, les Automatisations, Parcourir les bots et vos réglages. La pilule Plugins est juste à côté."
           }
         }
       }
@@ -98215,7 +98205,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'ordinateur de votre bot suit le fuseau horaire de cet appareil."
+            "value": "L'ordinateur de ton bot suit le fuseau horaire de cet appareil."
           }
         },
         "pt-BR": {
@@ -116047,15 +116037,39 @@
       "extractionState": "manual",
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld rules"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rule"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rules"
+                }
+              }
+            }
           }
         },
         "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld règles"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld règle"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld règles"
+                }
+              }
+            }
           }
         }
       }

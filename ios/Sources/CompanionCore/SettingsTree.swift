@@ -41,6 +41,7 @@ public enum SettingsItem: String, CaseIterable, Hashable, Sendable {
     public var opens: SettingsPageID? {
         switch self {
         case .profile: .account
+        // The "Permissions" row (#4103)
         case .bots: .bots
         case .privacySecurity: .privacySecurity
         case .about: .about
@@ -110,22 +111,26 @@ public enum SettingsTree {
                 // The reference app's account sheet (2026-11-01): the profile with
                 // Usage and the Vault, Connect apps, then the Bot card
                 [(.profile, true), (.usage, c.usage), (.organization, c.organization), (.vault, c.connected)],
-                [(.connectApps, c.plugins), (.publishedPages, c.connected)],
-                [(.bots, true)],
+                // Connect apps alone, as the reference's card (#4103): the
+                // published pages are its Pages chip, so the root lists them
+                // only where Connect apps is not offered
+                [(.connectApps, c.plugins), (.publishedPages, c.connected && !c.plugins)],
+                // The reference's "Bot" card (#4103): Permissions (it opens
+                // the approvals), the time zone, the computer, then the
+                // rest of the bots' settings in the same card
+                [(.bots, c.connected), (.timeZoneAuto, c.connected), (.timeZone, c.connected),
+                 (.botComputer, c.connected && c.computer), (.reachMe, c.connected),
+                 (.myEngines, c.connected && c.myEngines), (.quickReplies, true), (.callVoice, true),
+                 (.experimental, c.connected && c.experimental)],
                 [(.notifications, true), (.appearance, true), (.language, true), (.haptics, true)],
                 [(.privacySecurity, c.connected)],
                 [(.helpCenter, true), (.sendFeedback, true), (.about, true)],
                 [(.signOut, c.connected)],
             ]
         case .bots:
+            // Permissions (#4103): the approvals the root's row sums up
             all = [
                 [(.autoReviewRules, c.connected), (.approvalRules, c.connected), (.actionJournal, c.connected)],
-                [(.reachMe, c.connected)],
-                [(.myEngines, c.connected && c.myEngines)],
-                [(.timeZoneAuto, c.connected), (.timeZone, c.connected)],
-                [(.botComputer, c.connected && c.computer)],
-                [(.quickReplies, true), (.callVoice, true)],
-                [(.experimental, c.connected && c.experimental)],
             ]
         case .privacySecurity:
             all = [

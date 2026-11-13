@@ -112,9 +112,7 @@ struct NotificationSoundChoiceCard: View {
             } label: {
                 SettingsRow(
                     title: "Notification sound",
-                    accessory: .valueChevron(String(localized: String.LocalizationValue(prefs.notificationSound.label))),
-                    height: 43.67
-                )
+                    accessory: .valueChevron(String(localized: String.LocalizationValue(prefs.notificationSound.label))))
             }
             .disabled(!on)
             .accessibilityIdentifier("settings-notification-sound")

@@ -209,6 +209,9 @@ struct PersonAvatar: View {
     var presenceId: String?
     /// Their Perspicax picture (`/api/people/<id>/avatar`), else the initials.
     var avatarUrl: String?
+    /// The settings sheet's person row (#4103): muted medium letters on a
+    /// faint ink wash that reads on the card in light and dark.
+    var muted = false
     @ObservedObject private var people = PeopleDirectory.shared
 
     var body: some View {
@@ -232,10 +235,10 @@ struct PersonAvatar: View {
                 .clipShape(Circle())
         } else {
             Text(verbatim: initials)
-                .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
+                .font(.system(size: size * 0.4, weight: muted ? .medium : .semibold))
+                .foregroundStyle(muted ? Theme.textSecondary : Theme.textPrimary)
                 .frame(width: size, height: size)
-                .background(Theme.inset, in: Circle())
+                .background(muted ? Theme.textPrimary.opacity(0.08) : Theme.inset, in: Circle())
         }
     }
 }

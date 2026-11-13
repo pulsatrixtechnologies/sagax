@@ -42,7 +42,7 @@ struct DesktopCapabilitiesModal: View {
         DesktopModalFrame(width: 900, background: \.app, close: close) {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
-                    DesktopText(Text("Plugins"), size: 17, weight: .semibold, line: 24, tracking: -0.136)
+                    DesktopText(Text("Connect Apps"), size: 17, weight: .semibold, line: 24, tracking: -0.136)
                         .padding(.trailing, 48)
                     // the scope and the one search share a line (2026-10-29)
                     HStack(spacing: 12) {

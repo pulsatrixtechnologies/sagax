@@ -42,15 +42,27 @@ final class SettingsUITests: XCTestCase {
         return app
     }
 
-    /// Settings > Bots (rules, time zone): one level in since the
-    /// The reference app layout (2026-10-26).
+    /// Settings > Permissions (the rules): the root's Bot card row opens
+    /// them (#4103).
     @MainActor
     private func launchBotCard() -> XCUIApplication {
         let app = launch()
-        XCTAssertTrue(app.element("settings-bots").waitForExistence(timeout: 20))
-        app.element("settings-bots").tap()
+        rootRow("settings-bots", in: app).tap()
         XCTAssertTrue(app.element("settings-rules").waitForExistence(timeout: 20))
         return app
+    }
+
+    /// A row of the root's cards, scrolled into reach: the time zone and
+    /// the bot's computer sit in the root's Bot card (#4103).
+    @MainActor
+    private func rootRow(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        let row = app.element(identifier)
+        XCTAssertTrue(row.waitForExistence(timeout: 20), identifier)
+        for _ in 0..<8 where !row.isHittable {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+            start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)), withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
+        return row
     }
 
     // MARK: API
@@ -93,13 +105,14 @@ final class SettingsUITests: XCTestCase {
 
     @MainActor
     func testTimeZoneIsSetFromThePickerAndAutomatically() {
-        let app = launchBotCard()
+        // the time zone rows are the root's Bot card (#4103)
+        let app = launch()
         if botSettings()["timeZoneAuto"] as? Bool == true {
-            app.element("settings-time-zone-auto.toggle").tap()
+            rootRow("settings-time-zone-auto.toggle", in: app).tap()
             XCTAssertTrue(eventually { (self.botSettings()["timeZoneAuto"] as? Bool) == false })
         }
-        let row = app.element("settings-time-zone")
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let row = rootRow("settings-time-zone", in: app)
+        XCTAssertTrue(eventually(5) { row.isHittable })
         row.tap()
         let search = app.textFields["time-zone-search"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
@@ -112,7 +125,7 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(eventually { app.element("settings-time-zone").label.contains("Asia/Tokyo") })
 
         // Automatic again: the phone sends its own zone.
-        app.element("settings-time-zone-auto.toggle").tap()
+        rootRow("settings-time-zone-auto.toggle", in: app).tap()
         let phoneZone = TimeZone.current.identifier
         XCTAssertTrue(eventually {
             let settings = self.botSettings()
@@ -143,15 +156,26 @@ final class SettingsUITests: XCTestCase {
 
     @MainActor
     func testBotComputerShowsStatusAndUpdateAndResetReachTheServer() {
-        let app = launchBotCard()
-        app.element("settings-bot-computer").tap()
+        // the bot's computer is a row of the root's Bot card (#4103)
+        let app = launch()
+        rootRow("settings-bot-computer", in: app).tap()
         let disk = app.otherElements["computer-disk"].exists ? app.otherElements["computer-disk"] : app.staticTexts["Disk space"]
         XCTAssertTrue(disk.waitForExistence(timeout: 10))
         let status = api("GET", "/api/computer/status").1
         XCTAssertNotNil(status["diskState"], "the server reports the disk state")
         XCTAssertTrue(app.staticTexts["Normal"].waitForExistence(timeout: 10) || app.staticTexts["Almost full"].exists || app.staticTexts["Full"].exists)
 
-        for (row, confirm) in [("computer-update", "Update Computer"), ("computer-reset", "Reset Computer")] {
+        // a small phone keeps the actions under the fold; a computer that
+        // needs recovering offers Recover in Update's place
+        let reset = app.element("computer-reset")
+        for _ in 0..<6 where !(reset.exists && reset.isHittable) { app.swipeUp() }
+        XCTAssertTrue(reset.waitForExistence(timeout: 5), app.debugDescription)
+        let actions = app.element("computer-recover").exists
+            ? [("computer-reset", "Reset Computer")]
+            : [("computer-update", "Update Computer"), ("computer-reset", "Reset Computer")]
+        for (row, confirm) in actions {
+            // a small phone keeps the actions under the fold
+            for _ in 0..<6 where !(app.element(row).exists && app.element(row).isHittable) { app.swipeUp() }
             app.element(row).tap()
             let matches = app.buttons.matching(NSPredicate(format: "label == %@", confirm))
             XCTAssertTrue(matches.firstMatch.waitForExistence(timeout: 5))
@@ -177,11 +201,11 @@ final class SettingsUITests: XCTestCase {
         _ = api("DELETE", "/api/mcp/servers/deepwiki")
         addTeardownBlock { _ = self.api("DELETE", "/api/mcp/servers/deepwiki") }
         let app = launch()
-        app.element("settings-plugins").tap()
+        rootRow("settings-plugins", in: app).tap()
         // Settings > Connect apps (#203, #218): search across apps and skills
         XCTAssertTrue(app.element("connect-apps-manage").waitForExistence(timeout: 10))
-        let search = app.searchFields.firstMatch
-        if !search.exists { app.swipeDown() }
+        // the floating search at the sheet's foot (#4103)
+        let search = app.textFields["connect-apps-search"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("deepwiki\n")
@@ -228,14 +252,15 @@ final class SettingsUITests: XCTestCase {
         _ = api("DELETE", "/api/mcp/servers/deepwiki")
         addTeardownBlock { _ = self.api("DELETE", "/api/mcp/servers/deepwiki") }
         let app = launch()
-        app.element("settings-plugins").tap()
+        rootRow("settings-plugins", in: app).tap()
         XCTAssertTrue(app.element("connect-apps-manage").waitForExistence(timeout: 10))
-        let search = app.searchFields.firstMatch
-        if !search.exists { app.swipeDown() }
+        // the floating search at the sheet's foot (#4103)
+        let search = app.textFields["connect-apps-search"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("deepwiki\n")
-        let row = app.element("connect-apps-row.featured:deepwiki")
+        // a search hit is the result row (connect-apps-app-<key>)
+        let row = app.element("connect-apps-app-featured:deepwiki")
         XCTAssertTrue(row.waitForExistence(timeout: 10), app.debugDescription)
         row.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap()
         let action = app.element("connect-apps-detail-action")
@@ -375,28 +400,36 @@ final class SettingsUITests: XCTestCase {
         }
         let row = app.element("settings-appearance")
         XCTAssertTrue(row.waitForExistence(timeout: 10))
-        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        for _ in 0..<6 where !row.isHittable { settle(app) }
         row.tap()
         XCTAssertTrue(app.element("skin.family.phone").waitForExistence(timeout: 5))
+    }
+
+    /// A slow half-page drag: a swipe's momentum keeps the list moving, and
+    /// the next tap only stops it instead of pressing the row.
+    @MainActor
+    private func settle(_ app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)), withVelocity: .slow, thenHoldForDuration: 0.3)
     }
 
     /// Picks a family, then its variant (when it has several), then the mode.
     @MainActor
     private func wear(family: String, variant: String?, mode: String?, in app: XCUIApplication) {
         let card = app.element("skin.family.\(family)")
-        for _ in 0..<8 where !card.isHittable { app.swipeUp() }
+        for _ in 0..<8 where !card.isHittable { settle(app) }
         XCTAssertTrue(card.waitForExistence(timeout: 5), family)
         card.tap()
         if let variant {
             let swatch = app.element("skin.variant.\(variant)")
-            if swatch.waitForExistence(timeout: 2) {
-                for _ in 0..<8 where !swatch.isHittable { app.swipeUp() }
+            if swatch.waitForExistence(timeout: 5) {
+                for _ in 0..<8 where !swatch.isHittable { settle(app) }
                 swatch.tap()
             }
         }
         if let mode {
             let menu = app.element("theme.mode")
-            for _ in 0..<8 where !menu.isHittable { app.swipeUp() }
+            for _ in 0..<8 where !menu.isHittable { settle(app) }
             XCTAssertTrue(menu.waitForExistence(timeout: 5))
             menu.tap()
             // menu items can lose their identifier: fall back to the label

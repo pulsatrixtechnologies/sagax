@@ -223,6 +223,35 @@ struct PanelSwitchRow: View {
     }
 }
 
+/// A filter chip of the phone's pages (Library, Connect apps): the chosen
+/// one white on the page, the others on the raised colour (#4101, #4103).
+struct PhoneChip: View {
+    @Environment(\.themePalette) var themePalette
+    let title: Text
+    let selected: Bool
+    let id: String
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            withAnimation(.snappy(duration: 0.2)) { action() }
+        } label: {
+            title
+                .font(Theme.PhonePanel.chipFont)
+                .foregroundStyle(selected ? Theme.bg : Theme.textPrimary)
+                .lineLimit(1)
+                .padding(.horizontal, Theme.PhonePanel.chipPadding)
+                .frame(height: Theme.PhonePanel.chipHeight)
+                .background(selected ? Theme.textPrimary : Theme.cardRaised, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityIdentifier(id)
+    }
+}
+
 /// The small "Edit" pill under the bot's name.
 struct PanelEditPill: View {
     @Environment(\.themePalette) var themePalette

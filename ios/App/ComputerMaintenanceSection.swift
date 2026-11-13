@@ -35,7 +35,6 @@ struct ComputerMaintenanceSection: View {
                     title: "Scheduled update",
                     subtitle: summary(schedule),
                     accessory: .toggle(Binding(get: { schedule.enabled }, set: { on in save { $0.enabled = on } })),
-                    height: 74,
                     identifier: "computer-maintenance"
                 )
                 if schedule.enabled {
@@ -46,7 +45,7 @@ struct ComputerMaintenanceSection: View {
                 }
                 if let result = maintenance?.lastResult {
                     CardHairline(leadingInset: SettingsMetrics.rowInset)
-                    SettingsRow(title: "Last update", accessory: .value(resultText(result)), height: 45, identifier: "computer-maintenance-last")
+                    SettingsRow(title: "Last update", accessory: .value(resultText(result)), identifier: "computer-maintenance-last")
                 }
             }
             .disabled(saving || maintenance?.running == true)

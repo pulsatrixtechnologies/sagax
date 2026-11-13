@@ -107,32 +107,33 @@ final class PluginsUITests: XCTestCase {
     // MARK: Connect apps
 
     /// The main view: one row per app with Add or Connect, a section per
-    /// category, and "N connected >" to Manage (#203, #218).
-    /// Discover has no "Browse Bots" button any more (2026-10-29): the
-    /// Bots tab is its place, for every bot.
+    /// category, and "N connected" to what is connected (#203, #218).
+    /// Discover has no "Browse Bots" button (2026-10-29): Bots is one of
+    /// the chips that scroll sideways (#4103), for every bot.
     @MainActor
-    func testDiscoverHasNoBrowseBotsButtonAndBotsIsATab() {
+    func testDiscoverHasNoBrowseBotsButtonAndBotsIsAChip() {
         let app = launch()
-        let botsTab = app.segmentedControls["connect-apps-tabs"].buttons["Bots"]
-        XCTAssertTrue(botsTab.waitForExistence(timeout: 10), app.debugDescription)
+        let botsChip = chip("bots", in: app)
         XCTAssertFalse(app.element("connect-apps-bot-templates").exists, "no Browse Bots button in Discover")
-        XCTAssertFalse(app.segmentedControls["connect-apps-tabs"].buttons["Providers"].exists, "Providers is a section of Installed")
+        XCTAssertFalse(app.element("connect-apps-chip.providers").exists, "Providers is a section of Installed")
         ParityShots.save("Connect apps Discover", app)
-        botsTab.tap()
-        XCTAssertTrue(botsTab.isSelected, "the Bots tab is in front")
+        botsChip.tap()
+        XCTAssertTrue(eventually(5) { botsChip.isSelected }, "the Bots chip is in front")
+        XCTAssertFalse(app.element("connect-apps-chip.all").isSelected)
         XCTAssertTrue(app.element("connect-apps-manage").exists, "Connect apps stays open")
-        XCTAssertTrue(app.element("browse-bots.category.all").waitForExistence(timeout: 10), "Browse Bots' categories in the tab")
-        ParityShots.save("Connect apps Bots tab", app)
+        XCTAssertTrue(app.element("browse-bots.category.all").waitForExistence(timeout: 10), "Browse Bots' categories in the chip's list")
+        ParityShots.save("Connect apps Bots chip", app)
     }
 
-    /// One search on every tab: the bots are found from Installed too, in
-    /// their own group, and a hit opens the bot's card.
+    /// One search on every list: the bots are found from what is connected
+    /// too, in their own group, and a hit opens the bot's card.
     @MainActor
     func testOneSearchFindsBotsFromAnyTab() {
         let app = launch()
-        app.segmentedControls["connect-apps-tabs"].buttons["Installed"].tap()
-        let field = app.searchFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 10), "the search shows on Installed")
+        app.element("connect-apps-manage").tap()
+        // the floating search at the sheet's foot (#4103)
+        let field = app.textFields["connect-apps-search"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "the search shows on what is connected")
         field.tap()
         field.typeText("Aurora")
         let hit = app.staticTexts["Aurora"].firstMatch
@@ -145,7 +146,7 @@ final class PluginsUITests: XCTestCase {
     @MainActor
     func testTheMainViewListsAppsAndCountsWhatIsConnected() {
         let app = launch()
-        XCTAssertTrue(app.element("connect-apps-filter").exists)
+        XCTAssertTrue(chip("all", in: app).isSelected, "All is the chip in front")
         let manage = app.element("connect-apps-manage")
         XCTAssertTrue(manage.label.contains("connected"), manage.label)
         // the featured connectors (the managed connected-apps broker is gone)
@@ -154,40 +155,57 @@ final class PluginsUITests: XCTestCase {
         XCTAssertEqual(notion.label, "Connect")
     }
 
-    /// One filter button (the reference iOS app's marketplace): the menu picks a
-    /// type, the button names it, All goes back.
+    /// The chips (the reference's row that scrolls sideways, #4103): a type
+    /// chip narrows the list to that type, pressed again or All goes back.
     @MainActor
-    func testTheFilterMenuPicksATypeAndClears() {
+    func testATypeChipPicksATypeAndAllClears() {
         let app = launch()
-        let filter = app.element("connect-apps-filter")
-        XCTAssertTrue(filter.waitForExistence(timeout: 10), app.debugDescription)
-        XCTAssertTrue(filter.label.contains("All"), filter.label)
-        // the list row reports the whole width; the capsule is at its leading edge
-        let capsule = filter.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
-        capsule.tap()
-        let mcp = app.buttons["MCP servers"].firstMatch
-        XCTAssertTrue(mcp.waitForExistence(timeout: 5), app.debugDescription)
-        mcp.tap()
-        XCTAssertTrue(eventually(5) { filter.label.contains("MCP servers") }, filter.label)
-        filter.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
-        let all = app.buttons["All"].firstMatch
-        XCTAssertTrue(all.waitForExistence(timeout: 5), app.debugDescription)
-        all.tap()
-        XCTAssertTrue(eventually(5) { filter.label.contains("All") && !filter.label.contains("MCP") }, filter.label)
+        let all = chip("all", in: app)
+        let skills = chip("type.skills", in: app)
+        skills.tap()
+        XCTAssertTrue(eventually(5) { skills.isSelected && !all.isSelected })
+        // a featured app is no skill: the type hides it
+        XCTAssertTrue(eventually(5) { !app.element("connect-apps-row.featured:notion").exists }, app.debugDescription)
+        let back = chip("all", in: app)
+        back.tap()
+        XCTAssertTrue(eventually(5) { back.isSelected && !skills.isSelected })
+        XCTAssertTrue(app.element("connect-apps-row.featured:notion").waitForExistence(timeout: 10), app.debugDescription)
+    }
+
+    /// A chip, scrolled sideways into reach.
+    @MainActor
+    private func chip(_ key: String, in app: XCUIApplication) -> XCUIElement {
+        let chip = app.element("connect-apps-chip.\(key)")
+        XCTAssertTrue(chip.waitForExistence(timeout: 10), app.debugDescription)
+        let row = app.element("connect-apps-tabs")
+        for _ in 0..<8 where !chip.isHittable { row.swipeLeft() }
+        for _ in 0..<8 where !chip.isHittable { row.swipeRight() }
+        XCTAssertTrue(chip.isHittable, key)
+        return chip
     }
 
     // MARK: MCP servers
 
-    /// A server's page: Sign in runs the real OAuth flow in the system sheet
-    /// and the server reaches connected.
+    /// A server's sheet: its one sign-in, the Authorize pill at the foot
+    /// (#4103; no second Sign in in its Accounts section), runs the real
+    /// OAuth flow in the system sheet and the server reaches connected.
     @MainActor
     func testMcpServerSignInFromItsPage() {
         api("POST", "/api/mcp/servers/oauthdocs/oauth/disconnect", body: [:])
         let app = launch()
         app.element("connect-apps-manage").tap()
         open("connect-apps-installed.mcp:oauthdocs", in: app)
-        let signIn = app.element("connect-apps-sign-in")
-        XCTAssertTrue(signIn.waitForExistence(timeout: 15), app.debugDescription)
+        // the Authorize pill, or the Accounts row's Sign in when the server
+        // is turned off (its pill then says Off): never both
+        let row = app.element("connect-apps-sign-in")
+        let pill = app.element("connect-apps-detail-action")
+        XCTAssertTrue(eventually(15) { row.exists || pill.exists }, app.debugDescription)
+        XCTAssertFalse(row.exists && pill.exists, "one sign-in on the sheet")
+        let signIn = row.exists ? row : pill
+        if signIn == pill { XCTAssertEqual(pill.label, "Authorize") }
+        // the half sheet opens at its medium height: the Accounts row can
+        // sit under the foot pill on a small phone, so raise it first
+        if signIn == row { app.element("connect-apps-detail-header").swipeUp() }
         signIn.tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let proceed = springboard.buttons["Continue"]
@@ -207,11 +225,9 @@ final class PluginsUITests: XCTestCase {
     @MainActor
     func testClaudeConnectorsShowTheAnswerAndNoAdminSwitch() {
         // Installed > Providers (#207; Providers is a section of Installed since 2026-10-29)
+        // "N connected" opens what is connected (#4103: no tabs on the phone)
         let app = launch()
         app.element("connect-apps-manage").tap()
-        let tabs = app.segmentedControls.firstMatch
-        XCTAssertTrue(tabs.waitForExistence(timeout: 10))
-        tabs.buttons["Installed"].tap()
         let manage = app.element("harness-connectors-manage")
         for _ in 0..<16 where !(manage.exists && manage.isHittable) { scrollStep(app) }
         XCTAssertTrue(manage.waitForExistence(timeout: 30), app.debugDescription)

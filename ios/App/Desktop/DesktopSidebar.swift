@@ -790,7 +790,7 @@ struct DesktopFootCapabilitiesButton: View {
         .onHover { hovering = $0 }
         // `data-tour="nav-apps"` on FootConnectApps (SidebarFoot.tsx)
         .desktopTourAnchor("nav-apps")
-        .accessibilityLabel(Text("Plugins"))
+        .accessibilityLabel(Text("Connect Apps"))
         .accessibilityIdentifier("desktop-sidebar-capabilities")
     }
 }

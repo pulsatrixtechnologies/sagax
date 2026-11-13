@@ -801,7 +801,7 @@ struct PersonaSkillsPage: View {
                     shell.modal = .plugins
                 } label: {
                     HStack(spacing: 4) {
-                        DesktopText("Manage in Plugins", size: 12.5, weight: .medium, line: 18.75, color: \.accentText)
+                        DesktopText("Manage in Connect Apps", size: 12.5, weight: .medium, line: 18.75, color: \.accentText)
                         InstructionsIconView(icon: .arrowUpRight, size: 13).foregroundStyle(theme.accentText)
                     }
                     .padding(4)

@@ -66,7 +66,7 @@ struct SettingsSearchResults: View {
         case .notifications: String(localized: "Notifications")
         case .privacy: String(localized: "Privacy")
         case .experimental: String(localized: "Developer")
-        case .plugins: String(localized: "Plugins")
+        case .plugins: String(localized: "Connect apps")
         case .account: String(localized: "Account")
         case .botComputer: String(localized: "Bot Computer")
         case .pages: String(localized: "Published pages")

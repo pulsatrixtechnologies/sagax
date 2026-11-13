@@ -530,18 +530,65 @@ Permissions, Coffre, Utilisation et facturation, Mises à jour. Sagax a plus de 
   choisir une région) se fait dans la fenêtre même : en place dans la rangée, ou en
   sous-page avec retour, jamais une deuxième fenêtre par-dessus.
 
-**iPhone.** Une feuille pleine hauteur qui s'ouvre depuis l'avatar, × rond en haut à
-gauche (loupe ronde à droite chez Sagax). Cartes groupées, dans cet ordre de référence :
-le compte (avatar, nom, courriel, organisation) puis Utilisation (pourcentage) et Coffre
-(sous-titre d'une ligne) ; Connecter des apps seul dans sa carte ; un libellé « Bot » et
-sa carte (Permissions avec « examen auto actif · N règles », fuseau automatique avec
-une phrase d'aide, fuseau, ordinateur du bot, appareils, import de mémoire) ;
-notifications, apparence, langue, retour haptique avec leur valeur à droite ; liens
-d'aide et de politique avec une flèche oblique (lien externe) ; déconnexion en rouge ;
-logo, version et droit d'auteur en bas. Chaque page poussée : retour rond à gauche,
-titre centré, action ronde (+) à droite au besoin. Page Compte : liste « changer de
-compte » avec coche, ajouter un compte, Se déconnecter (texte rouge, carte seule),
-Supprimer le compte (rouge avec icône de corbeille et une note de conséquence dessous).
+**iPhone (#4103, mesuré sur les photos du propriétaire, téléphone de 430 pt).** Les
+feuilles reprennent la carte, la rangée, le titre de groupe, la note et l'interrupteur
+du panneau du bot (#4101) : une seule carte groupée, un seul style de rangée, un seul
+contrôle rond pour tout le téléphone. Mesures dans `PhoneSheetMetrics` (CompanionCore).
+
+- Feuille des réglages : grands coins arrondis en haut sur la page voilée ; × rond de 44
+  à 17 du bord gauche et du haut de la feuille, rien à droite (la recherche attend
+  au-dessus de la première carte, hors de vue : tirer la liste vers le bas la montre).
+  Première carte à 102 du haut de la feuille ; cartes à 17 des bords, 31 entre deux
+  cartes, 55,4 quand un titre de groupe est entre elles. Carte 1 : la personne
+  (rangée de 89, avatar rond de 42 à 20 du bord, initiales grises sur le gris relevé,
+  nom 16, courriel gris 13 dessous, chevron), Utilisation (pourcentage gris à 15 avant
+  le chevron), Coffre (sous-titre gris 13). Carte 2 : Connecter des apps seule
+  (« Rechercher des plugins »). Titre gris « Bot », puis sa carte : Permissions
+  (« N règles » ; la référence ajoute « Révision auto activée », absente de Sagax
+  depuis un seul niveau d'approbation par bot), Régler le fuseau automatiquement (phrase
+  d'aide, interrupteur 66 x 30), Fuseau horaire (valeur grise), Ordinateur du bot, puis
+  les autres réglages des bots de Sagax dans la même carte (Me joindre, Mes moteurs,
+  Réponses rapides, Voix d'appel, Développeur). Puis notifications, apparence, langue,
+  retour haptique ; confidentialité ; aide et liens (flèche oblique) ; déconnexion en
+  rouge ; logo, version et droit d'auteur.
+- Couleurs mesurées sur les photos (sombre) : page voilée #0B0B0B, feuille #1E1E1E,
+  carte #2C2C2E, avatar #3E3D42, interrupteur actif gris clair. Sagax garde les
+  couleurs de son habillage (fond, carte, carte relevée, interrupteur), les mêmes que
+  le panneau du bot (#4101) : l'écart de teinte se règle dans l'habillage, pour tout
+  le téléphone à la fois, jamais page par page.
+- Rangées : une ligne 52 ; deux lignes 15,5 au-dessus du titre et sous la deuxième
+  ligne, 3 entre elles (70 avec une ligne de 13) ; texte à 20 du bord ; chevron qui
+  finit à 24 du bord ; filet de 1 qui part du texte. Absent chez Sagax, donc caché (pas
+  grisé) : la rangée de mise à jour (l'app se met à jour par l'App Store) et Gérer tes
+  appareils. Pages publiées passe dans la puce Pages de Connecter des apps (la racine
+  la garde seulement là où Connecter des apps n'est pas offert).
+- Page Compte (poussée dans la feuille) : retour rond à gauche, titre centré 16
+  medium. Carte de la personne (sans chevron) ; titre gris « Changer de compte » ; carte
+  du compte en cours (son courriel seul, coche) puis « + Ajouter un compte » (glyphe à
+  20 du bord, texte à 50) ; carte « Se déconnecter » en encre rouge ; carte « Supprimer
+  le compte » avec la corbeille en rouge et la note grise dessous à 10. Rangées de 52.
+  Chez Sagax, la photo à soi (serveur d'organisation) et Détails de la connexion
+  gardent leur carte.
+- Connecter des apps : × rond à 17 du bord, titre 16 à 13 après lui, pilule « N
+  connectées » à droite (44 de haut, texte 19, 17 de côté) qui ouvre ce qui est
+  connecté. Puces qui défilent de côté (celles de la Bibliothèque : 35 de haut), le haut
+  à 38 sous le contrôle, à 24 du bord : Tout (choisie, blanche), les catégories qui ont
+  des apps, les types, puis Bots, Pages, Sources (les anciens onglets). Sections : titre
+  16 et chevron quand la section a plus. Rangée de 68 : icône de 42 à 24 du bord
+  (coins à 30 %), nom 16 à 15 après l'icône, ligne grise 14 sur deux lignes au plus,
+  pilule à 24 du bord (35 de haut, 16 de côté, texte 13 medium) : Connecter ou Ajouter
+  (gris relevé), Autoriser (bleu plein), Connectée (grise éteinte, rien à presser).
+  Recherche flottante en bas : 50 de haut, 31 des bords, 12 au-dessus du bas, texte 17.
+- Fiche d'un plugin : demi-feuille sur la liste (la référence flotte à 9 des bords ;
+  Sagax garde la demi-feuille du système), coins de 40 ; × rond à
+  gauche et « … » rond à droite, à 16 des bords (le « … » seulement s'il contient
+  Désinstaller). Icône dans une tuile arrondie de 56 (coins 14) centrée à 39 du haut ;
+  nom 20 gras centré à 16 sous la tuile ; description 16 grise, pas de 20, à 18 des
+  bords et 18 sous le nom. Une pilule centrée en bas (48 de haut, 135 de large au moins,
+  à 33 du bas, texte 15 medium) avec l'état ou l'action. Sous la description, les
+  sections de Sagax, chacune un seul conteneur : Comptes seulement quand un compte
+  s'applique (pas de « Aucune connexion requise »), Outils sauf si le serveur n'en a
+  aucun (pas de « 0 sur 0 »), Contenu, Détails.
 
 ### 2.5 bis Notes de version / What's new
 

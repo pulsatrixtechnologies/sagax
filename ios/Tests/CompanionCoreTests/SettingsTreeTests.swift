@@ -20,8 +20,17 @@ final class SettingsTreeTests: XCTestCase {
         .accountPhoto, .switchAccount, .addAccount, .accountSignOut, .deleteAccount, .connectionDetails,
     ]
 
+    /// Published pages is the Connect apps sheet's Pages chip (#4103): the
+    /// tree lists it only where Connect apps is not offered.
+    private var withoutConnectApps: SettingsContext {
+        var c = SettingsContext.everything
+        c.plugins = false
+        return c
+    }
+
     func testEverySettingFromBeforeStillHasAPlace() {
         let reachable = Set(SettingsTree.reachable(.everything).map(\.item))
+            .union(SettingsTree.reachable(withoutConnectApps).map(\.item))
         for item in before {
             XCTAssertTrue(reachable.contains(item), "\(item) lost its place")
         }
@@ -29,7 +38,21 @@ final class SettingsTreeTests: XCTestCase {
 
     func testEveryRowOfTheTreeIsReachable() {
         let reachable = Set(SettingsTree.reachable(.everything).map(\.item))
-        XCTAssertEqual(reachable, Set(SettingsItem.allCases))
+        XCTAssertEqual(reachable, Set(SettingsItem.allCases).subtracting([.publishedPages]))
+        XCTAssertTrue(SettingsTree.reachable(withoutConnectApps).contains { $0.item == .publishedPages })
+    }
+
+    /// The reference's settings sheet (#4103): the person with Usage and
+    /// the Vault, Connect apps alone, then one "Bot" card that opens with
+    /// Permissions, the time zone pair and the bots' computer.
+    func testTheRootFollowsTheReferenceSheet() {
+        let root = SettingsTree.cards(.root, .everything)
+        XCTAssertEqual(root[0], [.profile, .usage, .organization, .vault])
+        XCTAssertEqual(root[1], [.connectApps])
+        XCTAssertEqual(Array(root[2].prefix(4)), [.bots, .timeZoneAuto, .timeZone, .botComputer])
+        // Permissions opens the approvals, nothing else
+        XCTAssertEqual(SettingsTree.cards(.bots, .everything), [[.autoReviewRules, .approvalRules, .actionJournal]])
+        XCTAssertEqual(SettingsTree.path(to: .timeZone), [])
     }
 
     func testEachRowHasOnePlace() {
@@ -40,9 +63,9 @@ final class SettingsTreeTests: XCTestCase {
     func testTheRootIsShortAndOneLevelDeep() {
         let root = SettingsTree.cards(.root, .everything)
         XCTAssertEqual(root.first?.first, .profile, "the profile heads the list")
-        XCTAssertLessThanOrEqual(root.joined().count, 16)
+        XCTAssertLessThanOrEqual(root.count, 8)
         XCTAssertEqual(SettingsTree.path(to: .autoReviewRules), [.bots])
-        XCTAssertEqual(SettingsTree.path(to: .reachMe), [.bots], "Reach me sits with the bots' settings")
+        XCTAssertEqual(SettingsTree.path(to: .reachMe), [], "Reach me sits in the Bot card")
         // The reference app's sheet lists the Vault with the profile (2026-11-01)
         XCTAssertEqual(SettingsTree.path(to: .vault), [])
         XCTAssertEqual(SettingsTree.cards(.root, .everything).first, [.profile, .usage, .organization, .vault])

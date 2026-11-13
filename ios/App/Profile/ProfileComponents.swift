@@ -249,6 +249,8 @@ struct ProfileTopFade: View {
 /// A pushed screen's back circle (chevron ink 8.7 x 15.3 pt).
 struct ProfileBackButton: View {
     @Environment(\.themePalette) var themePalette
+    /// The settings sheet's pages keep their own id ("settings-back").
+    var identifier = "profile-back"
     let action: () -> Void
 
     var body: some View {
@@ -257,7 +259,7 @@ struct ProfileBackButton: View {
             glyphSize: 18, glyphOffset: CGSize(width: 0.85, height: -0.25), action: action
         )
         .chatGlassRim(Circle())
-        .accessibilityIdentifier("profile-back")
+        .accessibilityIdentifier(identifier)
     }
 }
 

@@ -290,7 +290,7 @@ struct DesktopCommandPalette: View {
         if shortcuts.contains(.teamMap) {
             out.append(Item(id: "cmd:teamMap", group: .navigation, label: String(localized: "Team map"), words: [nav], action: .teamMap))
         }
-        out.append(Item(id: "cmd:connectApps", group: .navigation, label: String(localized: "Plugins"), words: [nav, "plugins", "apps"], action: .capabilities))
+        out.append(Item(id: "cmd:connectApps", group: .navigation, label: String(localized: "Connect Apps"), words: [nav, "plugins", "apps"], action: .capabilities))
         let settingsWord = Self.label(.settings)
         out.append(Item(id: "cmd:settings", group: .settings, label: String(localized: "Open settings"), words: [settingsWord],
                         shortcut: ["⌘", ","], action: .settings(nil)))

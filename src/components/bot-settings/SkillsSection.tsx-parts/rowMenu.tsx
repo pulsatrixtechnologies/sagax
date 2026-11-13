@@ -1,10 +1,14 @@
-import { Ellipsis, Eye, Pencil, Share2, Trash2 } from "lucide-react";
+import { Ellipsis } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { MenuItem, PopoverMenu } from "../FilesSection";
+import { skillActions, type SkillAction } from "./actions";
 import type { ManagedSkill, SkillRowActions } from "./types";
 
-export function renderRowMenu(a: SkillRowActions, skill: ManagedSkill, buttonClass: string) {
-  const { libraryOn, working, openSkill, share, unshare, remove } = a;
+/** The skill row's more menu. The plain row has no switch and no review
+ * line, so its menu carries Turn on / Turn off and Review changes (#4148);
+ * the classic row keeps its switch and its inline Review changes. */
+export function renderRowMenu(a: SkillRowActions, skill: ManagedSkill, buttonClass: string, compact = false) {
+  const items = skillActions(a, skill).filter((item: SkillAction) => compact || (item.id !== "toggle" && item.id !== "review"));
   return (
   <PopoverMenu
     label={t("botPanel.skills.rowMenu", { name: skill.name })}
@@ -15,30 +19,16 @@ export function renderRowMenu(a: SkillRowActions, skill: ManagedSkill, buttonCla
   >
     {(close) => (
       <>
-        <MenuItem icon={<Eye size={14} />} label={t("botPanel.skills.open")} onClick={() => { close(); openSkill(skill); }} />
-        <MenuItem icon={<Pencil size={14} />} label={t("botPanel.skills.edit")} onClick={() => { close(); openSkill(skill, true); }} />
-        {libraryOn && skill.origin === "private" && (
+        {items.map((item) => (
           <MenuItem
-            icon={<Share2 size={14} />}
-            label={t("botPanel.skills.shareMe")}
-            disabled={Boolean(working)}
-            onClick={() => { close(); void share(skill, "me"); }}
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            disabled={item.disabled}
+            data-skill-menu-item={item.id}
+            onClick={() => { close(); item.run(); }}
           />
-        )}
-        {libraryOn && (skill.origin === "me" || skill.origin === "library") && (
-          <MenuItem
-            icon={<Share2 size={14} />}
-            label={t("botPanel.skills.unshare")}
-            disabled={Boolean(working)}
-            onClick={() => { close(); void unshare(skill); }}
-          />
-        )}
-        <MenuItem
-          icon={<Trash2 size={14} />}
-          label={t("botPanel.skills.removeTitle")}
-          disabled={Boolean(working)}
-          onClick={() => { close(); void remove(skill); }}
-        />
+        ))}
       </>
     )}
   </PopoverMenu>

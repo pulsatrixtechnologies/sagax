@@ -113,15 +113,11 @@ describe("Skills on the profile page (plain)", () => {
     expect(rows).toHaveLength(3);
     const report = card.querySelector('[data-skill-row="weekly-report"]') ?? rows[0]!;
     expect(report.querySelector("svg")).not.toBeNull();
-    expect(report.querySelector("[data-skill-name]")!.className).toContain("text-[14px]");
-    expect(report.querySelector("[data-skill-origin]")).not.toBeNull();
+    expect(report.querySelector("[data-profile-row-label]")!.className).toContain("text-[14px]");
     expect(report.textContent).toContain("Writes the weekly report.");
-    expect(report.querySelector("[data-skill-source] [data-inline-fold]")).not.toBeNull();
-    // the shared skill names the other bots still linked to it
-    expect(card.textContent).toContain("Juniper");
-    // a skill changed after its review: Review changes a pill
-    const review = card.querySelector("[data-skill-warning] button");
-    expect(review?.className).toContain("ui-button");
+    // #4148: the shared skill names the other bots on its glyph, not in a line
+    expect(card.querySelector('[data-skill-row="meeting-notes"] [data-skill-shared]')?.getAttribute("aria-label")).toBe("Shared with Pepper, Juniper");
+    expect(card.textContent).not.toContain("Juniper");
     expect(container.querySelector("[data-manage-in-connect-apps]")).toBeNull();
     expectPlain(container.innerHTML);
   });
@@ -255,13 +251,15 @@ describe("Skills on the profile page (plain)", () => {
     expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Afficher 2 de plus");
   });
 
-  it("#4104: a blocked skill beyond the fourth is never hidden: it comes first with its Review changes", async () => {
+  it("#4104: a blocked skill beyond the fourth is never hidden: it comes first, its short orange state on the row", async () => {
     const skills = many(9);
-    skills[6] = skill("blocked-one", { enabled: false, warnings: ["changed after review"] });
+    skills[6] = skill("blocked-one", { enabled: false, warnings: ["stored SKILL.md changed after review - enablement is blocked"] });
     skillsAnswer = { skills, staged: [], library: [], assignedSkills: [] };
     await render();
     expect(shownSkills()).toEqual(["blocked-one", "skill-1", "skill-2", "skill-3"]);
-    expect(skillsCard().querySelector('[data-skill-warning="blocked-one"] button')?.textContent).toBe("Review changes");
+    const blocked = skillsCard().querySelector<HTMLElement>('[data-skill-row="blocked-one"]')!;
+    expect(blocked.querySelector("[data-skill-needs]")?.textContent).toBe("Needs review");
+    expect(blocked.querySelector("[data-skill-needs]")?.className).toContain("text-warning");
     expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Show 5 more");
   });
 

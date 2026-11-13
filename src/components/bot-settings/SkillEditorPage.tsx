@@ -2,7 +2,7 @@
 // view by default, Edit then Save. Frontmatter (name, description) validated.
 // When SKILL.md changed outside a review, Review changes opens a diff with
 // Accept (re-sign) or Revert. Supporting files list beside the body.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { File as FileIcon, Loader2 } from "lucide-react";
 
 import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
@@ -30,11 +30,15 @@ export type SkillEditorTarget = {
   origin?: SkillEditorOrigin;
   /** Open already in edit mode (row menu Edit). */
   startEditing?: boolean;
+  /** Open on Review changes (row menu, a skill changed after its review). */
+  startReview?: boolean;
 };
 
 type Mode = "view" | "edit" | "review";
 
 const fieldClass = cn(inputCls, "w-full");
+
+const startMode = (target: SkillEditorTarget): Mode => (target.startReview ? "review" : target.startEditing ? "edit" : "view");
 
 export function SkillEditorPage({
   botId,
@@ -42,17 +46,24 @@ export function SkillEditorPage({
   onClose,
   onPanelClose,
   onSaved,
+  details,
+  actions,
 }: {
   botId: string;
   target: SkillEditorTarget;
   onClose: () => void;
   onPanelClose?: () => void;
   onSaved: () => void;
+  /** What the skill's row no longer shows (the bot's profile page, #4148):
+   * private or shared and with whom, its warnings. */
+  details?: ReactNode;
+  /** The skill's actions beside Edit (turn on or off, share, remove). */
+  actions?: ReactNode;
 }) {
   const confirm = useConfirm();
   const { request: api } = useBotEditor();
   const [payload, setPayload] = useState<SkillEditorPayload | null>(null);
-  const [mode, setMode] = useState<Mode>(target.startEditing ? "edit" : "view");
+  const [mode, setMode] = useState<Mode>(startMode(target));
   const [name, setName] = useState(target.name);
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -82,7 +93,7 @@ export function SkillEditorPage({
   useEffect(() => {
     let cancelled = false;
     setPayload(null);
-    setMode(target.startEditing ? "edit" : "view");
+    setMode(startMode(target));
     setOpenFile(null);
     void (async () => {
       try {
@@ -216,6 +227,7 @@ export function SkillEditorPage({
           </>
         ) : (
           <>
+            {actions}
             <span className="flex-1" />
             {payload?.editable && (
               <button type="button" disabled={busy || !payload} className={PRIMARY_PILL} onClick={() => setMode("edit")} data-skill-edit="">
@@ -231,6 +243,7 @@ export function SkillEditorPage({
 
       {payload && mode !== "review" && !openFile && (
         <div className="mb-3 flex flex-col gap-2">
+          {details}
           {payload.changedAfterReview && (
             <div role="status" className="rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning" data-skill-changed-after-review="">
               <div>{t("botPanel.skills.changedAfterReview")}</div>

@@ -7,5 +7,7 @@ export const originLabel = (skill: ManagedSkill) => {
   return t("botPanel.skills.originPrivate");
 };
 
-export const changedAfterReview = (skill: ManagedSkill) =>
-  skill.warnings.some((warning) => warning.includes("changed after review"));
+/** The server's warning for a SKILL.md changed after its review. */
+export const isChangedAfterReviewWarning = (warning: string) => warning.includes("changed after review");
+
+export const changedAfterReview = (skill: ManagedSkill) => skill.warnings.some(isChangedAfterReviewWarning);

@@ -65,11 +65,11 @@ const FILTER_KEY: Record<string, LocaleKey> = {
   apps: "connectApps.filter.apps",
   mcp: "connectApps.filter.mcp",
   skills: "connectApps.filter.skills",
+  recommended: "connectApps.section.recommended",
 };
 
 const SECTION_KEY: Record<string, LocaleKey> = {
   ...FILTER_KEY,
-  recommended: "connectApps.section.recommended",
   needed: "connectApps.section.needed",
   results: "connectApps.section.results",
   other: "connectApps.section.other",
@@ -355,8 +355,9 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
 }
 
 /** One row: icon, name, one line, and Connect or the status. An installed
- * row opens its page. */
-export function PluginRow({ item, onOpen, action, below, meta }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; below?: ReactNode; meta?: ReactNode }) {
+ * row opens its page. `sub` says another line than the description (a
+ * recommendation's why); the description stays in the line's tooltip. */
+export function PluginRow({ item, onOpen, action, below, meta, sub }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; below?: ReactNode; meta?: ReactNode; sub?: string }) {
   const opens = item.installed;
   return (
     <div data-plugin-row={item.key} className="py-3">
@@ -373,7 +374,7 @@ export function PluginRow({ item, onOpen, action, below, meta }: { item: PluginI
             <span className={PLUGINS.rowName}>{item.name}</span>
             <span className={PLUGINS.rowSub} title={item.description}>
               {meta && <span className="mr-1.5 inline-flex align-middle">{meta}</span>}
-              {item.description}
+              {sub ?? item.description}
             </span>
           </span>
         </button>

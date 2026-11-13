@@ -5,13 +5,16 @@
 // two columns. View all filters this view in place. The search is Connect
 // Apps' one search above the tabs (2026-10-29: one option, one place). The apps a conversation needs (its Connect
 // apps pill) come first. What is installed lives in Installed; the engines'
-// connectors in Installed (Providers).
+// connectors in Installed (Providers). Recommended for you comes first, under
+// the pills (#4207): the curated picks a bot usually wants
+// (recommended-picks.ts) that this person can connect and does not have.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { mainSections, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
+import { mainSections, SECTION_PREVIEW, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
+import { PICK_WHY, recommendedPicks } from "@/lib/recommended-picks";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { ConnectedMark, PluginRow, categoryPills, filterLabel, moreCategoryPills, sectionTitle } from "./ConnectAppsView";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
@@ -65,13 +68,33 @@ export interface DiscoverViewProps {
   onAccountsSetUp?: (engine: HarnessEngine) => void;
   /** the centred "Add a custom connector" at the end */
   onAddCustom?: () => void;
+  /** names of what the person already has, in any scope (Recommended for
+   * you leaves them out, and their kind) */
+  owned?: readonly string[];
+  /** whether this person can connect a row here (Recommended for you hides
+   * the others); absent: a row with an action */
+  canConnect?: (item: PluginItem) => boolean;
+  /** where Recommended for you picks from, when it is wider than `items`
+   * (Me: the catalog's apps too); absent: `items` */
+  recommendFrom?: readonly PluginItem[];
 }
 
-export function DiscoverView({ items, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, accounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom }: DiscoverViewProps) {
+export function DiscoverView({ items, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, accounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom, owned = [], canConnect, recommendFrom }: DiscoverViewProps) {
   const [limit, setLimit] = useState(PAGE);
   useEffect(() => setLimit(PAGE), [filter, type]);
-  const sections = mainSections(items, "", filter, type, extraSources, focus);
   const single = filter !== "all" || type !== "any";
+  const listsPicks = type === "recommended";
+  // Recommended for you (#4207): on All, the first SECTION_PREVIEW picks (the
+  // reference's count); its View all lists every pick. An account connector
+  // the person has connected counts as theirs, and so does what it reaches.
+  // Only a connector that is connected counts: one waiting for a sign-in
+  // or failed leaves its kind open.
+  const accountOwned = accounts.flatMap(({ rows }) => rows.filter((row) => row.status === "connected"));
+  const picks = !single || listsPicks
+    ? recommendedPicks(recommendFrom ?? items, { names: [...owned, ...accountOwned.map((row) => row.name)], capabilities: accountOwned.flatMap((row) => row.capabilities) }, canConnect)
+    : [];
+  const recommended = listsPicks ? picks : picks.slice(0, SECTION_PREVIEW);
+  const sections = listsPicks ? [] : mainSections(items, "", filter, type, extraSources, focus, recommended.map((row) => row.item.key));
   // the account rows' categories have their pill too
   const categorized = [...items, ...accounts.flatMap((section) => section.rows)];
   const pills = categoryPills(categorized, filter);
@@ -101,6 +124,16 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
             </button>
           )}
         </div>
+      )}
+      {recommended.length > 0 && (
+        <section data-plugins-section="recommended" className="mt-[30px]">
+          <SectionHead title={sectionTitle({ id: "recommended" })} id="recommended" onViewAll={!single && picks.length > recommended.length ? () => onType("recommended") : undefined} />
+          <div className={PLUGINS.grid}>
+            {recommended.map(({ item, pick }) => (
+              <PluginRow key={item.key} item={item} sub={t(PICK_WHY[pick.kind])} onOpen={onOpenItem} action={renderAction(item)} below={renderBelow?.(item)} />
+            ))}
+          </div>
+        </section>
       )}
       {ours.length > 0 && (
         <section data-plugins-section="from-sagax" className="mt-[30px]">
@@ -152,7 +185,7 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
         <div className="flex items-center justify-center gap-2 py-24 text-[12px] text-ink-secondary">
           <Loader2 size={14} className="animate-spin" /> {t("connectors.loadingCatalog")}
         </div>
-      ) : sections.every((section) => section.items.length === 0) ? (accountSections.some((section) => section.rows.length > 0) ? null : (
+      ) : sections.every((section) => section.items.length === 0) ? (recommended.length > 0 || accountSections.some((section) => section.rows.length > 0) ? null : (
         <div className="mt-6 rounded-xl bg-card px-4 py-3 text-[12px] text-ink-secondary" data-plugins-empty>
           {t("connectApps.discover.empty")}
         </div>

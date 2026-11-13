@@ -128,18 +128,25 @@ describe("View all and the breadcrumb", () => {
     expect(host.querySelector("[data-breadcrumb]")).toBeNull();
   });
 
-  it("Recommended has its View all on the right, like the reference app's", () => {
+  it("Recommended has its View all on the right, like the reference app's, and View all lists every pick (#4207)", () => {
     const onType = vi.fn();
+    // eight curated picks: the shelf shows six, as the reference does
     const many = buildPluginItems({
-      featured: Array.from({ length: 8 }, (_, index) => ({
-        id: `app${index}`, name: `App ${index}`, description: "", url: `https://mcp${index}.example.net/mcp`, domain: `app${index}.example.net`, auth: "oauth", category: "productivity",
+      featured: ["Notion", "Linear", "Slack", "Figma", "Asana", "Atlassian", "Stripe", "Canva"].map((name) => ({
+        id: name.toLowerCase(), name, description: "", url: `https://mcp.${name.toLowerCase()}.example.net/mcp`, domain: `${name.toLowerCase()}.example.net`, auth: "oauth", category: "productivity",
       })),
     });
-    flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onType }))));
+    const action = (item: { action: string | null }) => (item.action ? createElement("button", { type: "button" }, "Connect") : null);
+    flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onType, renderAction: action }))));
+    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(6);
     const viewAll = host.querySelector("[data-plugins-view-all=\"recommended\"]");
     expect(viewAll).not.toBeNull();
     click(viewAll);
     expect(onType).toHaveBeenCalledWith("recommended");
+    flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, type: "recommended", renderAction: action }))));
+    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(8);
+    // the type pill names it
+    expect(host.querySelector('[data-plugins-type="recommended"]')?.textContent).toContain("Recommended for you");
   });
 
   it("the back button and a crumb go back; the current page is not a link", () => {

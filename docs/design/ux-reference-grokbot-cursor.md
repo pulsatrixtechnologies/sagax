@@ -2766,6 +2766,38 @@ only. Sagax follows them in `src/components/plugins/plugins-style.ts`,
   by 8px of padding, 4px from the right edge.
 - A shelf shows at most 6 rows (three lines of two) before "View all".
 
+#### Connect Apps: "Recommended for you" (measured, #4207)
+
+Read on the installed reference app's bundle (2026-11-13), values only.
+
+- It is the home's first shelf, under the search and the category chips,
+  before the team's plugins and the featured ones; its key is
+  `recommended-plugins`, its title "Recommended for you".
+- It holds **6** picks (the same shelf of three lines of two) and its View
+  all lists every pick. Nothing to recommend: no shelf.
+- A pick is never installed already, and an item the team's admin blocked
+  is left out, not greyed.
+- The reference has no fixed list of apps: it orders its picks by what it
+  knows of the person, first the plugins teammates installed (most
+  teammates first, at most half the shelf), then the plugins of the
+  categories the person already uses (the most used category first), then
+  the other teammate picks; ties by catalog rank, then by name. A remote
+  setting may add up to 4 plugin names per job role; its default is empty.
+  Its grey line says why ("used by 2 teammates", "because you use ...").
+- Sagax has no teammate counts or job roles to read, so it follows the
+  owner's rule (2026-11-13: "pick things that are good and usually a good
+  pick for bots") with one curated, ordered list in
+  `src/lib/recommended-picks.ts`: the work basics first (mail, calendar,
+  files and documents, chat and meetings, the code host, a browser, the
+  ticketing or CRM product), then notes, tasks, library docs, design,
+  errors and payments. One pick per kind comes first, in that order, then
+  the others. A pick the person has (installed in any scope, or an account
+  connector of theirs) is left out, and so is any pick of a kind they
+  already cover (one mail app is enough); a pick this person cannot add
+  here is hidden. The grey line is the pick's why, by kind; the row is the
+  shared `PluginRow` (glyph, name, why, Connect), the item's own
+  description in the line's tooltip.
+
 #### About
 
 - A small dialog: 320px wide (or the window minus 32px), 14px corners,

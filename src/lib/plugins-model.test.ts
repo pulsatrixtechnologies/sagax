@@ -21,7 +21,9 @@ describe("the Plugins panel's one list", () => {
     const byKey = Object.fromEntries(items.map((item) => [item.key, item]));
     expect(byKey["mcp:docs"]).toMatchObject({ installed: true, status: "needs_auth", source: "manual" });
     expect(byKey["mcp:notes"]).toMatchObject({ status: "off" });
-    expect(byKey["featured:linear"]).toMatchObject({ action: "connect", category: "code", domain: "linear.app", recommended: true });
+    expect(byKey["featured:linear"]).toMatchObject({ action: "connect", category: "code", domain: "linear.app" });
+    // #4207: no row carries a recommendation of its own (recommended-picks.ts picks them)
+    expect(items.some((item) => "recommended" in item)).toBe(false);
     // a catalog plugin already added shows once, as the server it became
     expect(byKey["featured:same"]).toBeUndefined();
     expect(byKey["skill:release-notes"]).toMatchObject({ source: "local", installed: true });
@@ -57,8 +59,10 @@ describe("the Plugins panel's one list", () => {
   it("shows sections per category, one list for a search across apps and skills", () => {
     const items = buildPluginItems(sources);
     const sections = mainSections(items, "", "all");
-    // #3047: Linear is recommended, so its Code section does not repeat it
-    expect(sections.map((section) => section.id)).toEqual(["recommended", "mcp", "skills"]);
+    // #4207: Recommended for you is the view's own first section, not one of these
+    expect(sections.map((section) => section.id)).toEqual(["code", "mcp", "skills"]);
+    // #3047: a row the view already recommends is not repeated
+    expect(mainSections(items, "", "all", "any", [], [], ["featured:linear"]).map((section) => section.id)).toEqual(["mcp", "skills"]);
     const keys = sections.flatMap((section) => section.items.map((item) => item.key));
     expect(new Set(keys).size).toBe(keys.length);
     // the Code chip still lists it

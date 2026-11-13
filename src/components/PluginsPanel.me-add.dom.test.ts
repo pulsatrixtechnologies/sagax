@@ -42,8 +42,10 @@ vi.mock("./bot-catalog/use-bot-catalog-sources", () => ({
   useBotCatalogSources: () => ({ entries: [], templates: [], loading: false, error: null, reload: () => {} }),
 }));
 vi.mock("@/lib/bot-tailscale", () => ({ fetchBotTailscale: async () => null }));
+const openExternalLink = vi.fn(async (_url: string) => {});
+vi.mock("@/lib/app-links", async () => ({ ...(await vi.importActual<object>("@/lib/app-links")), openExternalLink: (url: string) => openExternalLink(url) }));
 
-const MINE = {
+const MINE: { github: unknown; sandbox: boolean; servers: Array<Record<string, unknown>> } = {
   github: { state: "none", deviceFlow: true },
   sandbox: true,
   servers: [
@@ -227,5 +229,70 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     await act(async () => { link!.click(); });
     await settle();
     expect(host.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("bot");
+  });
+});
+
+// #4207: Connect Apps opens on Me; Recommended for you is its first section
+// there too, with the catalog's apps a bot usually wants, each one added as a
+// server of the person's own (an organization server).
+describe("Connect Apps > Me: Recommended for you first, from the catalog", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  const search = API["/api/plugins/search"];
+  const servers = MINE.servers;
+
+  beforeEach(() => {
+    setLocale("en");
+    vi.mocked(api).mockClear();
+    openExternalLink.mockClear();
+    API["/api/plugins/search"] = {
+      featured: [
+        { id: "linear", name: "Linear", description: "Issues", url: "https://mcp.linear.app/mcp", domain: "linear.app", auth: "oauth" },
+        { id: "slack", name: "Slack", description: "Channels", url: "https://mcp.slack.com/mcp", domain: "slack.com", auth: "oauth" },
+        { id: "notion", name: "Notion", description: "Pages", url: "https://mcp.notion.com/mcp", domain: "notion.com", auth: "oauth" },
+        // a key to paste, or a data center to choose first: not offered here
+        { id: "stripe", name: "Stripe", description: "Payments", url: "https://mcp.stripe.com", domain: "stripe.com", auth: "api-key" },
+        { id: "sentry", name: "Sentry", description: "Errors", url: "https://us.sentry.io/mcp", domain: "sentry.io", auth: "oauth", regions: [{ id: "us", label: "US", url: "https://us.sentry.io/mcp" }, { id: "de", label: "DE", url: "https://de.sentry.io/mcp" }] },
+      ],
+      results: [], nextCursor: null, registryAvailable: true,
+    };
+    // the person already has Notion as a server of their own
+    MINE.servers = [...servers, { name: "notion", kind: "remote", type: "http", url: "https://mcp.notion.com/mcp", domain: "mcp.notion.com", auth: "oauth", tokenConfigured: false, enabled: true, addedAt: 2, authState: "connected" }];
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+  afterEach(() => {
+    API["/api/plugins/search"] = search;
+    MINE.servers = servers;
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  const home = async () => {
+    await act(async () => { root.render(createElement(PluginsPanel)); });
+    await settle();
+  };
+  const shelf = () => [...host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')].map((row) => row.getAttribute("data-plugin-row"));
+
+  it.each(["en", "fr"])("the home opens on Me with the picks as its first section (%s)", async (lang) => {
+    await loadLocale(lang);
+    await home();
+    const sections = [...host.querySelectorAll("[data-plugins-section]")].map((section) => section.getAttribute("data-plugins-section"));
+    expect(sections[0]).toBe("recommended");
+    // chat before tickets; what the person has, a key to paste and a data center to choose are left out
+    expect(shelf()).toEqual(["featured:slack", "featured:linear"]);
+  });
+
+  it("Connect adds the app as the person's own server, then opens its sign-in", async () => {
+    await home();
+    await act(async () => { host.querySelector<HTMLButtonElement>('[data-personal-connect="slack"]')!.click(); });
+    await settle();
+    const posts = vi.mocked(api).mock.calls.filter(([, init]) => (init as { method?: string } | undefined)?.method === "POST");
+    const add = posts.find(([path]) => path === "/api/me/mcp/servers");
+    expect(JSON.parse(String((add?.[1] as { body?: string } | undefined)?.body))).toEqual({ name: "slack", url: "https://mcp.slack.com/mcp", auth: "oauth" });
+    expect(posts.map(([path]) => path)).toContain("/api/me/mcp/servers/slack/oauth/start");
+    expect(posts.map(([path]) => path)).not.toContain("/api/plugins/install");
+    expect(openExternalLink).toHaveBeenCalledTimes(1);
   });
 });

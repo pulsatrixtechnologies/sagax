@@ -35,7 +35,7 @@ describe("Plugins panel views", () => {
 
   it("the reference app's Connect Apps: the home (title, N connected, the sticky search row), then Manage, Bots and the views behind a back bar (#2104)", () => {
     const html = page({ connected: { count: 2, icons: [] } });
-    expect(html).toMatch(/id="plugins-title"[^>]*>Plugins<\/h2>/);
+    expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps<\/h2>/);
     expect(html).toMatch(/data-plugins-connected="2"[\s\S]*?2 connected/);
     expect(html).not.toContain('role="tablist"');
     expect(html).not.toContain("data-breadcrumb");
@@ -58,7 +58,7 @@ describe("Plugins panel views", () => {
     // Manage: the back bar to Plugins, the big title, the scope, the links to Pages and Sources
     const manage = page({ tab: "installed", scope: createElement("div", null, "SCOPE") });
     expect(manage).toContain("INSTALLED");
-    expect(manage).toMatch(/data-plugins-home[^>]*>[\s\S]*?Plugins/);
+    expect(manage).toMatch(/data-plugins-home[^>]*>[\s\S]*?Connect Apps/);
     expect(manage).toMatch(/id="plugins-title"[^>]*>Manage plugins and skills<\/h2>[\s\S]*?SCOPE/);
     expect([...manage.matchAll(/data-plugins-view-link="([a-z]+)"/g)].map((match) => match[1])).toEqual(["pages", "sources"]);
     // Bots: its pane under the back bar, no scope
@@ -92,6 +92,46 @@ describe("Plugins panel views", () => {
     expect(html).toMatch(/data-plugin-row="featured:linear"[\s\S]*?>Connect</);
     expect(html).not.toContain("data-plugins-browse-bots");
     expect(html).not.toMatch(/Browse bots/i);
+  });
+
+  it("Recommended for you is the first section, above From Sagax, with each pick's why on the shared row (#4207)", () => {
+    const rows = buildPluginItems({
+      featured: [
+        { id: "linear", name: "Linear", description: "Issues", url: "https://mcp.linear.app/mcp", domain: "linear.app", auth: "oauth" },
+        { id: "slack", name: "Slack", description: "Channels", url: "https://mcp.slack.com/mcp", domain: "slack.com", auth: "oauth" },
+        { id: "stripe", name: "Stripe", description: "Payments", url: "https://mcp.stripe.com", domain: "stripe.com", auth: "oauth" },
+      ],
+      tailscale: { description: "Private network", connected: false },
+    });
+    const html = renderToStaticMarkup(createElement(DiscoverView, {
+      ...discoverProps, items: rows, owned: ["Stripe"],
+      fromSagax: [{ key: "plugin:github", item: { key: "plugin:github", kind: "plugin", name: "GitHub" }, name: "GitHub", sub: "1 connector", status: "connected" }],
+    }));
+    const sections = [...html.matchAll(/data-plugins-section="([^"]+)"/g)].map((match) => match[1]);
+    expect(sections[0]).toBe("recommended");
+    expect(sections[1]).toBe("from-sagax");
+    expect(html.indexOf("data-plugins-chips")).toBeLessThan(html.indexOf('data-plugins-section="recommended"'));
+    const shelf = html.slice(html.indexOf('data-plugins-section="recommended"'), html.indexOf('data-plugins-section="from-sagax"'));
+    // the basics first (chat before tickets), what the person has left out, the private network tool not picked
+    expect([...shelf.matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1])).toEqual(["featured:slack", "featured:linear"]);
+    expect(shelf).toContain("Reads and posts in your team&#x27;s chat and meetings");
+    expect(shelf).toMatch(/title="Channels"/);
+    expect(shelf).toMatch(/>Connect</);
+    // an account connector counts only once connected: one waiting for a sign-in leaves chat open
+    const teams = (status: "connected" | "needs_auth") => [{
+      group: { id: "claude" as const, name: "Claude", source: "From Anthropic", manageUrl: "", connectors: [] },
+      rows: [{ key: "claude:Microsoft Teams", engine: "claude" as const, provider: "Claude", name: "Microsoft Teams", status, manageUrl: "", category: "communication" as const, capabilities: ["teams" as const] }],
+    }];
+    const shelfOf = (markup: string) => {
+      const start = markup.indexOf('data-plugins-section="recommended"');
+      const end = markup.indexOf("data-plugins-section=", start + 1);
+      return [...markup.slice(start, end < 0 ? undefined : end).matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1]);
+    };
+    expect(shelfOf(renderToStaticMarkup(createElement(DiscoverView, { ...discoverProps, items: rows, owned: ["Stripe"], accounts: teams("needs_auth") })))).toContain("featured:slack");
+    expect(shelfOf(renderToStaticMarkup(createElement(DiscoverView, { ...discoverProps, items: rows, owned: ["Stripe"], accounts: teams("connected") })))).not.toContain("featured:slack");
+    // nothing left to recommend: no section at all
+    const none = renderToStaticMarkup(createElement(DiscoverView, { ...discoverProps, items: rows, owned: ["Slack", "Linear", "Stripe"] }));
+    expect(none).not.toContain('data-plugins-section="recommended"');
   });
 
   it("Discover leaves out what is installed and the engines' connectors, keeps an app a conversation needs until it connects", () => {
@@ -133,7 +173,7 @@ describe("Plugins panel views", () => {
       tools: { list: [{ name: "search", enabled: true }, { name: "delete", enabled: false }], loading: false, onToggle: noop },
       details: [{ label: "Source", value: "Added manually" }, { label: "Transport", value: "HTTP" }],
     }));
-    expect(html).toContain('aria-label="Back to Plugins"');
+    expect(html).toContain('aria-label="Back to Connect Apps"');
     // Turned on beside the name; Uninstall is the reference app's gray pill under the page,
     // and with no Update, Test or Edit there is no "..." menu
     expect(html).toMatch(/data-plugin-enabled[^>]*>Turned on<button[^>]*aria-label="Turn glitcho off"/);

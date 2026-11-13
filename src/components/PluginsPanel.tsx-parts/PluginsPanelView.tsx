@@ -1,12 +1,12 @@
 import { useRef, type ReactNode } from "react";
-import { BookOpen, ClipboardPaste, KeyRound, X } from "lucide-react";
+import { BookOpen, ClipboardPaste, KeyRound, Loader2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { canEditConfig } from "@/lib/viewer";
 import { discoverItems, entryIcon, privateSkills } from "@/lib/installed-model";
-import { connectedSummary } from "@/lib/plugins-model";
+import { connectedSummary, TAILSCALE_KEY, type PluginItem } from "@/lib/plugins-model";
 import { organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
 import { SavedKeysResetNotice } from "../SavedKeysReset";
@@ -25,7 +25,7 @@ import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
 import { BotCatalogPane } from "../lazy-bot-catalog";
 import { AddMenu, bringsLabel, InstalledView } from "../plugins/InstalledView";
-import { PLUGINS } from "../plugins/plugins-style";
+import { PLUGINS, pluginActionClass } from "../plugins/plugins-style";
 import { DiscoverView, type FromSagaxRow } from "../plugins/DiscoverView";
 import { AccountsView } from "../plugins/AccountsView";
 import { SourcesView } from "../plugins/SourcesView";
@@ -69,6 +69,36 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   const personal = usePersonalMcp(personalHere);
   const marketError = s.marketError;
   const marketNeedsToken = s.marketNeedsToken;
+
+  // Recommended for you (#4207) on the screen Connect Apps opens on (Me):
+  // the catalog's apps are picks there too. On an organization server one
+  // becomes a server of the person's own (an app that signs in with OAuth or
+  // needs nothing, at its one address); on a solo installation the
+  // installation's servers are the person's, as under Organization.
+  const personalListing = (item: PluginItem) => {
+    if (!personalHere || item.kind !== "featured") return null;
+    const listing = featured?.find((entry) => entry.id === item.id);
+    if (!listing || listing.regions?.length) return null;
+    const auth = listing.auth === "oauth" ? "oauth" as const : listing.auth === "none" ? "none" as const : null;
+    return auth ? { id: listing.id, url: listing.url, auth } : null;
+  };
+  const canRecommend = (item: PluginItem) => {
+    if (item.action === null) return false;
+    if (item.kind === "plugin") return scope === "workspace" || Boolean(scopedPluginView?.canChange);
+    if (scope === "workspace" || item.key === TAILSCALE_KEY) return true;
+    if (scope !== "me" || item.kind !== "featured") return false;
+    return personalHere ? personalListing(item) !== null : !mcp.restricted;
+  };
+  const discoverAction = (item: PluginItem) => {
+    const listing = personalListing(item);
+    if (!listing) return renderAction(item);
+    return (
+      <button type="button" data-personal-connect={item.id} disabled={personal.connecting !== null} className={pluginActionClass()}
+        onClick={() => { setPanelError(null); void personal.connect(listing).catch((cause: unknown) => setPanelError(readableError(cause))); }}>
+        {personal.connecting === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.action === "connect" ? "connectApps.action.connect" : "connectApps.action.add")}
+      </button>
+    );
+  };
 
   const notices = (
     <>
@@ -280,7 +310,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               extraSources={(shownMarketplaces ?? []).map((market) => market.name)}
               focus={state.pluginsFocusApps ?? undefined}
               onOpenItem={openItem}
-              renderAction={renderAction}
+              renderAction={discoverAction}
               renderBelow={renderBelow}
               fromSagax={fromSagax}
               onOpenFromSagax={(row) => {
@@ -294,6 +324,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               onAccountsRefresh={() => void harness.load(true)}
               onAccountsSetUp={setUpEngine}
               onAddCustom={scope === "workspace" && !mcp.restricted ? () => push({ page: "connector" }) : undefined}
+              // Recommended for you (#4207): what the person has in any
+              // scope is not offered; under Me the catalog's apps are picks
+              // too; only what can be connected here
+              recommendFrom={scope === "me" ? discoverItems(items) : undefined}
+              owned={[...items.filter((item) => item.installed).map((item) => item.name), ...entries.map((entry) => entry.name), ...personal.names]}
+              canConnect={canRecommend}
             />
           )}
           // Browse Bots (2026-10-29): its home, View all, a bot's page and the

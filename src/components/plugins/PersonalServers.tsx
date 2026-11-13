@@ -11,7 +11,7 @@ import { openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import {
-  disconnectPersonalServer, removePersonalServer, setPersonalServerEnabled, startPersonalServerSignIn,
+  addPersonalServer, disconnectPersonalServer, removePersonalServer, setPersonalServerEnabled, startPersonalServerSignIn, suggestServerName,
   type MyConnections, type PersonalServer,
 } from "@/lib/my-connections";
 import { PersonalImportForm, PersonalServerForm, stateLabel, useMyConnections } from "../settings/MyConnectionsSettings";
@@ -32,6 +32,14 @@ export interface PersonalMcp {
   startImport: () => void;
   refresh: () => Promise<void>;
   busy: boolean;
+  /** the names of the person's servers */
+  names: string[];
+  /** Connect Apps > Recommended for you under Me (#4207): a catalog app
+   * (its id and address) becomes a server of the person's own, then its
+   * sign-in opens when it has one; a failure is the caller's to show */
+  connect: (listing: { id: string; url: string; auth: "oauth" | "none" }) => Promise<void>;
+  /** the catalog app being connected, by its id */
+  connecting: string | null;
 }
 
 /** `active`: the Me scope on an organization server (the /api/me routes).
@@ -118,5 +126,18 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
     startImport: () => setForm((current) => current?.kind === "import" ? null : { kind: "import" }),
     refresh,
     busy: busy !== null,
+    names: servers.map((server) => server.name),
+    connect: async (listing) => {
+      setBusy(`connect:${listing.id}`);
+      try {
+        const name = suggestServerName(listing.id);
+        await addPersonalServer({ name, url: listing.url, auth: listing.auth });
+        if (listing.auth === "oauth") await openExternalLink((await startPersonalServerSignIn(name)).authorizationUrl);
+        await refresh();
+      } finally {
+        setBusy(null);
+      }
+    },
+    connecting: busy?.startsWith("connect:") ? busy.slice("connect:".length) : null,
   };
 }

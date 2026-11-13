@@ -16,25 +16,12 @@
 import { ROUTINE_GOAL_STALL_RUNS, type RoutineGoal } from "./routine-goal.ts";
 import { routineProblemToldAt } from "./routine-repeat.ts";
 import { failureDetail, reportBrief } from "./routine-result.ts";
-import { isRoutineProblemRun, type Routine, type RoutineRun } from "./routines.ts";
+import { isRoutineProblemRun, type Routine, type RoutineNeedsPerson, type RoutineRun } from "./routines.ts";
 
-/** What needs the person, once, with the run it comes from. `needsPerson`
- * on a routine (written by the server in a later lot) is taken as is; until
- * then it is read from what the wire already carries. */
-export interface OutcomeNeed {
-  kind: "question" | "items" | "problem" | "paused" | "goal";
-  /** The sentence that needs the person (the bot's own words); empty when
-   * the record carries none, and the app says it in its own words. */
-  text: string;
-  runId?: string;
-  since: number;
-  /** `paused`: the failures in a row that paused the routine. */
-  failures?: number;
-  /** `goal`: why the goal needs the person. */
-  goal?: "expired" | "stalled";
-  /** `goal` stalled: the checks in a row with the same progress. */
-  checks?: number;
-}
+/** What needs the person, once, with the run it comes from: the wire's
+ * `Routine.needsPerson` (one type). The server's (null: nothing) is taken
+ * as is; from an older server it is read from what the wire carries. */
+export type OutcomeNeed = RoutineNeedsPerson;
 
 /** A stored outcome (a later lot): its name, an optional note, its order. */
 export interface OutcomeRecord {
@@ -46,11 +33,9 @@ export interface OutcomeRecord {
 }
 
 export type OutcomeRoutine = Pick<Routine, "id" | "name" | "enabled" | "schedule" | "nextRunAt" | "createdAt"> &
-  Partial<Pick<Routine, "goal" | "autoPaused" | "failureStreak">> & {
+  Partial<Pick<Routine, "goal" | "autoPaused" | "failureStreak" | "needsPerson">> & {
     /** The stored outcome it serves (a later lot). Absent: its own. */
     outcome?: string;
-    /** What needs the person, as the server decided it (a later lot). */
-    needsPerson?: OutcomeNeed;
   };
 
 export type OutcomeRun = Pick<RoutineRun, "id" | "routineId" | "routineName" | "status" | "scheduledFor" | "createdAt"> &
@@ -109,23 +94,45 @@ function runWord(run: OutcomeRun): OutcomeRunWord {
   return "status";
 }
 
-/** What needs the person for one routine, from today's wire fields: a run
- * waiting on the person (not on teammates), a pause after failures, problem
- * runs in a row once the chat's own rule has told the person
- * (routineProblemToldAt: the first for a routine that runs at most once a
- * day, the third for one that runs several times a day), a goal past its
- * deadline or stalled. */
-export function routineNeed(routine: OutcomeRoutine, runs: readonly OutcomeRun[], now = Date.now()): OutcomeNeed | undefined {
-  if (routine.needsPerson) return routine.needsPerson;
+/** #4098: the facts only the server holds (server/routines/
+ * routine-needs-person.ts gives them, from what the chat's row gate reads).
+ * Without them the rule reads the wire alone: every run waiting on the
+ * person (not on teammates) has its card open, no items are known, and the
+ * problem streak is told at routineProblemToldAt in the routine's zone. */
+export interface RoutineNeedFacts<R extends OutcomeRun = OutcomeRun> {
+  /** A waiting run's question or approval card is still open. */
+  cardOpen?(run: R): boolean;
+  /** Items only the person can do, on this run's row, not yet settled. */
+  openItems?(run: R): { text: string; since: number } | undefined;
+  /** The run of a problem streak that tells the person. */
+  problemToldAt?: number;
+}
+
+/** What needs the person for one routine: a run waiting on the person (not
+ * on teammates) with its card open, items only they can do still open, a
+ * pause after failures, problem runs in a row once the chat's own rule has
+ * told the person (routineProblemToldAt: the first for a routine that runs
+ * at most once a day, the third for one that runs several times a day) and
+ * no good run since, a goal past its deadline or stalled. The server's
+ * verdict on the routine (`needsPerson`, null: nothing) wins; the server
+ * itself reads it here, with its facts. */
+export function routineNeed<R extends OutcomeRun>(routine: OutcomeRoutine, runs: readonly R[], now = Date.now(), facts: RoutineNeedFacts<R> = {}): OutcomeNeed | undefined {
+  if (routine.needsPerson !== undefined) return routine.needsPerson ?? undefined;
   const own = runs.filter((run) => run.routineId === routine.id).sort((a, b) => runAt(b) - runAt(a));
-  const waiting = own.find((run) => run.status === "waiting" && run.waitingOn !== "teammates");
+  const waiting = own.find((run) => run.status === "waiting" && run.waitingOn !== "teammates" && (facts.cardOpen?.(run) ?? true));
   if (waiting) return { kind: "question", text: waiting.attention?.trim() ?? "", runId: waiting.id, since: waiting.startedAt ?? runAt(waiting) };
+  if (facts.openItems) {
+    for (const run of own) {
+      const items = facts.openItems(run);
+      if (items) return { kind: "items", text: items.text, runId: run.id, since: items.since };
+    }
+  }
   if (!routine.enabled && routine.autoPaused) {
     return { kind: "paused", text: "", failures: routine.autoPaused.failures, since: routine.autoPaused.at, ...(routine.autoPaused.runId ? { runId: routine.autoPaused.runId } : {}) };
   }
   const settled = own.find((run) => run.status !== "queued" && run.status !== "running" && run.status !== "waiting");
   if (settled && isRoutineProblemRun(settled)
-    && Math.max(1, routine.failureStreak ?? 0, settled.problemRepeat?.count ?? 0) >= routineProblemToldAt(routine.schedule, now)) {
+    && Math.max(1, routine.failureStreak ?? 0, settled.problemRepeat?.count ?? 0) >= (facts.problemToldAt ?? routineProblemToldAt(routine.schedule, now))) {
     const detail = settled.redacted ? "" : failureDetail(settled.error || settled.problems || "");
     return { kind: "problem", text: detail, runId: settled.id, since: settled.problemRepeat?.since ?? runAt(settled) };
   }

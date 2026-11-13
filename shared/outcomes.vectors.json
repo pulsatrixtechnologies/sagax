@@ -1397,6 +1397,56 @@
           ]
         }
       ]
+    },
+    {
+      "name": "needsPerson null from the server is nothing, even with a run that still reads waiting (its card was answered)",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "needsPerson": null
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "waiting",
+          "scheduledFor": 1799996400000,
+          "createdAt": 1799996400000,
+          "startedAt": 1799996400000,
+          "attention": "Which deck should I send?"
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "waiting",
+              "word": "status",
+              "at": 1799996400000
+            }
+          ]
+        }
+      ]
     }
   ]
 }

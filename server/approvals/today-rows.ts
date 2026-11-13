@@ -118,8 +118,9 @@ export function attentionSettled(message: TodayMessage, rows: readonly TodayMess
   return rows.some((row) => row.role === "user" && row.at > message.at) || sourceRows.some((row) => row.role === "user" && row.at > message.at);
 }
 
-/** The same check through the reader: one indexed row per thread at most. */
-function attentionSettledBy(read: TodayReader, threadId: string, message: TodayMessage): boolean {
+/** The same check through the reader: one indexed row per thread at most.
+ * #4098: also what settles a routine's open items for its outcome. */
+export function attentionSettledBy(read: Pick<TodayReader, "wroteAfter">, threadId: string, message: TodayMessage): boolean {
   if (!message.attention || message.attention.handledAt) return true;
   if (read.wroteAfter(threadId, message.at)) return true;
   const source = message.attention.threadId;

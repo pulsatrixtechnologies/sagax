@@ -6,6 +6,43 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Outcomes (#4098, 2026-11-13)
+
+An outcome is a named result that one or more routines of a bot keep true.
+It is a reading of routines, their goal, their runs and what already waits
+on the person, never a second scheduler or run log. The bot page's Outcomes
+tab reads it with one function, `outcomesOf` in `shared/outcomes.ts`, whose
+cases are in `shared/outcomes.vectors.json` (the server, the desktop and the
+phone run the same ones). Each routine is an outcome of its own; one with a
+goal is named by its goal.
+
+What needs the person is decided once, by the server, from the facts the
+chat's row gate already reads, and rides on the routine as
+`Routine.needsPerson` (`server/routines/routine-needs-person.ts`, written by
+`routineOnWire` on `GET /api/routines` and on the `routine` frame):
+
+- `question`: a run waiting on the person (never on its teammates) whose
+  question or approval card is still open (`routineRunNeedsPerson`,
+  `openCardIn`);
+- `items`: items only the person can do on a run's row (an attention card
+  with its `routineRunId`) neither handled nor answered by a later line of
+  the person, as Today reads them (`attentionSettledBy`), found by the
+  store's index of open waiting rows, never by reading a transcript;
+- `paused`: the routine paused itself after failures in a row;
+- `problem`: the problem streak the chat told (`problemToldAt`) and no good
+  run since (a blocked goal is told this way, as its run's problem);
+- `goal`: a goal past its deadline, or stalled.
+
+The rule itself is `routineNeed` in `shared/outcomes.ts`, given the
+server's facts; an app reading an older server falls back to the same rule
+over what the wire carries. `null` means nothing waits on the person and
+wins over the runs; someone else's routine seen through a wider scope
+carries `null`. It clears the moment its fact does: `RoutineNeedsWatch`
+re-reads every routine shortly after a run changes or a card, items, a run's
+row or the person's own line lands in a conversation, and sends the
+`routine` frame of each routine whose need moved. Nothing of what the row
+gate decides changes, and no chat row is written for it.
+
 ## What enters a bot's main chat (#3581, 2026-11-11)
 
 One rule, `shared/chat-relevance.ts` (`chatPlace`, `chatOrigin`,

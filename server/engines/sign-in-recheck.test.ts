@@ -65,6 +65,18 @@ describe("sign-in recheck (#2040)", () => {
     expect(h.deps.renew).toHaveBeenCalledTimes(1);
   });
 
+  it("#4192: restore renews a refused Grok sign-in once, then restores it; a failure marks nothing", async () => {
+    const h = harness([true, false]);
+    h.marked.add("p1/grokAgent");
+    const [first, second] = await Promise.all([h.recheck.restore("p1", "grokAgent", "grok"), h.recheck.restore("p1", "grokAgent", "grok")]);
+    expect([first, second]).toEqual([true, true]);
+    expect(h.deps.renew).toHaveBeenCalledTimes(1);
+    expect(h.marked.has("p1/grokAgent")).toBe(false);
+    expect(h.deps.onRestored).toHaveBeenCalledWith("p1", "grokAgent", "grok");
+    expect(await h.recheck.restore("p1", "grokAgent", "grok")).toBe(false);
+    expect(h.deps.markExpired).not.toHaveBeenCalled();
+  });
+
   it("a renew that throws counts as a failure", async () => {
     const h = harness([]);
     (h.deps.renew as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("cli"));

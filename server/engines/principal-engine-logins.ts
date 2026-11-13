@@ -27,7 +27,8 @@ import type { ProviderAuthenticationStart, ProviderAuthenticationStatus } from "
 import { ClaudeLoginController } from "../drivers/claude-login-auth.ts";
 import { CodexDeviceAuthController } from "../drivers/codex-device-auth.ts";
 import { DeviceLoginController } from "../drivers/device-login.ts";
-import { probeGrokModels, probeGrokReach, readGrokModelsCache } from "../drivers/acp/grok.ts";
+import { probeGrokModels, probeGrokReach, readGrokModelsCache, renewGrokSignIn } from "../drivers/acp/grok.ts";
+import { grokAccessFrom } from "../cloud-agents/subscription-access.ts";
 import { ProviderAuthSessions } from "./provider-auth-sessions.ts";
 import { separateAccountInstance } from "./separate-account.ts";
 import { isPrincipalId } from "../auth/principals.ts";
@@ -151,6 +152,10 @@ export interface PrincipalEngineLoginsOptions {
    * `_x.ai/mcp/list` answer), read by a standalone probe of the person's own
    * CLI (server/drivers/acp/grok.ts probeGrokReach). Tests pass a fake. */
   probeReach?: (cli: string, env: Record<string, string | undefined>) => Promise<unknown>;
+  /** #4192: renews a Grok sign-in through the person's own CLI (the
+   * engine's refresh path, server/drivers/acp/grok.ts renewGrokSignIn).
+   * Tests pass a fake. */
+  renewGrok?: (cli: string, env: Record<string, string | undefined>) => Promise<boolean>;
   /** #3344: one of the person's sign-ins came or went (or all of them, the
    * console's Reset access), so the connector registry reads it again or
    * forgets it (server/connectors/registry.ts). A Grok sign-in is said
@@ -173,6 +178,16 @@ const failure = (message: string, status: number) => Object.assign(new Error(mes
 export function isLoginDriver(driver: string): driver is LoginDriver {
   return driver === "claudeAgent" || driver === "codex" || driver === "grokAgent" || driver === "kimiAgent";
 }
+
+/** #4192: a Grok sign-in handed over for a live call is renewed first when
+ * it expires within this window. */
+export const GROK_LIVE_FRESH_MS = 10 * 60_000;
+/** #4192: the person's Grok sign-in for one live call, or why there is none:
+ * `no_sign_in` (not signed in to Grok here), `sign_in_refused` (the
+ * provider refused it and the engine could not renew it). */
+export type GrokLiveAccess =
+  | { ok: true; accessToken: string; expiresAt: number | null }
+  | { ok: false; error: "no_sign_in" | "sign_in_refused" };
 
 /** #1154: how long a person's model list stays the one a turn reads. */
 export const ACCOUNT_MODELS_TTL_MS = 10 * 60_000;
@@ -446,6 +461,54 @@ export class PrincipalEngineLogins {
     const env: Record<string, string | undefined> = { ...process.env, ...facts.environment, CODEX_HOME: this.loginDir(principalId, "codex", "primary", instanceId) };
     delete env.OPENAI_API_KEY;
     return { cli: facts.cli, env };
+  }
+
+  /** #4192: one renewal of this person's Grok sign-in through the
+   * engine's own path (the person's CLI on their own home, which rewrites
+   * auth.json, the one copy). True when the CLI took it and the sign-in
+   * then holds an access value that has not expired. The sign-in recheck's
+   * `renew` for Grok (server/engines/sign-in-recheck.ts), which runs it one
+   * at a time and restores the sign-in when it works. */
+  async renewGrokAccount(principalId: string, instanceId: string): Promise<boolean> {
+    const launch = this.accountEnv(principalId, instanceId);
+    if (!launch) return false;
+    const accepted = await (this.options.renewGrok ?? renewGrokSignIn)(launch.cli, launch.env).catch(() => false);
+    const after = this.readGrokAccess(principalId, instanceId);
+    return Boolean(accepted && after && (after.expiresAt === null || after.expiresAt > this.now()));
+  }
+
+  /** #4192: the current access value of this person's Grok sign-in, for
+   * one live call (the organization's voice service, through the
+   * organization link). When it expires within `freshForMs` or the
+   * provider refused it before, `restore` renews it first: the sign-in
+   * recheck's single flight on renewGrokAccount, which also clears the
+   * refusal and its cards once the renewal works. Only ever this person's
+   * folder; nothing is logged or written here. */
+  async grokLiveAccess(
+    principalId: string,
+    instanceId: string,
+    restore: (principalId: string, driver: LoginDriver, instanceId: string) => Promise<boolean>,
+    freshForMs = GROK_LIVE_FRESH_MS
+  ): Promise<GrokLiveAccess> {
+    if (!this.accountEnv(principalId, instanceId)) return { ok: false, error: "no_sign_in" };
+    const refused = this.expired(principalId, "grokAgent", "primary", instanceId);
+    const before = this.readGrokAccess(principalId, instanceId);
+    if (!before) return { ok: false, error: "no_sign_in" };
+    if (!refused && (before.expiresAt === null || before.expiresAt > this.now() + freshForMs)) return { ok: true, ...before };
+    const restored = await restore(principalId, "grokAgent", instanceId).catch(() => false);
+    const after = this.readGrokAccess(principalId, instanceId);
+    // a sign-in the provider refused counts again only once the CLI took it
+    if (!after || (refused && !restored)) return { ok: false, error: "sign_in_refused" };
+    if (after.expiresAt !== null && after.expiresAt <= this.now()) return { ok: false, error: "sign_in_refused" };
+    return { ok: true, ...after };
+  }
+
+  private readGrokAccess(principalId: string, instanceId: string): ReturnType<typeof grokAccessFrom> {
+    try {
+      return grokAccessFrom(readFileSync(join(this.loginDir(principalId, "grokAgent", "primary", instanceId), ".grok", "auth.json"), "utf8"));
+    } catch {
+      return null;
+    }
   }
 
   private accountEnv(principalId: string, instanceId: string, slot: LoginSlot = "primary"): { cli: string; env: Record<string, string | undefined> } | null {

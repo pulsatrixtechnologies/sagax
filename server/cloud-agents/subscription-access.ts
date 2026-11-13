@@ -19,7 +19,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { CLAUDE_KEYCHAIN_SERVICE, decodeKeychainSecret, readDarwinClaudeKeychain } from "../usage/plan-usage.ts";
+import { CLAUDE_KEYCHAIN_SERVICE, decodeKeychainSecret, grokCandidate, readDarwinClaudeKeychain } from "../usage/plan-usage.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -112,6 +112,25 @@ export function codexAccessFrom(text: string | null): SubscriptionAccess | null 
   if (!access) return null;
   const accountId = typeof tokens?.account_id === "string" && /^[\x21-\x7e]{1,200}$/.test(tokens.account_id) ? tokens.account_id : undefined;
   return { provider: "openai", accessToken: access, expiresAt: jwtExpiry(access), ...(accountId ? { accountId } : {}) };
+}
+
+/** #4192: Grok's login file (`<grok home>/auth.json`, one record per
+ * issuer::principal): the access value of the sign-in, with its expiry (the
+ * record's, else the value's own `exp`), the record that lives longest when
+ * there are several. Never the refresh token. Null when there is none. */
+export function grokAccessFrom(text: string | null): { accessToken: string; expiresAt: number | null } | null {
+  const root = parse(text);
+  if (!root) return null;
+  let best: { accessToken: string; expiresAt: number | null } | null = null;
+  for (const value of [root, ...Object.values(root)]) {
+    const entry = record(value);
+    const candidate = entry ? grokCandidate(entry) : null;
+    const access = token(candidate?.token);
+    if (!candidate || !access) continue;
+    const expiresAt = candidate.expiresAt ?? jwtExpiry(access);
+    if (!best || (expiresAt ?? Number.NEGATIVE_INFINITY) > (best.expiresAt ?? Number.NEGATIVE_INFINITY)) best = { accessToken: access, expiresAt };
+  }
+  return best;
 }
 
 /** The macOS keychain item Claude Code uses for a CLAUDE_CONFIG_DIR (the

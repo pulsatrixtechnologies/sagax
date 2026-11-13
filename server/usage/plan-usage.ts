@@ -955,13 +955,16 @@ function readCodexCredential(
   return { token, accountId, expired: false };
 }
 
-interface GrokCandidate {
+export interface GrokCandidate {
   token: string;
   expiresAt: number | null;
   refreshable: boolean;
 }
 
-function grokCandidate(record: Record<string, unknown>): GrokCandidate | null {
+/** One record of Grok's login file (`<grok home>/auth.json`): its access
+ * value, expiry and whether it can be refreshed. Also read by
+ * server/cloud-agents/subscription-access.ts grokAccessFrom (#4192). */
+export function grokCandidate(record: Record<string, unknown>): GrokCandidate | null {
   const token = secretString(record.access_token) ?? secretString(record.key);
   if (!token) return null;
   return { token, expiresAt: timeMs(record.expires_at ?? record.expiresAt), refreshable: Boolean(secretString(record.refresh_token)) };

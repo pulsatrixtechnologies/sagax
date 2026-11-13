@@ -393,6 +393,27 @@ Perspicax have it read now. Keep these rules, covered by
   2 s apart, and a call during a fetch schedules exactly one more. 202
   `{ok, refresh: "started" | "queued"}`.
 
+## A person's Grok sign-in for a live call (organization mode, #4192)
+
+`POST /api/org/link/grok-sign-in` (`server/org/org-link-routes.ts`) answers
+the organization's voice service the access value of one person's own Grok
+sign-in, so a bot's phone line runs on that person's subscription. Keep these
+rules, covered by `server/org/org-link-routes.test.ts` and
+`server/engines/principal-engine-logins.test.ts`:
+
+- Same caller check as the directory refresh (link token, failure limiter),
+  no accepted-call cap. Body `{"sub"}`: the person of this organization it
+  names, active (`directoryListsActive`, the bot email rule) and not turned
+  off. Only their own folder is read (`PrincipalEngineLogins.grokLiveAccess`).
+- Renewed first when it expires within `GROK_LIVE_FRESH_MS` (10 min) or was
+  refused: the engine's own path (`renewGrokSignIn`, the person's CLI
+  authenticating on its cached token, which rewrites `auth.json`), run by
+  the sign-in recheck's `restore` (one at a time per sign-in; a renewal that
+  works clears the refusal, resumes held runs and closes the sign-in cards,
+  like any restored sign-in). Never a second copy, never the refresh token.
+- Codes: `unknown_person` 404, `user_inactive` 409, `no_sign_in` 404,
+  `sign_in_refused` 409. The value is never logged, stored or cached.
+
 ## Automations scope (organization mode, 2026-10-09)
 
 Anyone may be allowed to see the automation schedule beyond their own

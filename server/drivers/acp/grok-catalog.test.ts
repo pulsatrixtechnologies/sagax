@@ -8,7 +8,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   dismissGrokModelCampaigns, GrokAgentDriver, grokModelsFromInitialize, probeGrokModels, readGrokModelCatalog,
-  readGrokModelsCache, resetGrokLiveModels, STATIC_GROK_MODELS,
+  readGrokModelsCache, renewGrokSignIn, resetGrokLiveModels, STATIC_GROK_MODELS,
 } from "./grok.ts";
 
 const fakeCli = join(dirname(fileURLToPath(import.meta.url)), "../../testing/fake-acp-cli.ts");
@@ -250,5 +250,20 @@ describe("per-model reasoning levels (2026-10-13)", () => {
     const models = readGrokModelsCache({ HOME: home })!;
     expect(models.find((model) => model.id === "grok-4.5")).toMatchObject({ effortLevels: ["low", "medium", "high"], defaultEffort: "high" });
     expect(models.find((model) => model.id === "grok-4.7")).toMatchObject({ effortLevels: ["high", "xhigh"], defaultEffort: "high" });
+  });
+});
+
+describe("renewGrokSignIn (#4192)", () => {
+  it("authenticates the person's own CLI on its cached sign-in, and says when it was refused", async () => {
+    chmodSync(fakeCli, 0o755);
+    const home = scratchConfig("");
+    const env = { HOME: home, PATH: process.env.PATH };
+    // no login file: nothing to renew, the CLI is not started
+    expect(await renewGrokSignIn(fakeCli, env)).toBe(false);
+    // a made-up record, never a real credential
+    writeFileSync(join(home, ".grok", "auth.json"), JSON.stringify({ "https://auth.example.test::p-1": { auth_mode: "oidc", key: "fake-grok-access-renew-0000000000" } }));
+    expect(await renewGrokSignIn(fakeCli, env)).toBe(true);
+    expect(await renewGrokSignIn(fakeCli, { ...env, FAKE_ACP_MODE: "authenticate-failed" })).toBe(false);
+    expect(await renewGrokSignIn(join(home, "no-such-grok"), env)).toBe(false);
   });
 });

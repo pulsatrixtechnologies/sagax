@@ -9,6 +9,7 @@ import { composerCommandMenu, type ComposerSlashCommand } from "../lib/composer-
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { HarnessCommand } from "../../shared/harness-commands";
+import { TEACH_TASK_OFFERED } from "../../shared/teach-task";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -19,7 +20,7 @@ const query = params.get("q") ?? "";
 const before = params.get("mode") === "before";
 
 const sagax: ComposerSlashCommand[] = [
-  { id: "learn", label: "/learn", description: t("composer.command.learnDesc") },
+  ...(TEACH_TASK_OFFERED ? [{ id: "learn" as const, label: "/learn", description: t("composer.command.learnDesc") }] : []),
   { id: "setup", label: "/setup", description: t("composer.command.setupDesc") },
 ];
 const engine: HarnessCommand[] = [

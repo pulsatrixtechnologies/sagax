@@ -30345,6 +30345,28 @@
         }
       }
     },
+    "Engine commands, /setup and more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engine commands, /setup and more"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commandes du moteur, /setup et plus"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comandos do motor, /setup e mais"
+          }
+        }
+      }
+    },
     "English": {
       "shouldTranslate": false,
       "localizations": {}

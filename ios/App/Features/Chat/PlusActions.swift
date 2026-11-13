@@ -136,7 +136,10 @@ extension ChatView {
         out.append(PlusAction(
             id: "commands", systemImage: "command",
             title: LocalizedStringKey(String(localized: "Slash commands")),
-            subtitle: LocalizedStringKey(String(localized: "Engine commands, /learn, /setup and more")),
+            // /learn is named only while Teach a task is offered (#4209)
+            subtitle: power.teachTask
+                ? LocalizedStringKey(String(localized: "Engine commands, /learn, /setup and more"))
+                : LocalizedStringKey(String(localized: "Engine commands, /setup and more")),
             disabled: preparingAttachments || sendingMessage
         ) {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { openCommandMenu() }

@@ -14,7 +14,7 @@ private struct InstanceCapabilityList: Decodable {
 }
 
 private struct FeatureFlagConfig: Decodable {
-    struct Features: Decodable { let skillAuthoring: Bool? }
+    struct Features: Decodable { let skillAuthoring: Bool?; let teachTask: Bool? }
     let features: Features?
 }
 
@@ -55,8 +55,16 @@ extension CompanionClient {
 
     /// `skillAuthoringEnabled`: on unless the computer switched it off.
     public func skillAuthoringEnabled() async throws -> Bool {
+        try await composerFeatures().skillAuthoring
+    }
+
+    /// The composer's switches in one read of `/api/config`: skill authoring
+    /// (on unless switched off) and Teach a task with `/learn`
+    /// (`features.teachTask`, shared/teach-task.ts, #4209), offered only
+    /// when the server says so.
+    public func composerFeatures() async throws -> (skillAuthoring: Bool, teachTask: Bool) {
         let config = try await send(try makeRequest("GET", "/api/config"), as: FeatureFlagConfig.self)
-        return config.features?.skillAuthoring != false
+        return (config.features?.skillAuthoring != false, config.features?.teachTask == true)
     }
 
     // MARK: Held sends

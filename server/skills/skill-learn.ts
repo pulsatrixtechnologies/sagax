@@ -7,6 +7,7 @@
 // that mounts the agents tools.
 
 import { SAVE_RUN_AS_SKILL_LINE } from "../../shared/learn-request.ts";
+import { TEACH_TASK_OFFERED } from "../../shared/teach-task.ts";
 
 export const LEARN_SOURCE_PREFIX = "learn:";
 export const LEARN_PROMPT_MARKER = "[/learn]";
@@ -77,8 +78,9 @@ export function buildLearnPrompt(userRequest: string): string {
 
 /** The turn the engine runs: `/learn <request>` and the run card's plain
  * sentence followed by the request both become the authoring prompt; any
- * other message is passed through. */
+ * other message is passed through. While Teach a task is hidden
+ * (shared/teach-task.ts, #4209) a typed `/learn` is plain text. */
 export function expandLearnTurnText(userText: string): string {
-  const learn = parseLearnCommand(userText) ?? parseSaveRunRequest(userText);
+  const learn = (TEACH_TASK_OFFERED ? parseLearnCommand(userText) : null) ?? parseSaveRunRequest(userText);
   return learn ? buildLearnPrompt(learn.request) : userText;
 }

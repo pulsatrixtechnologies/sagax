@@ -5,6 +5,7 @@ import { viewerActorId } from "@/lib/viewer";
 import { activeLocale, t } from "@/lib/i18n";
 import { canTeachInBrowser } from "@/lib/bot-capabilities";
 import { browserAvailable, builtInBrowserEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
+import { TEACH_TASK_OFFERED } from "../../../shared/teach-task";
 import { requestBrowserTeach } from "@/lib/teach-request";
 import { myChromeCall, type MyChromeRecordingResult } from "@/lib/my-chrome";
 import { mentionChoicesForQuery } from "@/lib/mentions";
@@ -116,12 +117,13 @@ export function useComposerCommands({
           (instance) => instance.instanceId === candidate.modelSelection.instanceId,
         )?.capabilities?.agentsMcp,
     );
-  // /learn: also the + menu's "Teach a task"
-  const learnAvailable = skillAuthoringEnabled(config) &&
+  // /learn: also the + menu's "Teach a task". All three ways to teach a task
+  // follow one switch (shared/teach-task.ts, #4209): off, none is offered.
+  const learnAvailable = TEACH_TASK_OFFERED && skillAuthoringEnabled(config) &&
     (group ? (members ?? []).some(supportsAgents) : supportsAgents(bot));
   // ...which can also be shown in the bot's browser (a recording) when this
   // person can open that browser (the Browser panel's own conditions).
-  const browserTeach = Boolean(bot && !group && bot.browser !== false && canTeachInBrowser(config, bot, ownerOrAdmin)
+  const browserTeach = Boolean(TEACH_TASK_OFFERED && bot && !group && bot.browser !== false && canTeachInBrowser(config, bot, ownerOrAdmin)
     && (builtInBrowserEnabled(config) || browserAvailable(config)) && config?.browserEngine?.kind === "engine");
   const [teachChooser, setTeachChooser] = useState(false);
   // ...or shown in the person's own Chrome (My Chrome's recorder), where this
@@ -129,7 +131,7 @@ export function useComposerCommands({
   const [myChromeOffered, setMyChromeOffered] = useState(false);
   const [myChromeRecord, setMyChromeRecord] = useState(false);
   const [myChromeTaught, setMyChromeTaught] = useState<MyChromeRecordingResult | null>(null);
-  const myChromeBotId = bot && !group && !remoteClient ? bot.id : "";
+  const myChromeBotId = TEACH_TASK_OFFERED && bot && !group && !remoteClient ? bot.id : "";
   useEffect(() => {
     if (!myChromeBotId) { setMyChromeOffered(false); return; }
     let live = true;

@@ -68,6 +68,9 @@ queued). `SAGAX_HEADLESS_TASK_WAIT_MS` (1 h) bounds one task's turn. Tests:
 
 ## Show a task in my Chrome (2026-10-29)
 
+Hidden for now with the rest of Teach a task (#4209, see Teach by
+demonstration below).
+
 The person shows a task once in their own Chrome and a bot replays it.
 Teach a task (composer +) offers "Show it in my Chrome" where the server
 offers My Chrome to this person (`src/components/MyChromeRecordDialog.tsx`).
@@ -915,6 +918,12 @@ banner's Stop (a trusted click) and Sagax's Stop cut at once. With
 real tool path: cards for delete, payment and send, refusals, Stop.
 
 ## Teach by demonstration (2026-10-16)
+
+Hidden for now (2026-11-13, #4209; making it work: #4208): one switch,
+`TEACH_TASK_OFFERED` in `shared/teach-task.ts`, is off. The composer's + menu
+has no Teach a task, the "/" menu has no `/learn` (desktop, web app, and the
+phone app through `features.teachTask` of `GET /api/config`), and a `/learn`
+typed by hand is sent as plain text. The run card's Save as skill still works.
 
 The composer's + > Teach a task, when the bot has a browser, offers "Show it
 in the browser" beside "Describe it in words" (`/learn`, unchanged). Showing

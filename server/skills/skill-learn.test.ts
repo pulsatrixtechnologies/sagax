@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// shared/teach-task.ts: on here so /learn's own expansion stays covered (#4208)
+const teach = vi.hoisted(() => ({ offered: true }));
+vi.mock("../../shared/teach-task.ts", () => ({ get TEACH_TASK_OFFERED() { return teach.offered; } }));
+beforeEach(() => { teach.offered = true; });
 
 import {
     LEARN_PROMPT_MARKER,
@@ -47,6 +52,15 @@ describe("expandLearnTurnText", () => {
         expect(expanded).toContain('action="update"');
         expect(expanded).toContain("explicitly asked to revise");
         expect(expanded).toContain("exact SKILL.md path listed for that skill");
+    });
+
+    it("sends a typed /learn as plain text while Teach a task is hidden (#4209)", () => {
+        teach.offered = false;
+        expect(expandLearnTurnText("/learn the REST client in ~/sdk")).toBe("/learn the REST client in ~/sdk");
+        expect(expandLearnTurnText("/learn")).toBe("/learn");
+        // the run card's Save as skill is not part of the switch
+        const plain = `${SAVE_RUN_AS_SKILL_LINE}\nGoal: publish`;
+        expect(expandLearnTurnText(plain)).toBe(buildLearnPrompt("Goal: publish"));
     });
 
     it("treats a bare /learn as 'what we just did'", () => {

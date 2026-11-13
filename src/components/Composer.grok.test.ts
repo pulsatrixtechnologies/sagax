@@ -17,7 +17,10 @@ const fixture = vi.hoisted(() => ({
   // the headless model picker: what it was given, and its menu's control
   picker: null as null | Record<string, unknown>,
   toggleModel: vi.fn(), closeModel: vi.fn(),
+  // shared/teach-task.ts: Teach a task and /learn are offered (#4209)
+  teach: false,
 }));
+vi.mock("../../shared/teach-task", () => ({ get TEACH_TASK_OFFERED() { return fixture.teach; } }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, api: vi.fn(async () => ({})), useStore: () => ({
@@ -85,6 +88,7 @@ beforeEach(() => {
   fixture.picker = null;
   fixture.instances = [];
   fixture.dictation = false;
+  fixture.teach = false;
   forgetVoiceModeStatus();
   // voice mode answers "not available" for this bot
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ provider: "xai", available: false, refusal: { cause: "no_credentials" } }), { status: 200, headers: { "content-type": "application/json" } })));
@@ -122,7 +126,24 @@ describe("composer controls (the reference app's prompt bar)", () => {
     expect($("[data-composer-voice]")!.getAttribute("style") ?? "").not.toContain("--cta-fill");
   });
 
-  it("opens a + menu with Attach files, GIF and Teach a task, as in the reference design", () => {
+  it("hides Teach a task from the + menu and /learn from the \"/\" menu while the switch is off (#4209)", () => {
+    fixture.instances = [{ instanceId: "test", driverKind: "claude", displayName: "Claude", capabilities: { agentsMcp: true } } as unknown as InstanceInfo];
+    render(createElement(Composer, { bot: bot("teal") }));
+    click($("[data-composer-plus]"));
+    const items = [...$('[data-composer-plus-menu]')!.querySelectorAll<HTMLElement>("[data-composer-plus-item]")];
+    // nothing else moves: Attach files, then GIF
+    expect(items.map((item) => item.dataset.composerPlusItem)).toEqual(["attach", "gif"]);
+    expect(items.map((item) => item.querySelector(".truncate")?.textContent)).toEqual(["Attach files", "GIF"]);
+    click($("[data-composer-plus]"));
+    type("/");
+    const options = [...host.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => row.textContent ?? "");
+    expect(options.some((text) => text.includes("/setup"))).toBe(true);
+    expect(options.some((text) => text.includes("/learn"))).toBe(false);
+    type("");
+  });
+
+  it("opens a + menu with Attach files, GIF and Teach a task, as in the reference design (switch on, #4208)", () => {
+    fixture.teach = true;
     fixture.instances = [{ instanceId: "test", driverKind: "claude", displayName: "Claude", capabilities: { agentsMcp: true } } as unknown as InstanceInfo];
     render(createElement(Composer, { bot: bot("teal") }));
     click($("[data-composer-plus]"));
@@ -196,6 +217,7 @@ describe("composer controls (the reference app's prompt bar)", () => {
   });
 
   it("leaves Teach a task out when the bot cannot draft a skill", () => {
+    fixture.teach = true;
     render(createElement(Composer, { bot: bot("teal") }));
     click($("[data-composer-plus]"));
     expect($('[data-composer-plus-item="teach"]')).toBeNull();

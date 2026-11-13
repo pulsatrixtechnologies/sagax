@@ -30,7 +30,7 @@ import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { TaskComposer } from "../task/TaskComposer";
 import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
-import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
+import { useWaitingNotPinned, WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
 import { type WaitingItem } from "@/lib/use-waiting-cards";
 import { activityChip } from "../bot-settings/ActivityWindow";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
@@ -151,6 +151,8 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   // only a run has: when it was due, what started it, its cost, and that
   // its routine is gone.
   const waitingFor = waitingKind(waitingItems);
+  // #4204: an ask a pinned card holds is drawn there only
+  const waitingShown = useWaitingNotPinned(waitingItems);
   const header = (
     <div data-run-state={run.status} className="flex flex-col gap-1.5">
       <TaskStatusHeader
@@ -182,7 +184,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
 
   const attention = (
     <>
-      {waitingItems.length > 0 && <div data-run-waiting><WaitingOnYou items={waitingItems} threadId={threadId ?? ""} botFor={(id) => bots.find((candidate) => candidate.id === id)} onCancel={() => onStop?.()} onOpenThread={onOpenThread} /></div>}
+      {waitingShown.length > 0 && <div data-run-waiting><WaitingOnYou items={waitingShown} threadId={threadId ?? ""} botFor={(id) => bots.find((candidate) => candidate.id === id)} onCancel={() => onStop?.()} onOpenThread={onOpenThread} /></div>}
       {run.status === "queued" && (run.attention || queuePlace) && <div data-run-deferred className="rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[12.5px] text-accent-text"><span className="font-medium">{t("routineRun.deferred")}</span>{run.attention && <> · {run.attention}</>}{queuePlace && <> · <span data-run-queue-position>{queuePlace}</span></>}</div>}
       {problems && <div data-run-problems role="status" className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap"><span className="font-medium">{t("routines.status.completedWithProblems")}</span>{"\n"}{problems}</span></div>}
       {run.status !== "waiting" && errorText && <div data-run-error={blocked ? "blocked" : "failed"} role="alert" className={cn("flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] leading-relaxed", blocked ? "border-warning/30 bg-warning/10 text-warning" : "border-danger/30 bg-danger/10 text-danger")}><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap">{errorText}</span></div>}

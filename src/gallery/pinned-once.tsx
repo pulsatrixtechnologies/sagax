@@ -4,7 +4,10 @@
  * pinned card, while it waits; its record in the conversation once settled).
  * Answers /api itself with made-up bots; nothing reaches a server. Not
  * shipped in the app.
- * ?lang=fr|en&skin=<id>&case=question|two|approval|answered|room */
+ * #4204: case=window opens a team bot's task over the chat (CodingChat,
+ * its own composer and pinned card) while that bot's question waits: drawn
+ * once, on the window's pinned card, never also in a "Waiting on you" head.
+ * ?lang=fr|en&skin=<id>&case=question|two|approval|answered|room|window */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -23,6 +26,7 @@ await loadLocale(lang);
 const fr = lang === "fr";
 const which = params.get("case") ?? "question";
 const room = which === "room";
+const windowed = which === "window";
 
 const bot = (id: string, name: string, color: string): Bot =>
   ({ id, threadId: `t-${id}`, name, title: "", description: "", notifications: true, color, unread: false, ownerUserId: "pr_me", modelSelection: { instanceId: "fake", model: "test" }, messages: [], tasks: [] }) as unknown as Bot;
@@ -66,13 +70,24 @@ const person: Message = { id: "u1", role: "user", kind: "text", at, text: fr ? "
 const words: Message = { id: "w1", role: "bot", kind: "text", at: at + 60_000, from, text: fr ? "La migration est prête. Il reste une décision avant de lancer." : "The migration is ready. One decision is left before I start." };
 const after: Message = { id: "w2", role: "bot", kind: "text", at: at + 240_000, from, text: fr ? "Je t'attends pour continuer." : "I am waiting for you to go on." };
 
-const messages: Message[] = which === "two" ? [person, words, question(), second(), after]
+// #4204: the team bot's task, its question waiting
+const irisFrom = { botId: "iris", name: "Iris", color: "orange" } as const;
+const taskThread = "t-iris-task";
+const taskMessages: Message[] = [
+  { id: "tu1", role: "user", kind: "text", at, text: fr ? "Trie les billets du tableau de soutien." : "Sort the help desk board's tickets." },
+  { id: "tw1", role: "bot", kind: "text", at: at + 30_000, from: irisFrom, text: fr ? "Je regarde le tableau d'abord." : "I'll look at the board first." },
+  { ...question(), id: "tq1", from: irisFrom, card: { ...question().card!, requestId: "req-tq1" } } as Message,
+];
+const taskItem = { id: `thread:${taskThread}`, kind: "session", botId: "iris", botName: "Iris", title: fr ? "Trier le tableau de soutien" : "Sort the help desk board", status: "waiting", startedAt: at, updatedAt: at + 60_000, threadId: taskThread, steps: [], stepsTruncated: false, files: [], children: [], canStop: false };
+
+const messages: Message[] = windowed ? [person, words, after]
+  : which === "two" ? [person, words, question(), second(), after]
   : which === "approval" ? [person, words, approval(), after]
   : which === "answered" ? [person, words, question(CHOICES[1]), approval("allow"), after]
   : [person, words, question(), after];
 
-let waiting = messages.filter((message) => message.card?.requestId && !message.card.answered).map((message) => ({
-  id: message.card!.requestId, kind: message.card!.questionRequest ? "question" : "approval", botId: "atlas", botName: "Atlas", threadId,
+let waiting = (windowed ? taskMessages : messages).filter((message) => message.card?.requestId && !message.card.answered).map((message) => ({
+  id: message.card!.requestId, kind: message.card!.questionRequest ? "question" : "approval", botId: windowed ? "iris" : "atlas", botName: windowed ? "Iris" : "Atlas", threadId: windowed ? taskThread : threadId,
   messageId: message.id, at: message.at, ageMs: 0, title: "", text: "", options: [], answerWith: "option", freeText: false, skippable: true, message,
 }));
 const group = {
@@ -101,7 +116,12 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return json({ ok: true });
   }
   if (parsed.pathname === "/api/bots") return json({ bots: [room ? atlas : { ...atlas, messages }, iris], groups: [group], sections: [], computerControl: {} });
-  if (parsed.pathname === "/api/approvals" && parsed.searchParams.get("waiting") === "1") return json({ waiting });
+  if (parsed.pathname === "/api/approvals" && parsed.searchParams.get("waiting") === "1") {
+    const botId = parsed.searchParams.get("botId");
+    return json({ waiting: botId ? waiting.filter((item) => item.botId === botId) : waiting });
+  }
+  if (parsed.pathname === "/api/bots/iris/activity/item") return json({ item: taskItem });
+  if (parsed.pathname === `/api/threads/${taskThread}/messages`) return json({ messages: taskMessages, hasMore: false });
   if (parsed.pathname === "/api/config") return json({ profile: { name: "Alex", email: "alex@example.test" }, viewer: { principalId: "pr_me", role: "member" } });
   return json({ error: "gallery" }, 404);
 }) as typeof window.fetch;
@@ -123,6 +143,9 @@ function Chat() {
   settle = (requestId, answer) => dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: "answer", answeredText: answer } });
   useEffect(() => {
     if (state.hydrated && state.selectedId !== target) dispatch({ type: "select", id: target });
+  }, [state.hydrated, state.selectedId, dispatch, target]);
+  useEffect(() => {
+    if (windowed && state.hydrated && state.selectedId === target) dispatch({ type: "openCodingChat", target: { botId: "iris", itemId: `thread:${taskThread}`, threadId: taskThread } });
   }, [state.hydrated, state.selectedId, dispatch, target]);
   const shownRoom = state.groups.find((candidate) => candidate.id === "ops");
   const one = state.bots.find((candidate) => candidate.id === "atlas");

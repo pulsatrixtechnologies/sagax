@@ -10,6 +10,7 @@ import { Hand, ExternalLink, GitFork } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { usePinnedHeldNearby } from "@/lib/pinned-waiting";
 import type { WaitingItem } from "@/lib/use-waiting-cards";
 import type { Bot } from "@/state/store";
 import { OptionCard } from "../OptionCard";
@@ -25,6 +26,15 @@ export function waitingKind(items: readonly (WaitingItem | WaitingNote)[]): "app
   return undefined;
 }
 
+/** #4204, the owner's rule: an ask the pinned card over the box holds is
+ * drawn there only, never a second time in a "Waiting on you" head. What
+ * the head draws of `items`; its holder leaves its slot out when empty. */
+export function useWaitingNotPinned<T extends WaitingItem | WaitingNote>(items: readonly T[]): readonly T[] {
+  const held = usePinnedHeldNearby();
+  if (held.size === 0) return items;
+  return items.filter((item) => !(item.kind === "approval" ? held.has(item.pending.message.id) : item.kind === "question" && held.has(item.message.id)));
+}
+
 export function WaitingOnYou({ items, threadId, botFor, onCancel, onOpenThread, className }: {
   items: readonly (WaitingItem | WaitingNote)[];
   /** The task's own thread: the approval box answers there unless the
@@ -36,11 +46,12 @@ export function WaitingOnYou({ items, threadId, botFor, onCancel, onOpenThread, 
   onOpenThread?: (botId: string, threadId: string) => void;
   className?: string;
 }) {
-  if (items.length === 0) return null;
-  const approvals = items.flatMap((item) => (item.kind === "approval" ? [item.pending] : []));
-  const rest = items.filter((item) => item.kind !== "approval");
+  const shown = useWaitingNotPinned(items);
+  if (shown.length === 0) return null;
+  const approvals = shown.flatMap((item) => (item.kind === "approval" ? [item.pending] : []));
+  const rest = shown.filter((item) => item.kind !== "approval");
   return (
-    <section data-task-waiting={items.length} aria-labelledby="task-waiting-title" className={cn("flex flex-col gap-2 rounded-2xl border border-warning/50 bg-warning/[0.07] px-4 pb-3 pt-3", className)}>
+    <section data-task-waiting={shown.length} aria-labelledby="task-waiting-title" className={cn("flex flex-col gap-2 rounded-2xl border border-warning/50 bg-warning/[0.07] px-4 pb-3 pt-3", className)}>
       <h3 id="task-waiting-title" className="flex items-center gap-1.5 text-[13px] font-semibold leading-[18px] text-ink">
         <Hand size={14} aria-hidden="true" className="text-warning" />
         {t("task.sheet.waiting")}

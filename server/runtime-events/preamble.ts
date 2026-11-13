@@ -5,7 +5,7 @@ import { withoutFinishUntilMarker } from "../finish-until.ts";
 import { withoutBareNeedsInput } from "../../shared/person-attention.ts";
 import { soloGoalLine, withoutSoloGoalMarker } from "../solo-goal.ts";
 import { clearHeldSteersForThread } from "../turns/held-steers.ts";
-import { noteFirstResponse } from "../turns/turn-trace.ts";
+import { noteFirstResponse, noteTurnSettled } from "../turns/turn-trace.ts";
 import { dropCancelledVoiceEvent, isStaleAssistantOutput } from "../voice/voice-call-duplex.ts";
 import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
 import { cleanReplyStyle } from "../../shared/reply-style.ts";
@@ -83,7 +83,10 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
     }
   } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
     if (!staleAssistant) noteFirstResponse(event.threadId);
-  } else if (event.type === "turn.completed") host.voiceLatency.settled(event.threadId);
+  } else if (event.type === "turn.completed") {
+    host.voiceLatency.settled(event.threadId);
+    noteTurnSettled(event.threadId);
+  }
   const privateImageEvent = event.type === "item.completed" && event.itemType === "assistant_image";
   // The durable message patch below is the public frame. Sending raw base64
   // through runtime SSE would multiply large bytes across every app window.

@@ -54,7 +54,10 @@ The turn, preview, Capabilities `promptIndex` and `skills_list` share
 `scopedSkillInventory` and `server/skills/skill-discovery.ts`. The prompt renders
 it per capability (`server/capabilities/capability-prompt.ts`, lot 3: 4,000 bytes and 30
 full entries each, whole files only; past that budget every enabled reference
-is still named with its route, never dropped, #3295); native Claude plugins stay native.
+is still named with its route, never dropped, #3295). An index (an engine that reads
+a reference by name) shares one 4,000-byte budget between its capabilities, at least
+1,000 bytes each (#4215); whole files keep one budget per capability. Native Claude
+plugins stay native.
 `skills_list` reads independently of skill authoring and pages by stable
 scoped identity. Never restore the plugin scanner's silent 40-file cutoff.
 Keep disabled descriptions and staged gists out of discovery, and derive

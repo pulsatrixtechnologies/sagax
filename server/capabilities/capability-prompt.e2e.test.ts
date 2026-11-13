@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 import { fixtureApi } from "../../scripts/testing/preview-fixture.ts";
 import { seedMarketplaceBeforeBoot } from "../testing/seed-marketplace.ts";
+import { CAPABILITY_INDEX_TURN_BYTES } from "./capability-prompt.ts";
 
 it("indexes personal and plugin references, then loads exact scoped instructions on an API turn", async () => {
   const requests: Array<{ messages: Array<{ role: string; content?: string }>; tools?: Array<{ function: { name: string } }> }> = [];
@@ -68,9 +69,10 @@ it("indexes personal and plugin references, then loads exact scoped instructions
     const receipt = await api("GET", `/api/bots/${bot.id}/capabilities`);
     // Bodies, including oversized ones, no longer consume the index budget.
     const packing = receipt.items.find((item: { key: string }) => item.key === "plugin:me:packing@catalog");
-    expect(packing).toMatchObject({ state: "on", promptIndex: { maxBytes: 4_000, maxSkills: 30 } });
+    // #4215: an index shares one turn budget between its capabilities (two here)
+    expect(packing).toMatchObject({ state: "on", promptIndex: { maxBytes: CAPABILITY_INDEX_TURN_BYTES / 2, maxSkills: 30 } });
     const { skills: shown, omitted, named = 0 } = packing.promptIndex as { skills: number; omitted: number; named?: number };
-    expect(shown).toBeGreaterThan(20);
+    expect(shown).toBeGreaterThan(5);
     expect(shown).toBeLessThanOrEqual(30);
     // #3295: past the budget, references are named, never dropped.
     expect(omitted).toBe(0);

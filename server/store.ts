@@ -59,7 +59,7 @@ import type {
   OptionCardData, TaskClosedBy, TaskOpenedBy, TaskUsage, WireBot, WireGroup,
   WireMessage, WireTask, BotProject as BotProjectRecord,
 } from "../shared/wire.ts";
-import type { WireBotGrant } from "../shared/wire.ts";
+import type { WireBotGrant, WireTurnTiming } from "../shared/wire.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
 import { nextOpenThread } from "../shared/wire.ts";
 import { namesEngine } from "./bots/bot-engine.ts";
@@ -3672,21 +3672,19 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return task;
   }
 
-  /** Queue wait and time to first text, on the conversation. Not a message. */
-  noteConversationTiming(threadId: string, timing: { queueMs?: number; firstResponseMs?: number }): void {
-    const queueMs = wholeMs(timing.queueMs);
-    const firstResponseMs = wholeMs(timing.firstResponseMs);
-    if (queueMs === undefined && firstResponseMs === undefined) return;
-    const merge = (current: { queueMs?: number; firstResponseMs?: number } | undefined) => {
-      const next = {
-        ...(current?.queueMs !== undefined ? { queueMs: current.queueMs } : {}),
-        ...(current?.firstResponseMs !== undefined ? { firstResponseMs: current.firstResponseMs } : {}),
-        ...(queueMs !== undefined ? { queueMs } : {}),
-        ...(firstResponseMs !== undefined ? { firstResponseMs } : {}),
-      };
-      if (next.queueMs === current?.queueMs && next.firstResponseMs === current?.firstResponseMs) return null;
-      return next;
-    };
+  /** The last turn's timing (shared/wire.ts WireTurnTiming), on the
+   * conversation. Not a message. #4215: each note is the whole turn so far
+   * (server/turns/turn-trace.ts), so it replaces the previous turn's numbers
+   * instead of keeping one of them beside the new ones. */
+  noteConversationTiming(threadId: string, timing: WireTurnTiming): void {
+    const clean: WireTurnTiming = {};
+    for (const key of ["queueMs", "firstResponseMs", "firstWordMs", "engineStartMs", "totalMs"] as const) {
+      const value = wholeMs(timing[key]);
+      if (value !== undefined) clean[key] = value;
+    }
+    if (timing.engineStart === "warm" || timing.engineStart === "cold") clean.engineStart = timing.engineStart;
+    if (!Object.keys(clean).length) return;
+    const merge = (current: WireTurnTiming | undefined) => JSON.stringify(current ?? null) === JSON.stringify(clean) ? null : clean;
     const bot = this.botByThread(threadId);
     if (bot && this.taskByThread(bot.id, threadId)) {
       const next = merge(this.taskByThread(bot.id, threadId)?.turnTiming);

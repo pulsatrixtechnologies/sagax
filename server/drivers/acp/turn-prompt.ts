@@ -15,6 +15,7 @@ import {
 import { engineFailureKind, engineFailureMessage } from "../engine-errors.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
 import { composeAcpPromptInput } from "./turn-prompt-build.ts";
+import { noteEnginePrompt } from "../../turns/turn-trace.ts";
 
 export async function promptAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   const {
@@ -121,6 +122,8 @@ if (state.settled || state.stopped || session.closing) throw new Error("turn sto
 state.promptSent = true;
 latency.promptAt = Date.now();
 latency.path = launchedThisTurn ? "spawn" : reused ? "pooled" : "load";
+// #4215: the conversation's timing line says whether the engine was warm
+noteEnginePrompt(threadId, latency.path !== "spawn", latency.promptAt);
 latency.promptChars = text.length;
 if (pendingSplitReceipt) latency.full = pendingSplitReceipt.receipt.turnsSinceFull === 0;
 acknowledge();

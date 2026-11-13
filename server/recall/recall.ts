@@ -13,7 +13,7 @@ export type { RecallPassage } from "./recall-types.ts";
 // are neutralised so a note cannot close the block; the block is capped.
 import { recallMessages, recallTerms, type MemoryHit, type RecallHit } from "../messages/message-db.ts";
 import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "../memory/memory-topics.ts";
-import { listMemoryTopics, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "../workspace/workspace.ts";
+import { listMemoryTopics, loadMemory, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "../workspace/workspace.ts";
 import { withoutExpired, withoutSuperseded } from "../memory/memory-entries.ts";
 import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "../memory/memory-audience.ts";
 import { fusePassages, semanticPassages } from "./semantic-recall.ts";
@@ -29,12 +29,46 @@ const CONVERSATION_HITS = 4;
 /** From this many content words on, a hit must match two of them: one
  * shared word with a long question is usually a coincidence. */
 export const MIN_TERMS_FOR_TWO = 5;
-/** MEMORY.md already loads whole; the archive holds what is no longer true;
- * daily logs are a record of what happened, never loaded into a prompt
- * (session_search finds them when the bot asks), and they repeat what was
- * just said. */
+/** The archive holds what is no longer true; daily logs are a record of
+ * what happened, never loaded into a prompt (session_search finds them when
+ * the bot asks), and they repeat what was just said. MEMORY.md: only a line
+ * past the excerpt the turn's prompt shows (#4215, memoryLinePassages). */
 const NOT_RECALLED = new Set(["MEMORY.md", "memory/archive.md"]);
 const recalled = (file: string) => !NOT_RECALLED.has(file) && !file.startsWith("memory/log/");
+
+/** #4215: a turn whose prompt showed only the first lines of MEMORY.md
+ * (`excerptBytes`, from workspace.ts memoryExcerptBytes for that same turn).
+ * A line past them that shares the message's words comes back like a topic's
+ * passage; a line inside them is already in the prompt. A turn whose prompt
+ * kept the whole load budget (no excerpt: a read-only turn, a narrower
+ * place) gets nothing of MEMORY.md recalled. At most this many lines. */
+const MEMORY_LINE_HITS = 2;
+export function memoryLinePassages(botId: string, query: string, excerptBytes: number | undefined): RecallPassage[] {
+  if (!excerptBytes) return [];
+  const terms = recallTerms(query);
+  if (!terms.length) return [];
+  let whole: ReturnType<typeof loadMemory>;
+  let shown: ReturnType<typeof loadMemory>;
+  try {
+    shown = loadMemory(botId, { maxBytes: excerptBytes });
+    if (!shown?.truncated) return [];
+    whole = loadMemory(botId);
+  } catch {
+    return [];
+  }
+  if (!whole || !whole.text.startsWith(shown.text)) return [];
+  const need = terms.length >= MIN_TERMS_FOR_TWO ? 2 : 1;
+  const out: RecallPassage[] = [];
+  for (const line of whole.text.slice(shown.text.length).split("\n")) {
+    const text = line.trim();
+    if (!text) continue;
+    const words = text.toLowerCase().split(/[^\p{L}\p{N}+.-]+/u).filter(Boolean);
+    if (terms.filter((term) => words.some((word) => sameWord(term, word))).length < need) continue;
+    out.push({ source: "memory", label: "MEMORY.md", snippet: text.length > TOPIC_PASSAGE_CHARS ? `${text.slice(0, TOPIC_PASSAGE_CHARS)}…` : text });
+    if (out.length >= MEMORY_LINE_HITS) break;
+  }
+  return out;
+}
 
 export const RECALL_OPEN =
   "Recalled for this message — passages from your own memory files and earlier conversations, found by Sagax because they share words with the message below." +
@@ -137,6 +171,10 @@ export interface RecallInput {
   /** Where this recall would be shown. A wider place does not receive a
    * captured fact stamped for somewhere narrower. Absent: the person. */
   audience?: MemoryDestination;
+  /** #4215: how much of MEMORY.md this turn's prompt showed
+   * (workspace.ts memoryExcerptBytes); absent when it showed the whole load
+   * budget, so no line of MEMORY.md is recalled a second time. */
+  memoryExcerptBytes?: number;
   /** When true, passages of the local semantic index (server/recall/semantic-index.ts)
    * may take the slots FTS5 left free. The server passes it unless semantic
    * recall is switched off. No model is downloaded. */
@@ -274,7 +312,7 @@ export function buildRecall(input: RecallInput): RecallResult | null {
   // A matching passage beats a topic's opening: otherwise a name match hides
   // the actual answer later in that same file.
   const notes = selectMemoryPassages(
-    memoryPassages(input.botId, query, input.audience),
+    [...memoryLinePassages(input.botId, query, input.memoryExcerptBytes), ...memoryPassages(input.botId, query, input.audience)],
     topics,
     input.budget?.notes ?? MEMORY_HITS,
   );

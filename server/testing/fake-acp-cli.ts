@@ -1039,7 +1039,9 @@ process.stdin.on("data", (c) => {
     } catch {
       continue;
     }
-    if (mode === "voice") {
+    // #4215: FAKE_ACP_COLD_MS (and FAKE_ACP_LOAD_MS) give any mode a real
+    // engine's start, so a reproduction sees a start's cost on the line
+    if (mode === "voice" || envMs("FAKE_ACP_COLD_MS") > 0) {
       // in order, each request after its own real-world cost
       voiceQueue = voiceQueue.then(() => voiceDelay(msg)).then(() => { handle(msg); }, () => { handle(msg); });
     } else handle(msg);

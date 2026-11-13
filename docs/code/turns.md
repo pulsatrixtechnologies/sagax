@@ -30,7 +30,9 @@ MCP mounts and Perspicax sessions. Register active, claim before reuse,
 park idle only after the turn, mark ordinary teardown `retiring`, and forget
 only after close. Per-person caps reclaim that person's idle LRU first;
 global caps reclaim idle LRU across the server. Active turns never yield to
-budget pressure. Normal identity contracts and idle timers remain in place.
+budget pressure, and (#4215) never count against it: the caps bound what is
+retained idle, so a person whose other engines are busy keeps the warm engine
+of the conversation they are in. Normal identity contracts and idle timers remain in place.
 Capability files for retained proxies are scoped by speaker as well as thread.
 `GET /api/health` includes aggregate `warmResources` only at its existing
 full-detail auth level. Defaults: 64 resources / 2 GiB globally, 12 / 1 GiB

@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
 import { closeMessageDb, recallMatchTerm, recallTerms } from "../messages/message-db.ts";
-import { buildRecall, CALL_RECALL_BUDGET, enoughMatches, LOCAL_RECALL_BUDGET, memoryPassages, RECALL_CLOSE, RECALL_OPEN, recallQuery, renderRecall, selectMemoryPassages, sessionMemoryHitFor, sessionMemoryHitMayShow, topicPassages } from "./recall.ts";
+import { buildRecall, CALL_RECALL_BUDGET, enoughMatches, LOCAL_RECALL_BUDGET, memoryLinePassages, memoryPassages, RECALL_CLOSE, RECALL_OPEN, recallQuery, renderRecall, selectMemoryPassages, sessionMemoryHitFor, sessionMemoryHitMayShow, topicPassages } from "./recall.ts";
 import type { RecallPassage } from "./recall-types.ts";
-import { appendMemoryLog, searchMemoryFiles, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace/workspace.ts";
+import type { MemoryDestination } from "../memory/memory-audience.ts";
+import { appendMemoryLog, memoryExcerptBytes, searchMemoryFiles, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace/workspace.ts";
 
 const BOT = "bot-recall-test";
 
@@ -116,6 +117,32 @@ describe("recall from memory files", () => {
     const block = buildRecall({ botId: BOT, message: "book a table, any restaurants?", threadIds: [], label: () => "", author: () => "" });
     expect(block?.text).toContain("memory/dining.md");
     expect(block?.text).toContain("Loves pasta");
+  });
+
+  it("recalls a MEMORY.md line past the excerpt a turn is shown, never one inside it (#4215)", () => {
+    const filler = Array.from({ length: 150 }, (_, n) => `- 2026-09-10 · Standing note number ${n} about the weekly routine and its order`);
+    writeMemoryFile(BOT, `- 2026-09-10 · The accountant is Ms Lindqvist\n${filler.join("\n")}\n- 2026-09-11 · The plumber is Mr Okafor\n`);
+    const excerpt = (audience?: MemoryDestination, fileTools = true) => memoryExcerptBytes({ fileTools, ...(audience ? { audience } : {}) });
+    const recall = (message: string, audience?: MemoryDestination, fileTools = true) => buildRecall({
+      botId: BOT, message, threadIds: [], label: () => "", author: () => "",
+      ...(audience ? { audience } : {}),
+      ...(excerpt(audience, fileTools) ? { memoryExcerptBytes: excerpt(audience, fileTools) } : {}),
+    });
+    // inside the first lines the prompt shows: already there
+    expect(memoryLinePassages(BOT, "who is my accountant", excerpt())).toEqual([]);
+    // past them: comes back with the message that names it
+    expect(memoryLinePassages(BOT, "who is my plumber", excerpt())).toEqual([{ source: "memory", label: "MEMORY.md", snippet: "- 2026-09-11 · The plumber is Mr Okafor" }]);
+    expect(recall("who is my plumber")?.text).toContain("MEMORY.md");
+    expect(recall("who is my plumber")?.text).toContain("Mr Okafor");
+    // a narrower place keeps the whole file in its prompt: nothing recalled
+    expect(recall("who is my plumber", { kind: "room", id: "room-1" })?.text ?? "").not.toContain("Okafor");
+    // a read-only turn (no file tools, no managed writes) keeps the whole
+    // file in its prompt too: nothing of it recalled a second time
+    expect(excerpt(undefined, false)).toBeUndefined();
+    expect(recall("who is my plumber", undefined, false)?.text ?? "").not.toContain("Okafor");
+    // a short MEMORY.md is shown whole: nothing of it is recalled
+    writeMemoryFile(BOT, "- 2026-09-11 · The plumber is Mr Okafor\n");
+    expect(memoryLinePassages(BOT, "who is my plumber", excerpt())).toEqual([]);
   });
 
   it("keeps a matching answer late in a named topic instead of replacing it with the introduction", () => {

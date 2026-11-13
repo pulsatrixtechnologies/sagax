@@ -83,10 +83,19 @@ describe("shared warm resource budget", () => {
     expect(f.budget.stats()).toMatchObject({ count: 3, closing: 1, evictions: 0 });
     closing.forget(); expect(f.budget.stats()).toMatchObject({ count: 2, overBudget: false }); f.cleanup();
   });
-  it("reclaims global idle capacity even when another person's active usage exceeds their cap", async () => {
+  it("reclaims global idle capacity across people when what is retained exceeds the cap", async () => {
     const f = fixture({ personCount: 1, count: 2 });
-    f.add("active-one", "osprey", 10, true); f.add("active-two", "osprey", 10, true); f.add("idle", "wren");
-    await f.budget.settled(); expect(f.closed).toEqual(["idle"]); f.cleanup();
+    f.add("active-one", "osprey", 10, true); f.add("idle-osprey", "osprey"); f.add("idle-wren", "wren"); f.add("idle-tern", "tern");
+    await f.budget.settled(); expect(f.closed).toEqual(["idle-osprey"]); f.cleanup();
+  });
+  it("keeps a conversation's idle engine while the same person's other engines run (#4215)", async () => {
+    // production defaults: 1 GiB per person, four running engines of 256 MiB
+    const f = fixture({ personBytes: 1024, bytes: 2048 });
+    for (const id of ["busy-1", "busy-2", "busy-3", "busy-4"]) f.add(id, "osprey", 256, true);
+    const conversation = f.add("conversation", "osprey", 256, true);
+    conversation.idle(); await f.budget.settled();
+    expect(f.closed).toEqual([]);
+    expect(conversation.active()).toBe(true); f.cleanup();
   });
   it("updates growing process trees and deduplicates concurrent samples", async () => {
     const sample = vi.fn(async () => [{ pid: 20, parent: 1, bytes: 30 }, { pid: 21, parent: 20, bytes: 30 }]);

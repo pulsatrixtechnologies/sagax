@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearTurnCounters, closeTurnServing, noteFirstResponse, noteTurnQueued, noteTurnServed, noteTurnServedPart, openTurnServing, setTurnTimingWriter, turnCounters, turnTrace, turnTraceMarks, turnTracePayloadHash } from "./turn-trace.ts";
+import { newTurnLatency, turnLatencyParts } from "../drivers/acp/turn-latency.ts";
+import { clearTurnArrival, clearTurnCounters, closeTurnServing, noteEnginePrompt, noteFirstResponse, noteTurnArrival, noteTurnQueued, noteTurnSettled, noteTurnServed, noteTurnServedPart, openTurnServing, setTurnTimingWriter, turnCounters, turnQueueBusyMs, turnQueuedAt, turnTrace, turnTraceMarks, turnTracePayloadHash } from "./turn-trace.ts";
 
 describe("turn trace (SAGAX_TURN_TRACE)", () => {
   afterEach(() => {
@@ -75,9 +76,35 @@ describe("turn trace (SAGAX_TURN_TRACE)", () => {
     noteFirstResponse("thread-1");
     expect(seen).toEqual([
       { threadId: "thread-1", timing: { queueMs: 40 } },
-      { threadId: "thread-1", timing: { queueMs: 40, firstResponseMs: 160 } },
+      { threadId: "thread-1", timing: { queueMs: 40, firstResponseMs: 160, firstWordMs: 200 } },
     ]);
     expect(JSON.stringify(seen)).not.toContain("hello");
+  });
+
+  it("says where a turn's time went: send to first word, engine start, total, and nothing of the turn before (#4215)", () => {
+    const seen: Array<Record<string, unknown>> = [];
+    setTurnTimingWriter((_threadId, timing) => seen.push({ ...timing }));
+    let now = 10_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    noteTurnQueued("thread-2", 10_000);
+    turnTrace("thread-2", "start", true);
+    now = 10_300;
+    turnTrace("thread-2", "send");
+    noteEnginePrompt("thread-2", false, 13_300);
+    now = 15_300;
+    noteFirstResponse("thread-2");
+    now = 16_000;
+    noteTurnSettled("thread-2");
+    expect(seen.at(-1)).toEqual({ queueMs: 300, firstResponseMs: 5_000, firstWordMs: 5_300, engineStartMs: 3_000, engineStart: "cold", totalMs: 6_000 });
+    // the next turn on a warm engine starts from its own message
+    noteTurnQueued("thread-2", 20_000);
+    now = 20_000;
+    turnTrace("thread-2", "start", true);
+    now = 20_010;
+    turnTrace("thread-2", "send");
+    expect(seen.at(-1)).toEqual({ queueMs: 10 });
+    noteEnginePrompt("thread-2", true, 20_015);
+    expect(seen.at(-1)).toEqual({ queueMs: 10, engineStartMs: 5, engineStart: "warm" });
   });
 
   it("prints a first-token line from noteFirstResponse when the trace is on", () => {
@@ -152,6 +179,52 @@ describe("turn trace (SAGAX_TURN_TRACE)", () => {
     expect(turnTraceMarks(thread, 0, 9_000).length).toBe(64);
     expect(turnTraceMarks("unknown-thread", 0, 9_000)).toEqual([]);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  // #4215: the queue says whether Sagax's own main thread was busy or the
+  // turn waited on I/O
+  it("counts a send that waited for its conversation's pre-warm from its arrival, and names the wait (#4215)", () => {
+    let now = 10_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const thread = "thread-joined-a-warm";
+    // the previous turn of the conversation, sent and answered
+    turnTrace(thread, "start", true);
+    turnTrace(thread, "send");
+    // the send arrives at 20 000 and waits for the warm until 21 500
+    noteTurnArrival(thread, 20_000, 21_500);
+    now = 21_520;
+    turnTrace(thread, "start", true);
+    noteTurnQueued(thread, 21_510);
+    now = 21_600;
+    turnTrace(thread, "send");
+    expect(turnQueuedAt(thread)).toBe(20_000);
+    expect(turnCounters(thread).queueMs).toBe(1_600);
+    const latency = newTurnLatency(21_600, turnQueuedAt(thread));
+    expect(turnLatencyParts(latency, turnTraceMarks(thread, 20_000, 21_600)).queueBy).toBe("admit:20,prewarm:1500,send:80");
+    // the next turn of the conversation, with no wait, counts from its message
+    now = 30_000;
+    turnTrace(thread, "start", true);
+    noteTurnQueued(thread, 29_990);
+    expect(turnQueuedAt(thread)).toBe(29_990);
+    turnTrace(thread, "send");
+    // a send that never started a turn leaves nothing behind
+    noteTurnArrival(thread, 40_000, 40_100);
+    clearTurnArrival(thread);
+    now = 40_200;
+    turnTrace(thread, "start", true);
+    expect(turnQueuedAt(thread)).toBeUndefined();
+  });
+
+  it("measures the main thread's busy time between the turn's start and its send", () => {
+    const thread = "busy-thread-4215";
+    turnTrace(thread, "start", true);
+    expect(turnQueueBusyMs(thread)).toBeUndefined();
+    const until = performance.now() + 60;
+    while (performance.now() < until) { /* the server's own work */ }
+    turnTrace(thread, "send");
+    expect(turnQueueBusyMs(thread)).toBeGreaterThanOrEqual(40);
+    turnTrace(thread, "start", true);
+    expect(turnQueueBusyMs(thread)).toBeUndefined();
   });
 
   it("adds up the parts of a mount's tool list while the setup waits, and only then (#3623)", () => {

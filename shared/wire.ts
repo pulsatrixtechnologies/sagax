@@ -213,6 +213,25 @@ export interface CacheKeepWarmStatus {
   stopped?: string;
 }
 
+/** The last turn of a conversation, in whole ms from the server's own marks
+ * (server/turns/turn-trace.ts). Each field is there once its moment
+ * happened. #4215: send to first word, where it went, and the total. */
+export interface WireTurnTiming {
+  /** the send arrived (or, when it did not wait for a warm-up, the person's
+   * message was stored) -> the turn was handed to the engine */
+  queueMs?: number;
+  /** handed to the engine -> the first answer text */
+  firstResponseMs?: number;
+  /** from the same start as queueMs -> the first answer text */
+  firstWordMs?: number;
+  /** handed to the engine -> the prompt reached it (an engine that says so) */
+  engineStartMs?: number;
+  /** whether that engine was already running (warm) or started (cold) */
+  engineStart?: "warm" | "cold";
+  /** from the same start as queueMs -> the turn ended */
+  totalMs?: number;
+}
+
 export interface WireTask {
   /** Outstanding handoffs, not an active provider turn. */
   waitingForTeammates?: boolean;
@@ -312,9 +331,9 @@ export interface WireTask {
    * its elapsed readout here, so the count survives thread switches. Stamped
    * by setTaskActivity on an idle→busy transition; runtime-only like busy. */
   turnStartedAt?: number;
-  /** Last turn: wait before the engine was sent, and wait until the first
-   * answer text. Numbers only. Stored on the conversation, never in a message. */
-  turnTiming?: { queueMs?: number; firstResponseMs?: number };
+  /** Last turn: where its time went (WireTurnTiming). Numbers only. Stored
+   * on the conversation, never in a message. */
+  turnTiming?: WireTurnTiming;
   /** What the last direct turn could reach, by source (shared/turn-connectors.ts):
    * names and states only. Absent before the first turn that recorded it. */
   connectors?: import("./turn-connectors.ts").TurnConnectors;
@@ -1618,7 +1637,7 @@ export interface GroupTask {
   /** The member bot currently speaking or generating in this thread, if any. */
   busyBotId?: string | null;
   /** Same numbers as WireTask.turnTiming, for this channel thread. */
-  turnTiming?: { queueMs?: number; firstResponseMs?: number };
+  turnTiming?: WireTurnTiming;
 }
 
 /** A room as a client may see it: the record plus the computed working
@@ -1690,7 +1709,7 @@ export interface WireGroup {
    * every transition into a busy speaker (never persisted) */
   turnStartedAt?: number;
   /** A direct conversation has no task row. Its turn numbers live here. */
-  turnTiming?: { queueMs?: number; firstResponseMs?: number };
+  turnTiming?: WireTurnTiming;
   /** the room's shared desk; absent = each member's own default. */
   cwd?: string;
   /** Compatibility mirror of the active task's pinned folder. */

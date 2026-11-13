@@ -7,7 +7,7 @@ import { withoutLeakedTokens } from "@/lib/leaked-tokens";
 import { citationAttachment, CITATION_MAX_QUOTE_LENGTH } from "@/lib/citations";
 import type { AppSettingsSection, BotSettingsSection } from "../settings-section";
 import type { BotUpdatePatch } from "../bot-patch-queue";
-import type { BotVisibility, CloudBackend, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, GroupThreadUsage, SteerQueueReason, VoiceCallMark, WaitingOnCard, WireBotConversation, WireWaitingApproval } from "../../../shared/wire";
+import type { BotVisibility, CloudBackend, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, GroupThreadUsage, SteerQueueReason, VoiceCallMark, WaitingOnCard, WireBotConversation, WireTurnTiming, WireWaitingApproval } from "../../../shared/wire";
 import { type DataSheet, type DataTable } from "../../../shared/data-surface";
 import type { ModelListIssue } from "../../../shared/azure-openai";
 import type { TurnDigest } from "../../../shared/digest";
@@ -248,7 +248,7 @@ export interface Group {
    * turnStartedAt; stamped by the server when the speaker claims the turn */
   turnStartedAt?: number | null;
   /** A direct conversation keeps its turn numbers here. A channel keeps them on the task. */
-  turnTiming?: { queueMs?: number; firstResponseMs?: number };
+  turnTiming?: WireTurnTiming;
   /** True for the whole orchestrated run, including hand-offs between members. */
   working?: boolean;
   /** Every bot in the room as each person in it sees it, whoever owns it
@@ -313,7 +313,7 @@ export interface GroupTask {
   working?: boolean;
   /** The member bot currently speaking or generating in this thread, if any. */
   busyBotId?: string | null;
-  turnTiming?: { queueMs?: number; firstResponseMs?: number };
+  turnTiming?: WireTurnTiming;
 }
 
 export interface ModelSelection {
@@ -360,7 +360,7 @@ export interface Task {
   /** Newest message time, or createdAt. Server-derived; local bumps use max. */
   updatedAt?: number;
   /** Wait before send, and wait until the first answer text. Not message text. */
-  turnTiming?: { queueMs?: number; firstResponseMs?: number };
+  turnTiming?: WireTurnTiming;
   /** what this task has spent, banked once per settled turn */
   usage?: TaskUsage;
   /** Prompt-cache keep-warm status (server-derived, never stored). */

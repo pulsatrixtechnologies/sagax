@@ -18570,7 +18570,11 @@
       "connectApps.recommended.why.errors": "cb5d3efb80b5abed091438b655b131777d4288e4519341cb73f1ea5c0628f846",
       "connectApps.recommended.why.payments": "98e81d39a74365847bb1e5f76d75c57918b2d2d79893dab4b1fceaae2c278d61",
       "approval.held.read": "b5de5fbfb706f073fd6ef85c59c7b0b6ed272eeb8db22dcd6ebd4cc216561e90",
-      "approval.held.write": "6bf9777e6090654bca39b704e42b70a7191c44f8d7d3af1765e29c6052e80089"
+      "approval.held.write": "6bf9777e6090654bca39b704e42b70a7191c44f8d7d3af1765e29c6052e80089",
+      "chat.turnTiming.firstWord": "0bb58aebeb26b9b8fed631e3722cbfabb0eac1bdf59013d0400bc87d16f1499d",
+      "chat.turnTiming.engineCold": "3be035cbc573142dfcaf2b96b8539522125a5e45ea2477e4fba2ab09d65f281a",
+      "chat.turnTiming.engineWarm": "8d28acf8c6205eac65051cce72a32fabd83a7c79e80fe3985e1785509361ec9d",
+      "chat.turnTiming.total": "fcdbc5ec03664f1b2cd9df51c1406bef368f56fd7a0b1871d578ba33fde7d231"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

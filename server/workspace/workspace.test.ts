@@ -38,6 +38,7 @@ import {
   MEMORY_ENTRY_MAX_LINES,
   MEMORY_MAX_BYTES,
   MEMORY_MAX_LINES,
+  MEMORY_TURN_BYTES,
   WORKSPACES_DIR,
   TASK_WORKSPACES_DIR,
 } from "./workspace.ts";
@@ -487,6 +488,24 @@ describe("workspace", () => {
     }
   });
 
+  it("shows a turn that can read MEMORY.md its first lines only, whole lines, and says where the rest is (#4215)", () => {
+    const dir = ensureWorkspace(BOT);
+    const lines = Array.from({ length: 190 }, (_, i) => `- 2026-09-10 · Standing fact number ${i} about the person's weekly routine`);
+    writeFileSync(join(dir, "MEMORY.md"), `${lines.join("\n")}\n`);
+    const whole = Buffer.byteLength(lines.join("\n"), "utf8");
+    expect(whole).toBeGreaterThan(MEMORY_TURN_BYTES * 1.5);
+    for (const opts of [{ managedWrites: true }, {}, { fileTools: true, withholdHostTools: true }]) {
+      const prompt = memorySystemPrompt(BOT, opts);
+      expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(MEMORY_TURN_BYTES + 3_000);
+      expect(prompt).toContain("Standing fact number 0 ");
+      expect(prompt).not.toContain("Standing fact number 189 ");
+      // the excerpt ends on a whole line
+      expect(prompt).toMatch(/weekly routine \[MEMORY\.md is 190 lines and \d+ bytes; its first \d+ lines are shown above, the rest is in "[^"]*MEMORY\.md"\.\]/);
+    }
+    // read only (no file tools, no memory tools): the whole load budget
+    expect(memorySystemPrompt(BOT, { fileTools: false })).toContain("Standing fact number 189 ");
+  });
+
   it("states the load cut plainly for a hand-grown file, and tells a managed bot the file never fills up", () => {
     const dir = ensureWorkspace(BOT);
     const lines = Array.from({ length: MEMORY_MAX_LINES + 50 }, (_, i) => `- fact ${i}`);
@@ -494,8 +513,13 @@ describe("workspace", () => {
     const memory = loadMemory(BOT);
     expect(memory).toMatchObject({ truncated: true, lines: MEMORY_MAX_LINES + 50 });
     const managed = memorySystemPrompt(BOT, { managedWrites: true });
-    expect(managed).toContain(`[MEMORY.md is ${MEMORY_MAX_LINES + 50} lines and ${memory!.bytes} bytes; only the first ${MEMORY_MAX_LINES} lines / ${MEMORY_MAX_BYTES} bytes are shown above.]`);
-    expect(managed).toContain(`It is shown to you at the start of every session, up to ${MEMORY_MAX_LINES} lines / 24 KB.`);
+    // #4215: a turn that reads the file itself is shown its first lines
+    expect(managed).toContain(`[MEMORY.md is ${MEMORY_MAX_LINES + 50} lines and ${memory!.bytes} bytes; only the first ${MEMORY_MAX_LINES} lines are shown above.]`);
+    expect(managed).toContain(`Its first lines, up to 8 KB, are shown to you at the start of every session; a line past them comes back with a message that shares its words, and the whole file (up to ${MEMORY_MAX_LINES} lines / 24 KB) is one read away.`);
+    // a turn with no way to read it keeps the whole load budget
+    const readOnly = memorySystemPrompt(BOT, { fileTools: false });
+    expect(readOnly).toContain(`- fact ${MEMORY_MAX_LINES - 1}`);
+    expect(readOnly).toContain("[Only the initial memory excerpt is visible.]");
     // how memory_update makes room is said once, in its own description
     expect(managed).not.toContain("archive");
     expect(managed).not.toContain("Consolidate");

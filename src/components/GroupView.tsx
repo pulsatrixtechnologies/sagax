@@ -26,7 +26,7 @@ import { ExportTranscriptMenu } from "./ExportTranscriptMenu";
 import { AccessCard } from "./AccessCard";
 import { TransientNotice } from "./TransientNotice";
 import { isRoutineAutoPausedNotice } from "../../shared/transient-notices";
-import { routineAutoPauseSettled } from "@/lib/transient-notice";
+import { autoPausedRoutineToResume, routineAutoPauseSettled } from "@/lib/transient-notice";
 import { RoutineRunCard } from "./RoutineRunCard";
 import { GoalRunHeaderChip } from "./GoalRunCard";
 import type { SideChat } from "./ChatView.tsx-parts/sideChat";
@@ -254,8 +254,8 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         );
         const runRef = m.routineRun?.runId ? m.routineRun : undefined;
         // 2026-10-26: the failure that paused its routine offers Resume.
-        const paused = isRoutineAutoPausedNotice(m) ? state.routines.find((candidate) => candidate.id === m.routineRun?.routineId) : undefined;
-        const onResume = paused && !paused.enabled && paused.canEdit !== false
+        const paused = isRoutineAutoPausedNotice(m) ? autoPausedRoutineToResume(m, state.routines) : undefined;
+        const onResume = paused
           ? () => { close(); dispatch({ type: "updateRoutine", routineId: paused.id, patch: { enabled: true } }); }
           : undefined;
         return <RoutineRunCard message={m} bot={state.bots.find((candidate) => candidate.id === m.from?.botId)} botOf={(id) => state.bots.find((candidate) => candidate.id === id)} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId, report: { text: runRef.summary ?? "", at: m.at } }); } : undefined} />;

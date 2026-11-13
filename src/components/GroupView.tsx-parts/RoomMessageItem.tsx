@@ -38,6 +38,7 @@ import type { MentionPeer } from "@/lib/mentions";
 import { roomAuthor } from "@/lib/room-authors";
 import { ActivityRun } from "../ActivityRun";
 import { botNames } from "../ToolActivity";
+import { autoPausedRoutineToResume } from "@/lib/transient-notice";
 
 type RunMeta = {
   author: ReturnType<typeof roomAuthor>;
@@ -110,6 +111,7 @@ export function RoomMessageItem({
   const mine = author.kind === "self";
   const person = author.kind === "person" ? author : null;
   const routineRunRef = m.kind === "routine.run" && m.routineRun?.runId ? m.routineRun : undefined;
+  const pausedRoutine = autoPausedRoutineToResume(m, state.routines);
   const canRetryRoom = m.id === retryableId && retryRequest !== null && !roomBusy;
 
   const row = isCancelledTranscriptRow(m) ? (
@@ -187,6 +189,8 @@ export function RoomMessageItem({
           bot={state.bots.find((candidate) => candidate.id === m.from?.botId)}
           botOf={(id) => state.bots.find((candidate) => candidate.id === id)}
           modelOf={(id, threadId) => delegateModelLabel(state.bots.find((candidate) => candidate.id === id), state.instances, threadId)}
+          // #4058: a streak's summary that paused its routine offers Resume on its row
+          onResume={pausedRoutine ? () => dispatch({ type: "updateRoutine", routineId: pausedRoutine.id, patch: { enabled: true } }) : undefined}
           onOpen={routineRunRef
             ? () => openRoutineRun(dispatch, { runId: routineRunRef.runId, routineId: routineRunRef.routineId, report: { text: routineRunRef.summary ?? "", at: m.at } })
             : undefined}

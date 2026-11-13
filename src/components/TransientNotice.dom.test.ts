@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TransientNotice } from "./TransientNotice";
-import { readShownNotices } from "@/lib/transient-notice";
+import { autoPausedRoutineToResume, pickTransientNotice, readShownNotices } from "@/lib/transient-notice";
 import { setLocale } from "@/lib/i18n";
 import { TRANSIENT_NOTICE_RULES } from "../../shared/transient-notices";
 import type { Message } from "@/state/store";
@@ -102,4 +102,19 @@ it("renders the reviewed French summary", () => {
   setLocale("fr");
   draw([failure(1), failure(2)]);
   expect(host.querySelector("summary")?.textContent).toBe("Exécutions de routine en échec (2)");
+});
+
+// #4058: a streak's summary is a row, never the passing banner, and its row
+// offers Resume through the banner's own reading.
+it("never picks a streak's summary as the banner, and its row resumes the paused routine", () => {
+  const now = Date.now();
+  const summary = {
+    id: "streak", role: "bot", kind: "routine.run", at: now - 1000, text: "Morning digest failed",
+    routineRun: { runId: "r9", routineId: "rt1", routineName: "Morning digest", status: "failed", autoPausedAfter: 3,
+      repeat: { firstRunId: "r6", count: 3, since: now - 5000, lastAt: now - 1000, streak: true } },
+  } as unknown as Message;
+  expect(pickTransientNotice([summary], now, new Set())).toBeNull();
+  expect(autoPausedRoutineToResume(summary, [{ id: "rt1", enabled: false }])?.id).toBe("rt1");
+  expect(autoPausedRoutineToResume(summary, [{ id: "rt1", enabled: true }])).toBeUndefined();
+  expect(autoPausedRoutineToResume(summary, [{ id: "rt1", enabled: false, canEdit: false }])).toBeUndefined();
 });

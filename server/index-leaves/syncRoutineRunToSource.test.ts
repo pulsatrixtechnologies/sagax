@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
+import { isTransientChatNotice } from "../../shared/transient-notices.ts";
 import { routineRunReportable } from "../routines/routine-report.ts";
 import { createRoutineRunLateRow, createSyncRoutineRunToSource } from "./syncRoutineRunToSource.ts";
 
@@ -135,7 +137,10 @@ function ruleWorld(run: Record<string, unknown>, postResults = true, needsPerson
       patchMessage: (_t: string, id: string, patch: Partial<Row>) => { const at = rows.findIndex((row) => row.id === id); rows[at] = { ...rows[at]!, ...patch }; },
       appendMessage: (_t: string, message: Omit<Row, "id">) => { rows.push({ ...message, id: `m${rows.length}` }); return rows.at(-1); },
     },
-    routineRunCard: (r: { id: string }) => ({ runId: r.id }),
+    // the card's state and pause, as server/routines/routine-run-card.ts writes them
+    routineRunCard: (r: { id: string; status: string; startedBy?: string; autoPaused?: { failures: number } }) => ({
+      runId: r.id, status: r.status, ...(r.startedBy === "person" ? { startedBy: "person" } : {}), ...(r.autoPaused ? { autoPausedAfter: r.autoPaused.failures } : {}),
+    }),
     routineRunFallbackText: () => "Hourly pass",
     attentionCard: () => ({ kind: "action", items: [{ text: "decide" }] }),
     attentionTicketUrl: undefined,
@@ -171,6 +176,21 @@ describe("syncRoutineRunToSource reads one rule for every bot (#3581: quiet mode
       mine.sync();
       expect(mine.rows, JSON.stringify(run)).toHaveLength(1);
       expect(mine.unread).toEqual(["main"]);
+    }
+  });
+
+  // #4058: the summary a failing streak tells is a row the chat draws and
+  // keeps, never a passing banner gone at the next run.
+  it("#4058: a failed run that tells its streak writes the summary as a row the chat keeps", () => {
+    for (const run of [{ status: "failed", error: "timeout" }, { status: "failed", error: "timeout", autoPaused: { failures: 3 } }]) {
+      const w = ruleWorld({ ...run, tellsStreak: true, problemRepeat: { firstRunId: "run-0", since: 1, count: 3 } }, false);
+      w.sync();
+      expect(w.rows, JSON.stringify(run)).toHaveLength(1);
+      const row = w.rows[0] as Row & { routineRun: { status: string; repeat?: { streak?: true } } };
+      expect(row.routineRun.status).toBe("failed");
+      expect(row.routineRun.repeat?.streak).toBe(true);
+      expect(routineRunRowOutOfChat(row), JSON.stringify(run)).toBe(false);
+      expect(isTransientChatNotice(row), JSON.stringify(run)).toBe(false);
     }
   });
 

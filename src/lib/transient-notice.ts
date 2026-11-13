@@ -59,3 +59,16 @@ export function routineAutoPauseSettled(notice: Message, routines: ReadonlyArray
   const routine = routines.find((candidate) => candidate.id === notice.routineRun?.routineId);
   return routine?.enabled === true;
 }
+
+/** 2026-10-26, #4058: the routine a run's Resume turns back on: the run
+ * paused it, it is still off and the viewer may edit it. One reading for
+ * the passing banner and for a streak summary's row, which carries Resume
+ * itself. */
+export function autoPausedRoutineToResume<R extends { id: string; enabled: boolean; canEdit?: boolean }>(
+  message: Pick<Message, "kind" | "routineRun">,
+  routines: readonly R[],
+): R | undefined {
+  if (message.kind !== "routine.run" || !((message.routineRun?.autoPausedAfter ?? 0) > 0)) return undefined;
+  const routine = routines.find((candidate) => candidate.id === message.routineRun?.routineId);
+  return routine && !routine.enabled && routine.canEdit !== false ? routine : undefined;
+}

@@ -12,6 +12,11 @@ import Foundation
 /// RoutineAutoPause) carries `routineRun.autoPausedAfter`: its banner says so
 /// and offers Resume in one click.
 ///
+/// #4058: the one summary of a routine's streak of problems
+/// (`routineRun.repeat.streak`) is never one of these, even when its run
+/// failed or paused the routine: it is the row the chat keeps until the
+/// routine works again, and that same row then says so.
+///
 /// Same rules as the desktop's shared/transient-notices.ts:
 /// TransientNoticesTests reads Fixtures/transient-notices.json, which
 /// shared/transient-notices.test.ts keeps in step with that file.
@@ -23,15 +28,32 @@ public enum TransientNotices {
     /// Older than this when the chat first sees it: history, never shown.
     public static let freshMs: Double = 120_000
 
-    public static func isFailedRoutineRun(_ message: Message) -> Bool {
+    /// #4058: the one summary of a routine's streak of problems: a row.
+    public static func isRoutineStreakSummary(_ message: Message) -> Bool {
+        message.kind == .routineRun && message.routineRun?.repeat?.streak == true
+    }
+
+    /// A routine run that failed or was missed, whatever its row.
+    static func failedRoutineRun(_ message: Message) -> Bool {
         guard message.kind == .routineRun, let run = message.routineRun else { return false }
         if let goal = run.goalStatus, !goal.isEmpty { return routineGoalStatuses.contains(goal) }
         return routineRunStatuses.contains(run.status)
     }
 
-    /// The failure that paused its routine: the banner offers Resume.
-    public static func isRoutineAutoPaused(_ message: Message) -> Bool {
+    /// A run that paused its routine, whatever its row.
+    static func autoPausedRoutineRun(_ message: Message) -> Bool {
         message.kind == .routineRun && (message.routineRun?.autoPausedAfter ?? 0) > 0
+    }
+
+    /// A routine run that failed or was missed (not a streak's summary).
+    public static func isFailedRoutineRun(_ message: Message) -> Bool {
+        failedRoutineRun(message) && !isRoutineStreakSummary(message)
+    }
+
+    /// The failure that paused its routine: the banner offers Resume (not a
+    /// streak's summary).
+    public static func isRoutineAutoPaused(_ message: Message) -> Bool {
+        autoPausedRoutineRun(message) && !isRoutineStreakSummary(message)
     }
 
     public static func isRoutineAccess(_ message: Message) -> Bool {
@@ -50,7 +72,7 @@ public enum TransientNotices {
         let botId = notice.access?.botId
         return later.contains { message in
             message.at > notice.at && message.kind == .routineRun && message.routineRun != nil
-                && !isFailedRoutineRun(message) && !isRoutineAutoPaused(message)
+                && !failedRoutineRun(message) && !autoPausedRoutineRun(message)
                 && (botId == nil || message.from?.botId == nil || message.from?.botId == botId)
         }
     }

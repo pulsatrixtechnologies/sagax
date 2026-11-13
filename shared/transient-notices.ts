@@ -14,6 +14,12 @@
 // failure count from zero); it leaves like the others, and also as soon as
 // the routine is back on.
 //
+// #4058: the one summary of a routine's streak of problems
+// (`routineRun.repeat.streak`, shared/routine-repeat.ts) is never one of
+// these, even when its run failed or paused the routine: it is the row the
+// chat keeps until the routine works again, and that same row then says so.
+// A row of an auto-paused summary carries Resume itself.
+//
 // Desktop (src/components/TransientNotice.tsx) and iOS
 // (ios/Sources/CompanionCore/TransientNotices.swift) read the same rule; the
 // iOS copy is checked against ios/Tests/CompanionCoreTests/Fixtures/
@@ -34,21 +40,42 @@ export const TRANSIENT_NOTICE_RULES = {
 
 type NoticeMessage = {
   kind: string;
-  routineRun?: { status: string; goalStatus?: string | null; autoPausedAfter?: number | null } | null;
+  routineRun?: {
+    status: string;
+    goalStatus?: string | null;
+    autoPausedAfter?: number | null;
+    repeat?: { streak?: boolean | null } | null;
+  } | null;
   access?: { routine?: boolean | null; reason?: string } | null;
 };
 
-/** A routine run that failed or was missed. */
-export function isFailedRoutineRunNotice(message: NoticeMessage): boolean {
+/** #4058: the one summary of a routine's streak of problems: a row. */
+export function isRoutineStreakSummary(message: NoticeMessage): boolean {
+  return message.kind === "routine.run" && message.routineRun?.repeat?.streak === true;
+}
+
+/** A routine run that failed or was missed, whatever its row. */
+function failedRoutineRun(message: NoticeMessage): boolean {
   const run = message.kind === "routine.run" ? message.routineRun : null;
   if (!run) return false;
   if (run.goalStatus) return (TRANSIENT_NOTICE_RULES.routineGoalStatuses as readonly string[]).includes(run.goalStatus);
   return (TRANSIENT_NOTICE_RULES.routineRunStatuses as readonly string[]).includes(run.status);
 }
 
-/** The failure that paused its routine: the banner offers Resume. */
-export function isRoutineAutoPausedNotice(message: NoticeMessage): boolean {
+/** A run that paused its routine, whatever its row. */
+function autoPausedRoutineRun(message: NoticeMessage): boolean {
   return message.kind === "routine.run" && (message.routineRun?.autoPausedAfter ?? 0) > 0;
+}
+
+/** A routine run that failed or was missed (not a streak's summary). */
+export function isFailedRoutineRunNotice(message: NoticeMessage): boolean {
+  return failedRoutineRun(message) && !isRoutineStreakSummary(message);
+}
+
+/** The failure that paused its routine: the banner offers Resume (not a
+ * streak's summary, whose row offers it). */
+export function isRoutineAutoPausedNotice(message: NoticeMessage): boolean {
+  return autoPausedRoutineRun(message) && !isRoutineStreakSummary(message);
 }
 
 /** The card a routine leaves when its owner's access could not run it. */
@@ -69,5 +96,5 @@ export function routineAccessSettled(
 ): boolean {
   const botId = notice.access?.botId;
   return later.some((message) => message.at > notice.at && message.kind === "routine.run" && Boolean(message.routineRun)
-    && !isFailedRoutineRunNotice(message) && !isRoutineAutoPausedNotice(message) && (!botId || !message.from?.botId || message.from.botId === botId));
+    && !failedRoutineRun(message) && !autoPausedRoutineRun(message) && (!botId || !message.from?.botId || message.from.botId === botId));
 }

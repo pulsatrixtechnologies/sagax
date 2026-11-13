@@ -16,6 +16,8 @@
     {"id":"done","role":"bot","kind":"routine.run","at":1000,"routineRun":{"runId":"r4","routineId":"rt1","routineName":"Morning digest","status":"completed","summary":"All good"}},
     {"id":"needs","role":"bot","kind":"routine.run","at":1000,"routineRun":{"runId":"r5","routineId":"rt2","routineName":"Weekly summary","status":"completed","goalStatus":"needs-input"}},
     {"id":"paused","role":"bot","kind":"access","at":1000,"access":{"reason":"routine_delegation","engine":"","botId":"b1","ownerPrincipalId":"p1","routine":true,"suspendReason":"person_out","routineName":"Morning digest"}},
-    {"id":"turn-access","role":"bot","kind":"access","at":1000,"access":{"reason":"no_access","engine":"Claude","botId":"b1","ownerPrincipalId":"p1"}}
+    {"id":"turn-access","role":"bot","kind":"access","at":1000,"access":{"reason":"no_access","engine":"Claude","botId":"b1","ownerPrincipalId":"p1"}},
+    {"id":"streak-failed","role":"bot","kind":"routine.run","at":1000,"text":"Morning digest failed 3 times in a row","routineRun":{"runId":"r8","routineId":"rt1","routineName":"Morning digest","status":"failed","error":"engine unavailable","repeat":{"firstRunId":"r6","count":3,"since":900,"lastAt":1000,"streak":true}}},
+    {"id":"streak-auto-paused","role":"bot","kind":"routine.run","at":1000,"text":"Morning digest failed and was paused after 3 failures in a row","routineRun":{"runId":"r9","routineId":"rt1","routineName":"Morning digest","status":"failed","error":"engine unavailable","autoPausedAfter":3,"repeat":{"firstRunId":"r6","count":3,"since":900,"lastAt":1000,"streak":true}}}
   ]
 }

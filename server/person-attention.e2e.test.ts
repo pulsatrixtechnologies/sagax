@@ -28,9 +28,20 @@ async function fixture(test: (f: any) => Promise<void>) {
     const plan: Record<string, any> = {};
     const save = () => writeFileSync(planPath, JSON.stringify(plan));
     const messages = async (threadId: string) => (await api(`/api/threads/${threadId}/messages`)).messages as any[];
-    const card = async () => (await messages(atlas.activeTaskId)).find((message) => message.attention) ?? null;
-    await test({ session, cli, api, nova, atlas, plan, save, messages, card });
+    // #4243, #4260: each item is its own keyed question card, in the
+    // person's own conversation with the bot
+    const itemCards = async () => (await messages(atlas.activeTaskId)).filter((message) => message.kind === "options" && message.card?.askKey?.startsWith("item:"));
+    await test({ session, cli, api, nova, atlas, plan, save, messages, itemCards });
   } finally { await session.close(); }
+}
+
+/** Both items, one keyed card each, Done / Not for me, the ticket's words. */
+function expectItemCards(cards: any[], scope: string) {
+  expect(cards.map((message) => message.card.askKey).sort()).toEqual([`item:${scope}:t100201`, `item:${scope}:t100202`]);
+  for (const message of cards) {
+    expect(message.card).toMatchObject({ options: ["Done", "Not for me"], requestType: "question", noHold: true });
+    expect(message.card.subtitle).toMatch(/^\*\*10020[12]\*\* \(board 1, /);
+  }
 }
 
 async function handOff(f: any, step: Record<string, unknown>) {
@@ -40,26 +51,27 @@ async function handOff(f: any, step: Record<string, unknown>) {
     f.plan[f.atlas.id] = { reply: REPORT };
     f.save();
     await f.cli("send", "--bot", f.nova.id, "--task", f.nova.activeTaskId, "--text", "Have Atlas run the hourly dispatch pass.");
-    await expect.poll(f.card, { timeout: 30_000 }).toBeTruthy();
-    const card = await f.card();
-    // the card, in the person's own conversation with Atlas
-    expect(card.attention).toMatchObject({
-      kind: "human", botId: f.atlas.id, botName: "Atlas", openedBy: { botId: f.nova.id, name: "Nova" },
-      items: [{ ticketId: 100201 }, { ticketId: 100202 }],
-    });
-    expect(card.attention.threadId).not.toBe(f.atlas.activeTaskId);
+    // #4260 (Fixes #4238): a teammate's exchange's items take the keyed item
+    // card path under the peer scope, "no unkeyed attention card per answer"
+    await expect.poll(async () => (await f.itemCards()).length, { timeout: 30_000 }).toBe(2);
+    expectItemCards(await f.itemCards(), "peer");
+    expect((await f.messages(f.atlas.activeTaskId)).some((message: any) => message.attention)).toBe(false);
     // where it was said: Atlas's thread Nova opened, which holds the report
-    expect((await f.messages(card.attention.threadId)).some((message: any) => message.text === REPORT)).toBe(true);
-    // and a notification that reaches desktop and phone (the push hub reads notify frames)
-    const frame = await stream.until((candidate) => candidate.kind === "notify" && candidate.notification?.kind === "needs-you", 15_000);
-    expect(frame.notification).toMatchObject({ botId: f.atlas.id, threadId: f.atlas.activeTaskId, title: "Atlas needs you" });
-    expect(frame.notification.quietOnPhones).toBeUndefined();
+    const atlasThreads = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.atlas.id).tasks.map((task: any) => task.threadId);
+    let saidIn = false;
+    for (const threadId of atlasThreads) if (threadId !== f.atlas.activeTaskId && (await f.messages(threadId)).some((message: any) => message.text === REPORT)) saidIn = true;
+    expect(saidIn).toBe(true);
+    // each card rings in the person's own conversation (the push hub reads notify frames)
+    for (const ticket of ["100201", "100202"]) {
+      const frame = await stream.until((candidate) => candidate.kind === "notify" && candidate.notification?.kind === "question" && String(candidate.notification?.title).startsWith(ticket), 15_000);
+      expect(frame.notification).toMatchObject({ botId: f.atlas.id, threadId: f.atlas.activeTaskId });
+    }
     // the conversation turns unread
     const atlasNow = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.atlas.id);
     expect(atlasNow.tasks.find((task: any) => task.threadId === f.atlas.activeTaskId)?.unread).toBe(true);
-    // one card, however the hand-off settles
+    // one card per item, however the hand-off settles
     await new Promise((resolve) => setTimeout(resolve, 500));
-    expect((await f.messages(f.atlas.activeTaskId)).filter((message: any) => message.attention)).toHaveLength(1);
+    expect(await f.itemCards()).toHaveLength(2);
   } finally { stream.close(); }
 }
 
@@ -71,7 +83,7 @@ it("carries them from a one-way send too, where nothing goes back to the sender"
   await handOff(f, { tool: "send_to_bot", arguments: { bot_id: f.atlas.id, title: "Hourly dispatch", message: "Run the hourly dispatch pass." } });
 }), 60_000);
 
-it("a run with [HUMAIN] items gives one card, not two, and rings once", () => fixture(async (f) => {
+it("a run with [HUMAIN] items gives one card per item, not two, and rings once per card", () => fixture(async (f) => {
   const stream = await openSse(`${f.session.info.url}/api/events`);
   try {
     f.plan[f.atlas.id] = { reply: REPORT };
@@ -84,12 +96,15 @@ it("a run with [HUMAIN] items gives one card, not two, and rings once", () => fi
     const { run } = await f.api(`/api/routines/${routine.id}/run`, {});
     const runState = async () => (await f.api("/api/routines", undefined, "GET")).runs.find((entry: any) => entry.id === run.id);
     await expect.poll(async () => (await runState())?.status, { timeout: 30_000 }).toBe("completed");
-    await stream.until((frame) => frame.kind === "notify" && frame.notification?.kind === "needs-you", 15_000);
+    // #4243 (Refs #4233): each item of a run is its own keyed card under the
+    // routine's prefix, never a second list on the run's card
+    await expect.poll(async () => (await f.itemCards()).length, { timeout: 15_000 }).toBe(2);
     await new Promise((resolve) => setTimeout(resolve, 800));
-    const carried = (await f.messages(f.atlas.activeTaskId)).filter((message: any) => message.attention);
-    // the run's own card is the card
-    expect(carried).toHaveLength(1);
-    expect(carried[0]).toMatchObject({ kind: "routine.run", routineRun: { runId: run.id }, attention: { items: [{ ticketId: 100201 }, { ticketId: 100202 }] } });
-    expect(stream.frames.filter((frame) => frame.kind === "notify" && frame.notification?.kind === "needs-you")).toHaveLength(1);
+    expectItemCards(await f.itemCards(), routine.id);
+    const rows = await f.messages(f.atlas.activeTaskId);
+    expect(rows.filter((message: any) => message.attention)).toHaveLength(0);
+    expect(rows.filter((message: any) => message.kind === "routine.run" && message.routineRun?.runId === run.id)).toHaveLength(1);
+    const rings = stream.frames.filter((frame) => frame.kind === "notify" && (frame.notification?.kind === "question" || frame.notification?.kind === "needs-you"));
+    expect(rings.map((frame) => frame.notification.kind)).toEqual(["question", "question"]);
   } finally { stream.close(); }
 }), 60_000);

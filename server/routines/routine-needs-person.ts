@@ -89,6 +89,9 @@ export interface RoutineNeedsWatchDeps {
   emit(routine: Routine): void;
   /** Run a pass soon (one pass for a burst of changes). */
   later(pass: () => void): void;
+  /** #4233: every routine, once per pass (routine-problem-card.ts keeps
+   * each lasting problem's fix card in step with its need). */
+  each?(routines: readonly Routine[]): void;
 }
 
 function needKey(need: RoutineNeedsPerson | null | undefined): string {
@@ -125,7 +128,8 @@ export class RoutineNeedsWatch {
   /** Read every routine's need; send the frame of each that changed. */
   pass(): void {
     const seen = new Set<string>();
-    for (const routine of this.deps.routines()) {
+    const all = this.deps.routines();
+    for (const routine of all) {
       seen.add(routine.id);
       const key = needKey(this.deps.need(routine));
       if ((this.sent.get(routine.id) ?? "") === key) continue;
@@ -133,5 +137,6 @@ export class RoutineNeedsWatch {
       this.deps.emit(routine);
     }
     for (const id of this.sent.keys()) if (!seen.has(id)) this.sent.delete(id);
+    this.deps.each?.(all);
   }
 }

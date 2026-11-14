@@ -1528,6 +1528,10 @@ export interface OptionCardData extends WaitCardField {
    * `to`): the others see it, only this person's answer counts, and the
    * notification goes to them. */
   askTo?: AskAddressee;
+  /** #4233: when the server rang this pending card's one reminder (a
+   * routine's fix card still open a day later), so a restart never rings
+   * it again. */
+  remindedAt?: number;
   /** #2048: publish-target choice (Sagax page / artifact / Claude / …).
    * Same question card family; enables "Always use this choice". */
   pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;

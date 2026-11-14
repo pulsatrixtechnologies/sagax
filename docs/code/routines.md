@@ -33,6 +33,21 @@ chat's row gate already reads, and rides on the routine as
   run since (a blocked goal is told this way, as its run's problem);
 - `goal`: a goal past its deadline, or stalled.
 
+A `problem` or `paused` need is told to the person as something to fix
+(#4233, `server/routines/routine-problem-card.ts`): the needs watch's pass
+raises one keyed `ask_choice` card (#4205) in the conversation the routine
+reports to, key `routine-problem:<routineId>`, holding nothing, with the
+streak's summary and the failing readiness line, and the choices Run a check,
+Pause the routine (not for a paused routine) and Open the routine; the answer
+reaches the bot with its key, as any keyed card's. It rings once, as a
+question, when raised; later problem runs replace its words in place (the
+count); the first good run retires it; an answered card is not raised again
+for the same streak, a restart included; a restart finds the pending card by
+its key, looked up as any keyed card is: in the conversations of the bot it
+reports to with the same person, never another person's. Still open
+after a day (`INPUT_REMIND_REPEAT_MS`), its question rings once more, marked
+on the card (`remindedAt`) so a restart never rings it again.
+
 The rule itself is `routineNeed` in `shared/outcomes.ts`, given the
 server's facts; an app reading an older server falls back to the same rule
 over what the wire carries. `null` means nothing waits on the person and

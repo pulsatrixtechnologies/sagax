@@ -152,4 +152,18 @@ describe("RoutineNeedsWatch keeps the frame as fresh as the chat (#4098)", () =>
     expect(routineNeedMayMove({ role: "bot", kind: "routine.run" })).toBe(true);
     expect(routineNeedMayMove({ role: "bot", kind: "text" })).toBe(false);
   });
+
+  it("#4233: every pass hands every routine to the fix cards, changed or not", () => {
+    const passes: string[][] = [];
+    const watch = new RoutineNeedsWatch({
+      routines: () => [routine()],
+      need: () => null,
+      emit: () => {},
+      later: (pass) => pass(),
+      each: (all) => { passes.push(all.map((entry) => entry.id)); },
+    });
+    watch.pass();
+    watch.touch();
+    expect(passes).toEqual([["r1"], ["r1"]]);
+  });
 });

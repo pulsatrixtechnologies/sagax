@@ -457,7 +457,7 @@ export class ProactiveAsk {
    * bots or choices reads it again. */
   listing(person: string): Promise<AskListing> {
     const bots = this.deps.bots(person);
-    const key = JSON.stringify([bots, this.deps.choices.get(person).domains]);
+    const key = JSON.stringify([bots, this.deps.choices.get(person).domains, this.deps.language(person)]);
     const hit = this.listings.get(person);
     const now = this.now();
     if (hit && hit.key === key && now - hit.at < ASK_LISTING_FRESH_MS) return hit.value;
@@ -471,6 +471,7 @@ export class ProactiveAsk {
     const skills = new Set<string>();
     const products = new Set<string>();
     const causes = new Set<NothingOffered["causes"][number]>();
+    const language = this.deps.language(person);
     for (const [index, bot] of bots.entries()) {
       if (index > 0) await yieldLoop();
       const offered = await this.deps.offered(person, bot.id).catch(() => null);
@@ -478,8 +479,13 @@ export class ProactiveAsk {
       else if (!offered.ok) causes.add(offered.cause);
       else {
         byBot.set(bot.id, offered.domains.filter((domain) => domain.eligible));
-        for (const watch of offered.domains.flatMap((domain) => domain.watches)) {
-          for (const name of watch.lacking ?? []) (watch.missing === "skill" ? skills : products).add(name);
+        for (const domain of offered.domains) {
+          for (const watch of domain.watches) {
+            // #3408: the connection works but does not serve this domain's read:
+            // name the domain (never the tool), as what the connection does not give
+            if (watch.missing === "read") products.add(domainLabelIn(domain, language));
+            else for (const name of watch.lacking ?? []) (watch.missing === "skill" ? skills : products).add(name);
+          }
         }
       }
     }

@@ -463,8 +463,9 @@ write `proactive`); the switch now records who set it (`proactiveModeSet`).
 The loop (`server/proactive/flow-watches.ts`, `docs/proactive.md`) walks the
 choices, not the bots: no choice, no session, no helper call, no read.
 Eligibility: the carrying bot is the person's own, visible, not temporary,
-on a Perspicax server; the connection serves every product a watch names;
-the bot holds its skill. Products are read once a day per person; watch
+on a Perspicax server; the connection serves every product a watch names
+and its observe tool as a read (#3408, read with the products); the bot
+holds its skill. Products are read once a day per person; watch
 memory is per person (`DATA_DIR/proactive-watch-memory.json`). A chosen watch
 passes the bot's switch, as a direct trigger. A paused domain says so once
 in the carrying bot's chat. A watch alert's "never" stops those watches in

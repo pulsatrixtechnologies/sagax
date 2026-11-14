@@ -11,45 +11,69 @@ function originOf(value) {
   }
 }
 
+// The one-shot intent a page declares right before getDisplayMedia, in the
+// same click: "preview" (the screen preview and screenshot: video only, never
+// audio) or "listen" (#4100, listening to a conversation: the computer's
+// sound, which the shell can only give beside a screen video; the page drops
+// the video at once). A request must match the kind its intent declared.
 function createDisplayMediaGuard({ now = Date.now, ttlMs = 5_000 } = {}) {
   const intents = new Map();
 
   function prune() {
     const current = now();
-    for (const [key, expiresAt] of intents) {
-      if (expiresAt < current) intents.delete(key);
+    for (const [key, intent] of intents) {
+      if (intent.expiresAt < current) intents.delete(key);
     }
   }
 
+  function consumeKind(request, expectedOrigin) {
+    const key = frameKey(request?.frame);
+    if (!key) return null;
+    const intent = intents.get(key);
+    intents.delete(key);
+    const requestOrigin = originOf(request.securityOrigin);
+    const allowedOrigin = originOf(expectedOrigin);
+    const trusted =
+      intent !== undefined &&
+      intent.expiresAt >= now() &&
+      request.userGesture === true &&
+      request.videoRequested === true &&
+      requestOrigin !== null &&
+      allowedOrigin !== null &&
+      requestOrigin === allowedOrigin;
+    if (!trusted) return null;
+    // the screen preview never gets audio; listening asks for it
+    if (intent.kind === "preview") return request.audioRequested === false ? "preview" : null;
+    return request.audioRequested === true ? "listen" : null;
+  }
+
   return Object.freeze({
-    begin(frame) {
+    begin(frame, kind = "preview") {
       const key = frameKey(frame);
-      if (!key) return false;
+      if (!key || (kind !== "preview" && kind !== "listen")) return false;
       prune();
-      intents.set(key, now() + ttlMs);
+      intents.set(key, { expiresAt: now() + ttlMs, kind });
       return true;
     },
 
-    consume(request, expectedOrigin) {
-      const key = frameKey(request?.frame);
-      if (!key) return false;
-      const expiresAt = intents.get(key);
-      intents.delete(key);
-      const requestOrigin = originOf(request.securityOrigin);
-      const allowedOrigin = originOf(expectedOrigin);
+    /** The kind of a trusted request ("preview" or "listen"), or null. */
+    consumeKind,
 
-      return Boolean(
-        expiresAt !== undefined &&
-          expiresAt >= now() &&
-          request.userGesture === true &&
-          request.videoRequested === true &&
-          request.audioRequested === false &&
-          requestOrigin !== null &&
-          allowedOrigin !== null &&
-          requestOrigin === allowedOrigin,
-      );
+    /** A trusted screen preview request (video only). */
+    consume(request, expectedOrigin) {
+      return consumeKind(request, expectedOrigin) === "preview";
     },
   });
+}
+
+/** What the shell answers a trusted listen request (#4100): the computer's
+ * sound ("loopback", Windows; tried on macOS, where the system asks for the
+ * screen and system audio recording permission) beside the screen video the
+ * shell requires. Linux has no loopback: no answer, the page listens on the
+ * microphone only. */
+function listenResponse(platform, source) {
+  if (!source || (platform !== "win32" && platform !== "darwin")) return {};
+  return { video: source, audio: "loopback" };
 }
 
 function selectCaptureSource({ sources, host, primaryDisplayId }) {
@@ -89,6 +113,7 @@ module.exports = {
   createDisplayMediaGuard,
   frameKey,
   invokeDisplayMediaCallback,
+  listenResponse,
   originOf,
   selectCaptureSource,
 };

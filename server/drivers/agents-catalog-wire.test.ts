@@ -193,6 +193,9 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // 2026-11-13 (#4238): ask_choice takes tell (a fact for the person from a
 // teammate's exchange); the room non-chief baselines, left without margin by
 // the lots before it, move to the measured wire.
+// 2026-11-17 (#4100): listening_read joins the direct catalog (deferred, never
+// in a room). It adds 459 bytes. After the #4518 trim that stays inside the
+// 2% margin, so the baselines stay on the measured wire.
 const BUDGET_BASELINE: Record<string, number> = {
   // #2909: ask_choice says its answers must answer the question and takes
   // per-answer details (+266 bytes of ask_choice, measured).

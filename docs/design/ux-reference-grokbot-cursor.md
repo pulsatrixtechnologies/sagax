@@ -1504,6 +1504,45 @@ code y reste à porter.
 
 ---
 
+### 2.25 Écoute d'une conversation (#4100)
+
+Ajouté le 2026-11-14 (structure de la référence, mots Sagax). Captures du lot à côté de la
+carte d'appel en direct (2.19).
+
+**Départ.** Dans le chat d'un bot (jamais une salle), le menu + du compositeur offre
+« Écouter une conversation ». Le système demande ses propres permissions la première fois
+(micro ; sur le bureau, le son de l'ordinateur) ; aucune carte de consentement de l'app.
+Sans transcription vocale configurée, l'entrée ouvre la carte des clés, comme la dictée.
+
+**Carte flottante (`ListeningCard`).** En haut de la transcription, sous la barre d'en-tête,
+dans la pile des bannières (après la carte d'appel vocal). Surface de carte compacte du chat
+(`bg-composer`, `ring-composer-ring`, `rounded-3xl`, largeur de la colonne, max 720 px) :
+avatar du bot (32 px), point rouge (`bg-danger`, pulsation, coupée en mouvement réduit) et
+« Écoute de la conversation », la source entendue en tertiaire (« Micro » ou « Micro et son
+de l'ordinateur »), la ligne la plus récente dessous en secondaire (locuteur en gras). À
+droite : le contrôle de chat (bulle, bascule entre la transcription en direct et la
+conversation) et le bouton d'arrêt rond rouge (carré plein blanc), le rouge d'enregistrement
+de la barre d'appel. Sous l'en-tête, la transcription en direct dans la boîte inset des
+lignes d'appel (`TranscriptLines`, partagée avec `OutboundCard`) : étiquette du locuteur en
+secondaire, texte dessous, la ligne en cours en gris secondaire jusqu'à ce qu'elle soit
+finale. Le compositeur reste dessous et fonctionne. Sur un autre appareil de la même
+personne, la carte suit la session par sa ligne (dernière ligne, Arrêter), sans contrôle de chat.
+
+**Ligne dans la conversation.** Une seule ligne par session, mise à jour en place
+(`AskSettledLine`) : « Écoute d'une conversation » avec un point rouge pendant l'écoute,
+puis « Écouté 24 min, 3 interlocuteurs » avec « Transcription », qui déplie la transcription
+complète en lecture seule (même boîte inset). Les apps publiées et le téléphone lisent le
+texte simple de la ligne.
+
+**Ailleurs dans l'app.** Point rouge sur la ligne du bot dans la barre latérale ; pastille au
+bas de la barre latérale quand un autre chat est à l'écran (retour, Arrêter) ; puce dans
+l'en-tête pour les fenêtres trop étroites. Le son de l'ordinateur refusé par le système : une
+ligne sur la carte avec « Ouvrir les réglages ».
+
+Composants : `src/components/ListeningCard.tsx`, `src/components/TranscriptLines.tsx`.
+Logique : `src/lib/listening/` (session, canal, locuteurs, lignes). Serveur :
+`server/listening/`, `server/routes/listening.ts`.
+
 ## 3. Cursor : ce qu'on retient
 
 Repères tirés de ce qu'on sait publiquement de Cursor, utiles pour les surfaces de

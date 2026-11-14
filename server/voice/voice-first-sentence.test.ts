@@ -134,5 +134,12 @@ describe("cache prime prompt and opener audience", () => {
     expect(voiceOpenerFrameAllowed(ended, "ada", "operator")).toBe(true);
     expect(voiceOpenerFrameAllowed(ended, "bob", "operator")).toBe(false);
     expect(voiceOpenerFrameAllowed({ kind: "voice.call.ended" }, "ada", "operator")).toBe(false);
+    // #4100: a listening session's frame reaches the person who listens only
+    const listening = { kind: "listening", audience: "ada", sessionId: "ls_00000000000000000000" };
+    expect(voiceOpenerFrameAllowed(listening, "ada", "operator")).toBe(true);
+    expect(voiceOpenerFrameAllowed(listening, undefined, "ada")).toBe(true);
+    expect(voiceOpenerFrameAllowed(listening, "bob", "operator")).toBe(false);
+    expect(voiceOpenerFrameAllowed(listening, undefined, "operator")).toBe(false);
+    expect(voiceOpenerFrameAllowed({ kind: "listening" }, "ada", "operator")).toBe(false);
   });
 });

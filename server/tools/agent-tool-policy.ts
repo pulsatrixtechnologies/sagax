@@ -14,6 +14,8 @@ export const READ_ONLY_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "wait_delegation",
   "session_search",
   "session_read",
+  // #4100: a listened conversation of this chat (server/listening/listening-turn.ts)
+  "listening_read",
   "recall_topic",
   "tool_result_read",
   "list_routines",

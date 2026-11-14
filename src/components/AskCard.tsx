@@ -54,7 +54,7 @@ export function AskCard({
       // conversation's controls (the approval row uses the same).
       // #3581: every card of a chat (an ask, a result) takes the approval
       // card's width, the whole message column: one card, one width.
-      className="w-full rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring"
+      className={ASK_CARD_SURFACE}
     >
       <div className={cn("flex min-w-0 gap-2", plain ? "items-start" : "items-center")}>
         {icon && <span aria-hidden="true" className="flex shrink-0 text-accent-text">{icon}</span>}
@@ -159,6 +159,10 @@ const ASK_CONTROL =
 
 /** The main action: the accent fill. `accent-ink` rather than white, since
  * Foundry's brass accent needs dark ink to stay readable. */
+/** The chat card surface: the composer's own, the whole message column wide.
+ * Every card of a chat (an ask, a result, the listening card) is this one. */
+export const ASK_CARD_SURFACE = "w-full rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring";
+
 export const ASK_PRIMARY_BUTTON =
   `${ASK_CONTROL} bg-accent text-accent-ink hover:brightness-110`;
 

@@ -15,6 +15,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 
 import { endCall } from "@/lib/call";
 import { configureLiveMedia, liveMedia, resetLiveMedia, startLiveCall } from "@/lib/live-call-media";
+import { currentListening, startListening, stopListening } from "@/lib/listening/listening-session";
 import { LiveCallChip, LiveCallPill } from "./LiveCallPill";
 
 type ElementProps = { children?: ReactNode; onClick?: () => void; [key: string]: unknown };
@@ -91,6 +92,62 @@ describe("LiveCallPill", () => {
     expect(markup).toContain('aria-label="On a Live call with Atlas"');
     expect(markup).toContain('aria-label="Hang up"');
     expect(markup).not.toContain('<span class="truncate">');
+  });
+});
+
+describe("LiveCallPill, listening variant (#4100)", () => {
+  async function listenToAtlas() {
+    await startListening({ botId: "atlas", threadId: "thread-atlas", personName: "Ada" }, {
+      openMicrophone: async () => ({ stop: () => {} }),
+      transcriber: () => ({ connect: async () => true, onPartial: () => () => {}, begin: () => {}, push: () => {}, probe: () => false, audio: () => new Float32Array(0), finishHeard: async () => ({ text: "" }), discard: () => {}, close: () => {} }),
+      models: async () => ({ vad: { probability: async () => 0, reset: () => {} }, embedder: null }),
+      request: async <T,>(path: string) => (path.endsWith("/listening")
+        ? { session: { sessionId: "ls_aaaaaaaaaaaaaaaaaaaa", botId: "atlas", threadId: "thread-atlas", state: "listening", startedAt: 1, lineCount: 0, lastSeq: 0, speakers: [], sources: { microphone: true, computer: false } } }
+        : {}) as T,
+      now: () => 1,
+      setTimer: () => null,
+      clearTimer: () => {},
+    });
+  }
+  // the session listens for the window closing
+  beforeEach(() => { vi.stubGlobal("window", { ogb: { speechStop: vi.fn(async () => {}) }, addEventListener: () => {}, removeEventListener: () => {} }); });
+  afterEach(async () => { await stopListening(); });
+
+  it("is the same pill in the recording red: the bot's name first, then Stop", async () => {
+    fixture.bots = [{ ...atlas, name: "Atlas Operations Assistant With A Long Name" }];
+    expect(renderPill({ variant: "listening", onOpen: vi.fn(), currentBotId: "juniper" }).markup).toBe("");
+    await listenToAtlas();
+    const onOpen = vi.fn();
+    const { markup, tree } = renderPill({ variant: "listening", onOpen, currentBotId: "juniper" });
+    expect(markup).toContain('data-live-pill="listening"');
+    expect(markup).toContain("border-danger/40");
+    expect(markup).not.toContain("border-success/40");
+    // the name leads the line, the short label follows: a cut never takes the name first
+    expect(markup.indexOf("Atlas Operations Assistant With A Long Name")).toBeLessThan(markup.indexOf(">Listening<"));
+    expect(markup).toContain('aria-label="Stop listening"');
+    expect(markup).not.toContain('aria-label="Mute"');
+    findElement(tree(), (props) => props.title === "Back to listening")?.props.onClick?.();
+    expect(onOpen).toHaveBeenCalledWith("atlas", "thread-atlas");
+    findElement(tree(), (props) => props["aria-label"] === "Stop listening")?.props.onClick?.();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(currentListening()).toBeNull();
+  });
+
+  it("stays out of the way in the listening chat, and fits the icons-only sidebar", async () => {
+    await listenToAtlas();
+    expect(renderPill({ variant: "listening", onOpen: vi.fn(), currentBotId: "atlas" }).markup).toBe("");
+    const { markup } = renderPill({ variant: "listening", onOpen: vi.fn(), currentBotId: null, iconOnly: true });
+    expect(markup).toContain('aria-label="Listening in Atlas&#x27;s chat"');
+    expect(markup).toContain('aria-label="Stop listening"');
+  });
+
+  it("is the header chip too, back to listening", async () => {
+    await listenToAtlas();
+    const markup = renderToStaticMarkup(createElement(LiveCallChip, { variant: "listening", currentBotId: "juniper", onOpen: vi.fn() }));
+    expect(markup).toContain("Back to listening");
+    expect(markup).toContain('data-live-chip="listening"');
+    expect(markup).toContain("md:hidden");
+    expect(renderToStaticMarkup(createElement(LiveCallChip, { variant: "listening", currentBotId: "atlas", onOpen: vi.fn() }))).toBe("");
   });
 });
 

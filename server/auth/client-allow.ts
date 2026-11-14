@@ -553,6 +553,12 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // voice mode (server/voice/voice-mode.ts): the speaker's own turn on a bot they may use; never the key
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/voice\/(?:status|voices|listen|speech|realtime)$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/voice\/(?:prepare|speak|transcribe|stream|call)$/ },
+  // #4100: listening to a conversation (server/routes/listening.ts): the
+  // person's own sessions in their conversation with a bot they may use;
+  // a session answers only to the person who started it
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/listening$/ },
+  { methods: ["GET"], path: /^\/api\/listening\/ls_[a-f0-9]{20}$/ },
+  { methods: ["POST"], path: /^\/api\/listening\/ls_[a-f0-9]{20}\/(?:lines|stop)$/ },
   // the person's own providers, a provider's voices and the voice test (Settings > Voice, 2026-10-29)
   { methods: ["GET"], path: /^\/api\/voice\/(?:status|voices)$/ },
   { methods: ["POST"], path: /^\/api\/voice\/speak$/ },

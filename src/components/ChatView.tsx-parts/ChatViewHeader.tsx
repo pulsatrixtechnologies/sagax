@@ -4,7 +4,9 @@ import { splitBesideMain } from "@/lib/split-view";
 import { CallOverlay } from "../CallView";
 import { ExportTranscriptMenu } from "../ExportTranscriptMenu";
 import { TaskPicker } from "../TaskPicker";
-import { startNewTopic, type Action, type Bot, type ConfigStatus, type Message } from "@/state/store";
+import { LiveCallChip } from "../LiveCallPill";
+import { useStoreSelector } from "@/state/store-selector";
+import { openBotThread, startNewTopic, type Action, type Bot, type ConfigStatus, type Message } from "@/state/store";
 import type { SideChat } from "./sideChat";
 import { ChatHeaderBar } from "@/components/ChatHeaderBar";
 
@@ -53,6 +55,7 @@ export function ChatViewHeader({
   messages: Message[];
   dataItem: unknown;
 }) {
+  const bots = useStoreSelector((current) => current.bots);
   return (
     <>
       {/* The older call mode covers the thread while the bot is on the line;
@@ -100,6 +103,8 @@ export function ChatViewHeader({
             onSplit={(edge) => splitBesideMain(showThreads ? { kind: "bot", botId: bot.id, threadId: bot.threadId } : { kind: "bot", botId: bot.id }, edge)}
             {...(!showThreads ? { onClearChat: () => startNewTopic(dispatch, bot), clearChatKey: bot.id } : {})}
           />}
+          {/* #4100: this window listens in another chat: back to it */}
+          <LiveCallChip variant="listening" currentBotId={bot.id} onOpen={(botId, threadId) => { const target = bots.find((candidate) => candidate.id === botId); if (target) openBotThread(dispatch, target, threadId, showThreads); }} />
           <TaskPicker bot={bot} />
         </div>
       </ChatHeaderBar>}

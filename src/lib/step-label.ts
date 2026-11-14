@@ -113,7 +113,7 @@ const BARE: Record<string, Kind> = {
   memory_update: "memory", memory_log: "memory", group_memory_update: "memory", rules_update: "memory", docs_update: "memory", memory_write: "memory",
   memory_save: "memory", memory_remove: "memory", memory_forget: "memory", memory_suggestions: "memory",
   memory_search: "memorySearch", memory_recall: "memorySearch", memory_find: "memorySearch",
-  session_search: "readConversations", session_read: "readConversations", read_transcript: "readConversations",
+  session_search: "readConversations", session_read: "readConversations", listening_read: "readConversations", read_transcript: "readConversations",
   read_transcript_page: "readConversations", read_latest_page: "readConversations",
   read_latest_page_with_threads: "readConversations", read_transcript_cold: "readConversations", read_transcript_attachment: "readConversations",
   list_routines: "routine", propose_routine: "routine", propose_routine_action: "routine", schedule_routine: "routine", manage_routine: "routine",

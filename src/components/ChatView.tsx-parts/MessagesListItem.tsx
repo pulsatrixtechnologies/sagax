@@ -26,6 +26,7 @@ import { CwActivityWidgets, CwWidgetView, shownCwWidget } from "../cw/CwWidgetVi
 import { OwnerSettled, OwnerWait } from "../OwnerWait";
 import { PagePublishCard } from "../PublishedPages";
 import { OutboundCard } from "../OutboundCard";
+import { ListeningRowLine } from "../ListeningCard";
 import { AccessNoticeRow } from "../AccessCard";
 import { SecretRequestCard } from "../SecretRequestCard";
 import { SignInRequestCard } from "../SignInRequestCard";
@@ -420,6 +421,12 @@ export function MessagesListItem({
           />
         </MessageBoundary>
       );
+    }
+    // #4100: a listening session's one row: nothing while it is live (the
+    // floating card says it), then its settled line
+    if (m.listening && m.role === "bot") {
+      if (m.listening.state === "listening") return null;
+      return <MessageBoundary fallbackText={m.text ?? ""}><ListeningRowLine message={m} /></MessageBoundary>;
     }
     // a phone call or a purchase on its card (src/components/OutboundCard.tsx)
     if (m.outbound && m.role === "bot") {

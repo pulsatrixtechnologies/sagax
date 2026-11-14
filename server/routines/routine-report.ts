@@ -43,7 +43,7 @@ export const ROUTINE_NOTHING_TO_DO_RULE = `A run that found nothing to do, or wh
 /** #4205: a run that leaves the person several items to decide asks each
  * on its own card, never as one text whose answers they would type. */
 export const ROUTINE_ASK_EACH_ITEM_RULE =
-  "When the person must decide, ask on a card with ask_choice, never in your text for them to type an answer: one ask_choice call per separate item, each with its own choices and the item's whole context, and key set to the item's id so a later run replaces or retires that card (retire true) instead of asking again. With wait false the cards stay pending and this run ends normally, the next run starts on time, and each answer arrives later as its own turn; without it this run waits for the answers.";
+  "When the person must decide, ask on a card with ask_choice, never in your text for them to type an answer: one ask_choice call per separate item, each with its own choices and the item's whole context, and key set to the item's id so a later run replaces or retires that card (retire true) instead of asking again. With wait false the cards stay pending and this run ends normally, the next run starts on time, and each answer arrives later as its own turn; without it this run waits for the answers, except in a routine that can run several times a day, where a card holds nothing unless the person started the run.";
 
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =

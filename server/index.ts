@@ -178,7 +178,7 @@ import { commandReceipt, dropCommandReceipt, expireCommandReceipts, setCommandRe
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
-import { AskKeyIndex, closedAskCard } from "./widgets/ask-choice-keys.ts";
+import { AskKeyIndex, closedAskCard, raiseTextKeyedAsk } from "./widgets/ask-choice-keys.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
@@ -16483,6 +16483,39 @@ onMessageChange((threadId, messageId) => {
   if (askKeyIndex.size()) queueMicrotask(() => askKeyIndex.changed(threadId, messageId));
 });
 
+/** #4233: when a keyed ask made in a conversation last replaced its pending
+ * card in place (that card may sit in an earlier run's conversation), so
+ * the run reads it as a card drawn on its turn (routines.ts
+ * cardRaisedSince). Bounded: the oldest conversations leave first. */
+const askReplacedAt = new Map<string, number>();
+function noteAskReplaced(threadId: string): void {
+  askReplacedAt.delete(threadId);
+  askReplacedAt.set(threadId, Date.now());
+  if (askReplacedAt.size > 1_000) askReplacedAt.delete(askReplacedAt.keys().next().value!);
+}
+
+/** #4205: the ask_choice keys of a card `owning` raises in `cardThread` for
+ * a call made in `threadId`: a key spans this bot's conversations with the
+ * same person (a routine's every run), never another person's, and in a
+ * room only the room itself. */
+function askKeysFor(owning: { id: string; ownerUserId?: unknown }, threadId: string, cardThread: string) {
+  return {
+    find: (key: string, accepts: (message: Message) => boolean) => {
+      const group = Boolean(store.groupByThread(cardThread));
+      const botOwner = effectiveBotOwner(owning);
+      const whose = pageOwnerFor(store.taskByThread(owning.id, threadId), botOwner);
+      return askKeyIndex.find(key, (cardThreadId) => {
+        if (cardThreadId === cardThread) return true;
+        if (group) return false;
+        const task = store.taskByThread(owning.id, cardThreadId);
+        return Boolean(task) && pageOwnerFor(task, botOwner) === whose;
+      }, accepts);
+    },
+    remember: (key: string, cardThreadId: string, messageId: string) => askKeyIndex.remember(key, cardThreadId, messageId),
+    retire: (cardThreadId: string, message: Message) => { retireThreadQuestions(cardThreadId, { messageId: message.id }); },
+  };
+}
+
 /** The bot's ask_choice as a question request: the same path as an engine's
  * own question tool (request.opened), so the card carries a requestId and
  * reaches the person in the chat, the Approvals inbox, the member API, a
@@ -19906,7 +19939,8 @@ routines = new RoutineManager({
     const words = redactSecretsInText(open.subtitle ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
     return words ? `Waiting for your answer: ${words}` : "Waiting for your answer";
   },
-  cardRaisedSince: (threadId, since) => store.messagesFor(threadId).some((message) => message.kind === "options" && message.at >= since && Boolean(message.card)),
+  cardRaisedSince: (threadId, since) => (askReplacedAt.get(threadId) ?? -Infinity) >= since
+    || store.messagesFor(threadId).some((message) => message.kind === "options" && message.at >= since && Boolean(message.card)),
   // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for real
   // #4205: a cancelled or superseded run's question cards are closed
   closeRunCards: (threadId, since, roomCards) => {
@@ -19914,9 +19948,21 @@ routines = new RoutineManager({
     // #4219: the cards the run drew in its source room, those exactly
     for (const card of roomCards ?? []) retireThreadQuestions(card.threadId, { messageId: card.messageId });
   },
-  raiseClaimedCard: (threadId, claim) => {
+  raiseClaimedCard: (threadId, claim, card) => {
     // #4205: one card per separate ask, each with its own choices (the pinned card pages them)
-    const raised = routineClaimedCardChoices(redactSecretsInText(claim)).filter((choice) => raiseHarnessQuestion(threadId, choice, "output"));
+    // #4233: a repeating routine's run raises them holding nothing, each
+    // keyed by its text: the same ask in the next run replaces its pending
+    // card in place (#4205 keys), never a second card nor a second ring
+    const owning = card ? store.botByThread(threadId) : undefined;
+    const keys = owning ? askKeysFor(owning, threadId, threadId) : null;
+    const raised = routineClaimedCardChoices(redactSecretsInText(claim)).filter((choice) => keys
+      ? raiseTextKeyedAsk(threadId, choice, {
+        find: (key) => keys.find(key, () => true),
+        remember: keys.remember,
+        patch: (cardThreadId, messageId, next) => Boolean(store.patchMessage(cardThreadId, messageId, { card: next })),
+        raise: (keyed) => raiseHarnessQuestion(threadId, keyed, "output"),
+      })
+      : raiseHarnessQuestion(threadId, choice, "output"));
     return raised.length ? routineClaimedCardWaiting(raised) : null;
   },
   hasPendingDelegations: (threadId) => coordinator.awaitsTeammates(threadId) ||
@@ -23271,6 +23317,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         // a card raised in the run's room is not the run's own line
         ...(runRoom ? {} : { authored }),
         ...(room ? { room, notifyAddressee: notifyRoomAskAddressee } : {}),
+        // #4233: a repeating routine's run: ask_choice holds nothing by default
+        ...(routines?.asksHoldNothing(threadId) ? { repeatingRun: true } : {}),
         proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
         // #1905: a may-I ask_choice under Full access is answered, not drawn
         approvalLevel: sourceApprovalMode(bot.id, threadId),
@@ -23279,21 +23327,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         ...(raises ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(cardThread, room ? { ...choice, askerBotId: bot.id } : choice) } : {}),
         // #4205: an ask_choice key spans this bot's conversations with the
         // same person (a routine's every run), never another person's
-        askKeys: {
-          find: (key, accepts) => {
-            const group = Boolean(cardRoom);
-            const botOwner = effectiveBotOwner(owning);
-            const whose = pageOwnerFor(store.taskByThread(owning.id, threadId), botOwner);
-            return askKeyIndex.find(key, (cardThreadId) => {
-              if (cardThreadId === cardThread) return true;
-              if (group) return false;
-              const task = store.taskByThread(owning.id, cardThreadId);
-              return Boolean(task) && pageOwnerFor(task, botOwner) === whose;
-            }, accepts);
-          },
-          remember: (key, cardThreadId, messageId) => askKeyIndex.remember(key, cardThreadId, messageId),
-          retire: (cardThreadId, message) => { retireThreadQuestions(cardThreadId, { messageId: message.id }); },
-        },
+        askKeys: askKeysFor(owning, threadId, cardThread),
         // #2048: publish-target availability for this bot, engine and person
         pageTargetContext: {
           defaultId,
@@ -23311,6 +23345,9 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       });
       // #4219: a card the run drew in its source room dies with the run
       if (runRoom && posted.ok && posted.messageId) routines?.recordRoomCard(threadId, { threadId: runRoom, messageId: posted.messageId });
+      // #4233: a keyed ask that replaced its pending card in an earlier
+      // run's conversation was drawn on this turn all the same
+      if (posted.ok && "replaced" in posted && posted.replaced) noteAskReplaced(threadId);
       // #3514: the turn that posted a waiting card ends at its safe point
       // when its engine cannot take the answer live
       // #4205: the tool result then says this turn ends here (no other card

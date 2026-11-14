@@ -217,6 +217,19 @@ out of the chat, with the first run that count names (`repeat.firstRunId`,
 `routineRunsCounted`; iOS `RoutineRunRows.counted`). The "Asked by" line names a bot once, whether a row keeps its
 id or its name alone (`sameIncomingParty` in `src/lib/incoming-line.ts`).
 
+A repeating routine's asks never hold it (#4233): in a run that reports by
+its streak and whose routine can run several times a day
+(`RoutineManager.asksHoldNothing`), an `ask_choice` without `wait` reads as
+`wait` false, and the cards the server draws for asks the bot wrote as text
+(`raiseClaimedCard`) carry `noHold`: the run ends normally, its next
+occurrence starts on time, and each answer arrives later as its own turn in
+the run's conversation. `wait` true still holds. A run the person started,
+a native question tool and an approval card hold as before. Such a card
+without a key of the bot's is keyed by its normalized text (`askTextKey`,
+`raiseTextKeyedAsk` in `server/widgets/ask-choice-keys.ts`): the same ask in
+the next run replaces its pending card in place (the #4205 keys), so a run
+every few minutes leaves one pending card per ask and rings once.
+
 One row gate (#3990): every writer of a run's row asks
 `routineRunMayWriteRow` (`server/routines/routine-report.ts`) whether the
 run may put a row in the conversation now, or keep the one it has: the run's

@@ -13,7 +13,7 @@ import { createOpenQuestionCard } from "../index-leaves/openQuestionCard.ts";
 import { createDeliverLateQuestionAnswer } from "../index-leaves/deliverLateQuestionAnswer.ts";
 import { promptWithReply, transcriptText } from "../messages/replies.ts";
 import { createAgentCard, type AgentCardStore } from "./chat-widgets.ts";
-import { AskKeyIndex } from "./ask-choice-keys.ts";
+import { AskKeyIndex, askTextKey, raiseTextKeyedAsk } from "./ask-choice-keys.ts";
 import { callTool, type ToolCallContext } from "../drivers/agents-call.ts";
 import type { HarnessClient } from "../drivers/agents-client.ts";
 import { ASK_CHOICE_DEF } from "../drivers/agents-tools/extras.ts";
@@ -115,6 +115,89 @@ describe("several cards, none holding the run (#4205)", () => {
     expect(openQuestionCard("run-1")).toBeUndefined();
     w.ask("run-1", ITEM(2));
     expect(openQuestionCard("run-1")).toMatchObject({ subtitle: ITEM(2).question });
+  });
+});
+
+describe("a routine that runs several times a day holds nothing by default (#4233)", () => {
+  it("an ask_choice without wait reads as wait false there, and its answer arrives as its own turn", async () => {
+    const w = world();
+    const result = w.ask("run-1", { ...ITEM(1), key: "ticket-1" }, { repeatingRun: true });
+    expect(result).toMatchObject({ ok: true, holds: false });
+    const [row] = w.open("run-1");
+    expect(row!.card).toMatchObject({ askKey: "ticket-1", noHold: true });
+    // the turn is not cut, the run and the conversation are not held
+    expect(postedCardWaits(ASK_CHOICE_TOOL, result as never)).toBe(false);
+    const openQuestionCard = createOpenQuestionCard(() => ({ store: w.store, isPersistentQuestionCard, isApprovalCardMessage: () => false }));
+    expect(openQuestionCard("run-1")).toBeUndefined();
+    // the same key next run replaces the card in place, still holding nothing
+    expect(w.ask("run-2", { ...ITEM(1), key: "ticket-1" }, { repeatingRun: true })).toMatchObject({ ok: true, replaced: true, holds: false });
+    expect(w.open("run-1")[0]!.card!.noHold).toBe(true);
+    // the answer, after the run ended, starts its own turn in that conversation
+    const startOrQueueDirectMessage = vi.fn(async (..._args: unknown[]) => ({}));
+    const host = {
+      store: { ...w.store, taskByThread: () => ({ threadId: "run-1" }), groupByThread: () => undefined },
+      sendSequencer: { run: (_key: string, _print: unknown, work: () => unknown) => work() },
+      startOrQueueDirectMessage,
+      messageSender: () => undefined, usageTriggerFor: () => undefined, cfg: {},
+    };
+    const deliver = createDeliverLateQuestionAnswer(() => host);
+    const card = w.open("run-1")[0]!;
+    await deliver({}, "run-1", card.card!.requestId, "Approve", card, BOT);
+    expect(startOrQueueDirectMessage).toHaveBeenCalledTimes(1);
+    expect(startOrQueueDirectMessage.mock.calls[0]![1]).toBe("run-1");
+  });
+
+  it("an unkeyed ask_choice is keyed by its text there: the next run's same ask replaces its pending card in place", () => {
+    const w = world();
+    expect(w.ask("run-1", ITEM(1), { repeatingRun: true })).toMatchObject({ ok: true, holds: false });
+    expect(w.ask("run-1", ITEM(2), { repeatingRun: true })).toMatchObject({ ok: true, holds: false });
+    // the next run asks the same two items, its words spaced and cased otherwise
+    const again = { ...ITEM(1), question: `  ${ITEM(1).question.toUpperCase()}  ` };
+    expect(w.ask("run-2", again, { repeatingRun: true })).toMatchObject({ ok: true, replaced: true, holds: false });
+    expect(w.ask("run-2", ITEM(2), { repeatingRun: true })).toMatchObject({ ok: true, replaced: true, holds: false });
+    expect(w.open("run-1")).toHaveLength(2);
+    expect(w.open("run-2")).toHaveLength(0);
+    expect(new Set(w.open("run-1").map((row) => row.card!.askKey)).size).toBe(2);
+    expect(w.open("run-1").map((row) => row.card!.askKey)).toEqual([askTextKey(ITEM(1).question), askTextKey(ITEM(2).question)]);
+    // a run the person started keys nothing for the bot
+    w.ask("run-3", ITEM(3));
+    expect(w.open("run-3")[0]!.card!.askKey).toBeUndefined();
+  });
+
+  it("an ask written as text is keyed by its text: two runs leave one pending card per ask", () => {
+    const w = world();
+    let rings = 0;
+    const drawText = (threadId: string, question: string) => raiseTextKeyedAsk(threadId, { title: "Your bot has a question", question, options: ["Approve", "Refuse"] }, {
+      find: (key) => w.index.find(key, () => true),
+      remember: (key, cardThreadId, messageId) => w.index.remember(key, cardThreadId, messageId),
+      patch: (cardThreadId, messageId, card) => Boolean(w.store.patchMessage(cardThreadId, messageId, { card })),
+      raise: (keyed) => {
+        rings += 1;
+        const row = w.store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: keyed.title, subtitle: keyed.question, options: keyed.options, requestId: `ask-choice-x${rings}`, requestType: "question", ...keyed.card } } as Omit<Message, "id" | "at">);
+        return { messageId: row.id };
+      },
+    });
+    for (const run of ["run-1", "run-2"]) {
+      expect(drawText(run, "Ticket 1: approve the 2 h entry?")).toBe(true);
+      expect(drawText(run, "Ticket 2: approve the 1 h entry?")).toBe(true);
+    }
+    expect(w.open("run-1")).toHaveLength(2);
+    expect(w.open("run-2")).toHaveLength(0);
+    expect(w.open("run-1").every((row) => row.card!.noHold === true)).toBe(true);
+    expect(rings).toBe(2);
+  });
+
+  it("a run the person started keeps holding on a card without wait", () => {
+    const w = world();
+    const held = w.ask("run-1", ITEM(1), { repeatingRun: false });
+    expect(postedCardWaits(ASK_CHOICE_TOOL, held as never)).toBe(true);
+    expect(w.open("run-1")[0]!.card!.noHold).toBeUndefined();
+    // wait true still holds a repeating routine's run when the bot asks for it
+    expect(postedCardWaits(ASK_CHOICE_TOOL, w.ask("run-2", { ...ITEM(2), wait: true }, { repeatingRun: true }) as never)).toBe(true);
+  });
+
+  it("the tool says a card holds nothing by default in a routine that runs several times a day", () => {
+    expect(ASK_CHOICE_DEF.inputSchema.properties.wait.description).toMatch(/several times a day/);
   });
 });
 

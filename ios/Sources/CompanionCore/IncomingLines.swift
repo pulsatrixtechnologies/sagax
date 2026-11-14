@@ -161,13 +161,12 @@ public enum IncomingLines {
 
     /// "514 555-0142": a North American number as a person reads it on a
     /// line (shared/outbound-call.ts readablePhone); anything else as it is.
+    /// #4122: the desktop's pattern, `^\+1\s?(\d{3})\s?(\d{3})\s?(\d{4})$` (ASCII digits, as JavaScript's \d),
+    /// so a label the desktop leaves as it is stays so here too.
     public static func readablePhone(_ label: String) -> String {
         let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        let digits = trimmed.filter(\.isNumber)
-        let shaped = trimmed.allSatisfy { $0.isNumber || $0 == " " || $0 == "+" }
-        guard trimmed.hasPrefix("+1"), shaped, digits.count == 11 else { return trimmed }
-        let local = Array(digits.dropFirst())
-        return "\(String(local[0..<3])) \(String(local[3..<6]))-\(String(local[6..<10]))"
+        guard let match = trimmed.wholeMatch(of: #/\+1\s?([0-9]{3})\s?([0-9]{3})\s?([0-9]{4})/#) else { return trimmed }
+        return "\(match.1) \(match.2)-\(match.3)"
     }
 
     /// Where the rule puts a received row: the work another bot or an AI
@@ -227,5 +226,24 @@ public enum NamesLineFit {
     public static func shownCounts(total: Int, most: Int = 3) -> [Int] {
         guard total > 0 else { return [0] }
         return Array((1...min(most, total)).reversed())
+    }
+
+    /// #4122: the one-line tries, widest first. As on the desktop
+    /// (BotNamesLine `detail`, #4112), a phone line's source word ("Text
+    /// Message") gives way before a name does: each count of names is tried
+    /// whole, then with only the number kept, before one name fewer.
+    public static func attempts(total: Int, most: Int = 3, compactable: Bool) -> [(shown: Int, compact: Bool)] {
+        shownCounts(total: total, most: most).flatMap { shown in
+            compactable ? [(shown, false), (shown, true)] : [(shown, false)]
+        }
+    }
+
+    /// The words after a party's source that never give way ("(555
+    /// 010-0142)" in "Text Message (555 010-0142)"), or nil: the desktop's
+    /// split (HandoffRow partyOf), read from the locale's whole name.
+    public static func detail(name: String, lead: String) -> String? {
+        guard name != lead, name.hasPrefix(lead) else { return nil }
+        let rest = name.dropFirst(lead.count).trimmingCharacters(in: .whitespaces)
+        return rest.isEmpty ? nil : rest
     }
 }

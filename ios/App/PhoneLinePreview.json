@@ -1,0 +1,877 @@
+{
+ "bots": [
+  {
+   "id": "preview-phone-one-fr",
+   "threadId": "preview-thread-phone-one-fr",
+   "name": "Rocket",
+   "title": "Assistant",
+   "description": "",
+   "notifications": true,
+   "color": "cyan",
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "one-fr-r1",
+   "tasks": [
+    {
+     "threadId": "preview-thread-phone-one-fr",
+     "title": "Rocket",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "id": "one-fr-u",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028000000,
+     "text": "Rappelle-moi de vérifier les sauvegardes ce soir."
+    },
+    {
+     "id": "one-fr-ua",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028004000,
+     "text": "C'est noté, je te le rappelle à 18 h.",
+     "turnId": "one-fr-turn-u",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "one-fr-u",
+     "parentId": "one-fr-u"
+    },
+    {
+     "id": "one-fr-t1",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028420000,
+     "text": "Est-ce que le serveur est revenu ?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "one-fr-ua"
+    },
+    {
+     "id": "one-fr-s1",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028422000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "one-fr-turn-1",
+     "requestMessageId": "one-fr-t1",
+     "parentId": "one-fr-t1"
+    },
+    {
+     "id": "one-fr-r1",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028425000,
+     "text": "Oui, le serveur répond depuis 9 h 12.",
+     "turnId": "one-fr-turn-1",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "one-fr-t1",
+     "parentId": "one-fr-s1"
+    }
+   ]
+  },
+  {
+   "id": "preview-phone-three-fr",
+   "threadId": "preview-thread-phone-three-fr",
+   "name": "Rocket",
+   "title": "Assistant",
+   "description": "",
+   "notifications": true,
+   "color": "cyan",
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "three-fr-r3",
+   "tasks": [
+    {
+     "threadId": "preview-thread-phone-three-fr",
+     "title": "Rocket",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "id": "three-fr-u",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028000000,
+     "text": "Rappelle-moi de vérifier les sauvegardes ce soir."
+    },
+    {
+     "id": "three-fr-ua",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028004000,
+     "text": "C'est noté, je te le rappelle à 18 h.",
+     "turnId": "three-fr-turn-u",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-fr-u",
+     "parentId": "three-fr-u"
+    },
+    {
+     "id": "three-fr-t1",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028420000,
+     "text": "Est-ce que le serveur est revenu ?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "three-fr-ua"
+    },
+    {
+     "id": "three-fr-s1",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028422000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "three-fr-turn-1",
+     "requestMessageId": "three-fr-t1",
+     "parentId": "three-fr-t1"
+    },
+    {
+     "id": "three-fr-r1",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028425000,
+     "text": "Oui, le serveur répond depuis 9 h 12.",
+     "turnId": "three-fr-turn-1",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-fr-t1",
+     "parentId": "three-fr-s1"
+    },
+    {
+     "id": "three-fr-t2",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028840000,
+     "text": "Merci. Et l'imprimante du 2e ?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "three-fr-r1"
+    },
+    {
+     "id": "three-fr-s2",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028842000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "three-fr-turn-2",
+     "requestMessageId": "three-fr-t2",
+     "parentId": "three-fr-t2"
+    },
+    {
+     "id": "three-fr-r2",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028845000,
+     "text": "L'imprimante est en ligne, un bourrage a été retiré.",
+     "turnId": "three-fr-turn-2",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-fr-t2",
+     "parentId": "three-fr-s2"
+    },
+    {
+     "id": "three-fr-t3",
+     "role": "user",
+     "kind": "text",
+     "at": 1787029260000,
+     "text": "Parfait, je passe demain matin.",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "three-fr-r2"
+    },
+    {
+     "id": "three-fr-s3",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787029262000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "three-fr-turn-3",
+     "requestMessageId": "three-fr-t3",
+     "parentId": "three-fr-t3"
+    },
+    {
+     "id": "three-fr-r3",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787029265000,
+     "text": "Bien reçu, à demain.",
+     "turnId": "three-fr-turn-3",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-fr-t3",
+     "parentId": "three-fr-s3"
+    }
+   ]
+  },
+  {
+   "id": "preview-phone-two-fr",
+   "threadId": "preview-thread-phone-two-fr",
+   "name": "Rocket",
+   "title": "Assistant",
+   "description": "",
+   "notifications": true,
+   "color": "cyan",
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "two-fr-r4",
+   "tasks": [
+    {
+     "threadId": "preview-thread-phone-two-fr",
+     "title": "Rocket",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "id": "two-fr-u",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028000000,
+     "text": "Rappelle-moi de vérifier les sauvegardes ce soir."
+    },
+    {
+     "id": "two-fr-ua",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028004000,
+     "text": "C'est noté, je te le rappelle à 18 h.",
+     "turnId": "two-fr-turn-u",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-fr-u",
+     "parentId": "two-fr-u"
+    },
+    {
+     "id": "two-fr-t1",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028420000,
+     "text": "Est-ce que le serveur est revenu ?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "two-fr-ua"
+    },
+    {
+     "id": "two-fr-s1",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028422000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-fr-turn-1",
+     "requestMessageId": "two-fr-t1",
+     "parentId": "two-fr-t1"
+    },
+    {
+     "id": "two-fr-r1",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028425000,
+     "text": "Oui, le serveur répond depuis 9 h 12.",
+     "turnId": "two-fr-turn-1",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-fr-t1",
+     "parentId": "two-fr-s1"
+    },
+    {
+     "id": "two-fr-t2",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028840000,
+     "text": "Merci. Et l'imprimante du 2e ?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100199",
+      "id": "preview-person"
+     },
+     "parentId": "two-fr-r1"
+    },
+    {
+     "id": "two-fr-s2",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028842000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-fr-turn-2",
+     "requestMessageId": "two-fr-t2",
+     "parentId": "two-fr-t2"
+    },
+    {
+     "id": "two-fr-r2",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028845000,
+     "text": "L'imprimante est en ligne, un bourrage a été retiré.",
+     "turnId": "two-fr-turn-2",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-fr-t2",
+     "parentId": "two-fr-s2"
+    },
+    {
+     "id": "two-fr-t3",
+     "role": "user",
+     "kind": "text",
+     "at": 1787029260000,
+     "text": "Parfait, je passe demain matin.",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "two-fr-r2"
+    },
+    {
+     "id": "two-fr-s3",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787029262000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-fr-turn-3",
+     "requestMessageId": "two-fr-t3",
+     "parentId": "two-fr-t3"
+    },
+    {
+     "id": "two-fr-r3",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787029265000,
+     "text": "Bien reçu, à demain.",
+     "turnId": "two-fr-turn-3",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-fr-t3",
+     "parentId": "two-fr-s3"
+    },
+    {
+     "id": "two-fr-t4",
+     "role": "user",
+     "kind": "text",
+     "at": 1787029680000,
+     "text": "Peux-tu confirmer le rendez-vous de mardi ?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100199",
+      "id": "preview-person"
+     },
+     "parentId": "two-fr-r3"
+    },
+    {
+     "id": "two-fr-s4",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787029682000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-fr-turn-4",
+     "requestMessageId": "two-fr-t4",
+     "parentId": "two-fr-t4"
+    },
+    {
+     "id": "two-fr-r4",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787029685000,
+     "text": "Oui, mardi 10 h est confirmé.",
+     "turnId": "two-fr-turn-4",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-fr-t4",
+     "parentId": "two-fr-s4"
+    }
+   ]
+  },
+  {
+   "id": "preview-phone-one-en",
+   "threadId": "preview-thread-phone-one-en",
+   "name": "Rocket",
+   "title": "Assistant",
+   "description": "",
+   "notifications": true,
+   "color": "cyan",
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "one-en-r1",
+   "tasks": [
+    {
+     "threadId": "preview-thread-phone-one-en",
+     "title": "Rocket",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "id": "one-en-u",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028000000,
+     "text": "Remind me to check the backups tonight."
+    },
+    {
+     "id": "one-en-ua",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028004000,
+     "text": "Noted, I will remind you at 6 PM.",
+     "turnId": "one-en-turn-u",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "one-en-u",
+     "parentId": "one-en-u"
+    },
+    {
+     "id": "one-en-t1",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028420000,
+     "text": "Is the server back up?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "one-en-ua"
+    },
+    {
+     "id": "one-en-s1",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028422000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "one-en-turn-1",
+     "requestMessageId": "one-en-t1",
+     "parentId": "one-en-t1"
+    },
+    {
+     "id": "one-en-r1",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028425000,
+     "text": "Yes, the server has answered since 9:12.",
+     "turnId": "one-en-turn-1",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "one-en-t1",
+     "parentId": "one-en-s1"
+    }
+   ]
+  },
+  {
+   "id": "preview-phone-three-en",
+   "threadId": "preview-thread-phone-three-en",
+   "name": "Rocket",
+   "title": "Assistant",
+   "description": "",
+   "notifications": true,
+   "color": "cyan",
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "three-en-r3",
+   "tasks": [
+    {
+     "threadId": "preview-thread-phone-three-en",
+     "title": "Rocket",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "id": "three-en-u",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028000000,
+     "text": "Remind me to check the backups tonight."
+    },
+    {
+     "id": "three-en-ua",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028004000,
+     "text": "Noted, I will remind you at 6 PM.",
+     "turnId": "three-en-turn-u",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-en-u",
+     "parentId": "three-en-u"
+    },
+    {
+     "id": "three-en-t1",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028420000,
+     "text": "Is the server back up?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "three-en-ua"
+    },
+    {
+     "id": "three-en-s1",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028422000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "three-en-turn-1",
+     "requestMessageId": "three-en-t1",
+     "parentId": "three-en-t1"
+    },
+    {
+     "id": "three-en-r1",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028425000,
+     "text": "Yes, the server has answered since 9:12.",
+     "turnId": "three-en-turn-1",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-en-t1",
+     "parentId": "three-en-s1"
+    },
+    {
+     "id": "three-en-t2",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028840000,
+     "text": "Thanks. And the second floor printer?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "three-en-r1"
+    },
+    {
+     "id": "three-en-s2",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028842000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "three-en-turn-2",
+     "requestMessageId": "three-en-t2",
+     "parentId": "three-en-t2"
+    },
+    {
+     "id": "three-en-r2",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028845000,
+     "text": "The printer is online, a jam was cleared.",
+     "turnId": "three-en-turn-2",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-en-t2",
+     "parentId": "three-en-s2"
+    },
+    {
+     "id": "three-en-t3",
+     "role": "user",
+     "kind": "text",
+     "at": 1787029260000,
+     "text": "Great, I will come by tomorrow morning.",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "three-en-r2"
+    },
+    {
+     "id": "three-en-s3",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787029262000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "three-en-turn-3",
+     "requestMessageId": "three-en-t3",
+     "parentId": "three-en-t3"
+    },
+    {
+     "id": "three-en-r3",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787029265000,
+     "text": "Got it, see you tomorrow.",
+     "turnId": "three-en-turn-3",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "three-en-t3",
+     "parentId": "three-en-s3"
+    }
+   ]
+  },
+  {
+   "id": "preview-phone-two-en",
+   "threadId": "preview-thread-phone-two-en",
+   "name": "Rocket",
+   "title": "Assistant",
+   "description": "",
+   "notifications": true,
+   "color": "cyan",
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "two-en-r4",
+   "tasks": [
+    {
+     "threadId": "preview-thread-phone-two-en",
+     "title": "Rocket",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "id": "two-en-u",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028000000,
+     "text": "Remind me to check the backups tonight."
+    },
+    {
+     "id": "two-en-ua",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028004000,
+     "text": "Noted, I will remind you at 6 PM.",
+     "turnId": "two-en-turn-u",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-en-u",
+     "parentId": "two-en-u"
+    },
+    {
+     "id": "two-en-t1",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028420000,
+     "text": "Is the server back up?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "two-en-ua"
+    },
+    {
+     "id": "two-en-s1",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028422000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-en-turn-1",
+     "requestMessageId": "two-en-t1",
+     "parentId": "two-en-t1"
+    },
+    {
+     "id": "two-en-r1",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028425000,
+     "text": "Yes, the server has answered since 9:12.",
+     "turnId": "two-en-turn-1",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-en-t1",
+     "parentId": "two-en-s1"
+    },
+    {
+     "id": "two-en-t2",
+     "role": "user",
+     "kind": "text",
+     "at": 1787028840000,
+     "text": "Thanks. And the second floor printer?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100199",
+      "id": "preview-person"
+     },
+     "parentId": "two-en-r1"
+    },
+    {
+     "id": "two-en-s2",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787028842000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-en-turn-2",
+     "requestMessageId": "two-en-t2",
+     "parentId": "two-en-t2"
+    },
+    {
+     "id": "two-en-r2",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787028845000,
+     "text": "The printer is online, a jam was cleared.",
+     "turnId": "two-en-turn-2",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-en-t2",
+     "parentId": "two-en-s2"
+    },
+    {
+     "id": "two-en-t3",
+     "role": "user",
+     "kind": "text",
+     "at": 1787029260000,
+     "text": "Great, I will come by tomorrow morning.",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100142",
+      "id": "preview-person"
+     },
+     "parentId": "two-en-r2"
+    },
+    {
+     "id": "two-en-s3",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787029262000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-en-turn-3",
+     "requestMessageId": "two-en-t3",
+     "parentId": "two-en-t3"
+    },
+    {
+     "id": "two-en-r3",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787029265000,
+     "text": "Got it, see you tomorrow.",
+     "turnId": "two-en-turn-3",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-en-t3",
+     "parentId": "two-en-s3"
+    },
+    {
+     "id": "two-en-t4",
+     "role": "user",
+     "kind": "text",
+     "at": 1787029680000,
+     "text": "Can you confirm Tuesday's appointment?",
+     "via": "sms",
+     "sender": {
+      "name": "+15550100199",
+      "id": "preview-person"
+     },
+     "parentId": "two-en-r3"
+    },
+    {
+     "id": "two-en-s4",
+     "role": "bot",
+     "kind": "activity",
+     "at": 1787029682000,
+     "tool": {
+      "name": "Search",
+      "ok": true
+     },
+     "turnId": "two-en-turn-4",
+     "requestMessageId": "two-en-t4",
+     "parentId": "two-en-t4"
+    },
+    {
+     "id": "two-en-r4",
+     "role": "bot",
+     "kind": "text",
+     "at": 1787029685000,
+     "text": "Yes, Tuesday at 10 is confirmed.",
+     "turnId": "two-en-turn-4",
+     "turnTerminal": true,
+     "turnSucceeded": true,
+     "requestMessageId": "two-en-t4",
+     "parentId": "two-en-s4"
+    }
+   ]
+  }
+ ],
+ "groups": []
+}

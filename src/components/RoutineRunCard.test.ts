@@ -105,14 +105,17 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(markup).toMatch(/data-routine-run-open[^>]*>.*Morning brief/);
   });
 
-  it("a result with problems stays a card with its state line and the count of a lasting problem", () => {
+  // #4161 changed this on purpose: a result with problems is the problem row
+  it("a result with problems is the problem row: the state in its glyph, the count of a lasting problem under the words", () => {
     const markup = draw({
       message: message("completed", { summary: "The mailbox refused the sign-in, so 4 messages were not sorted. Sign in again from Connect apps.", problems: "sign-in refused",
         repeat: { firstRunId: "run-0", count: 4, since: Date.UTC(2026, 10, 9, 19), lastAt: Date.UTC(2026, 10, 11, 13) } }),
       onOpen: vi.fn(),
     });
-    expect(markup).toContain('data-routine-run-form="card"');
-    expect(markup).toMatch(/data-routine-run-status="[^"]*" class="text-warning">Completed with problems/);
+    expect(markup).toContain('data-routine-run-form="problem"');
+    // the state is the glyph's colour and its accessible name, never a word on a line
+    expect(markup).toMatch(/role="img" aria-label="Completed with problems"[^>]*data-routine-run-status="completed"[^>]*class="[^"]*text-warning/);
+    expect(words(markup)).not.toContain("Completed with problems");
     expect(markup).toContain("4 runs in a row");
     expect(markup).toContain("Sign in again from Connect apps.");
     // the problem lines themselves stay in the run window (2026-11-03)
@@ -125,24 +128,25 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     const since = Date.UTC(2026, 10, 11, 17, 22);
     const repeat = { firstRunId: "run-0", count: 3, since, lastAt: since + 600_000, streak: true as const };
     const card = draw({ message: message("completed", { brief: "The merge queue is stuck on a failed check. Rerun it.", problems: "queue stuck", repeat }), onOpen: vi.fn() });
-    expect(card).toContain('data-routine-run-form="card"');
+    expect(card).toContain('data-routine-run-form="problem"');
     expect(words(card)).toContain("3 runs with problems since");
     expect(words(card)).not.toContain("Same problem");
     expect(card).toContain("Rerun it.");
-    // a failed or blocked third run: the same card, the failure words in its
-    // brief, the count and since when in its state line
+    // a failed or blocked third run: the same problem row, the failure words
+    // in its brief, the count and since when under them (#4161: the state is
+    // the glyph, red for a failure, no "Failed" word on a line)
     const failed = draw({ message: message("failed", { error: "The engine stopped answering\nThe service timed out", repeat: { ...repeat, count: 5 } }), onOpen: vi.fn() });
-    expect(failed).toContain('data-routine-run-form="card"');
+    expect(failed).toContain('data-routine-run-form="problem"');
     expect(failed).toMatch(/data-routine-run-brief[^>]*>The engine stopped answering\s*The service timed out</);
-    expect(failed).toMatch(/data-routine-run-status[^>]*>Failed<span data-routine-run-repeat/);
+    expect(failed).toMatch(/aria-label="Failed"[^>]*data-routine-run-status="failed"[^>]*class="[^"]*text-danger/);
+    expect(words(failed)).not.toContain("Failed");
     expect(words(failed)).toContain("5 runs with problems since");
-    expect(failed).toContain("text-warning");
     const blocked = draw({ message: message("blocked", { error: "Signed out", repeat }), onOpen: vi.fn() });
-    expect(blocked).toContain('data-routine-run-form="card"');
+    expect(blocked).toContain('data-routine-run-form="problem"');
     expect(blocked).toMatch(/data-routine-run-brief[^>]*>Signed out</);
     expect(words(blocked)).toContain("3 runs with problems since");
-    // a failure that is not a lasting problem's summary stays the quiet row
-    expect(draw({ message: message("failed", { error: "The engine stopped answering" }), onOpen: vi.fn() })).toContain('data-routine-run-form="row"');
+    // #4161: a single failure is the same problem row
+    expect(draw({ message: message("failed", { error: "The engine stopped answering" }), onOpen: vi.fn() })).toContain('data-routine-run-form="problem"');
     const again = draw({ message: message("completed", { brief: "The merge queue is stuck on a failed check. Rerun it.", recovered: { afterRuns: 4, since } }), onOpen: vi.fn() });
     expect(again).toContain("data-routine-run-recovered");
     expect(words(again)).toContain("Works again");
@@ -166,12 +170,12 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(markup).toContain("data-routine-run-recovered");
   });
 
-  it("a blocked run is a card that says why in one line", () => {
+  it("a blocked run is the problem row that says why in one line", () => {
     const html = draw({
       message: message("blocked", { error: "{", handedTo: [{ botId: "bot-b", threadId: "teammate-thread", name: "Bot B", status: "running" }] }),
       onOpen: () => {}, onOpenThread: () => {},
     });
-    expect(html).toContain('data-routine-run-form="card"');
+    expect(html).toContain('data-routine-run-form="problem"');
     expect(html).toContain("Blocked: waiting for Bot B");
     expect(html).not.toMatch(/>\{</);
     expect(html).toContain('data-run-teammate-thread="teammate-thread"');
@@ -179,8 +183,8 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
 
   it("a team goal waiting on the person keeps its words and its Review label", () => {
     const markup = draw({ message: message("waiting", { goalStatus: "needs-input", summary: "Which region should I use?" }), onOpen: vi.fn() });
-    expect(markup).toContain("Needs your input");
-    expect(markup).toContain('aria-label="Review for Morning brief"');
+    expect(markup).toContain('aria-label="Needs your input"');
+    expect(markup).toContain('aria-label="Needs your input: Review for Morning brief"');
     const blocked = draw({ message: message("completed", { goalStatus: "blocked", summary: "The team needs a missing credential." }), onOpen: vi.fn() });
     expect(blocked).toContain("Blocked");
     expect(blocked).not.toContain(">Completed<");
@@ -254,7 +258,7 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
   it("a failure in the banner: one row with its reason, and Resume when it paused the routine (2026-10-26)", () => {
     const verbose = `Provider failed ${"trace-line ".repeat(100)}`;
     const failed = draw({ message: message("failed", { error: verbose }), onOpen: vi.fn() });
-    expect(failed).toContain('data-routine-run-form="row"');
+    expect(failed).toContain('data-routine-run-form="problem"');
     expect(failed).toContain("Provider failed");
     expect(failed).not.toContain(verbose);
     const paused = message("failed", { error: "engine unavailable", autoPausedAfter: 5 });
@@ -376,7 +380,8 @@ describe("RoutineRunCard (#4234): the reference's line, the result under it, the
       message: { ...message("completed", { summary: "One invoice waits for your answer." }), attention: { kind: "human", items: [{ text: "Send invoice 100203 now?" }], botId: "b", botName: "Bot B", threadId: "t", sourceMessageId: "m" } } as Message,
       onOpen: vi.fn(),
     });
-    expect(markup).toContain('data-routine-run-form="card"');
+    // #4161: what waits on the person is the problem row
+    expect(markup).toContain('data-routine-run-form="problem"');
     expect(markup).toMatch(/data-routine-run-brief[^>]*>One invoice waits for your answer\.</);
     // unanswered, the question is drawn once, in the pinned zone (#4204):
     // the run says it in one quiet line, never its items again
@@ -424,5 +429,71 @@ describe("RoutineRunCard row state line", () => {
     } finally {
       setLocale("en");
     }
+  });
+});
+
+// #4161 (the owner, 2026-11-13: "This should look nicer. It looks very bad."):
+// a routine's problem row was a wide block with "Failed" alone on a line and
+// "Details" apart at the line's end. One compact row, the same for every kind.
+describe("RoutineRunCard problem row (#4161)", () => {
+  const since = Date.UTC(2026, 10, 11, 17, 22);
+  const streak = { firstRunId: "run-0", count: 3, since, lastAt: since + 600_000, streak: true as const };
+  const kinds: Array<[string, Message]> = [
+    ["one failure", message("failed", { error: "The engine is signed out." })],
+    ["a streak's summary that failed", message("failed", { error: "The engine is signed out.", repeat: streak, autoPausedAfter: 3 })],
+    ["a streak's summary with problems", message("completed", { brief: "The backup host is off.", problems: "host off", repeat: streak })],
+    ["a result that needs the person", { ...message("completed", { brief: "Two invoices wait for you." }), attention: { kind: "human", items: [{ text: "Approve invoice 1042" }], botId: "b", botName: "Bot B", threadId: "t", sourceMessageId: "m" } } as Message],
+  ];
+
+  it.each(kinds)("%s: one compact row the whole of which opens the run, with a chevron", (_kind, shown) => {
+    const markup = draw({ message: shown, onOpen: vi.fn(), onResume: vi.fn() });
+    expect(markup).toContain('data-routine-run-form="problem"');
+    // the row itself is the one way to the details: one button, with a
+    // chevron, no Details word and no second entry
+    expect(markup.match(/data-routine-run-open/g)).toHaveLength(1);
+    expect(markup).toMatch(/<button[^>]*data-routine-run-open[^>]*data-routine-problem-row/);
+    expect(markup).not.toContain("data-routine-run-details");
+    expect(words(markup)).not.toContain("Details");
+    const row = markup.slice(markup.indexOf("data-routine-problem-row"), markup.indexOf("</button>"));
+    expect(row).toContain("lucide-chevron-right");
+    // the name, the time and the sentence are all inside the row
+    expect(row).toMatch(/data-routine-run-name[^>]*>Morning brief</);
+    expect(row).toMatch(/<time /);
+    expect(row).toContain("data-routine-run-brief");
+    // the state once: the glyph's colour and accessible name, no word alone
+    const state = /role="img" aria-label="([^"]+)"/.exec(row)?.[1] ?? "";
+    expect(state).not.toBe("");
+    expect(words(markup)).not.toContain(state);
+    // the row is as wide as its words, never the whole column
+    expect(row).toMatch(/class="[^"]*w-fit/);
+  });
+
+  it("red for a failure, orange for problems and for what waits on the person: the routine rows' tokens", () => {
+    const tone = (shown: Message) => /role="img"[^>]*class="([^"]*)"/.exec(draw({ message: shown, onOpen: vi.fn() }))?.[1] ?? "";
+    expect(tone(kinds[0][1])).toContain("text-danger");
+    expect(tone(kinds[0][1])).not.toContain("text-warning");
+    expect(tone(kinds[1][1])).toContain("text-danger");
+    expect(tone(kinds[2][1])).toContain("text-warning");
+    expect(tone(kinds[3][1])).toContain("text-warning");
+    // a folded failure keeps its row, its glyph red as well
+    expect(draw({ message: kinds[0][1], folded: true, onOpen: vi.fn() })).toMatch(/lucide-triangle-alert[^"]*text-danger|text-danger[^"]*lucide/);
+  });
+
+  it("a streak that paused its routine keeps its sentence, its count, the pause and Resume beside the row", () => {
+    const markup = draw({ message: kinds[1][1], onOpen: vi.fn(), onResume: vi.fn() });
+    expect(words(markup)).toContain("The engine is signed out.");
+    expect(words(markup)).toContain("3 runs with problems since");
+    expect(markup).toContain('data-routine-auto-paused="3"');
+    // Resume is its own button, never inside the row's button
+    const row = markup.slice(markup.indexOf("data-routine-problem-row"), markup.indexOf("</button>"));
+    expect(row).not.toContain("data-routine-resume");
+    expect(markup).toContain("data-routine-resume");
+  });
+
+  it("without a way to open the run, the row is the same look and no button", () => {
+    const markup = draw({ message: kinds[0][1] });
+    expect(markup).toContain("data-routine-problem-row");
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("lucide-chevron-right");
   });
 });

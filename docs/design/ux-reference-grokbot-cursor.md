@@ -710,6 +710,26 @@ dessous (« écran de » suivi du nom du bot).
   dans cette conversation. Aucune bande vide, aucun « Détails » détaché en bas à droite de la carte. Le
   rapport ne se déplie jamais dans le chat : la puce ouvre la fenêtre de l'exécution avec le
   rapport entier, comme un message normal du bot. Aucune police de terminal.
+- **Rangée de problème d'une routine (#4161)** : le propriétaire le 2026-11-13 sur la rangée
+  d'une routine en échec (« This should look nicer. It looks very bad. » : « Échouée » seul
+  sur sa ligne, « Détails » à part au bout). Un échec, le résumé après une série (#3695,
+  #4058), un résultat avec problèmes, un blocage, un objectif d'équipe ouvert et des points
+  pour la personne sont UNE rangée compacte (`RoutineRunCard`, forme `problem`), dessinée
+  avec les mesures de l'événement système ci-dessus : la puce de la routine grandie aux
+  lignes de la rangée (4 px en haut et en bas, 4 px avant le glyphe, 6 px après, `gap` 2 px,
+  texte 12 px sur 16 px, fond de survol en 120 ms, coins de 12 px), aussi large que ses mots,
+  jamais toute la colonne. Première ligne : le glyphe d'état de 12 px dans la couleur d'état
+  des rangées de routine (`routineRunTone` : rouge `danger` et cercle d'alerte pour un échec,
+  orange `warning` et triangle pour des problèmes ou ce qui attend la personne), le nom,
+  « · » et l'heure en encre tertiaire, puis un chevron. Sous le nom (18 px) : la phrase, 13 px
+  sur 18 px en encre principale, une ou deux lignes ; puis le compte de la série et « En pause
+  après N échecs » en tertiaire. L'état se dit une fois : la couleur du glyphe et son nom
+  accessible (« Échouée »), jamais un mot seul sur sa ligne. Toute la rangée ouvre
+  l'exécution (son chevron), plus de « Détails » à part. Relancer et Arrêter sont leurs
+  propres boutons sous la rangée, alignés sur le nom ; « X a besoin de toi » et la ligne
+  « A demandé » suivent. Une rangée qu'un résultat plus récent replie reste la ligne
+  ci-dessus, son glyphe dans la même couleur d'état. Galerie :
+  `src/gallery/routine-runs-chat.html?case=problem-rows`.
 
 ### 2.8 Bibliothèque, skills, Connecter des apps
 

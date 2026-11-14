@@ -69,14 +69,16 @@ export function routineRunError(error: string | undefined): string | undefined {
   return key ? t(key) : t("routines.failure.code", { code: text });
 }
 
-export function routineRunTone(run: RoutineRun): string {
+/** A run's state colour, the one rule for every surface that tells it (the
+ * routine log, the panel's clock, the chat's problem row #4161). */
+export function routineRunTone(run: Pick<RoutineRun, "status" | "goalStatus" | "problems" | "quiet"> | Pick<RoutineRunCardData, "status" | "goalStatus" | "problems">): string {
   if (run.status === "waiting" || ["needs-input", "limit-reached", "paused"].includes(run.goalStatus ?? "")) return "text-warning";
   if (["failed", "missed"].includes(run.status) || ["failed", "blocked"].includes(run.goalStatus ?? "")) return "text-danger";
   // 2026-11-03: blocked waits on something; never the success green.
   if (run.status === "blocked") return "text-warning";
   if (run.status === "running") return "text-accent";
   if (run.status === "completed" && run.problems) return "text-warning";
-  if (run.status === "completed" && run.quiet) return "text-ink-secondary";
+  if (run.status === "completed" && "quiet" in run && run.quiet) return "text-ink-secondary";
   if (run.status === "completed" && (!run.goalStatus || run.goalStatus === "completed")) return "text-success";
   return "text-ink-secondary";
 }

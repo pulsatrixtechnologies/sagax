@@ -1,8 +1,8 @@
-import { ChevronRight, CircleSlash, Clock, Play, TriangleAlert } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronRight, CircleAlert, CircleSlash, Clock, Play, TriangleAlert } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
-import { routineAutoPausedText, routineDateTime, routineResultText, routineRunBlockedLine, routineRunBrief, routineRunDuration, routineRunError, routineRunProblems } from "@/lib/routine-display";
+import { routineAutoPausedText, routineDateTime, routineResultText, routineRunBlockedLine, routineRunBrief, routineRunDuration, routineRunError, routineRunProblems, routineRunTone } from "@/lib/routine-display";
 import { isRoutineResult, routineResultNeedsPerson } from "@/lib/routine-result-stack";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
@@ -16,36 +16,36 @@ import { dayLabel, localDay } from "@/lib/transcript-derivations";
 const DETAIL_LIMIT = 280;
 
 const COPY = {
-  queued: { label: "routines.status.queued", tone: "text-ink-secondary" },
-  running: { label: "routines.status.running", tone: "text-accent" },
-  waiting: { label: "routines.status.waiting", tone: "text-warning" },
-  completed: { label: "routines.status.completed", tone: "text-ink-secondary" },
-  failed: { label: "routines.status.failed", tone: "text-danger" },
-  blocked: { label: "routines.status.blocked", tone: "text-warning" },
-  cancelled: { label: "routines.status.cancelled", tone: "text-ink-secondary" },
-  missed: { label: "routines.status.missed", tone: "text-danger" },
-  nothing_to_report: { label: "routines.status.nothing_to_report", tone: "text-ink-secondary" },
+  queued: { label: "routines.status.queued" },
+  running: { label: "routines.status.running" },
+  waiting: { label: "routines.status.waiting" },
+  completed: { label: "routines.status.completed" },
+  failed: { label: "routines.status.failed" },
+  blocked: { label: "routines.status.blocked" },
+  cancelled: { label: "routines.status.cancelled" },
+  missed: { label: "routines.status.missed" },
+  nothing_to_report: { label: "routines.status.nothing_to_report" },
 } satisfies Record<
   RoutineRunCardData["status"],
-  { label: LocaleKey; tone: string }
+  { label: LocaleKey }
 >;
 
 const GOAL_COPY = {
-  completed: { label: "routines.goal.completed", tone: "text-ink-secondary" },
-  "needs-input": { label: "routines.goal.needs-input", tone: "text-warning" },
-  blocked: { label: "routines.goal.blocked", tone: "text-danger" },
-  "limit-reached": { label: "routines.goal.limit-reached", tone: "text-warning" },
-  paused: { label: "routines.goal.paused", tone: "text-warning" },
-  stopped: { label: "routines.goal.stopped", tone: "text-ink-secondary" },
-  failed: { label: "routines.goal.failed", tone: "text-danger" },
+  completed: { label: "routines.goal.completed" },
+  "needs-input": { label: "routines.goal.needs-input" },
+  blocked: { label: "routines.goal.blocked" },
+  "limit-reached": { label: "routines.goal.limit-reached" },
+  paused: { label: "routines.goal.paused" },
+  stopped: { label: "routines.goal.stopped" },
+  failed: { label: "routines.goal.failed" },
 } satisfies Record<
   NonNullable<RoutineRunCardData["goalStatus"]>,
-  { label: LocaleKey; tone: string }
+  { label: LocaleKey }
 >;
 
-const DEFERRED = { label: "routines.status.deferred" as const, tone: "text-warning" };
+const DEFERRED = { label: "routines.status.deferred" as const };
 /** 2026-11-01: completed, but not all of it went right. */
-const WITH_PROBLEMS = { label: "routines.status.completedWithProblems" as const, tone: "text-warning" };
+const WITH_PROBLEMS = { label: "routines.status.completedWithProblems" as const };
 
 /** 2026-11-03 (JC, 0.8.35: "when the status flips from Running fast, the
  * app flashes"): a card's status change shows once it has held this long, so
@@ -130,7 +130,7 @@ export function hasRoutineExecutionTask(
   );
 }
 
-const DONE = { label: "routineRun.card.done" as const, tone: "text-success" };
+const DONE = { label: "routineRun.card.done" as const };
 
 /** #4234: the reference's system event, measured from its installed bundle
  * (docs/design/ux-reference-grokbot-cursor.md 2.7): a 24px chip, pill
@@ -174,20 +174,28 @@ function useNow(active: boolean): number {
 }
 
 /** #3581: the form a run takes in the chat. The card: a finished result
- * with something to read (#4234: or a widget the run drew for the person),
- * and any result that needs the person; its words under the line. The row:
- * a run in progress, queued, waiting, failed, cancelled or with nothing to
- * report, and a card a newer result folded; its words in the line. */
-export function routineRunForm(message: Pick<Message, "routineRun" | "attention">, run: RoutineRunCardData, folded: boolean): "card" | "row" {
-  // #3695: a repeating routine's one summary card is the one thing its runs
-  // say in the chat: a card whatever the third run's status, so its count,
-  // since when and what is wrong are read whole.
-  if (isProblemStreakCard(run)) return "card";
+ * with something to read (#4234: or a widget the run drew for the person);
+ * its words under the line. #4161, the problem row: a failure, a streak's
+ * summary, a result with problems, a block, an open team goal or items for
+ * the person, one compact row the whole of which opens the run. The row: a
+ * run in progress, queued, waiting, cancelled or with nothing to report, and
+ * a result or failure a newer result folded; its words in the line. */
+export function routineRunForm(message: Pick<Message, "routineRun" | "attention">, run: RoutineRunCardData, folded: boolean): "card" | "row" | "problem" {
+  // #3695: a repeating routine's one summary is the one thing its runs say
+  // in the chat, whatever the third run's status, so its count, since when
+  // and what is wrong are read whole.
+  if (isProblemStreakCard(run)) return "problem";
   if (folded) return "row";
   const shown = { ...message, routineRun: run };
-  if (routineResultNeedsPerson(shown)) return "card";
+  if (isProblemRun(shown, run)) return "problem";
   if (!isRoutineResult(run)) return "row";
   return run.widgetId || routineRunBrief(run) || run.recovered || run.handedTo?.length ? "card" : "row";
+}
+
+/** #4161: a run whose row tells a problem or waits on the person. */
+function isProblemRun(message: Pick<Message, "routineRun" | "attention">, run: RoutineRunCardData): boolean {
+  if (!run.goalStatus && (run.status === "failed" || run.status === "missed")) return true;
+  return run.goalStatus === "failed" || routineResultNeedsPerson(message);
 }
 
 /** One routine run in the conversation it reports to. The run works in the
@@ -246,6 +254,7 @@ export function RoutineRunCard({
   onOpenThread?: (botId: string, threadId: string) => void;
 }) {
   const run = useSettledRoutineRun(message.routineRun);
+  const briefId = useId();
   const running = run?.status === "running" && !run.goalStatus;
   // A live run (queued, running, waiting on someone) keeps Stop beside Details (#2096).
   const live = Boolean(run && !run.goalStatus && (run.status === "queued" || run.status === "running" || run.status === "waiting"));
@@ -272,7 +281,10 @@ export function RoutineRunCard({
         : run.status === "completed"
           ? DONE
           : COPY[run.status];
-  const statusLabel = t(copy.label);
+  const pendingItems = Boolean(message.attention?.items.length && !message.attention.handledAt);
+  // #4161: a finished result whose items wait on the person is not "Done":
+  // its glyph is named for what it waits for
+  const statusLabel = t(copy === DONE && pendingItems ? "routines.goal.needs-input" : copy.label);
   const name = run.routineName?.trim() ?? "";
   // 2026-11-06: the run sits where it posted, so its time is when it posted;
   // the trigger's time (a late schedule, a queued webhook) is in the tooltip.
@@ -308,16 +320,15 @@ export function RoutineRunCard({
   const handedTo = run.handedTo ?? [];
   const asked = handedTo.length > 0 && <DelegationLine entries={handedTo} owner={bot} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />;
 
-  // #3479: a lasting problem is said once; its card counts the runs since.
-  // #3695: a repeating routine's one summary card counts its runs with
-  // problems, whatever they said, a failure or a block included.
-  const repeat = run.repeat && run.repeat.count > 1 && (withProblems || run.repeat.streak) ? (
-    <span data-routine-run-repeat title={routineDateTime(run.repeat.lastAt)}>
-      {" · "}{routineRepeatText(run.repeat)}
-    </span>
-  ) : null;
+  // #3479: a lasting problem is said once; its row counts the runs since.
+  // #3695: a repeating routine's one summary counts its runs with problems,
+  // whatever they said, a failure or a block included.
+  const lasting = run.repeat && run.repeat.count > 1 && (withProblems || run.repeat.streak) ? run.repeat : undefined;
 
-  const warn = withProblems || streakFailed || run.status === "blocked" || run.status === "failed" || run.status === "missed" || (run.goalStatus && run.goalStatus !== "completed") || Boolean(message.attention?.items.length && !message.attention.handledAt);
+  const warn = withProblems || streakFailed || run.status === "blocked" || run.status === "failed" || run.status === "missed" || (run.goalStatus && run.goalStatus !== "completed") || pendingItems;
+  // #4161: the routine rows' own state tokens, red for a failure, orange for
+  // problems and for what waits on the person
+  const tone = routineRunTone(run) === "text-danger" ? "text-danger" : "text-warning";
   // #4234, the reference's routine glyph (a clock), its state when it has one
   const glyph = run.status === "waiting"
     ? <TriangleAlert size={12} className="text-warning" />
@@ -326,12 +337,12 @@ export function RoutineRunCard({
       : run.status === "cancelled"
         ? <CircleSlash size={12} className="text-ink-tertiary" />
         : warn
-          ? <TriangleAlert size={12} className="text-warning" />
+          ? <TriangleAlert size={12} className={tone} />
           : <Clock size={12} />;
 
   // What the line says after the routine's name: the row's state words, or
   // nothing for a result whose words are under it.
-  const said = form === "card" ? "" : (() => {
+  const said = form !== "row" ? "" : (() => {
     if (running || (live && run.status !== "queued" && run.status !== "waiting")) return t("routines.status.running");
     if (run.status === "blocked" && !run.goalStatus) return routineRunBlockedLine(run);
     if (run.status === "failed" || run.status === "missed") {
@@ -346,6 +357,94 @@ export function RoutineRunCard({
     if (run.recovered && !brief) return t("routineRun.worksAgain", { since: routineDateTime(run.recovered.since) });
     return brief || statusLabel;
   })();
+
+  const pausedWords = pausedAfter ? routineAutoPausedText(pausedAfter) : "";
+  // #4234 review, #4204: an unanswered question is drawn once, in the pinned
+  // zone, with its options; the run says it in one quiet line. Answered, its
+  // items stay under the run as the record of what was asked.
+  const items = form !== "row" && message.attention?.items.length ? (
+    <div data-routine-run-attention={pendingItems ? "pinned" : "answered"} className="w-full">
+      <div className={cn("text-[12px] font-medium text-ink-secondary", !pendingItems && "mb-1.5")}>{t("needsYou.title", { bot: message.attention.botName })}</div>
+      {!pendingItems && <AttentionItems items={message.attention.items} />}
+    </div>
+  ) : null;
+
+  if (form === "problem") {
+    // #4161 (the owner, 2026-11-13, on the wide block with "Failed" alone on
+    // a line and "Details" apart: "It looks very bad"): one compact row in
+    // the reference's system event look (docs/design 2.7): the state glyph in
+    // the state's colour, named for the state, the routine's name, the time
+    // and a chevron on the line; the sentence under the name in a line or
+    // two; the count of a lasting problem and the pause under it, quiet. The
+    // state is said once, by the glyph; the whole row opens the run.
+    const sentence = streakFailed
+      ? brief
+      : run.status === "blocked" && !run.goalStatus
+        ? routineRunBlockedLine(run)
+        : !run.goalStatus && (run.status === "failed" || run.status === "missed")
+          ? compactDetail(routineResultText(routineRunError(run.error) ?? run.summary).text)
+          : brief;
+    const content = (
+      <>
+        <span className="flex h-4 min-w-0 max-w-full items-center gap-0.5">
+          <span role="img" aria-label={statusLabel} title={statusLabel} data-routine-run-status={run.goalStatus ?? run.status} className={cn("flex shrink-0", tone)}>
+            {tone === "text-danger" ? <CircleAlert aria-hidden="true" size={12} /> : <TriangleAlert aria-hidden="true" size={12} />}
+          </span>
+          {name && <span data-routine-run-name className="min-w-0 truncate" title={name}>{name}</span>}
+          <Separator shown={Boolean(name)} />
+          <span className="shrink-0 text-ink-tertiary">{time}</span>
+          {onOpen && <ChevronRight aria-hidden="true" size={12} className="ms-0.5 shrink-0 text-ink-tertiary rtl:rotate-180" />}
+        </span>
+        {sentence && (
+          <span id={briefId} data-routine-run-brief dir="auto" title={sentence} className="mt-0.5 line-clamp-2 ps-[14px] text-[13px] leading-[18px] text-ink">{sentence}</span>
+        )}
+        {(lasting || pausedWords) && (
+          <span className="ps-[14px] text-ink-tertiary">
+            {lasting && <span data-routine-run-repeat title={routineDateTime(lasting.lastAt)}>{routineRepeatText(lasting)}</span>}
+            {lasting && pausedWords && <span aria-hidden="true">{" · "}</span>}
+            {pausedWords && <span data-routine-auto-paused={pausedAfter ?? undefined}>{pausedWords}</span>}
+          </span>
+        )}
+      </>
+    );
+    // the reference's chip, grown to the row's lines: 4px above and below,
+    // 4px before the glyph and 6px after, the hover fill; as wide as its
+    // words, never the whole column
+    const rowClass = "flex w-fit min-w-0 max-w-full flex-col items-start rounded-xl py-1 ps-1 pe-1.5 text-start text-[12px] leading-4 text-ink-secondary";
+    return (
+      <section
+        data-routine-run-card
+        data-routine-run={run.runId}
+        data-routine-run-state={run.goalStatus ?? run.status}
+        data-routine-run-form={form}
+        aria-label={t("routineRun.ariaLabel", { name: run.routineName, status: statusLabel })}
+        className="flex w-full min-w-0 max-w-[600px] flex-col items-start text-start"
+      >
+        {onOpen ? (
+          <button
+            type="button"
+            data-routine-run-open
+            data-routine-problem-row
+            onClick={onOpen}
+            title={t("routineRun.details")}
+            aria-label={t("routineRun.stateLine", { status: statusLabel, reason: openLabel })}
+            aria-describedby={sentence ? briefId : undefined}
+            className={cn(rowClass, RUN_CHIP_INTERACTIVE)}
+          >
+            {content}
+          </button>
+        ) : (
+          <div data-routine-problem-row className={rowClass}>{content}</div>
+        )}
+        {/* Resume and Stop: their own buttons under the row, where its words
+            start, so the row keeps the width of its words at any width */}
+        {(resume || stop) && <div className={cn(RUN_INDENT, "-ms-1.5 flex items-center gap-0.5 text-[12px] leading-4")}>{resume}{stop}</div>}
+        {items && <div className={cn(RUN_INDENT, "mt-1 w-full")}>{items}</div>}
+        {asked && <div className={cn(RUN_INDENT, "mt-1 w-full")}>{asked}</div>}
+        {widget && <div data-routine-run-widget className="mt-2 w-full">{widget}</div>}
+      </section>
+    );
+  }
 
   // #4234 (the reference's system event): the routine's glyph and name are
   // one chip, and the chip is the run's Details: it opens the run's window
@@ -372,7 +471,6 @@ export function RoutineRunCard({
       <ChevronRight aria-hidden="true" size={12} className="rtl:rotate-180" />
     </button>
   );
-  const pausedWords = pausedAfter ? routineAutoPausedText(pausedAfter) : "";
   const when = elapsed
     ? <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>
     : !live ? time : null;
@@ -396,36 +494,12 @@ export function RoutineRunCard({
     </div>
   );
 
-  // one state line, only when there is something to say: a finished result
-  // without problems has no state word (the reference's active state)
-  const state = form !== "card" ? null : streakFailed
-    // #3695: the failure words are the brief; the state line says how
-    // many runs in a row and since when, like a result with problems
-    ? <span data-routine-run-status className={copy.tone}>{statusLabel}{repeat}</span>
-    : run.status === "blocked" && !run.goalStatus
-    ? <span data-routine-run-status className={copy.tone}>{routineRunBlockedLine(run)}</span>
-    : withProblems || (run.goalStatus && run.goalStatus !== "completed")
-      ? (
-        <span data-routine-run-status className={copy.tone}>
-          {statusLabel}
-          {/* #3479: a lasting problem is said once; its card counts the runs since */}
-          {withProblems && repeat}
-        </span>
-      )
-      : run.recovered
-        // #3479: the first success after it says once that it works again
-        ? <span data-routine-run-recovered className="text-success">{t("routineRun.worksAgain", { since: routineDateTime(run.recovered.since) })}</span>
-        : null;
-  // #4234 review, #4204: an unanswered question is drawn once, in the pinned
-  // zone, with its options; the run says it in one quiet line. Answered, its
-  // items stay under the run as the record of what was asked.
-  const pending = Boolean(message.attention && !message.attention.handledAt);
-  const items = form === "card" && message.attention?.items.length ? (
-    <div data-routine-run-attention={pending ? "pinned" : "answered"} className="w-full">
-      <div className={cn("text-[12px] font-medium text-ink-secondary", !pending && "mb-1.5")}>{t("needsYou.title", { bot: message.attention.botName })}</div>
-      {!pending && <AttentionItems items={message.attention.items} />}
-    </div>
-  ) : null;
+  // #4161: every problem and everything that waits on the person is the
+  // problem row above; a card's one state line is the first success after a
+  // lasting problem (#3479), said once
+  const state = form === "card" && run.recovered
+    ? <span data-routine-run-recovered className="text-success">{t("routineRun.worksAgain", { since: routineDateTime(run.recovered.since) })}</span>
+    : null;
 
   return (
     <section

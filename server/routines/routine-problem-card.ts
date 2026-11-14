@@ -29,12 +29,14 @@
  * reminder is its step 1, a good run retires it. The card in storage is read
  * only for a streak a previous version told. */
 import type { ApprovalWords } from "../../shared/approval-describe.ts";
+import { ROUTINE_PROBLEM_KEY_PREFIX } from "../../shared/fix-card-keys.ts";
 import { ASK_CHOICE_TOOL } from "../../shared/options-card.ts";
 import type { RoutineNeedsPerson } from "../../shared/routines.ts";
 import type { SignalLedger } from "../proactive/signal-ledger.ts";
 import { FIX_LADDER, dueStep, stepsToldBy } from "../proactive/escalation-ladder.ts";
 
-export const ROUTINE_PROBLEM_KEY_PREFIX = "routine-problem:";
+/** shared/fix-card-keys.ts: the one list of the server's card keys. */
+export { ROUTINE_PROBLEM_KEY_PREFIX };
 /** #4250: the ledger kind of a routine's fix card. */
 export const ROUTINE_PROBLEM_KIND = "routine-problem";
 

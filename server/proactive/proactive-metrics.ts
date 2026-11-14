@@ -234,8 +234,9 @@ export function signalAwaitsAnswer(entry: Pick<SignalEntry, "kind" | "ref">): bo
  * `run-deferred:<run>:...`, `needs-you:run:<run>:<card>`). */
 const RUN_KEY = /^(?:run-problem|run-access|run-deferred|needs-you:run):([^:@]+)/;
 /** The routine a routine's key names (`routine-problem:<routine>`,
- * `away-skips:<routine>:...`, `routine-suspended:<routine>:...`). */
-const ROUTINE_KEY = /^(?:routine-problem|away-skips|routine-suspended):([^:@]+)/;
+ * `away-skips:<routine>:...`, `routine-suspended:<routine>:...`,
+ * `routine-cheap-path:<routine>`). */
+const ROUTINE_KEY = /^(?:routine-problem|away-skips|routine-suspended|routine-cheap-path):([^:@]+)/;
 
 /** #4250 (S9): the routine a ledger entry belongs to: the one its key names,
  * else the run whose conversation it points at; "" when none. */

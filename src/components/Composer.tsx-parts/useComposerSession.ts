@@ -5,7 +5,7 @@ import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useBoundedLock } from "@/lib/composer-lock";
 import { pendingQuestions } from "@/lib/pending-question";
-import { usePublishPinnedHold, useServerWaitingItems } from "@/lib/pinned-waiting";
+import { usePublishPinnedHold, useServerWaitingItems, waitingStamp } from "@/lib/pinned-waiting";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { sendKeyLabel, useSendKey } from "@/lib/send-key";
@@ -21,11 +21,6 @@ import { useSendBlock } from "@/lib/send-state";
 /** What changes when a card is posted or settled in one of the
  * conversation's threads: its waiting state, unread marks and the activity
  * of its topics (#3542). */
-function waitingStamp(owner: { threadId: string; tasks?: ReadonlyArray<{ threadId: string; activity?: string | null; unread?: boolean }>; waitingOn?: { threadId?: string } | null } | undefined): string {
-  if (!owner) return "";
-  const tasks = (owner.tasks ?? []).map((task) => `${task.threadId}:${task.activity ?? ""}:${task.unread ? 1 : 0}`).join(",");
-  return `${owner.threadId}|${owner.waitingOn?.threadId ?? ""}|${tasks}`;
-}
 
 export function useComposerSession({
   profile,

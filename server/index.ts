@@ -788,6 +788,7 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
 import { RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
+import { RoutineCheapPathCards, firstToolStep } from "./routines/routine-cheap-path.ts";
 import { cardSignalEnding, createTellPerson, settleCardSignals, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
 import { answeredCardText, answerHistory, answerLearningNote, answersOnKind, instructionsWithAlwaysLine, learnFromAnsweredCard, type AnswerScope } from "./proactive/answer-learning.ts";
 import { clipReadable } from "../shared/routine-result.ts";
@@ -7890,7 +7891,11 @@ const routineNeedsWatch = new RoutineNeedsWatch({
   },
   later: (pass) => { setTimeout(pass, 250).unref?.(); },
   // #4233: each lasting problem's keyed fix card in step with its need
-  each: (all) => routineProblemCards.syncAll(all),
+  each: (all) => {
+    routineProblemCards.syncAll(all);
+    // #4250 (S6): the cheaper path, proposed once
+    routineCheapPathCards.syncAll(all);
+  },
 });
 const principalMayRunRoutine = createPrincipalMayRunRoutine(getLeafHost);
 const routineAdmission = createRoutineAdmission(getLeafHost);
@@ -16833,7 +16838,7 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
   words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
   ask: (routine, input) => {
     const place = routineProblemPlace(routine, !("retire" in input));
-    if (!place) return;
+    if (!place) return false;
     const { bot, threadId, group } = place;
     const posted = createAgentCard({
       store,
@@ -16873,6 +16878,39 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
 function routineProblemPerson(routine: Routine): string {
   return routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }) ?? "";
 }
+
+/** #4250 (S6): a routine that keeps ending quiet after the same read is
+ * offered, once, to make that read its pre-check or its product trigger
+ * (routines/routine-cheap-path.ts), on a quiet keyed card in the place its
+ * fix card would go. */
+const routineCheapPathCards = new RoutineCheapPathCards<Routine>({
+  runs: (routine) => routines?.runsOfRoutineAsStored(routine.id) ?? [],
+  firstStep: (run) => (run.threadId ? firstToolStep(run, store.messagesFor(run.threadId)) : null),
+  words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
+  productTrigger: () => IDENTITY.kind === "perspicax",
+  ask: (routine, input) => {
+    const place = routineProblemPlace(routine, !("retire" in input));
+    if (!place) return false;
+    const { bot, threadId, group } = place;
+    const posted = createAgentCard({
+      store,
+      bot,
+      threadId,
+      input: input as unknown as Record<string, unknown>,
+      ...(group ? { room: { people: roomPeopleOf(group), name: group.name, fromRun: true }, notifyAddressee: notifyRoomAskAddressee } : {}),
+      personLanguage: languageOfPerson(routine.runAs?.principalId),
+      // a saving to take or leave: shown and waiting, never rung
+      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, { ...choice, ...(group ? { askerBotId: bot.id } : {}), quiet: true as const }),
+      askKeys: askKeysFor(bot, threadId, threadId),
+    });
+    if (!posted.ok) console.warn(`routine ${routine.id} cheap path card: ${posted.error}`);
+    return posted.ok;
+  },
+  pending: (routine, key) => Boolean(askKeyIndex.find(key, routineProblemCardIn(routineProblemPlace(routine, false)))),
+  now: () => Date.now(),
+  signals: signalLedger,
+  person: (routine) => routineProblemPerson(routine),
+});
 
 /** The bot's ask_choice as a question request: the same path as an engine's
  * own question tool (request.opened), so the card carries a requestId and

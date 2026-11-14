@@ -222,6 +222,7 @@ describe("#4250 (S9): usefulness from the signal ledger and the routine runs", (
     const runs = { byId, byThread };
     expect(signalRoutineId({ key: "routine-problem:rt-x" }, runs)).toBe("rt-x");
     expect(signalRoutineId({ key: "away-skips:rt-y:123" }, runs)).toBe("rt-y");
+    expect(signalRoutineId({ key: "routine-cheap-path:rt-z" }, runs)).toBe("rt-z");
     expect(signalRoutineId({ key: "routine-suspended:rt-z:person_out:5" }, runs)).toBe("rt-z");
     expect(signalRoutineId({ key: signalKeys.runProblem("run-1", "failed") }, runs)).toBe("rt-a");
     expect(signalRoutineId({ key: signalKeys.runNeedsYou("run-1", "msg-2") }, runs)).toBe("rt-a");

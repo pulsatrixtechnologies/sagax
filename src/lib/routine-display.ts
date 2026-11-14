@@ -7,6 +7,7 @@ import { ROUTINE_AUTO_PAUSE_CHOICES } from "../../shared/routine-auto-pause";
 import { readableRoutineProblems } from "../../shared/routine-problems";
 import { reportBrief, routineResultParts } from "../../shared/routine-result";
 import type { RoutineRunCardData } from "../../shared/routine-run";
+import type { RoutineNeedsPerson } from "../../shared/routines";
 
 /** A completed run's problems as a person reads them: a teammate's quoted
  * last message as plain text, rows stored before 2026-11-03 included. */
@@ -307,4 +308,17 @@ export function routineNextText(routine: Routine, now = Date.now()): string {
   if (routine.schedule.type === "event") return t("routineRun.onEvent");
   if (!routine.enabled) return routineScheduleState(routine);
   return t("routines.noNextRun");
+}
+
+/** The sentence that needs the person (#4098): the bot's own words, else
+ * the app's words for that kind. The Outcomes tab and the bot panel's
+ * Suggestions card say it the same way. */
+export function needSentence(need: RoutineNeedsPerson): string {
+  if (need.text.trim()) return need.text.trim();
+  switch (need.kind) {
+    case "paused": return routineAutoPausedText(need.failures ?? 1);
+    case "problem": return t("outcomes.needs.problem");
+    case "goal": return need.goal === "stalled" ? t("outcomes.needs.goalStalled", { count: need.checks ?? 3 }) : t("outcomes.needs.goalExpired");
+    default: return t("outcomes.needs.question");
+  }
 }

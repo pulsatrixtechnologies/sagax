@@ -369,6 +369,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                   <SuggestionsSection
                     bot={bot}
                     routineCount={derived.botRoutines.length}
+                    routines={derived.botRoutines}
                     slackUrl={slackUrl}
                     onAddToMeeting={() => dispatch({ type: "openRoutine", botId: bot.id })}
                   />

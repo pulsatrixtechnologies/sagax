@@ -274,6 +274,15 @@ export function usePublishPinnedHold(items: readonly PinnedItem[]): void {
   useLayoutEffect(() => () => hold?.set(NOTHING_HELD), [hold]);
 }
 
+/** What makes a bot's or a room's waiting list worth reading again: its
+ * topics, their activity and what it waits on (useServerWaitingItems'
+ * `stamp`; the composer's pinned row and the bot panel's Suggestions). */
+export function waitingStamp(owner: { threadId: string; tasks?: ReadonlyArray<{ threadId: string; activity?: string | null; unread?: boolean }>; waitingOn?: { threadId?: string } | null } | undefined): string {
+  if (!owner) return "";
+  const tasks = (owner.tasks ?? []).map((task) => `${task.threadId}:${task.activity ?? ""}:${task.unread ? 1 : 0}`).join(",");
+  return `${owner.threadId}|${owner.waitingOn?.threadId ?? ""}|${tasks}`;
+}
+
 /** The server's items that wait on the person in one bot's conversations
  * (`botId`), or in a room's threads (`threads`, no bot). `stamp` changes
  * when the bot's waiting state or topics change: the list is read again. */

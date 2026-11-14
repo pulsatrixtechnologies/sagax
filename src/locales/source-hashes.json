@@ -18682,7 +18682,21 @@
       "settings.receive.group.reviews": "84cb7871b741c32eb14f0a65e5e7e4db53ffae1a952ea8e2f1c2c48b1d134a9b",
       "settings.receive.endOfDay.switch": "265c568912ab40799d0611fe2963cabb7efb0055192f7843a2f01d5c78f071f9",
       "settings.receive.weekly.switch": "4e5ec7704616e5d861866b4f753bbf40fa04da27ef6c9c08e79e3b9ede435c44",
-      "outbound.call.endCallFailed": "b517663397f0d4ac7a2f887e7392241157cc7e77ff498850d71e9ffb33a435e3"
+      "outbound.call.endCallFailed": "b517663397f0d4ac7a2f887e7392241157cc7e77ff498850d71e9ffb33a435e3",
+      "routine.cheapPath.title": "0dc7e445e712d1532436b1a51ed890ce1ffe1e328134a396fb6fc061bedd6e07",
+      "routine.cheapPath.question": "33f9bace21f0397b6e9ed75da8ec5b5a34790b1db59bebbb81ea291822eec5d4",
+      "routine.cheapPath.precheckLine": "205dd74d777cd650511d2484bcc67f96ddc38150f2fee74d9612f9e6dee6134d",
+      "routine.cheapPath.productLine": "5e75dba75afbbbd468188a1bee2bc866bd975fef87afd38fe549a8f1979f1f20",
+      "routine.cheapPath.precheck": "6565c2a7acdde9b8a89982032fe682abcdea3a26f54765d760a680317ad69c43",
+      "routine.cheapPath.precheckDetail": "b38cbd136a385f2de63d1ff7c1c4ec59fff7f900467875bf63550ade1ca30421",
+      "routine.cheapPath.product": "563e280620853e03c47d48ae5c347a8a8c2e845d59ea5cbcbf9c68eb88860749",
+      "routine.cheapPath.productDetail": "a14c93fe54831d42c88f2106a7aa075b2588cff15cf190af18475ca31bf2e243",
+      "routine.cheapPath.keep": "5c5e8809cf0a6f04ade70a88f9c2d5fc1a6fc7c7831aea30045a8b289b9f1c42",
+      "routine.cheapPath.keepDetail": "f4eb9bd479be79e4ca788ceb359b6f9ef332184df0ae0b31e571b41829a24ef7",
+      "botPanel.suggestions.needs.title": "09b4d65100ba8a8834f38918f809ff1993efaa5d53cbcece092be4e594b64801",
+      "botPanel.suggestions.fix.subtitle": "2189884255430d3a991f7c0216ddae0d6bed29b4972406b1f2b449edb88a5f89",
+      "botPanel.suggestions.saving.subtitle": "1a189b1200f30d2baf5582cca596252fbcfd76c3db90ce1b407bacd3f3ab634e",
+      "routine.cheapPath.readLine": "3ec9092420c63f88f8b20da7d3fb26631611ac913e109ddf26ba1e04035f38dd"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

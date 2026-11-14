@@ -14,7 +14,7 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { scheduleLabelCompact, shortDate } from "@/lib/schedule-label";
-import { routineAutoPausedText, routineRunAgo, routineRunLabel } from "@/lib/routine-display";
+import { needSentence, routineRunAgo, routineRunLabel } from "@/lib/routine-display";
 import { outcomesOf, type Outcome, type OutcomeNeed, type OutcomeRunLine } from "../../../../shared/outcomes";
 import { ASK_CHIP, ASK_CHIP_IDLE, AskCard } from "../../AskCard";
 import { ShowMoreFold } from "../../ShowMoreFold";
@@ -30,18 +30,6 @@ export const OUTCOMES_SHOWN = 5;
 /** The bot's outcomes from the routines and runs this viewer has. */
 export function useOutcomes(routines: readonly Routine[], runs: readonly RoutineRun[]): Outcome[] {
   return useMemo(() => outcomesOf(routines, runs), [routines, runs]);
-}
-
-/** The sentence that needs the person: the bot's own words, else the
- * app's words for that kind. */
-export function needSentence(need: OutcomeNeed): string {
-  if (need.text.trim()) return need.text.trim();
-  switch (need.kind) {
-    case "paused": return routineAutoPausedText(need.failures ?? 1);
-    case "problem": return t("outcomes.needs.problem");
-    case "goal": return need.goal === "stalled" ? t("outcomes.needs.goalStalled", { count: need.checks ?? 3 }) : t("outcomes.needs.goalExpired");
-    default: return t("outcomes.needs.question");
-  }
 }
 
 const PILL = "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 text-[11px] font-medium leading-4 [&>svg]:size-3";

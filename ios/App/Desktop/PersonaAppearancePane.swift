@@ -155,6 +155,15 @@ enum PersonaWardrobe {
         PersonaMascotWords.shape[shape.rawValue].map(AppStrings.localized) ?? shape.rawValue.capitalized
     }
 
+    /// A person's own shape by its name, else "Your own shape" (`ownShapeName`).
+    static func ownShapeName(_ def: MascotAvatarDef) -> String {
+        let name: String? = switch def {
+        case let .own(own): own.name
+        case let .engine(engine): engine.name
+        }
+        return name.flatMap { $0.isEmpty ? nil : $0 } ?? AppStrings.localized("appearance.shape.own")
+    }
+
     /// The bot page's Appearance row value (`appearanceRowValue`, #4162):
     /// Picture when a picture replaces the mascot, else the mascot's name
     /// (the shape's for Shapes).
@@ -171,7 +180,7 @@ enum PersonaWardrobe {
 /// The desktop's label keys for the skins and the shapes (`MascotLookEditor.tsx`).
 enum PersonaMascotWords {
     // generated from MascotLookEditor.tsx's label maps (id: desktop key)
-    static let shape: [String: String] = ["circle": "mascot.shape.circle", "bean": "mascot.shape.pebble", "squircle": "mascot.shape.squircle", "pill": "mascot.shape.capsule", "pick": "mascot.shape.triangle", "hexagon": "mascot.shape.hexagon", "cloud": "mascot.shape.cloud", "drop": "mascot.shape.droplet", "pumpkin": "mascot.shape.pumpkin", "egg": "mascot.shape.egg", "gem": "mascot.shape.gem", "wedge": "mascot.shape.wedge", "diamond": "mascot.shape.diamond", "star": "mascot.shape.star", "clover": "mascot.shape.clover", "flower": "mascot.shape.flower", "blossom": "mascot.shape.blossom", "cat": "mascot.shape.cat", "ghost": "mascot.shape.ghost", "jellyfish": "mascot.shape.jellyfish", "axolotl": "mascot.shape.axolotl", "puff": "mascot.shape.puff", "pin": "mascot.shape.pin", "marker": "mascot.shape.marker", "sprite": "mascot.shape.sprite", "flask": "mascot.shape.flask", "tube": "mascot.shape.tube", "potion": "mascot.shape.potion", "chomp": "mascot.shape.chomp", "nibble": "mascot.shape.nibble", "shield": "mascot.shape.shield", "bubble": "mascot.shape.bubble", "pad": "mascot.shape.pad", "cup": "mascot.shape.cup", "bulb": "mascot.shape.bulb", "say": "mascot.shape.say", "sprout": "mascot.shape.sprout", "tin": "mascot.shape.tin", "tome": "mascot.shape.tome", "ship": "mascot.shape.ship"]
+    static let shape: [String: String] = ["circle": "mascot.shape.circle", "bean": "mascot.shape.pebble", "squircle": "mascot.shape.squircle", "pill": "mascot.shape.capsule", "pick": "mascot.shape.triangle", "hexagon": "mascot.shape.hexagon", "cloud": "mascot.shape.cloud", "drop": "mascot.shape.droplet", "pumpkin": "mascot.shape.pumpkin", "egg": "mascot.shape.egg", "gem": "mascot.shape.gem", "wedge": "mascot.shape.wedge", "diamond": "mascot.shape.diamond", "star": "mascot.shape.star", "clover": "mascot.shape.clover", "flower": "mascot.shape.flower", "blossom": "mascot.shape.blossom", "cat": "mascot.shape.cat", "ghost": "mascot.shape.ghost", "jellyfish": "mascot.shape.jellyfish", "axolotl": "mascot.shape.axolotl", "puff": "mascot.shape.puff", "pin": "mascot.shape.pin", "marker": "mascot.shape.marker", "sprite": "mascot.shape.sprite", "flask": "mascot.shape.flask", "tube": "mascot.shape.tube", "potion": "mascot.shape.potion", "chomp": "mascot.shape.chomp", "nibble": "mascot.shape.nibble", "shield": "mascot.shape.shield", "bubble": "mascot.shape.bubble", "pad": "mascot.shape.pad", "cup": "mascot.shape.cup", "bulb": "mascot.shape.bulb", "say": "mascot.shape.say", "sprout": "mascot.shape.sprout", "tin": "mascot.shape.tin", "tome": "mascot.shape.tome", "ship": "mascot.shape.ship", "brain": "mascot.shape.brain", "bull": "mascot.shape.bull", "bunny": "mascot.shape.bunny", "camera": "mascot.shape.camera", "magnifier": "mascot.shape.magnifier", "paint-brush": "mascot.shape.paint-brush", "palette": "mascot.shape.palette", "witch-hat": "mascot.shape.witch-hat", "barbell": "mascot.shape.barbell", "watering-can": "mascot.shape.watering-can"]
     static let shapeSkin: [String: String] = ["plain": "mascot.shapeSkin.clay", "pastel": "mascot.shapeSkin.pastel", "glossy": "mascot.shapeSkin.glossy", "night": "mascot.shapeSkin.night", "outline": "mascot.shapeSkin.outline", "gold": "mascot.shapeSkin.gold", "neon": "mascot.shapeSkin.neon", "chrome": "mascot.shapeSkin.chrome", "crystal": "mascot.shapeSkin.crystal", "circuit": "mascot.shapeSkin.circuit", "holo": "mascot.shapeSkin.holo", "molten": "mascot.shapeSkin.molten", "galaxy": "mascot.shapeSkin.galaxy"]
     static let trombi: [String: String] = ["classic": "mascot.trombiSkin.classic", "retro98": "mascot.trombiSkin.retro98", "gold": "mascot.trombiSkin.gold", "neon": "mascot.trombiSkin.neon", "chrome": "mascot.trombiSkin.chrome", "glitch": "mascot.trombiSkin.glitch", "holo": "mascot.trombiSkin.holo", "molten": "mascot.trombiSkin.molten"]
     static let bunbu: [String: String] = ["plain": "mascot.bunbuSkin.plain", "pastel": "mascot.bunbuSkin.pastel", "night": "mascot.bunbuSkin.night", "plush": "mascot.bunbuSkin.plush", "velvet": "mascot.bunbuSkin.velvet", "gold": "mascot.bunbuSkin.gold", "neon": "mascot.bunbuSkin.neon", "chrome": "mascot.bunbuSkin.chrome", "crystal": "mascot.bunbuSkin.crystal", "holo": "mascot.bunbuSkin.holo", "galaxy": "mascot.bunbuSkin.galaxy", "molten": "mascot.bunbuSkin.molten"]
@@ -606,7 +615,7 @@ struct PersonaAppearancePane: View {
     private func tabValue(_ tab: PersonaWardrobe.Tab) -> some View {
         switch tab {
         case .mascot: Text(verbatim: PersonaWardrobe.characterName(current))
-        case .shape: Text(verbatim: PersonaWardrobe.shapeName(draft.complete.shape))
+        case .shape: Text(verbatim: ownShape.map(PersonaWardrobe.ownShapeName) ?? PersonaWardrobe.shapeName(draft.complete.shape))
         case .color:
             HStack(spacing: 4) {
                 Circle().fill(tint).frame(width: 8, height: 8).overlay(Circle().strokeBorder(.white.opacity(0.4), lineWidth: 1))
@@ -759,17 +768,46 @@ struct PersonaAppearancePane: View {
 
     // MARK: Shape tab
 
+    /// A person's own shape (a pasted definition, or an earlier drawing that
+    /// is no catalog preset) is the chosen one, by its name (`ownShape` in
+    /// MascotLookEditor.tsx).
+    private var ownShape: MascotAvatarDef? {
+        guard let def = draft.complete.avatarDef, ShapeEngineStill.bakedShape(draft.complete.shape, avatarDef: def) == nil else { return nil }
+        return def
+    }
+
     private var shapeGrid: some View {
         let isLocked = locked(current)
+        let own = ownShape
         return PersonaGrid(minimum: 76, spacing: 8) {
+            if let own {
+                // the person's own shape first, chosen; picking a catalog body replaces it
+                let name = PersonaWardrobe.ownShapeName(own)
+                VStack(spacing: 4) {
+                    MascotCharacterView(look: shapeLook(draft.complete.shape, keeping: own), color: draft.color, skin: .none, size: 40, hd: false)
+                        .frame(width: 40, height: 40)
+                    Text(verbatim: name)
+                        .font(theme.font(11))
+                        .foregroundStyle(theme.inkSecondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, minHeight: 78)
+                .background(theme.inset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.accentBorder, lineWidth: 2))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("appearance.shape.ownNamed"), name)))
+                .accessibilityAddTraits([.isButton, .isSelected])
+            }
             ForEach(MascotShape.allCases, id: \.self) { shape in
-                let on = draft.complete.shape == shape
+                let on = own == nil && draft.complete.shape == shape
                 let look = shapeLook(shape)
                 Button {
                     var next = draft
                     var complete = next.complete
                     if let color = MascotShape.pickedColor(shape, from: complete.shape, skin: complete.shapeSkin) { next.color = color }
                     complete.shape = shape
+                    // a catalog body replaces the person's own shape, as on the desktop (`pickShape`)
+                    complete.avatarDef = nil
                     next.look = complete.stored
                     save(next)
                 } label: {
@@ -902,10 +940,12 @@ struct PersonaAppearancePane: View {
 
     // MARK: Pieces
 
-    private func shapeLook(_ shape: MascotShape) -> CompleteMascotLook {
+    /// A shape's tile: the catalog body, or the person's own shape when kept.
+    private func shapeLook(_ shape: MascotShape, keeping own: MascotAvatarDef? = nil) -> CompleteMascotLook {
         var look = draft.complete
         look.character = .shape
         look.shape = shape
+        look.avatarDef = own
         return look
     }
 

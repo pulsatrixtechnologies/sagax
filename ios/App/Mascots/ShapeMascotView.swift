@@ -1,21 +1,22 @@
-// The mascot shapes: a port of `src/components/ShapeMascot.tsx`. One body
-// in every shape of the set, drawn in volume as on the desktop since #786 (one
-// drawing since 2026-10-28): a few slices of one outline turned with the pose,
-// one flat colour, two opaque eyes in a solid ink on the face, under the face's
-// own matrix (capsules at rest, ovals while busy, arches when pleased), every
-// shape on the same ground. The Outline skin stays flat on purpose, eyes cut
-// through it.
-//
-// What moves it is the desktop's own code, ported in CompanionCore with its
-// numbers generated from the desktop's modules: `ShapeEngine` (gaze, blinks,
-// breath, changes of shape, face and colour, the fourteen moves),
-// `ShapeMotion` (the pose: settle and glance at rest, the busy loops, a
-// mood change's slide, a tap's squash and hop) and `ShapeVolume` (slices,
-// bend, eyes, inks). The live loop runs only for an animated drawing of
-// 44 pt or more (`fxDetail`), at 30 frames a second at rest and the
-// display's rate during a move; smaller ones, lists and Reduce Motion draw
-// the still pose and run no timer at all. On a large layout with a pointer,
-// the body and the face turn toward it while it is over the mascot.
+// The mascot shapes, drawn by the open-bot-avatar engine (#4145, #4159; MIT,
+// see NOTICE): a port of `src/components/ShapeMascot.tsx`. Every shape is the
+// engine's still of the look's definition, the very frame the desktop draws:
+// a catalog shape (ours and the engine's gallery) reads its baked still
+// (`ShapeEngineStill`, from src/components/shape-stills); a person's own
+// shape (a pasted engine definition, or a drawing in the older portable
+// format that is no object preset) has none, so the engine infers it once at
+// run time, as the desktop's `runtimeStill` does (`ShapeEngineBake` runs that
+// code in JavaScriptCore). The still is drawn with its cross-sections in the
+// body's colour, the eyes in the skin's ink, the mood from the bot's state
+// (`engineMood`: at work it thinks, done it is happy, else at rest). A skin
+// paints the body's face (its largest cross-section, under its projection)
+// with its fill, glow, shine, edge and layers, the eyes over it; the Outline
+// skin is the engine's flat body (depth 0). The phone draws the still at
+// every size (the engine's live loop is not ported); the fourteen Shapes
+// moves play over it at 44 pt and up as on the desktop (`ShapeEngine` gives
+// the move's timeline: the body's motion, the eyes closing or opening, its
+// turn into the egg, the hexagon or the triangle, and what it adds beside the
+// body), never under Reduce Motion.
 import Combine
 import CompanionCore
 import SwiftUI
@@ -27,10 +28,8 @@ struct ShapeMascotView: View {
     let color: String
     var size: CGFloat = 44
     var mood: ShapeMood = .idle
-    /// A face of its own, over the mood's.
-    var expression: ShapeExpression?
-    /// Path-based body (v2.1); object shapes also resolve presets when nil.
-    var avatarDef: ShapeAvatarDef? = nil
+    /// A person's own shape (`mascotLook.avatarDef`): a pasted engine definition or the older portable format.
+    var avatarDef: MascotAvatarDef? = nil
     /// Off draws a still frame (thumbnails, lists).
     var animated = false
     /// Plays the Shapes moves asked for (`OwlMascotHandle.shape(_:)`).
@@ -38,163 +37,242 @@ struct ShapeMascotView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
-    @State private var player = ShapePlayer()
-    /// A move plays: the loop runs at the display's rate until it ends.
+    @State private var player = ShapeMovePlayer()
+    /// A move plays: the drawing follows the display's rate until it ends.
     @State private var moving = false
 
-    /// `FX_FULL_MIN`: full detail (the live loop) from this size up.
+    /// From this size up a move plays and a tap winks (`FX_FULL_MIN`).
     static let liveMinSize: CGFloat = 44
     /// The canvas is this much larger than the box: rings and ribbons reach past the body.
     static let overflow: CGFloat = 1.7
 
+    /// Bumped when a person's own shape was baked off the main thread: draw it now.
+    @State private var baked = 0
+
     var body: some View {
-        let active = animated && !reduceMotion && scenePhase == .active
-        let live = active && size >= Self.liveMinSize
-        // a flat skin bounces while working (shape-mascot.css), even small
-        let bouncing = active && skin == .outline && mood == .working
-        let face = expression ?? ShapeEngineData.moodExpression[mood] ?? .neutral
-        let resolvedDef = ShapeAvatarPresets.avatarDef(for: shape, avatarDef: avatarDef)
-        let state = ShapeEngineState(shape: shape, expression: face, color: ShapeArt.hex(color), avatarDef: resolvedDef)
-        TimelineView(.animation(minimumInterval: moving ? nil : ShapeVolumeData.idleFrame, paused: !(live || bouncing))) { timeline in
+        let flat = skin == .outline
+        if let def = avatarDef, ShapeEngineStill.bakedShape(shape, avatarDef: def) == nil,
+           !ShapeEngineBake.isReady(shape, avatarDef: def, flat: flat) {
+            // a person's own shape: the engine infers it once, off the main thread
+            Color.clear.frame(width: size, height: size)
+                .task(id: OwnBake(shape: shape, flat: flat, avatarDef: def)) {
+                    let shape = shape
+                    await Task.detached(priority: .userInitiated) { _ = ShapeEngineBake.still(shape, avatarDef: def, flat: flat) }.value
+                    baked += 1
+                }
+        } else if let still = ShapeEngineStill.of(shape, avatarDef: avatarDef, flat: flat) {
+            engineBody(still)
+        } else {
+            Color.clear.frame(width: size, height: size)
+        }
+    }
+
+    private struct OwnBake: Equatable {
+        var shape: MascotShape
+        var flat: Bool
+        var avatarDef: MascotAvatarDef
+    }
+
+    private func engineBody(_ still: ShapeEngineStill) -> some View {
+        let live = animated && !reduceMotion && scenePhase == .active && size >= Self.liveMinSize
+        let hex = ShapeArt.hex(color)
+        let flat = skin == .outline
+        // the skin's larger look (its aura, particles) from 44 pt up when animated (`fxDetail`)
+        let full = animated && size >= Self.liveMinSize
+        return TimelineView(.animation(paused: !moving)) { timeline in
             Canvas { context, canvas in
                 let now = timeline.date.timeIntervalSinceReferenceDate
-                let drawn = live ? player.frame(state, mood: mood, now: now)
-                    : (ShapeFrames.still(shape, face, color: state.color, avatarDef: resolvedDef), ShapeVolume.grounded(ShapeVolume.rest, shape))
-                ShapeRenderer.draw(in: &context, canvas: canvas, box: size, frame: drawn.0, pose: drawn.1, shape: shape, skin: skin, hex: state.color,
-                                   eyes: ShapeVolume.eyeStyle(mood), bounce: bouncing ? now : nil)
+                let move = moving ? player.frame(now) : nil
+                let drawn = move?.morph.flatMap { ShapeEngineStill.of($0, flat: flat) } ?? still
+                ShapeEngineRenderer.draw(in: &context, canvas: canvas, box: size, still: drawn, mood: mood.engine, skin: skin, hex: hex, full: full, move: move)
             }
             .frame(width: size * Self.overflow, height: size * Self.overflow)
         }
         .frame(width: size, height: size)
-        .onContinuousHover { phase in
-            guard live else { return }
-            switch phase {
-            case let .active(at):
-                // -1...1 at about three box widths away (`pointerAround`)
-                let reach = max(240, size * 3)
-                player.pointer(CGPoint(x: (at.x - size / 2) / reach, y: (at.y - size / 2) / reach))
-            case .ended:
-                player.pointer(nil)
-            }
-        }
-        // a tap: a wink and a squash-and-hop, without taking the tap from the row or button around it
+        // a tap: a wink, without taking the tap from the row or button around it
         .simultaneousGesture(TapGesture().onEnded {
-            guard live else { return }
-            let now = Date().timeIntervalSinceReferenceDate
-            player.poke(now: now)
-            run(ShapeMoves.length(.wink))
+            guard live, !moving else { return }
+            play(.wink)
         }, including: live ? .all : .subviews)
         .onReceive(handle?.$shapeMove.eraseToAnyPublisher() ?? Empty().eraseToAnyPublisher()) { request in
-            guard live, let request else { return }
-            if player.play(request, now: Date().timeIntervalSinceReferenceDate) { run(ShapeMoves.length(request.move)) }
+            guard live, let request, player.take(request.key) else { return }
+            play(request.move)
         }
         .accessibilityHidden(true)
     }
 
-    /// The display's rate for `seconds`, then back to the resting pace.
-    private func run(_ seconds: Double) {
+    /// Plays a move over the still, at the display's rate, then rests again.
+    private func play(_ move: ShapeMove) {
+        let now = Date().timeIntervalSinceReferenceDate
+        player.play(move, shape: shape, color: ShapeArt.hex(color), now: now)
         moving = true
-        let until = Date().addingTimeInterval(seconds + 0.1)
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.1) {
+        let seconds = ShapeMoves.length(move) + 0.12
+        let until = Date().addingTimeInterval(seconds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
             if Date() >= until { moving = false }
         }
     }
 }
 
-/// Holds the live engine and motion across redraws (`engine.current`,
-/// `motion.current`), made on the first live frame; a still drawing never
-/// asks it for a frame.
-final class ShapePlayer {
+/// The move playing over an engine still: its frame at a moment, how open
+/// each eye is against the resting face, and the body it has turned into.
+struct ShapeMoveFrame {
+    let frame: ShapeFrame
+    /// Left eye then right (the one further left on screen), 1 at rest (`moveEyeOpen`).
+    let open: (Double, Double)
+    /// The shape the move has turned the body into, once more than half way (`MOVE_BODY`).
+    let morph: MascotShape?
+}
+
+/// Holds a move's own timeline (`ShapeEngine`) while it plays.
+final class ShapeMovePlayer {
     private var engine: ShapeEngine?
-    private var motion: ShapeMotion?
-    private var lastMove = 0
-    private var pendingPointer: CGPoint??
-    /// A seed of its own, so two mascots on one screen never move in step.
-    private let seed = Double.random(in: 0..<1000)
+    private var rest: ShapeFrame?
+    private var move: ShapeMove?
+    private var lastKey = 0
 
-    func frame(_ state: ShapeEngineState, mood: ShapeMood, now: Double) -> (ShapeFrame, ShapePose) {
-        let run: ShapeEngine
-        if let engine {
-            if engine.state != state { engine.set(state, now: now) }
-            run = engine
-        } else {
-            run = ShapeEngine(state, now: now, seed: seed)
-            engine = run
-        }
-        let sway: ShapeMotion
-        if let motion {
-            sway = motion
-        } else {
-            sway = ShapeMotion(mood.motion, seed: seed, start: now)
-            motion = sway
-        }
-        if let pointer = pendingPointer {
-            run.pointer(pointer)
-            sway.pointer(pointer)
-            pendingPointer = nil
-        }
-        sway.setMood(mood.motion, now: now)
-        let swayed = sway.pose(now)
-        // the sway's lean moves the gaze; the outline keeps its resting turn (ShapeVolume.upright)
-        run.lean(yaw: swayed.yaw - ShapeVolume.rest.yaw, pitch: swayed.pitch - ShapeVolume.rest.pitch)
-        let frame = run.frame(now)
-        let pose = ShapeVolume.grounded(ShapeVolume.upright(swayed), state.shape)
-        return (frame, pose)
+    /// `MOVE_BODY`: the body a move turns into for a while.
+    static let bodies: [ShapeMove: MascotShape] = [.egg: .egg, .hexagon: .hexagon, .play: .triangle, .orbit: .triangle]
+
+    /// Whether a requested move is new (each request plays once).
+    func take(_ key: Int) -> Bool {
+        guard key != lastKey else { return false }
+        lastKey = key
+        return true
     }
 
-    /// Plays a requested move once; false when it was already played.
-    @discardableResult
-    func play(_ request: ShapeMoveRequest, now: Double) -> Bool {
-        guard request.key != lastMove else { return false }
-        lastMove = request.key
-        engine?.play(request.move, now: now)
-        return engine != nil
+    func play(_ move: ShapeMove, shape: MascotShape, color: String, now: Double) {
+        // the gallery's shapes have no body of their own in the moves' set: they move as the circle does
+        let state = ShapeEngineState(shape: shape.isBody ? shape : .circle, expression: .neutral, color: color)
+        let engine = ShapeEngine(state, now: now, seed: 7)
+        engine.play(move, now: now)
+        self.engine = engine
+        self.move = move
+        rest = ShapeFrames.still(state.shape, .neutral, color: color)
     }
 
-    func poke(now: Double) {
-        engine?.play(.wink, now: now)
-        motion?.pokeAt(now)
-    }
-
-    func pointer(_ at: CGPoint?) {
-        if let engine {
-            engine.pointer(at)
-            motion?.pointer(at)
-        } else {
-            pendingPointer = .some(at)
+    func frame(_ now: Double) -> ShapeMoveFrame? {
+        guard let engine, let move, let rest, engine.playing(now) else { return nil }
+        let frame = engine.frame(now)
+        let eyes = frame.eyeShapes.sorted { $0.x < $1.x }
+        let base = rest.eyeShapes.sorted { $0.x < $1.x }
+        func open(_ i: Int) -> Double {
+            guard eyes.indices.contains(i), base.indices.contains(i), base[i].h > 0 else { return 1 }
+            return min(1.5, max(0.08, eyes[i].h / base[i].h))
         }
+        let morph = frame.morphed >= 0.5 ? Self.bodies[move] : nil
+        return ShapeMoveFrame(frame: frame, open: (open(0), open(1)), morph: morph)
     }
 }
 
-enum ShapeRenderer {
-    /// shape-mascot.css `shape-bounce`, 0.9 s, on a flat body (`.shape-body`).
-    static let bounce = CSSKeyframes([(0, [0, 1, 1]), (0.45, [-0.06, 0.98, 1.03]), (0.7, [0, 1.04, 0.96]), (1, [0, 1, 1])])
+/// Draws an engine still (`ShapeSvg` in ShapeMascot.tsx).
+enum ShapeEngineRenderer {
+    /// The engine draws across its whole 0..100 box: the drawing takes 84% of the mascot's box.
+    static let drawn: CGFloat = 0.84
+    /// The eyes' ink when a skin leaves it to the body (`#151515`).
+    static let defaultInk = "#151515"
 
-    /// Draws one frame centred in `canvas`, its 100 box mapped onto `box` points (`ShapeFrameSvg`).
-    static func draw(in context: inout GraphicsContext, canvas: CGSize, box: CGFloat, frame: ShapeFrame, pose: ShapePose, shape: MascotShape,
-                     skin: ShapeSkin, hex: String, eyes style: ShapeEyeStyle = .capsule, bounce time: Double? = nil) {
+    static func draw(in context: inout GraphicsContext, canvas: CGSize, box: CGFloat, still: ShapeEngineStill, mood: ShapeEngineMood,
+                     skin: ShapeSkin, hex: String, full: Bool = false, move: ShapeMoveFrame? = nil) {
+        let paint = ShapeArt.paint(skin, hex: hex)
+        let layers = ShapeSkinLayers.of(skin, hex: hex, full: full)
+        let body = isHex(paint.fill) ? paint.fill : hex
+        let ink = isHex(paint.eyes) ? paint.eyes : defaultInk
+        let frame = still.frame(mood)
+        let side = box * drawn
         var ctx = context
-        let k = box / 100
-        ctx.translateBy(x: (canvas.width - box) / 2, y: (canvas.height - box) / 2)
-        ctx.scaleBy(x: k, y: k)
+        ctx.translateBy(x: (canvas.width - side) / 2, y: (canvas.height - side) / 2)
+        ctx.scaleBy(x: side / 100, y: side / 100)
+        if let move { ctx.concatenate(move.frame.affine) }
+        let open = move?.open ?? (1, 1)
+        let leftmost = leftEye(frame)
 
-        // rings behind the body
-        for (i, ring) in frame.rings.enumerated() { stroke(ring.back, ring: ring, index: i, in: ctx) }
-        if skin == .outline {
-            drawFlat(in: ctx, frame: frame, skin: skin, hex: hex, bounce: time)
-        } else {
-            drawVolume(in: ctx, box: box, frame: frame, pose: pose, skin: skin, hex: hex, style: style)
+        if let move { ShapeRenderer.drawRings(move.frame, front: false, in: ctx) }
+        // a skin that draws over the flat body paints its face (`skinIsFlat`)
+        let skinned = layers.paints || paint.stroke != nil || paint.shine
+        let face = skinned ? still.face(of: frame) : nil
+        var onFace = ctx
+        if let face { onFace.concatenate(face.transform) }
+        let facePath = face.map { Path(SVGPath.cached($0.outline.d)) }
+        let faceRule = FillStyle(eoFill: face?.outline.evenOdd ?? false)
+        // the skin's aura, behind the body
+        if let facePath { ShapeSkinPainter.under(layers, face: facePath, rule: faceRule, in: onFace) }
+        // the body: the cross-sections back to front in its colour, the eyes in their planes
+        var root = ctx
+        root.concatenate(frame.root)
+        var eyeIndex = 0
+        for part in frame.parts {
+            switch part {
+            case let .slice(index, matrix):
+                guard still.outlines.indices.contains(index) else { continue }
+                let outline = still.outlines[index]
+                var c = root
+                c.concatenate(matrix)
+                c.fill(Path(SVGPath.cached(outline.d)), with: .color(Color(hex: body)), style: FillStyle(eoFill: outline.evenOdd))
+            case let .eye(mark, matrix):
+                let amount = eyeIndex == leftmost ? open.0 : open.1
+                eyeIndex += 1
+                eye(mark.opened(amount), matrix: matrix, ink: ink, in: root)
+            }
         }
-        drawExtras(in: ctx, frame: frame)
+        // the skin paints the face (fill, edge, shine, its layers), the eyes over it, its particles over all
+        if let facePath {
+            ShapeSkinPainter.face(layers, paint: paint, face: facePath, rule: faceRule, in: onFace)
+            eyeIndex = 0
+            for part in frame.parts {
+                guard case let .eye(mark, matrix) = part else { continue }
+                let amount = eyeIndex == leftmost ? open.0 : open.1
+                eyeIndex += 1
+                eye(mark.opened(amount), matrix: matrix, ink: ink, in: root)
+            }
+            ShapeSkinPainter.around(layers, face: facePath, rule: faceRule, in: onFace)
+        }
+        if let move { ShapeRenderer.drawMoveFront(move.frame, fill: body, in: ctx) }
     }
 
-    /// The badge's notch: the face steps aside around the badge.
-    private static func notch(_ frame: ShapeFrame, in ctx: inout GraphicsContext) {
-        guard let badge = frame.badge else { return }
-        var keep = Path(CGRect(x: -60, y: -60, width: 220, height: 220))
-        keep.addEllipse(in: CGRect(x: badge.x - badge.r - badge.notch, y: badge.y - badge.r - badge.notch,
-                                   width: 2 * (badge.r + badge.notch), height: 2 * (badge.r + badge.notch)))
-        ctx.clip(to: keep, style: FillStyle(eoFill: true))
+    /// One eye in its plane: the engine's pill, or its happy arc.
+    private static func eye(_ mark: ShapeEngineStill.Eye, matrix: CGAffineTransform, ink: String, in context: GraphicsContext) {
+        var c = context
+        c.concatenate(matrix)
+        switch mark {
+        case let .pill(x, y, width, height, radius):
+            c.fill(Path(roundedRect: CGRect(x: x, y: y, width: width, height: height), cornerRadius: radius), with: .color(Color(hex: ink)))
+        case let .arc(d, strokeWidth):
+            c.stroke(Path(SVGPath.cached(d)), with: .color(Color(hex: ink)), style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round))
+        }
+    }
+
+    /// Which of the frame's eyes is the left one on screen (`withEyes`).
+    private static func leftEye(_ frame: ShapeEngineStill.Frame) -> Int {
+        let xs: [Double] = frame.parts.compactMap {
+            guard case let .eye(mark, matrix) = $0 else { return nil }
+            if case let .pill(x, _, _, _, _) = mark { return Double(matrix.tx) + x }
+            return Double(matrix.tx)
+        }
+        return xs.count > 1 && xs[1] < xs[0] ? 1 : 0
+    }
+
+    private static func isHex(_ value: String) -> Bool {
+        value.count == 7 && value.hasPrefix("#") && value.dropFirst().allSatisfy(\.isHexDigit)
+    }
+}
+
+/// What a Shapes move adds beside an engine body (`moveExtrasMarkup`): the
+/// rings, the thought dots and marks, the specks, the ribbons and the badge.
+enum ShapeRenderer {
+    /// A move's rings on one side of the body, in the box (`moveExtrasMarkup`).
+    static func drawRings(_ frame: ShapeFrame, front: Bool, in ctx: GraphicsContext) {
+        for (i, ring) in frame.rings.enumerated() { stroke(front ? ring.front : ring.back, ring: ring, index: i, in: ctx) }
+    }
+
+    /// What a move adds in front of an engine body (`moveExtrasMarkup`'s
+    /// front): the thought dots and marks in the body's colour, the specks,
+    /// the rings' front, the ribbons and the badge.
+    static func drawMoveFront(_ frame: ShapeFrame, fill: String, in ctx: GraphicsContext) {
+        dots(frame, fill: fill, in: ctx)
+        marks(frame, fill: fill, in: ctx)
+        drawExtras(in: ctx, frame: frame)
+        badge(frame, in: ctx)
     }
 
     private static func badge(_ frame: ShapeFrame, in ctx: GraphicsContext) {
@@ -219,116 +297,6 @@ enum ShapeRenderer {
             m.opacity = mark.opacity
             m.fill(Path(path), with: .color(Color(hex: fill)))
         }
-    }
-
-    /// A body in volume (shape-volume.ts drawShape): its slices in the
-    /// side's fill, then the face with the stem behind it, the dots, the
-    /// marks, the badge and the two eyes, all under the face's one matrix.
-    private static func drawVolume(in ctx: GraphicsContext, box: CGFloat, frame: ShapeFrame, pose: ShapePose, skin: ShapeSkin, hex: String, style: ShapeEyeStyle) {
-        let paint = ShapeArt.paint(skin, hex: hex)
-        let solid = skin == .plain
-        let ink = ShapeVolume.ink(solid ? frame.color : paint.fill)
-        let fill = solid ? ink.fill : paint.fill
-        let sideFill = solid ? ink.side : paint.fill
-        let detail = ShapeVolumeDetail.of(Double(box))
-        // the one drawing: a plain body bends with the resting turn; a skin's own art is drawn on the outline at rest
-        guard let drawing = ShapeVolume.drawShape(frame, pose, detail: detail, style: style, bend: solid) else { return }
-        let body = Path(drawing.fillPath)
-        let evenOdd = FillStyle(eoFill: drawing.pathD != nil)
-        let extras = drawing.extras.map { Path(SVGPath.parse($0)) }
-
-        // a move's motion (breath, drift, a move's turn) carries the whole body
-        var moved = ctx
-        moved.concatenate(drawing.motion)
-        // the body behind its face: slices of the same outline, turned with it
-        for t in drawing.slices {
-            var c = moved
-            c.concatenate(t)
-            c.fill(body, with: .color(Color(hex: sideFill)), style: evenOdd)
-            for extra in extras { c.fill(extra, with: .color(Color(hex: sideFill))) }
-        }
-        var face = moved
-        face.concatenate(drawing.face)
-        // the pumpkin's stem: behind the face, its foot under the body's top
-        if let stem = drawing.stem {
-            let path = CGMutablePath()
-            stem.outline.add(to: path)
-            var c = face
-            c.opacity = stem.opacity
-            c.fill(Path(path), with: .color(Color(hex: ShapeMath.mixHex(ShapeEngineData.stemInk, fill.hasPrefix("#") && fill.count == 7 ? fill : ShapeEngineData.stemInk, 0.12))))
-        }
-        var faceBody = face
-        notch(frame, in: &faceBody)
-        if let glow = paint.glow {
-            var g = faceBody
-            g.addFilter(.blur(radius: 2.4))
-            g.fill(body, with: .color(Color(hex: glow)), style: evenOdd)
-        }
-        faceBody.fill(body, with: .color(Color(hex: fill)), style: evenOdd)
-        for extra in extras { faceBody.fill(extra, with: .color(Color(hex: fill))) }
-        if let edge = ink.edge {
-            // a near-white or near-black face keeps its silhouette: one hairline, on the face only
-            var c = faceBody
-            c.opacity = 0.2
-            c.stroke(body, with: .color(Color(hex: edge)), style: StrokeStyle(lineWidth: detail == .tiny ? 2.4 : 1.6, lineJoin: .round))
-        }
-        if paint.shine {
-            let g = Gradient(stops: [
-                .init(color: .white.opacity(0.55), location: 0),
-                .init(color: .white.opacity(0.08), location: 0.45),
-                .init(color: .black.opacity(0.18), location: 1),
-            ])
-            let bounds = body.boundingRect
-            let center = CGPoint(x: bounds.minX + 0.32 * bounds.width, y: bounds.minY + 0.26 * bounds.height)
-            faceBody.fill(body, with: .radialGradient(g, center: center, startRadius: 0, endRadius: 0.75 * max(bounds.width, bounds.height)), style: evenOdd)
-        }
-        if let stroke = paint.stroke {
-            faceBody.stroke(body, with: .color(Color(hex: stroke)), style: StrokeStyle(lineWidth: paint.strokeWidth, lineJoin: .round))
-        }
-        dots(frame, fill: fill, in: faceBody)
-        marks(frame, fill: fill, in: faceBody)
-        badge(frame, in: face)
-
-        // the eyes in their ink (dark, or light on a dark body), on the face, under its
-        // matrix: they go through the very same transforms as the outline
-        guard !drawing.eyes.isEmpty else { return }
-        face.fill(Path(ShapeVolume.path(drawing.eyes)), with: .color(Color(hex: solid ? ink.eyes : paint.eyes)))
-    }
-
-    /// A flat skin (Outline): the eyes cut through the body, the bounce while working.
-    private static func drawFlat(in ctx: GraphicsContext, frame: ShapeFrame, skin: ShapeSkin, hex: String, bounce time: Double?) {
-        let paint = ShapeArt.paint(skin, hex: hex)
-        let outline: CGPath = {
-            if let path = frame.bodyPath, !frame.pathMorphing {
-                return SVGPath.parse(path)
-            }
-            let path = CGMutablePath()
-            ShapeMath.smoothClosedPath(frame.body, into: path)
-            return path
-        }()
-        let eyes = CGMutablePath()
-        for eye in frame.eyes { ShapeMath.smoothClosedPath(eye, into: eyes) }
-        let body = Path(outline)
-        var cut = body
-        cut.addPath(Path(eyes))
-        let evenOdd = FillStyle(eoFill: true)
-        var group = ctx
-        if let time, let v = bounce.value(at: time, duration: 0.9, timing: .easeInOut) {
-            let bounds = body.applying(frame.affine).boundingRect
-            let origin = CGPoint(x: bounds.midX, y: bounds.maxY)
-            group.translateBy(x: 0, y: v[0] * bounds.height)
-            group.pivot(origin, scaleX: v[1], scaleY: v[2])
-        }
-        var shaped = group
-        shaped.concatenate(frame.affine)
-        notch(frame, in: &shaped)
-        shaped.fill(cut, with: .color(Color(hex: paint.fill)), style: evenOdd)
-        if let stroke = paint.stroke {
-            shaped.stroke(cut, with: .color(Color(hex: stroke)), style: StrokeStyle(lineWidth: paint.strokeWidth, lineJoin: .round))
-        }
-        dots(frame, fill: paint.fill, in: shaped)
-        marks(frame, fill: paint.fill, in: shaped)
-        badge(frame, in: group)
     }
 
     /// Specks, rings in front, ribbons: in the box, around the body.

@@ -14,7 +14,13 @@ enum MascotAvatarRenderer {
     static let scale: CGFloat = 3
 
     static func png(_ look: PushSenderLook) async -> Data? {
-        await MainActor.run { render(look) }
+        // a person's own shape is inferred by the engine before the snapshot, which runs no task
+        let complete = look.resolvedLook
+        if complete.character == .shape, let def = complete.avatarDef,
+           ShapeEngineStill.bakedShape(complete.shape, avatarDef: def) == nil {
+            _ = ShapeEngineBake.still(complete.shape, avatarDef: def, flat: complete.shapeSkin == .outline)
+        }
+        return await MainActor.run { render(look) }
     }
 
     @MainActor static func render(_ look: PushSenderLook) -> Data? {

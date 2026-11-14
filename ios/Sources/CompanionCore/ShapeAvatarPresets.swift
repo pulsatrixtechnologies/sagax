@@ -75,13 +75,13 @@ public enum ShapeAvatarPresets {
 
     /// Definition for the current shape: custom avatarDef, or the object preset.
     public static func definition(for look: MascotLook) -> ShapeAvatarDef? {
-        if let def = look.avatarDef { return current(def) }
+        if let def = look.avatarDef { return def.own.map(current) }
         if let shape = look.shape, isObjectShape(shape) { return byShape(shape) }
         return nil
     }
 
     public static func definition(for look: CompleteMascotLook) -> ShapeAvatarDef? {
-        if let def = look.avatarDef { return current(def) }
+        if let def = look.avatarDef { return def.own.map(current) }
         if isObjectShape(look.shape) { return byShape(look.shape) }
         return nil
     }

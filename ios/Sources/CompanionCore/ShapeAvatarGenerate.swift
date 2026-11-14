@@ -75,7 +75,7 @@ public enum ShapeAvatarGenerate {
         if let id = def.id, let shape = MascotShape.stored(id), ShapeAvatarPresets.isObjectShape(shape) {
             next.shape = shape
         }
-        next.avatarDef = def
+        next.avatarDef = .own(def)
         return next.stored
     }
 

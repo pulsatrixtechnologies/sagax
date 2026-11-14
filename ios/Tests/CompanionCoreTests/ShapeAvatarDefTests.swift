@@ -64,12 +64,13 @@ final class ShapeAvatarDefTests: XCTestCase {
         for id in ["pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship"] {
             XCTAssertNotNil(MascotShape.stored(id), "missing shape \(id)")
         }
-        XCTAssertEqual(MascotShape.allCases.count, 40)
+        XCTAssertEqual(MascotShape.bodies.count, 40)
+        XCTAssertEqual(MascotShape.allCases.count, 50, "and the engine's gallery (#4159)")
     }
 
     func testMascotLookKeepsAvatarDef() throws {
         let def = ShapeAvatarValidator.validateJSON(samplePartsJSON()).def!
-        let look = MascotLook(character: .shape, shape: .cup, avatarDef: def)
+        let look = MascotLook(character: .shape, shape: .cup, avatarDef: .own(def))
         let data = try JSONEncoder().encode(look)
         let decoded = try JSONDecoder().decode(MascotLook.self, from: data)
         XCTAssertEqual(decoded.character, .shape)

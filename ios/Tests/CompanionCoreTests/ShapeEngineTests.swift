@@ -77,7 +77,7 @@ final class ShapeEngineTests: XCTestCase {
         XCTAssertEqual(ShapeMove.allCases.count, 14)
         XCTAssertEqual(Set(ShapeEngineData.expressions.keys), Set(ShapeExpression.allCases))
         XCTAssertEqual(Set(ShapeEngineData.moveTiming.keys), Set(ShapeMove.allCases))
-        XCTAssertEqual(Set(ShapeEngineData.radii.keys), Set(MascotShape.allCases))
+        XCTAssertEqual(Set(ShapeEngineData.radii.keys), Set(MascotShape.bodies))
         XCTAssertTrue(ShapeEngineData.radii.values.allSatisfy { $0.count == ShapeEngineData.radiiCount })
         XCTAssertEqual(ShapeEngineData.moodExpression[.thinking], .curious)
         XCTAssertEqual(ShapeEngineData.moodExpression[.sleeping], .sleepy)
@@ -94,7 +94,7 @@ final class ShapeEngineTests: XCTestCase {
     }
 
     func testTheGeneratedMoodStillsAreTheEngineStills() {
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             for mood in ShapeMood.allCases {
                 let frame = ShapeFrames.still(shape, ShapeEngineData.moodExpression[mood]!)
                 assertPath(frame.eyesD, ShapeStillArt.eyes[shape]?[mood] ?? "", "\(shape) \(mood)")
@@ -219,7 +219,7 @@ final class ShapeEngineTests: XCTestCase {
             XCTAssertGreaterThan(rx - lx, lw, "\(name) apart")
             XCTAssertTrue(frame.eyeShapes.allSatisfy { $0.tilt == 0 }, "\(name) upright capsules")
         }
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             let still = ShapeFrames.still(shape, .neutral)
             check(still, ShapeVolume.grounded(ShapeVolumeData.rest, shape), "\(shape) rest")
             var squashed = still

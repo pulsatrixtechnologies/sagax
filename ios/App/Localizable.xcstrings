@@ -106034,6 +106034,38 @@
         }
       }
     },
+    "appearance.shape.own": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your own shape"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta propre forme"
+          }
+        }
+      }
+    },
+    "appearance.shape.ownNamed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, your own shape"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, ta propre forme"
+          }
+        }
+      }
+    },
     "mascot.shape.ghost": {
       "localizations": {
         "en": {
@@ -106320,6 +106352,166 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fusée"
+          }
+        }
+      }
+    },
+    "mascot.shape.brain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brain"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerveau"
+          }
+        }
+      }
+    },
+    "mascot.shape.bull": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bull"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taureau"
+          }
+        }
+      }
+    },
+    "mascot.shape.bunny": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bunny"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lapin"
+          }
+        }
+      }
+    },
+    "mascot.shape.camera": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caméra"
+          }
+        }
+      }
+    },
+    "mascot.shape.magnifier": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Magnifier"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loupe"
+          }
+        }
+      }
+    },
+    "mascot.shape.paint-brush": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paintbrush"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pinceau"
+          }
+        }
+      }
+    },
+    "mascot.shape.palette": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Palette"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Palette"
+          }
+        }
+      }
+    },
+    "mascot.shape.witch-hat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Witch hat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapeau"
+          }
+        }
+      }
+    },
+    "mascot.shape.barbell": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barbell"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haltère"
+          }
+        }
+      }
+    },
+    "mascot.shape.watering-can": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watering can"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrosoir"
           }
         }
       }

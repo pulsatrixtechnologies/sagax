@@ -49,7 +49,7 @@
 // below changes. PARITY_ORG_PHONE=1 adds a phone bearer for that person
 // (the session file's token), for the synced sidebar UI tests (WP6).
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -255,6 +255,15 @@ const BOTS = [
   { key: "liora", name: "Liora", title: "Department Manager", color: "green", section: "Transformation Numérique", ...shape("squircle") },
   { key: "orion", name: "Orion", title: "Analyst", color: "coral", section: "Transformation Numérique", ...owl("gold") },
 ];
+
+// PARITY_OWN_SHAPE=1: Ara (the bot whose profile the captures open) wears a
+// definition pasted on the desktop, in Neon (the engine's ghost under an id of
+// its own), for the own-shape captures (#4159).
+if (process.env.PARITY_OWN_SHAPE === "1") {
+  const ghost = JSON.parse(readFileSync(join(HERE, "../../third_party/open-bot-avatar/gallery/ghost.json"), "utf8"));
+  const ara = BOTS.find((bot) => bot.key === "ara");
+  ara.look = { character: "shape", shape: "pumpkin", skins: { shape: "neon" }, avatarDef: { ...ghost, id: "my-ghost", name: "My ghost" } };
+}
 
 const GROUP = { name: "Peer Managers", members: ["ara", "helios", "liora"] };
 

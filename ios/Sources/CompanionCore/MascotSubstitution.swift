@@ -1,6 +1,6 @@
 // Where the phone draws a bot's look with less than the desktop does, and
 // what it draws instead. A known character is never drawn as another one:
-// a shape stays that shape in its colour, Bunbu stays Bunbu, Shiba stays
+// a shape stays that shape in its colour (and draws its skins in full), Bunbu stays Bunbu, Shiba stays
 // Shiba, Frog stays Frog, Trombi stays Trombi, and only a skin's premium layers (textures, particles, the
 // repainted wire) give way to the closest finish the phone has. Each
 // substitution is logged once (subsystem `ca.pulsatrix.sagax`, category
@@ -20,8 +20,6 @@ public enum MascotSubstitution {
 
     /// Owl skins the phone draws with their palette, aura and rim only.
     static let owlBaseOnly: Set<MascotSkin> = [.snowy, .barn, .chrome, .holo, .galaxy, .spirit]
-    /// Shape skins whose premium layers the phone does not draw.
-    static let shapeBaseOnly: Set<ShapeSkin> = [.outline, .gold, .neon, .chrome, .crystal, .circuit, .holo, .molten, .galaxy]
     /// Trombi skins the phone tints rather than repaints.
     static let trombiTinted: Set<TrombiSkin> = [.chrome, .glitch, .holo, .molten]
     /// Bunbu skins whose premium layers the phone does not draw.
@@ -36,8 +34,8 @@ public enum MascotSubstitution {
             guard owlBaseOnly.contains(owlSkin) else { return [] }
             return [Entry(character: .owl, wanted: "owl skin \(owlSkin.rawValue)", drawn: "its palette, aura and rim, without its effects")]
         case .shape:
-            guard shapeBaseOnly.contains(look.shapeSkin) else { return [] }
-            return [Entry(character: .shape, wanted: "shape skin \(look.shapeSkin.rawValue)", drawn: "its base finish on the \(look.shape.rawValue) shape")]
+            // every shape skin paints its layers on the face (ShapeSkinLayers, #4159)
+            return []
         case .trombi:
             guard trombiTinted.contains(look.trombiSkin) else { return [] }
             return [Entry(character: .trombi, wanted: "Trombi skin \(look.trombiSkin.rawValue)", drawn: "the classic drawing tinted toward its colours")]

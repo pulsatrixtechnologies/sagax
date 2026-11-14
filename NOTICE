@@ -153,7 +153,14 @@ The shape mascots are drawn by open-bot-avatar 0.2.1 (npm open-bot-avatar,
 the version pinned in package.json), https://github.com/DominikScholz/open-bot-avatar,
 Copyright (c) 2026 Dominik Scholz, used under the MIT License
 (third_party/open-bot-avatar/LICENSE). The desktop and the web bundle the
-unmodified package; nothing is fetched at run time. Its gallery definitions
+unmodified package; nothing is fetched at run time. The phone app draws the
+engine's baked frames of the same definitions
+(ios/Sources/CompanionCore/ShapeEngineStillData.swift); for a person's own
+shape it runs the unmodified package itself in JavaScriptCore
+(ios/Sources/CompanionCore/Resources/shape-engine.js, bundled with zod,
+https://github.com/colinhacks/zod, Copyright (c) 2025 Colin McDonnell, used
+under the MIT License, third_party/zod/LICENSE). The app carries this notice
+and those licences in its bundle. Its gallery definitions
 are copied unmodified in third_party/open-bot-avatar/gallery, and the app
 draws some shapes with them and with the package's examples; our own shapes
 (shared/shape-avatars.json) are written in its definition format.

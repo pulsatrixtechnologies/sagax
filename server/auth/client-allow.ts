@@ -167,6 +167,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the bot's own email address from the Perspicax relay (an address, no id, no secret)
   // and its owner's change of it (PUT: the handler checks the owner)
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/inbound-mail$/ },
+  // #4250: what the viewer can watch in their products (URIs and names, read
+  // with the viewer's own sign-in), for the routine editor
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/watchable-resources$/ },
   // "Me joindre": the person's own channels and hours for this bot (each
   // person chooses for themself, no admin); Telegram's token is write only
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/reach-me$/ },

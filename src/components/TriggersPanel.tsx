@@ -166,7 +166,7 @@ export function TriggersPanel({
               }}
               options={[
                 ...TRIGGER_SOURCES.map((entry) => ({ value: entry.id, label: triggerSourceLabel(entry.id), group: t("triggers.group.link") })),
-                ...TRIGGER_SOURCE_TYPES.map((type) => ({ value: type as string, label: typedSourceLabel(type), group: type === "telephony" ? t("triggers.group.telephony") : isRelaySource(type) ? t("triggers.group.botmail") : t("triggers.group.signed") })),
+                ...TRIGGER_SOURCE_TYPES.map((type) => ({ value: type as string, label: typedSourceLabel(type), group: type === "telephony" ? t("triggers.group.telephony") : type === "perspicax" ? t("triggers.group.perspicax") : isRelaySource(type) ? t("triggers.group.botmail") : t("triggers.group.signed") })),
               ]}
             />
             {source === "custom" && (

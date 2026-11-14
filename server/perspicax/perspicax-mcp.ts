@@ -444,6 +444,33 @@ function missingPermission(permission: CwPermission): string {
  * of one refused write. */
 const WRITE_STOP_NEXT = "Tell the person. Send this write again only when the person asks for it: it needs a role that holds that permission (the person decides, by a saved rule or a card) or an administrator of the vendor who gives it. Everything else goes on: other calls, and switching roles (identity_switch, clear included) for other work, are fine.";
 
+/** #4250: one resource the person can watch: a URI, or a URI template
+ * whose `{...}` parts the person fills in. */
+export interface WatchableResource {
+  uri: string;
+  name?: string;
+  template?: true;
+}
+
+/** The watchable resources of a `resources/list` and a
+ * `resources/templates/list` answer: perspicax:// only, at most 100. */
+export function watchableFrom(listed: unknown, templates: unknown): WatchableResource[] {
+  const out: WatchableResource[] = [];
+  const seen = new Set<string>();
+  const add = (uri: unknown, name: unknown, template: boolean) => {
+    if (typeof uri !== "string" || !/^perspicax:\/\/\S{1,188}$/i.test(uri) || seen.has(uri) || out.length >= 100) return;
+    seen.add(uri);
+    const label = typeof name === "string" ? name.replace(/\p{Cc}+/gu, " ").trim().slice(0, 120) : "";
+    out.push({ uri, ...(label ? { name: label } : {}), ...(template ? { template: true as const } : {}) });
+  };
+  const result = (body: unknown) => isObject(body) && isObject(body.result) ? body.result : null;
+  const resources = result(listed)?.resources;
+  if (Array.isArray(resources)) for (const entry of resources) if (isObject(entry)) add(entry.uri, entry.name ?? entry.title, false);
+  const shapes = result(templates)?.resourceTemplates;
+  if (Array.isArray(shapes)) for (const entry of shapes) if (isObject(entry)) add(entry.uriTemplate, entry.name ?? entry.title, true);
+  return out;
+}
+
 export interface PerspicaxRelayAnswer {
   status: number;
   /** A JSON body, absent for 202. */
@@ -830,6 +857,45 @@ export class PerspicaxMcp {
         if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
         void link.revokeExchanged(token).catch(reportBackgroundError);
       }
+    }
+  }
+
+  /** #4250: what the person can watch in their products, as Perspicax lists
+   * it (`resources/list` and `resources/templates/list`), for the routine
+   * editor's "When something changes in a product". Read on a short-lived
+   * connection with the person's own sign-in; null when there is none or
+   * Perspicax cannot be read. */
+  async watchableResources(principalId: string, signal: AbortSignal): Promise<WatchableResource[] | null> {
+    const link = this.options.link();
+    const subject = this.options.subjectOf(principalId);
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) return null;
+    const source = await this.subjectFor("session", principalId, { iss: subject.iss, sub: subject.sub });
+    if (!source.ok) return null;
+    const exchanged = await link.exchangeToken(source.token);
+    if (!exchanged.ok) return null;
+    let session: string | null = null;
+    const rpc = async (method: string, params: Json): Promise<unknown> => {
+      signal.throwIfAborted();
+      const id = `sagax-watchable-${++this.nativeCalls}`;
+      const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${exchanged.token}`, ...(session ? { "mcp-session-id": session } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", ...(method === "notifications/initialized" ? {} : { id }), method, params }) });
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      if (!response.ok) throw new Error(`Perspicax resources HTTP ${response.status}`);
+      return method === "notifications/initialized" ? {} : parseMcpBody(text, id);
+    };
+    try {
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "Sagax watchable resources", version: this.options.version } });
+      await rpc("notifications/initialized", {});
+      const listed = await rpc("resources/list", {});
+      const templates = await rpc("resources/templates/list", {});
+      return watchableFrom(listed, templates);
+    } catch {
+      return null;
+    } finally {
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
+      void link.revokeExchanged(exchanged.token).catch(reportBackgroundError);
     }
   }
 

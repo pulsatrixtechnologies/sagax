@@ -8,7 +8,8 @@
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { pollerCredentialInputSchema } from "../triggers/trigger-poller-credentials.ts";
 import { triggerSourceSetup, webhookCredential } from "../triggers/webhook-ingress.ts";
-import { isRelaySource, type TriggerSourceType } from "../../shared/trigger-sources.ts";
+import { isRelaySource, type TriggerSourceConfig, type TriggerSourceType } from "../../shared/trigger-sources.ts";
+import { webhookForApp } from "../../shared/webhooks.ts";
 import { BOT_ACT_ROUTE_HEADER } from "./remote-session-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -71,8 +72,11 @@ export interface WebhooksRouteDeps {
 }
 
 export function createWebhooksRoutes(deps: WebhooksRouteDeps): RouteHandler {
-  return async ({ req, res, path, method, auth, json, readBody }) => {
+  return async ({ req, res, path, method, auth, json: send, readBody }) => {
     if (!path.startsWith("/api/webhooks")) return PASS;
+    // #4250: every trigger in an answer goes out in the shape the previous
+    // app release reads too (a newer source under `sourceNext`).
+    const json: typeof send = (target, status, body) => send(target, status, appBody(body));
 
     if (path === "/api/webhooks" && method === "GET") {
       const hookViewer = deps.isPerspicax() && auth.kind === "session" ? deps.channelViewerId(auth) : undefined;
@@ -197,5 +201,19 @@ export function createWebhooksRoutes(deps: WebhooksRouteDeps): RouteHandler {
     }
 
     return PASS;
+  };
+}
+
+type AppHook = { source?: TriggerSourceConfig };
+
+/** The answer's `webhook` and `webhooks` as webhookForApp sends them. */
+function appBody(body: unknown): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  const answer = body as { webhook?: unknown; webhooks?: unknown };
+  if (answer.webhook === undefined && answer.webhooks === undefined) return body;
+  return {
+    ...answer,
+    ...(answer.webhook && typeof answer.webhook === "object" ? { webhook: webhookForApp(answer.webhook as AppHook) } : {}),
+    ...(Array.isArray(answer.webhooks) ? { webhooks: answer.webhooks.map((hook) => (hook && typeof hook === "object" ? webhookForApp(hook as AppHook) : hook)) } : {}),
   };
 }

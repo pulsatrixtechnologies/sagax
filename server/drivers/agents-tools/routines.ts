@@ -70,9 +70,14 @@ export const DEF_PROPOSE_ROUTINE = {
           type: "object",
           additionalProperties: false,
           description:
-            "Instead of schedule. type is webhook, email or github. github runs on GitHub events: events lists the kinds (omit for all) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The owner copies its key (for github: webhook URL and secret) in the app.",
+            "Instead of schedule. type is webhook, email, github or product. github runs on GitHub events: events lists the kinds (omit for all) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The owner copies its key (for github: webhook URL and secret) in the app. product runs when a resource the person watches in Perspicax changes (no turn before): resources lists the watched URIs, e.g. [\"perspicax://cw/boards/12/open\"]; nothing to set up.",
           properties: {
-            type: { type: "string", enum: ["webhook", "email", "github"] },
+            type: { type: "string", enum: ["webhook", "email", "github", "product"] },
+            resources: {
+              type: "array",
+              items: { type: "string" },
+              description: "product only: the watched URIs (perspicax://...) whose change starts the routine.",
+            },
             events: {
               type: "array",
               items: { type: "string", enum: [...TRIGGER_SOURCES.github.events] },

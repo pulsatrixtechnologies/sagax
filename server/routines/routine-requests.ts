@@ -9,6 +9,7 @@ import { normalizeCronSchedule, nextCronRuns } from "../../shared/routine-schedu
 import { presentTiming, storedTiming } from "../../shared/routine-timing.ts";
 import { isTriggerSchedule } from "../../shared/routines.ts";
 import { cleanGithubEventSchedule, githubEventScheduleLabel, type RoutineGithubEventSchedule } from "../../shared/routine-github.ts";
+import { cleanProductEventSchedule, productEventScheduleLabel, type RoutineProductEventSchedule } from "../../shared/routine-product-event.ts";
 import { newId } from "../contracts.ts";
 import { SELF_ROUTINE_CAP, UNDO_STALE, grantAfterQuote, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
 import { redactSecretsInText } from "../redact.ts";
@@ -115,6 +116,11 @@ const routineToolTriggerSchema = z.discriminatedUnion("type", [
     type: z.literal("github"),
     events: z.array(z.string().max(80)).max(64).optional(),
     filters: z.record(z.string(), z.array(z.string().max(200)).max(50)).optional(),
+  }).strict(),
+  // #4250: a watched resource changed in a product (perspicax://...).
+  z.object({
+    type: z.literal("product"),
+    resources: z.array(z.string().max(200)).min(1).max(20),
   }).strict(),
 ]);
 
@@ -256,10 +262,20 @@ const storedCronScheduleSchema = z.object({
  * carries its kinds and filters; email carries neither. */
 const storedEventScheduleSchema = z.object({
   type: z.literal("event"),
-  source: z.enum(["email", "github"]),
+  source: z.enum(["email", "github", "perspicax"]),
   events: z.array(z.string().max(80)).max(64).optional(),
   filters: z.record(z.string(), z.array(z.string().max(200)).max(50)).optional(),
+  resources: z.array(z.string().max(200)).max(20).optional(),
 }).strict().superRefine((schedule, context) => {
+  if (schedule.source === "perspicax") {
+    try {
+      cleanProductEventSchedule(schedule);
+    } catch (error) {
+      context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "Invalid watched resources" });
+    }
+    return;
+  }
+  if (schedule.resources !== undefined) context.addIssue({ code: "custom", message: "Only a product change trigger has watched resources" });
   if (schedule.source === "email") {
     if (schedule.events !== undefined || schedule.filters !== undefined) {
       context.addIssue({ code: "custom", message: "An email trigger has no events or filters" });
@@ -271,8 +287,9 @@ const storedEventScheduleSchema = z.object({
   } catch (error) {
     context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "Invalid GitHub events" });
   }
-}).transform((schedule): RoutineGithubEventSchedule | { type: "event"; source: "email" } =>
-  schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" });
+}).transform((schedule): RoutineGithubEventSchedule | RoutineProductEventSchedule | { type: "event"; source: "email" } =>
+  schedule.source === "perspicax" ? cleanProductEventSchedule(schedule)
+    : schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" });
 const storedLimitResetScheduleSchema = z.object({
   type: z.literal("limit_reset"),
   engine: z.string().trim().min(1).max(128),
@@ -856,6 +873,12 @@ function normalizeScheduleChanges(
   };
 }
 
+/** An event schedule as stored: GitHub, a product change (#4250) or email. */
+function eventScheduleCopy(schedule: Extract<RoutineRequestSchedule, { type: "event" }>): Extract<RoutineRequestSchedule, { type: "event" }> {
+  if (schedule.source === "perspicax") return cleanProductEventSchedule(schedule);
+  return schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" };
+}
+
 function triggerSchedule(trigger: z.infer<typeof routineToolTriggerSchema>): RoutineRequestSchedule {
   if (trigger.type === "webhook") return { type: "webhook" };
   if (trigger.type === "github") {
@@ -863,6 +886,13 @@ function triggerSchedule(trigger: z.infer<typeof routineToolTriggerSchema>): Rou
       return cleanGithubEventSchedule(trigger);
     } catch (error) {
       throw new RoutineRequestError(error instanceof Error ? error.message : "Choose GitHub events");
+    }
+  }
+  if (trigger.type === "product") {
+    try {
+      return cleanProductEventSchedule(trigger);
+    } catch (error) {
+      throw new RoutineRequestError(error instanceof Error ? error.message : "Choose the resource to watch");
     }
   }
   return { type: "event", source: "email" };
@@ -1036,7 +1066,7 @@ export function asSchedule(schedule: RoutineRequestSchedule, now: number): Routi
     };
   }
   if (schedule.type === "webhook") return { type: "webhook" };
-  if (schedule.type === "event") return schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" };
+  if (schedule.type === "event") return eventScheduleCopy(schedule);
   return { type: "daily", time: schedule.time, weekdays: [...schedule.weekdays], ...timingCarry(schedule) };
 }
 
@@ -1068,7 +1098,7 @@ function effectiveSchedule(
   if (incoming.type === "cron") return { ...incoming, ...keptTiming(current, incoming) };
   if (incoming.type === "limit_reset") return { ...incoming };
   if (incoming.type === "webhook") return { type: "webhook" };
-  if (incoming.type === "event") return incoming.source === "github" ? cleanGithubEventSchedule(incoming) : { type: "event", source: "email" };
+  if (incoming.type === "event") return eventScheduleCopy(incoming);
   if (incoming.type !== "interval") {
     return incoming.type === "once"
       ? { type: "once", at: incoming.at }
@@ -1207,6 +1237,12 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string,
       ? "Déclencheur : webhook entrant (l’URL et la clé te sont montrées après l’approbation)"
       : "Trigger: incoming webhook (URL and key are shown to you after approval)";
   }
+  if (schedule.type === "event" && schedule.source === "perspicax") {
+    const watched = schedule.resources.join(", ");
+    return fr
+      ? `Déclencheur : un changement dans un produit (${watched}), dit par Perspicax`
+      : `Trigger: a change in a product (${watched}), told by Perspicax`;
+  }
   if (schedule.type === "event" && schedule.source === "github") {
     const events = githubEventScheduleLabel(schedule).slice("GitHub: ".length);
     return fr
@@ -1242,6 +1278,7 @@ export function consequenceLine(schedule: RoutineRequestSchedule, continuity = f
     : "";
   if (schedule.type === "webhook") return "Runs when a webhook delivery arrives.";
   if (schedule.type === "event" && schedule.source === "github") return `Runs on ${githubEventScheduleLabel(schedule)}.`;
+  if (schedule.type === "event" && schedule.source === "perspicax") return `Runs when a watched resource changes (${productEventScheduleLabel(schedule).slice("Product change: ".length)}).`;
   if (schedule.type === "event") return "Runs when email arrives.";
   if (schedule.type === "limit_reset") {
     return schedule.repeat === "every_reset"
@@ -1271,6 +1308,7 @@ function frenchConsequenceLine(schedule: RoutineRequestSchedule, continuity: boo
     : "";
   if (schedule.type === "webhook") return "S’exécute à l’arrivée d’une livraison du webhook.";
   if (schedule.type === "event" && schedule.source === "github") return `S’exécute sur ${githubEventScheduleLabel(schedule)}.`;
+  if (schedule.type === "event" && schedule.source === "perspicax") return `S’exécute quand une ressource suivie change (${schedule.resources.join(", ")}).`;
   if (schedule.type === "event") return "S’exécute à l’arrivée d’un courriel.";
   if (schedule.type === "limit_reset") {
     return schedule.repeat === "every_reset"

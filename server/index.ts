@@ -1065,9 +1065,12 @@ import { createCustomDomainPublicRoutes, createCustomDomainSettingsRoutes } from
 import { createSharedComputersRoutes } from "./routes/shared-computers-http.ts";
 import { createHostedSlackRoutes } from "./routes/hosted-slack.ts";
 import { createBotInboundMailReadRoutes } from "./routes/bot-inbound-mail.ts";
+import { createWatchableResourcesRoutes } from "./routes/watchable-resources.ts";
 import { BOT_MAIL_ASSERTION_ACTORS, botmailEvent, botmailTaggedPrompt, createBotInboundMailRoute, senderDomain } from "./mail/bot-inbound-mail.ts";
 import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bots/bot-inbound-telephony.ts";
 import { PublicReceptionTurns, receptionAskOutcome } from "./bots/public-reception.ts";
+import { PERSPICAX_EVENTS_ACTORS, createPerspicaxEventsRoute } from "./perspicax/perspicax-events.ts";
+import { ProductFixCards, type ProductFixPlace } from "./perspicax/product-fix-cards.ts";
 import { createPhoneLineContactInternalRoute, PhoneLineContactsStore } from "./phone/phone-line-contacts.ts";
 import { SmsConversation } from "./sms-conversation.ts";
 import { BotMailAddresses } from "./mail/bot-mail-addresses.ts";
@@ -7053,6 +7056,7 @@ bindLeafHost({
   get smsReplyAfter() { return smsReplyAfter; },
   get smsConversation() { return smsConversation; },
   get inboundTelephony() { return inboundTelephony; },
+  get perspicaxEvents() { return perspicaxEvents; },
   get xaiMarketplace() { return xaiMarketplace; },
   get orgInstallStatuses() { return orgInstallStatuses; },
   get savePersonPreferences() { return savePersonPreferences; },
@@ -20347,7 +20351,8 @@ routines = new RoutineManager({
       botId: routine.botId,
       runOn: routine.runOn,
       enabled: routine.enabled,
-      ...(ownedTriggerOf(routine.schedule).github ? { github: ownedTriggerOf(routine.schedule).github } : {})
+      ...(ownedTriggerOf(routine.schedule).github ? { github: ownedTriggerOf(routine.schedule).github } : {}),
+      ...(ownedTriggerOf(routine.schedule).perspicax ? { perspicax: ownedTriggerOf(routine.schedule).perspicax } : {})
     });
   },
   goalState: (groupId, coordinatorBotId) => {
@@ -24454,6 +24459,16 @@ ROUTES.push(createBotInboundMailReadRoutes({
     actor: orgAuditActor(auth)
   })
 }));
+// #4250: what the viewer can watch in their products, for the routine editor.
+ROUTES.push(createWatchableResourcesRoutes({
+  bot: (id) => store.bot(id),
+  viewer: (auth) => {
+    if (IDENTITY.kind !== "perspicax") return null;
+    const acting = auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() : localPrincipalId();
+    return acting || null;
+  },
+  list: async (principalId, signal) => perspicaxMcp ? perspicaxMcp.watchableResources(principalId, signal) : null,
+}));
 /** v2 (S3): a bot deleted or given to another owner: Perspicax's list follows. */
 function botMailResync(): void {
   try {
@@ -24704,6 +24719,77 @@ const inboundTelephony = createBotInboundTelephonyRoute({
     after: { event: row.event, caller: row.caller, authenticated: row.authenticated, triggers: row.triggers, delivered: row.delivered, duplicate: row.duplicate, ignored: row.ignored },
     actor: { kind: "person", principalId: row.ownerPrincipalId, via: "perspicax-voice" }
   })
+});
+// #4250 (S4): a product, phone line or watched resource change told by the
+// organization server for one person (server/perspicax/perspicax-events.ts).
+// A health change raises or retires that person's keyed fix card in their
+// conversation with their Primary Bot; a watched resource change wakes the
+// `perspicax` triggers that are the person's.
+/** The person's Primary Bot (else their first visible bot), and its
+ * conversation with them; `start` opens it when there is none. */
+function productFixPlace(principalId: string, start: boolean): (ProductFixPlace & { bot: BotRecord }) | null {
+  const owner = principalId.trim().toLowerCase();
+  const bot = store.primaryBotOf(owner) ?? store.bots.find((candidate) => !candidate.hidden && effectiveBotOwner(candidate) === owner);
+  if (!bot || bot.hidden) return null;
+  const personId = privateThreads() ? principalId : undefined;
+  const threadId = start ? conversationOrStart(bot, personId) : conversationThreadFor(bot, personId);
+  return threadId ? { bot, botId: bot.id, threadId } : null;
+}
+const productFixCards = new ProductFixCards({
+  place: (principalId, start) => productFixPlace(principalId, start),
+  pending: (place, key) => {
+    const bot = store.bot(place.botId);
+    return Boolean(bot && askKeyIndex.find(key, askKeyScope(bot, place.threadId, place.threadId)));
+  },
+  ask: (place, principalId, input) => {
+    const bot = store.bot(place.botId);
+    if (!bot) return false;
+    const posted = createAgentCard({
+      store,
+      bot,
+      threadId: place.threadId,
+      input: input as unknown as Record<string, unknown>,
+      personLanguage: languageOfPerson(principalId),
+      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(place.threadId, choice),
+      askKeys: askKeysFor(bot, place.threadId, place.threadId),
+    });
+    if (!posted.ok) console.warn(`[perspicax-events] fix card ${input.key}: ${posted.error}`);
+    return posted.ok;
+  },
+  words: (principalId) => serverApprovalWords(languageOfPerson(principalId)),
+  productName: (place, api) => perspicaxMcp?.apiName(place.botId, api),
+  signals: signalLedger,
+});
+/** Whose a `perspicax` trigger is: the person its routine runs as, else its
+ * bot's owner. */
+function productTriggerPerson(hook: { botId: string; routineId?: string }): string | undefined {
+  const routine = hook.routineId ? routines?.listRoutines().find((candidate) => candidate.id === hook.routineId) : undefined;
+  const runAs = routine?.runAs?.principalId?.trim().toLowerCase();
+  if (runAs) return runAs;
+  const bot = store.bot(hook.botId);
+  return bot ? effectiveBotOwner(bot) || undefined : undefined;
+}
+const perspicaxEvents = createPerspicaxEventsRoute({
+  identity: () => IDENTITY.kind,
+  publicOrigin: () => (IDENTITY.kind === "perspicax" ? IDENTITY.publicOrigin.replace(/\/+$/, "") : null),
+  linkServerId: () => perspicaxDirectory?.serverId() ?? null,
+  verify: (token, audience, serverId) => {
+    if (!oidcRp) throw new Error("This server has no identity provider configured.");
+    return oidcRp.verifyConsoleAssertion(token, audience, serverId, PERSPICAX_EVENTS_ACTORS);
+  },
+  person: (sub) => {
+    if (IDENTITY.kind !== "perspicax") return null;
+    const person = principals.bySubject(IDENTITY.issuer, sub);
+    return person ? { principalId: person.id, active: personActive(perspicaxDirectory?.directory(), person, sub) } : null;
+  },
+  health: (change) => productFixCards.apply(change),
+  triggers: (principalId) => {
+    const person = principalId.trim().toLowerCase();
+    return webhooks.list()
+      .filter((hook) => hook.enabled && hook.source?.type === "perspicax" && productTriggerPerson(hook) === person)
+      .map((hook) => hook.id);
+  },
+  ingest: (id, event, key) => webhooks.ingest(id, event, key),
 });
 // An imported bot's public card (port of OpenMausBot #3073).
 ROUTES.push(createTeamLibraryGrokRoutes());

@@ -15,6 +15,7 @@ export interface OriginGatesDeps {
   hostedWorkspaceConfiguration(...args: any[]): any;
   inboundMail(...args: any[]): any;
   inboundTelephony(...args: any[]): any;
+  perspicaxEvents(...args: any[]): any;
   isInterimSignInRoute(...args: any[]): any;
   isLoopbackHost(...args: any[]): any;
   isProxied(...args: any[]): any;
@@ -60,6 +61,8 @@ async function originGates(req: IncomingMessage, res: ServerResponse, url: URL, 
   if (await host.inboundMail(req, res, url)) return true;
   // 2026-10-26: bot phone events from Perspicax Voice, same rule.
   if (await host.inboundTelephony(req, res, url)) return true;
+  // #4250: product events from the organization server, same rule.
+  if (await host.perspicaxEvents(req, res, url)) return true;
   // 2026-10-11: Perspicax's link routes, the link token only.
   if (await host.orgLink(req, res, url)) return true;
   // 2026-10-16: a security key ceremony, its own id only (server/routes/security-keys.ts).

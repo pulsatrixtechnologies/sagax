@@ -307,7 +307,9 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
           : routine.schedule.type === "webhook"
             ? { type: "webhook" as const }
             : routine.schedule.type === "event"
-              ? routine.schedule.source === "github"
+              ? routine.schedule.source === "perspicax"
+                ? { type: "event" as const, source: "perspicax" as const, resources: [...(routine.schedule.resources as string[])] }
+                : routine.schedule.source === "github"
                 ? { type: "event" as const, source: "github" as const, events: [...(routine.schedule.events as string[])], ...(routine.schedule.filters ? { filters: { ...(routine.schedule.filters as Record<string, string[]>) } } : {}) }
                 : { type: "event" as const, source: "email" as const }
               : routine.schedule.type === "limit_reset"

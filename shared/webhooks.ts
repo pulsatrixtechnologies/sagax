@@ -3,7 +3,7 @@
  * verbatim from the client's mirrors (src/lib/webhooks.ts); the client file
  * re-exports these under the same names. */
 import type { RoutineRunOn } from "./routines.ts";
-import type { TriggerAutomationStatus, TriggerSourceConfig } from "./trigger-sources.ts";
+import type { TriggerAutomationStatus, TriggerSourceConfig, TriggerSourceType } from "./trigger-sources.ts";
 
 export interface WebhookTrigger {
   id: string;
@@ -42,6 +42,13 @@ export interface WebhookTrigger {
   /** Typed trigger: the provider, its events and filters (see
    *  shared/trigger-sources.ts). Absent on a plain bearer webhook. */
   source?: TriggerSourceConfig;
+  /** #4250: the typed source of a trigger whose type the previous app
+   * release does not know (NEWER_SOURCE_TYPES). That release draws any
+   * webhook with `source` as a typed row and throws on an unknown type, so
+   * the server sends it here instead (webhookForApp) and this app reads it
+   * back as `source` (webhookFromServer). Fold into `source` one release
+   * later. */
+  sourceNext?: TriggerSourceConfig;
   /** Typed trigger: whether the provider's signing secret is set. The
    *  secret is write only. */
   signingSecretSet?: boolean;
@@ -98,3 +105,23 @@ export interface WebhookIngressStatus {
   error?: string;
 }
 
+
+/** #4250: typed sources the previous release (app and server) cannot read:
+ * its catalog has no entry for them. One release of grace, then empty. */
+export const NEWER_SOURCE_TYPES: ReadonlySet<TriggerSourceType> = new Set<TriggerSourceType>(["perspicax"]);
+
+/** A trigger as the server sends it to an app: a newer source rides under
+ * `sourceNext`, so the previous app release (which reads `source` only)
+ * shows a plain row instead of throwing. */
+export function webhookForApp<T extends { source?: TriggerSourceConfig }>(webhook: T): T & { sourceNext?: TriggerSourceConfig } {
+  if (!webhook.source || !NEWER_SOURCE_TYPES.has(webhook.source.type)) return webhook;
+  const { source, ...rest } = webhook;
+  return { ...(rest as T), sourceNext: source };
+}
+
+/** A trigger as this app reads it: `sourceNext` back into `source`. */
+export function webhookFromServer(webhook: WebhookTrigger): WebhookTrigger {
+  if (webhook.source || !webhook.sourceNext) return webhook;
+  const { sourceNext, ...rest } = webhook;
+  return { ...rest, source: sourceNext };
+}

@@ -13,6 +13,7 @@ import type { RecurrenceChoice } from "./types";
 import type { LimitResetChoice } from "@/components/routines/LimitResetFields";
 import type { ScheduleDraft } from "@/components/routines/schedule-editor";
 import { githubScheduleFromDraft, type GithubDraft } from "@/components/routines/GithubTriggerFields";
+import { productScheduleFromDraft, type ProductDraft } from "@/components/routines/ProductTriggerFields";
 import type { EffortLevel } from "../../../shared/model-selection";
 
 export type EventEditorSaveCtx = {
@@ -20,6 +21,7 @@ export type EventEditorSaveCtx = {
   setSaving: (v: boolean) => void;
   setError: (v: string) => void;
   githubDraft: GithubDraft;
+  productDraft: ProductDraft;
   state: { routines: Routine[] };
   kind: "routine" | "call";
   routinesOnly: boolean;
@@ -91,11 +93,18 @@ export type EventEditorSaveCtx = {
   onClose: () => void;
 };
 
+/** #4250: the product change schedule, or its reason as the save's error. */
+function productScheduleOrThrow(draft: ProductDraft) {
+  const built = productScheduleFromDraft(draft);
+  if ("error" in built) throw new Error(built.error);
+  return built.schedule;
+}
+
 /** Shared save path for the event editor (routine or call). */
 export async function runEventEditorSave(ctx: EventEditorSaveCtx): Promise<void> {
   const {
     attachmentPending, setSaving, setError, state, kind, routinesOnly, intervalMinutes,
-    existingIntervalSchedule, recurrence, intervalEndsAt, limitReset, githubDraft, bots, lockedBotId, botIds,
+    existingIntervalSchedule, recurrence, intervalEndsAt, limitReset, githubDraft, productDraft, bots, lockedBotId, botIds,
     existingRoutine, keptCron, scheduleTouched, schedule, pattern, scheduleDraft, keptEvery, at,
     weekdays, selectedIntervalWeekdays, selectedIntervalWindow, triggered, timingMode, earlyMinutes,
     lateMinutes, name, description, routineTarget, groupId, runOn, durationMinutes, timeoutMinutes,
@@ -126,6 +135,8 @@ export async function runEventEditorSave(ctx: EventEditorSaveCtx): Promise<void>
         ? { type: "webhook" as const }
         : recurrence === "github"
         ? githubScheduleFromDraft(githubDraft)
+        : recurrence === "product"
+        ? productScheduleOrThrow(productDraft)
         : recurrence === "email" && existingRoutine?.schedule.type === "event"
           ? existingRoutine.schedule
         : recurrence === "pattern" || recurrence === "advanced"
@@ -194,7 +205,7 @@ export async function runEventEditorSave(ctx: EventEditorSaveCtx): Promise<void>
         return;
       }
     } else {
-      if (recurrence === "interval" || recurrence === "limit_reset" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "github" || recurrence === "email") throw new Error(t("routineCalendar.supportedCallSchedule"));
+      if (recurrence === "interval" || recurrence === "limit_reset" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "github" || recurrence === "product" || recurrence === "email") throw new Error(t("routineCalendar.supportedCallSchedule"));
       const nextSchedule = makeCalendarSchedule(recurrence, at, weekdays);
       const input: CalendarCallInput = {
         name,

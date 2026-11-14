@@ -253,6 +253,8 @@ export function verifySource(
       return { ok: false, reason: "Bot email arrives only through the Perspicax relay" };
     case "telephony":
       return { ok: false, reason: "Bot phone arrives only through the Perspicax relay" };
+    case "perspicax":
+      return { ok: false, reason: "Product changes arrive only through the Perspicax events route" };
   }
 }
 
@@ -584,6 +586,7 @@ export function normalizeSource(type: TriggerSourceType, request: SourceRequest)
     case "linear": return linearEvents(request, payload);
     case "botmail": return { ignored: "Bot email arrives only through the Perspicax relay" };
     case "telephony": return { ignored: "Bot phone arrives only through the Perspicax relay" };
+    case "perspicax": return { ignored: "Product changes arrive only through the Perspicax events route" };
   }
 }
 

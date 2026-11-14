@@ -1,6 +1,6 @@
 // DEBUG only: every character, skin and a few colours at the reference's
 // frame sizes (24, 42, 85 pt), for comparing the phone's renders with the
-// desktop's. Launch with `-mascotGallery owl|shape|trombi|shiba|frog|crab|group`; the same
+// desktop's. Launch with `-mascotGallery owl|shape|shape-set|shape-skins|trombi|shiba|frog|crab|group`; the same
 // `ios/parity/mascot-gallery.render.ts`, with the same layout.
 import SwiftUI
 #if DEBUG
@@ -26,6 +26,9 @@ struct MascotGalleryView: View {
                     .foregroundStyle(.white)
                 switch page {
                 case "shape": shapes
+                case "shape-set": shapeSet
+                case "shape-skins": shapeSkins
+                case "shape-own": shapeOwn
                 case "shape-moves": ShapeMovesGallery()
                 case "shape-volume": ShapeVolumeGallery()
                 case "trombi": trombis
@@ -102,6 +105,83 @@ struct MascotGalleryView: View {
                 character(CompleteMascotLook(character: .shape, shape: .squircle), "teal", .none, 60, .working)
                 character(CompleteMascotLook(character: .shape, shape: .squircle), "teal", .none, 60, .happy)
                 character(CompleteMascotLook(character: .shape, shape: .squircle), "teal", .none, 60, .sleeping)
+            }
+        }
+    }
+
+    /// Every shape once (ours, then the engine's gallery), the skins on one
+    /// shape and the engine's moods: a page light enough for a simulator capture (#4159).
+    private var shapeSet: some View {
+        let colors = ["tomato", "jade", "violet", "honey", "cobalt", "white", "black", "teal"]
+        return VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(44), spacing: 6), count: 8), alignment: .leading, spacing: 6) {
+                ForEach(Array(MascotShape.allCases.enumerated()), id: \.offset) { index, shape in
+                    character(CompleteMascotLook(character: .shape, shape: shape), colors[index % colors.count], .none, 40)
+                }
+            }
+            row("skins") {
+                ForEach(ShapeSkin.allCases.prefix(7), id: \.self) { skin in
+                    character(CompleteMascotLook(character: .shape, shape: .star, shapeSkin: skin), "purple", .none, 44)
+                }
+            }
+            row("skins") {
+                ForEach(ShapeSkin.allCases.dropFirst(7), id: \.self) { skin in
+                    character(CompleteMascotLook(character: .shape, shape: .star, shapeSkin: skin), "purple", .none, 44)
+                }
+            }
+            row("moods: idle, thinking, happy; 24, 85") {
+                character(CompleteMascotLook(character: .shape, shape: .brain), "teal", .none, 60)
+                character(CompleteMascotLook(character: .shape, shape: .brain), "teal", .none, 60, .thinking)
+                character(CompleteMascotLook(character: .shape, shape: .brain), "teal", .none, 60, .happy)
+                character(CompleteMascotLook(character: .shape), "red", .none, 24)
+                character(CompleteMascotLook(character: .shape, shape: .cloud, shapeSkin: .glossy), "blue", .none, 85)
+            }
+        }
+    }
+
+    /// Each premium skin's layers on our shapes and a gallery one, small and
+    /// larger: the desktop's `shape-skins` page (#4159).
+    private var shapeSkins: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(ShapeSkin.allCases.dropFirst(4)), id: \.self) { skin in
+                row(skin.rawValue) {
+                    ForEach([MascotShape.circle, .star, .gem, .brain], id: \.self) { shape in
+                        character(CompleteMascotLook(character: .shape, shape: shape, shapeSkin: skin), "purple", .none, 36)
+                    }
+                    character(CompleteMascotLook(character: .shape, shape: .cloud, shapeSkin: skin), "teal", .none, 36)
+                    character(CompleteMascotLook(character: .shape, shape: .circle, shapeSkin: skin), "purple", .none, 60)
+                }
+            }
+        }
+    }
+
+    /// A person's own shapes (#4159): a definition pasted on the desktop and
+    /// an own drawing in the older portable format, plain, in skins, flat and
+    /// in moods: the desktop's `shape-own` page.
+    private var shapeOwn: some View {
+        let pasted = MascotAvatarDef.engine(EngineAvatarDef(
+            id: "my-ghost", name: "My ghost",
+            body: .init(path: "M24 50C24 28 35 12 50 12C65 12 76 28 76 50L77 80C77 85 73 88 68 88C63 88 61 84 59 81C57 84 54 88 50 88C46 88 43 84 41 81C39 84 37 88 32 88C27 88 23 85 23 80Z"),
+            eyes: .init(x: 50, y: 42, spacing: 16, scale: 1.15)
+        ))
+        var drawing = ShapeAvatarPresets.byShape(.cup)
+        drawing?.id = "my-own-mascot"
+        drawing?.name = "My own"
+        let own = drawing.map(MascotAvatarDef.own)
+        return VStack(alignment: .leading, spacing: 10) {
+            ForEach([("pasted", MascotShape.pumpkin, Optional(pasted)), ("own drawing", MascotShape.circle, own)], id: \.0) { label, shape, def in
+                row("\(label): plain, neon, gold, outline, chrome") {
+                    ForEach([ShapeSkin.plain, .neon, .gold, .outline, .chrome], id: \.self) { skin in
+                        character(CompleteMascotLook(character: .shape, shape: shape, shapeSkin: skin, avatarDef: def), "purple", .none, 44)
+                    }
+                }
+                row("\(label): idle, thinking, happy; 24, 85") {
+                    character(CompleteMascotLook(character: .shape, shape: shape, avatarDef: def), "teal", .none, 60)
+                    character(CompleteMascotLook(character: .shape, shape: shape, avatarDef: def), "teal", .none, 60, .thinking)
+                    character(CompleteMascotLook(character: .shape, shape: shape, avatarDef: def), "teal", .none, 60, .happy)
+                    character(CompleteMascotLook(character: .shape, shape: shape, avatarDef: def), "red", .none, 24)
+                    character(CompleteMascotLook(character: .shape, shape: shape, shapeSkin: .glossy, avatarDef: def), "blue", .none, 85)
+                }
             }
         }
     }
@@ -277,8 +357,8 @@ struct MascotGalleryView: View {
         }
     }
 }
-/// `-mascotGallery shape-moves`: the sixteen faces live, then the fourteen
-/// moves, each replaying every four seconds (the desktop's Moves menu).
+/// `-mascotGallery shape-moves`: the engine's three moods live, then the
+/// fourteen moves, each replaying every four seconds (the desktop's Moves menu).
 private struct ShapeMovesGallery: View {
     @State private var handles = ShapeMove.allCases.map { _ in OwlMascotHandle() }
     private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
@@ -286,11 +366,11 @@ private struct ShapeMovesGallery: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(78), spacing: 6), count: 4), alignment: .leading, spacing: 4) {
-                ForEach(ShapeExpression.allCases, id: \.self) { face in
+                ForEach([ShapeMood.idle, .thinking, .happy], id: \.self) { mood in
                     VStack(spacing: 0) {
-                        ShapeMascotView(shape: .squircle, color: "cobalt", size: 46, expression: face, animated: true)
+                        ShapeMascotView(shape: .squircle, color: "cobalt", size: 46, mood: mood, animated: true)
                             .frame(width: 60, height: 52)
-                        Text(verbatim: face.rawValue).font(.system(size: 9)).foregroundStyle(.white.opacity(0.6))
+                        Text(verbatim: mood.engine.rawValue).font(.system(size: 9)).foregroundStyle(.white.opacity(0.6))
                     }
                 }
             }
@@ -351,13 +431,14 @@ private struct ShapeVolumeGallery: View {
     }
 
     private func frozen(_ shape: MascotShape, _ move: ShapeMove, _ size: CGFloat) -> some View {
-        let run = ShapeEngine(ShapeEngineState(shape: shape, expression: .neutral, color: "#F4F4F4"), now: 0, seed: 1)
-        run.play(move, now: 0)
+        let player = ShapeMovePlayer()
+        player.play(move, shape: shape, color: "#F4F4F4", now: 0)
         let timing = ShapeEngineData.moveTiming[move]!
-        let frame = run.frame(min(timing.duration, timing.morph + 0.6))
-        let pose = ShapeVolume.grounded(ShapePose(yaw: 28, pitch: 18, roll: 8, scale: ShapeVolumeData.rest.scale, lift: ShapeVolumeData.rest.lift), shape)
+        let frame = player.frame(min(timing.duration - 0.01, timing.morph + 0.6))
+        let still = frame?.morph.flatMap { ShapeEngineStill.of($0) } ?? ShapeEngineStill.of(shape)
         return Canvas { context, canvas in
-            ShapeRenderer.draw(in: &context, canvas: canvas, box: size, frame: frame, pose: pose, shape: shape, skin: .plain, hex: "#F4F4F4")
+            guard let still else { return }
+            ShapeEngineRenderer.draw(in: &context, canvas: canvas, box: size, still: still, mood: .idle, skin: .plain, hex: "#F4F4F4", move: frame)
         }
         .frame(width: size * 1.2, height: size * 1.2)
     }

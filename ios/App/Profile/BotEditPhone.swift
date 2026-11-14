@@ -28,6 +28,9 @@ struct BotEditActions {
     /// servers page (the iPad's Plugins window); nil: the profile opens its own.
     var openApps: (() -> Void)? = nil
     var openMcpServers: (() -> Void)? = nil
+    /// General > Settings > Appearance (#4162): the Appearance pane as a
+    /// pushed sub-page; nil: the avatar editor (`editAvatar`).
+    var openAppearance: (() -> Void)? = nil
 }
 
 extension LocalizedStringKey {

@@ -81,7 +81,7 @@ final class ShapeObjectEyeAnchorTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "shape-polar-eyes", withExtension: "json", subdirectory: "Fixtures"))
         let before = try JSONDecoder().decode([String: [[Double]]].self, from: Data(contentsOf: url))
         var seen = 0
-        for shape in MascotShape.allCases where !Self.objects.contains(shape) {
+        for shape in MascotShape.bodies where !Self.objects.contains(shape) {
             for expression in ShapeExpression.allCases {
                 let key = "\(shape.rawValue)|\(expression.rawValue)"
                 let want = try XCTUnwrap(before[key], key)

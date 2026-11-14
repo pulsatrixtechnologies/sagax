@@ -13,7 +13,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { it } from "vitest";
 import { BotAvatar } from "@/components/Avatar";
 import { OwlAvatar } from "@/components/OwlAvatar";
+import { loadAllBakedStills } from "@/components/shape-stills";
 import { MASCOT_SKIN_IDS } from "../shared/mascot-skins";
+import { OBJECT_SHAPE_BY_ID } from "../shared/shape-avatar-presets";
+import ghost from "../third_party/open-bot-avatar/gallery/ghost.json" with { type: "json" };
 import { MASCOT_SHAPES, SHAPE_SKINS, TROMBI_SKINS, type MascotLook } from "../shared/mascot-look";
 
 const root = process.cwd();
@@ -45,6 +48,49 @@ function page(name: string): ReactNode[] {
       ),
     ];
   }
+  if (name === "shape-set") {
+    // the phone's `shape-set` page: every shape once, the skins on the star, the engine's moods
+    const colors = ["tomato", "jade", "violet", "honey", "cobalt", "white", "black", "teal"];
+    const skins = (list: readonly (typeof SHAPE_SKINS)[number][]) => list.map((skin) => avatar({ character: "shape", shape: "star", skins: { shape: skin } }, "purple", 44));
+    return [
+      h("div", { className: "grid" }, ...MASCOT_SHAPES.map((shape, i) => avatar({ character: "shape", shape }, colors[i % colors.length]!, 40))),
+      row("skins", skins(SHAPE_SKINS.slice(0, 7))),
+      row("skins", skins(SHAPE_SKINS.slice(7))),
+      row("moods: idle, thinking, happy; 24, 85", [
+        avatar({ character: "shape", shape: "brain" }, "teal", 60),
+        avatar({ character: "shape", shape: "brain" }, "teal", 60, "none", "thinking"),
+        avatar({ character: "shape", shape: "brain" }, "teal", 60, "none", "happy"),
+        avatar({ character: "shape" }, "red", 24),
+        avatar({ character: "shape", shape: "cloud", skins: { shape: "glossy" } }, "blue", 85),
+      ]),
+    ];
+  }
+  if (name === "shape-skins") {
+    // the phone's `shape-skins` page: each premium skin's layers on our shapes and a gallery one
+    return SHAPE_SKINS.slice(4).map((skin) =>
+      row(skin, [
+        ...(["circle", "star", "gem", "brain"] as const).map((shape) => avatar({ character: "shape", shape, skins: { shape: skin } }, "purple", 36)),
+        avatar({ character: "shape", shape: "cloud", skins: { shape: skin } }, "teal", 36),
+        avatar({ character: "shape", shape: "circle", skins: { shape: skin } }, "purple", 60),
+      ]),
+    );
+  }
+  if (name === "shape-own") {
+    // the phone's `shape-own` page: a pasted definition and an own drawing, in skins and moods (#4159)
+    const pasted = { ...ghost, id: "my-ghost", name: "My ghost" } as never;
+    const own = { ...OBJECT_SHAPE_BY_ID.cup, id: "my-own-mascot", name: "My own" } as never;
+    return ([["pasted", "pumpkin", pasted], ["own drawing", "circle", own]] as const).flatMap(([label, shape, avatarDef]) => [
+      row(`${label}: plain, neon, gold, outline, chrome`, (["plain", "neon", "gold", "outline", "chrome"] as const).map((skin) =>
+        avatar({ character: "shape", shape, skins: { shape: skin }, avatarDef }, "purple", 44))),
+      row(`${label}: idle, thinking, happy; 24, 85`, [
+        avatar({ character: "shape", shape, avatarDef }, "teal", 60),
+        avatar({ character: "shape", shape, avatarDef }, "teal", 60, "none", "thinking"),
+        avatar({ character: "shape", shape, avatarDef }, "teal", 60, "none", "happy"),
+        avatar({ character: "shape", shape, avatarDef }, "red", 24),
+        avatar({ character: "shape", shape, skins: { shape: "glossy" }, avatarDef }, "blue", 85),
+      ]),
+    ]);
+  }
   if (name === "trombi") {
     return [
       ...TROMBI_SKINS.map((skin) => row(skin, [24, 42, 85].map((size) => avatar({ character: "trombi", skins: { trombi: skin } }, "green", size)))),
@@ -75,10 +121,12 @@ function page(name: string): ReactNode[] {
   );
 }
 
-it("renders the mascot gallery pages", () => {
+it("renders the mascot gallery pages", async () => {
   const out = process.env.MASCOT_GALLERY_OUT;
   if (!out) return;
-  for (const name of ["owl", "shape", "trombi", "group"]) {
+  // a page draws the shapes once their stills are loaded
+  await loadAllBakedStills();
+  for (const name of ["owl", "shape", "shape-set", "shape-skins", "shape-own", "trombi", "group"]) {
     const body = renderToStaticMarkup(h("main", null, h("div", { className: "title" }, `desktop · ${name}`), ...page(name)));
     const html = `<!doctype html><meta charset="utf-8"><style>
       html,body{margin:0;background:#141414;width:402px;height:874px;overflow:hidden}
@@ -87,7 +135,8 @@ it("renders the mascot gallery pages", () => {
       .row{display:flex;flex-direction:column;gap:4px}
       .label{color:rgba(255,255,255,.6);font-size:11px}
       .items{display:flex;align-items:flex-end;gap:8px}
-      .inline-flex{display:inline-flex}.shrink-0{flex-shrink:0}.items-end{align-items:flex-end}.justify-center{justify-content:center}
+      .grid{display:grid;grid-template-columns:repeat(8,44px);gap:6px;justify-items:center;align-items:center}
+      .inline-flex{display:inline-flex}.shrink-0{flex-shrink:0}.relative{position:relative}.items-center{align-items:center}.block{display:block}.h-\\[84\\%\\]{height:84%}.w-\\[84\\%\\]{width:84%}.select-none{user-select:none}.items-end{align-items:flex-end}.justify-center{justify-content:center}
       *{animation:none!important}
       ${css}
     </style>${body}`;

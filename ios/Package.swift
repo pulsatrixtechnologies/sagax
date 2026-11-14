@@ -17,7 +17,9 @@ let package = Package(
         .library(name: "CompanionCore", targets: ["CompanionCore"])
     ],
     targets: [
-        .target(name: "CompanionCore"),
+        // shape-engine.js: the open-bot-avatar engine with the desktop's
+        // runtimeStill, run in JavaScriptCore for a person's own shape (#4159).
+        .target(name: "CompanionCore", resources: [.copy("Resources/shape-engine.js")]),
         .testTarget(
             name: "CompanionCoreTests",
             dependencies: ["CompanionCore"],

@@ -129,7 +129,7 @@ final class ShapeSetRegressionTests: XCTestCase {
     }
 
     func testAtRestInEveryFaceBlinkingAndLookingAroundOnARestingAndARolledSquashedBody() {
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             var frames: [(String, ShapeFrame)] = ShapeExpression.allCases.map { ($0.rawValue, ShapeFrames.still(shape, $0, color: Self.color)) }
             frames.append(("blink", ShapeFrames.still(shape, .neutral, color: Self.color, open: 0.06)))
             for (x, y) in [(1.0, 1.0), (-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0)] {
@@ -153,7 +153,7 @@ final class ShapeSetRegressionTests: XCTestCase {
 
     func testThroughEveryMoveAtFiveMomentsTheBodyStaysOneWholeOutlineWithItsTwoEyesAndComesBackToRest() throws {
         let seed = 7.0
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             for move in ShapeMove.allCases {
                 let state = ShapeEngineState(shape: shape, expression: .neutral, color: Self.color)
                 let run = ShapeEngine(state, now: 0, seed: seed)
@@ -196,7 +196,7 @@ final class ShapeSetRegressionTests: XCTestCase {
     /// but plain) draws the face without the bend, and the eyes still sit
     /// inside the outline it draws.
     func testInEverySkinTheEyesSitInsideTheOutlineTheSkinDraws() {
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             let frame = ShapeFrames.still(shape, .neutral, color: Self.color)
             for skin in ShapeSkin.allCases {
                 let paint = ShapeArt.paint(skin, hex: Self.color)
@@ -207,7 +207,7 @@ final class ShapeSetRegressionTests: XCTestCase {
     }
 
     func testOnlyThePumpkinWearsAStem() {
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             let frame = ShapeFrames.still(shape, .neutral, color: Self.color)
             let drawing = ShapeVolume.drawShape(frame, Self.restPose(shape), detail: .full)
             XCTAssertEqual(frame.stem != nil, shape == .pumpkin, "\(shape) frame stem")
@@ -216,7 +216,7 @@ final class ShapeSetRegressionTests: XCTestCase {
     }
 
     func testEveryShapeHasItsArtFromTheGeometry() {
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             let art = ShapeArt.art[shape]
             XCTAssertNotNil(art, shape.rawValue)
             guard let art else { continue }

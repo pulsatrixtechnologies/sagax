@@ -82,10 +82,8 @@ public enum ShapeArt {
 
     /// `shapeSkinBase` (skin-fx/shape-skins.tsx): the finish every size
     /// draws, from the skin rules of the geometry file (`ShapeGeometryData.skins`).
-    /// The premium editions add light, texture and effects on top on the
-    /// desktop (`shapeSkinLayers`); the phone draws this base finish, which
-    /// is the desktop's own still look minus those layers
-    /// (`MascotSubstitution` records it).
+    /// The premium editions add light, texture and effects on top
+    /// (`shapeSkinLayers`, ported as `ShapeSkinLayers`).
     public static func paint(_ skin: ShapeSkin, hex: String) -> Paint {
         let rule = ShapeGeometryData.skins[skin] ?? ShapeGeometryData.skins[.plain]!
         let fill = paintOf(rule.fill, hex: hex)

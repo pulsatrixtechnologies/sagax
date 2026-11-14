@@ -62,6 +62,19 @@ targets:
       - path: ../src/assets/mascots/shiba
         type: folder
         buildPhase: resources
+      # The shape mascots are the open-bot-avatar engine's frames (#4159,
+      # ShapeEngineStillData): its MIT licence and the repository's NOTICE
+      # ship in the app, as the desktop ships them.
+      - path: ../NOTICE
+        buildPhase: resources
+      - path: ../third_party/open-bot-avatar
+        type: folder
+        buildPhase: resources
+      # A person's own shape runs the engine itself (ShapeEngineBake,
+      # Resources/shape-engine.js), which bundles zod: its MIT licence too.
+      - path: ../third_party/zod
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: CompanionCore
         product: CompanionCore
@@ -365,6 +378,7 @@ targets:
       - path: App/Mascots/OwlMascotView.swift
       - path: App/Mascots/OwlSkinFx.swift
       - path: App/Mascots/ShapeMascotView.swift
+      - path: App/Mascots/ShapeSkinPainter.swift
       - path: App/Mascots/TrombiMascotView.swift
       - path: App/Mascots/BunbuMascotView.swift
       - path: App/Mascots/ShibaMascotView.swift
@@ -441,6 +455,7 @@ targets:
       - path: App/Mascots/OwlMascotView.swift
       - path: App/Mascots/OwlSkinFx.swift
       - path: App/Mascots/ShapeMascotView.swift
+      - path: App/Mascots/ShapeSkinPainter.swift
       - path: App/Mascots/TrombiMascotView.swift
       - path: App/Mascots/BunbuMascotView.swift
       - path: App/Mascots/ShibaMascotView.swift

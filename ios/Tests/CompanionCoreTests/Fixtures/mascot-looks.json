@@ -51,7 +51,17 @@
     "sprout",
     "tin",
     "tome",
-    "ship"
+    "ship",
+    "brain",
+    "bull",
+    "bunny",
+    "camera",
+    "magnifier",
+    "paint-brush",
+    "palette",
+    "witch-hat",
+    "barbell",
+    "watering-can"
   ],
   "shapeSkins": [
     "plain",
@@ -9270,6 +9280,2216 @@
       }
     },
     {
+      "name": "shape brain plain",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape brain pastel",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape brain glossy",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape brain night",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape brain outline",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape brain gold",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape brain neon",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape brain chrome",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape brain crystal",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape brain circuit",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape brain holo",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape brain molten",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape brain galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "brain",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape bull plain",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape bull pastel",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape bull glossy",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape bull night",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape bull outline",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape bull gold",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape bull neon",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape bull chrome",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape bull crystal",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape bull circuit",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape bull holo",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape bull molten",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape bull galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bull",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape bunny plain",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape bunny pastel",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape bunny glossy",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape bunny night",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape bunny outline",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape bunny gold",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape bunny neon",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape bunny chrome",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape bunny crystal",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape bunny circuit",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape bunny holo",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape bunny molten",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape bunny galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bunny",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape camera plain",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape camera pastel",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape camera glossy",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape camera night",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape camera outline",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape camera gold",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape camera neon",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape camera chrome",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape camera crystal",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape camera circuit",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape camera holo",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape camera molten",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape camera galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "camera",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier plain",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier pastel",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier glossy",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier night",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier outline",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier gold",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier neon",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier chrome",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier crystal",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier circuit",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier holo",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier molten",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape magnifier galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "magnifier",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush plain",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush pastel",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush glossy",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush night",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush outline",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush gold",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush neon",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush chrome",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush crystal",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush circuit",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush holo",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush molten",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape paint-brush galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "paint-brush",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape palette plain",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape palette pastel",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape palette glossy",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape palette night",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape palette outline",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape palette gold",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape palette neon",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape palette chrome",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape palette crystal",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape palette circuit",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape palette holo",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape palette molten",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape palette galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "palette",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat plain",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat pastel",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat glossy",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat night",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat outline",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat gold",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat neon",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat chrome",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat crystal",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat circuit",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat holo",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat molten",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape witch-hat galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "witch-hat",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape barbell plain",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape barbell pastel",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape barbell glossy",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape barbell night",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape barbell outline",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape barbell gold",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape barbell neon",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape barbell chrome",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape barbell crystal",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape barbell circuit",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape barbell holo",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape barbell molten",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape barbell galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "barbell",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can plain",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can pastel",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can glossy",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can night",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can outline",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can gold",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can neon",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can chrome",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can crystal",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can circuit",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can holo",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can molten",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape watering-can galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "watering-can",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
       "name": "trombi classic",
       "input": {
         "character": "trombi",
@@ -13203,6 +15423,129 @@
       "input": "bunbu",
       "expected": {
         "character": "owl"
+      }
+    },
+    {
+      "name": "own shape drawing",
+      "input": {
+        "character": "shape",
+        "shape": "circle",
+        "skins": {
+          "shape": "gold"
+        },
+        "avatarDef": {
+          "schemaVersion": 1,
+          "id": "my-own-mascot",
+          "name": "My own",
+          "body": {
+            "kind": "path",
+            "d": "M26 16L58 16L60 30L72 28C90 28 98 40 98 52C98 66 88 78 68 78L60 76L62 84C62 92 54 96 44 96C34 96 26 92 26 84ZM60 38L68 36C80 36 86 44 86 52C86 62 78 70 66 70L60 68Z"
+          },
+          "eyes": {
+            "anchor": [
+              42,
+              48
+            ],
+            "size": {
+              "w": 7,
+              "h": 14
+            },
+            "shape": "pill",
+            "gap": 14
+          }
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "circle",
+        "avatarDef": {
+          "schemaVersion": 1,
+          "id": "my-own-mascot",
+          "name": "My own",
+          "body": {
+            "kind": "path",
+            "d": "M26 16L58 16L60 30L72 28C90 28 98 40 98 52C98 66 88 78 68 78L60 76L62 84C62 92 54 96 44 96C34 96 26 92 26 84ZM60 38L68 36C80 36 86 44 86 52C86 62 78 70 66 70L60 68Z"
+          },
+          "eyes": {
+            "anchor": [
+              42,
+              48
+            ],
+            "size": {
+              "w": 7,
+              "h": 14
+            },
+            "shape": "pill",
+            "gap": 14
+          }
+        },
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "pasted engine definition",
+      "input": {
+        "character": "shape",
+        "shape": "pumpkin",
+        "skins": {
+          "shape": "neon"
+        },
+        "avatarDef": {
+          "version": 1,
+          "id": "my-ghost",
+          "name": "My ghost",
+          "body": {
+            "path": "M24 50C24 28 35 12 50 12C65 12 76 28 76 50L77 80C77 85 73 88 68 88C63 88 61 84 59 81C57 84 54 88 50 88C46 88 43 84 41 81C39 84 37 88 32 88C27 88 23 85 23 80Z"
+          },
+          "eyes": {
+            "x": 50,
+            "y": 42,
+            "spacing": 16,
+            "scale": 1.15
+          }
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pumpkin",
+        "avatarDef": {
+          "version": 1,
+          "id": "my-ghost",
+          "name": "My ghost",
+          "body": {
+            "path": "M24 50C24 28 35 12 50 12C65 12 76 28 76 50L77 80C77 85 73 88 68 88C63 88 61 84 59 81C57 84 54 88 50 88C46 88 43 84 41 81C39 84 37 88 32 88C27 88 23 85 23 80Z"
+          },
+          "eyes": {
+            "x": 50,
+            "y": 42,
+            "spacing": 16,
+            "scale": 1.15
+          }
+        },
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "pasted engine definition without eyes",
+      "input": {
+        "character": "shape",
+        "shape": "pumpkin",
+        "avatarDef": {
+          "version": 1,
+          "id": "no-eyes",
+          "name": "No eyes",
+          "body": {
+            "path": "M20 20H80V80H20Z"
+          }
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pumpkin"
       }
     }
   ],

@@ -172,9 +172,10 @@ final class MascotLookFixtureTests: XCTestCase {
     func testSubstitutionsAreNamedAndKeepTheCharacter() {
         XCTAssertTrue(MascotSubstitution.entries(for: CompleteMascotLook(character: .shape, shapeSkin: .plain)).isEmpty)
         XCTAssertTrue(MascotSubstitution.entries(for: CompleteMascotLook(character: .bunbu, bunbuSkin: .plush)).isEmpty)
-        let galaxy = MascotSubstitution.entries(for: CompleteMascotLook(character: .shape, shape: .cloud, shapeSkin: .galaxy))
-        XCTAssertEqual(galaxy.map(\.wanted), ["shape skin galaxy"])
-        XCTAssertEqual(galaxy.first?.character, .shape)
+        // a shape skin's layers are drawn since #4159 (ShapeSkinLayersTests): Bunbu's galaxy is still its base finish
+        let galaxy = MascotSubstitution.entries(for: CompleteMascotLook(character: .bunbu, bunbuSkin: .galaxy))
+        XCTAssertEqual(galaxy.map(\.wanted), ["Bunbu skin galaxy"])
+        XCTAssertEqual(galaxy.first?.character, .bunbu)
         let owl = MascotSubstitution.entries(for: MascotLook.owl.complete, owlSkin: .spirit)
         XCTAssertEqual(owl.first?.character, .owl)
         XCTAssertTrue(MascotSubstitution.entries(for: MascotLook.owl.complete, owlSkin: .lightning).isEmpty)
@@ -183,7 +184,8 @@ final class MascotLookFixtureTests: XCTestCase {
     /// The Shapes art the phone draws is the desktop's: one outline per
     /// shape and a pair of eyes for each mood.
     func testEveryShapeHasItsStillFrames() {
-        for shape in MascotShape.allCases {
+        // the bodies' own frames; every shape's engine still is checked in ShapeEngineStillTests
+        for shape in MascotShape.bodies {
             XCTAssertFalse(ShapeStillArt.body[shape, default: ""].isEmpty, shape.rawValue)
             for mood in ShapeMood.allCases {
                 XCTAssertFalse(ShapeStillArt.eyes[shape]?[mood]?.isEmpty ?? true, "\(shape.rawValue) \(mood.rawValue)")

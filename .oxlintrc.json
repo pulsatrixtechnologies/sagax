@@ -18,6 +18,7 @@
     "electron/vendor/**",
     "release/**",
     "third_party/**",
-    "electron/resources/**"
+    "electron/resources/**",
+    "ios/Sources/CompanionCore/Resources/**"
   ]
 }

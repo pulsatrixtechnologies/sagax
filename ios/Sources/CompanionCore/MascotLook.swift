@@ -186,9 +186,10 @@ public enum MascotStyle: String, CaseIterable, Codable, Sendable {
 }
 
 /// The shapes, in the picker's order (`MASCOT_SHAPES`, 2026-10-28): the
-/// bloub network's bodies and our pumpkin. The first eight keep the ids the
-/// desktop and older builds store (bean is the pebble, pick the triangle), so
-/// a look made on either side reads the same on the other.
+/// bloub network's bodies and our pumpkin, then the engine's gallery. The
+/// first eight keep the ids the desktop and older builds store (bean is the
+/// pebble, pick the triangle), so a look made on either side reads the same
+/// on the other.
 public enum MascotShape: String, CaseIterable, Codable, Sendable {
     case circle
     case blob = "bean"
@@ -200,6 +201,25 @@ public enum MascotShape: String, CaseIterable, Codable, Sendable {
     case flask, tube, potion, chomp, nibble, shield, bubble
     // Object silhouettes (shape-engine v2, 2026-11-01): portable JSON defs on desktop.
     case pad, cup, bulb, say, sprout, tin, tome, ship
+    // The open-bot-avatar engine's own avatars (`GALLERY_SHAPES`, #4145, #4159),
+    // after ours under the engine's ids: drawn by the engine only, no body of
+    // their own in the geometry file.
+    case brain, bull, bunny, camera, magnifier
+    case paintBrush = "paint-brush"
+    case palette
+    case witchHat = "witch-hat"
+    case barbell
+    case wateringCan = "watering-can"
+
+    /// The engine's gallery shapes (`GALLERY_SHAPES`).
+    public static let gallery: [MascotShape] = [.brain, .bull, .bunny, .camera, .magnifier, .paintBrush, .palette, .witchHat, .barbell, .wateringCan]
+
+    /// Whether the shape has a body in the geometry file (`isBodyShape`): the
+    /// moves turn such a body; the gallery's shapes move as the circle does.
+    public var isBody: Bool { !Self.gallery.contains(self) }
+
+    /// The shapes with a body in the geometry file (`BODY_SHAPES`).
+    public static var bodies: [MascotShape] { allCases.filter(\.isBody) }
 
     /// `LEGACY_SHAPES`: ids from earlier sets (and the phone's own old ids)
     /// land on the nearest shape.
@@ -392,13 +412,15 @@ public struct MascotLook: Codable, Hashable, Sendable {
     public var style: MascotStyle?
     public var shape: MascotShape?
     public var skins: Skins?
-    /// Portable Shape geometry (`shared/shape-avatar-def.ts`). Optional; colour stays separate.
-    public var avatarDef: ShapeAvatarDef?
+    /// A person's own shape (`MascotAvatarDef`): the portable geometry
+    /// (`shared/shape-avatar-def.ts`) or a pasted engine definition
+    /// (`shared/engine-avatar-def.ts`). Optional; colour stays separate.
+    public var avatarDef: MascotAvatarDef?
 
     /// The owl, what every bot wore before characters existed.
     public static let owl = MascotLook(character: .owl)
 
-    public init(character: MascotCharacter, style: MascotStyle? = nil, shape: MascotShape? = nil, skins: Skins? = nil, avatarDef: ShapeAvatarDef? = nil) {
+    public init(character: MascotCharacter, style: MascotStyle? = nil, shape: MascotShape? = nil, skins: Skins? = nil, avatarDef: MascotAvatarDef? = nil) {
         self.character = character
         self.style = style
         self.shape = shape
@@ -448,13 +470,10 @@ public struct MascotLook: Codable, Hashable, Sendable {
             )
             skins = read.isEmpty ? nil : read
         }
-        // Invalid avatarDef is dropped; the look still loads (cosmetic only).
-        var avatarDef: ShapeAvatarDef?
+        // Either format is kept as it came; an invalid avatarDef is dropped and the look still loads (cosmetic only).
+        var avatarDef: MascotAvatarDef?
         if container.contains(Key("avatarDef")), !(try container.decodeNil(forKey: Key("avatarDef"))) {
-            if let raw = try? container.decode(ShapeAvatarDef.self, forKey: Key("avatarDef")),
-               case let .ok(valid) = ShapeAvatarValidator.check(raw) {
-                avatarDef = valid
-            }
+            avatarDef = try? container.decode(MascotAvatarDef.self, forKey: Key("avatarDef"))
         }
         return MascotLook(character: character, style: style, shape: shape, skins: skins, avatarDef: avatarDef)
     }
@@ -510,9 +529,9 @@ public struct CompleteMascotLook: Hashable, Sendable {
     public var ogreSkin: OgreSkin
     public var frogSkin: FrogSkin
     public var crabSkin: CrabSkin
-    public var avatarDef: ShapeAvatarDef?
+    public var avatarDef: MascotAvatarDef?
 
-    public init(character: MascotCharacter, style: MascotStyle = .flat, shape: MascotShape = .circle, shapeSkin: ShapeSkin = .plain, trombiSkin: TrombiSkin = .classic, bunbuSkin: BunbuSkin = .plain, shibaSkin: ShibaSkin = .plain, grumpSkin: GrumpSkin = .plain, ogreSkin: OgreSkin = .plain, frogSkin: FrogSkin = .plain, crabSkin: CrabSkin = .plain, avatarDef: ShapeAvatarDef? = nil) {
+    public init(character: MascotCharacter, style: MascotStyle = .flat, shape: MascotShape = .circle, shapeSkin: ShapeSkin = .plain, trombiSkin: TrombiSkin = .classic, bunbuSkin: BunbuSkin = .plain, shibaSkin: ShibaSkin = .plain, grumpSkin: GrumpSkin = .plain, ogreSkin: OgreSkin = .plain, frogSkin: FrogSkin = .plain, crabSkin: CrabSkin = .plain, avatarDef: MascotAvatarDef? = nil) {
         self.character = character
         self.style = style
         self.shape = shape

@@ -94,7 +94,7 @@ final class ShapeVolumeTests: XCTestCase {
 
     func testTheDrawingIsTheDesktops() throws {
         let fixture = try fixture()
-        XCTAssertEqual(fixture.warps.count, MascotShape.allCases.count * 3)
+        XCTAssertEqual(fixture.warps.count, MascotShape.bodies.count * 3)
         for entry in fixture.warps {
             let shape = try XCTUnwrap(MascotShape(rawValue: entry.shape))
             let face = try XCTUnwrap(ShapeExpression(rawValue: entry.expression))
@@ -140,7 +140,7 @@ final class ShapeVolumeTests: XCTestCase {
             XCTAssertEqual(paint.edge, ink.edge, ink.hex)
             XCTAssertEqual(paint.eyes, ink.eyes, ink.hex)
         }
-        XCTAssertEqual(Set(fixture.ground.keys), Set(MascotShape.allCases.map(\.rawValue)))
+        XCTAssertEqual(Set(fixture.ground.keys), Set(MascotShape.bodies.map(\.rawValue)))
         for (shape, lift) in fixture.ground {
             XCTAssertEqual(ShapeVolume.groundLift(try XCTUnwrap(MascotShape(rawValue: shape))), lift, accuracy: 1e-9, shape)
         }
@@ -189,7 +189,7 @@ final class ShapeVolumeTests: XCTestCase {
     /// The body's thickness (`bodyDepth`) still thins the slices of a
     /// naturally thin body (a tube, a teardrop's tip), measured on its own radii.
     func testAThinBodyThinsItsSlices() {
-        for shape in MascotShape.allCases {
+        for shape in MascotShape.bodies {
             let thinnest = ShapeEngineData.radii[shape]!.min()!
             XCTAssertEqual(ShapeFrames.still(shape, .neutral).depth, min(1, thinnest / ShapeEngineData.depthFull), accuracy: 1e-12, shape.rawValue)
         }

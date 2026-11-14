@@ -22,11 +22,11 @@ struct DesktopBotProfileHost: View {
     private var gate: SurfaceGate { session.surfaceGate }
 
     /// Gear / Edit bot (overview, no panel section) show the profile root.
-    /// Avatar / deep links open that Edit bot page in the main column.
+    /// Avatar / deep links open that Edit bot page in the main column;
+    /// Appearance is General > Settings > Appearance, a sub-page back to
+    /// the profile like Personality and Model (#4162, the desktop's #4147).
     private var sectionPage: DesktopPersonaPage? {
         if model.personaPage == .overview && model.panelSection == nil { return nil }
-        // Appearance unfolds inside the profile page (#1939 r7), like the desktop.
-        if model.personaPage == .appearance && model.panelSection == nil { return nil }
         return model.personaPage
     }
 
@@ -62,12 +62,7 @@ struct DesktopBotProfileHost: View {
             openRoutines: {
                 withAnimation(.easeOut(duration: 0.15)) { routinesOpen = true }
             },
-            editAvatar: {
-                withAnimation(.easeOut(duration: 0.15)) {
-                    model.panelSection = nil
-                    model.personaPage = .appearance
-                }
-            },
+            editAvatar: { showAppearance() },
             archive: { confirmingArchive = true },
             delete: { confirmingDelete = true },
             close: { close() },
@@ -83,7 +78,8 @@ struct DesktopBotProfileHost: View {
             // Access > "+ Add" > Apps: the Plugins window, the
             // desktop's togglePlugins (#3399); closing it comes back here.
             // MCP servers opens the profile's own page of servers.
-            openApps: { model.modal = .plugins }
+            openApps: { model.modal = .plugins },
+            openAppearance: { showAppearance() }
         )
     }
 
@@ -154,12 +150,7 @@ struct DesktopBotProfileHost: View {
                 context: editContext,
                 actions: editActions,
                 slackURL: slackURL,
-                fillsMain: true,
-                openAppearance: model.personaPage == .appearance && model.panelSection == nil,
-                onAppearanceOpened: {
-                    // The pane is open in the page: the request is spent.
-                    model.personaPage = .overview
-                }
+                fillsMain: true
             )
         }
         .environment(\.desktopTheme, theme)
@@ -290,6 +281,15 @@ struct DesktopBotProfileHost: View {
         default: page.section
         }
         return section.flatMap { session.sectionLock(current, $0) }
+    }
+
+    /// The Appearance sub-page: the Settings row, the avatar, a deep link.
+    private func showAppearance() {
+        withAnimation(.easeOut(duration: 0.15)) {
+            model.permissionsPart = .all
+            model.panelSection = nil
+            model.personaPage = .appearance
+        }
     }
 
     private func openPersona(_ page: DesktopPersonaPage) {

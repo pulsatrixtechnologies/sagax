@@ -98,6 +98,8 @@ final class MascotLookTests: XCTestCase {
             "blossom", "cat", "ghost", "jellyfish", "axolotl", "puff", "pin", "marker", "sprite", "flask", "tube", "potion", "chomp", "nibble", "shield", "bubble",
             // object silhouettes (shape-engine v2, 2026-11-01)
             "pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship",
+            // the open-bot-avatar engine's gallery (#4145, #4159)
+            "brain", "bull", "bunny", "camera", "magnifier", "paint-brush", "palette", "witch-hat", "barbell", "watering-can",
         ])
         // the rest of the lists are checked against the desktop's own in MascotLookFixtureTests
         XCTAssertEqual(ShapeSkin.allCases.first, .plain)
@@ -276,8 +278,8 @@ final class MascotLookTests: XCTestCase {
     // MARK: shapes
 
     func testEveryShapeHasArtThatParses() {
-        // every shape's outline comes from the geometry file's radii (ShapeGeometryData), the engine's resting body
-        for shape in MascotShape.allCases {
+        // every body's outline comes from the geometry file's radii (ShapeGeometryData), the engine's resting body
+        for shape in MascotShape.bodies {
             let art = ShapeArt.art[shape]
             XCTAssertNotNil(art, shape.rawValue)
             XCTAssertTrue(art?.d.hasPrefix("M") == true)

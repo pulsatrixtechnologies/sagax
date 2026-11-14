@@ -1159,6 +1159,12 @@ export interface WireMessage extends WaitLineField {
    * its words. On a Cloud home a conversation holding one is someone else's
    * for lending and memory (server/cloud-lending.ts reportsFromOthers). */
   webhookPost?: boolean;
+  /** #4236: a bot row of a phone call (a hand-over, a handed bot's call
+   * summary) whose text, after its first line and a blank line, is the
+   * caller's words. Every client shows `text` as is; the model reads those
+   * words inside the untrusted markers (server/bots/bot-inbound-telephony.ts
+   * callRowContext). */
+  callerData?: boolean;
   /** user messages sent INTO a running turn (capabilities.queueing). */
   steered?: boolean;
   /** user messages a peer bot handed to this thread's RUNNING turn through

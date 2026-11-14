@@ -53,6 +53,7 @@ import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
 import { AGENT_SETTINGS_FIELDS } from "./fleet-agent-settings.ts";
 import { readRouteRefusal } from "./route-refusal.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
+import type { BotSpeech } from "../shared/voice-mode.ts";
 
 export {
   AGENT_PRIMARY_FIELD,
@@ -339,6 +340,13 @@ export interface AgentProfile {
   profile_url: string | null;
   /** Default model/engine (#1944); always when the agent is reachable. */
   model?: AgentModelSummary | null;
+  /** #4236: the agent's name, role and short description, as the console's
+   * bot page answers them (`persona`), for anyone who reaches it. */
+  persona?: { displayName: string; title: string | null; description: string | null; descriptionTruncated?: true };
+  /** #4236: how the agent sounds and talks to THIS caller, the console's
+   * bot page `speech` (shared/voice-mode.ts botSpeech) with the caller's
+   * own voice preference, for anyone who reaches it. */
+  speech?: BotSpeech;
 }
 
 /** One engine and its models for list_agent_models. */
@@ -1393,7 +1401,10 @@ function createAgentApiHandlers(env: {
       if (isRefusal(profile)) return profile;
       const model = profile.model ?? agent.model ?? null;
       return ok({
-        agent: { ...wireSummary(agent), title: profile.title, ...(model ? { model } : {}) },
+        agent: {
+          ...wireSummary(agent), title: profile.title, ...(model ? { model } : {}),
+          ...(profile.persona ? { persona: profile.persona } : {}), ...(profile.speech ? { speech: profile.speech } : {}),
+        },
         owner: profile.owner,
         profile: profile.profile,
         model,

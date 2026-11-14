@@ -3,6 +3,7 @@
 import { webhookPostText } from "../peers/peer-provenance.ts";
 import { digestPromptLine } from "../digest.ts";
 import { teamNoteContext } from "../team-work/person-note.ts";
+import { callRowContext } from "../bots/bot-inbound-telephony.ts";
 export type Host = Record<string, any>;
 
 export function createDirectContext(getHost: () => Host): any {
@@ -18,6 +19,8 @@ function directContext(bot: BotRecord, threadId: string, messages: Message[]) {
         : m.kind === "digest" && m.digest ? digestPromptLine(m.digest, m.from?.name ?? bot.name)
           // #3461: the person's words to a team bot, as a note from the app
           : m.teamNote ? teamNoteContext(m.teamNote)
+          // #4236: a call row's caller words, read inside the untrusted markers
+          : m.callerData && m.role !== "user" ? callRowContext(m.text ?? "")
           : m.peerAsk ? peerLineText(m.peerAsk.name, m.text ?? "", "delivered")
             : m.webhookPost && m.role !== "user" ? webhookPostText(bot.name, host.transcriptText(m, messagesById, host.cfg.profile?.name?.trim() || "User"))
             : m.role !== "user" && m.from ? host.peerReplayText(m, m.from.name, host.transcriptText(m, messagesById, host.cfg.profile?.name?.trim() || "User"))

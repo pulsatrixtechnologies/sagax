@@ -135,6 +135,9 @@ function world(options: {
         temporary: agent.temporary ? { created_at: clock, idle_hours: 24, expires_at: clock + 86_400_000, pinned: false } : null,
         profile_url: `https://perspicax.example.test/console/sagax/bots/${agentId}`,
         model: agent.model ?? null,
+        // #4236: how the agent sounds and talks to this caller
+        persona: { displayName: agent.name, title: `${agent.name} title`, description: agent.description },
+        speech: { xaiVoice: "ara", provider: "xai", voice: "ara", language: "fr", speed: 1.25, persona: `How ${agent.name} talks to ${caller.id}.` },
       };
     },
     async listModels(_caller, agentId) {
@@ -693,6 +696,20 @@ describe("get_agent / delete_agent", () => {
     // the audit row keeps the shape, never the instructions
     expect(w.audits.at(-1)!.entry).toMatchObject({ tool: "get_agent", outcome: "refused" });
     expect(JSON.stringify(w.audits)).not.toContain("careful clerk");
+  });
+
+  it("#4236: get_agent on an agent shared with the caller answers its persona and speech; an unreachable one stays unknown_agent", async () => {
+    const w = world({ reachable: (caller, agent) => agent.id !== "bot-c" || caller.id === "pr_owner" });
+    const shared = await w.api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });
+    expect(shared.status).toBe(200);
+    expect(shared.body.agent).toMatchObject({
+      id: "bot-a",
+      persona: { displayName: "Alpha", title: "Alpha title", description: "Answers questions about invoices" },
+      speech: { xaiVoice: "ara", provider: "xai", voice: "ara", language: "fr", speed: 1.25, persona: "How Alpha talks to pr_1." },
+    });
+    const unreachable = await w.api.call(person("pr_1"), "get_agent", { agent_id: "bot-c" });
+    expect(unreachable.status).toBe(404);
+    expect(unreachable.body).toMatchObject({ code: "unknown_agent" });
   });
 
   it("get_agent hides the instructions from a caller who may only use the agent", async () => {

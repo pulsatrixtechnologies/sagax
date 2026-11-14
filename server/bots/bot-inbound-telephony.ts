@@ -63,6 +63,26 @@
 //   - the same `eventId` twice: 202, delivered once (the triggers' delivery
 //     ring, kept on disk, plus a route memory that also covers notices);
 //   - every answer carries `X-Sagax-Telephony-Api: 1`.
+//
+// A live call handed from one of the person's bots to another (#4236):
+//   - `call_handover` is sent once to each bot (`botId`), with its own
+//     `eventId`. It is not a wake and not a turn: one row in the person's
+//     unified conversation with that bot, `via: "call"`: for `fromBotId`
+//     the call was passed to `toName`; for `toBotId` the call was received
+//     from the other bot, with what the person had just asked: stored as
+//     plain text every client shows (`callerData`), read by the model
+//     inside the usual untrusted markers (callRowContext);
+//   - every event to a bot the call was handed to (`call_handover`,
+//     `call_request`, `call_summary`) may be signed as the person on the
+//     call (`sub` = `person.id`) instead of the bot's owner: it is accepted
+//     when `sub` reaches the bot under the list_agents reach rule (own or
+//     shared, the person active and not turned off), else 403. Never another
+//     person's bot;
+//   - for such a bot, `call_request` is a turn of the person's own
+//     conversation with it (as the owner's own request is, `via: "call"`)
+//     and `call_summary`, the summary of that bot's part of the call, a row
+//     of the same conversation: neither ever wakes the owner's phone
+//     triggers, which would hand one person's call to another.
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
@@ -71,6 +91,7 @@ import { formatPhone } from "../../shared/outbound-call.ts";
 import type { NormalizedTriggerEvent } from "../../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "../org/org-admin-routes.ts";
+import { wrapUntrusted } from "../../shared/safety-review.ts";
 import { reachMeSmsReply } from "../reach-me/inbound.ts";
 import {
   phoneContactDirective,
@@ -95,8 +116,11 @@ export const TELEPHONY_SEEN_MAX = 2_000;
 export const TELEPHONY_SEEN_MS = 24 * 60 * 60_000;
 const MAX_TOKEN_CHARS = 8_192;
 
-export const TELEPHONY_EVENTS = ["sms", "call_started", "call_request", "call_summary", "pin_locked", "call_rejected", "call_result", "call_progress"] as const;
+export const TELEPHONY_EVENTS = ["sms", "call_started", "call_request", "call_summary", "pin_locked", "call_rejected", "call_result", "call_progress", "call_handover"] as const;
 export type TelephonyEventType = (typeof TELEPHONY_EVENTS)[number];
+/** #4236: the events the gateway may sign as the person on a handed call,
+ * for a bot that person reaches without owning it. */
+export const HANDED_CALL_EVENTS: ReadonlySet<TelephonyEventType> = new Set(["call_handover", "call_request", "call_summary"]);
 /** The events that wake the bot, and the trigger kind each one becomes. */
 export const TELEPHONY_WAKE_KINDS: Readonly<Partial<Record<TelephonyEventType, string>>> = {
   sms: "sms.received",
@@ -157,11 +181,21 @@ const callProgressSchema = z.object({
 
 export type CallProgressBody = z.output<typeof callProgressSchema>;
 
+const BOT_ID = /^[\w-]{1,128}$/;
+
+/** #4236: a live call handed from one bot to another. */
+const handoverSchema = z.object({
+  fromBotId: z.string().regex(BOT_ID),
+  toBotId: z.string().regex(BOT_ID),
+  toName: oneLine(1, 200),
+});
+
 const telephonySchema = z.object({
   contract: z.literal(TELEPHONY_CONTRACT),
   event: z.enum(TELEPHONY_EVENTS),
-  /** `<event>:<Twilio sid>`: the delivery id and the dedupe key. */
-  eventId: z.string().max(200).regex(/^[a-z_]{1,32}:[A-Za-z0-9_-]{1,128}$/),
+  /** `<event>:<Twilio sid>`: the delivery id and the dedupe key. #4236: a
+   * hand-over's is `call_handover:<CallSid>:<id>`, one per bot. */
+  eventId: z.string().max(200).regex(/^[a-z_]{1,32}:[A-Za-z0-9_-]{1,128}(?::[A-Za-z0-9_-]{1,64})?$/),
   receivedAt: z.string().max(64).regex(RFC3339).refine((value) => Number.isFinite(Date.parse(value))),
   line: z.object({
     id: oneLine(1, 128),
@@ -182,7 +216,7 @@ const telephonySchema = z.object({
     trust: z.literal("caller"),
     text: printable(TELEPHONY_TEXT_MAX),
   }).optional(),
-  botId: z.string().regex(/^[\w-]{1,128}$/),
+  botId: z.string().regex(BOT_ID),
   directives: z.object({
     thirdPartyCall: z.enum(["card", "direct"]),
     // The former name of `psa_contact` is read for one version and
@@ -194,10 +228,16 @@ const telephonySchema = z.object({
   }),
   result: callResultSchema.optional(),
   progress: callProgressSchema.optional(),
+  handover: handoverSchema.optional(),
 }).superRefine((value, ctx) => {
   // a call_result, and only a call_result, carries its result
   if ((value.event === "call_result") !== (value.result !== undefined)) ctx.addIssue({ code: "custom", path: ["result"], message: "result goes with call_result only" });
   if ((value.event === "call_progress") !== (value.progress !== undefined)) ctx.addIssue({ code: "custom", path: ["progress"], message: "progress goes with call_progress only" });
+  // a call_handover, and only a call_handover, carries its hand-over, and
+  // goes to one of its two bots
+  if ((value.event === "call_handover") !== (value.handover !== undefined)) ctx.addIssue({ code: "custom", path: ["handover"], message: "handover goes with call_handover only" });
+  if (value.handover && value.handover.fromBotId === value.handover.toBotId) ctx.addIssue({ code: "custom", path: ["handover"], message: "a call is handed to another bot" });
+  if (value.handover && value.botId !== value.handover.fromBotId && value.botId !== value.handover.toBotId) ctx.addIssue({ code: "custom", path: ["botId"], message: "botId is one of the hand-over's bots" });
   if (!value.eventId.startsWith(`${value.event}:`)) ctx.addIssue({ code: "custom", path: ["eventId"], message: "eventId must start with the event" });
   // pin_locked and call_rejected carry a masked number (`***1234`), the others the real one.
   const pattern = MASKED_FROM.has(value.event) ? MASKED : E164;
@@ -213,7 +253,37 @@ export function parseTelephonyEvent(value: unknown): TelephonyEvent | null {
 }
 
 export function isTelephonyNotice(event: TelephonyEventType): boolean {
-  return TELEPHONY_WAKE_KINDS[event] === undefined;
+  return event !== "call_handover" && TELEPHONY_WAKE_KINDS[event] === undefined;
+}
+
+/** #4236: a bot row of a call in the person's conversation. `text` is what
+ * every client shows as is; with `callerData`, what follows its first line
+ * and a blank line is the caller's words, which the model reads inside the
+ * usual untrusted markers (callRowContext), never the person's chat. */
+export interface CallRow { text: string; callerData: boolean }
+
+/** #4236: the row a hand-over writes in the person's conversation with
+ * `botId`. The words the person had just asked go to the bot that takes the
+ * call only, as caller data. */
+export function callHandoverRow(event: Pick<TelephonyEvent, "botId" | "handover" | "content">, fromName: string | null): CallRow {
+  const handed = event.handover!;
+  if (event.botId === handed.fromBotId) return { text: `Call passed to ${handed.toName}.`, callerData: false };
+  const text = event.content?.text.trim() ?? "";
+  const line = `Call received from ${fromName?.trim() || "another bot"}.`;
+  return text ? { text: `${line}\n\n${text}`, callerData: true } : { text: line, callerData: false };
+}
+
+/** #4236: the summary of a handed bot's part of the call, as a row of the
+ * person's conversation with it. */
+export function handedCallSummaryRow(text: string): CallRow {
+  return { text: `Call summary.\n\n${text.trim()}`, callerData: true };
+}
+
+/** #4236: what the model reads of a call row with caller data: its first
+ * line as written, the caller's words under it inside the untrusted markers. */
+export function callRowContext(text: string): string {
+  const cut = text.indexOf("\n\n");
+  return cut < 0 ? wrapUntrusted("call", text) : `${text.slice(0, cut)}\n\n${wrapUntrusted("call", text.slice(cut + 2))}`;
 }
 
 const TITLES: Record<string, string> = {
@@ -341,9 +411,14 @@ export interface TelephonyRouteDeps {
   ownText?(input: { ownerPrincipalId: string; sub: string; botId: string; from: string; text: string; label: string; via: "sms" | "call" }): Promise<boolean>;
   /** Allowlisted SMS contact persona for this owner (#2194). */
   allowlistedContact?(ownerPrincipalId: string, from: string): PhoneLineContact | null;
-  /** One-line notice in the owner's unified chat (allowlisted summary or
-   * unknown-sender notice). Fire-and-forget; never blocks delivery. */
-  ownerNotice?(input: { ownerPrincipalId: string; botId: string; text: string }): void;
+  /** One row in the person's unified chat with the bot (allowlisted
+   * summary, unknown-sender notice, #4236 a call's hand-over or a handed
+   * bot's call summary, stamped `via: "call"`). False: it was not written. */
+  ownerNotice?(input: { ownerPrincipalId: string; botId: string; text: string; via?: "call"; callerData?: boolean }): boolean | void;
+  /** #4236: whether the person `sub` reaches the bot under the list_agents
+   * reach rule (own or shared), with their principal id and whether they
+   * are active (in the directory, not turned off); null when they do not. */
+  reaches?(sub: string, botId: string): Promise<{ principalId: string; active: boolean } | null> | { principalId: string; active: boolean } | null;
   /** Whether the owner wants a chat notice for SMS that are not their own
    * and have no allowlisted contact persona. */
   noticeUnknown?(ownerPrincipalId: string): boolean;
@@ -462,9 +537,20 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
 
     const bot = deps.bot(event.botId);
     if (!bot) return send(res, 404, { error: "no_bot" });
-    // The bot Perspicax's IVR chose must be the line owner's own.
-    const owner = deps.owner(bot.id);
-    if (!owner?.sub || owner.sub !== assertion.sub) return send(res, 403, { error: "not_owner" });
+    // The bot Perspicax's IVR chose must be the line owner's own; #4236: or,
+    // on a handed call, a bot the person on the call reaches.
+    const lineOwner = deps.owner(bot.id);
+    let owner: { principalId: string; active: boolean };
+    let handed = false;
+    if (lineOwner?.sub && lineOwner.sub === assertion.sub) owner = lineOwner;
+    else {
+      const reached = HANDED_CALL_EVENTS.has(event.event) && event.person?.id === assertion.sub && deps.reaches
+        ? await deps.reaches(assertion.sub, bot.id)
+        : null;
+      if (!reached) return send(res, 403, { error: "not_owner" });
+      owner = reached;
+      handed = true;
+    }
     if (!owner.active) return send(res, 403, { error: "owner_inactive" });
 
     const seenKey = `${bot.id}\n${event.eventId}`;
@@ -501,6 +587,29 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
     const notice = isTelephonyNotice(event.event);
     if (seen.has(seenKey, now())) {
       return send(res, 202, { event: event.event, notice, triggers: 0, delivered: 0, duplicate: 1, ignored: 0, reason: "duplicate" });
+    }
+    const conversationRow = ({ text, callerData }: CallRow) => {
+      if (!deps.ownerNotice || deps.ownerNotice({ ownerPrincipalId: owner.principalId, botId: bot.id, text, via: "call", ...(callerData ? { callerData } : {}) }) === false) {
+        return send(res, 503, { error: "not_delivered" });
+      }
+      seen.add(seenKey, now());
+      deps.record({
+        botId: bot.id, botName: bot.name, ownerPrincipalId: owner.principalId, event: event.event, notice: false,
+        caller: maskedCaller(event.from), authenticated: event.authenticated, triggers: 0, delivered: 1, duplicate: 0, ignored: 0,
+      });
+      return send(res, 202, { event: event.event, notice: false, triggers: 0, delivered: 1, duplicate: 0, ignored: 0, conversation: true });
+    };
+    // #4236: a hand-over is one row of the person's conversation with each bot.
+    if (event.event === "call_handover") {
+      const from = event.handover!.fromBotId === bot.id ? null : deps.bot(event.handover!.fromBotId)?.name ?? null;
+      return conversationRow(callHandoverRow(event, from));
+    }
+    // #4236: the summary of a handed bot's part goes to the person's
+    // conversation with it, never to its owner's phone triggers.
+    if (handed && event.event === "call_summary") {
+      const text = event.content?.text.trim() ?? "";
+      if (!text) return send(res, 202, { event: event.event, notice: false, triggers: 0, delivered: 0, duplicate: 0, ignored: 1, reason: "empty" });
+      return conversationRow(handedCallSummaryRow(text));
     }
 
     // 2026-10-26: a text that answers a "Reach me" card (server/reach-me/inbound.ts)
@@ -541,6 +650,9 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
         return send(res, 202, { event: event.event, notice, triggers: 0, delivered: 1, duplicate: 0, ignored: 0, conversation: true });
       }
     }
+    // #4236: a bot the person only reaches never hands their call to its
+    // owner's phone triggers. Not remembered: the gateway may try again.
+    if (handed) return send(res, 202, { event: event.event, notice, triggers: 0, delivered: 0, duplicate: 0, ignored: 1, reason: "not_started" });
 
     let triggers: string[] = [];
     let delivered = 0;

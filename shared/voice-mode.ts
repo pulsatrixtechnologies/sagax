@@ -226,13 +226,26 @@ export interface BotSpeech {
   voice?: string;
   /** the bot's voice language, else its owner's: a short code */
   language?: string;
+  /** #4236: the bot's voice speed, else the person's (left out at 1) */
+  speed?: number;
+  /** #4236: the bot's persona and instructions text, line breaks kept, at
+   * most BOT_SPEECH_PERSONA_MAX characters (left out when empty) */
+  persona?: string;
 }
+
+/** The phone side cuts a persona text at 4000 characters too. */
+export const BOT_SPEECH_PERSONA_MAX = 4_000;
+
+const validSpeed = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= VOICE_MODE_MIN_SPEED && value <= VOICE_MODE_MAX_SPEED;
 
 /** `preference` is the owner's saved preference (VOICE_MODE_STORAGE_KEY, raw
  * or parsed), `botLanguage` the bot's own voice language (bot-profile.ts
  * `voiceLanguage`), which wins over the person's. The same rules as the
- * desktop (effectiveVoiceChoice, spokenVoice). */
-export function botSpeech(preference: unknown, botId: string, botLanguage?: string): BotSpeech {
+ * desktop (effectiveVoiceChoice, spokenVoice). #4236: with `bot`, its own
+ * voice speed (`voiceSpeed`, which wins over the person's `speed`) and its
+ * persona and instructions text (`soul`). */
+export function botSpeech(preference: unknown, botId: string, botLanguage?: string, bot?: { voiceSpeed?: unknown; persona?: unknown }): BotSpeech {
   let parsed = preference;
   if (typeof preference === "string") {
     try { parsed = JSON.parse(preference); } catch { parsed = null; }
@@ -242,11 +255,15 @@ export function botSpeech(preference: unknown, botId: string, botLanguage?: stri
   const { provider, voice } = spokenVoice(choice);
   const xaiVoice = choice.voices.xai;
   const language = botLanguage !== undefined && isVoiceModeLanguage(botLanguage) ? botLanguage : settings.language;
+  const speed = bot ? (validSpeed(bot.voiceSpeed) ? bot.voiceSpeed : settings.speed) : 1;
+  const persona = bot && typeof bot.persona === "string" ? bot.persona.replace(/\r\n?/g, "\n").trim().slice(0, BOT_SPEECH_PERSONA_MAX).trimEnd() : "";
   return {
     ...(xaiVoice ? { xaiVoice } : {}),
     provider,
     ...(voice ? { voice } : {}),
     ...(language && language !== "auto" ? { language } : {}),
+    ...(speed !== 1 ? { speed } : {}),
+    ...(persona ? { persona } : {}),
   };
 }
 

@@ -189,7 +189,10 @@ export function callGuidance(instructions: string | undefined, language: CallLan
   return both.length <= CONVERSATION_LIMITS.instructions ? both : own;
 }
 
-export function voiceCallArgs(request: OutboundCallRequest, input: { botName: string; ref: string; dryRun: boolean }): Record<string, unknown> {
+/** `botId` is the bot that places the call, pinned by the harness: the call
+ * speaks as that bot, with its own name, voice and persona, never as the
+ * line's own bot (Perspicax #2022). */
+export function voiceCallArgs(request: OutboundCallRequest, input: { botName: string; ref: string; dryRun: boolean; botId?: string }): Record<string, unknown> {
   const instructions = callGuidance(request.instructions, request.language);
   return {
     to: request.to,
@@ -202,6 +205,7 @@ export function voiceCallArgs(request: OutboundCallRequest, input: { botName: st
     ref: input.ref,
     ...(request.voicemail ? { voicemail: request.voicemail } : {}),
     confirm: true,
+    ...(input.botId ? { bot: `sagax:${input.botId}` } : {}),
     ...(input.dryRun ? { dry_run: true } : {}),
   };
 }

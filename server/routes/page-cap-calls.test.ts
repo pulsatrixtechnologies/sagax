@@ -96,6 +96,32 @@ describe("store (lot 3): collections a page keeps", () => {
     expect((await call(routes, A, "/api/pages/page-1/store/prefs/theme")).status).toBe(200);
   });
 
+  it("never gives a reader-scope document to anyone else when a later version declares the collection shared", async () => {
+    const record = page({ currentVersion: 1, versions: [{ n: 1, kind: "html", title: "Board", bytes: 100 }, { n: 2, kind: "html", title: "Board", bytes: 100 }] } as Partial<PageRecord>);
+    const byVersion: Record<number, Partial<PageCapabilities>> = {
+      1: { store: { prefs: { write: "signed_in", scope: "reader" } } },
+      2: { store: { prefs: { write: "signed_in", scope: "shared" } } },
+    };
+    const { routes: routesBy, deps } = world({ record });
+    deps.pages.capabilities = (_id, n) => ({ ...BASE, ...byVersion[n ?? 1] });
+    expect((await call(routesBy, B, "/api/pages/page-1/store/prefs/theme", "PUT", { value: { secret: "B private" } })).status).toBe(200);
+    // the page's person reads the unpublished version 2, where prefs is shared
+    const listed = await call(routesBy, A, "/api/pages/page-1/store/prefs?version=2");
+    expect(listed.status).toBe(200);
+    expect(JSON.stringify(listed.body)).not.toContain("B private");
+    expect((await call(routesBy, A, "/api/pages/page-1/store/prefs/theme?version=2")).status).toBe(404);
+    // a shared write or delete under version 2 never reaches B's document
+    await call(routesBy, A, "/api/pages/page-1/store/prefs/theme?version=2", "DELETE");
+    await call(routesBy, A, "/api/pages/page-1/store/prefs/theme?version=2", "PUT", { value: { secret: "A shared" } });
+    // version 2 published: still nothing of B's for anyone else
+    record.currentVersion = 2;
+    expect(JSON.stringify((await call(routesBy, A, "/api/pages/page-1/store/prefs")).body)).not.toContain("B private");
+    expect(JSON.stringify((await call(routesBy, as("person-c"), "/api/pages/page-1/store/prefs")).body)).not.toContain("B private");
+    // B still has their own document under the reader scope of version 1
+    record.currentVersion = 1;
+    expect((await call(routesBy, B, "/api/pages/page-1/store/prefs/theme")).body).toMatchObject({ value: { secret: "B private" }, mine: true });
+  });
+
   it("refuses a shared write once the page reads personal data and is shared; a reader collection stays the reader's", async () => {
     const { routes } = world({ personalShared: true, caps: { data: ["team-board"], store: { votes: { write: "signed_in", scope: "shared" }, mine: { write: "signed_in", scope: "reader" } } } });
     const shared = await call(routes, B, "/api/pages/page-1/store/votes", "POST", { value: { board: "B's board" } });

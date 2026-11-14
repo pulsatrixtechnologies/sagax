@@ -7,6 +7,12 @@
 // reader and gives them to nobody else (the page's person included), so
 // reader B never reads what reader A wrote there.
 //
+// The scope is kept with each document, not taken from the version being
+// read: a later (or unpublished) version that declares the same collection
+// `shared` never reaches a document written in reader scope, which stays
+// its writer's alone. A shared list, get, write or delete only ever touches
+// shared documents; a reader one only the reader's own.
+//
 // Storage: one file per page (page-store/<pageId>.json, 0600 in a 0700
 // folder), read once and kept in memory. Limits (PAGE_CAP_LIMITS):
 // documents per collection, bytes per document, bytes per page. The bytes
@@ -24,6 +30,10 @@ export interface StoredDoc {
   /** The writer: a principal id, or "owner" on a one-person server. */
   by: string;
   at: number;
+  /** The scope it was written in; it decides who reads it, whatever a later
+   * version declares. Absent on a document kept before it was stored: the
+   * key tells (a reader key holds the writer). */
+  scope?: PageStoreScope;
 }
 
 type Collections = Record<string, Record<string, StoredDoc>>;
@@ -37,8 +47,22 @@ function keyOf(scope: PageStoreScope, by: string, id: string): string {
   return scope === "reader" ? `${by.toLowerCase()}\u0000${id}` : id;
 }
 
-function mine(scope: PageStoreScope, doc: StoredDoc, reader: string): boolean {
-  return scope !== "reader" || doc.by.toLowerCase() === reader.toLowerCase();
+/** The scope a stored document was written in. */
+function scopeOf(key: string, doc: StoredDoc): PageStoreScope {
+  return doc.scope ?? (key.includes("\u0000") ? "reader" : "shared");
+}
+
+/** Whether a reader asking in `scope` sees this stored document: only a
+ * document written in that same scope, and a reader one only by its writer. */
+function mine(scope: PageStoreScope, key: string, doc: StoredDoc, reader: string): boolean {
+  const kept = scopeOf(key, doc);
+  if (kept !== scope) return false;
+  return kept !== "reader" || doc.by.toLowerCase() === reader.toLowerCase();
+}
+
+/** A document as handed out: without its stored scope. */
+function copy(doc: StoredDoc): StoredDoc {
+  return { id: doc.id, value: doc.value, by: doc.by, at: doc.at };
 }
 
 function compare(a: unknown, b: unknown): number {
@@ -101,20 +125,21 @@ export class PageStore {
 
   /** The documents this reader sees in one collection, filtered, sorted, capped. */
   list(pageId: string, collection: string, input: { scope: PageStoreScope; reader: string; query?: PageStoreQuery }): StoredDoc[] {
-    const docs = Object.values(this.load(pageId)[collection] ?? {}).filter((doc) => mine(input.scope, doc, input.reader));
+    const docs = Object.entries(this.load(pageId)[collection] ?? {}).filter(([key, doc]) => mine(input.scope, key, doc, input.reader)).map(([, doc]) => doc);
     const where = Object.entries(input.query?.where ?? {});
     const kept = where.length ? docs.filter((doc) => where.every(([name, wanted]) => field(doc.value, name) === wanted)) : docs;
     const order = input.query?.order;
     kept.sort(order && order.by !== "at"
       ? (a, b) => compare(field(a.value, order.by), field(b.value, order.by)) * (order.desc ? -1 : 1)
       : (a, b) => (a.at - b.at) * (order?.desc ? -1 : 1));
-    return kept.slice(0, Math.min(input.query?.limit ?? PAGE_STORE_LIST_MAX, PAGE_STORE_LIST_MAX)).map((doc) => ({ ...doc }));
+    return kept.slice(0, Math.min(input.query?.limit ?? PAGE_STORE_LIST_MAX, PAGE_STORE_LIST_MAX)).map(copy);
   }
 
   /** One document this reader sees, or null. */
   get(pageId: string, collection: string, id: string, input: { scope: PageStoreScope; reader: string }): StoredDoc | null {
-    const doc = this.load(pageId)[collection]?.[keyOf(input.scope, input.reader, id)];
-    return doc && mine(input.scope, doc, input.reader) ? { ...doc } : null;
+    const key = keyOf(input.scope, input.reader, id);
+    const doc = this.load(pageId)[collection]?.[key];
+    return doc && mine(input.scope, key, doc, input.reader) ? copy(doc) : null;
   }
 
   /** Write one document (a new id when `id` is absent), within the limits;
@@ -134,8 +159,10 @@ export class PageStore {
     const docs = data[collection] ?? {};
     const id = input.id ?? randomBytes(12).toString("base64url");
     const key = keyOf(input.scope, input.by, id);
+    // a reader key holds its writer and an id never does, so a shared write
+    // never lands on a reader's document, nor the reverse
     if (!(key in docs) && Object.keys(docs).length >= PAGE_CAP_LIMITS.storeDocuments) return { ok: false, status: 409, code: "too_large", error: `A collection keeps at most ${PAGE_CAP_LIMITS.storeDocuments} documents.` };
-    const doc: StoredDoc = { id, value: JSON.parse(json), by: input.by, at: this.now() };
+    const doc: StoredDoc = { id, value: JSON.parse(json), by: input.by, at: this.now(), scope: input.scope };
     docs[key] = doc;
     data[collection] = docs;
     const after = Buffer.byteLength(JSON.stringify(data));
@@ -143,7 +170,7 @@ export class PageStore {
     const grew = after - before;
     if (input.room !== undefined && grew > 0 && grew > input.room) return { ok: false, status: 409, code: "too_large", error: "The page's person has no room left for their pages." };
     this.save(pageId, data);
-    return { ok: true, doc: { ...doc }, grew };
+    return { ok: true, doc: copy(doc), grew };
   }
 
   /** Remove one document this reader sees; false when there is none. */
@@ -151,7 +178,7 @@ export class PageStore {
     const data = structuredClone(this.load(pageId));
     const key = keyOf(input.scope, input.reader, id);
     const doc = data[collection]?.[key];
-    if (!doc || !mine(input.scope, doc, input.reader)) return false;
+    if (!doc || !mine(input.scope, key, doc, input.reader)) return false;
     delete data[collection]![key];
     if (!Object.keys(data[collection]!).length) delete data[collection];
     this.save(pageId, data);

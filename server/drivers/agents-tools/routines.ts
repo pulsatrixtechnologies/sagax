@@ -70,14 +70,9 @@ export const DEF_PROPOSE_ROUTINE = {
           type: "object",
           additionalProperties: false,
           description:
-            "Instead of schedule. type is webhook, email, github or product. github runs on GitHub events: events lists the kinds (omit for all) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The owner copies its key (for github: webhook URL and secret) in the app. product runs when a resource the person watches in Perspicax changes (no turn before): resources lists the watched URIs, e.g. [\"perspicax://cw/boards/12/open\"]; nothing to set up.",
+            "Instead of schedule. type is webhook, email or github. github runs on GitHub events: events lists the kinds (omit for all) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The owner copies its key (for github: webhook URL and secret) in the app.",
           properties: {
-            type: { type: "string", enum: ["webhook", "email", "github", "product"] },
-            resources: {
-              type: "array",
-              items: { type: "string" },
-              description: "product only: the watched URIs (perspicax://...) whose change starts the routine.",
-            },
+            type: { type: "string", enum: ["webhook", "email", "github"] },
             events: {
               type: "array",
               items: { type: "string", enum: [...TRIGGER_SOURCES.github.events] },
@@ -107,6 +102,37 @@ export const DEF_PROPOSE_ROUTINE = {
       required: ["name", "instructions"],
     },
   };
+
+/** #4250 (S4): propose_routine on a server linked to Perspicax, where a
+ * routine can start when a watched product resource changes. A solo server
+ * never receives those events, so its catalog keeps DEF_PROPOSE_ROUTINE
+ * without the product trigger (an option that cannot work is not offered). */
+export function withProductTrigger(def: typeof DEF_PROPOSE_ROUTINE): typeof DEF_PROPOSE_ROUTINE {
+  const trigger = def.inputSchema.properties.trigger;
+  return {
+    ...def,
+    inputSchema: {
+      ...def.inputSchema,
+      properties: {
+        ...def.inputSchema.properties,
+        trigger: {
+          ...trigger,
+          description: trigger.description.replace("type is webhook, email or github.", "type is webhook, email, github or product.")
+            + " product runs when a resource the person watches in Perspicax changes (no turn before): resources lists the watched URIs, e.g. [\"perspicax://cw/boards/12/open\"]; nothing to set up.",
+          properties: {
+            ...trigger.properties,
+            type: { type: "string", enum: [...trigger.properties.type.enum, "product"] },
+            resources: {
+              type: "array",
+              items: { type: "string" },
+              description: "product only: the watched URIs (perspicax://...) whose change starts the routine.",
+            },
+          },
+        },
+      },
+    },
+  } as typeof DEF_PROPOSE_ROUTINE;
+}
 
 export const DEF_PROPOSE_ROUTINE_ACTION = {
     name: "propose_routine_action",

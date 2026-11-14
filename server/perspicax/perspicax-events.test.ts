@@ -461,3 +461,26 @@ describe("end to end: a fake organization server and a routine bound to a watche
     expect(webhookFromServer(plain)).toBe(plain);
   });
 });
+
+// #4250 (S4) review: a solo server never receives product events, so the
+// model is not offered a product trigger there; a linked server offers it.
+describe("propose_routine product trigger", () => {
+  const triggerOf = async (perspicax: boolean) => {
+    const { availableTools, catalogProfileFromEnv } = await import("../drivers/agents-catalog.ts");
+    const profile = catalogProfileFromEnv({ SAGAX_CHIEF_OF_STAFF: "1", SAGAX_PERSPICAX_TOOLS: perspicax ? "1" : "0" });
+    const tool = availableTools(profile).find((candidate) => candidate.name === "propose_routine") as { description: string; inputSchema: { properties: Record<string, unknown> } } | undefined;
+    return (tool?.inputSchema.properties.trigger ?? {}) as { description: string; properties: { type: { enum: string[] }; resources?: unknown } };
+  };
+  it("a solo server's propose_routine has no product trigger", async () => {
+    const trigger = await triggerOf(false);
+    expect(trigger.properties.type.enum).toEqual(["webhook", "email", "github"]);
+    expect(trigger.properties.resources).toBeUndefined();
+    expect(trigger.description).not.toContain("product");
+  });
+  it("a server linked to Perspicax offers the product trigger", async () => {
+    const trigger = await triggerOf(true);
+    expect(trigger.properties.type.enum).toEqual(["webhook", "email", "github", "product"]);
+    expect(trigger.properties.resources).toBeDefined();
+    expect(trigger.description).toContain("type is webhook, email, github or product.");
+  });
+});

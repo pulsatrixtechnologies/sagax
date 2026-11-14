@@ -574,7 +574,10 @@ export function availableTools(profile: CatalogProfile) {
 }
 
 function catalogTools(profile: CatalogProfile) {
-  const core = coreCatalogTools(profile);
+  // #4250 (S4): the product trigger only where Perspicax tells product events.
+  const core = profile.perspicax && !profile.externalRuntime
+    ? coreCatalogTools(profile).map((tool) => tool.name === "propose_routine" ? routinesTools.withProductTrigger(tool as typeof routinesTools.DEF_PROPOSE_ROUTINE) : tool)
+    : coreCatalogTools(profile);
   const base = [
     ...core,
     // image (#2954) and video on every engine, including a turn whose host

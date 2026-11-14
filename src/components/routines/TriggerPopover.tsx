@@ -24,7 +24,7 @@ import { RoutineWebhookPanel } from "./RoutineWebhookPanel";
 import { WatchFields, draftFromWatch, watchFromDraft } from "./WatchFields";
 import { PANEL_INPUT, PANEL_LABEL, PanelRow, PanelRows } from "./PanelRows";
 import { GithubTriggerFields, githubDraftFrom, githubScheduleFromDraft, type GithubDraft } from "./GithubTriggerFields";
-import { ProductTriggerFields, productDraftFrom, productScheduleFromDraft, type ProductDraft } from "./ProductTriggerFields";
+import { ProductTriggerFields, productDraftFrom, productScheduleFromDraft, useProductTriggerOffered, type ProductDraft } from "./ProductTriggerFields";
 
 /** once | a pattern's frequency | every N minutes | cron | webhook; mail
  * and limit-reset triggers are kept as they are (changed in Edit). */
@@ -117,6 +117,7 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
   const [cron, setCron] = useState(() => routine.schedule.type === "cron" ? { expression: routine.schedule.expression, timeZone: routine.schedule.timeZone } : { expression: "0 9 * * 1-5", timeZone: personTimeZone() });
   const [github, setGithub] = useState<GithubDraft>(() => githubDraftFrom(routine.schedule));
   const [product, setProduct] = useState<ProductDraft>(() => productDraftFrom(routine.schedule));
+  const productOffered = useProductTriggerOffered(routine.schedule);
   const [watchDraft, setWatchDraft] = useState(() => draftFromWatch(routine.precheck?.kind === "watch" ? routine.precheck : undefined));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -175,7 +176,7 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
     { value: "cron", label: t("routineTrigger.cron") },
     ...(routine.target !== "room-goal" ? [{ value: "webhook", label: t("routineEditor.whenWebhook") }] : []),
     ...(routine.target !== "room-goal" ? [{ value: "github", label: t("routineTrigger.github") }] : []),
-    ...(routine.target !== "room-goal" ? [{ value: "product", label: t("routineTrigger.product") }] : []),
+    ...(routine.target !== "room-goal" && productOffered ? [{ value: "product", label: t("routineTrigger.product") }] : []),
     ...(choice === "email" ? [{ value: "email", label: t("schedule.sentence.email") }] : []),
     ...(choice === "limit_reset" ? [{ value: "limit_reset", label: t("routines.limitReset.option") }] : []),
   ];

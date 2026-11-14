@@ -2,7 +2,8 @@
  * a product" in the routine editor (#4250, S4), next to its neighbour, the
  * GitHub trigger of the same editor. Mocked API (the watchable resources
  * answer a canned list); no server. Not shipped in the app.
- * ?lang=<code>&skin=<id>&sample=github|product */
+ * ?lang=<code>&skin=<id>&sample=github|product&linked=yes|no (a server
+ * linked to Perspicax, the default, or a solo server) */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineEditor } from "../components/RoutineCalendarPage";
@@ -18,6 +19,7 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 const lang = params.get("lang") ?? "fr";
 await loadLocale(lang);
 const sample = params.get("sample") ?? "product";
+const linked = params.get("linked") !== "no";
 
 /** About as many as a person with a few products sees: 40 resources and 15
  * templates, some with long names, so the list's scroll and search show. */
@@ -50,6 +52,9 @@ window.fetch = async (input, init) => {
       available: true,
       resources: watchableSample(lang),
     }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  if (url.includes("/api/org")) {
+    return new Response(JSON.stringify({ org: linked ? { name: "Org", identity: { kind: "perspicax" } } : null }), { status: 200, headers: { "content-type": "application/json" } });
   }
   if (url.includes("/api/")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
   return realFetch(input, init);

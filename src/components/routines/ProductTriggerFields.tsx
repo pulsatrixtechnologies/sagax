@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { api } from "@/state/store";
 import { cleanProductEventSchedule, type RoutineProductEventSchedule } from "../../../shared/routine-product-event";
 import { PANEL_INPUT, PanelRow, PanelRows } from "./PanelRows";
@@ -29,6 +30,19 @@ export interface WatchableResource {
 export function productDraftFrom(schedule: { type: string; source?: unknown; resources?: string[] } | undefined): ProductDraft {
   if (schedule?.type === "event" && schedule.source === "perspicax") return { resources: (schedule.resources ?? []).join("\n") };
   return { resources: "" };
+}
+
+/** Whether to offer "When something changes in a product": only a server
+ * linked to Perspicax receives those events (a solo server never would, so
+ * the choice is hidden there), and a routine that already has this trigger
+ * keeps it in the list. */
+export function productTriggerOffered(linked: boolean, schedule: { type: string; source?: unknown } | undefined): boolean {
+  return linked || (schedule?.type === "event" && schedule.source === "perspicax");
+}
+
+/** productTriggerOffered with the server's own word (GET /api/org). */
+export function useProductTriggerOffered(schedule: { type: string; source?: unknown } | undefined): boolean {
+  return productTriggerOffered(usePerspicaxOrg() !== null, schedule);
 }
 
 function draftUris(draft: ProductDraft): string[] {

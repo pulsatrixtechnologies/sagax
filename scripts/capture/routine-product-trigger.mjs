@@ -4,7 +4,7 @@
  * routine editor (#4250, S4) next to its neighbour, the GitHub trigger:
  * the trigger list open, then each trigger's fields, in the dark and the
  * light skin. Mocked API; no server, nothing read. Playwright, no window.
- * Usage: node scripts/capture/routine-product-trigger.mjs [--out DIR] [--port N] [--lang fr] [--samples github,product] [--prefix after] [--menus no] [--search text]
+ * Usage: node scripts/capture/routine-product-trigger.mjs [--out DIR] [--port N] [--lang fr] [--samples github,product] [--prefix after] [--menus no] [--search text] [--linked no]
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -23,6 +23,7 @@ const samples = arg("--samples", "github,product").split(",");
 const prefix = arg("--prefix", "after");
 const menus = arg("--menus", "yes") !== "no";
 const search = arg("--search", "");
+const linked = arg("--linked", "yes");
 
 async function waitForServer(url, ms = 180_000) {
   const start = Date.now();
@@ -59,7 +60,7 @@ try {
   for (const skin of ["pulsatrix", "daylight"]) {
     const tone = skin === "daylight" ? "light" : "dark";
     for (const sample of samples) {
-      await page.goto(`${base}?skin=${skin}&lang=${lang}&sample=${sample}`, { waitUntil: "networkidle", timeout: 180_000 });
+      await page.goto(`${base}?skin=${skin}&lang=${lang}&sample=${sample}&linked=${linked}`, { waitUntil: "networkidle", timeout: 180_000 });
       const dialog = page.locator("[role=dialog]").first();
       await dialog.waitFor({ timeout: 60_000 });
       await page.evaluate(() => { const d = document.querySelector("[role=dialog]"); if (d) d.style.maxHeight = "none"; });

@@ -62,6 +62,8 @@ const BOT = 7;
 const PROMPT = 8;
 const TYPED_DRAFT = 11;
 const SETUPS = 12;
+const ORG = 13;
+const LINKED_ORG = { org: { identity: { kind: "perspicax" } } };
 
 const bot = (id: string, name: string) => ({ id, name, hidden: false, modelSelection: { instanceId: "claude", model: "m" } }) as unknown as Bot;
 const webhook = (id: string, extra: Partial<WebhookTrigger> = {}): WebhookTrigger => ({
@@ -121,7 +123,7 @@ describe("Triggers / Automations > Webhooks view", () => {
     // The source and the bot are pill menus (PillSelect): their choices.
     const menu = (label: string) => tree.find((node) => node.props.ariaLabel === label)!.props.options as Array<{ value: string; label: string }>;
     expect(menu(t("triggers.sourceAria")).map((option) => option.label)).toEqual(["Another app sends a link request", "Typeform", "Zapier", "Stripe", "Something else…",
-      "GitHub", "GitLab", "Slack", "Microsoft Teams", "Outlook", "Outlook Calendar", "Sentry", "PagerDuty", "Linear", "Bot email", "Bot phone", "Product change"]);
+      "GitHub", "GitLab", "Slack", "Microsoft Teams", "Outlook", "Outlook Calendar", "Sentry", "PagerDuty", "Linear", "Bot email", "Bot phone"]);
     expect(menu(t("triggers.botAria"))).toContainEqual({ value: "atlas", label: "Atlas" });
     expect(html).toContain("Create trigger");
     expect(html).toContain("No triggers yet");
@@ -394,9 +396,18 @@ describe("Triggers / Automations > Webhooks view", () => {
     expect(html).toContain("Signing secret from Linear");
   });
 
+  it("offers a product change only on a server linked to Perspicax", () => {
+    const sources = () => (render().nodes.find((node) => node.props.ariaLabel === t("triggers.sourceAria"))!.props.options as Array<{ value: string }>).map((option) => option.value);
+    // a solo server never receives product events: the option is hidden
+    expect(sources()).not.toContain("perspicax");
+    fixture.overrides.set(ORG, LINKED_ORG);
+    expect(sources().at(-1)).toBe("perspicax");
+  });
+
   it("is translated in French", () => {
     setLocale("fr");
     fixture.overrides.set(SOURCE, "github");
+    fixture.overrides.set(ORG, LINKED_ORG);
     fixture.webhooks = [webhook("w1", { source: { type: "github", events: [], filters: {} }, signingSecretSet: true })];
     const { html, nodes: tree } = render();
     const options = tree.find((node) => node.props.ariaLabel === t("triggers.sourceAria"))!.props.options as Array<{ group: string }>;

@@ -15,6 +15,8 @@ import { MessagedLine } from "../MessagedLine";
 import { AskLine } from "../AskLine";
 import { TeamNoteLine } from "../TeamNoteLine";
 import { QuietModeLine } from "../QuietModeLine";
+import { PeerOutcomeLine } from "../PeerOutcomeLine";
+import { isPeerOutcomeLine } from "@/lib/peer-outcome-line";
 import { teamNoteCount, teamNoteFolded } from "@/lib/team-work";
 import { silentChatItem, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
@@ -380,6 +382,11 @@ export function MessagesListItem({
     // #2109: connect_github's sign-in card (code, Copy code, Open link)
     if (m.githubConnect && m.role === "bot" && m.kind === "text") {
       return <MessageBoundary fallbackText={m.text ?? ""}><GithubConnectCard card={m.githubConnect} /></MessageBoundary>;
+    }
+    // #4238: what a teammate's request left for the person: one line, the
+    // cards are in the pinned zone
+    if (isPeerOutcomeLine(m) && m.peerOutcome) {
+      return <MessageBoundary fallbackText={m.text ?? ""}><PeerOutcomeLine outcome={m.peerOutcome} botId={m.threadRef?.botId ?? botId} bots={bots} mid={m.id} /></MessageBoundary>;
     }
     // #3480: the bot's quiet mode went off: one quiet line that opens the runs
     if (m.quietSummary && m.role === "bot" && m.kind === "text") {

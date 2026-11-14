@@ -918,3 +918,64 @@ describe("#4233 (Q4): a routine's or a wake's [HUMAIN] items are keyed cards", (
     expect(w.cards("main", ROUTINE, itemsOf(reportOf(nine))).raised).toEqual([]);
   });
 });
+
+describe("#4238: a teammate's exchange's [HUMAIN] items are keyed cards under the peer scope", () => {
+  // the one item card path (person-item-cards.ts) over the person's
+  // conversation, as the server wires it for a teammate's exchange
+  function peerWorld() {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => (threadId === "work" ? "teammate" : undefined);
+    const asked: string[] = [];
+    const pending = (key: string) => (w.threads.get("main") ?? []).findLast((row) => row.kind === "options" && row.card?.askKey === key && !row.card.answered);
+    w.deps.peerItemCards = (_bot, target, items) => syncPersonItemCards({ routineId: "peer" }, items, {
+      pending: (key) => {
+        const card = pending(key)?.card;
+        return card ? { question: card.subtitle, options: card.options } : null;
+      },
+      pendingKeys: () => [],
+      answeredKeys: (prefix) => answeredItemKeys(w.threads.get(target) ?? [], prefix),
+      release: () => undefined,
+      ask: (input) => {
+        asked.push(String(input.key));
+        const open = pending(String(input.key));
+        if (open) open.card = { ...open.card!, subtitle: String(input.question) };
+        else w.deps.append(target, { role: "bot", kind: "options", card: { title: "q", subtitle: String(input.question), options: input.options as string[], askKey: String(input.key), noHold: true } as never });
+        return true;
+      },
+    }, "en", { retire: false });
+    return { ...w, asked };
+  }
+  const cards = (w: ReturnType<typeof peerWorld>) => (w.threads.get("main") ?? []).filter((row) => row.kind === "options");
+  const attention = (w: ReturnType<typeof peerWorld>) => (w.threads.get("main") ?? []).filter((row) => row.attention);
+
+  it("raises one keyed card per item, no unkeyed attention card, and hands the items to the outcome", () => {
+    const w = peerWorld();
+    w.say("work", REPORT);
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
+    expect(outcome).toMatchObject({ posted: true, keyed: true });
+    expect(cards(w)).toHaveLength(2);
+    expect(cards(w).every((row) => row.card!.askKey!.startsWith("item:peer:"))).toBe(true);
+    expect(attention(w)).toEqual([]);
+    expect(outcome.posted && outcome.peer?.keyed.map((one) => one.state)).toEqual(["raised", "raised"]);
+  });
+
+  it("the same tagged sweep an hour later keeps its cards: no second card", () => {
+    const w = peerWorld();
+    w.say("work", REPORT, "t1");
+    relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "t1", ok: true }, w.deps);
+    w.say("work", REPORT, "t2");
+    const again = relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "t2", ok: true }, w.deps);
+    expect(cards(w)).toHaveLength(2);
+    expect(attention(w)).toEqual([]);
+    expect(again.posted && again.peer?.keyed.map((one) => one.state)).toEqual(["kept", "kept"]);
+  });
+
+  it("an attention card posted from a teammate's exchange names its row and items for the outcome", () => {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => (threadId === "work" ? "teammate" : undefined);
+    w.say("work", REPORT);
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
+    const row = (w.threads.get("main") ?? []).find((message) => message.attention);
+    expect(outcome.posted && outcome.peer?.card).toEqual({ messageId: row!.id, items: row!.attention!.items });
+  });
+});

@@ -28,6 +28,7 @@ import { AskLine } from "./AskLine";
 import { NamesLine, type LineParty } from "./BotNamesLine";
 import { ExchangeSheet } from "./BotExchangeChip";
 import { PILL } from "./SettingsPrimitives";
+import { PeerOutcomeSummary } from "./PeerOutcomeLine";
 import { useChatRows } from "./ChatView.tsx-parts/types";
 
 const TeammateExchangeSheet = lazy(() => import("./TeammateExchangeSheet"));
@@ -130,6 +131,9 @@ export const IncomingLine = memo(function IncomingLine({ line, self, bots, mid }
       </>
     ) : undefined;
     const entry = threaded[index];
+    // #4238: what this request concluded for the person, under its exchange
+    const outcome = entry?.message.peerOutcome && !entry.message.peerOutcome.line ? entry.message.peerOutcome : undefined;
+    const sheetFooter = outcome ? <>{<PeerOutcomeSummary outcome={outcome} />}{footer}</> : footer;
     if (entry) {
       // the asker wrote the user-role lines of the exchange, the other answered
       const answer = line.verb === "answerFrom";
@@ -143,7 +147,7 @@ export const IncomingLine = memo(function IncomingLine({ line, self, bots, mid }
             threadId={entry.threadId!}
             task={entry.request}
             bots={bots.filter((bot) => bot.id === who.id || bot.id === me.id)}
-            footer={footer}
+            footer={sheetFooter}
             onClose={close}
           />
         </Suspense>

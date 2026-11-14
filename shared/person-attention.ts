@@ -106,7 +106,7 @@ function clip(text: string): string {
   return clean.length > ITEM_MAX ? `${clean.slice(0, ITEM_MAX - 1).trimEnd()}…` : clean;
 }
 
-function ticketOf(text: string): number | undefined {
+export function ticketOf(text: string): number | undefined {
   const match = TICKET.exec(text);
   const raw = match?.[1] ?? match?.[2];
   const id = raw ? Number(raw) : NaN;

@@ -417,13 +417,26 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     // run no longer reports from. Never from the person's own conversation.
     try {
       const attentionInput = { bot, threadId: event.threadId, turnId: completedTurnId, ok: event.ok, stopped, runTurn: Boolean(routineRun) };
-      relayFinishedTurn({
-        attention: () => host.relayPersonAttention(attentionInput, host.personAttentionDeps),
+      let attention: { posted: boolean; peer?: unknown } | undefined;
+      const relayed = relayFinishedTurn({
+        attention: () => (attention = host.relayPersonAttention(attentionInput, host.personAttentionDeps)),
         lateRun: () => host.mirrorLateRunReply(attentionInput, host.personAttentionDeps),
         // #3148: a turn the shutdown cut resumes at the next start; no
         // "did not finish (error)" trace in the chat for the restart.
         background: () => (!event.ok || stopped) && isShuttingDown() ? false : host.mirrorBackgroundReply(attentionInput, host.personAttentionDeps),
       }, incidentsCopied);
+      // #4238: a teammate's request ends with its outcome for the person
+      // (server/turns/peer-outcome-relay.ts): the items the bot raised, or
+      // the server's one ask when its words leave something on the person
+      if (host.settlePeerOutcome && host.peerOutcomeDeps && !isShuttingDown()) {
+        // what the attention relay carried is this outcome's items, recorded
+        // once; a person who muted these cards gets none raised either
+        host.settlePeerOutcome({
+          ...attentionInput,
+          ...(attention?.posted ? { carried: attention.peer ?? { keyed: [] } } : {}),
+          ...(relayed === "muted" ? { muted: true } : {}),
+        }, host.peerOutcomeDeps);
+      }
     } catch (error) {
       console.error(`[attention] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
     }

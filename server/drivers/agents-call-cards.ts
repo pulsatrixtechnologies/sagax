@@ -64,8 +64,25 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     if (answered) {
       return { text: `Full access answered this for the person: ${answered}. The person already authorized this work; continue in this same turn without waiting for a click, and do not ask again.` };
     }
-    const body = (result && typeof result === "object" ? result : {}) as { waitsForPerson?: unknown; holds?: unknown; replaced?: unknown; retired?: unknown; turnEnds?: unknown; addressedTo?: unknown; people?: unknown; inRoom?: unknown };
+    const body = (result && typeof result === "object" ? result : {}) as { waitsForPerson?: unknown; holds?: unknown; replaced?: unknown; retired?: unknown; turnEnds?: unknown; addressedTo?: unknown; people?: unknown; inRoom?: unknown; told?: unknown; note?: unknown; toPerson?: unknown; alreadyAnswered?: unknown };
     const key = typeof args?.key === "string" ? args.key.trim() : "";
+    // #4238: a tell is a fact for the person, no card and no answer
+    if (body.told === true) {
+      return { text: body.toPerson === true
+        ? "Recorded for the person: it reaches their own conversation with you as one line with this exchange's outcome. Go on with your work."
+        : typeof body.note === "string" && body.note ? body.note : "Nothing was drawn; say it in your reply." };
+    }
+    // #4238: the person already answered this item: no second card
+    if (typeof body.alreadyAnswered === "string") {
+      return { text: body.alreadyAnswered
+        ? `The person already answered this item: ${body.alreadyAnswered}. Their answer stands; no new card was raised. Go on with your work.`
+        : "The person already put this item away. No new card was raised; do not raise it again. Go on with your work." };
+    }
+    // #4238: from another bot's request, the card went to the person's own
+    // conversation with you; it holds nothing
+    if (body.toPerson === true && args?.retire !== true) {
+      return { text: `${body.replaced === true ? "The person's pending card for this item now asks this, in its place." : "The question card is waiting for the person in their own conversation with you."} It holds nothing: raise any other item for the person now with its own call, then answer the bot that asked you normally (without the person's items); each answer of the person arrives later as their own turn in that conversation, with the card's key.` };
+    }
     // #4205: a retire closes the keyed card; nothing waits on it any more
     if (args?.retire === true) {
       return { text: body.retired ? `The card with key "${key}" is closed; an answer to it starts nothing.` : `No pending card has the key "${key}"; nothing to close.` };

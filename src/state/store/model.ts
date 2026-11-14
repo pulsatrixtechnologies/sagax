@@ -184,6 +184,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
   /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */
   attention?: import("../../../shared/wire").WireMessage["attention"];
+  /** #4238: what a teammate's request concluded for the person (WireMessage.peerOutcome). */
+  peerOutcome?: import("../../../shared/wire").WireMessage["peerOutcome"];
   githubConnect?: import("../../../shared/wire").WireMessage["githubConnect"];
   /** #3461: the quiet note an orchestrator reads at its next turn (WireMessage.teamNote);
    * #3462: drawn as one quiet line in the conversation with the bot that opened the thread. */

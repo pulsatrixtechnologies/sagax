@@ -117,7 +117,11 @@ describe("boardSummary (addendum P1)", () => {
       card({ key: "o/r#4", status: "blocked", column: "blocked" }),
       card({ key: "o/r#5", status: "waiting_release", column: "merged" }),
       card({ key: "o/r#6", status: "free", column: "todo" }),
-    ], NOW)).toEqual({ inProgress: 2, waitingYou: 1, blocked: 1, mergedThisWeek: 1, oldestInProgress: { key: "o/r#2", days: 9 } });
+    ], NOW)).toEqual({ inProgress: 2, waitingYou: 1, blocked: 1, mergedThisWeek: 1, oldestInProgress: { key: "o/r#2", days: 9, hours: 216 } });
+  });
+  it("gives the oldest in progress in hours too, at the scale of the decided aging (4 hours), never only 0 days", () => {
+    const HOUR = 60 * 60_000;
+    expect(boardSummary([card({ key: "o/r#7", status: "running", since: NOW - 5 * HOUR - 1 })], NOW).oldestInProgress).toEqual({ key: "o/r#7", days: 0, hours: 5 });
   });
 });
 

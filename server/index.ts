@@ -1573,7 +1573,7 @@ import { createTemporaryAgentSetting } from "./index-leaves/temporaryAgentSettin
 import { createAnswerInboxCard } from "./index-leaves/answerInboxCard.ts";
 import { createPublishedPageOptions } from "./index-leaves/publishedPageOptions.ts";
 import { createObservePushFrame } from "./index-leaves/observePushFrame.ts";
-import { heldSignalsSection, PersonSignalGate, QUIET_HOURS_KEY, readQuietHours, readSignalBudget, SIGNAL_BUDGET_KEY } from "../shared/signal-levels.ts";
+import { heldSignalsSection, PersonSignalGate, readSignalPrefs } from "../shared/signal-levels.ts";
 import { createConfirmHeldCard } from "./index-leaves/confirmHeldCard.ts";
 import { createResumeTurnsCutByRestart } from "./index-leaves/resumeTurnsCutByRestart.ts";
 import { createDispatchComputerResume } from "./index-leaves/dispatchComputerResume.ts";
@@ -8828,7 +8828,8 @@ const pushHub = new PushHub({
 const signalGate = new PersonSignalGate((person) => {
   let prefs: Record<string, string> = {};
   try { prefs = userPreferenceStore.get(person).preferences ?? {}; } catch { /* the defaults */ }
-  return { budget: readSignalBudget(prefs[SIGNAL_BUDGET_KEY]), quiet: readQuietHours(prefs[QUIET_HOURS_KEY]) };
+  // #4233: the budget day starts at the person's own midnight
+  return readSignalPrefs(prefs, readerTimeZone(person));
 }, Date.now, signalGateFileStorage(join(DATA_DIR, "signal-gate.json")));
 /** "Me joindre" (server/reach-me/): set once its channels exist, further down. */
 let reachMeService: ReachMe | null = null;
@@ -26059,7 +26060,14 @@ ROUTES.push(createApprovalsInboxRoutes({
   answer: (auth, item, decision, rule) => answerInboxCard(auth, item.threadId, item.requestId, decision, rule),
   // #3471, #3543: a question in words skipped, marked handled or answered,
   // in a conversation of this person's: one settle path
-  settle: inboxRequestSettled
+  settle: inboxRequestSettled,
+  // #4233: what the signal gate held, on Today with or without a brief, the
+  // same person key the brief takes it by; cleared once read
+  held: (_auth, viewer) => signalGate.peekHeld(reachMePerson(viewer.principalId)).map((item) => {
+    const botName = item.botId ? store.bot(item.botId)?.name : undefined;
+    return botName ? { ...item, botName } : item;
+  }),
+  readHeld: (_auth, viewer, upTo) => signalGate.clearHeldUpTo(reachMePerson(viewer.principalId), upTo)
 }));
 /** #2689, #3471, #3512, #3543: one of the viewer's questions in words (a
  * "needs you" card or an input request row) skipped, marked handled or

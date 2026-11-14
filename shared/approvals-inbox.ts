@@ -9,6 +9,7 @@
 // Never an id on screen: `key`, `threadId` and `requestId` route answers
 // and selection, nothing more.
 import type { ApprovalRisk } from "./approval-describe.ts";
+import type { HeldSignal } from "./signal-levels.ts";
 import type { ServedWaitingItem } from "./waiting-item.ts";
 
 /** Whose card it is, from the viewer's side. */
@@ -103,7 +104,16 @@ export interface InboxPayload {
   /** #3512: with ?waiting=1, what waits on the person, read from `pending`, each with its message (#3543)
    * (shared/waiting-items.ts). */
   waiting?: ServedWaitingItem[];
+  /** #4233: what the signal gate held for the person (daily budget, quiet
+   * hours, FYI), oldest first: Today shows it as one group "While you were
+   * quiet" whether or not a brief exists, then clears it
+   * (POST /api/approvals/held/read). */
+  held?: InboxHeldSignal[];
 }
+
+/** #4233: one held signal on Today: its words and its conversation, with
+ * the bot's name for the row (never an id on screen). */
+export type InboxHeldSignal = HeldSignal & { botName?: string };
 
 export const INBOX_BULK_MAX = 50;
 export const INBOX_HISTORY_MAX = 300;

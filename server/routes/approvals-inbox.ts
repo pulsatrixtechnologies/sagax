@@ -14,6 +14,10 @@
 //                                the waiting work told so (#3543); with skip,
 //                                skipped (#3471); with answered, settled once
 //                                the person's own words went to the work
+//   POST /api/approvals/held/read { upTo }: what the signal gate held for
+//                                the person (the list's `held`, #4233),
+//                                read up to that time: cleared, so neither
+//                                Today nor the brief says it again
 //   POST /api/approvals/journal/test { rule: { id?, when, behavior, botId, riskScope } }:
 //                                that rule replayed on the last 7 days
 //
@@ -32,6 +36,7 @@ import {
   inboxKey,
   type InboxApproval,
   type InboxBulkRefusal,
+  type InboxHeldSignal,
   type InboxPayload,
 } from "../../shared/approvals-inbox.ts";
 import type { OptionCardData } from "../../shared/wire.ts";
@@ -75,6 +80,12 @@ export interface ApprovalsInboxDeps {
    * (the person's words already went to it). False when it is not one of
    * their open cards. */
   settle?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }, how: PersonRequestSettle): boolean;
+  /** #4233: what the signal gate held for this person, oldest first, not
+   * cleared by the read. */
+  held?(auth: RequestAuth, viewer: InboxViewer): InboxHeldSignal[];
+  /** #4233: the person read what was held up to `upTo` (ms): cleared. How
+   * many were. */
+  readHeld?(auth: RequestAuth, viewer: InboxViewer, upTo: number): number;
   /** The clock of the waiting items' age (tests). */
   now?: () => number;
 }
@@ -135,6 +146,10 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
         history: url.searchParams.get("history") === "1" ? deps.history(auth, viewer) : [],
         scopes: deps.scopes(auth, viewer),
       };
+      // #4233: what waited (budget, quiet hours, FYI) reaches Today even
+      // when the person has no brief; the brief takes what is still there
+      const held = deps.held?.(auth, viewer) ?? [];
+      if (held.length) payload.held = held;
       // #3512: what waits on the person, read from the same rows (the pinned
       // row asks for one bot's): Today, the pinned row and the connector's
       // list count the same items. #3543: each with its message, so the
@@ -166,6 +181,14 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
       const how: PersonRequestSettle = body?.skip === true ? "skipped" : body?.answered === true ? "answered" : "handled";
       if (!deps.settle(auth, viewer, { botId, threadId, messageId }, how)) return json(res, 404, { error: "no such card", code: "gone" });
       return json(res, 200, { ok: true, outcome: how });
+    }
+    if (method === "POST" && path === "/api/approvals/held/read") {
+      const viewer = deps.viewer(auth);
+      if (!viewer || !deps.readHeld) return json(res, 403, { error: "Sign in to read what waited.", code: "no_person" });
+      const body = await readBody(req) as Record<string, unknown> | null;
+      const upTo = body?.upTo;
+      if (typeof upTo !== "number" || !Number.isFinite(upTo) || upTo < 0) return json(res, 400, { error: "upTo must be a time in ms" });
+      return json(res, 200, { ok: true, cleared: deps.readHeld(auth, viewer, upTo) });
     }
     if (method === "POST" && path === "/api/approvals/journal/test") {
       const viewer = deps.viewer(auth);

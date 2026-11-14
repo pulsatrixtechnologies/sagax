@@ -284,6 +284,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"exact","route":"/api/me/providers","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
   {"method":"DELETE","kind":"prefix","route":"/api/me/providers/","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true,"destructive":true},
   {"method":"PUT","kind":"prefix","route":"/api/me/providers/","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
+  {"method":"GET","kind":"exact","route":"/api/me/providers/catalog","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/me/reauth","tier":"admin","readOnly":false,"scope":"me:admin","defaultEnabled":false},
   {"method":"GET","kind":"exact","route":"/api/me/server-environment","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
   {"method":"ANY","kind":"exact","route":"/api/me/server-environment/power","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},

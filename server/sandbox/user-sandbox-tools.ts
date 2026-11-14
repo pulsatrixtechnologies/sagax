@@ -122,6 +122,11 @@ export interface ToolExec {
    * (server/sandbox/sandbox-server-path.ts). Checked before the misuse guard, so the
    * bot reads where its folder is, never the policy refusal. */
   serverPathAnswer?(value: string, kind: "path" | "command"): string | null;
+  /** #4146: the command with the environment's paths in place of the
+   * server's plugin folders, or the line that stops it when it names a path
+   * under the server's data folder (server/sandbox/sandbox-server-path.ts
+   * commandForEnvironment). Checked before any other refusal. */
+  environmentCommand?(command: string): { command: string } | { refusal: string; command: string };
   /** #3440: a line added to a shell command that failed (a plugin folder
    * it names whose copy failed, and why), or null. */
   commandNote?(command: string): string | null;
@@ -143,7 +148,39 @@ function validPath(value: unknown): string {
   return value;
 }
 
-function commandOutput(result: SandboxExecOutput): ToolResult {
+/** #4146: what the row's Result shows of a failed command (step-label.ts
+ * stepResult reads four lines): the status line, then this many of the last
+ * lines of its error output. */
+export const COMMAND_FAILURE_TAIL_LINES = 3;
+export const COMMAND_FAILURE_TAIL_CHARS = 300;
+
+/** The end of a failed command's output, cut to a readable length: its
+ * last lines, at most COMMAND_FAILURE_TAIL_CHARS characters from the end. */
+function failureTail(output: string): string {
+  const lines = output.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trimEnd()).filter((line) => line.trim());
+  const tail = lines.slice(-COMMAND_FAILURE_TAIL_LINES).join("\n");
+  return tail.length > COMMAND_FAILURE_TAIL_CHARS ? `…${tail.slice(-(COMMAND_FAILURE_TAIL_CHARS - 1)).trimStart()}` : tail;
+}
+
+/** #4146 (2026-11-13, production): why a command failed, first, in words the
+ * row's Result and the bot both read: its exit code (or the time limit),
+ * then the end of its error output (stderr, else stdout), cut short. A
+ * script that exits before printing says so, so a failure never reads as
+ * one with no message. The whole output follows in its own block. */
+export function commandFailureText(result: SandboxExecOutput, timeoutSec?: number): string {
+  const stopped = result.timedOut || result.exitCode === 124;
+  const status = stopped
+    ? `The command was stopped: it reached its time limit${timeoutSec ? ` of ${timeoutSec} s` : ""} (exit ${result.exitCode ?? "unknown"}).`
+    : result.exitCode === null || result.exitCode === undefined
+      ? "The command ended without an exit code."
+      : `The command failed with exit code ${result.exitCode}.`;
+  const stderr = failureTail(result.stderr ?? "");
+  const stdout = stderr ? "" : failureTail(result.stdout ?? "");
+  if (!stderr && !stdout) return `${status} It printed nothing.`;
+  return `${status} End of its ${stderr ? "error output" : "output"}:\n${wrapUntrusted("tool", stderr || stdout)}`;
+}
+
+function commandOutput(result: SandboxExecOutput, failure?: { timeoutSec: number }): ToolResult {
   const body = [
     result.stdout,
     result.stderr ? `${result.stdout ? "\n" : ""}[stderr]\n${result.stderr}` : "",
@@ -151,7 +188,13 @@ function commandOutput(result: SandboxExecOutput): ToolResult {
     result.timedOut ? "\n[stopped: time limit reached]" : "",
   ].join("").trimStart();
   const exit = `\n[exit ${result.exitCode ?? "unknown"}]`;
-  return text(`${wrapUntrusted("tool", body)}${exit}`, result.exitCode !== 0);
+  const output = text(`${wrapUntrusted("tool", body)}${exit}`, result.exitCode !== 0);
+  if (!failure || !output.isError) return output;
+  const why = commandFailureText(result, failure.timeoutSec);
+  // the whole output only when it says more than the end already shown
+  const shown = failureTail(result.stderr ?? "") || failureTail(result.stdout ?? "");
+  const more = body.trim() && body.trim() !== shown ? output.content : [];
+  return { content: [{ type: "text", text: why }, ...more], isError: true };
 }
 
 /** Plugin and misuse refusals win over the safety review. */
@@ -554,6 +597,21 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
     if (exec.conversationPath && (name === "read_file" || name === "write_file" || name === "list_files") && typeof args.path === "string") {
       args = { ...args, path: exec.conversationPath(args.path) };
     }
+    if (name === "run_command" && typeof args.command === "string" && exec.environmentCommand) {
+      // the bot's own server folder keeps its line naming its folder there
+      const onServer = exec.serverPathAnswer?.(args.command, "command");
+      if (onServer) return text(onServer, true);
+      const placed = exec.environmentCommand(args.command);
+      if ("refusal" in placed) {
+        // the plugin refusal and the misuse guard judge it first (their
+        // verdict is audited and counts toward a lockout): only a path they
+        // let through gets the line naming the server path
+        const misuse = exec.commandRefusal?.(args.command)
+          ?? (placed.command !== args.command ? exec.commandRefusal?.(placed.command) : null);
+        return text(misuse ?? placed.refusal, true);
+      }
+      args = { ...args, command: placed.command };
+    }
     const refusedEarly = earlyRefusal(name, args, exec);
     if (refusedEarly) return text(refusedEarly, true);
     if (exec.beforeCall) {
@@ -567,7 +625,7 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
       if (refused) return text(refused, true);
       const asked = typeof args.timeout_seconds === "number" ? args.timeout_seconds : 120;
       const timeout = Math.min(MISUSE_MAX_COMMAND_SECONDS, Math.max(1, Number.isFinite(asked) ? asked : 120));
-      const output = commandOutput(await exec.exec({ argv: ["bash", "-lc", command], timeoutSec: timeout }));
+      const output = commandOutput(await exec.exec({ argv: ["bash", "-lc", command], timeoutSec: timeout }), { timeoutSec: timeout });
       const note = output.isError ? exec.commandNote?.(command) : null;
       return note ? { ...output, content: [...output.content, { type: "text", text: note }] } : output;
     }
@@ -641,7 +699,9 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
     }
     return text(`unknown tool ${name}`, true);
   } catch (error) {
-    return text(error instanceof Error ? error.message : String(error), true);
+    // #4146: a failure always says why, even an error thrown without words
+    const said = (error instanceof Error ? error.message : String(error ?? "")).trim();
+    return text(said || `${name} failed in your server environment before it answered (${error instanceof Error ? error.name : typeof error}).`, true);
   }
 }
 

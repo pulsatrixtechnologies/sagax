@@ -11,6 +11,7 @@
 
 import { markdownToPlainText } from "./plain-text.ts";
 import { fencedLines, runStatusNote, RUN_STATUS_PROBLEM_LINE, type RunStatusNote } from "./person-attention.ts";
+import { withoutUntrustedMarkers } from "./tool-failure-text.ts";
 
 export interface RoutineResultParts {
   /** The bot's own words before or instead of the structure. */
@@ -31,8 +32,6 @@ export interface RoutineResultParts {
   structured: boolean;
 }
 
-/** Engine wrappers around a tool result ("<<<UNTRUSTED source="tool">>>"). */
-const WRAPPER_LINE = /^<<<\/?\s*(?:END\s+)?UNTRUSTED\b[^>]*>>>$/i;
 /** A line with no words: braces, brackets, quotes and commas only. */
 const PUNCTUATION_ONLY = /^[\s{}[\](),:;"'`]*$/;
 const STATUS_LINE = /^[\s`*_>]*RUN[_ ]STATUS\s*:?[\s`*_]*(failed|failure|partial|partially|blocked)\b[\s`*_]*[:—–-]?\s*(.*)$/i;
@@ -44,10 +43,8 @@ const DONE_KEYS = ["done", "completed", "did", "actions", "actions_taken", "acti
 const BLOCKED_KEYS = ["blocked", "blockers", "blocked_on", "blockedon", "waiting_on", "waitingon", "waiting_for", "waitingfor"];
 const TODO_KEYS = ["todo", "next", "next_steps", "nextsteps", "needs", "needs_you", "action_required", "actionrequired", "person_action", "you_must", "ask"];
 
-/** Lines without the engine's wrapper markers. */
-function unwrap(text: string): string {
-  return text.split(/\r?\n/).filter((line) => !WRAPPER_LINE.test(line.trim())).join("\n").trim();
-}
+/** Lines without the engine's wrapper markers around a tool result. */
+const unwrap = withoutUntrustedMarkers;
 
 function tryParse(text: string): unknown {
   try {

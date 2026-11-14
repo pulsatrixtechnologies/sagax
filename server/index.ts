@@ -1870,7 +1870,7 @@ import { createDataConfinedRoots } from "./index-leaves/dataConfinedRoots.ts";
 import { createClaudeArtifactCommentsCheck } from "./index-leaves/claudeArtifactCommentsCheck.ts";
 import { createWithPiModelServers } from "./index-leaves/withPiModelServers.ts";
 import { createSyncPluginsForTurn } from "./index-leaves/syncPluginsForTurn.ts";
-import { createSyncPluginFoldersForTurn } from "./index-leaves/syncPluginFoldersForTurn.ts";
+import { createSyncPluginFoldersForTurn, environmentPluginFolders } from "./index-leaves/syncPluginFoldersForTurn.ts";
 import { createStopOwnSubagents } from "./index-leaves/stopOwnSubagents.ts";
 import { createSaveOrgPluginMarketplaces } from "./index-leaves/saveOrgPluginMarketplaces.ts";
 import { createResumeSecretCard } from "./index-leaves/resumeSecretCard.ts";
@@ -19439,6 +19439,18 @@ function serverBotRoots(botId: string): string[] {
   return roots.flatMap((root) => (real !== DATA_DIR && root.startsWith(`${DATA_DIR}/`) ? [root, real + root.slice(DATA_DIR.length)] : [root]));
 }
 
+/** #4146: the server's data folder, as written and through a link, and the
+ * plugins this bot's turns copy into the person's environment (the same
+ * selection as the copy: syncPluginFoldersForTurn), for a command sent
+ * there (server/sandbox/sandbox-server-path.ts commandForEnvironment). */
+function serverCommandPaths(botId: string, ownerId: string): { dataRoots: string[]; plugins: Array<{ name: string; dir: string }> } {
+  let real = DATA_DIR;
+  try { real = realpathSync(DATA_DIR); } catch { /* not created yet */ }
+  const bot = store.bot(botId);
+  const plugins = bot ? environmentPluginFolders(getLeafHost(), bot, ownerId).map((plugin: { name: string; dir: string }) => ({ name: plugin.name, dir: plugin.dir })) : [];
+  return { dataRoots: real === DATA_DIR ? [DATA_DIR] : [DATA_DIR, real], plugins };
+}
+
 // A risky call the engine will not ask about itself (a sandbox tool, a
 // desktop tool) waits on this card. Auto does not answer it. The respond
 // route settles it before any provider sees the request id.
@@ -23883,6 +23895,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     userSandboxOverQuota: async (ownerId, botId) => userSandbox!.workspaceOverQuota(ownerId, botId),
     sandboxBotFolder,
     serverBotRoots: (botId) => serverBotRoots(botId),
+    serverCommandPaths: (botId, ownerId) => serverCommandPaths(botId, ownerId),
     sandboxTidy: async (ownerId, botId) => { await sandboxTidier?.ensure(ownerId, botId); },
     sandboxDiskWarning: (ownerId, folder) => workspaceDiskWarning(sandboxTidier?.disk(ownerId) ?? null, folder ?? undefined),
     enginePluginCommandRefusal,

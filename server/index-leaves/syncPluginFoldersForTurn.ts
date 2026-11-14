@@ -4,6 +4,13 @@ import { pluginCopyFailures, SANDBOX_CAPABILITY_SKILLS_DIR, SANDBOX_PLUGIN_DATA_
 
 export type Host = Record<string, any>;
 
+/** The plugins a bot's turns copy into this person's environment. A private
+ * bot install stays with its owner. Organization and personal installs are
+ * selected for the person whose environment receives them. */
+export function environmentPluginFolders(host: Host, bot: { id: string; ownerUserId?: unknown }, principalId: string): Array<{ name: string; dir: string; scope: string }> {
+  return host.scopedPluginFolders(bot, principalId).filter((plugin) => plugin.scope !== "bot" || host.samePerson(host.effectiveBotOwner(bot), principalId));
+}
+
 export function createSyncPluginFoldersForTurn(getHost: () => Host): any {
 async function syncPluginFoldersForTurn(principalId: string, botId: string, limit: <T>(task: () => Promise<T>) => Promise<T> = (task) => task()) {
   const host = getHost();
@@ -11,9 +18,7 @@ async function syncPluginFoldersForTurn(principalId: string, botId: string, limi
 
   const bot = host.store.bot(botId);
   if (!bot || !host.userSandbox) return;
-  // A private bot install stays with its owner. Organization and personal
-  // installs are selected for the person whose environment receives them.
-  const plugins = host.scopedPluginFolders(bot, principalId).filter((plugin) => plugin.scope !== "bot" || host.samePerson(host.effectiveBotOwner(bot), principalId));
+  const plugins = environmentPluginFolders(host, bot, principalId);
   const skills = skillsLibraryEnabled(host.cfg) && host.personalSkills.enabled(principalId).length ? [{ name: "me", dir: host.personalSkills.root(principalId) }] : [];
   if (!plugins.length && !skills.length) return;
   // #3440: the copy's commands wait in the person's line like the bots' own

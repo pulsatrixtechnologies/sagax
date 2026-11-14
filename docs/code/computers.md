@@ -877,7 +877,8 @@ An organization server never offers it unless that file says
   access the bot acts unless one of the gate's holds applies (an
   organization rule set to Refuse or Ask first, the person's own rule or a
   security key they set on the action, isolation between people: a guest's
-  turn, a mail-woken run, another person speaking), and the conversation and
+  turn, a mail-woken run still confined (#4226: a Full bot's routine its owner
+  confirmed is not), another person speaking), and the conversation and
   the decision journal name what was paid, sent or deleted
   (`myChromeHeldLevel`, `myChromeLevelAnswered`). Approve for me reads it the
   way it reads a safety hold on any other permission card: the card comes,

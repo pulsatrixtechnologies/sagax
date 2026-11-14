@@ -19174,7 +19174,7 @@ setSafetyFullAccess(({ botId, threadId }) => {
 
 /** #3502: a payment, a send or a delete in the person's own browser (My
  * Chrome) reads the one Full access decision before its card: the level the
- * turn runs at (a guest's or a mail-woken turn runs at Ask), and the holds
+ * turn runs at (the bot's one level, #4226: a guest's turn runs at Ask), and the holds
  * that stand at Full: an organization rule or the person's own rule (their
  * words, or a security key they set on this kind of action) set to Refuse or
  * Ask first, and isolation between people (a guest's turn, another person

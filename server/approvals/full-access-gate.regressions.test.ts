@@ -1,7 +1,7 @@
 // Every card that came back under Full access, as a test that fails the day
 // it comes back again (#1065, #1819, #1905; 2026-11-02). Each case is the
 // live incident, reduced to the surface that showed the card.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +30,7 @@ import { reviewSafety } from "../../shared/safety-review.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import type { FullAccessFacts } from "./full-access-gate.ts";
 import { MyChromeMemory, myChromeLevelAnswers, runMyChromeTool } from "../browser/my-chrome/pilot.ts";
+import { REQUEST_PURCHASE_TOOL_SPEC } from "../../shared/payment-vault.ts";
 
 const SEND_TO_BOT = "agents__send_to_bot";
 // Sagax's own bot-to-bot tools: in-app peer contact between the person's own
@@ -594,5 +595,51 @@ describe("#3502: a payment, a send or a delete in the person's own browser", () 
     // the same answer Approve for me gives a held permission card
     expect(autoVerdict("auto", "other", { safetyHold: true, toolName: "my_chrome:agent_browser_click" })).toEqual({ approve: null, source: "safety-hold" });
     expect(autoVerdict("full", "other", { safetyHold: true, toolName: "my_chrome:agent_browser_click" })).toMatchObject({ source: "full-access" });
+  });
+});
+
+// #3367 (decision of 2026-11-13): at Full access the browser's card for a
+// payment, a send or a deletion passes too, as for the bot's other tools;
+// the organization's Refuse / Ask-first rules still apply. The server acts
+// that way (#3502 above, and the built-in browser's purchase through
+// fillBrowserCredentials autoApprove), so what the person reads in Settings
+// and what the bot reads in request_purchase must say the level answers it,
+// never that the card always comes.
+describe("#3367: what is said about the browser's held card follows the bot's level", () => {
+  const read = (lang: string) => JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "src", "locales", `${lang}.json`), "utf8")) as Record<string, string>;
+  const KEYS = ["settings.myChrome.description", "settings.profiles.myChromeHint", "vault.payments.defaultHint"];
+
+  it("Settings names Full access and no longer says the card always comes (English and French)", () => {
+    const en = read("en");
+    const fr = read("fr");
+    for (const key of KEYS) {
+      expect(en[key], key).toMatch(/Full access/);
+      expect(en[key], key).not.toMatch(/always waits|still asks you/i);
+      expect(fr[key], key).toMatch(/Accès complet/);
+      expect(fr[key], key).not.toMatch(/attend toujours|te demande encore/i);
+    }
+  });
+
+  it("the iOS Vault > Payments footer says the same as vault.payments.defaultHint (English and French)", () => {
+    const root = join(import.meta.dirname, "..", "..");
+    const swift = readFileSync(join(root, "ios", "App", "Features", "Settings", "VaultSettingsView.swift"), "utf8");
+    const en = read("en")["vault.payments.defaultHint"];
+    const fr = read("fr")["vault.payments.defaultHint"];
+    expect(swift).toContain(`SettingsFooter(text: ${JSON.stringify(en)})`);
+    expect(swift).not.toMatch(/Every purchase still asks you/);
+    const catalog = JSON.parse(readFileSync(join(root, "ios", "App", "Localizable.xcstrings"), "utf8")) as {
+      strings: Record<string, { localizations?: Record<string, { stringUnit?: { value?: string } }> }>;
+    };
+    const entry = catalog.strings[en];
+    expect(entry?.localizations?.en?.stringUnit?.value).toBe(en);
+    expect(entry?.localizations?.fr?.stringUnit?.value).toBe(fr);
+    expect(Object.keys(catalog.strings).some((k) => /Every purchase still asks you/.test(k))).toBe(false);
+  });
+
+  it("request_purchase tells the bot that Full access answers the card, unless an organization rule asks", () => {
+    const text = REQUEST_PURCHASE_TOOL_SPEC.description;
+    expect(text).toMatch(/Full access/);
+    expect(text).toMatch(/organization rule/);
+    expect(text).not.toMatch(/Nothing is charged until the person allows it on the approval card \(or their Primary Bot/);
   });
 });

@@ -271,6 +271,30 @@ describe("a placed call is a live conversation, never a spoken message (#4193)",
     expect(plain.text).not.toContain("no_realtime_voice");
   });
 
+  it("the call speaks as the bot that placed it: voice_call names it, dry run and placement alike", async () => {
+    await placePhoneCall(deps(), CTX, ARGS);
+    expect(voice.mock.calls[0]![0]).toMatchObject({ bot: `sagax:${CTX.botId}`, dry_run: true });
+    const row = calls.pending(CTX.principalId)[0]!;
+    calls.answer(CTX.principalId, row.id, "call", undefined, "+15145550142", true);
+    await placePhoneCall(deps(), CTX, ARGS);
+    expect(real()[0]![0]).toMatchObject({ bot: `sagax:${CTX.botId}`, ref: row.id });
+  });
+
+  it("an older Perspicax that knows only the line's bots still places the call, without the bot", async () => {
+    const older = { ok: true, isError: true, value: { code: "params_invalid", message: "bot: one of the line's bots (sagax:bot-line)" } };
+    voice.mockImplementation(async (args: Record<string, unknown>) => (args.bot
+      ? older
+      : args.dry_run ? { ok: true, isError: false, value: { dry_run: true, mode: "conversation" } } : { ok: true, isError: false, value: { sid: SID, status: "queued" } }));
+    const asked = await placePhoneCall(deps(), CTX, ARGS);
+    expect(asked.isError).toBeUndefined();
+    const row = calls.pending(CTX.principalId)[0]!;
+    calls.answer(CTX.principalId, row.id, "call", undefined, "+15145550142", true);
+    const placed = await placePhoneCall(deps(), CTX, ARGS);
+    expect(placed.text).toContain("Conversation call placed");
+    expect(real().at(-1)![0]).not.toHaveProperty("bot");
+    expect(calls.get(row.id)).toMatchObject({ status: "placed", callSid: SID });
+  });
+
   it("the live voice gone between the card and the call: the call fails with the reason in plain words", async () => {
     await placePhoneCall(deps(), CTX, ARGS);
     const row = calls.pending(CTX.principalId)[0]!;

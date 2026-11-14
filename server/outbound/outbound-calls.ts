@@ -599,6 +599,16 @@ function noLiveVoice(value: unknown): string | undefined {
   return said || "the person's Perspicax Voice line has no live voice to hold the conversation now; whoever manages their Perspicax Voice connects it";
 }
 
+/** voice_call for the bot that places the call (Perspicax #2022). A
+ * Perspicax older than #2022 knows only the line's own bots as `bot` and
+ * refuses any other: the call then goes without it, as before. */
+async function callVoice(deps: PlaceCallDeps, args: Record<string, unknown>): Promise<ToolAnswer> {
+  const answer = await deps.voice!(args);
+  if (!("bot" in args) || !answer.ok || !answer.isError || !/bot: one of the line's bots/.test(shortError(answer.value, ""))) return answer;
+  const { bot: _bot, ...rest } = args;
+  return deps.voice!(rest);
+}
+
 /** Why a placement failed, in words for the card and the bot. */
 function placementError(answer: ToolAnswer): string {
   if (!answer.ok) return answer.error;
@@ -620,7 +630,7 @@ async function placeConversation(
   if (approved && deps.calls.overLimit(context.principalId, "calls")) return { text: deps.calls.overLimit(context.principalId, "calls")!, isError: true };
   if (approved && deps.calls.claim(approved.id)) {
     // used now, whatever Perspicax answers: a retry asks again
-    const answer = await deps.voice(voiceCallArgs(request, { botName: names.botName, ref: approved.id, dryRun: false }));
+    const answer = await callVoice(deps, voiceCallArgs(request, { botName: names.botName, botId: context.botId, ref: approved.id, dryRun: false }));
     const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
     const sid = placed ? sidOf(answer.value) : undefined;
     const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: placementError(answer) })!;
@@ -636,7 +646,7 @@ async function placeConversation(
   const capped = waiting ? null : deps.calls.overLimit(context.principalId, "cards");
   if (capped) return { text: capped, isError: true };
   // the dry run checks the person's own line; it needs a ref of the right shape
-  const dry = await deps.voice(voiceCallArgs(request, { botName: names.botName, ref: `call_${"0".repeat(16)}`, dryRun: true }));
+  const dry = await callVoice(deps, voiceCallArgs(request, { botName: names.botName, botId: context.botId, ref: `call_${"0".repeat(16)}`, dryRun: true }));
   if (!dry.ok || dry.isError) return { text: voiceRefusal(dry), isError: true };
   const opened = deps.calls.open({ ...context, request, names });
   for (const old of opened.replaced) deps.card(old, old.messageId);
@@ -654,7 +664,7 @@ async function placeConversation(
     }
     const approved = deps.calls.approvedFor({ ...context, request, names });
     if (approved && deps.calls.claim(approved.id)) {
-      const answer = await deps.voice(voiceCallArgs(request, { botName: names.botName, ref: approved.id, dryRun: false }));
+      const answer = await callVoice(deps, voiceCallArgs(request, { botName: names.botName, botId: context.botId, ref: approved.id, dryRun: false }));
       const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
       const sid = placed ? sidOf(answer.value) : undefined;
       const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: placementError(answer) })!;

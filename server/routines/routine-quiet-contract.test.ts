@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSyncRoutineRunToSource } from "../index-leaves/syncRoutineRunToSource.ts";
+import { createTellPerson, SignalLedger } from "../proactive/signal-ledger.ts";
 import { openCardIn } from "../turns/person-attention-relay.ts";
 import { routineRunRingsDone } from "../runtime-events/turn-completed.ts";
 import { ROUTINE_EXECUTION_PROMPT, WEBHOOK_PROMPT, routineExecutionPromptFor } from "../system-prompt.ts";
@@ -102,7 +103,10 @@ function conversation(options: { personAttention?: (text: string | undefined) =>
     routineRunFallbackText,
     attentionCard: (_bot: unknown, _threadId: string, _task: unknown, _key: string, found: unknown) => found,
     deliverableNotification: (kind: string) => kind,
-    notify: (kind: string) => { rang.push(kind); },
+    // #4265 moved the run's needs-you ring onto tellPerson (one signal
+    // ledger per person): the fake follows, ringing into `rang`
+    tellPerson: createTellPerson<{ notification: string }>({ ledger: new SignalLedger({ schedule: () => {} }), notify: ({ notification }) => { rang.push(notification); }, log: () => {} }),
+    routineRunPerson: (run: RoutineRun) => run.runAs ?? "pr_owner",
   };
   const sync = createSyncRoutineRunToSource(() => host);
   return { rows, unread, rang, sync: (run: RoutineRun) => sync(run) };

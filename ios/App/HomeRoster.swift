@@ -601,7 +601,7 @@ enum HomeApp: String, CaseIterable {
 
 /// The apps button at the bottom leading corner (reference app's grid with a
 /// +): it opens `HomeAppsMenu`, the places the account menu lists, then
-/// Templates, Plugins and Updates.
+/// Templates, Connect apps and Updates.
 struct HomeAppsButton: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
@@ -639,7 +639,7 @@ struct HomeAppsButton: View {
 /// What the apps button opens (#4041): an opaque card over a dimmed home,
 /// growing up from the button, so nothing of the list reads through it and
 /// the bottom bar stays whole under the dim. The account menu's groups
-/// above, then Templates, Plugins (the desktop's word since 0.8.52) and
+/// above, then Templates, Connect apps (the desktop's Connect Apps, #4103) and
 /// Updates nearest the button. A long list scrolls inside the card.
 struct HomeAppsMenu: View {
     @Environment(\.themePalette) var themePalette

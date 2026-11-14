@@ -88,14 +88,16 @@ final class PhoneLayoutTests: XCTestCase {
         XCTAssertTrue(fade.contains("Color.clear.frame(height: 0).background(background.ignoresSafeArea(edges: .top))"))
     }
 
-    func testTheAppsMenuIsOpaqueAndSaysPlugins() throws {
+    func testTheAppsMenuIsOpaqueAndSaysConnectApps() throws {
         let home = try source("App/HomeRoster.swift")
         let button = try declaration(home, from: "struct HomeAppsButton: View {")
         // not the system menu, whose glass let the list read through
         XCTAssertFalse(button.contains("Menu {"))
         let menu = try declaration(home, from: "struct HomeAppsMenu: View {")
-        XCTAssertTrue(menu.contains("String(localized: \"Plugins\")"))
-        XCTAssertFalse(menu.contains("\"Connect apps\""))
+        // #4103: the desktop's Plugins window is Connect Apps (#4153), and
+        // the phone takes the same name
+        XCTAssertTrue(menu.contains("String(localized: \"Connect apps\")"))
+        XCTAssertFalse(menu.contains("String(localized: \"Plugins\")"))
         XCTAssertFalse(home.contains("Label(String(localized: \"Connect apps\")"))
         // a dimmed home under an opaque card: the one card both menus share
         XCTAssertTrue(menu.contains("HomeMenuCard("))

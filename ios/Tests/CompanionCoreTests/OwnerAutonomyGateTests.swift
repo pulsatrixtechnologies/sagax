@@ -295,7 +295,10 @@ final class MemberEnvironmentGateTests: XCTestCase {
         XCTAssertEqual(DesktopSettingsNavGroup.of(.myEngines), .ai)
         let phone = Set(SettingsTree.reachable(SettingsContext(gate: member(), connected: true)).map(\.item))
         XCTAssertTrue(phone.contains(.myEngines))
-        XCTAssertEqual(SettingsTree.path(to: .myEngines), [.bots])
+        // #4103: the root's Bot card holds it, the Bots page keeps only
+        // the approvals (Permissions)
+        XCTAssertEqual(SettingsTree.path(to: .myEngines), [])
+        XCTAssertTrue(SettingsTree.cards(.root, .everything).contains { $0.contains(.bots) && $0.contains(.myEngines) })
         XCTAssertTrue(SettingsSearch.results("abonnement", available: SettingsDestination.allCases, label: { $0.rawValue }).contains(.myEngines))
         // the sidecar has no such route, a personal server no organization list
         for gate in [SurfaceGate(scope: .sidecar), SurfaceGate(scope: .serverClient), SurfaceGate(scope: .serverAdmin)] {

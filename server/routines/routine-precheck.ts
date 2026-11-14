@@ -90,7 +90,7 @@ const watchSchema = z.object({
     context.addIssue({ code: "custom", message: "A file watch tests exists, count or bytes" });
   }
   if (watch.source.type === "tool") {
-    const refusal = watchToolRefusal(watch.source.tool);
+    const refusal = watchToolRefusal(watch.source.tool, watch.source.args);
     if (refusal) context.addIssue({ code: "custom", message: refusal });
   }
 });
@@ -102,8 +102,10 @@ const watchSchema = z.object({
  * turn (server/proactive/brief-routine.ts). `end_of_day_review` and
  * `weekly_review` (#4250 S8) are the person's reviews: the check reads the
  * run log and the person's waiting items, posts the review and never starts a turn
- * (server/proactive/review-routines.ts). */
-export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments", "daily_brief", "end_of_day_review", "weekly_review"] as const;
+ * (server/proactive/review-routines.ts). `flow_watch` (#4250, S5) is a
+ * Pulsatrix Flow watch the person turned on: the check resolves the watch
+ * and reads it through the routine watch engine (server/proactive/flow-watches.ts). */
+export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments", "daily_brief", "end_of_day_review", "weekly_review", "flow_watch"] as const;
 export const ROUTINE_CODE_CHECK_TIMEOUT_MS = 180_000;
 const codeSchema = z.object({
   kind: z.literal("code"),

@@ -13,8 +13,8 @@ function replayPendingProactive() {
         if (!child || child.botId !== row.botId || !child.oneWay || !["completed", "failed", "cancelled", "expired"].includes(child.status)) continue;
         host.offerPeerNotice(child, child.parentId ? host.coordinator.node(child.parentId) : undefined);
       } else if (row.ref.kind === "watch") {
-        // #3140: a Flow watch is observed again at the loop's next tick
-        host.flowWatchLoop.replay(row.botId, row.ref.watchId);
+        // #3140: a Flow watch reads its condition as new at its routine's next check (#4250)
+        host.flowWatches.replay(row.botId, row.ref.watchId);
       } else {
         const ref = row.ref;
         const room = host.store.group(ref.groupId);

@@ -25,6 +25,10 @@ export class ProactiveChoices {
    * own any more. Kept in the file, set once. */
   readonly since: number;
 
+  /** #4250 (S5): told after a person's domains or watches changed (their
+   * Flow watch routines follow, server/proactive/flow-watches.ts). */
+  onChange?: (person: string) => void;
+
   constructor(file?: string, now: () => number = () => Date.now()) {
     this.file = file;
     this.now = now;
@@ -86,6 +90,7 @@ export class ProactiveChoices {
     }
     this.people[key] = row;
     this.save();
+    this.onChange?.(key);
     return this.get(key);
   }
 
@@ -172,6 +177,7 @@ export class ProactiveChoices {
       changed = true;
     }
     if (changed) this.save();
+    for (const row of moved) this.onChange?.(row.person);
     return moved;
   }
 

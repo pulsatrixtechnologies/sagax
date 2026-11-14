@@ -17,9 +17,11 @@ import {
   spawnLocalWatch,
   walkLocalFiles,
   watchNoteBlock,
+  type BuiltWatchPrecheck,
   type RoutineWatchDeps,
   type WatchPlace,
 } from "./routine-watch.ts";
+import { watchToolRefusal } from "./routine-watch-tools.ts";
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "routine-watch-")); });
@@ -299,5 +301,60 @@ describe("the evaluator", () => {
     const preview = await previewWatch(d, routine, command("echo hi", { condition: { test: "contains", text: "hi" } }));
     expect(preview).toMatchObject({ ok: true, summary: "1 line · exit code 0", excerpt: "hi\n", condition: { holds: true } });
     expect(d.states.get(routine.id)).toBeNull();
+  });
+});
+
+// #4250 S5 (a): a Flow watch is a routine; its read goes through this one
+// probe engine. `when` (JMESPath) is the condition, its result the key.
+describe("a built tool pre-check with a JMESPath condition (#4250)", () => {
+  const routine = { id: "flow-r1", botId: "bot-1" };
+  const flow = (extra: Partial<BuiltWatchPrecheck> = {}): BuiltWatchPrecheck => ({
+    kind: "watch", source: { type: "tool", tool: "flow_action", args: { action: "late_tickets", params: {} } },
+    when: "tickets[?late]", firstRun: "wake", stateKey: "flow-watch:late", ...extra,
+  });
+
+  it("wakes the first time the condition holds, never twice for the same key, again after it turned false", async () => {
+    const clock = { at: 1_000_000 };
+    let value: unknown = { tickets: [{ id: 1, late: true }] };
+    const evaluate = createRoutineWatchEvaluator({
+      place: () => ({ kind: "refuse", reason: "no" }),
+      callTool: async () => ({ isError: false, value }),
+      states: new RoutineWatchStates(join(dir, "states")),
+      now: () => clock.at,
+    });
+    const first = await evaluate(routine, flow());
+    expect(first.wake).toBe(true);
+    expect(first.wake && first.note).toMatch(/late/);
+    clock.at += 6 * 60_000;
+    // the same tickets, other fields moved: same key, no second wake
+    value = { tickets: [{ id: 1, late: true }], fetchedAt: 2 };
+    expect(await evaluate(routine, flow())).toMatchObject({ wake: false });
+    clock.at += 6 * 60_000;
+    value = { tickets: [{ id: 1, late: false }] };
+    expect(await evaluate(routine, flow())).toMatchObject({ wake: false });
+    clock.at += 6 * 60_000;
+    value = { tickets: [{ id: 1, late: true }] };
+    expect((await evaluate(routine, flow())).wake).toBe(true);
+  });
+
+  it("arguments whose dates move with the clock keep the same state (stateKey)", async () => {
+    const clock = { at: 1_000_000 };
+    const evaluate = createRoutineWatchEvaluator({
+      place: () => ({ kind: "refuse", reason: "no" }),
+      callTool: async () => ({ isError: false, value: { tickets: [{ id: 1, late: true }] } }),
+      states: new RoutineWatchStates(join(dir, "states")),
+      now: () => clock.at,
+    });
+    expect((await evaluate(routine, flow({ source: { type: "tool", tool: "flow_action", args: { action: "late_tickets", params: { since: "2026-11-13" } } } }))).wake).toBe(true);
+    clock.at += 24 * 60 * 60_000;
+    expect(await evaluate(routine, flow({ source: { type: "tool", tool: "flow_action", args: { action: "late_tickets", params: { since: "2026-11-14" } } } })))
+      .toMatchObject({ wake: false, reason: "No change since the last check" });
+  });
+
+  it("a Flow read is a read: flow_run read and flow_action without confirm; never a confirmed action", () => {
+    expect(watchToolRefusal("flow_run", { command: "read", args: ["recipe", "plan", "x"] })).toBeNull();
+    expect(watchToolRefusal("flow_action", { action: "late_tickets", params: {} })).toBeNull();
+    expect(watchToolRefusal("flow_action", { action: "late_tickets", params: {}, confirm: true })).toMatch(/read tools only/);
+    expect(watchToolRefusal("flow_run", { command: "run", args: [] })).toMatch(/read tools only/);
   });
 });

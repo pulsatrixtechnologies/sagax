@@ -500,19 +500,24 @@ store is `server/proactive/proactive-choices.ts` (`DATA_DIR/proactive-choices.js
 0600, one row per person; shape in `shared/proactive-choices.ts`), read and
 changed with `GET`/`PUT /api/me/proactive` (client scope, the person only)
 and `sagax_settings` `notifications.proactiveChoices`. `GET` also lists the
-domains the person can choose (`available`, from `FlowWatchLoop.offered`);
+domains the person can choose (`available`, from `FlowWatches.offered`);
 `PUT` answers an unknown domain (404) or one that cannot run on the bot (409)
 instead of storing it, and a chosen domain Flow does not have pauses with a
 line (`unknown-domain`). No screen yet: the person asks a bot. Absent is off; a stored
 `proactiveMode` is never read as consent (`createBot` and the startup both
 write `proactive`); the switch now records who set it (`proactiveModeSet`).
-The loop (`server/proactive/flow-watches.ts`, `docs/proactive.md`) walks the
-choices, not the bots: no choice, no session, no helper call, no read.
+Since #4250 (S5, step a) each chosen watch is a routine of the carrying
+bot (`server/proactive/flow-watches.ts` `FlowWatches.sync`, `docs/proactive.md`)
+with the code check `flow_watch`, which reads it through the one probe
+engine (`routine-watch.ts`, a built tool pre-check with a JMESPath `when`);
+the watch loop and its timer are gone. The routines follow the choices, not
+the bots: no choice, no routine, no session, no helper call, no read.
 Eligibility: the carrying bot is the person's own, visible, not temporary,
 on a Perspicax server; the connection serves every product a watch names
 and its observe tool as a read (#3408, read with the products); the bot
 holds its skill. Products are read once a day per person; watch
-memory is per person (`DATA_DIR/proactive-watch-memory.json`). A chosen watch
+memory is per person (`DATA_DIR/proactive-watch-memory.json`, with the
+routine of each watch). A chosen watch
 passes the bot's switch, as a direct trigger. A paused domain says so once
 in the carrying bot's chat. A watch alert's "never" stops those watches in
 the person's choices. One domain, one bot, by construction (#3394).

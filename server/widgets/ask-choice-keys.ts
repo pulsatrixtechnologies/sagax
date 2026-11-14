@@ -131,6 +131,19 @@ export class AskKeyIndex {
     return null;
   }
 
+  /** #4233: the keys starting with `prefix` that still name a pending card
+   * in a conversation `inScope` accepts (a routine's item cards). */
+  keysWith(prefix: string, inScope: (threadId: string) => boolean, accepts: (message: Message) => boolean = () => true): string[] {
+    this.seedOnce();
+    const keys: string[] = [];
+    // a key whose cards are gone leaves the map while it is read: a Map
+    // iterator takes that
+    for (const key of this.byKey.keys()) {
+      if (key.startsWith(prefix) && this.find(key, inScope, accepts)) keys.push(key);
+    }
+    return keys;
+  }
+
   size(): number {
     return this.keyOfRow.size;
   }

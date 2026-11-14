@@ -10,7 +10,13 @@ import type { WireMessage, WireTask } from "../../shared/wire.ts";
 import { routineRunReportable } from "../routines/routine-report.ts";
 import { routineRunCard, routineRunFallbackText } from "../routines/routine-run-card.ts";
 import { createRoutineRunLateRow } from "../index-leaves/syncRoutineRunToSource.ts";
-import { personAttention } from "../../shared/person-attention.ts";
+import { personAttention, type PersonAttentionItem } from "../../shared/person-attention.ts";
+import { retireOpenQuestions } from "../approvals/retire-open-questions.ts";
+import { isPersistentQuestionCard } from "../../shared/ask-question.ts";
+import { AskKeyIndex } from "../widgets/ask-choice-keys.ts";
+import { createAgentCard, type AgentCardStore } from "../widgets/chat-widgets.ts";
+import type { Message } from "../store.ts";
+import { answeredItemKeys, PERSON_ITEM_CHOICES, personItemKey, releasedItemCards, syncPersonItemCards } from "./person-item-cards.ts";
 import { withoutRunMarkersIn } from "../../shared/routine-result.ts";
 import { routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 import { askedWords, mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, turnAsk, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
@@ -647,5 +653,268 @@ describe("turnAsk (#4201: a bot that asked is named by its id)", () => {
   it("keeps the id a bot's own row carries and the opener's when no one is named", () => {
     expect(turnAsk([row({ role: "bot", from: { botId: "orion", name: "Orion", color: "" } })], undefined, opener)).toEqual({ text: "Your part?", by: "Orion", botId: "orion" });
     expect(turnAsk([row({})], undefined, opener)).toEqual({ text: "Your part?", by: "Nova", botId: "bot-nova" });
+  });
+});
+
+describe("#4233 (Q4): a routine's or a wake's [HUMAIN] items are keyed cards", () => {
+  const ROUTINE = { routineId: "routine-dispatch", routineName: "Hourly pass" };
+  const nine = Array.from({ length: 9 }, (_, index) => ({ text: `[HUMAIN] **${100201 + index}** : decide which client it belongs to.`, ticket: 100201 + index }));
+  const reportOf = (items: ReadonlyArray<{ text: string }>) => `${items.map((entry) => `- ${entry.text}`).join("\n")}\n\nNo writes.`;
+
+  /** The bot's conversations with the person, the one key index and the
+   * real ask_choice path (createAgentCard) raising question cards, as
+   * index.ts personItemCards wires them. */
+  function keyedWorld() {
+    const threads = new Map<string, Message[]>();
+    let next = 0;
+    const rows = (threadId: string) => {
+      if (!threads.has(threadId)) threads.set(threadId, []);
+      return threads.get(threadId)!;
+    };
+    const store: AgentCardStore = {
+      groupByThread: () => undefined,
+      messagesFor: (threadId) => rows(threadId),
+      appendMessage: (threadId, message) => {
+        const full = { ...message, id: `k${++next}`, at: next } as Message;
+        rows(threadId).push(full);
+        return full;
+      },
+      patchMessage: (threadId, messageId, patch) => {
+        const list = rows(threadId);
+        const index = list.findIndex((row) => row.id === messageId);
+        if (index < 0) return null;
+        list[index] = { ...list[index]!, ...patch } as Message;
+        return list[index]!;
+      },
+    };
+    const index = new AskKeyIndex({ seed: () => [], messagesFor: (threadId) => store.messagesFor(threadId) });
+    const raised: string[] = [];
+    const keys = {
+      find: (key: string, accepts: (message: Message) => boolean) => index.find(key, () => true, accepts),
+      remember: (key: string, cardThreadId: string, messageId: string) => index.remember(key, cardThreadId, messageId),
+      retire: (cardThreadId: string, message: Message) => {
+        retireOpenQuestions({
+          messagesFor: (id) => rows(id), isPersistentQuestionCard,
+          patch: (id, rowId, card) => { store.patchMessage(id, rowId, { card }); },
+        }, cardThreadId, { messageId: message.id });
+      },
+    };
+    const cards = (threadId: string, run: { routineId: string; routineName: string }, items: readonly PersonAttentionItem[], options: { retire?: boolean } = {}) =>
+      syncPersonItemCards(run, items, {
+        pending: (key) => {
+          const card = keys.find(key, () => true)?.message.card;
+          return card ? { question: card.subtitle ?? "", options: card.options ?? [] } : null;
+        },
+        pendingKeys: (prefix) => index.keysWith(prefix, () => true),
+        answeredKeys: (prefix) => answeredItemKeys(rows(threadId), prefix),
+        release: (key) => {
+          for (const { messageId, card } of releasedItemCards(rows(threadId), key)) store.patchMessage(threadId, messageId, { card });
+        },
+        ask: (input) => createAgentCard({
+          store, bot: { id: ATLAS.id, name: ATLAS.name, color: "blue" }, threadId, input,
+          raiseQuestion: (choice) => {
+            raised.push(choice.question);
+            const row = store.appendMessage(threadId, {
+              role: "bot", kind: "options",
+              card: { title: choice.title, subtitle: choice.question, options: choice.options, requestId: `ask-choice-${next + 1}`, requestType: "question", questionRequest: { questions: [{ question: choice.question, options: choice.options.map((label) => ({ label })) }] } },
+            } as Omit<Message, "id" | "at">);
+            return { messageId: row.id };
+          },
+          askKeys: keys,
+        }).ok,
+      }, undefined, options);
+    // the person answers a card in the chat
+    const answer = (threadId: string, key: string, answered: string) => {
+      const row = rows(threadId).find((one) => one.card?.askKey === key && !one.card.answered && !one.card.expired)!;
+      store.patchMessage(threadId, row.id, { card: { ...row.card!, answered } });
+      index.changed(threadId, row.id);
+    };
+    const open = (threadId: string) => rows(threadId).filter((row) => row.kind === "options" && row.card && !row.card.answered && !row.card.dismissed && !row.card.expired);
+    return { rows, open, raised, cards, answer };
+  }
+
+  const itemsOf = (report: string) => personAttention(report)!.items;
+
+  it("nine items make nine cards that hold nothing; the same nine in the next run make none new", () => {
+    const w = keyedWorld();
+    const first = w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    expect(first.raised).toHaveLength(9);
+    expect(first.left).toEqual([]);
+    const open = w.open("main");
+    expect(open).toHaveLength(9);
+    for (const row of open) {
+      expect(row.card!.requestId).toBeTruthy();
+      expect(row.card!.noHold).toBe(true);
+      expect(row.card!.options).toEqual(["Done", "Not for me"]);
+      expect(row.card!.askKey).toMatch(/^item:routine-dispatch:t1002\d\d$/);
+    }
+    // the next run lists the same nine (its card raised from another of the
+    // bot's conversations with the person)
+    const second = w.cards("other-run-conversation", ROUTINE, itemsOf(reportOf(nine)));
+    expect(second.raised).toEqual([]);
+    expect(second.kept).toHaveLength(9);
+    expect(w.raised).toHaveLength(9);
+    expect(w.rows("main")).toHaveLength(9);
+    expect(w.rows("other-run-conversation")).toHaveLength(0);
+  });
+
+  it("an item a later run no longer lists is retired; the rest stay as they are", () => {
+    const w = keyedWorld();
+    w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    const later = w.cards("main", ROUTINE, itemsOf(reportOf(nine.slice(1))));
+    expect(later.retired).toEqual(["item:routine-dispatch:t100201"]);
+    expect(later.kept).toHaveLength(8);
+    const dropped = w.rows("main").find((row) => row.card?.askKey === "item:routine-dispatch:t100201")!;
+    expect(dropped.card!.expired).toBe(true);
+    expect(w.open("main")).toHaveLength(8);
+    // a run that lists nothing retires them all
+    expect(w.cards("main", ROUTINE, []).retired).toHaveLength(8);
+    expect(w.open("main")).toHaveLength(0);
+  });
+
+  it("keys an item without a ticket by its plain text, and replaces its card in place when its words change", () => {
+    const w = keyedWorld();
+    const plain = [{ text: "Call the supplier back about the **late** delivery." }];
+    w.cards("main", ROUTINE, plain);
+    const key = personItemKey(ROUTINE.routineId, plain[0]!);
+    expect(key).toMatch(/^item:routine-dispatch:h[0-9a-f]{16}$/);
+    // other emphasis is the same item
+    expect(personItemKey(ROUTINE.routineId, { text: "Call the supplier back about the late   delivery." })).toBe(key);
+    w.cards("main", ROUTINE, [{ text: "Call the supplier back about the late delivery.", ticketId: undefined }]);
+    expect(w.open("main")).toHaveLength(1);
+    expect(w.open("main")[0]!.card!.subtitle).toBe("Call the supplier back about the late delivery.");
+    // another routine's items are its own
+    w.cards("main", { routineId: "routine-other", routineName: "Other" }, []);
+    expect(w.open("main")).toHaveLength(1);
+  });
+
+  it("offers the choices in the item's language", () => {
+    const w = keyedWorld();
+    w.cards("main", ROUTINE, [{ text: "Appeler le client pour confirmer le rendez-vous de jeudi, tu peux le faire?" }]);
+    expect(w.open("main")[0]!.card!.options).toEqual([...PERSON_ITEM_CHOICES.fr]);
+  });
+
+  it("the relay hands a run's late items to the keyed cards, never a second list card", () => {
+    const { deps, say, threads, notified } = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+    const handed: Array<{ runThreadId: string; target: string; items: number }> = [];
+    deps.itemCards = (runThreadId, target, items) => {
+      handed.push({ runThreadId, target, items: items.length });
+      return [];
+    };
+    say("run", REPORT);
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, deps);
+    expect(outcome).toMatchObject({ posted: true, threadId: "main", keyed: true });
+    expect(handed).toEqual([{ runThreadId: "run", target: "main", items: 2 }]);
+    expect((threads.get("main") ?? []).some((row) => row.attention)).toBe(false);
+    expect(notified).toEqual([]);
+  });
+
+  it("keeps the attention card for an item no card could carry, and for a teammate's hand-off", () => {
+    const { deps, say, threads } = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+    deps.itemCards = (_runThreadId, _target, items) => items.slice(1);
+    say("run", REPORT);
+    relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, deps);
+    const card = (threads.get("main") ?? []).find((row) => row.attention)!.attention!;
+    expect(card.items.map((entry) => entry.ticketId)).toEqual([100202]);
+
+    const handOff = world();
+    let called = false;
+    handOff.deps.itemCards = () => { called = true; return []; };
+    handOff.say("work", REPORT);
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, handOff.deps);
+    expect(called).toBe(false);
+    expect(outcome).toMatchObject({ posted: true, threadId: "main" });
+    expect((handOff.threads.get("main") ?? []).find((row) => row.attention)!.attention!.items).toHaveLength(2);
+  });
+  it("two items on one ticket are one card that carries both, in a stable order", () => {
+    const w = keyedWorld();
+    const two = "- [HUMAIN] **100201** : approve the quote.\n- [HUMAIN] **100201** : call the client about the outage.\n\nNo writes.";
+    const items = itemsOf(two);
+    expect(items).toHaveLength(2);
+    const first = w.cards("main", ROUTINE, items);
+    expect(first.raised).toEqual(["item:routine-dispatch:t100201"]);
+    expect(first.left).toEqual([]);
+    const open = w.open("main");
+    expect(open).toHaveLength(1);
+    expect(open[0]!.card!.subtitle).toContain("approve the quote");
+    expect(open[0]!.card!.subtitle).toContain("call the client about the outage");
+    // the next run lists the same two in the other order: the card stays
+    const flipped = w.cards("main", ROUTINE, [...items].reverse());
+    expect(flipped.kept).toEqual(["item:routine-dispatch:t100201"]);
+    expect(flipped.replaced).toEqual([]);
+    expect(w.raised).toHaveLength(1);
+  });
+
+  it("a run's late answer with a subset of its items retires nothing", () => {
+    const w = keyedWorld();
+    const { deps, say } = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+    // the run's own end raised its nine cards
+    w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    expect(w.open("main")).toHaveLength(9);
+    const seen: Array<{ retire: boolean }> = [];
+    deps.itemCards = (_runThreadId, target, items, options) => {
+      seen.push(options);
+      return w.cards(target, ROUTINE, items, options).left;
+    };
+    // a teammate's result resumes the bot after the run closed: one ticket
+    say("run", "- [HUMAIN] **100205** : decide which client it belongs to.\n\nNo writes.");
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, deps);
+    expect(outcome).toMatchObject({ posted: true, threadId: "main", keyed: true });
+    expect(seen).toEqual([{ retire: false }]);
+    expect(w.open("main")).toHaveLength(9);
+    expect(w.rows("main").some((row) => row.card?.expired)).toBe(false);
+  });
+
+  it("an item the person answered is never raised again while the runs keep listing it", () => {
+    const w = keyedWorld();
+    w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    expect(w.raised).toHaveLength(9);
+    const key = "item:routine-dispatch:t100203";
+    w.answer("main", key, "Not for me");
+    // the next run lists the same nine (its cards go to the same
+    // conversation with the person): nothing new, nothing rings
+    const next = w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    expect(next.raised).toEqual([]);
+    expect(next.replaced).toEqual([]);
+    expect(next.kept).toHaveLength(9);
+    expect(w.raised).toHaveLength(9);
+    expect(w.open("main")).toHaveLength(8);
+    // and the run after it, with other emphasis
+    const after = w.cards("main", ROUTINE, itemsOf(reportOf(nine.map((entry) => ({ text: entry.text.replace(/\*\*/g, "") })))));
+    expect(after.raised).toEqual([]);
+    expect(after.kept).toContain(key);
+    expect(w.raised).toHaveLength(9);
+    expect(w.raised).toHaveLength(9);
+    // the answered card keeps its answer and its key while the item is listed
+    const answered = w.rows("main").find((row) => row.card?.answered === "Not for me")!;
+    expect(answered.card!.askKey).toBe(key);
+    expect(answered.card!.expired).toBeFalsy();
+  });
+
+  it("an answered item a later run stops listing comes back as a new card when listed again", () => {
+    const w = keyedWorld();
+    w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    const key = "item:routine-dispatch:t100201";
+    w.answer("main", key, "Done");
+    // a run without it: its answered card lets go of the key
+    const without = w.cards("main", ROUTINE, itemsOf(reportOf(nine.slice(1))));
+    expect(without.released).toEqual([key]);
+    expect(without.retired).toEqual([]);
+    const answered = w.rows("main").find((row) => row.card?.answered === "Done")!;
+    expect(answered.card!.askKey).toBeUndefined();
+    expect(answered.card!.answered).toBe("Done");
+    // listed again: a new card, one ring
+    const back = w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    expect(back.raised).toEqual([key]);
+    expect(w.raised).toHaveLength(10);
+  });
+
+  it("a run's late answer never lets go of an answered item's key", () => {
+    const w = keyedWorld();
+    w.cards("main", ROUTINE, itemsOf(reportOf(nine)));
+    w.answer("main", "item:routine-dispatch:t100201", "Done");
+    const late = w.cards("main", ROUTINE, itemsOf(reportOf(nine.slice(4, 5))), { retire: false });
+    expect(late.released).toEqual([]);
+    expect(w.cards("main", ROUTINE, itemsOf(reportOf(nine))).raised).toEqual([]);
   });
 });

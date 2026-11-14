@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
@@ -45,6 +45,26 @@ describe("local computer proxy runtime path", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+});
+
+// #3901: every process the server starts from a file of its own (a relay the
+// MCP gate runs as a thread or, when the thread is late, as a process) ships
+// in each form of the server: its source in the tree, its bundle in
+// dist-server, which the packaged apps and the container image copy whole.
+describe("every spawned entry ships", () => {
+  it("has its source and is an entry point of the server bundle", () => {
+    const script = readFileSync(join(SERVER_ROOT, "../scripts/bundle-server.mjs"), "utf8");
+    const entryPoints = script.match(/const ENTRY_POINTS = \[([\s\S]*?)\];/)?.[1] ?? "";
+    const listed = new Set([...entryPoints.matchAll(/["']([^"']+\.ts)["']/g)].map((match) => match[1]));
+    // the pi extension is loaded by another program as TypeScript: copied, not bundled
+    const copied = script.replace(entryPoints, "");
+    const missing = Object.entries(SPAWNED_PROXIES).flatMap(([name, path]) => {
+      const file = relative(SERVER_ROOT, path).split(sep).join("/");
+      const shipped = listed.has(file) || copied.includes(`"${basename(file)}"`);
+      return existsSync(path) && shipped ? [] : [`${name}: ${file}`];
+    });
+    expect(missing).toEqual([]);
   });
 });
 

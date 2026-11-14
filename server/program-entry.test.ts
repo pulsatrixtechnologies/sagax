@@ -46,4 +46,27 @@ describe("program entry", () => {
       await rm(work, { recursive: true, force: true });
     }
   });
+
+  // #3901: the server's index.js inlines the harness MCP proxy. Its entry
+  // check matched the server's entry, so a bundled server printed the proxy's
+  // usage line and took its exit code 2 instead of serving /api/health.
+  it("starts a bundle that holds the harness MCP proxy as that bundle, never as the proxy", async () => {
+    const work = await realpath(await mkdtemp(join(tmpdir(), "program-entry-")));
+    try {
+      const source = join(work, "entry.ts");
+      await writeFile(source, `import { harnessMcpRequest } from ${JSON.stringify(join(dir, "harness-mcp-proxy.ts"))};\nvoid harnessMcpRequest;\nprocess.stdout.write("server up");\n`);
+      const outfile = join(work, "index.js");
+      await writeFile(join(work, "package.json"), JSON.stringify({ type: "module" }));
+      await build({ entryPoints: [source], outfile, bundle: true, platform: "node", format: "esm", packages: "external", logLevel: "silent" });
+      const child = spawn(process.execPath, [outfile], { env: { PATH: process.env.PATH ?? "" }, stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk: Buffer) => { stdout += chunk; });
+      child.stderr.on("data", (chunk: Buffer) => { stderr += chunk; });
+      const code = await new Promise<number | null>((resolve) => child.once("close", (exit) => resolve(exit)));
+      expect({ code, stdout, usage: stderr.includes("usage: harness-mcp-proxy") }).toEqual({ code: 0, stdout: "server up", usage: false });
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  });
 });

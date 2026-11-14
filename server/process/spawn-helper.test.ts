@@ -5,7 +5,7 @@ import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync } from "node:fs";
 import { getPriority, tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { runLoginShellProbe } from "../env-path.ts";
 import { spawnPcHook } from "../hooks/lifecycle-hook-exec.ts";
@@ -168,6 +168,34 @@ describe("a child the helper failed to start (#3901)", () => {
     child.onExit(1, null);
     const settled = await Promise.race([written, new Promise((resolve) => setTimeout(() => resolve("pending"), 500))]);
     expect(settled).toBeInstanceOf(Error);
+  });
+
+  // #3901: a helper that dies at its start is not started again at once: the
+  // server starts its processes itself, a missing program fails once as with
+  // Node's own spawn, and stopping that child settles at once. Every platform.
+  it("falls back to the server's own spawn when the helper dies at its start, without looping", async () => {
+    const said: string[] = [];
+    startSpawnHelper({ log: (line) => said.push(line) });
+    try {
+      const helper = spawnHelperPid();
+      if (helper !== undefined) {
+        try { process.kill(helper, "SIGKILL"); } catch { /* already gone */ }
+      }
+      await vi.waitFor(() => expect(said.some((line) => line.startsWith("[spawn-helper] down"))).toBe(true), { timeout: 5_000, interval: 10 });
+      expect(spawnHelperPid()).toBeUndefined();
+      const { stdout } = await execChildAsync(process.execPath, ["-e", PPID]);
+      expect(Number(stdout)).toBe(process.pid);
+      expect(spawnHelperPid()).toBeUndefined();
+      const missing = spawnChild("/nonexistent/engine-cli", [], { stdio: ["pipe", "pipe", "pipe"] });
+      const failed = await new Promise<NodeJS.ErrnoException>((resolve) => missing.once("error", resolve));
+      expect(failed.code).toBe("ENOENT");
+      expect(missing).not.toBeInstanceOf(HelperChild);
+      expect(pendingStart(missing)).toBeNull();
+      const stopped = await Promise.race([killCliTree(missing, 1_000), new Promise((resolve) => setTimeout(() => resolve("looping"), 2_000))]);
+      expect(stopped).toBe(true);
+    } finally {
+      stopSpawnHelper();
+    }
   });
 });
 const lines: string[] = [];

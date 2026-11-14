@@ -342,3 +342,33 @@ they are person preferences.
 Tests: one table of cases, `shared/attention-policy.vectors.json`, run by
 the server (`shared/attention-policy.test.ts`) and the desktop
 (`src/lib/attention.vectors.test.ts`); the phone reads the same file next.
+
+## Answer learning (`server/proactive/answer-learning.ts`, #4250 S7)
+
+The signal ledger keeps the person's answer to each keyed card (an
+`ask_choice` with a key) a routine's run raised, by kind: the key without
+its item id (`ticket-1012` and `ticket-1013` are the kind `ticket`; a key the
+server made from the question's words is its own kind). Each answer is one
+ordinary ledger entry (kind `card-answer`, state `answered`, the words in
+`answer`), the newest ten per person, routine and card kind. Only the
+person's own answer counts: a card skipped, put away, expired, applied
+without them or answered by a worker teaches nothing, and a room's cards
+never teach a routine.
+
+From those answers:
+
+- a run's prompt carries "the person's last answers" on each card kind of
+  that routine, with the usual one (the most frequent), and tells the bot
+  to ask as usual: never answer a card for the person;
+- a keyed card of that routine shows the usual answer first among its
+  options;
+- after three identical answers in a row, the card also offers
+  "<answer> (always for this routine)". Only the person's click on it writes
+  one line into the routine's instructions (`Always for "<question>" (key
+  <kind>): <answer>`), through the routine's own update, so the routine's
+  history says it. The offer is not made again once the line is there.
+
+Never an automatic answer: every card stays the person's to answer.
+
+Tests: `server/proactive/answer-learning.test.ts` (prompt section, the
+card's order and offer, the click that writes the line, a restart).

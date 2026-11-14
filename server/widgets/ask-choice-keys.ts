@@ -47,6 +47,9 @@ export interface AskKeyIndexDeps {
   /** Rows that may hold a pending keyed card (a superset). */
   seed(): Iterable<{ threadId: string; message: Message }>;
   messagesFor(threadId: string): readonly Message[];
+  /** #4250 (S7): an indexed card stopped being pending (answered, put
+   * away, closed): `message` is its row now, undefined when it is gone. */
+  left?(threadId: string, messageId: string, key: string, message: Message | undefined): void;
 }
 
 /** Where each pending keyed card is, so a keyed ask_choice reads only the
@@ -105,10 +108,17 @@ export class AskKeyIndex {
       }
       return;
     }
+    // #4250 (S7): the cards raised before a restart are watched too
+    this.seedOnce();
     const key = this.keyOfRow.get(`${threadId}\u0000${messageId}`);
     if (key === undefined) return;
     const message = this.deps.messagesFor(threadId).find((row) => row.id === messageId);
-    if (!pendingWithKey(message, key)) this.forget(threadId, messageId);
+    if (!pendingWithKey(message, key)) this.leave(threadId, messageId, key, message);
+  }
+
+  private leave(threadId: string, messageId: string, key: string, message: Message | undefined): void {
+    this.forget(threadId, messageId);
+    try { this.deps.left?.(threadId, messageId, key, message); } catch { /* a reader never fails the index */ }
   }
 
   /** The newest pending card raised with `key` in a conversation `inScope`
@@ -123,7 +133,7 @@ export class AskKeyIndex {
       if (!inScope(spot.threadId)) continue;
       const message = this.deps.messagesFor(spot.threadId).find((row) => row.id === spot.messageId);
       if (!pendingWithKey(message, key)) {
-        this.forget(spot.threadId, spot.messageId);
+        this.leave(spot.threadId, spot.messageId, key, message);
         continue;
       }
       if (accepts(message)) return { threadId: spot.threadId, message };

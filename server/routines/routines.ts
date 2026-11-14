@@ -802,6 +802,10 @@ export interface RoutineManagerOptions {
   /** A routine with a watch was deleted: its kept state goes too. */
   forgetWatch?: (routineId: string) => void;
   memoryHint?: (run: RoutineRun, prompt: string) => Promise<{ hint: RoutineMemoryHint; note: string } | null>;
+  /** #4250 (S7): the person's last answers to this routine's keyed cards,
+   * by card kind, as the run's prompt section
+   * (server/proactive/answer-learning.ts answerLearningNote). */
+  answersNote?: (run: RoutineRun) => string | undefined;
   /** 2026-10-15: a routine turned on or off from a conversation (a routine
    * card, its Undo, the person's switch while the conversation is open).
    * Changes made elsewhere (the console, a deleted bot) never call it. */
@@ -1352,6 +1356,7 @@ function composeExecutionPrompt(
   watchNote?: string,
   goal?: string,
   previousProblems?: string,
+  answers?: string,
 ): string {
   const parts = [prompt, retried ? retryNote(retried) : ""];
   // #2696: the goal and its two closing lines come right after the work.
@@ -1373,6 +1378,8 @@ function composeExecutionPrompt(
   }
   // #3479: the previous run's problems, so a lasting one is said once.
   if (previousProblems) parts.push(previousProblems);
+  // #4250 (S7): the person's last answers on this routine's card kinds.
+  if (answers) parts.push(answers);
   for (const attachment of attachments ?? []) {
     const tag = attachment.kind === "image" ? "attached-image" : "attached-file";
     parts.push(
@@ -2591,6 +2598,16 @@ export class RoutineManager {
       ...(earlier.length ? [routineProblemStreakNote(earlier, told)] : []),
     ];
     return said.length ? said.join("\n") : undefined;
+  }
+
+  /** #4250 (S7): the person's last answers to this routine's keyed cards. */
+  private answersNote(run: RoutineRun): string | undefined {
+    try {
+      return this.options.answersNote?.(cloneRun(run)) || undefined;
+    } catch (error) {
+      reportBackgroundError(error);
+      return undefined;
+    }
   }
 
   private failsLikeLastOutcome(run: RoutineRun): boolean {
@@ -4350,7 +4367,7 @@ export class RoutineManager {
             await this.options.startTurn(
               run.botId,
               task.threadId,
-              withMemoryNote(composeExecutionPrompt(prompt, run.attachments, this.continuityCarry(run), run.retried, run.watchNote, this.goalBlockFor(run), this.problemsNote(run)), memoryNote),
+              withMemoryNote(composeExecutionPrompt(prompt, run.attachments, this.continuityCarry(run), run.retried, run.watchNote, this.goalBlockFor(run), this.problemsNote(run), this.answersNote(run)), memoryNote),
               run.runOn ?? "maus",
               triggerSource,
               (message) => this.failThread(task.threadId, message),

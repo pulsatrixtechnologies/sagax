@@ -5420,6 +5420,34 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     ]) expect(routineEndsOnAnnouncement(said), said).toBe(true);
   });
 
+  it("#3990: a run that decides there is nothing to do, or asks the person to say, announces nothing", () => {
+    for (const said of [
+      "I'll skip it: nothing urgent, and it is no longer in the inbox.",
+      "I'll ignore this one: it needs no answer from me.",
+      "I'll pass on this one.",
+      "I'll keep watching.",
+      "I'll check again at the next run.",
+      "I'll wait for the next message.",
+      "Let me know if you need anything else.",
+      "Ok, let me know if the client calls back.",
+      "Laisse-moi savoir si tu veux que je relance le client.",
+      "Je vais m'abstenir : rien d'urgent.",
+      "Je vais ignorer ce message.",
+      "Je vais ne rien faire de plus.",
+      "Je vais continuer à surveiller.",
+      "Je vais revérifier à la prochaine passe.",
+      "Je vais attendre la suite.",
+    ]) expect(routineEndsOnAnnouncement(said), said).toBe(false);
+    // a skip or a wait followed by work still announces it
+    for (const said of [
+      "I'll skip the duplicates and send the rest.",
+      "I'll wait for the backup to finish, then report.",
+      "Let me check the backups first.",
+      "Je vais attendre la fin de la copie puis envoyer le rapport.",
+      "Je vais ignorer les doublons et traiter le reste.",
+    ]) expect(routineEndsOnAnnouncement(said), said).toBe(true);
+  });
+
   it("a tool that failed then succeeded is a clean run", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

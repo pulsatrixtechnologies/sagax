@@ -19,7 +19,7 @@
  * same cases run on each side: shared/attention-policy.vectors.json. */
 import type { Notification, NotifyKind } from "./notification.ts";
 import { REACH_CHANNELS, REACH_WIRED, localClock, validTimeZone, type ReachChannelId } from "./reach-me.ts";
-import type { QuietHours, SignalLevel } from "./signal-levels.ts";
+import type { QuietHours, SignalLevel } from "./attention-levels.ts";
 
 /** #3719: what each kind is, for the kind rule. Typed over every kind, so a
  * new kind cannot be added without saying whether it is an ask.

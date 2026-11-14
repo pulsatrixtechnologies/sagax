@@ -327,6 +327,8 @@ const __BUILD_DATE__: string;
       };
       /** Arms one user-initiated display capture request from this frame. */
       beginScreenPreviewIntent(): boolean;
+      /** #4100: the one-shot intent before getDisplayMedia asks for the computer's sound. */
+      beginListeningComputerIntent?(): boolean;
       /** One full frame of this computer: the local page only, never the
        * page served by the organization server (#3565). */
       screenFrame?(): Promise<string | null>;

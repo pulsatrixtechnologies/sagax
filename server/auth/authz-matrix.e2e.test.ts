@@ -193,6 +193,8 @@ async function furnish(auth: Auth, principal: string, label: string, marker: str
   take("ruleSet", set.body.set?.id ?? set.body.ruleSet?.id ?? set.body.id, set);
   const call = await api("POST", "/api/calendar-calls", auth, { name: `${label} ${NAME} call`, description: `About ${marker}.`, botIds: [bot.id], schedule: { type: "once", at: Date.now() + 86_400_000 }, durationMinutes: 30 });
   take("calendarCall", call.body.call?.id, call);
+  const listening = await api("POST", `/api/bots/${bot.id}/listening`, auth, {});
+  take("listeningSession", listening.body.session?.sessionId, listening);
   const search = await api("PUT", "/api/me/web-search", auth, { provider: "brave", key: `brave-${marker}` });
   if (search.status >= 300) missing.push(`web search key: ${search.status} ${search.text.slice(0, 160)}`);
   return { things, missing };
@@ -278,6 +280,9 @@ const USE_WRITES = new Set([
   "POST /api/bots/{bot}/warm",
   // splits text into speakable sentences for a voice turn; stores nothing
   "POST /api/bots/{bot}/voice/prepare",
+  // listening (#4100): a session in the person's own conversation with the
+  // bot, read back by them only, like a message they send
+  "POST /api/bots/{bot}/listening",
   "POST /api/bots/{bot}/interrupt",
   "POST /api/bots/{bot}/tasks",
   "POST /api/bots/{bot}/respond",

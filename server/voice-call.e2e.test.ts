@@ -172,6 +172,18 @@ describe("voice mode live call (streaming)", () => {
     expect(JSON.stringify(frames)).not.toContain(KEY.slice(6, 14));
   });
 
+  it("books a listening session's hearing under listening (#4100)", async () => {
+    const before = usage.length;
+    const { ws, frames } = await open("/api/bots/b-quasar/voice/listen?language=fr&threadId=t-1&purpose=listening");
+    await until("ready", () => frames.find((f) => f.type === "ready"));
+    ws.send(Buffer.alloc(3200));
+    ws.send(JSON.stringify({ type: "finalize" }));
+    await until("transcript", () => frames.find((f) => f.type === "transcript" && f.final));
+    ws.close();
+    const booked = await until("usage", () => usage.slice(before).find((u) => u.model === "grok-stt"));
+    expect(booked.purpose).toBe("listening");
+  });
+
   it("refuses a WebSocket from another origin (no CORS for WebSockets)", async () => {
     await expect(open("/api/bots/b-quasar/voice/listen", { origin: "https://evil.example" })).rejects.toThrow(/403/);
   });

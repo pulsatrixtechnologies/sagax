@@ -1,4 +1,5 @@
 // Fold one SSE server frame into store actions (#1383 live stream).
+import { receiveListeningFrame } from "@/lib/listening/listening-session";
 import { flushSync } from "react-dom";
 import type { Action, AppState, Bot, BotAnnouncement, ConfigStatusFrame, Group, Message } from "./model";
 import {
@@ -356,6 +357,11 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("sagax-voice-opener", { detail: frame }));
           }
+          break;
+        // #4100: this person's listening session changed; ended elsewhere
+        // (another device's Stop, the server's idle end) stops the capture here
+        case "listening":
+          receiveListeningFrame(frame);
           break;
         case "voice.call.ended":
           if (typeof window !== "undefined") {

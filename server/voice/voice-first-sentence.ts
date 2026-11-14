@@ -190,15 +190,18 @@ export async function joinCachePrime(
   return "cancelled";
 }
 
-/** `voice.opener` and `voice.call.ended` reach the person the turn speaks
- * for, and the operator at this computer when the stream has no viewer.
- * Same rule as a nudge. */
+/** The voice frames that belong to one person's streams. */
+export const PERSON_VOICE_FRAMES: ReadonlySet<string> = new Set(["voice.opener", "voice.call.ended", "listening"]);
+
+/** `voice.opener`, `voice.call.ended` and `listening` (#4100) reach the
+ * person they speak for, and the operator at this computer when the stream
+ * has no viewer. Same rule as a nudge. */
 export function voiceOpenerFrameAllowed(
   payload: { kind?: unknown; audience?: unknown },
   viewerId: string | undefined,
   localPersonId: string,
 ): boolean {
-  if (payload.kind !== "voice.opener" && payload.kind !== "voice.call.ended") return true;
+  if (!PERSON_VOICE_FRAMES.has(payload.kind as string)) return true;
   if (typeof payload.audience !== "string") return false;
   const audience = payload.audience.trim().toLowerCase();
   if (!audience) return false;

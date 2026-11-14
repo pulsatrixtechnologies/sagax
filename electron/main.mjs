@@ -146,7 +146,7 @@ app.setAboutPanelOptions({ applicationName: FULL_NAME });
 const { desktopCapabilities, nativeDesktopActions } = capabilitiesModule;
 const nativeActions = nativeDesktopActions(process.platform);
 const require = createRequire(import.meta.url);
-const { createDisplayMediaGuard, invokeDisplayMediaCallback, selectCaptureSource } = require(
+const { createDisplayMediaGuard, invokeDisplayMediaCallback, listenResponse, selectCaptureSource } = require(
   "./screen-preview.cjs",
 );
 const { STAGE_PREFIX: APPIMAGE_CUA_STAGE_PREFIX } = require("./cua-linux-bundle.cjs");
@@ -2339,6 +2339,13 @@ function desktopWorkspaceForEvent(event, create = false) {
 
 ipcMain.on("screen:preview-intent", localOnlySync("screen:preview-intent", (event) => {
   event.returnValue = displayMediaGuard.begin(event.senderFrame);
+}));
+
+// #4100: listening to a conversation, the computer's sound: the same one-shot
+// intent, of the "listen" kind (screen-preview.cjs), right before the page's
+// getDisplayMedia in the person's own click.
+ipcMain.on("listening:computer-intent", localOnlySync("listening:computer-intent", (event) => {
+  event.returnValue = displayMediaGuard.begin(event.senderFrame, "listen");
 }));
 
 // Each account's page keeps its own count; the badge adds them up, as a
@@ -5803,13 +5810,26 @@ app.whenReady().then(async () => {
   const hostedAccount = desktopRemoteAccess ? null : ensureCompanionAccountService();
   // Display capture remains user-initiated. The renderer first sends a
   // short-lived one-shot intent, then calls getDisplayMedia in the same click.
-  // The handler binds that request to the same frame/origin, rejects audio,
-  // and requires Electron's active user-gesture signal.
-  if (process.platform === "darwin" || process.platform === "linux") {
+  // The handler binds that request to the same frame/origin and requires
+  // Electron's active user-gesture signal. A screen preview intent never gets
+  // audio; a listen intent (#4100) gets the computer's sound only (Windows,
+  // and macOS where the shell gives it), never on Linux.
+  if (process.platform === "darwin" || process.platform === "linux" || process.platform === "win32") {
     session.defaultSession.setDisplayMediaRequestHandler(
       (request, callback) => {
         displayMediaRequestCount += 1;
-        if (!displayMediaGuard.consume(request, rendererOrigin())) {
+        const kind = displayMediaGuard.consumeKind(request, rendererOrigin());
+        if (kind === "listen") {
+          desktopCapturer
+            .getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } })
+            .then((sources) => respondToDisplayMediaRequest(callback, listenResponse(process.platform, sources[0] ?? null)))
+            .catch((error) => {
+              console.warn("[listening] computer sound source failed:", error);
+              respondToDisplayMediaRequest(callback, {});
+            });
+          return;
+        }
+        if (kind !== "preview" || process.platform === "win32") {
           respondToDisplayMediaRequest(callback, {});
           return;
         }

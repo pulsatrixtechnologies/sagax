@@ -482,6 +482,7 @@ export type StartTurnHost = {
   voiceBriefText: any,
   voiceCallSection: any,
   voiceCallTurnPrompt: any,
+  listeningSoFarFor: any,
   voiceCalls: any,
   voiceLatency: any,
   voicePickForTurn: any,

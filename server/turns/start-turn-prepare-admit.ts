@@ -54,6 +54,7 @@ export function createPrepareAdmitStartTurn(
     isSmallTalk,
     limitBackupRefusedInThread,
     liveVoiceUtteranceByThread,
+    listeningSoFarFor,
     llmThreadTitlesEnabled,
     markInternalTurn,
     noteAutoWorkspace,
@@ -343,6 +344,11 @@ export function createPrepareAdmitStartTurn(
   if (state.turnAuto && state.opts?.computerSelectionContinuation) state.turnAuto = carryAutoComputerMoves(state.turnAuto, state.opts.computerMovesSoFar);
   // #2762: the refusals of a move speak the language of the person's message.
   if (state.turnAuto) state.turnAuto = { ...state.turnAuto, language: turnLanguage(state.userMessage?.text, languageOfPerson(state.turnPrincipal)) };
+  // #4100: the person's own message while they listen in this conversation
+  // carries the transcript so far (server/listening/listening-turn.ts).
+  if (!state.warmOnly && !state.opts.cardContinuation && !state.opts.commsDepth && !state.opts.automationSource && !state.userMessage.peerAsk && !routineLineage(state.speaker)) {
+    state.providerText = listeningSoFarFor(state.threadId, orgSpeakerPrincipal(state.bot, state.speaker), state.providerText);
+  }
   // Each call turn's words carry the call mark themselves: a live session
   // gets the volatile call section only when it changed, so from the second
   // call turn on the section alone never reached the engine.

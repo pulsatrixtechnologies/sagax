@@ -1432,6 +1432,9 @@ import { createBotSendStateRoutes } from "./routes/bot-send-state.ts";
 import { createMeEngineModelsRoutes } from "./routes/me-engine-models.ts";
 import { createRoutineWatchCheckRoutes } from "./routes/routine-watch-check.ts";
 import { createThreadFilePinRoutes } from "./routes/thread-file-pins.ts";
+import { createListeningInternalRoutes, createListeningRoutes } from "./routes/listening.ts";
+import { ListeningSessions } from "./listening/listening-sessions.ts";
+import { listeningEndedTurn, withListeningSoFar } from "./listening/listening-turn.ts";
 import { remoteComputerForTurn, sandboxPrincipalForTurn } from "./sandbox/user-sandbox-routing.ts";
 import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
 import { BotFolderRegistry, WorkspaceTidier, attributeEntries, attributionFragments, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning } from "./sandbox/sandbox-bot-folder.ts";
@@ -19210,6 +19213,12 @@ function attentionPerson(bot: BotRecord, threadId: string): string | undefined {
   const task = store.taskByThread(bot.id, threadId);
   return task?.ownerPrincipalId || routines?.runForThread(threadId)?.runAs || threadPersonKey(threadId) || effectiveBotOwner(bot) || undefined;
 }
+/** An outside agent's conversation, or an AI client's hidden one (#291):
+ * the client reads it. A peer's hidden work thread is not one. */
+function aiClientConversation(botId: string, threadId: string): boolean {
+  const task = store.taskByThread(botId, threadId);
+  return isAgentConversation(task) || (task?.hidden === true && !task.routineRunId && !task.openedBy?.botId);
+}
 const CW_OPEN_RECORD = /https:\/\/([a-z0-9.-]+)\/v4_6_release\/services\/system_io\/router\/openrecord\.rails\?[^"\s]*?companyName=([A-Za-z0-9_.-]+)/i;
 /** A ConnectWise ticket's deep link: the site the server is told
  * (SAGAX_CW_SITE), else the one the thread's own ConnectWise cards link to. */
@@ -19220,12 +19229,7 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   patch: (threadId, messageId, patch) => { store.patchMessage(threadId, messageId, patch); },
   markUnread: (botId, threadId) => store.patchTask(botId, threadId, { unread: true }),
   conversation: (bot, threadId) => conversationOrStart(bot, attentionPerson(bot, threadId)),
-  // an outside agent's conversation, or an AI client's hidden one (#291):
-  // the client reads it. A peer's hidden work thread is not one.
-  agentConversation: (botId, threadId) => {
-    const task = store.taskByThread(botId, threadId);
-    return isAgentConversation(task) || (task?.hidden === true && !task.routineRunId && !task.openedBy?.botId);
-  },
+  agentConversation: (botId, threadId) => aiClientConversation(botId, threadId),
   routineRun: (threadId) => {
     const run = routines?.runForThread(threadId);
     return run && run.target === "bot" ? { id: run.id, routineName: run.routineName, status: run.status } : null;
@@ -31301,13 +31305,59 @@ const voiceModeDeps: VoiceModeDeps = {
       costSource: "estimated" as const,
       trigger: usage.speaker.principalId && IDENTITY.kind === "perspicax" ? { kind: "user", principalId: usage.speaker.principalId } : { kind: "owner" },
       ...(IDENTITY.kind === "perspicax" ? { access: usage.via, ...(bot ? { ownerPrincipalId: effectiveBotOwner(bot) } : {}) } : {}),
-      ...(usage.payerPrincipalId ? { payerPrincipalId: usage.payerPrincipalId } : {})
+      ...(usage.payerPrincipalId ? { payerPrincipalId: usage.payerPrincipalId } : {}),
+      ...(usage.purpose ? { purpose: usage.purpose } : {}),
     };
     noteSpend(DATA_DIR, row, appendUsage(DATA_DIR, row));
   }
 };
 const voiceModeRoutes = createVoiceModeRoutes(voiceModeDeps);
 ROUTES.push(voiceModeRoutes);
+
+// #4100: listening to a conversation. The person's own sessions, sealed
+// under their conversation's key; one row patched in place and a frame to
+// that person's devices. A device that went quiet is ended without a turn.
+const listeningDir = join(DATA_DIR, "listening");
+// Register the context before opening a session sealed on an earlier run.
+registerAtRestRoot({ id: "listening", dir: listeningDir, context: path => `listening/${path}`, files: () => listeningSessions.files() });
+const listeningSessions = new ListeningSessions({
+  dir: listeningDir,
+  appendRow: (threadId, row) => {
+    const bot = store.botByThread(threadId);
+    return bot && store.taskByThread(bot.id, threadId) ? store.appendMessage(threadId, row) : null;
+  },
+  patchRow: (threadId, messageId, patch) => { store.patchMessage(threadId, messageId, patch); },
+  broadcast: (frame) => broadcast({ ...frame }),
+  // at the person's stop the bot gets the transcript as data, in one turn
+  // that speaks for that person (server/listening/listening-turn.ts)
+  onEnded: listeningEndedTurn({
+    startTurn: ({ botId, threadId, prompt, principalId }) => startMeetingSummary(botId, threadId, prompt, { speaker: personSpeaker(principalId), what: "the answer to the conversation you listened to" }),
+  }),
+  log: (line) => console.warn(line),
+});
+// the bot's own read of a session of the conversation its turn runs in
+INTERNAL_ROUTES.push(createListeningInternalRoutes({ sessions: listeningSessions }));
+/** #4100: a message the person sends in a conversation they are listening
+ * in carries the transcript so far, added here (no client field). */
+function listeningSoFarFor(threadId: string, principal: string, text: string): string {
+  const live = listeningSessions.liveFor(threadId);
+  if (!live || !principal || live.principalId.trim().toLowerCase() !== principal.trim().toLowerCase()) return text;
+  return withListeningSoFar(text, live);
+}
+setInterval(() => { try { listeningSessions.sweep(); } catch (error) { reportBackgroundError(error); } }, 30_000).unref();
+ROUTES.push(createListeningRoutes({
+  sessions: listeningSessions,
+  person: (auth) => actorPrincipalId(auth).trim().toLowerCase(),
+  // the voice listen socket's rule: the named conversation when the person
+  // may post to it, else their own; never an AI client's hidden one
+  conversation: (auth, botId, threadId) => {
+    const target = voiceModeDeps.target(auth, botId, threadId);
+    if ("status" in target) return target;
+    // never in a room, never an AI client's hidden conversation (#4100)
+    if (store.groupByThread(target.threadId) || aiClientConversation(target.botId, target.threadId)) return { status: 404, error: "no such conversation" };
+    return { botId: target.botId, threadId: target.threadId };
+  },
+}));
 
 // The caller's own claude.ai connectors, read through their own Claude
 // account (server/harness-connectors.ts); always on, no server switch.
@@ -37217,6 +37267,7 @@ const startTurnRunner = createStartTurn({
   voiceBriefText,
   voiceCallSection,
   voiceCallTurnPrompt,
+  listeningSoFarFor,
   voiceCalls,
   voiceLatency,
   voicePickForTurn,

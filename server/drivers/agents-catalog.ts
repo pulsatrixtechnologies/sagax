@@ -270,6 +270,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   transcriptsTools.DEF_RECALL_TOPIC,
   coreTools.DEF_ROUTE_MESSAGE,
   transcriptsTools.DEF_SESSION_READ,
+  transcriptsTools.DEF_LISTENING_READ,
   cloudAgentsTools.DEF_LIST_CLOUD_AGENTS,
   cloudAgentsTools.DEF_GET_CLOUD_AGENT,
   cloudAgentsTools.DEF_LAUNCH_CLOUD_AGENT,
@@ -358,7 +359,8 @@ const ROOM_REPLACED_TOOLS = new Set(["ask_bot", "delegate_bot", "check_delegatio
 // run_with_engine starts a thread of the bot itself, which a room turn cannot
 // (startTurn: the bot is already working in that room).
 // Waits are one-to-one only (routes/waits.ts): a room holds no wait.
-const ROOM_ABSENT_TOOLS = new Set(["propose_page", "page_comments", "choose_page_target", "show_widget", "update_widget", "show_html", "update_html", "run_with_engine", ...WAIT_TOOL_NAMES]);
+// #4100: listening is never started in a room, so a room has none to read (listening_read)
+const ROOM_ABSENT_TOOLS = new Set(["propose_page", "page_comments", "choose_page_target", "show_widget", "update_widget", "show_html", "update_html", "run_with_engine", "listening_read", ...WAIT_TOOL_NAMES]);
 // 2026-10-28: what a teammate's turn one hop away (profile.peerHop) is not
 // shown: every tool that would start another bot's turn, a job of its own,
 // or an agent-API prompt. The routes refuse these past one hop
@@ -406,6 +408,8 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
   "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine", "create_routine", "delete_routine",
   "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
+  // #4100: a listened conversation's transcript, read now and then
+  "listening_read",
   // #4185: a Perspicax product's key card, asked for now and then.
   "request_product_key",
   "request_login", "request_sign_in", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",

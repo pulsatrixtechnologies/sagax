@@ -188,6 +188,9 @@ export interface VoiceUsage {
   input: number;
   /** whose key paid (2026-10-29): xAI when absent */
   provider?: VoiceProviderId;
+  /** #4100: hearing for a listening session (`/voice/listen?purpose=listening`),
+   * booked under listening rather than voice mode */
+  purpose?: "listening";
 }
 
 /** The ledger's model for one provider's speech or hearing. */
@@ -406,7 +409,7 @@ function scrub(message: string, key: string): string {
   return out.length > 300 ? `${out.slice(0, 300)}...` : out;
 }
 
-type Usage = (model: VoiceUsage["model"], input: number) => void;
+type Usage = (model: VoiceUsage["model"], input: number, purpose?: VoiceUsage["purpose"]) => void;
 /** The usage booker for the key a request ends up on. */
 type UsageFor = (candidate: VoiceKeyCandidate) => Usage;
 type Json = (res: import("node:http").ServerResponse, status: number, body: unknown) => unknown;
@@ -1019,17 +1022,23 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
     }
   }
 
-  const usageFor: UsageFor = (candidate) => (model, input) => deps.recordUsage({
+  const usageFor: UsageFor = (candidate) => (model, input, purpose) => deps.recordUsage({
     target, speaker, via: candidate.via, model, input,
     ...(candidate.payerPrincipalId ? { payerPrincipalId: candidate.payerPrincipalId } : {}),
     ...(candidateProvider(candidate) !== "xai" ? { provider: candidateProvider(candidate) } : {}),
+    ...(purpose ? { purpose } : {}),
   });
 
   const keyterms = (): string[] => {
     try { return deps.keyterms?.(target, speaker) ?? []; } catch { return []; }
   };
   if (choice.badVoice && action !== "listen") return json(res, 400, { error: "voice must be a voice id" });
-  if (action === "listen") return listen(req, res, url, json, sttKeys, refusals, who, usageFor, keyterms(), target.threadId);
+  if (action === "listen") {
+    // #4100: a listening session's channel books its hearing under listening
+    const listening = url.searchParams.get("purpose") === "listening";
+    const booked: UsageFor = listening ? (candidate) => (model, input) => usageFor(candidate)(model, input, "listening") : usageFor;
+    return listen(req, res, url, json, sttKeys, refusals, who, booked, keyterms(), target.threadId);
+  }
   if (action === "speech") return speech(req, res, url, json, ttsKeys, refusals, who, usageFor, voiceFor, target.threadId, { speed: target.speed, language: target.language });
 
   if (action === "speak" || action === "stream") {

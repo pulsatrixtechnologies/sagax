@@ -48,6 +48,7 @@ import {
   visibleMessages,
   currentTaskBot,
   openBot,
+  openBotThread,
   openNotificationTarget,
   startNewTopic,
   type AppState,
@@ -86,6 +87,8 @@ import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { BotRoleTag, PersonLabelTag } from "./LabelTag";
+import { ListeningBadge } from "./ListeningCard";
+import { LiveCallPill } from "./LiveCallPill";
 import { nudgeLineText } from "@/lib/nudge-line";
 import { ChevronsRight, Layers, LogOut, UserRound } from "lucide-react";
 import { backgroundThreads, personThreads } from "../../shared/background-threads";
@@ -1974,6 +1977,7 @@ export function BotListItem({
           </span>
           {share && !renaming && <BotShareIcon state={share} />}
           {title && !renaming && <BotRoleTag text={title} />}
+          {!renaming && <ListeningBadge botId={bot.id} />}
           {unread && <span className="sr-only">{t("task.unreadMany")}</span>}
         </div>
         {(!quiet || statusLine) && <div className="flex min-h-[18px] min-w-0 items-center gap-1">
@@ -2667,6 +2671,16 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
             <ChevronsRight size={20} aria-hidden="true" />
           </button>
         )}
+        {/* #4100: this window listens to a conversation in a chat not on screen */}
+        <LiveCallPill
+          variant="listening"
+          currentBotId={state.selectedId ?? null}
+          iconOnly={density === "icons"}
+          onOpen={(botId, threadId) => {
+            const target = state.bots.find((candidate) => candidate.id === botId);
+            if (target) openBotThread(dispatch, target, threadId, showThreads);
+          }}
+        />
         {density === "icons" && (
           <SidebarPhoneButton
             density={density}

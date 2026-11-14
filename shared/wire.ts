@@ -1096,6 +1096,11 @@ export interface WireMessage extends WaitLineField {
   relayGroup?: string[];
   /** Terminal receipt for a bounded multi-bot channel goal. */
   goalRun?: GroupGoalRunCardData;
+  /** #4100: listening to a conversation, the one row of a session in the
+   * person's conversation with the bot, patched in place as lines arrive
+   * and when it ends (shared/listening.ts). On a text row; `text` is the
+   * fallback ("Listening to a conversation", "Listened 24 min, 3 speakers"). */
+  listening?: import("./listening.ts").ListeningCard;
   /** call rows (kind "call"): the finished Live call this row records. The
    * row's text is only the fallback line for clients that do not know the
    * kind. */
@@ -2015,6 +2020,9 @@ export type ServerFrame =
   /** #2013: this organization server's reach of its Perspicax connector changed. */
   | { kind: "connector.status"; perspicax: { state: "ok" | "unreachable"; since: number } }
   | { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }
+  /** #4100: a listening session changed (started, new final lines, ended).
+   * The listening person's streams only. */
+  | import("./listening.ts").ListeningFrame
   /** A short first sentence spoken ahead of the bot's own reply on a duplex
    * call (server/voice/voice-first-sentence.ts). The speaker's streams only. Not
    * stored. iOS ignores the kind. */

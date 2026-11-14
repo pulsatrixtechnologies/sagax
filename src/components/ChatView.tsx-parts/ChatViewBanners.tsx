@@ -6,6 +6,7 @@ import { ConfidentialBanner } from "../ConfidentialBanner";
 import { AccessCard } from "../AccessCard";
 import { TransientNotice } from "../TransientNotice";
 import { VoiceCallDock } from "../CallView";
+import { ListeningCard } from "../ListeningCard";
 import { ThreadReturnLink } from "../TaskPicker";
 import { TurnTimingLine } from "../TurnTimingLine";
 import { t } from "@/lib/i18n";
@@ -65,6 +66,9 @@ export function ChatViewBanners({
           the name chip; collapsed it keeps its own small row, expanded its
           card hangs over the thread */}
       <VoiceCallDock bot={bot} />
+      {/* #4100: listening to a conversation: the card floats on top of the
+          transcript while it is on, in this window or on another device */}
+      {!side && <ListeningCard bot={bot} messages={messages} />}
       {/* #4215: the turn timing line sits below the floating header and its
           fade, like the room's (GroupView), so every row reads the same. */}
       <TurnTimingLine timing={profile.tasks?.find((task) => task.threadId === bot.threadId)?.turnTiming} />

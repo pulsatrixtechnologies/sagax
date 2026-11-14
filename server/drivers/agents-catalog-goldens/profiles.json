@@ -1,7 +1,7 @@
 {
   "direct": {
-    "bytes": 102756,
-    "sha256": "dcab4046f5333f33ba9d59b99eebee815c567d03becf9d0d132c2e7aa74349a5",
+    "bytes": 103363,
+    "sha256": "4f50688f38475451e0d30ab906ca6f0d8e7487062ece21091b86a4840f3240c2",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -72,6 +72,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -102,8 +103,8 @@
     ]
   },
   "direct+voice": {
-    "bytes": 103720,
-    "sha256": "8b2ca9fc88cbc444f3354a048136f540f5ffa83e5b170fee594fb3affd8ef6f1",
+    "bytes": 104327,
+    "sha256": "61d4b04772b7f059f1ae4985a2083962af69290a7b94818516abd0bd31d8d5ad",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -175,6 +176,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -205,8 +207,8 @@
     ]
   },
   "direct+shared": {
-    "bytes": 104650,
-    "sha256": "4a59cd310f2c973f373c9f419911e7487f45a45b2852ed4747e6febc34b17f46",
+    "bytes": 105257,
+    "sha256": "f7a99437735dd34923fdcdcec5c49a63dd20c25c2e120fad40ebbbf67481548b",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -279,6 +281,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -309,8 +312,8 @@
     ]
   },
   "direct+shared+voice": {
-    "bytes": 105614,
-    "sha256": "361573063a09fae9f1fd3016d20d1889b0067beb46fe1bec1fe96fd4e54e9fc8",
+    "bytes": 106221,
+    "sha256": "f615909631bed6ce577fe1f6a7504d42f6cf4a274653ef3d11970da2ec86e0e2",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -384,6 +387,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -414,8 +418,8 @@
     ]
   },
   "direct+skills": {
-    "bytes": 104117,
-    "sha256": "ba440a5b15432f2e3eb85b619436d31ad93b9d964c380b1dced3e8fa067a5871",
+    "bytes": 104724,
+    "sha256": "90a5ecd9a38bf8119e64224d0433c76f0e5ff8cc8aa2087b224f553177396db3",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -486,6 +490,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -517,8 +522,8 @@
     ]
   },
   "direct+skills+voice": {
-    "bytes": 105081,
-    "sha256": "d0825c956d5540b419c32dcd833ad52a55ba93dd92531036f54313951980de89",
+    "bytes": 105688,
+    "sha256": "19885bcc62ee44c1898acaaf4b4e11a2486e0bc4060ff3ab3f16146848d82211",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -590,6 +595,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -621,8 +627,8 @@
     ]
   },
   "direct+skills+shared": {
-    "bytes": 106011,
-    "sha256": "8f61385965b170a6f4f004c74ce9e4ee4331d5cc17ef17ddde718f7b6bfb6fc5",
+    "bytes": 106618,
+    "sha256": "07ae0a91b76ecf0ca584c85a1447dd5ab7f3ec608a08793167036f11c68bebc6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -695,6 +701,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -726,8 +733,8 @@
     ]
   },
   "direct+skills+shared+voice": {
-    "bytes": 106975,
-    "sha256": "a3961dcf68e65b186878bd1ad42439f2b3bdb6b8ba76cf9b142336961ebce977",
+    "bytes": 107582,
+    "sha256": "f4fd2278bcec28b6e73226f35c5a88493756b680fd9a3a7cd2d9b98367e0eb22",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -801,6 +808,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2312,8 +2320,8 @@
     ]
   },
   "direct+non-chief": {
-    "bytes": 92249,
-    "sha256": "2effefabdd1ec62bd0d314e1efffc5f72934d6c99f861f6a662c2d5863ed3c49",
+    "bytes": 92856,
+    "sha256": "2b3ac968fcd5b19c4f0a0ac897e8934a119b44d434f365bfeef0d313906e4c51",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2375,6 +2383,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2405,8 +2414,8 @@
     ]
   },
   "direct+voice+non-chief": {
-    "bytes": 93213,
-    "sha256": "74f0a3b2a86500d72b91b9da02c9a4907e287fbf9f95292db58dded1ef660bbb",
+    "bytes": 93820,
+    "sha256": "05df949307fe1bdbaff9c7dcaaf9517591bb8a75e8308f8aebcd8b54ae9a3067",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2469,6 +2478,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2499,8 +2509,8 @@
     ]
   },
   "direct+shared+non-chief": {
-    "bytes": 94143,
-    "sha256": "65f4dea09675525c34d7b24285407bdacc9046e16aa8a8bbe3f3671a47fa35c8",
+    "bytes": 94750,
+    "sha256": "9057761c71bada1f8e587a9772ef66bd12627990176343aa5c205ddeb3cc30a0",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2564,6 +2574,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2594,8 +2605,8 @@
     ]
   },
   "direct+shared+voice+non-chief": {
-    "bytes": 95107,
-    "sha256": "d1e15c2ee3e94460f7f938c46a8c7093e9124d7ba683672bbf45b645a667ac98",
+    "bytes": 95714,
+    "sha256": "042c45807438b6e7d5d570765aed78ffa6002e4b3a33b08bc1823702590772b0",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2660,6 +2671,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2690,8 +2702,8 @@
     ]
   },
   "direct+skills+non-chief": {
-    "bytes": 93610,
-    "sha256": "ed80cfc73a0902e2940a0cce5f19e2e2559c0adffb4202041a872a4cbd211d5b",
+    "bytes": 94217,
+    "sha256": "7fa5106f4d8c3497a76ddb4bfa3f34b3e0c02fa0470ff551af06c5b0d0dc4350",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2753,6 +2765,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2784,8 +2797,8 @@
     ]
   },
   "direct+skills+voice+non-chief": {
-    "bytes": 94574,
-    "sha256": "ecb78fecd23549bef9187e625832557978bdf8639d20e0de54f13d080935d278",
+    "bytes": 95181,
+    "sha256": "a1b3adb9771797af5f8dae16ca8559946efecd475663b4736ff4621cad486503",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2848,6 +2861,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2879,8 +2893,8 @@
     ]
   },
   "direct+skills+shared+non-chief": {
-    "bytes": 95504,
-    "sha256": "4cf39d80d780fa0acc6f6b4747cfa34d5ad71f0bbf72ed0fd4a35478a3a6cf11",
+    "bytes": 96111,
+    "sha256": "d7ec2ce56cb6f7fc32b7a6b835435c5247ffdbeee6f61f73c66eb173d2ff6fcd",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2944,6 +2958,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -2975,8 +2990,8 @@
     ]
   },
   "direct+skills+shared+voice+non-chief": {
-    "bytes": 96468,
-    "sha256": "025198f193e7bd3b2fe495f93011dac885bbf4d64d80ce225150519517e8bc77",
+    "bytes": 97075,
+    "sha256": "b2cc15495d6ee420898b507bcaeed66ab3c32200860a9114eb0a7d898a297259",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3041,6 +3056,7 @@
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",

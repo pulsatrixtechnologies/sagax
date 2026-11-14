@@ -193,6 +193,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   teamNote?: import("../../../shared/wire").WireMessage["teamNote"];
   /** #3480: the quiet line when the bot's quiet mode went off (WireMessage.quietSummary). */
   quietSummary?: import("../../../shared/wire").WireMessage["quietSummary"];
+  /** #4100: a listening session's one row, patched in place (WireMessage.listening). */
+  listening?: import("../../../shared/wire").WireMessage["listening"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];

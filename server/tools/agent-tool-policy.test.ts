@@ -13,6 +13,7 @@ describe("built-in agent tool read policy", () => {
       "wait_delegation",
       "session_search",
       "session_read",
+      "listening_read",
       "recall_topic",
       "tool_result_read",
       "list_routines",

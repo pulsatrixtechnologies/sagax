@@ -249,6 +249,27 @@ describe("WaitManager", () => {
     h.advance(5_000); await h.manager.tick(); expect(h.pageCalls).toBe(8);
   });
 
+  // #4250 (S5 step c): wait_until reads through the one probe reader, so a page
+  // reader that throws is a page that did not answer (backed off), not a tick
+  // that fails and leaves every other due wait unsettled.
+  it("reads a page whose reader throws as a page that did not answer, and still settles the other waits", async () => {
+    let stamp: FileStamp | null = null;
+    const h = harness({
+      probes: {
+        async page() { throw new Error("socket hang up"); },
+        async stamp() { return stamp; },
+        async processes() { return []; },
+      },
+    });
+    const { wait: page } = await h.create({ kind: "url_contains", url: "https://x.test/", text: "shipped" }, { label: "the page" }) as { wait: WaitRecord };
+    await h.create({ kind: "file_exists", path: "/r.txt" }, { label: "the report" });
+    stamp = { size: 1, mtimeMs: 1 };
+    h.advanceTo(page.nextCheckAt);
+    await h.manager.tick();
+    expect(h.posts).toEqual([expect.objectContaining({ status: "fired", text: expect.stringContaining("the report: done.") })]);
+    expect(h.waitOf(page.id)).toMatchObject({ errors: 1, nextCheckAt: h.now() + 120_000 });
+  });
+
   it("fires url_missing only once a check saw the text, so a page its scripts draw is never gone at once", async () => {
     const h = harness();
     h.page = { ok: true, text: "Loading" };

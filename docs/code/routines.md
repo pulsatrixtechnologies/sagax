@@ -539,6 +539,12 @@ turned back on from there. The per bot state stays in
 `DATA_DIR/heartbeat.json` (version 1, readable by the previous version). The
 person's « never » on heartbeat wakes (#2694) keeps the check quiet.
 
+Since S5 step c, `wait_until` and this checklist read a page, a file or a
+program through one reader, `readProbe` (`server/waits/wait-probes.ts`);
+each decides what the reading means for it. The reader never throws: a page
+reader that fails reads as a page that did not answer (the wait backs off),
+a program list that cannot be read says so. `waits.json` is unchanged.
+
 ## Edit routine, Grok-simple (2026-11-01)
 
 The routine editor (`EventEditor`, `kind === "routine"`) is titled "Edit

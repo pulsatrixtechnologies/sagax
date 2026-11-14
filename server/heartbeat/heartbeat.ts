@@ -30,10 +30,9 @@ import {
   fileChanged,
   fileStamp,
   listProcesses,
-  pageSays,
-  processRunning,
+  readProbe,
   type FileStamp,
-  type PageResult,
+  type ProbeReaders,
   type ProcessEntry,
 } from "../waits/wait-probes.ts";
 
@@ -136,11 +135,8 @@ export interface HeartbeatBotState {
   atDone: Record<string, string>;
 }
 
-export interface HeartbeatProbes {
-  page(url: string): Promise<PageResult>;
-  stamp(path: string): Promise<FileStamp | null>;
-  processes(): Promise<ProcessEntry[]>;
-}
+/** The readers of the one probe reader (wait-probes.ts `ProbeReaders`). */
+export type HeartbeatProbes = ProbeReaders;
 
 export interface HeartbeatGap {
   line: string;
@@ -163,22 +159,25 @@ export async function evaluateHeartbeat(
   const before = previous ?? { lastBeatAt: 0, gaps: [], stamps: {}, atDone: {} };
   const state: HeartbeatBotState = { lastBeatAt: now, gaps: [], stamps: {}, atDone: {} };
   const fresh: HeartbeatGap[] = [];
-  let processes: Promise<ProcessEntry[] | null> | undefined;
-  const readProcesses = () => (processes ??= probes.processes().catch(() => null));
+  // one reader for every line (wait-probes.ts readProbe), the program list read once a beat
+  let processes: Promise<ProcessEntry[]> | undefined;
+  const readers: HeartbeatProbes = { ...probes, processes: () => (processes ??= probes.processes()) };
   const today = localDay(new Date(now));
   for (const { line, probe } of list.items) {
     let gap: string | null = null;
     let event = false;
     switch (probe.kind) {
       case "page": {
-        const page = await probes.page(probe.url).catch((error: unknown): PageResult => ({ ok: false, error: String(error) }) as PageResult);
-        if (!page.ok) gap = `${probe.url} did not answer (${"error" in page ? page.error : "unreachable"})`;
-        else if (probe.want === "contains" && !pageSays(page.text, probe.text)) gap = `${probe.url} no longer says "${probe.text}"`;
-        else if (probe.want === "missing" && pageSays(page.text, probe.text)) gap = `${probe.url} now says "${probe.text}"`;
+        const read = await readProbe({ kind: "page", url: probe.url, text: probe.text }, readers);
+        if (read.kind !== "page") break;
+        if (!read.ok) gap = `${probe.url} did not answer (${read.page.error || "unreachable"})`;
+        else if (probe.want === "contains" && !read.says) gap = `${probe.url} no longer says "${probe.text}"`;
+        else if (probe.want === "missing" && read.says) gap = `${probe.url} now says "${probe.text}"`;
         break;
       }
       case "file": {
-        const stamp = await probes.stamp(probe.path);
+        const read = await readProbe({ kind: "file", path: probe.path }, readers);
+        const stamp = read.kind === "file" ? read.stamp : null;
         if (probe.want === "exists" && !stamp) gap = `${probe.path} is missing`;
         else if (probe.want === "missing" && stamp) gap = `${probe.path} exists`;
         else if (probe.want === "changed") {
@@ -189,13 +188,10 @@ export async function evaluateHeartbeat(
         break;
       }
       case "process": {
-        const entries = await readProcesses();
-        if (!entries) gap = "the process list could not be read";
-        else {
-          const running = processRunning(entries, probe.name);
-          if (probe.want === "running" && !running) gap = `${probe.name} is not running`;
-          else if (probe.want === "gone" && running) gap = `${probe.name} is still running`;
-        }
+        const read = await readProbe({ kind: "process", name: probe.name }, readers);
+        if (read.kind !== "process" || !read.listed) gap = "the process list could not be read";
+        else if (probe.want === "running" && !read.running) gap = `${probe.name} is not running`;
+        else if (probe.want === "gone" && read.running) gap = `${probe.name} is still running`;
         break;
       }
       case "at": {

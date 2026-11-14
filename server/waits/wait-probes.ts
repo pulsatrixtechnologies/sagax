@@ -90,6 +90,53 @@ export function processRunning(entries: readonly ProcessEntry[], wanted: string)
   });
 }
 
+// ── one reader (#4250, S5 step c) ──────────────────────────────────────
+
+/** What one probe reads: a page and a text, a file, or a program. */
+export type ProbeTarget =
+  | { kind: "page"; url: string; text: string }
+  | { kind: "file"; path: string }
+  | { kind: "process"; name: string };
+
+/** Where a probe reads from (replaced in tests). */
+export interface ProbeReaders {
+  page(url: string): Promise<PageResult>;
+  stamp(path: string): Promise<FileStamp | null>;
+  processes(): Promise<ProcessEntry[]>;
+}
+
+/** What it found: whether the page says the text (or why it could not be
+ * read), the file's stamp (null: absent), whether the program runs (or that
+ * the list could not be read). */
+export type ProbeReading =
+  | { kind: "page"; ok: true; says: boolean }
+  | { kind: "page"; ok: false; page: Extract<PageResult, { ok: false }> }
+  | { kind: "file"; stamp: FileStamp | null }
+  | { kind: "process"; listed: true; running: boolean }
+  | { kind: "process"; listed: false };
+
+/** #4250 (S5 `one-probe-engine`, step c): the one reader of a page, a file
+ * or a program, shared by wait_until (server/waits/waits.ts) and the
+ * HEARTBEAT.md checklist (server/heartbeat/heartbeat.ts). Each caller
+ * decides what the reading means for it. Never throws. */
+export async function readProbe(target: ProbeTarget, readers: ProbeReaders): Promise<ProbeReading> {
+  if (target.kind === "page") {
+    let page: PageResult;
+    try {
+      page = await readers.page(target.url);
+    } catch (error) {
+      page = { ok: false, refused: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    return page.ok ? { kind: "page", ok: true, says: pageSays(page.text, target.text) } : { kind: "page", ok: false, page };
+  }
+  if (target.kind === "file") return { kind: "file", stamp: await readers.stamp(target.path).catch(() => null) };
+  try {
+    return { kind: "process", listed: true, running: processRunning(await readers.processes(), target.name) };
+  } catch {
+    return { kind: "process", listed: false };
+  }
+}
+
 const NAMED_ENTITIES: Record<string, string> = {
   amp: "&",
   lt: "<",

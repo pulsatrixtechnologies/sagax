@@ -14,10 +14,10 @@ import {
   fileChanged,
   fileStamp,
   listProcesses,
-  pageSays,
-  processRunning,
+  readProbe,
   type FileStamp,
   type PageResult,
+  type ProbeReaders,
   type ProcessEntry,
 } from "./wait-probes.ts";
 
@@ -55,7 +55,8 @@ export type CreateWaitResult =
   | { state: "created"; wait: WaitRecord; note?: string }
   | { state: "already"; text: string }
   | { state: "refused"; status: 400 | 409; error: string };
-export interface WaitProbes { page(url: string): Promise<PageResult>; stamp(path: string): Promise<FileStamp | null>; processes(): Promise<ProcessEntry[]> }
+/** The readers of the one probe reader (wait-probes.ts `ProbeReaders`). */
+export type WaitProbes = ProbeReaders;
 export interface WaitManagerOptions {
   file?: string; now?: () => number; probes?: Partial<WaitProbes>;
   sourceAlive(botId: string, threadId: string): boolean;
@@ -407,27 +408,33 @@ export class WaitManager {
   }
 
   private async probe(condition: WaitCondition, processes: (() => Promise<ProcessEntry[]>) | undefined): Promise<Verdict> {
+    // #4250 (S5 step c): every page, file and program check goes through the
+    // one probe reader (wait-probes.ts readProbe), the one the HEARTBEAT.md
+    // checklist routine uses; pages still wait their turn on one queue.
+    const readers: ProbeReaders = { ...this.probes, page: (url) => this.runPage(url), processes: processes ?? (() => this.probes.processes()) };
     switch (condition.kind) {
       case "url_contains":
       case "url_missing": {
-        const page = await this.runPage(condition.url);
-        if (!page.ok) return { met: false, page };
-        const says = pageSays(page.text, condition.text);
-        if (condition.kind === "url_contains") return { met: says, page: { ok: true } };
-        if (says) condition.sawText = true;
-        return { met: condition.sawText && !says, page: { ok: true } };
+        const read = await readProbe({ kind: "page", url: condition.url, text: condition.text }, readers);
+        if (read.kind !== "page") return { met: false };
+        if (!read.ok) return { met: false, page: read.page };
+        if (condition.kind === "url_contains") return { met: read.says, page: { ok: true } };
+        if (read.says) condition.sawText = true;
+        return { met: condition.sawText && !read.says, page: { ok: true } };
       }
-      case "file_exists": return { met: (await this.probes.stamp(condition.path)) !== null };
-      case "file_missing": return { met: (await this.probes.stamp(condition.path)) === null };
-      case "file_changed": return { met: fileChanged(condition.before, await this.probes.stamp(condition.path)) };
+      case "file_exists":
+      case "file_missing":
+      case "file_changed": {
+        const read = await readProbe({ kind: "file", path: condition.path }, readers);
+        const stamp = read.kind === "file" ? read.stamp : null;
+        if (condition.kind === "file_changed") return { met: fileChanged(condition.before, stamp) };
+        return { met: condition.kind === "file_exists" ? stamp !== null : stamp === null };
+      }
       case "process_running":
       case "process_gone": {
-        try {
-          const running = processRunning(await (processes ?? (() => this.probes.processes()))(), condition.process);
-          return { met: condition.kind === "process_running" ? running : !running };
-        } catch {
-          return { met: false, unlisted: true };
-        }
+        const read = await readProbe({ kind: "process", name: condition.process }, readers);
+        if (read.kind !== "process" || !read.listed) return { met: false, unlisted: true };
+        return { met: condition.kind === "process_running" ? read.running : !read.running };
       }
       case "time_reached": return { met: this.now() >= condition.at };
       case "bot_idle": {

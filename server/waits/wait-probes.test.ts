@@ -16,6 +16,8 @@ import {
   parsePs,
   parseTasklist,
   processRunning,
+  readProbe,
+  type ProbeReaders,
 } from "./wait-probes.ts";
 
 let dir = "";
@@ -162,5 +164,37 @@ describe("fetchPageText", () => {
   });
   it("counts an answer that is not 2xx as a failed check", async () => {
     expect(await fetchPageText(`http://status.test:${port}/404`, test)).toEqual({ ok: false, refused: false, error: "The page answered 404." });
+  });
+});
+
+// #4250 (S5 step c): one reader for a page, a file and a program, shared by
+// wait_until and the HEARTBEAT.md checklist.
+describe("readProbe", () => {
+  const readers = (over: Partial<ProbeReaders> = {}): ProbeReaders => ({
+    page: async () => ({ ok: true, text: "All systems operational" }),
+    stamp: async () => ({ size: 1, mtimeMs: 1 }),
+    processes: async () => [{ pid: 7, name: "Backup" }],
+    ...over,
+  });
+
+  it("reads whether a page says a text, or why it could not", async () => {
+    expect(await readProbe({ kind: "page", url: "https://status.example.com", text: "all systems" }, readers())).toEqual({ kind: "page", ok: true, says: true });
+    expect(await readProbe({ kind: "page", url: "https://status.example.com", text: "outage" }, readers())).toEqual({ kind: "page", ok: true, says: false });
+    const failed = await readProbe({ kind: "page", url: "https://status.example.com", text: "x" }, readers({ page: async () => ({ ok: false, refused: false, error: "The page answered 503." }) }));
+    expect(failed).toMatchObject({ kind: "page", ok: false, page: { error: "The page answered 503." } });
+    // a reader that throws reads as a page that did not answer
+    expect(await readProbe({ kind: "page", url: "https://x.example", text: "x" }, readers({ page: async () => { throw new Error("boom"); } }))).toMatchObject({ kind: "page", ok: false });
+  });
+
+  it("reads a file's stamp, and a program in the list (once per pass), or that the list cannot be read", async () => {
+    expect(await readProbe({ kind: "file", path: "/data/x" }, readers({ stamp: async () => null }))).toEqual({ kind: "file", stamp: null });
+    let lists = 0;
+    const shared = readers({ processes: async () => { lists += 1; return [{ pid: 7, name: "Backup" }]; } });
+    let cached: Promise<Array<{ pid: number; name: string }>> | undefined;
+    const once = { ...shared, processes: () => (cached ??= shared.processes()) };
+    expect(await readProbe({ kind: "process", name: "backup" }, once)).toEqual({ kind: "process", listed: true, running: true });
+    expect(await readProbe({ kind: "process", name: "Other" }, once)).toEqual({ kind: "process", listed: true, running: false });
+    expect(lists).toBe(1);
+    expect(await readProbe({ kind: "process", name: "Backup" }, readers({ processes: async () => { throw new Error("no ps"); } }))).toEqual({ kind: "process", listed: false });
   });
 });

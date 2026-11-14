@@ -31,7 +31,8 @@ full-access-guard: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(appr
 # for everyone (a route with no policy row, a locale key nothing reads, a card
 # that skips the settings decision); left to the files beside a change, main
 # stayed red unseen. About 95 s together (#3538 added two files, about 15 s;
-# #4131 the UI guards that scan the whole of src, about 25 s).
+# #4131 the UI guards that scan the whole of src, about 25 s). The
+# source-text tests of the same list have their own line below.
 guard-tests: G="$(node scripts/verify/release/guard-tests.mjs)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --testTimeout=60000 $G; fi
 
 # electron-unit (#3565): the Electron unit tests (electron/*.node-test.mjs,
@@ -50,3 +51,13 @@ electron-unit: node --test "electron/*.node-test.mjs"
 # file of shared/ runs that one case: about 10 s on a busy machine. The src
 # and server cases wait on the cycles they still hold (known failures).
 shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space:]]*\.tsx?$'; then ./node_modules/.bin/vitest run --reporter=dot scripts/testing/madge-cycles.guard.test.ts -t 'shared stays at its ceiling'; fi
+
+# source-text (#4186): the tests that read the app's sources or its locale
+# catalogs as text (SOURCE_TEXT_TESTS in scripts/verify/release/guard-tests.mjs)
+# are linked to nothing by the import graph, so eight of them went red on the
+# 0.8.100 release commit unseen (a renamed window, a restyled round button).
+# They read src/, the catalogs, the model providers docs page and two
+# scripts/testing files, so a lot that touches one of those runs them all. They are static scans and rendered markup with no server,
+# so they run two files at a time: about 75 s on a busy machine (240 s one
+# at a time).
+source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Localizable\.xcstrings$|apps/docs/content/docs/providers/model-providers\.mdx$|scripts/testing/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)'; then G="$(node scripts/verify/release/guard-tests.mjs --source-text)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; fi; fi

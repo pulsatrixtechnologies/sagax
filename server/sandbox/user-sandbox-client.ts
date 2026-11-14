@@ -100,7 +100,7 @@ export function sandboxdClient(baseUrl: string, key: () => string, fetchImpl: ty
       signal: AbortSignal.timeout(timeoutMs),
     });
     const payload = await response.json().catch(() => ({})) as { error?: string; code?: string };
-    if (!response.ok) throw new SandboxdRequestError(response.status, payload.code ?? "error", payload.error ?? `the provisioner answered ${response.status}`);
+    if (!response.ok) throw new SandboxdRequestError(response.status, payload.code || "error", payload.error || `the provisioner answered ${response.status}`);
     return payload as T;
   };
   const httpsCall = <T>(method: string, path: string, text: string, hasBody: boolean, timeoutMs: number): Promise<T> => new Promise((resolve, reject) => {
@@ -125,7 +125,7 @@ export function sandboxdClient(baseUrl: string, key: () => string, fetchImpl: ty
       res.on("end", () => {
         let payload: { error?: string; code?: string } = {};
         try { payload = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { error?: string; code?: string }; } catch { payload = {}; }
-        if ((res.statusCode ?? 500) >= 400) reject(new SandboxdRequestError(res.statusCode ?? 500, payload.code ?? "error", payload.error ?? `the provisioner answered ${res.statusCode}`));
+        if ((res.statusCode ?? 500) >= 400) reject(new SandboxdRequestError(res.statusCode ?? 500, payload.code || "error", payload.error || `the provisioner answered ${res.statusCode}`));
         else resolve(payload as T);
       });
     });

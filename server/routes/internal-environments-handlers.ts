@@ -18,7 +18,7 @@ import type { DesktopBridgeOperation } from "../desktop/desktop-bridge.ts";
 import { botTmpScope, handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage/imessage-mcp.ts";
 import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../safety/misuse-guardrails.ts";
-import { serverPathAnswer, serverPathInCommand } from "../sandbox/sandbox-server-path.ts";
+import { commandForEnvironment, serverPathAnswer, serverPathInCommand } from "../sandbox/sandbox-server-path.ts";
 import { deliverableNotification } from "../notify.ts";
 import { enginePluginCommandRefusal } from "../people/person-integrations.ts";
 import type { PersonalMcpServer } from "../people/person-connections.ts";
@@ -200,6 +200,11 @@ export interface InternalEnvironmentsDeps {
    * workspaces, every spelling): a sandbox tool given one gets a short line
    * naming its folder in the environment (server/sandbox/sandbox-server-path.ts). */
   serverBotRoots?(botId: string): string[];
+  /** #4146: the server's data folder (every spelling) and the plugins copied
+   * into this person's environment for this bot, by name and server folder:
+   * a command's server paths become the environment's, or it stops with a
+   * line naming the path (server/sandbox/sandbox-server-path.ts). */
+  serverCommandPaths?(botId: string, ownerId: string): { dataRoots: string[]; plugins: Array<{ name: string; dir: string }> };
   /** The start-of-environment tidy (once per start) and disk check. */
   sandboxTidy?(ownerId: string, botId: string): Promise<void>;
   /** A disk-full warning for this person's environment, or null. */
@@ -608,6 +613,10 @@ async function handleSandboxMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
       commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
         ?? enginePluginCommandRefusal(command)
         ?? deps.misuseTextRefusal(command, ownerId, "shell", { botId: capability.botId, threadId: capability.threadId, tool: "run_command" }),
+      environmentCommand: (command) => {
+        const paths = deps.serverCommandPaths?.(capability.botId, ownerId);
+        return paths ? commandForEnvironment(command, { ...paths, folder }) : { command };
+      },
       serverPathAnswer: (value, kind) => {
         const where = { roots: deps.serverBotRoots?.(capability.botId) ?? [], folder };
         return kind === "path" ? serverPathAnswer(value, where) : serverPathInCommand(value, where);

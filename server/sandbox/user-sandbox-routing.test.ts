@@ -120,7 +120,11 @@ describe("environment tools", () => {
     await callUserSandboxTool("run_command", { command: "sleep 1", timeout_seconds: 99_999 }, long.exec);
     expect(long.calls[0]!.timeoutSec).toBe(600);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as { text: string }).text).toContain("[exit 2]");
+    // #4146 changed this on purpose: a failure leads with why (exit code and
+    // the end of stderr), the whole output with its exit line follows
+    expect((result.content[0] as { text: string }).text).toContain("The command failed with exit code 2. End of its error output:");
+    expect((result.content[0] as { text: string }).text).toContain("boom");
+    expect((result.content[1] as { text: string }).text).toContain("[exit 2]");
   });
 
   it("writes content through env, never through the command line, on the resolved path", async () => {

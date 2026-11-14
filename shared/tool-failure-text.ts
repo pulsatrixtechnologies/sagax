@@ -148,8 +148,20 @@ function read(value: unknown, depth: number): string | undefined {
   return undefined;
 }
 
+/** A line that only opens or closes the markers a tool result's data rides
+ * in (`<<<UNTRUSTED source="tool">>>`, shared/safety-review.ts wrapUntrusted). */
+export const UNTRUSTED_MARKER_LINE = /^<<<\/?\s*(?:END\s+)?UNTRUSTED\b[^>]*>>>$/i;
+
+/** The text without those marker lines: they tell a model where data
+ * starts, and are no words for a person (#4146: a failed command's Result
+ * spent two of its four lines on them). */
+export function withoutUntrustedMarkers(text: string): string {
+  return text.split(/\r?\n/).filter((line) => !UNTRUSTED_MARKER_LINE.test(line.trim())).join("\n").trim();
+}
+
 /** The error's own words, or undefined when the failure carried none. */
 export function toolFailureText(value: unknown): string | undefined {
   const found = read(value, 0);
-  return found?.trim() ? found.trim() : undefined;
+  const words = found ? withoutUntrustedMarkers(found) : "";
+  return words ? words : undefined;
 }

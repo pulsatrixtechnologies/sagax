@@ -134,6 +134,24 @@ describe("ToolActivity", () => {
     }
   });
 
+  // #4146: a failed command's Result leads with its exit code and the end of
+  // its error output, never the data markers or "no error message"
+  it("shows why a command failed in the environment: exit code, then the end of stderr", () => {
+    const why = 'The command failed with exit code 2. End of its error output:\n<<<UNTRUSTED source="tool">>>\ntrace line 39\ntrace line 40\nFileNotFoundError: /srv/data missing\n<<<END UNTRUSTED>>>';
+    const full = '<<<UNTRUSTED source="tool">>>\nstarted\n[stderr]\ntrace line 1\n<<<END UNTRUSTED>>>\n[exit 2]';
+    for (const output of [
+      JSON.stringify({ content: [{ type: "text", text: why }, { type: "text", text: full }], isError: true }),
+      JSON.stringify({ type: "MCP", output: { Error: `${why}\n${full}` }, is_error: true }),
+    ]) {
+      const html = renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "mcp__sagax-environment__run_command", ok: false, input: JSON.stringify({ command: "python3 run.py" }), output }, defaultOpen: true }));
+      expect(html).toContain("The command failed with exit code 2. End of its error output:\ntrace line 39\ntrace line 40\nFileNotFoundError: /srv/data missing");
+      expect(html).not.toContain("UNTRUSTED");
+      expect(html).not.toContain("The tool failed and returned no error message.");
+    }
+    const silent = renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "mcp__sagax-environment__run_command", ok: false, input: JSON.stringify({ command: "./job.sh" }), output: "The command failed with exit code 3. It printed nothing." }, defaultOpen: true }));
+    expect(silent).toContain("The command failed with exit code 3. It printed nothing.");
+  });
+
   it("shows a computer switch as a small line, not a tool disclosure", () => {
     const chip = (target: string, ok?: boolean) => renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "mcp__sagax-computer__computer_select", ok, input: JSON.stringify({ target, reason: "her files" }) } }));
     expect(chip("this_computer", true)).toContain('data-testid="tool-computer-switch"');

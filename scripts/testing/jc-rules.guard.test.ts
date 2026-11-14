@@ -805,6 +805,6 @@ describe("#3719 a notification interrupts only for an ask", () => {
   });
 
   it("every notify frame goes through the one rule on its way out", () => {
-    expect(readRoot("server/index-leaves/fanoutSsePayload.ts")).toMatch(/payload = ruleNotifyFrame\(payload, options\)/);
+    expect(readRoot("server/index-leaves/fanoutSsePayload.ts")).toMatch(/payload = ruleNotifyFrame\(payload, \{\s*\.\.\.options,/);
   });
 });

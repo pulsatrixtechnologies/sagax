@@ -206,6 +206,8 @@ const BUDGET_BASELINE: Record<string, number> = {
   // work, step and plan of a hand-over (+1,172 bytes on every room profile,
   // raised on purpose to the measured wire; direct profiles defer both tools).
 
+  // 2026-11-13 (#4242): ask_choice says a question in a repeating routine holds
+  // nothing; the goldens move to the measured wire (room+non-chief to 86,598).
   "direct": 104908,
   "direct+voice": 105875,
   "direct+shared": 106802,
@@ -240,7 +242,7 @@ const BUDGET_BASELINE: Record<string, number> = {
   "direct+skills+shared+non-chief": 97390,
   "direct+skills+shared+voice+non-chief": 98357,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
-  "room+non-chief": 84882,
+  "room+non-chief": 86598,
   "room+voice+non-chief": 85846,
   "room+shared+non-chief": 86776,
   "room+shared+voice+non-chief": 87740,

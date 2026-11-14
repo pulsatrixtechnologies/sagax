@@ -150,6 +150,8 @@ export async function runPiSession(ctx: PiSendCtx): Promise<void> {
       // re-anchor cost a slow turn (12 to 21 s) for a backstop.
       turn.compactPrompt ? 0 : promptReAnchorTurns,
       turn.systemVolatileSections,
+      // #4215: a changed stable section rides alone, not the whole block
+      turn.systemStableSections,
     );
     message = composed.text;
     pendingReceipt = { key: receiptKey, receipt: composed.receipt };

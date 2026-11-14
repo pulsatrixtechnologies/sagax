@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { newTurnLatency, turnLatencyParts } from "../drivers/acp/turn-latency.ts";
-import { clearTurnArrival, clearTurnCounters, closeTurnServing, noteEnginePrompt, noteFirstResponse, noteTurnArrival, noteTurnQueued, noteTurnSettled, noteTurnServed, noteTurnServedPart, openTurnServing, setTurnTimingWriter, turnCounters, turnQueueBusyMs, turnQueuedAt, turnTrace, turnTraceMarks, turnTracePayloadHash } from "./turn-trace.ts";
+import { clearTurnArrival, clearTurnCounters, closeTurnServing, noteEnginePrompt, noteFirstResponse, noteTurnArrival, noteTurnQueued, noteTurnSettled, noteTurnServed, noteTurnServedPart, openTurnServing, setTurnTimingWriter, turnCounters, turnProcessStarts, turnQueueBusyMs, turnQueuedAt, turnTrace, turnTraceMarks, turnTracePayloadHash } from "./turn-trace.ts";
+import { noteProcessStart } from "../process/spawn-helper.ts";
 
 describe("turn trace (SAGAX_TURN_TRACE)", () => {
   afterEach(() => {
@@ -213,6 +214,25 @@ describe("turn trace (SAGAX_TURN_TRACE)", () => {
     now = 40_200;
     turnTrace(thread, "start", true);
     expect(turnQueuedAt(thread)).toBeUndefined();
+  });
+
+  // #3598: the turn latency line counts the process starts of the turn's
+  // wait (queue and setup) and their total synchronous time.
+  it("counts the process starts made from the turn's start until the engine took its prompt (#3598)", () => {
+    const thread = "starts-thread-3598";
+    noteProcessStart("/usr/bin/early", 50);
+    turnTrace(thread, "start", true);
+    expect(turnProcessStarts(thread)).toBeUndefined();
+    noteProcessStart("/opt/engine/bin/engine", 120);
+    turnTrace(thread, "send");
+    noteProcessStart("/usr/bin/helper", 30);
+    noteEnginePrompt(thread, false);
+    // after the engine took the prompt: a tool's start is not the wait's
+    noteProcessStart("/usr/bin/tool", 400);
+    expect(turnProcessStarts(thread)).toEqual({ count: 2, ms: 150 });
+    // the next turn counts from its own start
+    turnTrace(thread, "start", true);
+    expect(turnProcessStarts(thread)).toBeUndefined();
   });
 
   it("measures the main thread's busy time between the turn's start and its send", () => {

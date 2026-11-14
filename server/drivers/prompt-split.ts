@@ -227,7 +227,7 @@ export function deletePromptSplitReceipt(scope: string, key: string): void {
 }
 
 /** Compose the prompt for a session that persists its own history (ACP
- * agents, pi): the full system block rides only when this native session
+ * agents, pi, Muse Code): the full system block rides only when this native session
  * has not carried it - or carried a different one, which re-delivers the
  * current copy the way a pre-split turn always did - and a changed
  * volatile half rides as a labelled note. Otherwise the turn text goes
@@ -256,8 +256,13 @@ export function splitSessionPrompt(
   perTurnVolatile = false,
   reAnchorAfterTurns = 0,
   volatileSections?: readonly VolatileSection[],
-  stableSections?: readonly VolatileSection[],
+  stableSectionsGiven?: readonly VolatileSection[],
 ): { text: string; receipt: PromptSplitReceipt } {
+  // Only sections that rebuild the stable half byte for byte can describe its
+  // change; a driver that added to the half keeps it whole (#4215).
+  const stableSections = stableSectionsGiven && stableSectionsGiven.map((section) => section.text).join("") === stable
+    ? stableSectionsGiven
+    : undefined;
   const fingerprints: PromptSplitReceipt = {
     ...promptSplitFingerprints(stable, volatile),
     ...(volatileSections ? { sections: sectionFingerprints(volatileSections) } : {}),

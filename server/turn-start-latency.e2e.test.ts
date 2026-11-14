@@ -114,6 +114,9 @@ it("sends the opening prompt once and reuses the conversation's engine on its ne
     // the first turn starts the engine; the next ones reuse it
     expect(paths[0]).toBe("spawn");
     expect(paths.slice(1)).not.toContain("spawn");
+    // #3598: the line counts the process starts of the turn's wait (the
+    // engine's start at least, on the first turn)
+    expect(Number(/ starts=(\d+):\d+ms /.exec(lines[0]!)?.[1] ?? 0)).toBeGreaterThanOrEqual(1);
     // the opening prompt rides the first turn only: the next ones add the
     // request, so the provider's cached prefix is the whole conversation
     expect(lines.slice(1).map((line) => /full=(\w+)/.exec(line)?.[1])).toEqual(["no", "no"]);

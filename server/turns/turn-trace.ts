@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 import { performance, type EventLoopUtilization } from "node:perf_hooks";
 import type { WireTurnTiming } from "../../shared/wire.ts";
+import { processStartTotals } from "../process/spawn-helper.ts";
 
 const enabled = () => process.env.SAGAX_TURN_TRACE === "1";
 const MAX_CLOCKS = 500;
@@ -28,6 +29,11 @@ interface TurnClock {
    * Sagax's own work (other turns, a save); near zero, it waited on I/O */
   loopAtStart?: EventLoopUtilization;
   queueBusyMs?: number;
+  /** #3598: the server's process starts at the turn's start, and those made
+   * from there until the engine took the prompt (count and synchronous ms;
+   * every start of the server in that window, as queueBusy counts its work) */
+  startsAtStart?: { count: number; ms: number };
+  starts?: { count: number; ms: number };
   /** every step of this turn so far with its time (epoch ms), oldest first:
    * the per-turn latency line names its parts from them (#3561) */
   marks?: Array<[step: string, at: number]>;
@@ -87,6 +93,10 @@ export function noteEnginePrompt(threadId: string, warm: boolean, at = Date.now(
   if (!row || row.engineAt !== undefined || !Number.isFinite(at)) return;
   row.engineAt = at;
   row.engineStart = warm ? "warm" : "cold";
+  if (row.startsAtStart) {
+    const now = processStartTotals();
+    row.starts = { count: now.count - row.startsAtStart.count, ms: Math.round(now.ms - row.startsAtStart.ms) };
+  }
   publish(threadId, row);
 }
 
@@ -143,6 +153,14 @@ export function turnCounters(threadId: string): { queueMs: number | null; firstR
  * start and its send, ms; undefined before the send. */
 export function turnQueueBusyMs(threadId: string): number | undefined {
   return clocks.get(threadId)?.queueBusyMs;
+}
+
+/** #3598: the process starts the server made from this turn's start until
+ * the engine took its prompt, and their total synchronous ms; undefined
+ * before that moment. */
+export function turnProcessStarts(threadId: string): { count: number; ms: number } | undefined {
+  const starts = clocks.get(threadId)?.starts;
+  return starts ? { ...starts } : undefined;
 }
 
 /** The steps marked on this thread between `from` and `to` (epoch ms,
@@ -282,7 +300,7 @@ export function turnTrace(threadId: string, step: string, first = false): void {
     const arrived = arrival && arrival.joinedAt <= now ? arrival : undefined;
     const queuedAt = arrived && (carried === undefined || arrived.arrivedAt < carried) ? arrived.arrivedAt : carried;
     clocks.set(threadId, {
-      startedAt: now, loopAtStart: performance.eventLoopUtilization(),
+      startedAt: now, loopAtStart: performance.eventLoopUtilization(), startsAtStart: processStartTotals(),
       ...(queuedAt !== undefined && queuedAt <= now ? { queuedAt } : {}),
       ...(arrived && arrived.joinedAt > arrived.arrivedAt ? { marks: [["prewarm-joined", arrived.joinedAt]] as Array<[string, number]> } : {}),
     });

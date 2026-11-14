@@ -116,10 +116,8 @@ it("an Allow in a chosen class needs the person's key, bound to that card, once"
     await api("PATCH", `/api/bots/${bot.id}/tasks/${idle}`, { approvalMode: "auto", acknowledgeLocalAuto: true, stepUp: forMode.ceremonyId });
     // back to Ask tightens: no key
     await api("PATCH", `/api/bots/${bot.id}/tasks/${idle}`, { approvalMode: "ask" });
-    // a permission refresh copying the bot's Auto onto the thread loosens too
-    const refresh = await call("PATCH", `/api/bots/${bot.id}/tasks/${idle}`, { refreshPermissions: true, acknowledgeLocalAuto: true });
-    expect(refresh.status, JSON.stringify(refresh.body)).toBe(403);
-    expect(refresh.body).toMatchObject({ code: "step_up_required", target: { action: "approval-mode", detail: { op: "refresh", thread: idle } } });
+    // #4200: the level is the bot's, so a thread never runs narrower than it
+    // and a refresh has nothing to loosen
 
     // the desktop's Full goes through a one-time allowance asked here first
     const full = await call("POST", "/api/security-keys/approval-mode", { botId: bot.id, op: "bot", thread: "*", mode: "full" });

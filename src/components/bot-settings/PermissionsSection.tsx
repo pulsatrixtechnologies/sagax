@@ -261,10 +261,7 @@ export function PermissionsSection({
         <AppliedLevelNote
           setting={approvalMode}
           applied={bot.approvalApplied}
-          onUseSetting={bot.threadId ? () => {
-            if (bot.approvalApplied?.reason === "consent") { setApprovalModeAgain(); return; }
-            dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId: bot.threadId });
-          } : undefined}
+          onConfirmFull={setApprovalModeAgain}
         />
       )}
       {showProactive && (

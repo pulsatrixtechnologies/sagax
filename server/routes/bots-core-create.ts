@@ -225,7 +225,6 @@ export function createBotsCoreCreateRoutes(deps: BotsCoreRouteDeps): RouteHandle
           autoApprove: approvalMode === "auto",
           ...(teamOverrides ? { teamOverrides } : {}),
         });
-        store.patchTask(bot.id, bot.threadId, { approvalMode, autoApprove: approvalMode === "auto" });
         // What the preset brings wins over the saved defaults for the same
         // skill name or note file.
         const presetSkills = new Set(preset?.preset.skills ?? []);

@@ -419,9 +419,7 @@ in `server/routes/security-keys.ts`. Rules, covered by
 - Removing `security-keys.json` (and its digest) is noticed at start
   (`.security-keys-used`) and audited as `security_keys.file_removed`.
 - Follow-ups, not covered yet: New bot defaults, bot creation and a bot zip
-  import can give standing permissions without a key; Settings > Bot >
-  Auto-review (`autoReviewDefault`) starts new conversations in a reviewed
-  level without a key; the classes that apply are the answerer's only, not
+  import can give standing permissions without a key; the classes that apply are the answerer's only, not
   the bot owner's combined with them.
 - RP ID: the https host the request came through (`x-forwarded-proto`), or
   `SAGAX_WEBAUTHN_RP_ID` (with `SAGAX_WEBAUTHN_ORIGINS`); never an IP address.

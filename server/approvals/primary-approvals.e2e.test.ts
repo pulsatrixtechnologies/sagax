@@ -189,9 +189,8 @@ it("the Primary Bot answers, always allows and cancels the person's cards at the
     const off = await settings(main.comms, { action: "set", key: "bot.approvalMode", target: ottoline.id, value: "auto", quote: "Mets Ottoline en auto" });
     expect(off.body.text, JSON.stringify(off.body)).toMatch(/^Done/);
     expect((await api("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.id === ottoline.id).approvalMode).toBe("auto");
-    // her conversation keeps its own level: the same request sets it too
-    const conversation = await settings(main.comms, { action: "set", key: "thread.approvalMode", target: ottoline.threadId, value: "auto", quote: "Mets Ottoline en auto" });
-    expect(conversation.body.text, JSON.stringify(conversation.body)).toMatch(/^Done/);
+    // #4200: her conversation runs at the bot's level; no separate key exists
+    expect(JSON.stringify((await settings(main.comms, { action: "set", key: "thread.approvalMode", target: ottoline.threadId, value: "auto", quote: "Mets Ottoline en auto" })).body)).not.toMatch(/"text":"Done/);
     // the person's words turn cards off, nothing else: another setting keeps its card
     // 2026-10-20: any setting of the person's own bot runs on their words,
     // but a new title must be their own words

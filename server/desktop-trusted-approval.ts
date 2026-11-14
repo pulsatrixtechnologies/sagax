@@ -57,7 +57,8 @@ function handleDesktopTrustedApprovalMessage(raw: unknown): boolean {
       } else if (grant.refreshPermissions && grant.threadId) {
         host.store.refreshTaskPermissions(botId, grant.threadId);
       } else if (grant.threadId && grant.threadOnly) {
-        host.store.patchTask(botId, grant.threadId, { approvalMode: mode, autoApprove: false });
+        // a grant an older build prepared for one conversation: the bot's level now (#4200)
+        host.store.patchBot(botId, { approvalMode: mode, autoApprove: false });
       } else if (grant.threadId) {
         // the bot's own level: its open thread follows it, like every other (#1169)
         host.store.patchTask(botId, grant.threadId, { approvalOwn: undefined });
@@ -222,6 +223,12 @@ function handleDesktopTrustedApprovalMessage(raw: unknown): boolean {
     return true;
   }
   if (message.type !== "approval-trusted-mode-set") return false;
+  // #4200 (one approval level per bot): a level chosen from a conversation
+  // is the bot's level, applied to every conversation of the bot.
+  if (message.threadOnly === true && message.refreshPermissions !== true) {
+    delete message.threadOnly;
+    delete message.threadId;
+  }
   const requestId = typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(message.requestId)
     ? message.requestId
     : null;
@@ -359,35 +366,6 @@ function handleDesktopTrustedApprovalMessage(raw: unknown): boolean {
     } else if (!host.store.refreshTaskPermissions(botId, target.threadId)) {
       respond({ ok: false, error: "That thread is no longer available" });
       return true;
-    }
-    respond({ ok: true, bot: host.wireTrustedApprovalBot(host.store.bot(botId)!) });
-    return true;
-  }
-  if (message.threadOnly === true) {
-    const target = typeof threadId === "string" ? host.store.projectBotForTask(botId, threadId) : null;
-    if (!target || message.modelSelection !== undefined || message.updateBotDefault !== undefined) {
-      respond({ ok: false, error: "Choose an existing thread for this approval change" });
-      return true;
-    }
-    // An ambiguous scoped grant may be cleared, but never a different grant.
-    const clearsOwnGrant = mode === "ask" && existing.approvalGrant?.threadOnly && existing.approvalGrant.threadId === threadId;
-    if ((existing.approvalGrant && !clearsOwnGrant) || host.threadBusy(botId, target.threadId)) {
-      respond({ ok: false, error: "Stop this thread and finish its pending approval change first" });
-      return true;
-    }
-    if (!host.supportsApprovalMode(target.modelSelection, mode)) {
-      respond({ ok: false, error: "This thread's provider does not support that approval level" });
-      return true;
-    }
-    if (mode === "auto" && target.computer === "local" && host.approvalModeFor(target) !== "auto" && message.acknowledgeLocalAuto !== true) {
-      respond({ ok: false, error: "Auto mode on this computer requires confirming the warning" });
-      return true;
-    }
-    if (mode === "full" || mode === "custom") {
-      host.store.patchBot(botId, { approvalGrant: { requestId, mode, phase: "prepared", threadId: target.threadId, threadOnly: true } });
-    } else {
-      if (clearsOwnGrant) clearGrant(existing);
-      host.store.patchTask(botId, target.threadId, { approvalMode: mode, autoApprove: mode === "auto", alwaysAllow: [] });
     }
     respond({ ok: true, bot: host.wireTrustedApprovalBot(host.store.bot(botId)!) });
     return true;

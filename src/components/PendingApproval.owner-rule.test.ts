@@ -121,6 +121,6 @@ describe("owner rule buttons", () => {
   it("the receipt reads Always allowed or Always denied", () => {
     expect(approvalPill({ answered: "allow", ruleSaved: { id: "r", behavior: "allow", description: "x" } })?.label).toBe("Always allowed");
     expect(approvalPill({ answered: "deny", ruleSaved: { id: "r", behavior: "deny", description: "x" } })?.label).toBe("Always denied");
-    expect(approvalPill({ answered: "deny" })?.label).toBe("Declined");
+    expect(approvalPill({ answered: "deny" })?.label).toBe("Denied");
   });
 });

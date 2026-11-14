@@ -55,7 +55,7 @@ describe("ApprovalCard decided by voice", () => {
 
   it("says a card was decided by voice on a Live call", () => {
     expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("allow", "call") }))).toMatch(/Allowed.*by voice/);
-    expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("deny", "call") }))).toMatch(/Declined.*by voice/);
+    expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("deny", "call") }))).toMatch(/Denied.*by voice/);
   });
 
   it("says nothing extra for a tap", () => {

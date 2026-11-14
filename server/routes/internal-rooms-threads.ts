@@ -158,8 +158,8 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     if (refused || !resumed) return json(res, refused?.status ?? 404, { error: refused?.error ?? "no such thread" });
     // nothing of a confidential conversation goes into one that is not
     if (store.isConfidentialThread(fromThreadId)) return json(res, 403, { error: CONFIDENTIAL_PEER_REFUSED, code: "confidential_thread" });
-    // read-only narrows the thread for good: Ask, no standing grants
-    if (readOnly) store.patchTask(from.id, resumed.threadId, { approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
+    // read-only drops the thread's standing grants; its level stays its bot's (#4200)
+    if (readOnly) store.patchTask(from.id, resumed.threadId, { alwaysAllow: [] });
     internalCapability.openedThreads += 1;
     const chip: Omit<Message, "id" | "at"> = {
       role: "bot",

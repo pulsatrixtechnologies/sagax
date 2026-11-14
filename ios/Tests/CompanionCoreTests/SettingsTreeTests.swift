@@ -10,7 +10,7 @@ final class SettingsTreeTests: XCTestCase {
     private let before: [SettingsItem] = [
         .profile, .securityKeys, .vault, .usage,
         .connectApps, .publishedPages,
-        .autoReview, .autoReviewRules, .approvalRules, .timeZoneAuto, .timeZone, .botComputer,
+        .autoReviewRules, .approvalRules, .timeZoneAuto, .timeZone, .botComputer,
         .notifications, .appearance, .language, .haptics, .quickReplies, .callVoice,
         .organization, .experimental,
         .helpCenter, .privacyPolicy, .termsOfService, .sagaxTerms,
@@ -41,7 +41,7 @@ final class SettingsTreeTests: XCTestCase {
         let root = SettingsTree.cards(.root, .everything)
         XCTAssertEqual(root.first?.first, .profile, "the profile heads the list")
         XCTAssertLessThanOrEqual(root.joined().count, 16)
-        XCTAssertEqual(SettingsTree.path(to: .autoReview), [.bots])
+        XCTAssertEqual(SettingsTree.path(to: .autoReviewRules), [.bots])
         XCTAssertEqual(SettingsTree.path(to: .reachMe), [.bots], "Reach me sits with the bots' settings")
         // The reference app's sheet lists the Vault with the profile (2026-11-01)
         XCTAssertEqual(SettingsTree.path(to: .vault), [])
@@ -52,6 +52,13 @@ final class SettingsTreeTests: XCTestCase {
     }
 
     /// Before pairing (onboarding) the phone's own settings stay reachable.
+    /// #4200: one approval level per bot; the Auto-review toggle (a reviewed
+    /// level on new conversations, which the server no longer applies) is gone.
+    func testNoAutoReviewToggle() {
+        XCTAssertFalse(SettingsItem.allCases.map(\.rawValue).contains("autoReview"))
+        XCTAssertEqual(SettingsTree.cards(.bots, .everything).first?.first, .autoReviewRules)
+    }
+
     func testUnpairedKeepsThePhonesOwnSettings() {
         let reachable = Set(SettingsTree.reachable(SettingsContext(connected: false)).map(\.item))
         for item: SettingsItem in [.notifications, .appearance, .language, .haptics, .quickReplies, .callVoice, .helpCenter, .about] {

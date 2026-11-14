@@ -327,8 +327,8 @@ quote must be in the person's own message.
   rules), with the level named, the bot named when it is not the
   speaking one, a new rule's words (three or more) or command in the message, its
   behavior said, "every bot" said for a rule of every bot, and a rule
-  changed or removed named by two of its words (`askedChange`), the policy (`personAsked`) runs approval levels (`bot.approvalMode`, and
-  `thread.approvalMode` for a conversation that keeps its own level),
+  changed or removed named by two of its words (`askedChange`), the policy (`personAsked`) runs the approval level (`bot.approvalMode`, the one level of the
+  bot and every conversation of it, #4200),
   Always allow rules and their removal at once, at any level of the
   speaking bot. A key, a secret, another person, a bulk change, the
   organization and the desktop-only Full of a personal server keep theirs.

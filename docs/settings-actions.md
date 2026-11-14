@@ -227,7 +227,6 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Model and effort of this conversation | Composer > model picker | `sagax_settings` get, set `thread.model` | simple |
 | Project | Thread menu > Move to project | `sagax_settings` get, set `thread.project` | simple |
 | Confidential (one way) | Thread menu > Confidential | `sagax_settings` get, set `thread.confidential` | simple |
-| Approval level of this conversation | Composer > approval level | `sagax_settings` get, set `thread.approvalMode` | élargit les droits |
 | Delete the conversation (true) | Thread menu > Delete | `sagax_settings` set `thread.delete` | suppression |
 
 ### Routines

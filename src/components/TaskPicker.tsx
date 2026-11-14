@@ -9,14 +9,12 @@ import { openTeamBotFromThread, teamBotSourceAllowed } from "@/lib/teambot-from-
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronLeft, Layers, MessagesSquare, MoreHorizontal, Plus, Search } from "lucide-react";
 import { backgroundThreads, personThreads } from "../../shared/background-threads";
-import { api, currentTaskBot, useStore, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
-import { botApprovalSetting, approvalModeFor } from "../../shared/approval-mode";
+import { api, useStore, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
 import { moveFolder } from "@/lib/folder-order";
 import { folderUnreadThreadIds, markFolderRead, markGroupFolderRead } from "@/lib/folder-read";
 import { personPickerThreads } from "@/lib/person-threads";
 import { threadRefUrl } from "@/lib/thread-refs";
-import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { roomThreadsWorkingElsewhere } from "@/lib/room-threads";
@@ -122,7 +120,6 @@ export type PickerThreadActions = {
   onRegenerateTitle?: (threadId: string, onSettled: (ok: boolean) => void) => void;
   onArchive?: (threadId: string, archivedAt: number | null) => void;
   onSnooze?: (threadId: string, snoozedUntil: number | null) => void;
-  onRefreshPermissions?: (threadId: string) => void;
   onCreateTeamBot?: (threadId: string) => void;
   /** Bot threads: make one confidential (the menu asks first). */
   onMakeConfidential?: (threadId: string) => void;
@@ -158,7 +155,6 @@ export function pickerRowActions(task: Pick<PickerTask, "threadId"> & { confiden
     ...(extra?.onSnooze ? { onSnooze: (until: number | null) => extra.onSnooze!(id, until) } : {}),
     ...(extra?.onCopyLink ? { onCopyLink: () => extra.onCopyLink!(id) } : {}),
     ...(extra?.onRegenerateTitle ? { onRegenerateTitle: (onSettled: (ok: boolean) => void) => extra.onRegenerateTitle!(id, onSettled) } : {}),
-    ...(extra?.onRefreshPermissions ? { onRefreshPermissions: () => extra.onRefreshPermissions!(id) } : {}),
     ...(extra?.onCreateTeamBot ? { onCreateTeamBot: () => extra.onCreateTeamBot!(id) } : {}),
     ...(extra?.onMakeConfidential && task.confidential !== true ? { onMakeConfidential: () => extra.onMakeConfidential!(id) } : {}),
   };
@@ -635,7 +631,6 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
   // In the chat header mode only (useThreadsMode): the sidebar mode lists a
   // bot's threads under its row instead, and one conversation has none.
   const threadsMode = useThreadsMode();
-  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "local-auto" } | null>(null);
   const [folderSaving, setFolderSaving] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   if (threadsMode !== "header") return null;
@@ -652,14 +647,6 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
       : undefined,
     onArchive: (threadId, archivedAt) => dispatch({ type: "updateTask", botId: bot.id, threadId, patch: { archivedAt } }),
     onSnooze: (threadId, snoozedUntil) => dispatch({ type: "updateTask", botId: bot.id, threadId, patch: { snoozedUntil } }),
-    // the same checks as the sidebar row had: a wider approval level asks first
-    onRefreshPermissions: (threadId) => {
-      const mode = botApprovalSetting(bot);
-      const threadMode = approvalModeFor(currentTaskBot(bot, threadId));
-      // Full applies at once with no confirmation (omb #2701).
-      if (mode === "auto" && bot.computer === "local" && threadMode !== "auto") { setPermissionRefresh({ threadId, kind: "local-auto" }); return; }
-      dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId });
-    },
     ...(teamBotSourceAllowed(bot.id) ? {
       onCreateTeamBot: (threadId: string) => openTeamBotFromThread({ botId: bot.id, threadId, title: (bot.tasks ?? []).find((task) => task.threadId === threadId)?.title ?? "" }),
     } : {}),
@@ -714,15 +701,6 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
       initialOpen={initialOpen}
     />
     {folderError && <p role="alert" data-thread-overlay className="fixed bottom-4 right-4 z-50 max-w-[320px] rounded-lg border border-hairline/50 bg-card px-3 py-2 text-[12px] text-danger shadow-xl" onClick={() => setFolderError(null)}>{folderError}</p>}
-    <LocalComputerAutoWarning
-      open={permissionRefresh?.kind === "local-auto"}
-      onCancel={() => setPermissionRefresh(null)}
-      onConfirm={() => {
-        const threadId = permissionRefresh?.threadId;
-        setPermissionRefresh(null);
-        if (threadId) dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId, acknowledgeLocalAuto: true });
-      }}
-    />
     </>
   );
 }

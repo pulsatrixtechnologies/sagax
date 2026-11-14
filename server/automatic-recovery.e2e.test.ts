@@ -250,11 +250,11 @@ it("recovers a coordinated specialist and returns its result to the Chief exactl
     expect(after.modelSelection).toEqual(primary);
     const childTask = after.tasks.find((task: any) => task.threadId === child.threadId);
     expect(childTask).toMatchObject({ modelSelection: backup, busy: false });
-    // #1207: the recovered thread keeps no copy of the level; it runs at its bot's
-    expect(childTask).not.toHaveProperty("approvalOwn");
-    expect(childTask.approvalMode).toBeUndefined();
-    // A new bot starts at Full access (OpenMausBot pro-rule port, #2111)
-    expect(after).toMatchObject({ approvalMode: "full", autoApprove: false });
+    // #4200: the Ask chosen from the specialist's conversation is the bot's
+    // level; the Chief's Full comes down on the hand-off it opened, and only
+    // as a Primary Bot's hand-off ("delegated")
+    expect(after).toMatchObject({ approvalMode: "ask" });
+    expect([undefined, "delegated"]).toContain(childTask.approvalOwn);
     expect(after.tasks.find((task: any) => task.threadId === specialist.activeTaskId).modelSelection).toEqual(primary);
     expect(fleet.bots.find((bot: any) => bot.id === chief.id)).toMatchObject({ busy: false, waitingForTeammates: false });
     await control("messages", "--bot", chief.id, "--task", chief.activeTaskId, "--limit", "20");
@@ -392,7 +392,9 @@ it.each(["workspace", "bot"])("uses the configured %s backup when Claude refuses
     expect(after.modelSelection).toEqual(backup);
     expect(after.tasks.find((task: any) => task.threadId === sibling.threadId).modelSelection).toEqual(backup);
     expect(after.tasks.find((task: any) => task.threadId === threadId))
-      .toMatchObject({ modelSelection: healthy, approvalMode: "ask", busy: false });
+      .toMatchObject({ modelSelection: healthy, busy: false });
+    // #4200: the level is the bot's, never a copy on the conversation
+    expect(after.approvalMode).toBe("ask");
   });
 }, 90_000);
 

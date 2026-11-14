@@ -197,6 +197,13 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
       }
       if (body.approvalMode !== undefined || body.autoApprove !== undefined) {
         if (body.autoApprove !== undefined && typeof body.autoApprove !== "boolean") return json(res, 400, { error: "autoApprove must be a boolean" });
+        // #4200 (one approval level per bot): a level chosen in a
+        // conversation is the bot's level. It stays its owner's: isolation
+        // between people, as for the bot's other settings.
+        if (callerBotsReadOnly(auth)) return json(res, 403, BOTS_READ_ONLY);
+        if (ownerSettingsForbidden(auth, store.bot(m[1]) ?? current, { model: true })) {
+          return json(res, 403, { error: "This bot's approval level belongs to its owner.", code: "owner_bot_settings" });
+        }
         const mode = body.approvalMode ?? (body.autoApprove ? "auto" : "ask");
         // Organization server: the bot's owner, signed in, turns Full on
         // over HTTP while the organization allows it (org-full-access.ts).
@@ -247,17 +254,31 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
       const modeBefore = approvalModeFor(current);
       // #1373: what each running turn answers at before this change
       const liveApprovalBefore = patch.approvalMode && patch.approvalMode !== modeBefore
-        && liveApprovalChange(modeBefore, patch.approvalMode as ApprovalMode) && threadBusy(current.id, current.threadId)
+        && liveApprovalChange(modeBefore, patch.approvalMode as ApprovalMode)
+        && store.tasks(m[1]).some((task) => threadBusy(m![1]!, task.threadId))
         ? runningTurnLevels(m[1]) : null;
       if (orgFullGrant) {
         const principalId = fullConsentPrincipal ?? sessionPrincipal(auth);
         if (principalId) store.patchBot(m[1], { fullAccessConsent: { principalId, at: Date.now() } });
       }
+      // #4200: the level goes to the bot, which every one of its
+      // conversations follows from its next tool call.
+      const levelChosen = patch.approvalMode as ApprovalMode | undefined;
+      if (patch.approvalMode !== undefined) {
+        store.patchBot(m[1], {
+          approvalMode: patch.approvalMode as ApprovalMode,
+          autoApprove: patch.autoApprove === true,
+          ...(orgFullGrant ? { alwaysAllow: [] } : {}),
+        });
+        delete patch.approvalMode;
+        delete patch.autoApprove;
+        delete patch.alwaysAllow;
+      }
       const task = patch.modelSelection
         ? store.switchTaskModel(m[1], m[2], patch.modelSelection as ModelSelection, body.updateBotDefault === true,
           { ...patch, ...hostedModels?.resetTask?.(current.modelSelection, patch.modelSelection as ModelSelection) })!
         : store.patchTask(m[1], m[2], patch)!;
-      if (patch.approvalMode) auditApprovalModeChange(auth, m[1], modeBefore, patch.approvalMode as ApprovalMode, m[2]);
+      if (levelChosen) auditApprovalModeChange(auth, m[1], modeBefore, levelChosen, m[2]);
       if (liveApprovalBefore) {
         try {
           await applyStricterApprovalLive(m[1], liveApprovalBefore);

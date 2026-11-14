@@ -597,16 +597,6 @@ describe("Copy link", () => {
   });
 });
 
-describe("Refresh permissions", () => {
-  it("is offered only when the row can refresh", () => {
-    const task = { threadId: "t1", title: "Fix the login" };
-    expect(threadMenu(renderRow(task, "scout"))!.actions.onRefreshPermissions).toBeUndefined();
-    const onRefreshPermissions = vi.fn();
-    threadMenu(renderRow(task, "scout", true, { onRefreshPermissions }))!.actions.onRefreshPermissions!();
-    expect(onRefreshPermissions).toHaveBeenCalledWith(task);
-  });
-});
-
 describe("Regenerate title", () => {
   it("is offered only when the caller can regenerate titles, for this row's thread", () => {
     const task = { threadId: "t1", title: "Fix the login" };

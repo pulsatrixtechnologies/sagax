@@ -42,14 +42,14 @@ final class SettingsUITests: XCTestCase {
         return app
     }
 
-    /// Settings > Bots (auto-review, time zone): one level in since the
+    /// Settings > Bots (rules, time zone): one level in since the
     /// The reference app layout (2026-10-26).
     @MainActor
     private func launchBotCard() -> XCUIApplication {
         let app = launch()
         XCTAssertTrue(app.element("settings-bots").waitForExistence(timeout: 20))
         app.element("settings-bots").tap()
-        XCTAssertTrue(app.element("settings-auto-review.toggle").waitForExistence(timeout: 20))
+        XCTAssertTrue(app.element("settings-rules").waitForExistence(timeout: 20))
         return app
     }
 
@@ -90,19 +90,6 @@ final class SettingsUITests: XCTestCase {
     }
 
     // MARK: Bot section
-
-    @MainActor
-    func testAutoReviewTogglePersistsOnTheServer() {
-        let app = launchBotCard()
-        let before = botSettings()["autoReviewDefault"] as? Bool ?? false
-        app.element("settings-auto-review.toggle").tap()
-        XCTAssertTrue(eventually { (self.botSettings()["autoReviewDefault"] as? Bool) == !before })
-        // Shown the same after a relaunch, then put back.
-        let again = launchBotCard()
-        XCTAssertEqual(again.element("settings-auto-review.toggle").value as? String, before ? "0" : "1")
-        again.element("settings-auto-review.toggle").tap()
-        XCTAssertTrue(eventually { (self.botSettings()["autoReviewDefault"] as? Bool) == before })
-    }
 
     @MainActor
     func testTimeZoneIsSetFromThePickerAndAutomatically() {

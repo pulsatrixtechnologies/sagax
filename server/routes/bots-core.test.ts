@@ -179,7 +179,6 @@ function baseDeps(over: Partial<BotsCoreRouteDeps> = {}): BotsCoreRouteDeps {
     scopedThreadViewer: () => undefined,
     conversationThreadFor: () => "t1",
     selectViewerThread: () => undefined,
-    applyAutoReviewDefault: () => undefined,
     noteStreamSend: () => undefined,
     refreshStreamDigests: () => undefined,
     actorKey: () => "actor",

@@ -16,7 +16,6 @@ async function syncHeadlessTeam(bots: HeadlessBot[]) {
     const bot = host.store.createBot({ name: entry.name, ...(entry.title ? { title: entry.title } : {}), modelSelection: await host.defaultSelection() });
     const approvalMode = host.newBotApprovalMode();
     host.store.patchBot(bot.id, { approvalMode, autoApprove: approvalMode === "auto" });
-    host.store.patchTask(bot.id, bot.threadId, { approvalMode, autoApprove: approvalMode === "auto" });
     console.log(`headless team: created bot ${bot.name}`);
   }
 

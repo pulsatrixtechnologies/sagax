@@ -10,7 +10,7 @@ function resetMemberAutoLevelsOnce() {
   if (!memberAutoResetPending(host.IDENTITY.kind, host.cfg.organization)) return;
   const reset = memberAutoLevelResets(host.store.bots, (bot) => host.memberOwnedInOrg(bot as BotRecord));
   const ask = { approvalMode: "ask" as const, autoApprove: false };
-  for (const thread of reset.threads) host.store.patchTask(thread.botId, thread.threadId, { ...ask, approvalOwn: "safety" });
+  // #4200: conversations follow their bot's level, so the bot's reset reaches them.
   for (const botId of reset.bots) host.store.patchBot(botId, ask);
   const total = reset.bots.length + reset.threads.length;
   console.log(`organization: ${total} saved Auto or Auto-accept edits level(s) of members' bots set back to Ask (${reset.bots.length} bot default(s), ${reset.threads.length} thread(s)); automatic levels are off for members' bots`);

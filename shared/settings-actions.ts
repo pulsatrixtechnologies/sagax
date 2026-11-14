@@ -525,14 +525,7 @@ threadField("thread.snoozedUntil", "snoozedUntil", "number?", "Snoozed until", "
 threadField("thread.model", "modelSelection", "object", "Model and effort of this conversation", "Composer > model picker");
 threadField("thread.project", "projectId", "string?", "Project", "Thread menu > Move to project");
 threadField("thread.confidential", "confidential", "boolean", "Confidential (one way)", "Thread menu > Confidential");
-add({
-  key: "thread.approvalMode", family: "thread", target: "thread", value: "enum:ask|edits|auto|full",
-  label: "Approval level of this conversation", where: "Composer > approval level",
-  read: (ids) => ({ path: "/api/bots", query: { messages: "0" }, list: "bots", match: "id", field: `tasks[threadId=${ids.target}].approvalMode` }),
-  write: (ids, v) => ({ method: "PATCH", path: `/api/bots/${enc(ids.botId!)}/tasks/${enc(ids.target!)}`, body: v === "full" ? { approvalMode: v, confirmFullAccess: true } : { approvalMode: v } }),
-  classes: always("rule-change"),
-  approvalTo: (v) => String(v),
-});
+// #4200: a conversation has no approval level of its own: bot.approvalMode is the one level.
 add({
   key: "thread.delete", family: "thread", target: "thread", value: "boolean", label: "Delete the conversation (true)", where: "Thread menu > Delete",
   write: (ids, v) => v === true ? { method: "DELETE", path: `/api/bots/${enc(ids.botId!)}/tasks/${enc(ids.target!)}` } : "value is true.",

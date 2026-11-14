@@ -26,7 +26,7 @@ function Gallery() {
       <ThreadMenu
         task={{ threadId: "t1", title: "Weekly report", link: "https://example.com/pr/1" }}
         folders={[{ id: "work", name: "Research" }]}
-        actions={{ onRename: noop, onDelete: noop, onPin: noop, onArchive: noop, onSnooze: noop, onMove: noop, onCopyLink: noop, onRegenerateTitle: noop, onRemoveLink: noop, onRefreshPermissions: noop }}
+        actions={{ onRename: noop, onDelete: noop, onPin: noop, onArchive: noop, onSnooze: noop, onMove: noop, onCopyLink: noop, onRegenerateTitle: noop, onRemoveLink: noop }}
         position={{ left: 24, top: 24 }}
         onClose={noop}
       />

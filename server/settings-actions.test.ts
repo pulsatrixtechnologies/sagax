@@ -228,10 +228,10 @@ describe("sagax_settings", () => {
     const seen: Array<[string, string | undefined]> = [];
     const h = harness({
       answer: projected,
-      approvalLevel: (botId, threadId) => { seen.push([botId, threadId]); return { setting: "full", applied: { mode: "ask", reason: "engine" } }; },
+      approvalLevel: (botId, threadId) => { seen.push([botId, threadId]); return { setting: "full", applied: { mode: "ask", reason: "member-policy" } }; },
     });
     const read = await h.call({ action: "get", key: "bot.approvalMode" });
-    expect(JSON.parse(String(read.body.text))).toEqual({ key: "bot.approvalMode", value: "full", thisConversation: "ask", because: "engine" });
+    expect(JSON.parse(String(read.body.text))).toEqual({ key: "bot.approvalMode", value: "full", thisConversation: "ask", because: "member-policy" });
     expect(seen).toEqual([["b1", "th1"]]);
     const same = await harness({ answer: projected, approvalLevel: () => ({ setting: "full" }) }).call({ action: "get", key: "bot.approvalMode" });
     expect(JSON.parse(String(same.body.text))).toEqual({ key: "bot.approvalMode", value: "full" });

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { autoReviewThreadMode, createBotSettingsStore, isTimeZone } from "./bot-settings.ts";
+import { createBotSettingsStore, isTimeZone } from "./bot-settings.ts";
 import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { createBotSettingsRoutes } from "../routes/bot-settings.ts";
@@ -46,25 +46,6 @@ describe("bot settings store", () => {
     expect(isTimeZone("UTC")).toBe(true);
     expect(isTimeZone("Mars/Olympus")).toBe(false);
     expect(isTimeZone("../../etc")).toBe(false);
-  });
-});
-
-describe("auto-review default", () => {
-  const base = { nativeReviewer: true, supportsAuto: true, thisComputer: false };
-  it("starts a new conversation with the engine's reviewer where there is one", () => {
-    expect(autoReviewThreadMode({ ...base, current: "ask" })).toBe("auto");
-    expect(autoReviewThreadMode({ ...base, current: "edits" })).toBe("auto");
-    expect(autoReviewThreadMode({ ...base, current: "full" })).toBe("auto");
-    expect(autoReviewThreadMode({ ...base, current: "auto" })).toBeNull();
-  });
-  it("otherwise asks, never loosening, and leaves Custom and this computer alone", () => {
-    expect(autoReviewThreadMode({ ...base, nativeReviewer: false, current: "ask" })).toBeNull();
-    expect(autoReviewThreadMode({ ...base, nativeReviewer: false, current: "edits" })).toBeNull();
-    expect(autoReviewThreadMode({ ...base, nativeReviewer: false, current: "auto" })).toBe("ask");
-    expect(autoReviewThreadMode({ ...base, nativeReviewer: false, current: "full" })).toBe("ask");
-    expect(autoReviewThreadMode({ ...base, current: "custom" })).toBeNull();
-    expect(autoReviewThreadMode({ ...base, thisComputer: true, current: "ask" })).toBeNull();
-    expect(autoReviewThreadMode({ ...base, thisComputer: true, current: "full" })).toBe("ask");
   });
 });
 

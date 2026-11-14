@@ -8,10 +8,10 @@ async function stopBotForEmergencyApprovalDowngrade(botId: string) {
 
   const bot = host.store.bot(botId);
   if (!bot) return;
+  // #4200: no conversation holds a level of its own; a Primary Bot's
+  // hand-off is ended with the bot's own level.
   for (const task of host.store.tasks(botId)) {
-    if (task.approvalMode === "full" || task.approvalMode === "custom") {
-      host.store.patchTask(botId, task.threadId, { approvalMode: "ask", autoApprove: false, alwaysAllow: [], approvalOwn: "safety" });
-    }
+    if (task.approvalOwn !== undefined) host.store.patchTask(botId, task.threadId, { approvalOwn: undefined });
   }
   const directStop = host.interruptAllDirectThreads(botId);
 

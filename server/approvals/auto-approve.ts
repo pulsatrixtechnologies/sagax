@@ -523,6 +523,8 @@ function isMailSendName(tool: string, alias?: string): boolean {
 
 export const HELD_NOTE = {
   "approval.held.outbound": "This sends something on your behalf. Allow it once, or always for this tool.",
+  "approval.held.read": "This reads data with your access. Allow it once, or always for this tool.",
+  "approval.held.write": "This changes data with your access. Allow it once, or always for this tool.",
   "approval.held.emailDraft": "Write this email as a draft card for the person to approve. Do not send it directly.",
   "approval.held.native": "The provider requires your approval for this action.",
   "approval.held.sandbox":
@@ -541,10 +543,16 @@ export function approvalHeldNote(context: {
   source?: AutoVerdictSource;
   /** Questions are not permissions and are never held for a mode reason. */
   permission: boolean;
+  /** #4200: the tool's own class, as its card shows it (read, write, send). */
+  toolClass?: "read" | "write" | "send";
 }): HeldNoteKey | undefined {
   if (!context.permission) return undefined;
   if (context.source === "email-draft-required") return "approval.held.emailDraft";
-  if (context.source === "outbound-guard") return "approval.held.outbound";
+  // #4200: the sentence follows the tool's own class: a read-only tool never
+  // says it sends something on the person's behalf.
+  if (context.source === "outbound-guard") {
+    return context.toolClass === "read" ? "approval.held.read" : context.toolClass === "write" ? "approval.held.write" : "approval.held.outbound";
+  }
   if (context.source === "safety-hold") return "approval.held.native";
   if (context.source === "custom-rule-ask" || context.source === "owner-rule-ask") return "approval.held.customRule";
   if (context.source === "explicit-approval-block") return "approval.held.sandbox";
@@ -557,6 +565,7 @@ export function approvalHeldNote(context: {
 export function approvalHeldReason(context: {
   source?: AutoVerdictSource;
   permission: boolean;
+  toolClass?: "read" | "write" | "send";
 }): string | undefined {
   const key = approvalHeldNote(context);
   return key && HELD_NOTE[key];

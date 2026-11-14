@@ -38,7 +38,7 @@ import { pickBotName } from "./names.ts";
 import { redactSecretsInText } from "./redact.ts";
 import { withoutRunMarkersIn } from "../shared/routine-result.ts";
 import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN, botAvatarProfile, clampAvatarFocus, clampAvatarZoom } from "../shared/bot-avatar.ts";
-import { approvalModeFor, isApprovalException, isApprovalMode, modelSwitchNeedsAsk, threadApprovalFields, type ApprovalException, type ApprovalMode } from "../shared/approval-mode.ts";
+import { approvalModeFor, delegatedLevelWidens, isApprovalException, isApprovalMode, modelSwitchNeedsAsk, threadApprovalFields, type ApprovalException, type ApprovalMode } from "../shared/approval-mode.ts";
 import { lastChangeRequestUrl } from "../shared/thread-link.ts";
 import { REMOVED_COMPUTER_DRIVER, type ComputerEngineMove } from "./computer/computer-engine-removal.ts";
 import type { ProfileRequestChanges } from "../shared/profile-request.ts";
@@ -224,6 +224,16 @@ export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number
 function followingBot<T extends Pick<TaskRecord, "approvalMode" | "autoApprove" | "approvalOwn">>(task: T): T {
   const { approvalMode: _mode, autoApprove: _auto, approvalOwn: _own, ...rest } = task;
   return rest as T;
+}
+
+/** #4200: the level fields of a conversation patch, unless it is a Primary
+ * Bot's hand-off: a conversation never holds a level of its own. */
+function conversationLevelDropped<P extends TaskPatch>(patch: P): P {
+  const setsLevel = Object.hasOwn(patch, "approvalMode") || Object.hasOwn(patch, "autoApprove");
+  if (!setsLevel || patch.approvalOwn === "delegated") return patch;
+  const { approvalMode: _mode, autoApprove: _auto, ...rest } = patch;
+  if (Object.hasOwn(rest, "approvalOwn") && rest.approvalOwn !== undefined) delete rest.approvalOwn;
+  return rest as P;
 }
 
 /** Only `true` is a pin. false/undefined must not land in bots.json or groups.json. */
@@ -874,15 +884,9 @@ export class Store {
       if (b.approvalGrant !== undefined) {
         const threadOnly = b.approvalGrant.threadOnly === true;
         if (threadOnly) {
-          // A crash may land between saving the target and clearing its
-          // journal. Revoke that target only, never unrelated threads.
-          const target = b.tasks?.find(task => task.threadId === b.approvalGrant?.threadId);
-          if (target) {
-            target.approvalMode = "ask";
-            target.autoApprove = false;
-            target.approvalOwn = "safety";
-            boot.keepAskTask.add(target.threadId);
-          }
+          // #4200: a conversation holds no level of its own, so a thread
+          // grant that never finished leaves nothing to revoke: the grant
+          // goes and the conversation keeps following its bot.
         }
         if (!threadOnly) {
         b.approvalMode = "ask";
@@ -1161,7 +1165,13 @@ export class Store {
           delete task.approvalMode;
           boot.botsMigrated = true;
         }
-        if (task.approvalOwn !== undefined && !isApprovalException(task.approvalOwn)) {
+        // #4200 (one approval level per bot): a conversation level that
+        // differs from its bot's goes, whatever wrote it (a picker in the
+        // conversation, an engine change, an unfinished grant, an
+        // auto-review default). Only a Primary Bot's hand-off that still
+        // lifts the conversation above its bot stays.
+        if (task.approvalOwn !== undefined && (!isApprovalException(task.approvalOwn) || !isApprovalMode(task.approvalMode)
+          || !delegatedLevelWidens(approvalModeFor({ approvalMode: b.approvalMode, autoApprove: b.autoApprove }), task.approvalMode))) {
           delete task.approvalOwn;
           boot.botsMigrated = true;
         }
@@ -2767,9 +2777,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return bot;
   }
 
-  /** `actorPrincipalId`: the person changing the bot. A level another
-   * person chose for their own conversation on this bot stays theirs. */
-  patchBot(id: string, patch: Partial<BotRecord>, options: { actorPrincipalId?: string | null } = {}): BotRecord | null {
+  /** `actorPrincipalId`: the person changing the bot (kept for callers; a
+   * level set on the bot reaches every conversation of it, #4200). */
+  patchBot(id: string, patch: Partial<BotRecord>, _options: { actorPrincipalId?: string | null } = {}): BotRecord | null {
     const bot = this.bot(id);
     if (!bot) return null;
     if (Object.hasOwn(patch, "toolScope")) {
@@ -2796,12 +2806,11 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     // unavailable. Profile edits use the separate atomic path below.
     Object.assign(bot, patch);
     if (levelChanged) {
-      const actor = options.actorPrincipalId?.trim().toLowerCase();
+      // #4200: one level per bot. It reaches every conversation of the bot,
+      // whoever opened it (an earlier pass kept the level of a conversation
+      // opened under another principal: the level the person set on the bot
+      // then never reached it).
       for (const task of bot.tasks ?? []) {
-        // Isolation between people (#934 review): the bot's new level never
-        // ends the level another person chose for their own conversation.
-        const threadOwner = task.ownerPrincipalId?.trim().toLowerCase();
-        if (actor && task.approvalOwn === "thread" && threadOwner && threadOwner !== actor) continue;
         delete task.approvalMode;
         delete task.autoApprove;
         delete task.approvalOwn;
@@ -3248,14 +3257,6 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
         // Read before anything changes: a conversation that follows the bot's
         // level has the bot's level here.
         const before = this.projectBotForTask(bot.id, task.threadId)!;
-        // The bot's own level goes back to Ask, so a conversation that
-        // followed it keeps the level it had (as switchTaskModel does).
-        if (botAsk) {
-          Object.assign(taskPatch, {
-            approvalMode: before.approvalMode, autoApprove: before.autoApprove, alwaysAllow: structuredClone(before.alwaysAllow ?? []),
-            approvalOwn: "engine" as const,
-          });
-        }
         // The engine this conversation ran on: its own, else the bot's.
         const moved = task.modelSelection ? retired(task.modelSelection) : botMoved;
         if (moved) {
@@ -3267,8 +3268,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
             taskPatch.surface = undefined;
             taskPatch.surfaceSource = undefined;
           }
+          // #4200: the conversation follows its bot's level; the turn
+          // judges what its engine runs (engine-unsupported).
           const ask = needsAsk(before);
-          if (ask) Object.assign(taskPatch, structuredClone(askNow), { approvalOwn: "engine" as const });
           if (task.modelSelection) taskPatch.modelSelection = structuredClone(replacement);
           const scope = botMoved && task.threadId === bot.threadId ? "bot" : "conversation";
           moves.push({ botId: bot.id, threadId: task.threadId, scope, ...cloudAfterMove(task.surface, task.surfaceSource),
@@ -3629,11 +3631,13 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (patch.projectId !== undefined && !this.project(botId, patch.projectId)) return null;
     // A revocation (a narrower approval level, fewer always-allowed tools)
     // stays live when its save fails; a widening never does.
-    // A level written on one thread is a deliberate exception to its bot's
-    // (#1169/#1170): it says so, else the next load would make it follow the
-    // bot again. `approvalOwn: undefined` makes the thread follow its bot.
-    const setsLevel = Object.hasOwn(patch, "approvalMode") || Object.hasOwn(patch, "autoApprove");
-    if (setsLevel && !Object.hasOwn(patch, "approvalOwn")) patch = { ...patch, approvalOwn: "thread" };
+    // #4200 (one approval level per bot): a conversation never stores a
+    // level of its own. Only a Primary Bot's hand-off (approvalOwn
+    // "delegated") writes one; any other level written here is dropped, so
+    // no writer can leave a conversation off its bot's level again. A level
+    // change goes to the bot (patchBot). `approvalOwn: undefined` makes the
+    // thread follow its bot.
+    patch = conversationLevelDropped(patch);
     const follows = Object.hasOwn(patch, "approvalOwn") && patch.approvalOwn === undefined;
     if (follows) patch = { ...patch, approvalMode: undefined, autoApprove: undefined };
     const revocation = keptRevocation(task, patch);
@@ -3777,11 +3781,8 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
     const own = sameModelSelection(selection, updateBotDefault ? selection : bot.modelSelection) ? undefined : structuredClone(selection);
-    // A level written with a model switch (Ask again on a new engine) is this
-    // thread's exception to its bot's level (#1169/#1170).
-    if ((Object.hasOwn(taskPatch, "approvalMode") || Object.hasOwn(taskPatch, "autoApprove")) && !Object.hasOwn(taskPatch, "approvalOwn")) {
-      taskPatch = { ...taskPatch, approvalOwn: "engine" };
-    }
+    // #4200: a model switch never leaves a level on the conversation.
+    taskPatch = conversationLevelDropped(taskPatch);
     const nextTask = persistedPin({ ...task, ...taskPatch, modelSelection: own,
       ...(typeof taskPatch.title === "string" ? { title: taskPatch.title.trim().slice(0, 80) || UNTITLED_THREAD } : {}) });
     // 2026-10-30: a model picked for this bot applies to every thread,
@@ -3917,9 +3918,10 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       ...(ownerPrincipalId?.trim() ? { ownerPrincipalId: ownerPrincipalId.trim().toLowerCase() } : {}),
       resumeCursors: {},
       ...(modelSelection && !sameModelSelection(modelSelection, bot.modelSelection) ? { modelSelection: structuredClone(modelSelection) } : {}),
-      // #1169/#1170: a new thread follows its bot's level live; it stores a
-      // level only when its creator chose one for it on purpose.
-      ...(approvalMode ? { approvalMode, autoApprove: false, alwaysAllow: [], approvalOwn: approvalOwn ?? "thread" } : {}),
+      // #4200: a new thread follows its bot's level live; it stores a level
+      // only for a Primary Bot's hand-off (a parallel task of a delegated
+      // conversation).
+      ...(approvalMode && approvalOwn === "delegated" ? { approvalMode, autoApprove: false, alwaysAllow: [], approvalOwn } : {}),
       unread: false,
       activity: "idle",
       busy: false,

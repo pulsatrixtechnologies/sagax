@@ -395,8 +395,8 @@ describe("start_thread on yourself", () => {
       const looked = await api("POST", "/api/internal/threads", { title: "Look only", message: "Read the logs.", readOnly: true }, token);
       expect(looked.status).toBe(201);
       expect(looked.body).toMatchObject({ self: true, readOnly: true });
-      // never wider than Ask, whatever the bot's level
-      expect(await taskOf(bot.id, looked.body.threadId)).toMatchObject({ approvalMode: "ask" });
+      // #4200: it runs at the bot's level, like every conversation of the bot
+      expect((await taskOf(bot.id, looked.body.threadId))?.approvalOwn).toBeUndefined();
       const opening = (await messages(looked.body.threadId)).find((message) => message.role === "user");
       expect(opening.text).toContain("Read-only task");
       expect(opening.text).toContain("Read the logs.");
@@ -419,14 +419,14 @@ describe("start_thread on yourself", () => {
       await expect.poll(async () => (await messages(looked.body.threadId)).filter((message) => message.role === "user").length, { timeout: 15_000 }).toBe(2);
       const followUp = (await messages(looked.body.threadId)).filter((message) => message.role === "user").at(-1);
       expect(followUp.text).toContain("Now check the config too.");
-      // still read-only: the thread kept Ask
-      expect(await taskOf(bot.id, looked.body.threadId)).toMatchObject({ approvalMode: "ask" });
+      // #4200: still the bot's level, no level of its own
+      expect((await taskOf(bot.id, looked.body.threadId))?.approvalOwn).toBeUndefined();
       // resuming opens no row: the main thread, the person's own and the read-only one
       expect((await botState(bot.id)).tasks).toHaveLength(3);
       release(looked.body.threadId);
       await expect.poll(async () => (await taskOf(bot.id, looked.body.threadId))?.busy, { timeout: 15_000 }).toBe(false);
 
-      // a thread opened at the bot's level, resumed read-only, drops to Ask
+      // a thread opened at the bot's level, resumed read-only, drops its own standing approvals
       const wide = await api("POST", "/api/internal/threads", { title: "Wide", message: "Fix the typo." }, token);
       // The level belongs to the bot (#1207): a thread opened at it keeps no
       // copy and no exception, so it reads the bot's Edits on every turn.
@@ -436,7 +436,8 @@ describe("start_thread on yourself", () => {
       await expect.poll(async () => (await taskOf(bot.id, wide.body.threadId))?.busy, { timeout: 15_000 }).toBe(false);
       const narrowed = await api("POST", "/api/internal/threads", { message: "Only look this time.", resumeThreadId: wide.body.threadId, readOnly: true }, token);
       expect(narrowed.body).toMatchObject({ resumed: true, readOnly: true });
-      expect(await taskOf(bot.id, wide.body.threadId)).toMatchObject({ approvalMode: "ask", alwaysAllow: [] });
+      expect(await followsBotLevel(bot.id, wide.body.threadId)).toBe(true);
+      expect((await taskOf(bot.id, wide.body.threadId))?.alwaysAllow ?? []).toEqual([]);
       release(wide.body.threadId);
       release(bot.threadId);
       await expect.poll(async () => (await botState(bot.id))?.busy, { timeout: 15_000 }).toBe(false);
@@ -482,7 +483,9 @@ describe("start_thread on yourself", () => {
       const elsewhere = await api("POST", "/api/internal/threads", { title: "Retired engine", message: "go" },
         await mintedToken(pm.id, fresh.body.task.threadId));
       expect(elsewhere.status).toBe(201);
-      expect(await taskOf(pm.id, elsewhere.body.threadId)).toMatchObject({ modelSelection: sonnet, followsBotModel: true, approvalMode: "ask", alwaysAllow: [] });
+      expect(await taskOf(pm.id, elsewhere.body.threadId)).toMatchObject({ modelSelection: sonnet, followsBotModel: true });
+      // #4200: the engine change leaves no level on the conversation
+      expect((await taskOf(pm.id, elsewhere.body.threadId))?.approvalOwn).toBeUndefined();
       expect((await messages(elsewhere.body.threadId)).filter((message) => message.tool?.name?.startsWith("notice: This thread's model (old-model)")))
         .toHaveLength(1);
       expect(await botState(pm.id)).toMatchObject({ modelSelection: sonnet, approvalMode: "edits" });

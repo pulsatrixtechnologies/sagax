@@ -81,9 +81,9 @@ describe("Permissions on the profile page (plain surface)", () => {
   });
 
   it("says the applied level as a subtitle with a plain pill", async () => {
-    const node = await renderPlain(createElement(AppliedLevelNote, { setting: "full", applied: { mode: "ask", reason: "thread" }, onUseSetting: vi.fn() }));
+    const node = await renderPlain(createElement(AppliedLevelNote, { setting: "full", applied: { mode: "ask", reason: "consent" }, onConfirmFull: vi.fn() }));
     expect(node.querySelector('[data-approval-applied="ask"]')).not.toBeNull();
-    expect(node.textContent).toContain("Use Full access here");
+    expect(node.textContent).toContain("Confirm Full access");
     expectReferenceLook(node);
   });
 

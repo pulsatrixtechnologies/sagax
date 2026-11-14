@@ -125,14 +125,6 @@ struct SettingsTreeRow: View {
                     Text("This phone forgets this computer. Pair it again to come back.")
                 }
         // Bots
-        case .autoReview:
-            SettingsRow(
-                title: "Auto-review",
-                subtitle: "Require approval for risky shell, MCP, and computer actions.",
-                accessory: .toggle(Binding(get: { model.autoReview }, set: { on in Task { await model.setAutoReview(on) } })),
-                height: 75,
-                identifier: "settings-auto-review"
-            )
         case .autoReviewRules:
             SettingsRow(title: "Auto-review Rules", accessory: .valueChevron(model.rules.map { "\($0.total)" } ?? ""), height: 43.33, identifier: "settings-rules") {
                 navigator.push(.rules)

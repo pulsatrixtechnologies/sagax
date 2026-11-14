@@ -2,8 +2,10 @@
 // conversation really runs at, when it is not the bot's own setting, as the
 // server judges its turns (WireBot.approvalApplied, shared/approval-mode.ts
 // appliedLevelReason). The selector above shows the bot's setting; this
-// line says, in words, why this conversation differs and offers the way
-// back where there is one. Nothing is shown when both are the same.
+// line says, in words, why this conversation differs. #4200: a conversation
+// holds no level of its own any more, so there is no way back to offer from
+// here; Full access that waits for its owner's confirmation keeps its
+// button. Nothing is shown when both are the same.
 import { TriangleAlert } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -13,10 +15,7 @@ import { PILL, useSettingsSurface } from "../SettingsPrimitives";
 import type { AppliedApprovalLevel, AppliedLevelReason, ApprovalMode } from "../../../shared/approval-mode";
 
 const REASON: Record<AppliedLevelReason, LocaleKey> = {
-  thread: "approvalApplied.reason.thread",
   delegated: "approvalApplied.reason.delegated",
-  engine: "approvalApplied.reason.engine",
-  safety: "approvalApplied.reason.safety",
   pending: "approvalApplied.reason.pending",
   consent: "approvalApplied.reason.consent",
   "member-policy": "approvalApplied.reason.memberPolicy",
@@ -24,10 +23,6 @@ const REASON: Record<AppliedLevelReason, LocaleKey> = {
   guest: "approvalApplied.reason.guest",
   mail: "approvalApplied.reason.mail",
 };
-
-/** The reasons the person can undo from here: the conversation follows the
- * bot again, or Full access gets its confirmation. */
-const FIXABLE: ReadonlySet<AppliedLevelReason> = new Set(["thread", "delegated", "engine", "safety", "consent"]);
 
 function levelName(mode: ApprovalMode): string {
   return t(`approvalMode.${mode}.label` as LocaleKey);
@@ -37,7 +32,7 @@ export function appliedLevelLine(applied: AppliedApprovalLevel): string {
   return t("approvalApplied.line", { level: levelName(applied.mode), reason: t(REASON[applied.reason]) });
 }
 
-export function AppliedLevelNote({ setting, applied, onUseSetting }: { setting: ApprovalMode; applied: AppliedApprovalLevel; onUseSetting?: () => void }) {
+export function AppliedLevelNote({ setting, applied, onConfirmFull }: { setting: ApprovalMode; applied: AppliedApprovalLevel; onConfirmFull?: () => void }) {
   // The bot's profile page (#2313): the note reads as the row's subtitle,
   // with no box of its own, and the way back is a plain pill.
   const plain = useSettingsSurface() === "plain";
@@ -53,9 +48,9 @@ export function AppliedLevelNote({ setting, applied, onUseSetting }: { setting: 
     >
       <TriangleAlert size={13} aria-hidden="true" className="shrink-0 text-warning" />
       <span className={cn("min-w-0 flex-1", !plain && "text-ink")}>{appliedLevelLine(applied)}</span>
-      {onUseSetting && FIXABLE.has(applied.reason) && (
-        <button type="button" data-approval-applied-fix="" onClick={onUseSetting} className={plain ? cn(PILL, "shrink-0") : "shrink-0 text-accent hover:underline"}>
-          {applied.reason === "consent" ? t("approvalApplied.confirmFull") : t("approvalApplied.useSetting", { level: levelName(setting) })}
+      {onConfirmFull && applied.reason === "consent" && (
+        <button type="button" data-approval-applied-fix="" onClick={onConfirmFull} className={plain ? cn(PILL, "shrink-0") : "shrink-0 text-accent hover:underline"}>
+          {t("approvalApplied.confirmFull")}
         </button>
       )}
     </div>

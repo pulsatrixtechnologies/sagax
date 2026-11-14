@@ -235,8 +235,6 @@ type ThreadRowProps = {
   onPin?: (task: ThreadRowTask, pinned: boolean) => void;
   onSnooze?: (task: ThreadRowTask, snoozedUntil: number | null) => void;
   onLink?: (task: ThreadRowTask, link: string | null) => void;
-  /** Copy this bot's current approval level and saved approvals onto this thread. */
-  onRefreshPermissions?: (task: ThreadRowTask) => void;
   /** Show the thread beside the main chat: the menu's Open beside, and
    * Option-click (Alt-click) on the row. Bot threads only. */
   onOpenAside?: (task: ThreadRowTask) => void;
@@ -263,7 +261,7 @@ const sameThreadRow = ({ task: previousTask, ...previous }: ThreadRowProps, { ta
 
 /** One quiet row for bot and group histories. Surface denotes selection;
  * working/waiting/unread remain independent signals, never different cards. */
-export const SidebarThreadRow = memo(function SidebarThreadRow({ task, ownerId, current, compact, folders, onSelect, onRename, onRegenerateTitle, onDelete, onMove, onArchive, onPin, onSnooze, onLink, onRefreshPermissions, onOpenAside: openAside, onMakeConfidential, onPrefetch, activityLabel, now }: ThreadRowProps) {
+export const SidebarThreadRow = memo(function SidebarThreadRow({ task, ownerId, current, compact, folders, onSelect, onRename, onRegenerateTitle, onDelete, onMove, onArchive, onPin, onSnooze, onLink, onOpenAside: openAside, onMakeConfidential, onPrefetch, activityLabel, now }: ThreadRowProps) {
   // The thread on screen in the main chat has nothing to open beside it.
   const onOpenAside = current ? undefined : openAside;
   const [menu, setMenu] = useState<{ left: number; top: number } | null>(null);
@@ -359,7 +357,6 @@ export const SidebarThreadRow = memo(function SidebarThreadRow({ task, ownerId, 
       onCopyLink: () => { void copyText(threadRefUrl({ botId: ownerId, threadId: task.threadId })); },
       ...(onRegenerateTitle ? { onRegenerateTitle: (onSettled: (ok: boolean) => void) => onRegenerateTitle(task, onSettled) } : {}),
       ...(onLink ? { onRemoveLink: () => onLink(task, null) } : {}),
-      ...(onRefreshPermissions ? { onRefreshPermissions: () => onRefreshPermissions(task) } : {}),
       ...(teamBotSourceAllowed(ownerId) ? { onCreateTeamBot: () => openTeamBotFromThread({ botId: ownerId, threadId: task.threadId, title: task.title }) } : {}),
       ...(onOpenAside ? { onOpenAside: () => onOpenAside(task) } : {}),
       ...(onMakeConfidential && task.confidential !== true ? { onMakeConfidential: () => onMakeConfidential(task) } : {}),

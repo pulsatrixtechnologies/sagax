@@ -6,34 +6,42 @@ export const APPROVAL_MODES = ["ask", "edits", "auto", "full", "custom"] as cons
 
 export type ApprovalMode = (typeof APPROVAL_MODES)[number];
 
-/** Why a thread keeps its own approval level instead of its bot's
- * (WireTask.approvalOwn, #1169/#1170). Every other thread follows its bot's
- * current level at the start of each turn: nothing is copied at creation. */
-export const APPROVAL_EXCEPTIONS = ["thread", "delegated", "engine", "safety"] as const;
+/** #4200 (one approval level per bot): a conversation never holds a level
+ * of its own. The only conversation-level record left is a Primary Bot's
+ * hand-off ("delegated"), and it only ever widens the receiving bot's own
+ * level: whatever the person sets on the bot applies at once to every one of
+ * its conversations. The older exceptions ("thread", "engine", "safety")
+ * are dropped at start (store load). */
+export const APPROVAL_EXCEPTIONS = ["delegated"] as const;
 export type ApprovalException = (typeof APPROVAL_EXCEPTIONS)[number];
 export function isApprovalException(value: unknown): value is ApprovalException {
   return typeof value === "string" && (APPROVAL_EXCEPTIONS as readonly string[]).includes(value);
 }
 
-/** The level a thread runs at as stored: its own while it holds an
- * exception, else its bot's, live. Standing approvals: an exception keeps
- * only its own; a thread that follows the bot gets the bot's and those
+/** Whether a Primary Bot's hand-off still lifts this conversation above its
+ * bot's own level. Custom is a separate grant and is never compared. */
+export function delegatedLevelWidens(botLevel: ApprovalMode, delegated: ApprovalMode): boolean {
+  if (botLevel === "custom" || delegated === "custom") return false;
+  return approvalModeWidens(botLevel, delegated);
+}
+
+/** The level a thread runs at as stored: its bot's, live (#4200). A
+ * Primary Bot's hand-off (approvalOwn "delegated") counts only while it is
+ * wider than the bot's own level. Standing approvals: the bot's and those
  * saved in the thread. Server (projectBotForTask) and clients share it. */
 export function threadApprovalFields<B extends { approvalMode?: unknown; autoApprove?: boolean; alwaysAllow?: string[] }>(
   bot: B,
   task: { approvalOwn?: unknown; approvalMode?: unknown; autoApprove?: boolean; alwaysAllow?: string[] },
 ): Pick<B, "approvalMode" | "autoApprove" | "alwaysAllow"> {
-  if (isApprovalException(task.approvalOwn)) {
-    return {
-      approvalMode: (task.approvalMode ?? (task.autoApprove === undefined ? bot.approvalMode : undefined)) as B["approvalMode"],
-      autoApprove: task.autoApprove ?? bot.autoApprove,
-      alwaysAllow: [...(task.alwaysAllow ?? bot.alwaysAllow ?? [])],
-    };
+  const alwaysAllow = [...new Set([...(bot.alwaysAllow ?? []), ...(task.alwaysAllow ?? [])])];
+  if (isApprovalException(task.approvalOwn) && isApprovalMode(task.approvalMode)
+    && delegatedLevelWidens(approvalModeFor(bot), task.approvalMode)) {
+    return { approvalMode: task.approvalMode as B["approvalMode"], autoApprove: task.approvalMode === "auto", alwaysAllow };
   }
   return {
     approvalMode: bot.approvalMode as B["approvalMode"],
     autoApprove: bot.autoApprove,
-    alwaysAllow: [...new Set([...(bot.alwaysAllow ?? []), ...(task.alwaysAllow ?? [])])],
+    alwaysAllow,
   };
 }
 
@@ -160,16 +168,16 @@ export function engineApprovalMode(level: ApprovalMode, rulesHold: boolean): App
  * (2026-10-28, one source of truth: what the selector shows is what the
  * server applies). The server works it out where it judges a turn
  * (approvalModeForTurn); every client reads it, never guesses it.
- * - thread, delegated, engine, safety: the conversation holds its own level
- *   (WireTask.approvalOwn);
+ * - delegated: a Primary Bot's hand-off lifts it above the bot's level
+ *   (WireTask.approvalOwn, #4200: never below it);
  * - pending: a Full or Custom choice still waits for its confirmation;
  * - consent: Full needs the bot's current owner to confirm it;
  * - member-policy: the organization keeps this level off for members' bots;
  * - engine-unsupported: the conversation's engine cannot run this level;
  * - guest: someone else drives this turn on a Cloud home;
- * - mail: a routine woken by an email runs at Ask. */
+ * - mail: a routine woken by an email runs at Ask (never on Full, #4200). */
 export const APPLIED_LEVEL_REASONS = [
-  "thread", "delegated", "engine", "safety", "pending", "consent", "member-policy", "engine-unsupported", "guest", "mail",
+  "delegated", "pending", "consent", "member-policy", "engine-unsupported", "guest", "mail",
 ] as const;
 export type AppliedLevelReason = (typeof APPLIED_LEVEL_REASONS)[number];
 
@@ -206,26 +214,6 @@ export function appliedLevelReason(setting: ApprovalMode, applied: ApprovalMode,
   if (setting === "full" && checks.consentMissing) return "consent";
   if (checks.memberPolicy) return "member-policy";
   return "engine-unsupported";
-}
-
-/** Whether a conversation's own exception may give way to its bot's
- * setting at start-up (2026-10-28 migration): an exception nobody chose in
- * that conversation ("engine": an engine change asked again; "safety": a
- * grant that never finished), narrower than the bot's setting, on an engine
- * that runs the bot's setting. A person's own choice in the conversation
- * ("thread") and a Primary Bot's handoff ("delegated") stay, and a level is
- * never narrowed. */
-export function staleThreadException(input: {
-  exception: unknown;
-  threadLevel: ApprovalMode;
-  setting: ApprovalMode;
-  engineRunsSetting: boolean;
-}): boolean {
-  if (input.exception !== "engine" && input.exception !== "safety") return false;
-  if (!input.engineRunsSetting) return false;
-  // Custom is a separate grant, never reached by this pass
-  if (input.setting === "custom" || input.threadLevel === "custom") return false;
-  return approvalModeWidens(input.threadLevel, input.setting);
 }
 
 /** The bot's own setting as a client reads it: `approvalSetting` from a

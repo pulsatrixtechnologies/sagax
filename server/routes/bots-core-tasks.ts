@@ -46,7 +46,6 @@ export function createBotsCoreTasksRoutes(deps: BotsCoreRouteDeps): RouteHandler
       scopedThreadViewer,
       conversationThreadFor,
       selectViewerThread,
-      applyAutoReviewDefault,
       noteStreamSend,
       refreshStreamDigests,
       actorKey,
@@ -146,8 +145,9 @@ export function createBotsCoreTasksRoutes(deps: BotsCoreRouteDeps): RouteHandler
       const ownerCreates = !creator || viewerBotLevel(auth, bot) === "owner";
       const task = store.createTask(bot.id, typeof body.title === "string" ? body.title : undefined, ownerCreates && !startedAside, body.projectId, undefined, body.approvalMode, creator && isPrincipalId(creator) ? creator : undefined, undefined, hidden, cwd, confidentialChoice.confidential);
       if (!task) return json(res, 500, { error: "couldn't create that task" });
-      // Settings > Bot > Auto-review: a new conversation starts reviewed.
-      if (body.approvalMode === undefined) applyAutoReviewDefault(auth, bot.id, task.threadId);
+      // #4200: a new conversation runs at its bot's level. The auto-review
+      // default no longer writes a level of its own on it (that wrote Approve
+      // for me on conversations of a bot set to Full access).
       if (creator && !startedAside) selectViewerThread(bot.id, creator, task.threadId);
       // "New topic" in a single stream (threads off): a stream segment from
       // the start, and the topic it closes gets its digest written now, in

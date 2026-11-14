@@ -1,19 +1,12 @@
 // The "Bot" section of the phone's Settings sheet (iOS parity, screen 12):
-// the auto-review default for new conversations, and the time zone routines
+// the retired auto-review default (ignored) and the time zone routines
 // run in. Kept for the whole server on a personal (solo) server, and per
 // person (principal id) on an organization server, in one small JSON file of
 // the data directory, written atomically (0600).
 //
-// - autoReviewDefault: when on, a conversation opened afterwards starts in a
-//   level where risky shell, MCP and computer actions are reviewed before
-//   they run (autoReviewThreadMode below): the engine's own reviewer
-//   ("auto": Codex, Claude, Cursor, Grok, Qwen) where it has one, otherwise
-//   Ask (the person approves each risky action; Full and Auto are tightened
-//   to Ask, Ask and Edits stay).
-//   Off changes nothing: a new conversation takes its bot's level, as before.
-//   It never touches a conversation that exists, never leaves Custom (the
-//   desktop's own confirmation), and never turns on Auto for a bot that
-//   works on this computer (that needs its own warning).
+// - autoReviewDefault: kept only so released phones can still save it. Since #4200 (one
+//   approval level per bot) it no longer writes a level on new
+//   conversations: every conversation runs at its bot's level.
 // - timeZone: an IANA zone, or null for the host's. Daily schedules, interval
 //   windows and weekdays of routines are read in it (server/routines/routines.ts);
 //   cron routines keep the zone saved with them.
@@ -23,7 +16,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
 export interface BotSettings {
@@ -153,21 +145,4 @@ export function createBotSettingsStore(dataDir: string): BotSettingsStore {
       persist();
     },
   };
-}
-
-/** The level a new conversation starts in when auto-review is on, or null to
- * keep the one it inherited (see the header). */
-export function autoReviewThreadMode(input: {
-  current: ApprovalMode;
-  /** The engine reviews risky actions itself in "auto" (hasNativeAutoReview). */
-  nativeReviewer: boolean;
-  /** The engine supports "auto" here (supportsApprovalMode). */
-  supportsAuto: boolean;
-  /** The bot works on this computer, where Auto needs its own warning. */
-  thisComputer: boolean;
-}): ApprovalMode | null {
-  if (input.current === "custom") return null;
-  if (input.nativeReviewer && input.supportsAuto && !input.thisComputer) return input.current === "auto" ? null : "auto";
-  // No reviewer here: whatever would run risky actions unasked asks instead.
-  return input.current === "full" || input.current === "auto" ? "ask" : null;
 }

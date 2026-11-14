@@ -30,6 +30,7 @@ import { blockedDmSender, notifyReportsChanged } from "@/lib/moderation";
 import { approvalWithdrawKey, showNotification, withdrawNotification } from "@/lib/notify";
 import { speaker } from "@/lib/tts";
 import { botShowsUnread } from "@/lib/bot-unread";
+import { botReadPoster } from "@/lib/bot-read-post";
 import { currentCall } from "@/lib/call";
 import { singleStreamTurnField } from "@/lib/thread-preferences";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
@@ -70,6 +71,8 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
           break;
         case "message": {
           rawDispatch({ type: "messageAdded", threadId: frame.threadId, message: frame.message as Message });
+          // a new line: the thread's next read may change something again
+          botReadPoster.noteLine(frame.threadId);
           if (frame.message?.role === "user" && typeof frame.message.queueId === "string") {
             rawDispatch({
               type: "consumePendingQueued",
@@ -131,8 +134,12 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
             // Hidden routine runs must not put the dot back on the next frame.
             // No task list: the bot flag is the unread signal.
             bot.unread = botShowsUnread(bot);
+            // #4187: one read per thread in flight, never a second one that
+            // would change nothing (bot-read-post.ts)
             for (const threadId of [...(wasUnread ? [shown] : []), ...readWith]) {
-              fetch(`/api/bots/${bot.id}/read`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ threadId }) }).catch(() => {});
+              // no thread on screen yet: the bot's own, as the server reads it
+              const read = threadId ?? bot.threadId;
+              if (read) botReadPoster.read(bot.id, read);
             }
           }
           rawDispatch({

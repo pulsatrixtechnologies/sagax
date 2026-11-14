@@ -168,7 +168,8 @@ describe("bots-mutate routes", () => {
     const deps = baseDeps();
     const { ctx, json } = context("/api/bots/osprey/read", "POST", { threadId: "thread-1" });
     await createBotsMutateRoutes(deps)(ctx);
-    expect(deps.store.patchTask).toHaveBeenCalledWith("osprey", "thread-1", expect.objectContaining({ unread: false }));
+    // #4187: the flip from unread to read is announced (one bot frame)
+    expect(deps.store.patchTask).toHaveBeenCalledWith("osprey", "thread-1", expect.objectContaining({ unread: false }), { announce: true });
     expect(deps.pushHub.noteRead).toHaveBeenCalledWith("pr_osprey", "thread-1");
     expect(json).toHaveBeenCalledWith(ctx.res, 200, expect.objectContaining({ bot: expect.anything() }));
   });

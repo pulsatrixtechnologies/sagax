@@ -85,12 +85,16 @@ async function handleBotRead(env: BotsMutateEnv): Promise<boolean> {
     const current = env.requestedTaskBot(m[1], body?.threadId);
     const task = env.store.taskByThread(current.id, current.threadId);
     const cursor = env.readCursor(current.threadId);
-    const changed = Boolean(task?.unread) || (cursor.lastReadMessageId !== undefined && task?.lastReadMessageId !== cursor.lastReadMessageId);
-    if (changed) env.store.patchTask(current.id, current.threadId, { unread: false, ...cursor });
+    // #4187: a desktop reads the open thread while a bot streams into it, so
+    // most reads only move the cursor. Only the flip from unread to read is
+    // news for the clients: patchTask's store change is its one bot frame.
+    // A cursor that only moves is bookkeeping, saved later and coalesced,
+    // without a frame (the next unread frame carries it to the divider).
+    const flips = Boolean(task?.unread);
+    const moves = Boolean(task) && cursor.lastReadMessageId !== undefined && task?.lastReadMessageId !== cursor.lastReadMessageId;
+    if (flips || moves) env.store.patchTask(current.id, current.threadId, { unread: false, ...cursor }, { announce: flips });
     env.pushHub.noteRead(env.actorPrincipalId(env.auth), current.threadId);
-    const visible = env.wireBot(env.store.bot(current.id)!);
-    if (changed) env.broadcast({ kind: "bot", bot: visible });
-    env.json(env.res, 200, { bot: visible });
+    env.json(env.res, 200, { bot: env.wireBot(env.store.bot(current.id)!) });
     return true;
   }
   return false;

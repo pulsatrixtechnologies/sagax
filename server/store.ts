@@ -3624,7 +3624,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     };
   }
 
-  patchTask(botId: string, threadId: string, patch: TaskPatch): TaskRecord | null {
+  /** `announce: false`: a change no client shows (a read cursor that only
+   * moves) is saved without a bot frame (#4187). */
+  patchTask(botId: string, threadId: string, patch: TaskPatch, { announce = true }: { announce?: boolean } = {}): TaskRecord | null {
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
@@ -3668,7 +3670,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       if (bot.threadId === threadId) this.mirrorActiveTask(bot, task);
       bot.unread = botHasPersonUnread(bot);
     }, revocation && (() => Object.assign(task, revocation)), !touchesPermissions(patch));
-    this.emit({ type: "bot", botId });
+    if (announce) this.emit({ type: "bot", botId });
     return task;
   }
 

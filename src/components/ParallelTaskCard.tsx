@@ -16,8 +16,9 @@ import { useEffect, useState } from "react";
 import { ChevronRight, GitFork, Loader2, Square } from "lucide-react";
 
 import { liveParallelState, type ParallelTaskState } from "../../shared/parallel-tasks";
-import { api, openThread, useStore, type Message } from "@/state/store";
+import { openThread, useStore, type Message } from "@/state/store";
 import { pendingQuestions } from "@/lib/pending-question";
+import { threadHeadPage } from "@/lib/thread-head-page";
 import { usePinnedHeld } from "@/lib/pinned-waiting";
 import { QuestionCard } from "./QuestionCard";
 import { StepRow } from "./StepRow";
@@ -58,7 +59,7 @@ export function parallelCardState(message: Message, task: { busy?: boolean; acti
 /** #2082 (JC, 2026-11-05): in the one conversation (threads off) a parallel
  * task's question lives inline in the bot's chat, under its card, answered
  * right there: no "Open" button, never a side thread. */
-function useInlineQuestions(threadId: string | undefined, enabled: boolean, version: unknown): Message[] {
+function useInlineQuestions(threadId: string | undefined, enabled: boolean, version: string | number | undefined): Message[] {
   const [found, setFound] = useState<{ key: string; questions: Message[] }>({ key: "", questions: [] });
   const key = enabled && threadId ? `${threadId}:${String(version)}` : "";
   useEffect(() => {
@@ -66,7 +67,8 @@ function useInlineQuestions(threadId: string | undefined, enabled: boolean, vers
     let live = true;
     void (async () => {
       try {
-        const page = await api(`/api/threads/${threadId}/messages?limit=60`) as { messages?: Message[] };
+        // #4187: the page the conversation's approvals read for the same change
+        const page = await threadHeadPage(threadId, version ?? 0);
         if (live) setFound({ key, questions: pendingQuestions(page.messages ?? []) });
       } catch {
         // the card still says the task waits on the person

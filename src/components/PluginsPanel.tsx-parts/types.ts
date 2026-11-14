@@ -50,7 +50,9 @@ export type Page =
   /** Connect apps > Tailscale: join a bot computer to the person's tailnet */
   | { page: "tailscale" }
   /** Connect Apps > "Add a custom connector" (Grok Bot's form) */
-  | { page: "connector" };
+  | { page: "connector" }
+  /** #4185: one of the person's Perspicax products */
+  | { page: "product"; id: string };
 
 export interface HarnessAnswer {
   manageUrl?: string;

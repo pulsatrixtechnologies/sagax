@@ -69,6 +69,7 @@ function blocksExchange(message: Message): boolean {
   if (
     message.kind === "options" ||
     message.kind === "secret" ||
+    message.kind === "productKey" ||
     message.kind === "access" ||
     message.kind === "routine.run" ||
     message.kind === "goal.run"

@@ -11,7 +11,9 @@ function dispatchSecretResume(entry: SecretResumeEntry) {
   if (!owner) return;
   const customCard = host.secretMessage(entry.botId, entry.threadId, entry.messageId)?.secret;
   const prompt = entry.prompt ?? (
-    isCustomSecret(customCard)
+    customCard?.target === "perspicaxProduct"
+      ? host.credentialUpdateText(entry.label, entry.outcome, customCard)
+      : isCustomSecret(customCard)
       ? (entry.outcome === "provided"
         ? `Sagax secret update: ${savedSecretText(entry.label, host.customSecretVault.savedFor(entry.messageId))} Continue the task that paused for it.`
         : `Sagax secret update: the person declined to provide ${entry.label}. Continue without it if you can, or say briefly what you cannot do. Do not ask for it in chat.`)

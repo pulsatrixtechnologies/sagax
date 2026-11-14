@@ -14,7 +14,8 @@ function secretMessage(botId: string, threadId: string, messageId: string) {
   // requested this credential may bind it into HPKE AAD or resume its turn.
   const message = host.store.activePath(threadId).find((candidate) => candidate.id === messageId);
   if (owner.group && message?.from?.botId !== botId) return null;
-  return message?.kind === "secret" && message.secret ? message : null;
+  // #4185: a product key card is its own kind (shared/credential-request.ts)
+  return (message?.kind === "secret" || message?.kind === "productKey") && message.secret ? message : null;
 
 }
   return secretMessage;

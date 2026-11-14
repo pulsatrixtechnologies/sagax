@@ -12,6 +12,7 @@
  * Organization for that person. settings-subpage: a Settings sub-page in
  * the same window size, the navigation Connect apps' pages follow
  * (2026-10-28). The bot Rocket has its own plugins (For Rocket).
+ * &products=1 (#4185): the person's Perspicax products at the Me scope.
  * scripts/capture/connect-apps-grokbot.mjs clicks through the screens. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -27,6 +28,7 @@ import { loadLocale, t } from "../lib/i18n";
 import { flowSupersededFixture, flowSupersededPluginsFixture } from "../lib/flow-superseded.fixture";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore } from "../state/store";
+import { parsePersonProducts } from "../../shared/person-products";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -240,6 +242,35 @@ const MANAGE_API: Record<string, unknown> = {
 
 // The same contract, with independent state for the person's Me scope.
 MANAGE_API["/api/me/plugins"] = { ...(MANAGE_API["/api/bots/bot-a/plugins"] as object) };
+
+// ?products=1 (#4185): the person's Perspicax products at the Me scope, one
+// per state; without it the server has none to show (the window unchanged).
+// Neutral names; no key value ever appears, only a masked ending.
+if (params.has("products")) {
+  const form = { kind: "basic", fields: [
+    { slot: "username", label: { en: "Username", fr: "Nom d'utilisateur" }, secret: false, required: true },
+    { slot: "password", label: { en: "Password", fr: "Mot de passe" }, secret: true, required: true },
+  ] };
+  const products = [
+    { id: "prod-psa", name: "Service Desk", icon: { domain: "example.com" }, state: "connected", address: "https://desk.example.com",
+      access: { roles: [{ slug: "tech", name: "Technicians", mode: "dispatch" }] },
+      key: { source: "own", kind: "basic", ending: "a1b2", last_test: { at: new Date(Date.now() - 3 * 3_600_000).toISOString(), ok: true } },
+      form, actions: ["set_own_key", "test", "remove_own_key"], console_url: "https://px.example.test/console/products/prod-psa" },
+    { id: "prod-docs", name: "Knowledge Base", state: "key_missing", address: "https://docs.example.org",
+      access: { roles: [{ slug: "tech", name: "Technicians", mode: "read" }] },
+      form: { kind: "api_key", fields: [{ slot: "token", label: { en: "API token", fr: "Jeton API" }, secret: true, required: true }] },
+      actions: ["set_own_key"], console_url: "https://px.example.test/console/products/prod-docs" },
+    { id: "prod-edr", name: "Endpoint Security", state: "key_refused", state_code: "unauthorized",
+      access: { roles: [{ slug: "sec", name: "Security", mode: "read" }] },
+      key: { source: "own", kind: "api_key", ending: "9f0c", last_test: { at: new Date(Date.now() - 20 * 60_000).toISOString(), ok: false, code: "unauthorized", status: 401 } },
+      form, actions: ["set_own_key", "test", "remove_own_key"] },
+    { id: "prod-voice", name: "Phone Lines", state: "not_served", access: { roles: [] }, actions: [], console_url: "https://px.example.test/console/products/prod-voice" },
+  ];
+  // what Perspicax answers, read as the Sagax server reads it
+  const served = parsePersonProducts(products);
+  MANAGE_API["/api/me/perspicax/products"] = { products: served };
+  for (const product of served) MANAGE_API[`/api/me/perspicax/products/${product.id}`] = { product };
+}
 
 // ?superseded=1: the real member panel, with an obsolete bot tenant copy.
 // All /api responses and the removal stay inside this gallery.

@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 183, covered 183, gaps 0.
+Totals: capabilities 184, covered 184, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -212,6 +212,7 @@ Reading the table:
 | remotesupport:hosts | perspicax | `remote_support_hosts` | `remotesupport:hosts` | covered |
 | remotesupport:hostcode | perspicax | `remote_support_host_code` | `remotesupport:hostcode` | covered |
 | remotesupport:hostrevoke | perspicax | `remote_support_host_revoke` | `remotesupport:hostrevoke` | covered |
+| perspicax:productkey | perspicax | `request_product_key` | `perspicax:productkey` | covered |
 | api:query | perspicax | `<profile>_query` | `api:query` | covered (bridge) |
 | api:write | perspicax | `<profile>_write`, `<profile>_<resource>_write` | `api:write` | covered (bridge) |
 | api:action | perspicax | `<profile>_action` | `api:action` | covered (bridge) |

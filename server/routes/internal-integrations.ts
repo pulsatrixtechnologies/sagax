@@ -7,12 +7,15 @@ import { randomUUID } from "node:crypto";
 import {
   CREDENTIAL_TARGETS,
   CUSTOM_SECRET_TARGET,
+  PRODUCT_KEY_KIND,
+  PRODUCT_KEY_TARGET,
   isCredentialTargetId,
   isPendingCredentialRequest,
   isPendingCustomSecretRequest,
   type CredentialTargetId,
 } from "../../shared/credential-request.ts";
 import { deliveryNote, parseCustomSecretRequest } from "../host/custom-secrets.ts";
+import { productCardReason, type PersonProduct } from "../../shared/person-products.ts";
 import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import {
   botAddedMcpServerEnabled,
@@ -52,6 +55,26 @@ function mcpAction(body: unknown): { action: "add" | "restart" | string; body: u
 }
 
 const RESTART_UNKNOWN_ACTION = "Unknown action: send add (the default) or restart.";
+
+export type OwnerProductRead =
+  | { ok: true; product: PersonProduct; for: string }
+  | { ok: false; error: "unavailable" | "not_found" | "sign_in" | "unreachable" };
+
+/** What the bot is told when no product key card could be raised (#4185). */
+function ownerProductRefusal(error: Exclude<OwnerProductRead, { ok: true }>["error"], productId: string): { status: number; error: string } {
+  switch (error) {
+    case "unavailable": return { status: 404, error: "Product keys are not available on this deployment yet: no card can be shown. Tell the person in one line which product needs their key; they set it in Perspicax." };
+    case "not_found": return { status: 404, error: `No product ${productId} for this person: call api_list for the product ids they hold.` };
+    case "sign_in": return { status: 409, error: "The person's Pulsatrix sign-in has expired: ask them to sign in again, then retry." };
+    default: return { status: 502, error: "Perspicax could not be reached: try again later." };
+  }
+}
+
+/** The text of a product key card: what a released app that does not know
+ * the card shows instead of it (shared/credential-request.ts PRODUCT_KEY_KIND). */
+function productKeyHandoff(botName: string, productName: string): string {
+  return `${botName} needs your key for ${productName}. Update Sagax to enter it securely on this card; never paste it in the chat.`;
+}
 
 function credentialDesktopHandoff(label: string): string {
   return `Securely provide the ${label} from Sagax on your phone or computer. It is never added to chat.`;
@@ -129,6 +152,11 @@ export interface InternalIntegrationsDeps {
     from?: { botId?: unknown };
   }>;
   patchMessage(threadId: string, messageId: string, patch: Record<string, unknown>): void;
+  /** #4185: one of the Perspicax products of the bot's owner, read as that
+   * person (`for`: their principal id). unavailable: the server is not
+   * linked, or its Perspicax has no product routes yet; not_found: not one of
+   * their products; sign_in: their sign-in expired; unreachable: no answer. */
+  ownerProduct?(botId: string, productId: string): Promise<OwnerProductRead>;
   botForThread(botId: string, threadId: string): InternalIntegrationsBot | null | undefined;
   orgXaiMediaGiven(media: "voice", principalId: string | null, ownerPrincipalId: string): boolean;
   turnMediaPrincipal(threadId: string): string | null;
@@ -397,6 +425,44 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       const fromThreadId = capability.threadId;
       const owner = deps.ownsThread(from.id, fromThreadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });
+      // #4185: the person's own key for one of their Perspicax products. The
+      // card names the product only; it reads the form from Perspicax.
+      if (typeof body.productId === "string" && body.productId.trim()) {
+        const productId = body.productId.trim().slice(0, 256);
+        // a routine, or a bot asked by another bot, never raises a card for the person
+        if ((capability.depth ?? 0) > 0 || deps.turnIsRoutine(fromThreadId)) return json(res, 409, { error: "A product key card is shown only in a person's own turn. Tell the person which product needs a key." });
+        const read: OwnerProductRead = deps.ownerProduct ? await deps.ownerProduct(from.id, productId) : { ok: false, error: "unavailable" };
+        if (!read.ok) {
+          const refusal = ownerProductRefusal(read.error, productId);
+          return json(res, refusal.status, { error: refusal.error });
+        }
+        const product = read.product;
+        const reason = productCardReason(product.state) ?? (product.actions.includes("set_own_key") || product.actions.includes("replace_key") ? "setup" : null);
+        if (!reason) return json(res, 200, { alreadyConfigured: true, label: product.name });
+        const message = deps.appendMessage(fromThreadId, {
+          role: "bot",
+          kind: PRODUCT_KEY_KIND,
+          text: productKeyHandoff(from.name, product.name),
+          ...(owner.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
+          secret: {
+            target: PRODUCT_KEY_TARGET,
+            label: product.name,
+            description: `${from.name} needs your key for ${product.name}. It goes to Perspicax only; ${from.name} never sees it.`,
+            placeholder: "",
+            helpUrl: "",
+            requestKey: randomUUID(),
+            product: { id: product.id, name: product.name, ...(product.icon ? { icon: product.icon } : {}), reason, for: read.for },
+          },
+        });
+        for (const prior of deps.activePath(fromThreadId)) {
+          if (prior.id === message.id) continue;
+          const secret = prior.secret as { target?: unknown; product?: { id?: unknown }; provided?: unknown; dismissed?: unknown; superseded?: unknown } | undefined;
+          if (prior.kind !== PRODUCT_KEY_KIND || secret?.target !== PRODUCT_KEY_TARGET || secret.product?.id !== product.id) continue;
+          if (secret.provided === true || secret.dismissed === true || secret.superseded === true) continue;
+          deps.patchMessage(fromThreadId, prior.id, { secret: { ...secret, superseded: true } });
+        }
+        return json(res, 201, { messageId: message.id, label: product.name });
+      }
       // Custom secret: label + reason + delivery, kept off Settings.
       if (!isCredentialTargetId(body.credentialId)) {
         const custom = parseCustomSecretRequest(body);

@@ -353,7 +353,7 @@ function portableTask(task: TaskRecord): Record<string, unknown> {
 }
 
 const LIVE_MESSAGE_FIELDS = ["queued", "queueId", "requestPending", "roomRequest", "sendId", "outboundRequest", "teamMemoryRequest", "parallelTask"] as const;
-const CARD_KINDS = new Set(["options", "secret", "access", "routine.run", "goal.run"]);
+const CARD_KINDS = new Set(["options", "secret", "productKey", "access", "routine.run", "goal.run"]);
 
 /** A message as it travels: live fields out; a card (an approval, a
  * connection, a secret request, a routine run) becomes its text, so an
@@ -364,7 +364,7 @@ function portableMessage(message: Message): Message {
   if (CARD_KINDS.has(message.kind)) {
     const parts = [message.text ?? ""];
     if (message.card) parts.push(message.card.title, message.card.subtitle, ...message.card.options, message.card.answered ? `Answer: ${message.card.answered}` : "");
-    if (message.kind === "secret") parts.push("[Secret request: not included]");
+    if (message.kind === "secret" || message.kind === "productKey") parts.push("[Secret request: not included]");
     if (message.routineRun) parts.push(`[Routine: ${message.routineRun.routineName}: ${message.routineRun.status}]`, message.routineRun.summary ?? "");
     if (message.goalRun) parts.push(`[Room goal: ${message.goalRun.status}]`, message.goalRun.goal);
     if (message.access) parts.push(`[Engine access: ${message.access.reason}]`);

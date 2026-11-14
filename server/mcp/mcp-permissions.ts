@@ -276,6 +276,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("remotesupport:hosts", "own", "remote_support_hosts", "perspicax"),
   p("remotesupport:hostcode", "own", "remote_support_host_code", "perspicax"),
   p("remotesupport:hostrevoke", "own", "remote_support_host_revoke", "perspicax"),
+  // #4185: the person's own product key, on a card in their own chat.
+  p("perspicax:productkey", "own", "request_product_key", "perspicax"),
   // Per-profile Perspicax tools, matched by name (profileToolCall). An
   // operation's own tool is not known to be a read, so it needs dispatch.
   profileTool("api:query", "read", "query", "<profile>_query"),

@@ -205,7 +205,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
       "api_lookup", "api_plan", "api_upload", "api_reload", "identity",
       "flow", "flow_action", "remote_support_open", "remote_support_status",
       "remote_support_close", "remote_support_hosts", "remote_support_host_code",
-      "remote_support_host_revoke", "review_write",
+      "remote_support_host_revoke", "review_write", "request_product_key",
       "claim", "claim_list", "claim_release", "claim_renew",
     ],
   },

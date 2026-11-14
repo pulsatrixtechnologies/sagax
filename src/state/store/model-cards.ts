@@ -143,8 +143,13 @@ export interface SecretRequestCardData {
   target:
     | import("../../../shared/credential-request").CredentialTargetId
     | import("../../../shared/credential-vault").VaultLoginTarget
-    | "customSecret";
+    | "customSecret"
+    | "perspicaxProduct";
   vault?: import("../../../shared/credential-vault").VaultRequestCardData;
+  /** perspicaxProduct (#4185): the product the key is for (shared/wire.ts). */
+  product?: import("../../../shared/wire").SecretRequestCardData["product"];
+  /** perspicaxProduct: the last save's test, never a value. */
+  result?: import("../../../shared/wire").SecretRequestCardData["result"];
   label: string;
   description: string;
   placeholder: string;

@@ -16,6 +16,8 @@ import { BotsForView } from "../plugins/BotsForView";
 import { MessagesSetupView } from "../plugins/MessagesSetupView";
 import { MacAppSetupView, macAppTitle } from "../plugins/MacAppSetupView";
 import { CustomConnectorPage } from "../plugins/CustomConnectorPage";
+import { ProductDetailView } from "../plugins/ProductDetailView";
+import type { PersonProduct } from "@/lib/person-products";
 import { detailProps } from "./detailBuilders";
 import type { Page } from "./types";
 import type { PluginsPanelState } from "./usePluginsPanelState";
@@ -31,7 +33,10 @@ export function PluginsPanelSubpage({
   botsForEntry,
   botsForRows,
   toggleBotServers,
+  products,
 }: {
+  /** #4185: the person's Perspicax products (rows of Installed) */
+  products: { products: PersonProduct[]; replace: (product: PersonProduct) => void };
   s: PluginsPanelState;
   a: PluginsPanelActions;
   trail: Crumb[];
@@ -57,9 +62,11 @@ export function PluginsPanelSubpage({
   const skillMissing = page.page === "skill" && Boolean(page.name) && skills !== null && !skills.some((entry) => entry.name === page.name);
   // An entry removed while its "For which bots" is open leaves it too.
   const botsForMissing = page.page === "botsFor" && !botsForEntry && mcp.servers !== null && shownMarketplaces !== null;
+  // #4185: a product no longer served to the person leaves its page too.
+  const productMissing = page.page === "product" && !products.products.some((entry) => entry.id === page.id);
   useEffect(() => {
-    if (detailMissing || skillMissing || botsForMissing) back();
-  }, [detailMissing, skillMissing, botsForMissing, back]);
+    if (detailMissing || skillMissing || botsForMissing || productMissing) back();
+  }, [detailMissing, skillMissing, botsForMissing, productMissing, back]);
   // The GitHub page opened before the marketplaces answered: the GitHub
   // plugin's page, once it is known.
   const githubLate = page.page === "github" && githubKey !== null;
@@ -122,6 +129,10 @@ export function PluginsPanelSubpage({
       </>
     );
   }
+  if (page.page === "product") {
+    const product = products.products.find((entry) => entry.id === page.id);
+    if (product) return <ProductDetailView key={product.id} product={product} onChanged={products.replace} onBack={back} trail={trail} />;
+  }
   if (page.page === "connector") {
     return <CustomConnectorPage mcp={mcp} onBack={back} trail={trail} />;
   }
@@ -175,7 +186,7 @@ export function PluginsPanelSubpage({
   return null;
 }
 
-export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[]): string {
+export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = []): string {
   switch (entry.page) {
     case "main": return connectAppsTabLabel(tab);
     case "botsFor": return t("connectApps.entry.bots");
@@ -189,5 +200,6 @@ export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly Plug
     case "mac-app": return macAppTitle(entry.app);
     case "connector": return t("connectApps.addCustomConnector");
     case "tailscale": return t("connectApps.tailscale.title");
+    case "product": return products.find((product) => product.id === entry.id)?.name ?? t("connectApps.back");
   }
 }

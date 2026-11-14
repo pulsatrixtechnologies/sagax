@@ -154,7 +154,7 @@ import { answeredItemKeys, PEER_ITEM_SCOPE, releasedItemCards, syncPersonItemCar
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
-import { credentialIsConfigured } from "../shared/credential-request.ts";
+import { credentialIsConfigured, PRODUCT_KEY_TARGET } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
@@ -1287,6 +1287,9 @@ import { createBotWizardStore } from "./bots/bot-wizard-store.ts";
 import { awaySkipsDetail, LocalAwayTracker, verdictFromPresence, type AwayVerdict } from "./routines/routine-away.ts";
 import { createPersonLabelRoutes } from "./routes/person-labels.ts";
 import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
+import { createPersonProductsRoutes, createSaveProductKeyCard, createSetProductKey } from "./routes/person-products.ts";
+import { productKeyResumeText } from "../shared/person-products.ts";
+import { createPersonProductsClient } from "./perspicax/person-products.ts";
 import { createMeEnginesRoutes } from "./routes/me-engines.ts";
 import { createOrgBotsRoutes } from "./routes/org-bots.ts";
 import { createPeopleAvatarRoutes } from "./routes/people-avatar.ts";
@@ -1462,7 +1465,7 @@ import { createInternalRoomsRoutes } from "./routes/internal-rooms.ts";
 import { createInternalMessageUserRoutes } from "./routes/internal-message-user.ts";
 import type { ReachablePerson } from "./people/bot-message-user.ts";
 import { createInternalMessagePersonRoutes } from "./routes/internal-message-person.ts";
-import { createInternalIntegrationsRoutes } from "./routes/internal-integrations.ts";
+import { createInternalIntegrationsRoutes, type OwnerProductRead } from "./routes/internal-integrations.ts";
 // IMPORT-ANCHOR:testing-routes
 // IMPORT-ANCHOR:team-map
 import { createTeamMapRoutes } from "./routes/team-map.ts";
@@ -10491,7 +10494,9 @@ const teamSetupDecisionText = (request: TeamSetupRequest): string => {
     ? " The user chose Not now for this suggested specialist. Do not suggest another specialist in this conversation unless they ask for one." : "";
   return `Sagax team setup decision ${request.requestId}: ${JSON.stringify(request.result)}. Report this exact result and continue the user's already requested work. Do not ask for confirmation again or repeat this setup/deletion. A denied or cancelled operation did not authorize any substitute action. Existing thread models were not changed.${notNow}`;
 };
-const credentialUpdateText = (label: string, outcome: "provided" | "dismissed"): string => outcome === "provided"
+const credentialUpdateText = (label: string, outcome: "provided" | "dismissed", secret?: Message["secret"]): string => secret?.target === PRODUCT_KEY_TARGET
+  ? productKeyResumeText(label, outcome === "provided" ? (secret.result ?? { ok: true }) : secret.result && !secret.result.ok ? secret.result : "declined")
+  : outcome === "provided"
   ? `Sagax credential update: the user securely provided ${label}. Continue the task that paused for it. You do not receive the secret and must not ask them to paste it into chat.`
   : `Sagax credential update: the user declined to provide ${label}. Continue without it if possible, or briefly explain the limitation. Do not ask them to paste it into chat.`;
 
@@ -10560,7 +10565,7 @@ function reconcileParkedNode(node: HandoffView): boolean {
     }
     const secret = message.secret;
     if (secret && !secret.superseded && (secret.provided || secret.dismissed)) {
-      if (!coordinator.answerNode(node.id, credentialUpdateText(secret.label, secret.provided ? "provided" : "dismissed"))) return false;
+      if (!coordinator.answerNode(node.id, credentialUpdateText(secret.label, secret.provided ? "provided" : "dismissed", secret))) return false;
       if (!secret.resumed) store.patchMessage(node.threadId, message.id, { secret: { ...secret, resumed: true, error: undefined } });
       return true;
     }
@@ -24567,6 +24572,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   createInternalIntegrationsRoutes({
     bot: (id) => store.bot(id) ?? undefined,
     isPerspicax: () => IDENTITY.kind === "perspicax",
+    ownerProduct: (botId, productId) => ownerPerspicaxProduct(botId, productId),
     ownsThread: (botId, threadId) => {
       const owner = connectorThread(botId, threadId);
       return owner ? { group: Boolean(owner.group) } : null;
@@ -29910,6 +29916,65 @@ ROUTES.push(createMeAvatarRoutes({
     return avatarUrl;
   }
 }));
+// #4185: the person's Perspicax products in Connect Apps (server/routes/person-products.ts),
+// read and written as the person (their own sign-in token) through the link.
+function personProductsOwner(auth: RequestAuth): { principalId: string } | null {
+  if (IDENTITY.kind !== "perspicax" || auth.kind !== "session") return null;
+  const principalId = auth.session.principalId?.trim().toLowerCase();
+  const person = principalId ? principals.byId(principalId) : undefined;
+  if (!person?.subject || person.subject.iss !== IDENTITY.issuer || person.disabledAt !== undefined) return null;
+  return { principalId: person.id };
+}
+async function personProductsSubjectToken(principalId: string): Promise<string | null> {
+  const person = principals.byId(principalId);
+  if (!idpSessions || !person?.subject) return null;
+  const outcome = await idpSessions.subjectToken({ iss: person.subject.iss, sub: person.subject.sub });
+  return outcome.ok ? outcome.token : null;
+}
+const personProducts = createPersonProductsClient({
+  call: (method, path, body, limits) => perspicaxDirectory
+    ? perspicaxDirectory.linkJson(method, path, body, limits)
+    : Promise.resolve({ ok: false as const, error: "link" as const }),
+});
+const personProductsLinked = () => IDENTITY.kind === "perspicax" && perspicaxDirectory !== null;
+const setProductKey = createSetProductKey({ subjectToken: personProductsSubjectToken, client: personProducts });
+/** #4185: one product of a bot's owner, read as that person (the product key
+ * card). A missing product is told apart from a Perspicax without the product
+ * routes (its list answers 404 too), so the bot hears which one it is. */
+async function ownerPerspicaxProduct(botId: string, productId: string): Promise<OwnerProductRead> {
+  const bot = store.bot(botId);
+  if (!bot || !personProductsLinked()) return { ok: false, error: "unavailable" };
+  const principalId = effectiveBotOwner(bot);
+  if (!principalId || !principals.byId(principalId)) return { ok: false, error: "unavailable" };
+  const token = await personProductsSubjectToken(principalId);
+  if (!token) return { ok: false, error: "sign_in" };
+  const read = await personProducts.get(principalId, token, productId);
+  if (read.ok) return { ok: true, product: read.product, for: principalId };
+  if (read.error === "not_found") {
+    const listed = await personProducts.list(principalId, token);
+    return { ok: false, error: !listed.ok && listed.error === "unavailable" ? "unavailable" : "not_found" };
+  }
+  return { ok: false, error: read.error === "subject" ? "sign_in" : read.error === "unavailable" ? "unavailable" : "unreachable" };
+}
+/** #4185: the product key card's Save (server/routes/person-products.ts). */
+const saveProductKeyCard = createSaveProductKeyCard({
+  card: (botId, threadId, messageId) => secretMessage(botId, threadId, messageId) ?? null,
+  cardOwner: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? effectiveBotOwner(bot) : null;
+  },
+  person: personProductsOwner,
+  setProductKey,
+  patchCard: (threadId, messageId, secret) => { store.patchMessage(threadId, messageId, { secret }); },
+  resume: (botId, threadId, messageId) => resumeSecretCard(botId, threadId, messageId, "provided"),
+  state: (botId, threadId, messageId) => currentSecretState(botId, threadId, messageId),
+});
+ROUTES.push(createPersonProductsRoutes({
+  organization: personProductsLinked,
+  person: personProductsOwner,
+  subjectToken: personProductsSubjectToken,
+  client: personProducts,
+}));
 // Shape avatar generate (geometry JSON via the bot's text model; fallback presets).
 // The bot tool and the editor share one generator (the bot's own text model).
 function shapeAvatarGenerator(...args: any[]) {
@@ -35249,7 +35314,7 @@ const widgetCheckAttempts = new WidgetCheckAttempts();
 ROUTES.push(createBotAvatarGenerateRoutes({ store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast }));
 ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrAdminOf, computerOwner, outboundCounts }));
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
-ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret }));
+ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret, saveProductKey: saveProductKeyCard }));
 ROUTES.push(createBotsMutateRoutes({
   resolveSectionId,
   teamDefaultsFor: teamDefaultsForAuth,

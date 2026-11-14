@@ -321,6 +321,61 @@ describe("createInternalIntegrationsRoutes", () => {
     expect(sent).toEqual([{ status: 201, body: { messageId: "sec-1", label: "xAI API key" } }]);
   });
 
+  // #4185: the key card of one of the person's Perspicax products
+  const product = { id: "psa", name: "Acme PSA", state: "key_missing" as const, roles: [], actions: ["set_own_key" as const] };
+  it("POST /request-credential raises a product key card naming the product only, superseding an older one", async () => {
+    const appendMessage = vi.fn((_threadId: string, _message: Record<string, unknown>) => ({ id: "sec-2" }));
+    const patchMessage = vi.fn();
+    const ownerProduct = vi.fn(async () => ({ ok: true as const, product, for: "pr_ann" }));
+    const route = createInternalIntegrationsRoutes(deps({
+      appendMessage, patchMessage, ownerProduct,
+      activePath: () => [
+        { id: "old", kind: "productKey", secret: { target: "perspicaxProduct", product: { id: "psa" } } as never },
+        { id: "other", kind: "productKey", secret: { target: "perspicaxProduct", product: { id: "docs" } } as never },
+      ],
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/request-credential", body: { productId: "psa" } });
+    await run();
+    expect(ownerProduct).toHaveBeenCalledWith("bot-1", "psa");
+    expect(sent).toEqual([{ status: 201, body: { messageId: "sec-2", label: "Acme PSA" } }]);
+    const card = appendMessage.mock.calls[0]![1] as { kind: string; text: string; secret: Record<string, unknown> };
+    expect(card.secret).toMatchObject({ target: "perspicaxProduct", label: "Acme PSA", product: { id: "psa", name: "Acme PSA", reason: "key_missing", for: "pr_ann" } });
+    // its own kind: a released app draws its text (never a one-field key form), which says what to do
+    expect(card.kind).toBe("productKey");
+    expect(card.text).toMatch(/Acme PSA/);
+    expect(card.text).toMatch(/update Sagax/i);
+    expect(card.secret).not.toHaveProperty("form");
+    expect(patchMessage).toHaveBeenCalledOnce();
+    expect(patchMessage).toHaveBeenCalledWith("t-1", "old", { secret: expect.objectContaining({ superseded: true }) });
+  });
+
+  it("POST /request-credential raises no product card in a routine, and says a connected product with nothing to set is connected", async () => {
+    const appendMessage = vi.fn(() => ({ id: "x" }));
+    const routine = call(createInternalIntegrationsRoutes(deps({ appendMessage, turnIsRoutine: () => true, ownerProduct: async () => ({ ok: true as const, product, for: "pr_ann" }) })), { path: "/api/internal/request-credential", body: { productId: "psa" } });
+    await routine.run();
+    expect(routine.sent[0]?.status).toBe(409);
+    const connected = call(createInternalIntegrationsRoutes(deps({ appendMessage, ownerProduct: async () => ({ ok: true as const, product: { ...product, state: "connected" as const, actions: [] }, for: "pr_ann" }) })), { path: "/api/internal/request-credential", body: { productId: "psa" } });
+    await connected.run();
+    expect(connected.sent).toEqual([{ status: 200, body: { alreadyConfigured: true, label: "Acme PSA" } }]);
+    const unknown = call(createInternalIntegrationsRoutes(deps({ appendMessage, ownerProduct: async () => ({ ok: false as const, error: "not_found" as const }) })), { path: "/api/internal/request-credential", body: { productId: "nope" } });
+    await unknown.run();
+    expect(unknown.sent[0]?.status).toBe(404);
+    expect(String((unknown.sent[0]?.body as { error?: unknown })?.error)).toMatch(/api_list/);
+    expect(appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("POST /request-credential tells the bot product keys are not available yet on a deployment without the routes", async () => {
+    const appendMessage = vi.fn(() => ({ id: "x" }));
+    for (const ownerProduct of [async () => ({ ok: false as const, error: "unavailable" as const }), undefined]) {
+      const out = call(createInternalIntegrationsRoutes(deps({ appendMessage, ...(ownerProduct ? { ownerProduct } : {}) })), { path: "/api/internal/request-credential", body: { productId: "psa" } });
+      await out.run();
+      expect(out.sent[0]?.status).toBe(404);
+      expect(String((out.sent[0]?.body as { error?: unknown })?.error)).toMatch(/not available on this deployment yet/);
+      expect(String((out.sent[0]?.body as { error?: unknown })?.error)).not.toMatch(/api_list/);
+    }
+    expect(appendMessage).not.toHaveBeenCalled();
+  });
+
   it("POST /voice-note validates text (400 / 413)", async () => {
     const route = createInternalIntegrationsRoutes(deps());
     const empty = call(route, { path: "/api/internal/voice-note", body: { text: "  " } });

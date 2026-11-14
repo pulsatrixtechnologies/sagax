@@ -136,7 +136,7 @@ export function RoomMessageItem({
       <div className="flex justify-start">
         <OwnerSettled message={m} />
       </div>
-    ) : m.kind === "secret" && m.secret && m.from?.botId ? (
+    ) : (m.kind === "secret" || m.kind === "productKey") && m.secret && m.from?.botId ? (
       <SecretRequestCard botId={m.from.botId} threadId={group.threadId} message={m} />
     ) : m.kind === "signin" && m.signIn && m.from?.botId ? (
       <SignInRequestCard botId={m.from.botId} botName={m.from.name} threadId={group.threadId} message={m} />

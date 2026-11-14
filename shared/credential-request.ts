@@ -64,6 +64,14 @@ export type CredentialConfig = {
 
 /** A secret Sagax does not keep itself: the bot names it, and gets a one-use reference or a private file. */
 export const CUSTOM_SECRET_TARGET = "customSecret";
+/** #4185: the person's own key for one of their Perspicax products; the card
+ * reads the product's form from Perspicax and sends the values there. */
+export const PRODUCT_KEY_TARGET = "perspicaxProduct";
+/** #4185: the message kind of a product key card. Its own kind, not
+ * "secret": a released app that does not know the card draws a kind it does
+ * not know as the message's text (with an update line on the desktop),
+ * never a one-field key form that would send the key to the wrong place. */
+export const PRODUCT_KEY_KIND = "productKey";
 export type SecretDelivery = "ref" | "file";
 export const SECRET_DELIVERIES: readonly SecretDelivery[] = ["ref", "file"];
 export const CUSTOM_SECRET_LABEL_MAX = 80;

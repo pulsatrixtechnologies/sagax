@@ -400,6 +400,8 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
   "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine", "create_routine", "delete_routine",
   "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
+  // #4185: a Perspicax product's key card, asked for now and then.
+  "request_product_key",
   "request_login", "request_sign_in", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",
   // The person's iPhone (agents-phone-tools.ts): rare, and long.
   "phone_tool",

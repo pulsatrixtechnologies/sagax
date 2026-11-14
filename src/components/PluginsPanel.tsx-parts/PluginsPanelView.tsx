@@ -20,6 +20,8 @@ import {
 import { DeveloperLink } from "../settings/DeveloperLink";
 import { MyGithubSummary } from "../settings/MyConnectionsSettings";
 import { usePersonalMcp } from "../plugins/PersonalServers";
+import { productRows } from "../plugins/ProductRows";
+import { usePersonProducts } from "@/lib/person-products";
 import { ConnectAppsView, connectAppsTabLabel, connectedCounts, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
@@ -67,6 +69,9 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // Installed and the same "+ Add" flows as Organization (2026-11-06)
   const personalHere = scope === "me" && Boolean(organization);
   const personal = usePersonalMcp(personalHere);
+  // #4185: the person's Perspicax products, rows of the same Installed list
+  // (none when the server is not linked or Perspicax has no such routes)
+  const products = usePersonProducts(personalHere && perspicaxOrg !== null);
   const marketError = s.marketError;
   const marketNeedsToken = s.marketNeedsToken;
 
@@ -140,7 +145,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // The breadcrumb: each page under the current one. A page opened from a
   // tab shows in that tab under Connect Apps' title: its first crumb is the
   // tab ("Installed"); Browse Bots too, from Discover (2026-10-28).
-  const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry, tab, items, entries), onSelect: () => popTo(depth) }));
+  const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry, tab, items, entries, products.products), onSelect: () => popTo(depth) }));
   const skillsOn = skills !== null && skillsLibraryOn;
   // Only pass a page node when one is open: ConnectAppsView treats any
   // defined page as a subpage and hides the open tab's list.
@@ -148,6 +153,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     <PluginsPanelSubpage
       s={s}
       a={a}
+      products={products}
       trail={trail}
       entries={entries}
       botsForEntry={botsForEntry}
@@ -229,12 +235,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           // the one refresh (#2104): plugins, servers, skills, and the engine
           // accounts' connectors, together
           refreshing={refreshing || harness.loading}
-          onRefresh={() => { refreshAll(); void harness.load(true); if (personalHere) void personal.refresh(); }}
+          onRefresh={() => { refreshAll(); void harness.load(true); if (personalHere) { void personal.refresh(); void products.refresh(); } }}
           installed={(
             <InstalledView
               loading={mcp.servers === null}
               entries={entries}
-              personal={personalHere ? personal.rows : undefined}
+              personal={personalHere ? [...personal.rows, ...productRows(products.products, (product) => push({ page: "product", id: product.id }))] : undefined}
               resolved={scope === "bot" ? botCapabilities.data : undefined}
               resolvedError={scope === "bot" && !botCapabilities.data ? botCapabilities.error : null}
               onRetryResolved={() => void botCapabilities.reload()}

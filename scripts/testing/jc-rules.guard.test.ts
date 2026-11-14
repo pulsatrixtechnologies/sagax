@@ -573,7 +573,7 @@ const MODEL_PICKER_OWNED = [
   "src/components/ModelMenu.tsx",
   "src/lib/model-menu.ts",
   "shared/model-account-pool.ts",
-  "shared/model-provider-unify.ts",
+  "src/lib/model-menu-steps.ts",
   "shared/model-auto-optimize.ts",
   "server/models/resolve-model-account.ts",
 ];

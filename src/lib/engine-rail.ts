@@ -2,7 +2,6 @@
 // and Local (no catalog — inject a model). A missing `access` is Cloud so
 // older payloads stay in the top group.
 import type { InstanceInfo } from "@/state/store";
-import { HARNESS_TOOL_NAME } from "../../shared/harness-matrix";
 import { vendorLabel, vendorOfDriver } from "../../shared/model-provider";
 
 /** The picker lists engines someone can use or finish setting up; the full
@@ -41,15 +40,6 @@ export function signInFamily(instance: { driverKind: string; access?: InstanceIn
 
 /** The provider's label (shared/model-provider.ts). */
 export const SIGN_IN_FAMILY_LABEL: Record<SignInFamily, string> = { claude: vendorLabel("anthropic"), openai: vendorLabel("openai") };
-
-/** #3116: the harness (the engine that runs a turn) named for the chat-bar
- * picker's first step: the CLI or API behind a provider's accounts. A kind
- * not listed falls back to the instance's display name. */
-export const HARNESS_LABEL: Readonly<Record<string, string>> = HARNESS_TOOL_NAME;
-
-export function harnessLabel(instance: { driverKind: string; displayName: string }): string {
-  return HARNESS_LABEL[instance.driverKind] ?? instance.displayName;
-}
 
 /** A Claude sign-in (one of possibly several accounts). */
 export function isClaudeAccount(instance: { driverKind: string; access?: InstanceInfo["access"] } | undefined): boolean {

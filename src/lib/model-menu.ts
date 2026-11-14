@@ -32,23 +32,20 @@ export interface ModelMenuRow {
   /** The model in use cannot run a turn now (src/lib/model-health.ts):
    * said beside it, discreetly. */
   warning?: string;
+  /** #4329: the engine (a driver kind) that runs this row. */
+  harness?: string;
+  /** #4329: the same model on the provider's other engines and accounts,
+   * pooled out of sight under this row (one model, one row). "Runs with"
+   * picks among them; a favorite starred on one of them still shows. */
+  alternatives?: ModelMenuRow[];
 }
 
 export interface ModelMenuSection {
   key: string;
-  /** The heading (an engine, Cloud, Local); none for the top rows. */
+  /** The heading (a provider, Favorites); none for the top rows. */
   label?: string;
-  /** A muted note beside the heading (an engine's state, or Account / API). */
+  /** A muted note beside the heading (the provider's state). */
   note?: string;
-  /** #2106: subscription login vs pasted API key, for grouping and tags. */
-  access?: "subscription" | "api";
-  /** #2106: sign-in family key used to unify several accounts into one section. */
-  family?: string;
-  /** #3116: the engine (driver kind) that runs this section's models, the
-   * first step of the chat-bar picker. Sections sharing it are its providers. */
-  harness?: string;
-  /** #3116: the harness's name ("Claude Code", "Codex", "Grok"). */
-  harnessLabel?: string;
   rows: ModelMenuRow[];
 }
 

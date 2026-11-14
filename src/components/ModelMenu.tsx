@@ -30,7 +30,7 @@ import {
   ALL_MODELS_KEY, CURRENT_KEY_PREFIX, FAVORITE_KEY_PREFIX,
   type ModelMenuEntry, type ModelMenuProvider, type ModelMenuRow, type ModelMenuSection,
 } from "@/lib/model-menu";
-import { modelMenuStepView, stepCrumbs, stepPathBack, stepPathInto, type ModelMenuHarness, type ModelStepEntry, type ModelStepPath } from "@/lib/model-menu-steps";
+import { modelMenuStepView, stepCrumbs, stepPathBack, stepPathInto, type ModelStepEntry, type ModelStepPath } from "@/lib/model-menu-steps";
 
 export type { ModelMenuRow, ModelMenuSection };
 
@@ -151,13 +151,12 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
   /** #2963: a row of engine chips over the list (All, then each engine with
    * its logo); a chip keeps the top rows and that engine's models. */
   engineChips?: { mark: (sectionKey: string) => ReactNode };
-  /** #3116: the menu in three steps while the search is empty: the
-   * harnesses (with the top rows), then the chosen harness's providers,
-   * then the provider's models. `mark` draws a harness's logo. Typing
-   * leaves the steps for the flat list of matches. `initialPath` opens
-   * the menu at a step (the gallery and tests; the chat bar opens at the
-   * harnesses). */
-  steps?: { mark?: (harness: string) => ReactNode; initialPath?: ModelStepPath };
+  /** #3116, #4329: the menu in two steps while the search is empty: the
+   * providers (with the top rows), then the chosen provider's models.
+   * `mark` draws a provider's logo, by its section key. Typing leaves the
+   * steps for the flat list of matches. `initialPath` opens the menu at a
+   * step (the gallery and tests; the chat bar opens at the providers). */
+  steps?: { mark?: (providerKey: string) => ReactNode; initialPath?: ModelStepPath };
   /** #3116: with `after`, the list never shrinks under this many pixels;
    * the footer scrolls instead. */
   listMinHeight?: number;
@@ -279,19 +278,19 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
     setMoved(ALL_MODELS_KEY);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
-  // #3116: into a harness or a provider, and one step back (the active
-  // row lands on the entry the person came out of)
+  // #3116: into a provider, and one step back (the active row lands on
+  // the provider the person came out of)
   const stepInto = (entry: ModelStepEntry) => {
     clearTimer();
     setPath(stepPathInto(path, entry));
     setMoved(null);
   };
-  const stepBackPath = view ? stepPathBack(view, path) : null;
+  const stepBackPath = view ? stepPathBack(view) : null;
   const stepBack = () => {
     if (!view || !stepBackPath) return;
     clearTimer();
     setPath(stepBackPath);
-    setMoved((stepBackPath.harness ? view.provider?.key : view.harness?.key) ?? null);
+    setMoved(view.provider?.key ?? null);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
@@ -311,7 +310,7 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
       openAll();
       return;
     }
-    if (view && entry && ("harness" in entry && entry.harness || entry.provider) && (event.key === "ArrowRight" || event.key === "Enter")) {
+    if (view && entry?.provider && (event.key === "ArrowRight" || event.key === "Enter")) {
       event.preventDefault();
       stepInto(entry);
       return;
@@ -464,7 +463,7 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
               <span aria-hidden="true" className="truncate font-normal">· {stepCrumbs(view).join(" › ")}</span>
             </button>
           )}
-          {(view.level === "harness" || view.skipped) && view.top.length + (view.current ? 1 : 0) > 0 && (
+          {(view.level === "provider" || view.skipped) && view.top.length + (view.current ? 1 : 0) > 0 && (
             <div role="group" data-model-section="top" className="py-0.5">
               {view.top.map((row) => (
                 <Fragment key={row.key}>
@@ -475,29 +474,18 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
               {view.current && <ModelSearchRow {...rowProps(view.current, `${CURRENT_KEY_PREFIX}${view.current.key}`)} />}
             </div>
           )}
-          {(view.level === "harness" || view.skipped) && view.favorites.length > 0 && (
+          {(view.level === "provider" || view.skipped) && view.favorites.length > 0 && (
             <div role="group" aria-label={t("model.favorites")} data-model-favorites className={cn("py-0.5", style.divider)}>
               <div aria-hidden="true" className={style.heading}>{t("model.favorites")}</div>
               {view.favorites.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, `${FAVORITE_KEY_PREFIX}${row.key}`)} />)}
             </div>
           )}
-          {view.level === "harness" && view.harnesses.length > 0 && (
-            <div role="group" aria-label={t("model.step.harness")} data-model-harnesses className={cn("py-0.5", style.divider)}>
-              <div aria-hidden="true" className={style.heading}>{t("model.step.harness")}</div>
-              {view.harnesses.map((harness) => (
-                <HarnessRow key={harness.key} harness={harness} id={optionId(harness.key)} style={style} active={harness.key === active}
-                  mark={steps?.mark?.(harness.harness)}
-                  onHover={() => setMoved(harness.key)}
-                  onOpen={() => stepInto({ key: harness.key, current: harness.current, harness })} />
-              ))}
-            </div>
-          )}
-          {view.level === "provider" && (
-            <div role="group" aria-label={t("model.step.provider")} data-model-providers className={cn("py-0.5", view.skipped && style.divider)}>
-              <div aria-hidden="true" className={style.heading}>{t("model.step.provider")}</div>
+          {view.level === "provider" && view.providers.length > 0 && (
+            <div role="group" aria-label={t("model.step.providersTitle")} data-model-providers className={cn("py-0.5", style.divider)}>
+              <div aria-hidden="true" className={style.heading}>{t("model.step.providersTitle")}</div>
               {view.providers.map((provider) => (
-                <ProviderRow key={provider.key} provider={provider} id={optionId(provider.key)} style={style}
-                  active={provider.key === active} expanded={false}
+                <ProviderStepRow key={provider.key} provider={provider} id={optionId(provider.key)} style={style} active={provider.key === active}
+                  mark={steps?.mark?.(provider.section.key)}
                   onHover={() => setMoved(provider.key)}
                   onOpen={() => stepInto({ key: provider.key, current: provider.current, provider })} />
               ))}
@@ -679,10 +667,10 @@ function AllModelsRow({ id, style, active, current, onHover, onOpen }: {
   );
 }
 
-/** #3116, step 1: a harness: its logo, its name, the current model when
- * it runs there (else how many providers or models), a chevron. */
-function HarnessRow({ harness, id, style, active, mark, onHover, onOpen }: {
-  harness: ModelMenuHarness;
+/** #3116, #4329, step 1: a provider: its logo, its name, the current
+ * model when it is one of its own (else how many models), a chevron. */
+function ProviderStepRow({ provider, id, style, active, mark, onHover, onOpen }: {
+  provider: ModelMenuProvider;
   id: string;
   style: Style;
   active: boolean;
@@ -690,19 +678,17 @@ function HarnessRow({ harness, id, style, active, mark, onHover, onOpen }: {
   onHover: () => void;
   onOpen: () => void;
 }) {
-  const current = harness.sections.flatMap((section) => section.rows).find((row) => row.current);
-  const detail = current
-    ? current.label
-    : harness.sections.length > 1
-      ? t("model.step.providers", { count: harness.sections.length })
-      : harness.models === 1 ? t("model.step.oneModel") : t("model.step.models", { count: harness.models });
+  const { section } = provider;
+  const current = section.rows.find((row) => row.current);
+  const models = section.rows.filter((row) => row.kind === "model").length;
+  const detail = current ? current.label : models === 1 ? t("model.step.oneModel") : t("model.step.models", { count: models });
   return (
     <div
       id={id}
       role="menuitem"
       aria-haspopup="menu"
-      data-model-row-key={harness.key}
-      data-model-harness={harness.harness}
+      data-model-row-key={provider.key}
+      data-model-provider={section.key}
       // keep the focus in the search field
       onMouseDown={(event) => event.preventDefault()}
       onMouseEnter={onHover}
@@ -713,13 +699,14 @@ function HarnessRow({ harness, id, style, active, mark, onHover, onOpen }: {
         active && style.active,
       )}
     >
-      <span className="flex min-w-0 items-center gap-2">
+      {/* 6px from the logo to the name, as the reference's menu rows (8.1, #4157) */}
+      <span className="flex min-w-0 items-center gap-1.5">
         {mark && <span aria-hidden="true" className="flex shrink-0 items-center">{mark}</span>}
-        <span className="truncate">{harness.label}</span>
+        <span className="truncate">{section.label}</span>
       </span>
       <span className="flex min-w-0 shrink items-center gap-1.5">
-        <span data-model-harness-detail className={cn("truncate text-[12px]", style.detail)}>{detail}</span>
-        {harness.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full bg-current", style.check)} />}
+        <span data-model-provider-detail className={cn("truncate text-[12px]", style.detail)}>{detail}</span>
+        {provider.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full bg-current", style.check)} />}
         <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0", style.detail)} />
       </span>
     </div>

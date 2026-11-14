@@ -1,12 +1,14 @@
-// #3116: the chat-bar model picker in three steps (harness, provider,
-// model). Each step offers only what the step before allows.
+// #3116, #4329 (lot 3): the chat-bar model picker in two steps (provider,
+// then model). Each step offers only what the step before allows.
 import { describe, expect, it } from "vitest";
 
 import { favoriteKey } from "./model-favorites";
 import { CURRENT_KEY_PREFIX, FAVORITE_KEY_PREFIX, type ModelMenuRow, type ModelMenuSection } from "./model-menu";
 import {
-  modelMenuHarnesses,
+  currentProvider,
+  modelMenuProviders,
   modelMenuStepView,
+  runsWithEntries,
   stepCrumbs,
   stepPathBack,
   stepPathInto,
@@ -19,129 +21,112 @@ const model = (instanceId: string, id: string, label: string, extra: Partial<Mod
 const top: ModelMenuSection = { key: "top", rows: [
   { key: "auto", kind: "auto", label: "Auto", detail: "the best model per task", current: false },
 ] };
-const claudeSub: ModelMenuSection = { key: "claude", label: "Claude", harness: "claudeAgent", harnessLabel: "Claude Code", rows: [
-  model("claude", "opus", "Opus 5.5", { current: true }), model("claude", "sonnet", "Sonnet 5"),
+// Claude's sign-in, its key and pi, pooled: one row per model
+const claude: ModelMenuSection = { key: "anthropic", label: "Claude", rows: [
+  model("claude", "opus", "Opus 5.5", { current: true, harness: "claudeAgent", alternatives: [
+    model("claudeApi", "opus", "Opus 5.5", { harness: "claudeAgent" }),
+    model("pi", "anthropic/opus", "Opus 5.5", { harness: "piAgent" }),
+  ] }),
+  model("claude", "sonnet", "Sonnet 5", { harness: "claudeAgent" }),
+  model("claudeApi", "haiku", "Haiku 5.5", { unavailable: "sign in", harness: "claudeAgent" }),
 ] };
-const claudeApi: ModelMenuSection = { key: "claudeApi", label: "Anthropic (API key)", harness: "claudeAgent", harnessLabel: "Claude Code", rows: [
-  model("claudeApi", "opus", "Opus 5.5"), model("claudeApi", "haiku", "Haiku 5.5", { unavailable: "sign in" }),
-] };
-const grok: ModelMenuSection = { key: "grok", label: "Grok", harness: "grokAgent", harnessLabel: "Grok", rows: [
-  model("grok", "grok-4.7", "Grok 4.7"),
-] };
-const local: ModelMenuSection = { key: "local:this-computer", label: "Local", harness: "local", harnessLabel: "Local", rows: [
-  model("claude", "dwarfstar::qwen", "Qwen"),
-] };
-const sections = [top, claudeSub, claudeApi, grok, local];
+const xai: ModelMenuSection = { key: "xai", label: "SpaceXAI", rows: [model("grok", "grok-4.7", "Grok 4.7", { harness: "grokAgent" })] };
+const computer: ModelMenuSection = { key: "computer", label: "This computer", rows: [model("claude", "dwarfstar::qwen", "Qwen", { harness: "claudeAgent" })] };
+const sections = [top, claude, xai, computer];
 
-describe("modelMenuHarnesses", () => {
-  it("groups the provider sections by harness, in menu order, and counts their models", () => {
-    const harnesses = modelMenuHarnesses(sections);
-    expect(harnesses.map((harness) => harness.harness)).toEqual(["claudeAgent", "grokAgent", "local"]);
-    expect(harnesses[0]).toMatchObject({ key: "harness:claudeAgent", label: "Claude Code", current: true, models: 4 });
-    expect(harnesses[0]!.sections.map((section) => section.key)).toEqual(["claude", "claudeApi"]);
-    expect(harnesses[1]).toMatchObject({ current: false, models: 1 });
-  });
-
-  it("takes a section without a harness as a harness of its own (older callers)", () => {
-    const plain: ModelMenuSection = { key: "codex", label: "OpenAI", rows: [model("codex", "gpt", "GPT")] };
-    expect(modelMenuHarnesses([top, plain])).toMatchObject([{ key: "harness:codex", harness: "codex", label: "OpenAI" }]);
+describe("modelMenuProviders", () => {
+  it("lists the provider sections in menu order, the one holding the current model marked", () => {
+    const providers = modelMenuProviders(sections);
+    expect(providers.map((provider) => provider.key)).toEqual(["provider:anthropic", "provider:xai", "provider:computer"]);
+    expect(providers.map((provider) => provider.current)).toEqual([true, false, false]);
+    expect(currentProvider(sections)?.section.label).toBe("Claude");
   });
 
   it("leaves out the top rows, Favorites and an empty section", () => {
-    const empty: ModelMenuSection = { key: "pi", label: "pi", rows: [] };
+    const empty: ModelMenuSection = { key: "google", label: "Gemini", rows: [] };
     const favorites: ModelMenuSection = { key: "favorites", label: "Favorites", rows: [model("grok", "grok-4.7", "Grok 4.7")] };
-    expect(modelMenuHarnesses([top, favorites, empty, grok]).map((harness) => harness.harness)).toEqual(["grokAgent"]);
+    expect(modelMenuProviders([top, favorites, empty, xai]).map((provider) => provider.section.key)).toEqual(["xai"]);
   });
 });
 
 describe("modelMenuStepView", () => {
-  it("step 1: the top rows, the current model, the favorites, then one entry per harness", () => {
+  it("step 1: the top rows, the current model, the favorites, then one entry per provider", () => {
     const view = modelMenuStepView(sections, {}, [favoriteKey("grok", "grok-4.7")]);
-    expect(view.level).toBe("harness");
+    expect(view.level).toBe("provider");
     expect(view.skipped).toBe(false);
     expect(view.current?.label).toBe("Opus 5.5");
     expect(view.favorites.map((row) => row.label)).toEqual(["Grok 4.7"]);
     expect(view.entries.map((entry) => entry.key)).toEqual([
       "auto", `${CURRENT_KEY_PREFIX}${favoriteKey("claude", "opus")}`, `${FAVORITE_KEY_PREFIX}${favoriteKey("grok", "grok-4.7")}`,
-      "harness:claudeAgent", "harness:grokAgent", "harness:local",
+      "provider:anthropic", "provider:xai", "provider:computer",
     ]);
-    // no model of a harness shows before its step
+    // no model of a provider shows before its step
     expect(view.rows).toEqual([]);
-    expect(view.providers).toEqual([]);
   });
 
-  it("step 2: the providers of the chosen harness, nothing of the others", () => {
-    const view = modelMenuStepView(sections, { harness: "claudeAgent" }, []);
-    expect(view.level).toBe("provider");
-    expect(view.harness?.harness).toBe("claudeAgent");
-    expect(view.providers.map((provider) => provider.section.key)).toEqual(["claude", "claudeApi"]);
-    expect(view.entries.map((entry) => entry.key)).toEqual(["provider:claude", "provider:claudeApi"]);
-    expect(view.providers[0]!.current).toBe(true);
-  });
-
-  it("step 3: the provider's models; an unavailable one is drawn but not reachable", () => {
-    const view = modelMenuStepView(sections, { harness: "claudeAgent", provider: "claudeApi" }, []);
+  it("step 2: the provider's models, one row per model; an unavailable one is drawn but not reachable", () => {
+    const view = modelMenuStepView(sections, { provider: "anthropic" }, []);
     expect(view.level).toBe("model");
-    expect(view.provider?.section.key).toBe("claudeApi");
-    expect(view.rows.map((row) => row.label)).toEqual(["Opus 5.5", "Haiku 5.5"]);
-    expect(view.entries.map((entry) => entry.row?.label)).toEqual(["Opus 5.5"]);
+    expect(view.provider?.section.key).toBe("anthropic");
+    expect(view.rows.map((row) => row.label)).toEqual(["Opus 5.5", "Sonnet 5", "Haiku 5.5"]);
+    expect(view.entries.map((entry) => entry.row?.label)).toEqual(["Opus 5.5", "Sonnet 5"]);
   });
 
-  it("a harness with one provider skips step 2", () => {
-    const view = modelMenuStepView(sections, { harness: "grokAgent" }, []);
-    expect(view.level).toBe("model");
-    expect(view.provider?.section.key).toBe("grok");
-    expect(view.entries.map((entry) => entry.key)).toEqual([favoriteKey("grok", "grok-4.7")]);
-  });
-
-  it("a lone harness opens on its content with the top rows kept, and marks the step skipped", () => {
-    const view = modelMenuStepView([top, grok], {}, []);
+  it("a lone provider opens on its models with the top rows kept, and marks the step skipped", () => {
+    const view = modelMenuStepView([top, xai], {}, []);
     expect(view.level).toBe("model");
     expect(view.skipped).toBe(true);
     expect(view.entries.map((entry) => entry.key)).toEqual(["auto", favoriteKey("grok", "grok-4.7")]);
   });
 
-  it("a path that names nothing known falls back to the harnesses", () => {
-    expect(modelMenuStepView(sections, { harness: "nope" }, []).level).toBe("harness");
-    expect(modelMenuStepView(sections, { harness: "claudeAgent", provider: "nope" }, []).level).toBe("provider");
+  it("a path that names nothing known falls back to the providers", () => {
+    expect(modelMenuStepView(sections, { provider: "nope" }, []).level).toBe("provider");
   });
 });
 
 describe("the path", () => {
   const at = (path: Parameters<typeof modelMenuStepView>[1]) => modelMenuStepView(sections, path, []);
 
-  it("goes into a harness, then a provider; a model entry leaves it alone", () => {
-    const harness = at({}).entries.find((entry) => entry.harness?.harness === "claudeAgent")!;
-    expect(stepPathInto({}, harness)).toEqual({ harness: "claudeAgent" });
-    const provider = at({ harness: "claudeAgent" }).entries[1]!;
-    expect(stepPathInto({ harness: "claudeAgent" }, provider)).toEqual({ harness: "claudeAgent", provider: "claudeApi" });
-    const row = at({ harness: "claudeAgent", provider: "claudeApi" }).entries[0]!;
-    expect(stepPathInto({ harness: "claudeAgent", provider: "claudeApi" }, row)).toEqual({ harness: "claudeAgent", provider: "claudeApi" });
+  it("goes into a provider; a model entry leaves it alone", () => {
+    const provider = at({}).entries.find((entry) => entry.provider?.section.key === "xai")!;
+    expect(stepPathInto({}, provider)).toEqual({ provider: "xai" });
+    const row = at({ provider: "xai" }).entries[0]!;
+    expect(stepPathInto({ provider: "xai" }, row)).toEqual({ provider: "xai" });
   });
 
-  it("goes back one step at a time, to nothing before the first step", () => {
-    const models = { harness: "claudeAgent", provider: "claudeApi" };
-    expect(stepPathBack(at(models), models)).toEqual({ harness: "claudeAgent" });
-    expect(stepPathBack(at({ harness: "claudeAgent" }), { harness: "claudeAgent" })).toEqual({});
-    // a skipped provider step goes back to the harnesses
-    expect(stepPathBack(at({ harness: "grokAgent" }), { harness: "grokAgent" })).toEqual({});
-    expect(stepPathBack(at({}), {})).toBeNull();
-    const lone = modelMenuStepView([top, grok], {}, []);
-    expect(stepPathBack(lone, {})).toBeNull();
+  it("goes back to the providers, to nothing before the first step", () => {
+    expect(stepPathBack(at({ provider: "anthropic" }))).toEqual({});
+    expect(stepPathBack(at({}))).toBeNull();
+    expect(stepPathBack(modelMenuStepView([top, xai], {}, []))).toBeNull();
   });
 
   it("finds the current model's step", () => {
-    expect(stepPathOfCurrent(sections)).toEqual({ harness: "claudeAgent", provider: "claude" });
-    expect(stepPathOfCurrent([top, grok, { ...local, rows: [model("claude", "dwarfstar::qwen", "Qwen", { current: true })] }])).toEqual({ harness: "local" });
+    expect(stepPathOfCurrent(sections)).toEqual({ provider: "anthropic" });
     expect(stepPathOfCurrent([top])).toEqual({});
   });
 
-  it("reads the crumbs of a step", () => {
+  it("reads the crumbs of a step: the provider, when there was a choice", () => {
     expect(stepCrumbs(at({}))).toEqual([]);
-    expect(stepCrumbs(at({ harness: "claudeAgent" }))).toEqual(["Claude Code"]);
-    expect(stepCrumbs(at({ harness: "claudeAgent", provider: "claudeApi" }))).toEqual(["Claude Code", "Anthropic (API key)"]);
-    // a lone provider is the harness itself
-    expect(stepCrumbs(at({ harness: "grokAgent" }))).toEqual(["Grok"]);
-    expect(stepCrumbs(modelMenuStepView([top, grok], {}, []))).toEqual([]);
+    expect(stepCrumbs(at({ provider: "anthropic" }))).toEqual(["Claude"]);
+    expect(stepCrumbs(modelMenuStepView([top, xai], {}, []))).toEqual([]);
+  });
+});
+
+describe("runsWithEntries (#4329)", () => {
+  it("offers one entry per engine that can run the model in use, the vendor's own tool first", () => {
+    const entries = runsWithEntries(sections);
+    // the two Claude accounts are one engine: they stay pooled
+    expect(entries.map((entry) => [entry.harness, entry.role, entry.current])).toEqual([
+      ["claudeAgent", "own", true],
+      ["piAgent", "pi", false],
+    ]);
+    expect(entries[1]!.row).toMatchObject({ instanceId: "pi", modelId: "anthropic/opus" });
+  });
+
+  it("has a single entry when one engine runs the model, and none without a current model", () => {
+    const onGrok = [top, claude, { ...xai, rows: [{ ...xai.rows[0]!, current: true }] }].map((section) =>
+      section.key === "anthropic" ? { ...section, rows: section.rows.map((row) => ({ ...row, current: false })) } : section);
+    expect(runsWithEntries(onGrok).map((entry) => entry.harness)).toEqual(["grokAgent"]);
+    expect(runsWithEntries([top, { ...xai }])).toEqual([]);
   });
 });

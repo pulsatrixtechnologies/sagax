@@ -1876,10 +1876,7 @@
   "leftOut.reason.intervalRoutine": "es wiederholt sich in einem Intervall, das in keinen Zeitplan passt; füge es mit einer Uhrzeit neu hinzu",
   "leftOut.reason.onceRoutine": "es läuft nur einmal und wurde daher nicht geplant; starte es von Hand, wenn es noch gebraucht wird",
   "leftOut.reason.invalidYaml": "es ist kein gültiges YAML",
-  "model.step.harness": "Harness",
-  "model.step.provider": "Anbieter",
   "model.step.model": "Modell",
-  "model.step.providers": "{count} Anbieter",
   "model.step.models": "{count} Modelle",
   "model.step.oneModel": "1 Modell"
 }

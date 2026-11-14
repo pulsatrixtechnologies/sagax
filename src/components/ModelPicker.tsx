@@ -21,7 +21,9 @@ import { useMyEngineModels, useMyEngines, usePerspicaxOrg } from "@/lib/perspica
 import { orgRefusesEngine } from "./OrgHostToolsNote";
 import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { ModelNoEngineNotice } from "./ModelNoEngineNotice";
-import { InstanceProviderMark } from "./ProviderIcons";
+import { InstanceProviderMark, PresetProviderMark } from "./ProviderIcons";
+import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../shared/provider-icon";
+import { COMPUTER_PROVIDER_ID } from "../../shared/model-provider";
 import { openModelWindow } from "@/lib/model-window";
 import { ModelManager } from "./ModelPicker.tsx-parts/ModelManager";
 import { effortLabel } from "@/lib/effort-label";
@@ -55,7 +57,7 @@ import { ModelPickerMenu, windowOnlyMenuPlace } from "./ModelPicker.tsx-parts/Mo
 import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/modelPickerActions";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
-import { modelMenuHarnesses } from "@/lib/model-menu-steps";
+import { currentProvider } from "@/lib/model-menu-steps";
 
 export {
   COMPOSER_MODEL_EVENT,
@@ -341,11 +343,8 @@ export function ModelPicker({
 
   const summary = modelPickerSummary({ autoOn, autoRecord, active, selection, selectedVariantLabel, advanced });
   const followLine = modelPickerFollowLine({ follows, profileName: profile.name, fallbackLine });
-  // #3116: the chip names the provider only when the harness has several
-  const currentHarness = modelMenuHarnesses(menuSections).find((harness) => harness.current);
-  const providerLabel = currentHarness && currentHarness.sections.length > 1
-    ? currentHarness.sections.find((section) => section.rows.some((row) => row.current))?.label
-    : undefined;
+  // #4329: the chip names the provider of the model in use (never a tool)
+  const providerLabel = currentProvider(menuSections)?.section.label;
   const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel });
 
   const toggleMenu = makeToggleMenu({
@@ -365,9 +364,14 @@ export function ModelPicker({
   });
 
   const effortTitle = active?.capabilities?.modelVariants ? t("model.reasoning") : t("model.effort");
-  // #2963: each engine's mark, in the chips and the window's column
+  // #2963, #4329: each provider's mark, in the menu and the window's
+  // column: a vendor's logo, a server's own icon (its engine instance's),
+  // this computer's monitor.
   const engineMark = (key: string): ReactNode => {
-    const instance = state.instances.find((candidate) => candidate.instanceId === key);
+    if ((PROVIDER_ICON_PRESETS as readonly string[]).includes(key)) return <PresetProviderMark preset={key as ProviderIconPreset} size={14} />;
+    const section = menuSections.find((candidate) => candidate.key === key);
+    const instanceId = section?.rows.find((row) => row.instanceId)?.instanceId ?? key;
+    const instance = key === COMPUTER_PROVIDER_ID ? undefined : state.instances.find((candidate) => candidate.instanceId === instanceId);
     return instance ? <InstanceProviderMark instance={instance} size={14} /> : <Monitor size={14} aria-hidden="true" />;
   };
   // #2963: the chat bar menu's footer opens the models window for this bot.

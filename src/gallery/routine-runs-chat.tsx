@@ -22,7 +22,9 @@
  * Neutral fictional bots and routines; a mocked fetch answers
  * /api, nothing reaches a server. Not shipped in the app.
  * case=form (#4234): a routine run's form drawn at its row, see FORM.
- * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|streak-failed|daily-first|proactive|watch-wake|form&state=before|after */
+ * case=problem-rows (#4161): every kind of a routine's problem row in one
+ * chat, beside the bot's bubbles and a result that ran fine.
+ * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|streak-failed|daily-first|proactive|watch-wake|form|problem-rows&state=before|after */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -183,7 +185,25 @@ const FORM: Message[] = [
   ) }),
   run("long-running", 80, { routineName: LONG_NAME, status: "running", startedAt: at + 79 * M }),
 ];
-const messages = which === "form" ? FORM : which === "chat" ? CHAT : which === "streak-failed" ? STREAK_FAILED : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
+/** #4161: every kind of a routine's problem row the chat keeps, beside the
+ * bot's bubbles and a result that ran fine (the conforming neighbour): a
+ * streak's summary that failed and paused its routine (Resume) with a long
+ * sentence, a streak's summary with problems, and a routine whose result
+ * needs the person. */
+const PROBLEM_ROWS: Message[] = [
+  ...OPENING,
+  run("streak-failed", 30, { routineName: MAIL, routineId: "routine-mail", status: "failed", error: FAILED_WORDS, autoPausedAfter: 3,
+    repeat: { firstRunId: "run-first", count: 3, since: at + 12 * M, lastAt: at + 30 * M, streak: true } }),
+  run("streak", 34, { routineName: BACKUP, status: "completed", summary: BACKUP_WORDS, brief: BACKUP_WORDS,
+    problems: say("the backup host did not answer", "l'hôte de sauvegarde n'a pas répondu"), repeat: { firstRunId: "run-b", count: 3, since: at + 10 * M, lastAt: at + 34 * M, streak: true } }),
+  person("u2", 40, say("Anything I need to do?", "Est-ce que j'ai quelque chose à faire ?")),
+  reply("b2", 41, say("One reply waits for you on the supplier thread; the rest is handled.", "Une réponse t'attend dans le fil du fournisseur ; le reste est réglé.")),
+  { ...run("needs", 44, { routineName: say("Invoice review", "Revue des factures"), status: "completed", summary: say("Two invoices wait for your approval.", "Deux factures attendent ton approbation."), brief: say("Two invoices wait for your approval.", "Deux factures attendent ton approbation.") }),
+    attention: { kind: "human", items: [{ text: say("Approve invoice 1042", "Approuver la facture 1042") }], botId: "atlas", botName: "Atlas", threadId: "t-atlas", sourceMessageId: "m-needs" } } as Message,
+  // a result that ran fine, the conforming neighbour: the reference's line
+  run("done", 50, { routineName: say("Morning brief", "Briefing du matin"), status: "completed", summary: say("Three meetings today, the first at nine.", "Trois réunions aujourd'hui, la première à neuf heures."), brief: say("Three meetings today, the first at nine.", "Trois réunions aujourd'hui, la première à neuf heures.") }),
+];
+const messages = which === "form" ? FORM : which === "problem-rows" ? PROBLEM_ROWS : which === "chat" ? CHAT : which === "streak-failed" ? STREAK_FAILED : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
 
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -194,7 +214,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (parsed.pathname === "/api/bots") return json({ bots: [{ ...atlas, messages }, iris], groups: [], sections: [], computerControl: {} });
   if (parsed.pathname === "/api/approvals") return json({ waiting: [] });
   // the routine the failed streak paused (case=streak-failed: Resume on its row)
-  if (parsed.pathname === "/api/routines") return json({ routines: which === "streak-failed" ? [{ id: "routine-mail", botId: "atlas", name: MAIL, enabled: false, prompt: "", schedule: { type: "interval", everyMinutes: 10 } }] : [], runs: [] });
+  if (parsed.pathname === "/api/routines") return json({ routines: which === "streak-failed" || which === "problem-rows" ? [{ id: "routine-mail", botId: "atlas", name: MAIL, enabled: false, prompt: "", schedule: { type: "interval", everyMinutes: 10 } }] : [], runs: [] });
   if (parsed.pathname === "/api/config") return json({ profile: { name: "Alex", email: "alex@example.test" }, viewer: { principalId: "pr_me", role: "member" } });
   return json({ error: "gallery" }, 404);
 }) as typeof window.fetch;

@@ -42,8 +42,7 @@ export const UI_GUARD_TESTS = [
  * files, so the fast gate runs them on a lot that touches one of those (the
  * "source-text" line of .fast-gate); verify:merge runs them
  * with the other guards. A file with a known failure is not listed (a guard
- * is fixed, never listed): src/components/ios-desktop-wording.test.ts,
- * src/components/ChatErrorBanner.test.ts, src/components/lazy-screens.test.ts,
+ * is fixed, never listed): src/components/ChatErrorBanner.test.ts, src/components/lazy-screens.test.ts,
  * src/components/skin-fx/skin-fx.test.ts and src/lib/{bubble-colors,
  * native-controls-scheme,sidebar-motion,switch-colors}.test.ts join when
  * their entries leave scripts/testing/known-failures.json. */
@@ -79,6 +78,7 @@ export const SOURCE_TEXT_TESTS = [
   "src/components/GroupPanel.parity.test.ts",
   "src/components/InspectorPanel.i18n.dom.test.ts",
   "src/components/ios-desktop-tokens.test.ts",
+  "src/components/ios-desktop-wording.test.ts",
   "src/components/LimitResetContinue.dom.test.ts",
   "src/components/list-virtualization.test.ts",
   "src/components/MentionTextarea.test.ts",
@@ -99,7 +99,7 @@ export const SOURCE_TEXT_TESTS = [
   "src/components/routines/UpcomingPanel.test.ts",
   "src/components/RoutineScheduleNote.test.ts",
   "src/components/settings/toggle-consumers.test.ts",
-  "src/components/shape-idle.test.ts",
+  "src/components/shape-avatar.test.ts",
   "src/components/sidebar-hover-intent.test.ts",
   "src/components/Sidebar.edit-bot.test.ts",
   "src/components/Sidebar.head.layout.test.ts",

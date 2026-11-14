@@ -18771,7 +18771,14 @@
       "model.runsWith.ownHint": "b5ce2c4dc05fc2285432192ce4f1c59196f2fe9417c73338109c0582dd0f3aa7",
       "model.runsWith.openHint": "92a786f0dd77f17c059c35711c0f660072f6a3a2f13bfea95eb35c68737a8b95",
       "model.runsWith.builtinHint": "20714f3aae1fddece71c4b456d51a1f307eb73cfa828ae185acfb90bebbfff15",
-      "pages.caps.files.add": "ac3e190aa4091e3de022c9a0dfb004fe719cb76ec629325daec8b7aeca872055"
+      "pages.caps.files.add": "ac3e190aa4091e3de022c9a0dfb004fe719cb76ec629325daec8b7aeca872055",
+      "pages.caps.store.shared": "d5ff5dbd596db5352aed488581cedbe73cc3df35a90a24d007d20f0714db6bb5",
+      "pages.caps.store.reader": "062438e21d4424ceafd53299d20c2000c4169dda8c92a2a440adf46847ace97b",
+      "pages.caps.model": "c2b5302e5ef99f3afe9f7662ad580d6de4589d406bfdf42641e9c0d38af14837",
+      "pages.caps.propose": "971c350b66fa004f2ba84feb34a5c395b67b5f0a5bfc5f18ef736703776446bd",
+      "pages.caps.connector": "8d775fa0ed9308cb06925c86262b14b7d53cf06e95fa2a08d75e57ad68a58ed3",
+      "pages.caps.act": "f194333d3e422638b74b3efd86bfc8edcbf2f9522fee349cae4a371d3a75525f",
+      "pages.caps.askUse": "a43cad489abfbe919d565191509c070f1011209d4faa39dcdbac355f0c0c9669"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

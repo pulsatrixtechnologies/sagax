@@ -55,12 +55,18 @@ export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker:
             {caps.viewer && <li className="sr-row" data-cap-viewer><span className="sr-row-text"><span>{text("capViewer")}</span></span></li>}
             {caps.open && <li className="sr-row" data-cap-open><span className="sr-row-text"><span>{text("capOpen")}</span></span></li>}
             {caps.files?.includes("download") && <li className="sr-row" data-cap-file><span className="sr-row-text"><span>{text("capFile")}</span></span></li>}
+            {caps.files?.includes("add") && <li className="sr-row" data-cap-files-add><span className="sr-row-text"><span>{text("capFilesAdd")}</span></span></li>}
+            {Object.values(caps.store ?? {}).some((rule) => rule.scope === "shared") && <li className="sr-row" data-cap-store><span className="sr-row-text"><span>{text("capStoreShared")}</span></span></li>}
+            {Object.values(caps.store ?? {}).some((rule) => rule.scope === "reader") && <li className="sr-row" data-cap-store-mine><span className="sr-row-text"><span>{text("capStoreReader")}</span></span></li>}
+            {caps.model && <li className="sr-row" data-cap-model><span className="sr-row-text"><span>{text("capModel")}</span></span></li>}
+            {caps.propose && <li className="sr-row" data-cap-propose><span className="sr-row-text"><span>{text("capPropose")}</span></span></li>}
+            {Object.entries(caps.connectors ?? {}).map(([connector, tools]) => <li key={`c:${connector}`} className="sr-row" data-cap-connector><span className="sr-row-text"><span>{text("capConnector", { connector, tools: tools.join(", ") })}</span></span></li>)}
           </ul>
           <p className="sr-muted sr-cap-scope">{text("capScope")}</p>
           {state.approvals.map((entry) => (
             <div key={entry.id} className="sr-confirm sr-cap-card" role="alert" data-cap-approval={entry.name}>
-              <span className="sr-cap-card-title"><ShieldQuestion size={14} aria-hidden="true" />{text("capAsk")}</span>
-              <span>{text("capAskWhat", { what: entry.label })}</span>
+              <span className="sr-cap-card-title"><ShieldQuestion size={14} aria-hidden="true" />{text(entry.name.startsWith("connector:") ? "capAct" : "capAsk")}</span>
+              <span>{text(entry.name.startsWith("connector:") || entry.name === "model" ? "capActWhat" : "capAskWhat", { what: entry.label })}</span>
               <div className="sr-confirm-actions">
                 <button type="button" className="sr-button sr-button-small" data-cap-decline onClick={() => broker.resolveApproval(entry.id, "decline")}>{text("decline")}</button>
                 <button type="button" className="sr-button sr-button-small" data-cap-always onClick={() => broker.resolveApproval(entry.id, "always")}>{text("capAlways")}</button>

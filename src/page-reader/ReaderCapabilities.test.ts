@@ -73,3 +73,27 @@ describe("a file the page hands the reader", () => {
     expect(fr).not.toContain("A file it hands you");
   });
 });
+
+describe("what a page keeps, asks and calls (#3413 lots 3 to 7)", () => {
+  const ALL = {
+    data: [], viewer: false, open: false, files: ["add" as const],
+    store: { votes: { write: "signed_in" as const, scope: "shared" as const }, prefs: { write: "signed_in" as const, scope: "reader" as const } },
+    model: true as const, propose: true as const, connectors: { GitHub: ["create_issue"] },
+  };
+
+  it("lists each of them in the panel, nothing invisible", () => {
+    const html = render({ caps: ALL, approvals: [{ id: 1, name: "connector:GitHub__create_issue", label: "GitHub: create_issue (Ada account)", at: 0 }] });
+    for (const marker of ["data-cap-files-add", "data-cap-store", "data-cap-store-mine", "data-cap-model", "data-cap-propose", "data-cap-connector"]) expect(html).toContain(marker);
+    expect(html).toContain("GitHub with your account: create_issue");
+  });
+
+  it("words a change the page asks for apart from a read, on the reader's own card", () => {
+    const html = render({ caps: ALL, approvals: [{ id: 1, name: "connector:GitHub__create_issue", label: "GitHub: create_issue (Ada account)", at: 0 }] });
+    expect(html).toContain(readerText("en", "capAct"));
+    expect(html).toContain("It wants to use, with your account: GitHub: create_issue (Ada account)");
+    expect(html).not.toContain(readerText("en", "capAsk"));
+    const french = render({ caps: ALL, approvals: [{ id: 1, name: "model", label: "une question à un modèle", at: 0 }] }, { ...BOOT, lang: "fr" });
+    expect(french).toContain("Ton organisation te demande d&#x27;abord.");
+    expect(french).toContain("Elle veut utiliser, avec ton compte : une question à un modèle");
+  });
+});

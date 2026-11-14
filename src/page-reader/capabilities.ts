@@ -593,7 +593,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           const question = parsePageModelQuestion(request.args);
           if (question === null) answer(id, { ok: false, error: "bad_request", message: "A question needs a prompt." });
           else if (question === "too_large") answer(id, { ok: false, error: "too_large", message: "This question is too long for a page." });
-          else answer(id, { ok: true, value: await withAskFirst("model", deps.lang === "fr" ? "Une question à un modèle, avec ton compte" : "A question to a model, with your account", () => deps.api(route("model"), { method: "POST", body: question })) });
+          else answer(id, { ok: true, value: await withAskFirst("model", deps.lang === "fr" ? "une question à un modèle" : "a question to a model", () => deps.api(route("model"), { method: "POST", body: question })) });
         } else if (request.cap === "connector.call") {
           // lot 7: the reader's own connector; a change only from their click
           const call = { connector: source as string, tool: tool as string, arguments: request.args?.arguments && typeof request.args.arguments === "object" ? request.args.arguments : {}, click: fromClick };

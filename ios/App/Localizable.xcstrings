@@ -15612,7 +15612,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Os bots rodam em ferramentas de IA instaladas neste computador — veja o que encontramos."
+            "value": "Os bots rodam em ferramentas de IA instaladas neste computador: veja o que encontramos."
           }
         }
       }
@@ -28962,7 +28962,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "A pasta de cada bot — ou um caminho absoluto"
+            "value": "A pasta de cada bot, ou um caminho absoluto"
           }
         }
       }
@@ -45574,7 +45574,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mensagem para %@ — %@"
+            "value": "Mensagem para %@: %@"
           }
         }
       }
@@ -103494,7 +103494,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "equivalente — está na sua assinatura, não é cobrado"
+            "value": "equivalente: está na sua assinatura, não é cobrado"
           }
         }
       }

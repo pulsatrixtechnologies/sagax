@@ -30,6 +30,18 @@ describe("iPad desktop shell wording", () => {
       }
     });
   }
+
+  // ios/parity/desktop-wording-sync.py never copies a desktop pt-br value
+  // that still has an em or en dash over the iPad's own Portuguese.
+  it("keeps every catalog value free of em and en dashes", () => {
+    const dashed: string[] = [];
+    for (const [key, entry] of Object.entries(catalog.strings)) {
+      for (const [lang, unit] of Object.entries(entry.localizations ?? {})) {
+        if (/[\u2013\u2014]/.test(unit.stringUnit?.value ?? "")) dashed.push(`${key} (${lang})`);
+      }
+    }
+    expect(dashed).toEqual([]);
+  });
 });
 
 // #4097: the desktop's shortcut labels became short words with a grey hint.

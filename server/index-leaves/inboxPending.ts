@@ -63,10 +63,13 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer) {
       // a question is the person's who asked it (its thread's starter or
       // requester), else the bot owner's; never an admin's by rank
       if (!readable) continue;
+      // #4219: a keyed card of a room waits on its people, or its addressee
+      const roomVerdict = host.roomAskAnswerFor?.(auth, threadId, card.requestId!) ?? { kind: "other" };
+      if (roomVerdict.kind === "refused") continue;
       const known = [host.threadStarters.get(threadId), host.cardRequesterKey(threadId, card.requestId!)].filter((person): person is string => Boolean(person));
-      const asks = host.sharedMembership() && known.length
+      const asks = roomVerdict.kind === "allowed" || (host.sharedMembership() && known.length
         ? known.includes(viewer.principalId) || (auth.kind === "session" && (known.includes(host.personKey(auth.session)) || known.includes(host.legacyPersonKey(auth.session))))
-        : ownerId === viewer.principalId || !host.sharedMembership();
+        : ownerId === viewer.principalId || !host.sharedMembership());
       if (!asks || host.cardAnswerRefusal(auth, threadId, card.requestId!, "answer")) continue;
       scope = "mine";
       decidable = true;

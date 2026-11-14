@@ -745,6 +745,38 @@ export interface ResolvedSender {
   id?: string;
 }
 
+/** #4219: the one person of a room a keyed card is addressed to. */
+export interface AskAddressee {
+  /** Their stable person id. */
+  id: string;
+  /** Their display name. */
+  name: string;
+}
+
+/** #4219: who answered a card, as the server knows them: their stable
+ * person id and the identity fields it already holds for them on the
+ * organization's products (absent where unknown). Written on a keyed card
+ * of a room, where several people may answer; the answering turn tells the
+ * bot (server/messages/replies.ts `answered by:`). */
+export interface CardAnswererIdentity {
+  /** Their stable person id. */
+  id?: string;
+  /** Their sign-in email address. */
+  email?: string;
+  /** Their login on the organization's identity provider. */
+  login?: string;
+  /** Their user id on the organization's control plane. */
+  accountId?: string;
+  /** Their subject (account id) on the organization's identity provider. */
+  subject?: string;
+  /** Their role there (admin, manager, employee). */
+  role?: string;
+  /** The ids of the teams they are in. */
+  teams?: string[];
+  /** Their custom label, as shown beside their name. */
+  label?: string;
+}
+
 /** Who answered a card: a signed-in person (named as their messages are), the
  * owner on this machine, or a session-less local caller on a shared server
  * (`worker`: the Slack worker, or any other process on that machine). */
@@ -752,8 +784,10 @@ export type CardAnswerer = (
   /** `person`: the answering session's opaque person key, recorded on an OMB
    * Cloud home only, where it decides whether an answer came from the owner
    * (server/cloud-lending.ts). */
-  | { kind: "session"; name: string; person?: string }
-  | { kind: "loopback" }
+  | ({ kind: "session"; name: string; person?: string } & CardAnswererIdentity)
+  /** #4219: the operator at this computer, named (`name`) on a keyed card
+   * of a room they answered. */
+  | ({ kind: "loopback"; name?: string } & CardAnswererIdentity)
   | { kind: "worker" }
 ) & {
   /** "call": decided by voice on a Live call, not tapped. "ai-client": answered
@@ -1479,6 +1513,10 @@ export interface OptionCardData extends WaitCardField {
    * person but holds no turn and no routine run; its answer arrives later
    * as its own turn. */
   noHold?: true;
+  /** #4219: a room card addressed to one person of the room (ask_choice
+   * `to`): the others see it, only this person's answer counts, and the
+   * notification goes to them. */
+  askTo?: AskAddressee;
   /** #2048: publish-target choice (Sagax page / artifact / Claude / …).
    * Same question card family; enables "Always use this choice". */
   pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;

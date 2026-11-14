@@ -41,6 +41,13 @@ export type AgentCardResult =
        * answer live, so the turn ends at the end of this call
        * (approvals/card-turn-handoff.ts cardPosted): no further call runs. */
       turnEnds?: true;
+      /** #4219: the room card is addressed to this person (display name);
+       * `people`: the room's people the bot can address, in one line. */
+      addressedTo?: string;
+      people?: string;
+      /** #4219: a routine run's card raised in its source room: the room's
+       * name (its answer arrives as a turn there, not in the run). */
+      inRoom?: string;
       auto?: { id: string; tool: string; name: string; description: string; icon?: string; reason: "single" | "default" };
       targets?: Array<{ id: string; tool: string; name: string; description: string; available: boolean; icon?: string; reason?: string }>;
     }

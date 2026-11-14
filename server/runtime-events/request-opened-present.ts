@@ -12,6 +12,15 @@ import { appendDecision, decisionCall } from "../decision-log.ts";
 import { deliverableNotification } from "../notify.ts";
 import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
 import { questionNotificationWords } from "./question-notification-words.ts";
+
+/** #4219: the card fields an ask_choice event carries (never more). */
+function askCardFields(card: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (typeof card?.askKey === "string" && card.askKey) out.askKey = card.askKey;
+  if (card?.noHold === true) out.noHold = true;
+  if (card?.askTo && typeof card.askTo.id === "string" && typeof card.askTo.name === "string") out.askTo = { id: card.askTo.id, name: card.askTo.name };
+  return out;
+}
 import { questionCardTitle } from "../approvals/approval-words.ts";
 import { lastPersonText, turnLanguage } from "../turns/turn-language.ts";
 import {
@@ -199,6 +208,8 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
           options: event.choices?.length ? event.choices : permission ? ["Allow", "Deny"] : [],
           requestId: event.requestId,
           requestType: permission ? "permission" : "question",
+          // #4205, #4219: a keyed ask_choice card's key, hold and addressee
+          ...(!permission && event.harnessAsk && event.askCard ? askCardFields(event.askCard) : {}),
           tool: permission ? event.tool : undefined,
           toolInput: permission ? event.input : undefined,
           // 2026-10-27: the product the server declared for this tool, so
@@ -341,12 +352,17 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
               permission, asker: asker.name, routed: notificationBot.name,
               summary: event.summary, plain, questions, options: card.options,
             });
-            host.notify(deliverableNotification(
+            // #4219: a keyed card of a room reaches its people, or its
+            // addressee alone, even with the room closed
+            const roomAudience = !permission && notificationThread === event.threadId ? host.roomAskAudienceFor?.(event.threadId, card) : undefined;
+            const roomGroup = roomAudience ? host.store.groupByThread(event.threadId) : undefined;
+            const note = deliverableNotification(
               permission ? "approval" : "question",
               notificationBot,
               notificationThread,
               words.line,
               {
+                ...(roomGroup ? { group: { id: roomGroup.id, name: roomGroup.name } } : {}),
                 ...(notificationBot.avatarUrl ? { avatarUrl: notificationBot.avatarUrl } : {}),
                 ...(words.title ? { title: words.title } : {}),
                 ...(notificationRequest ? { requestId: notificationRequest } : {}),
@@ -361,7 +377,8 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
                 // view in the chat the banner opens (a peer or a routine's owner)
                 ...(notification.messageId ? { cardId: notification.messageId } : {}),
               },
-            ));
+            );
+            host.notify(note && roomAudience ? { ...note, audience: roomAudience } : note);
           };
           const clearReviewing = () => {
             const row = host.store.messagesFor(event.threadId).find((candidate) => candidate.id === message.id);

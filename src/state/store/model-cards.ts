@@ -11,6 +11,8 @@ import type { SkillRequestCardData } from "../../../shared/skill-request";
 export interface OptionCardData {
   approvalOrigin?: import("../../../shared/wire").OptionCardData["approvalOrigin"];
   approvalDestination?: import("../../../shared/wire").OptionCardData["approvalDestination"];
+  /** #4219: a room card addressed to one person of the room. */
+  askTo?: import("../../../shared/wire").OptionCardData["askTo"];
   title: string;
   subtitle: string;
   options: string[];

@@ -145,6 +145,11 @@ export interface RoutineRun {
   error?: string;
   cost?: number | null;
   denials?: string[];
+  /** #4219: the question cards this run drew in its source room (a keyed
+   * ask_choice), outside its own conversation: closed with the run when it
+   * is cancelled or superseded, and only those (another bot's or run's
+   * cards in the room stay). */
+  roomCards?: Array<{ threadId: string; messageId: string }>;
   /** 2026-10-26: what the routine's watch saw change (bounded, data), read
    * by the run's turn inside its fence (server/routines/routine-watch.ts). Set when
    * the watch woke the run, so a restart before the turn keeps the wake. */

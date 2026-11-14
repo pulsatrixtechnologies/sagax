@@ -12,6 +12,11 @@ function cardAnswerRefusal(auth: RequestAuth, threadId: string, requestId: strin
       ? "A local service can only decline this request. Approve or answer it in Sagax while signed in."
       : null;
   }
+  // #4219: a keyed card of a room is answered by the room's people only,
+  // each as themselves, and an addressed one by its addressee alone
+  const roomVerdict = host.roomAskAnswerFor?.(auth, threadId, requestId) ?? { kind: "other" };
+  if (roomVerdict.kind === "refused") return roomVerdict.error;
+  if (roomVerdict.kind === "allowed") return null;
   const teamMemoryCard = host.store.messagesFor(threadId).find((message) =>
     message.card?.requestId === requestId && message.card.teamMemoryRequest);
   if (teamMemoryCard?.card?.teamMemoryRequest) {

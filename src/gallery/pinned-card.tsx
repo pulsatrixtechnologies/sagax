@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of the card pinned over the
  * composer with what the bot waits on (#3214). Not shipped in the app.
- * ?lang=<code>&skin=<id>&case=question|two|collapsed|approval|read|write|room-skill|routine-before|routine-after&width=1440|390
+ * ?lang=<code>&skin=<id>&case=question|two|collapsed|approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered&width=1440|390
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -40,8 +40,11 @@ window.fetch = async (input, init) => {
 };
 
 const bot = { id: "bot-orla", name: "Orla", color: "violet", threadId: "thread-main", messages: [], tasks: [] } as unknown as Bot;
+// #4219: the person looking at a room card (its addressee, or another
+// person of the room)
+const viewerId = params.get("viewer") ?? "p-ana";
 const store = {
-  state: { bots: [bot], instances: [], groups: [], routines: [] },
+  state: { bots: [bot], instances: [], groups: [], routines: [], config: { viewer: { principalId: viewerId } } },
   dispatch: (action: unknown) => { window.__decisions.push(action); },
   flushBotPatches: async () => null,
 } as unknown as ReturnType<typeof useStore>;
@@ -108,7 +111,22 @@ const routineFlat = routineWhole.join(" ").replace(/\s+/g, " ");
 const routineBefore = ask("rb", 30, `${routineFlat.slice(0, 499).trimEnd()}\u2026`, fr ? ["Continuer", "Arrêter ici"] : ["Continue", "Stop here"]);
 const routineAfter = routineWhole.map((question, index) => ask(`ra${index + 1}`, 30 + index, question, entryChoices));
 
+// #4219: a keyed card a shared bot raised in a room, addressed to one
+// person of the room; the others see it waiting on that person, and the
+// answered row names who answered.
+const roomQuestion = fr ? "Billet #1012 : qui prend la visite sur place aujourd'hui ?" : "Ticket #1012: who takes the on-site visit today?";
+const roomChoices = fr ? ["Je la prends", "Je la passe"] : ["I take it", "I hand it over"];
+const roomKeyed = (more: Record<string, unknown> = {}): Message => {
+  const base = ask("rk", 40, roomQuestion, roomChoices);
+  return { ...base, from: { botId: quasar.id, name: quasar.name, color: "teal" }, card: { ...base.card!, askKey: "ticket-1012", noHold: true, askTo: { id: "p-ana", name: "Ana" }, ...more } } as Message;
+};
+const roomOpen = roomKeyed();
+const roomAnswered = roomKeyed({ answered: "answer", answeredText: roomChoices[0], answeredBy: { kind: "session", id: "p-ana", name: "Ana" } });
+
 const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message }> = {
+  "room-keyed": { approvals: [], questions: [roomOpen], room: true, inline: roomOpen },
+  "room-keyed-other": { approvals: [], questions: [], room: true, inline: roomOpen },
+  "room-answered": { approvals: [], questions: [], room: true, inline: roomAnswered },
   "routine-before": { approvals: [], questions: [routineBefore], inline: routineBefore },
   "routine-after": { approvals: [], questions: routineAfter, inline: routineAfter[0] },
   question: { approvals: [], questions: [q1] },
@@ -140,7 +158,7 @@ function Gallery() {
     <div data-shot="chat" className="flex flex-col bg-canvas text-ink" style={{ width, minHeight: narrow ? 640 : 560 }}>
       <div className={`mx-auto flex w-full flex-1 flex-col justify-end gap-3 ${narrow ? "px-3 pt-4" : "max-w-[760px] px-6 pt-6"}`}>
         <Bubble>{fr ? "Orla : j'ai préparé la migration, il reste une décision avant de lancer." : "Orla: the migration is ready, one decision is left before I start."}</Bubble>
-        <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="thread-main" bot={{ id: bot.id, name: bot.name }} message={chosen.inline ?? q1} /></div>
+        <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="thread-main" bot={chosen.room ? { id: quasar.id, name: quasar.name } : { id: bot.id, name: bot.name }} message={chosen.inline ?? q1} /></div>
         {chosen.questions.length > 1 && !chosen.inline && <Bubble>{fr ? "Orla : et pour la suite de la semaine, trois projets attendent." : "Orla: and for the rest of the week, three projects wait."}</Bubble>}
         <div className="h-16" />
       </div>

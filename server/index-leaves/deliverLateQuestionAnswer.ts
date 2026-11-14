@@ -8,6 +8,8 @@ import { queuedSteeredMessage } from "../turns/steer-queue.ts";
 import { assertWithinBudget } from "../usage/spend.ts";
 import { createHash } from "node:crypto";
 import { visibleQuestionAnswer } from "../../shared/ask-question.ts";
+import { answeredByWith } from "../rooms/room-ask-cards.ts";
+import { cardAnsweredBy } from "./answeringCardAs.ts";
 export type Host = Record<string, any>;
 
 export function createDeliverLateQuestionAnswer(getHost: () => Host): any {
@@ -75,6 +77,15 @@ async function deliverLateQuestionAnswer(
     // retired) starts nothing
     if (latestCard.expired) throw Object.assign(new Error("this question is closed"), { status: 409 });
     assertWithinBudget(host.cfg, DATA_DIR);
+    // #4219: the answering turn of a keyed room card names who answered,
+    // in the card's one answeredBy: written here, in the sequenced delivery,
+    // for the one answer accepted (a second person answering at the same
+    // moment gets the 409 above and never overwrites it); answeringCardAs
+    // then keeps it
+    const answerer = host.roomAskAnswerer?.(auth, threadId, requestId);
+    const target = answerer
+      ? host.store.patchMessage(threadId, cardMessage.id, { card: { ...latestCard, answeredBy: answeredByWith(cardAnsweredBy(host, auth, via), answerer) } }) ?? cardMessage
+      : cardMessage;
     const sender = host.messageSender(auth);
     const trigger = host.usageTriggerFor(auth);
     if (group) {
@@ -90,10 +101,10 @@ async function deliverLateQuestionAnswer(
         });
         return { queued: true, queueId: queued.id };
       }
-      host.startGroupTurn(current.id, text, cardMessage, sendId, "chat", undefined, { threadId, sender, trigger });
+      host.startGroupTurn(current.id, text, target, sendId, "chat", undefined, { threadId, sender, trigger });
       return { queued: false };
     }
-    const direct = await host.startOrQueueDirectMessage(owner.id, threadId, text, cardMessage, sendId, sender, trigger, speakerFor(auth), undefined, via, callId);
+    const direct = await host.startOrQueueDirectMessage(owner.id, threadId, text, target, sendId, sender, trigger, speakerFor(auth), undefined, via, callId);
     return { queued: "queued" in direct && Boolean(direct.queued) };
   });
 

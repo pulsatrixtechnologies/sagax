@@ -9,7 +9,7 @@ export const WATCHER_OPTIONS_CARD_BOT_ID = "f08dd8e3-f942-4eb4-8783-df32b26b88a4
 export const ASK_CHOICE_TOOL = "ask_choice";
 // #4205: the question is the item's whole context; the card folds a long one
 // behind "show full question", so it is as long as a question card takes.
-export const ASK_CHOICE_LIMITS = { question: MAX_QUESTION_TEXT, title: 120, key: 120 } as const;
+export const ASK_CHOICE_LIMITS = { question: MAX_QUESTION_TEXT, title: 120, key: 120, to: 200 } as const;
 
 /** Keep agent-authored cards small enough to remain useful on desktop and mobile. */
 export const OPTIONS_CARD_LIMITS = {
@@ -34,11 +34,15 @@ export interface OptionsCardInput {
  * name for the card (same key again replaces it in place; the answer
  * carries it). `wait` false: the card holds no turn and no routine run.
  * `decision`: a business decision of the person's, never answered for them
- * (a key counts as one). `retire`: with key, close that pending card. */
+ * (a key counts as one). `retire`: with key, close that pending card.
+ * #4219 `to`: in a room, the one person the card is addressed to (their
+ * person id or display name); the same key with another `to` re-addresses
+ * the pending card. */
 export interface AskChoiceInput extends OptionsCardInput {
   key?: string;
   wait?: false;
   decision?: true;
+  to?: string;
 }
 
 export type ParsedAskChoiceInput =
@@ -105,8 +109,16 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
     if (!key) return { ok: false, error: "retire needs the key of the card to close." };
     return { ok: true, retire: { key } };
   }
-  const extra: Pick<AskChoiceInput, "key" | "wait" | "decision"> = {
+  // #4219: the room member the card is addressed to
+  let to: string | undefined;
+  if (value.to !== undefined) {
+    const given = boundedText(value.to, "to", ASK_CHOICE_LIMITS.to);
+    if (typeof given !== "string") return { ok: false, error: given.error };
+    to = given;
+  }
+  const extra: Pick<AskChoiceInput, "key" | "wait" | "decision" | "to"> = {
     ...(key ? { key } : {}),
+    ...(to ? { to } : {}),
     ...(value.wait === false ? { wait: false as const } : {}),
     ...(value.decision === true ? { decision: true as const } : {}),
   };

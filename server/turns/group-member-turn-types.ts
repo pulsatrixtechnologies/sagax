@@ -292,6 +292,7 @@ export type GroupMemberTurnHost = {
   roomTurnTimeoutMessage: any,
   roomPeerRosterSystemPrompt: any,
   roomRosterLine: any,
+  roomPeopleOf: any,
   memberTurnSelection: any,
   forgetTurnReach: any,
   unavailableCommandError: any,

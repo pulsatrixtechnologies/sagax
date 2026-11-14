@@ -729,8 +729,10 @@ export interface RoutineManagerOptions {
   /** #4205: a run cancelled or superseded leaves none of its own question
    * cards open: each card drawn in its conversation since `since` (the
    * run's start) is closed (an answer to it starts nothing). A card drawn
-   * before the run, in a conversation the run joined, stays. */
-  closeRunCards?: (threadId: string, since: number) => void;
+   * before the run, in a conversation the run joined, stays. #4219:
+   * `roomCards`, the cards it drew in its source room, are closed too,
+   * those exactly. */
+  closeRunCards?: (threadId: string, since: number, roomCards?: ReadonlyArray<{ threadId: string; messageId: string }>) => void;
   /** The job runtime still holds this run thread's teammate work and goes
    * on with it after a restart (docs/runtime-contract.md §5): a run waiting
    * on it stays waiting, and that work's resume completes it. */
@@ -1257,6 +1259,7 @@ function cloneRun(run: RoutineRun): RoutineRun {
     ...(run.requires ? { requires: structuredClone(run.requires) } : {}),
     attachments: cloneAttachments(run.attachments),
     denials: run.denials ? [...run.denials] : undefined,
+    ...(run.roomCards ? { roomCards: run.roomCards.map((card) => ({ ...card })) } : {}),
     ...(run.memoryHint ? { memoryHint: structuredClone(run.memoryHint) } : {}),
     ...(run.proactive ? {
       proactive: {
@@ -2748,6 +2751,15 @@ export class RoutineManager {
     const run = this.runs.find((candidate) => candidate.threadId === threadId && ["running", "waiting"].includes(candidate.status)) ??
       this.runs.find((candidate) => candidate.threadId === threadId && candidate.target !== "room-goal");
     return run ? cloneRun(run) : null;
+  }
+
+  /** #4219: a question card this thread's active run drew in its source
+   * room: closed with the run when it is cancelled or superseded. */
+  recordRoomCard(threadId: string, card: { threadId: string; messageId: string }): void {
+    const run = this.runs.find((candidate) => candidate.threadId === threadId && ["running", "waiting"].includes(candidate.status));
+    if (!run || run.roomCards?.some((known) => known.threadId === card.threadId && known.messageId === card.messageId)) return;
+    run.roomCards = [...(run.roomCards ?? []), { threadId: card.threadId, messageId: card.messageId }];
+    try { this.save(); } catch (error) { reportBackgroundError(error); }
   }
 
   /** Fail this one run, whatever its thread now runs. */
@@ -5843,7 +5855,7 @@ export class RoutineManager {
   private emitRun(run: RoutineRun) {
     // #4205: a cancelled or superseded run's cards die with it
     if (run.status === "cancelled" && run.threadId && run.startedAt !== undefined && run.target !== "room-goal") {
-      try { this.options.closeRunCards?.(run.threadId, run.startedAt); } catch (error) { reportBackgroundError(error); }
+      try { this.options.closeRunCards?.(run.threadId, run.startedAt, run.roomCards); } catch (error) { reportBackgroundError(error); }
     }
     this.options.emit?.({ kind: "routine.run", run: cloneRun(run) });
     if (run.status !== "queued") this.precheckPassed.delete(run.id);

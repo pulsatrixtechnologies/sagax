@@ -24572,7 +24572,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   createInternalIntegrationsRoutes({
     bot: (id) => store.bot(id) ?? undefined,
     isPerspicax: () => IDENTITY.kind === "perspicax",
-    ownerProduct: productKeyCardDeps.ownerProduct,
+    ownerProduct: (botId, productId) => productKeyCardDeps.ownerProduct(botId, productId),
     ownsThread: (botId, threadId) => {
       const owner = connectorThread(botId, threadId);
       return owner ? { group: Boolean(owner.group) } : null;

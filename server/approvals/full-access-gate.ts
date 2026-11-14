@@ -29,6 +29,7 @@
 // on the line of the card (full-access-gate.guard.test.ts fails a surface
 // without one, and a marker without a registered id).
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import type { CustomRuleDecision } from "../../shared/custom-rules.ts";
 import { permissionQuestion, recommendedPermissionAnswer, type ChoiceQuestion } from "../../shared/permission-question.ts";
 import { isYesNoChoices, offersTwoPaths } from "../../shared/notification-context.ts";
 import { alternativeChoices, choiceOptionsFor, yesNoOptions } from "./final-confirmation.ts";
@@ -62,6 +63,18 @@ export function fullAccessDecision(level: ApprovalMode, facts: FullAccessFacts =
   if (facts.sensitivePath) return { acts: false, level, hold: "sensitive-path" };
   if (facts.question) return { acts: false, level, hold: "question" };
   return { acts: true, level: "full" };
+}
+
+/** The rule holds of one call, from the custom rules' verdict: an
+ * organization rule or the person's own rule set to Refuse or Ask first,
+ * and a security key the person set on this kind of action (an Ask of
+ * theirs). My Chrome (#3502) and a page's connector call (#3413) read it. */
+export function ruleHoldFacts(decision: CustomRuleDecision, keyed = false): Pick<FullAccessFacts, "orgRule" | "personRule"> {
+  const held = decision.kind === "ask" || decision.kind === "deny" ? { kind: decision.kind, org: decision.rule.org === true } : null;
+  return {
+    orgRule: held?.org ? held.kind : null,
+    personRule: held && !held.org ? held.kind : keyed ? "ask" : null,
+  };
 }
 
 /** The short form every surface reads: Full access with nothing in its way. */

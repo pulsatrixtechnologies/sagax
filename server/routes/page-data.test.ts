@@ -122,9 +122,9 @@ describe("page data: the reader's own data, never another's", () => {
 
   it("applies the organization's Deny for page_data in the reader's context", async () => {
     const seen: string[] = [];
-    const deny = world({ orgRule: ({ source, auth }) => { seen.push(`${source}:${(auth as { session: { principalId: string } }).session.principalId}`); return "deny"; } });
+    const deny = world({ orgRule: ({ tool, mcpTool, auth }) => { seen.push(`${tool}:${mcpTool}:${(auth as { session: { principalId: string } }).session.principalId}`); return "deny"; } });
     expect((await call(deny.routes, as("person-b"), "/api/pages/page-1/data/team-board")).body.code).toBe("denied");
-    expect(seen).toEqual(["team-board:person-b"]);
+    expect(seen).toEqual(["page_data:page_data_team_board:person-b"]);
   });
 
   it("tells an organization's Deny apart from the reader's own refusal (#3449): reason org_rule, code still denied", async () => {

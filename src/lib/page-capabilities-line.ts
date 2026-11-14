@@ -4,7 +4,7 @@
 // capability says so before it is published. The declaration is the
 // server's own reading of that version.
 import { t } from "@/lib/i18n";
-import { pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageCapFile, type PageDataSource } from "../../shared/page-capabilities";
+import { pageCapabilitiesAct, pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageCapFile, type PageDataSource } from "../../shared/page-capabilities";
 
 const SOURCE_WORDS: Record<PageDataSource, () => string> = {
   "team-board": () => t("pages.caps.source.team-board"),
@@ -12,17 +12,26 @@ const SOURCE_WORDS: Record<PageDataSource, () => string> = {
 
 const FILE_WORDS: Record<PageCapFile, () => string> = {
   download: () => t("pages.caps.files.download"),
+  add: () => t("pages.caps.files.add"),
 };
 
 /** The parts of a declaration, in words: each data source, the reader's
- * name and role, opening links and chats. Pure. */
+ * name and role, opening links and chats, files, what it keeps (#3413 lot
+ * 3), a model question (lot 4), its own new versions (lot 6) and each of the
+ * reader's connectors it calls, with its tools (lot 7). Pure. */
 export function capabilityParts(caps: PageCapabilities | null | undefined): string[] {
   if (!pageCapabilitiesAny(caps)) return [];
+  const scopes = new Set(Object.values(caps.store ?? {}).map((rule) => rule.scope));
   return [
     ...caps.data.map((name) => SOURCE_WORDS[name]?.() ?? name),
     ...(caps.viewer ? [t("pages.caps.viewer")] : []),
     ...(caps.open ? [t("pages.caps.open")] : []),
     ...(caps.files ?? []).map((name) => FILE_WORDS[name]?.() ?? name),
+    ...(scopes.has("shared") ? [t("pages.caps.store.shared")] : []),
+    ...(scopes.has("reader") ? [t("pages.caps.store.reader")] : []),
+    ...(caps.model ? [t("pages.caps.model")] : []),
+    ...(caps.propose ? [t("pages.caps.propose")] : []),
+    ...Object.entries(caps.connectors ?? {}).map(([connector, tools]) => t("pages.caps.connector", { connector, tools: tools.join(", ") })),
   ];
 }
 
@@ -37,6 +46,14 @@ export function capabilitiesAdded(next: PageCapabilities | null | undefined, bef
     open: next.open && !before?.open,
     files: (next.files ?? []).filter((name) => !knownFiles.has(name)),
   };
+  const store = Object.fromEntries(Object.entries(next.store ?? {}).filter(([name, rule]) => before?.store?.[name]?.scope !== rule.scope));
+  if (Object.keys(store).length) added.store = store;
+  if (next.model && !before?.model) added.model = true;
+  if (next.propose && !before?.propose) added.propose = true;
+  const connectors = Object.fromEntries(Object.entries(next.connectors ?? {})
+    .map(([connector, tools]) => [connector, tools.filter((tool) => !(before?.connectors?.[connector] ?? []).includes(tool))] as const)
+    .filter(([, tools]) => tools.length));
+  if (Object.keys(connectors).length) added.connectors = connectors;
   return pageCapabilitiesAny(added) ? added : null;
 }
 
@@ -46,7 +63,8 @@ export function capabilityLine(next: PageCapabilities | null | undefined, publis
   if (!pageCapabilitiesAny(next)) return null;
   const added = published !== undefined ? capabilitiesAdded(next, published) : null;
   if (published !== undefined && added) return t("pages.caps.adds", { what: capabilityParts(added).join(", ") });
-  return t("pages.caps.reads", { what: capabilityParts(next).join(", ") });
+  // a page that also keeps, adds, asks or acts says what it may do, not only read
+  return t(pageCapabilitiesAct(next) ? "pages.caps.does" : "pages.caps.reads", { what: capabilityParts(next).join(", ") });
 }
 
 const declared = new Map<string, Promise<PageCapabilities | null>>();

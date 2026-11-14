@@ -290,11 +290,15 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * (what this version was granted, written here by the server), `data.read`,
  * `data.subscribe(name, fn, params?)` (read again, with its own params, on
  * the wrapper's `data` event; #3449), `viewer.get`
- * and `open`, and `files.download` (gesture from userActivation). Every call is one message to the parent, the wrapper, which
+ * and `open`, and `files.download` (gesture from userActivation), and
+ * `store.collection(name)` (lot 3: get, list, put, delete, and subscribe,
+ * read again on the wrapper's `store` event), `model.ask` (lot 4), and
+ * `files.add` (from a click), `files.list`, `files.get`, `files.remove` (lot 5),
+ * `page.propose` (lot 6, on `page`), and `connector.call` (lot 7). Every call is one message to the parent, the wrapper, which
  * asks the server with the reader's own session; the server checks it
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
-  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [] }).replace(/</g, "\\u003c");
+  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [], ...(caps.store ? { store: caps.store } : {}), ...(caps.model ? { model: true } : {}), ...(caps.propose ? { propose: true } : {}), ...(caps.connectors ? { connectors: caps.connectors } : {}) }).replace(/</g, "\\u003c");
   // capPost forwards the frame's transient activation. Chrome leaves the parent's
   // MessageEvent.userActivation inactive unless postMessage opts in. A load has
   // no activation, so a download on load still is not a click.
@@ -306,7 +310,7 @@ function capabilityParts(caps: PageCapabilities): string {
   // "unavailable". A ready without taken (a released app) keeps the unbounded
   // wait once sent only for the calls that may wait on a card there (CL);
   // any other call stays bounded. No periodic timer.
-  return String.raw`var C=${granted},CL=${JSON.stringify(PAGE_CAP_LEGACY_CARD_CALLS)},cpend={},cseq=0,dsubs={},CP=window.parent,cready=false,ctk=false,cqueue=[];
+  return String.raw`var C=${granted},CL=${JSON.stringify(PAGE_CAP_LEGACY_CARD_CALLS)},cpend={},cseq=0,dsubs={},ssubs={},CP=window.parent,cready=false,ctk=false,cqueue=[];
 function capPost(m){try{CP.postMessage(m,{targetOrigin:"*",includeUserActivation:true})}catch(x){var p=cpend[m.id];if(p){delete cpend[m.id];clearTimeout(p.t);p.no(x)}}}
 function capWait(id,sent){var p=cpend[id];if(!p)return;clearTimeout(p.t);p.t=0;if(sent&&!ctk&&CL.indexOf(p.c)>=0)return;p.t=setTimeout(function(){if(cpend[id]!==p)return;delete cpend[id];cqueue=cqueue.filter(function(q){return q.id!==id});var er=new Error(sent?"The page's wrapper did not answer. Update the app to use this.":"The page's wrapper did not answer.");er.code="unavailable";p.no(er)},${CAP_WAIT_MS})}
 function capCall(c,a,g){return new Promise(function(ok,no){var id=++cseq,m={type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}};if(typeof g==="boolean")m.gesture=g;cpend[id]={ok:ok,no:no,t:0,c:c};
@@ -315,13 +319,26 @@ window.addEventListener("message",function(e){if(e.source!==CP||!e.data||e.data.
 if(d.type==="${CAP_READY_MESSAGE}"){if(cready)return;cready=true;ctk=d.taken===true;var q=cqueue;cqueue=[];q.forEach(function(m){if(cpend[m.id]){capPost(m);capWait(m.id,true)}})}
 else if(d.type==="${CAP_TAKEN_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){clearTimeout(cpend[d.id].t);cpend[d.id].t=0}
 else if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){var p=cpend[d.id];delete cpend[d.id];clearTimeout(p.t);if(d.ok===true)p.ok(d.value);else{var er=new Error(String(d.message||d.error||"refused"));er.code=String(d.error||"");if(typeof d.reason==="string")er.reason=d.reason;p.no(er)}}
-else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name,gs={};(dsubs[n]||[]).forEach(function(s){var k=JSON.stringify(s.q);(gs[k]=gs[k]||{q:s.q,l:[]}).l.push(s.f)});Object.keys(gs).forEach(function(k){var g=gs[k];capCall("data.read",{name:n,params:g.q}).then(function(v){g.l.forEach(function(f){try{f(v)}catch(x){}})},function(){})})}});
+else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name,gs={};(dsubs[n]||[]).forEach(function(s){var k=JSON.stringify(s.q);(gs[k]=gs[k]||{q:s.q,l:[]}).l.push(s.f)});Object.keys(gs).forEach(function(k){var g=gs[k];capCall("data.read",{name:n,params:g.q}).then(function(v){g.l.forEach(function(f){try{f(v)}catch(x){}})},function(){})})}
+else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="store"&&typeof d.name==="string"&&ssubs[d.name]){var sn=d.name,sg={};(ssubs[sn]||[]).forEach(function(s){var k=JSON.stringify(s.q);(sg[k]=sg[k]||{q:s.q,l:[]}).l.push(s.f)});Object.keys(sg).forEach(function(k){var g=sg[k];capCall("store.list",{collection:sn,query:g.q}).then(function(v){g.l.forEach(function(f){try{f(v)}catch(x){}})},function(){})})}});
 try{CP.postMessage({type:"${CAP_HELLO_MESSAGE}",v:1},"*")}catch(x){}
-var caps={capabilities:Object.freeze({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open,files:Object.freeze(C.files.slice())}),
+var cconn=Object.freeze({call:function(c,t,a){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}return capCall("connector.call",{connector:String(c),tool:String(t),arguments:a&&typeof a==="object"?a:{}},g)}});
+function scol(n){n=String(n);return Object.freeze({get:function(i){return capCall("store.get",{collection:n,id:String(i)})},
+list:function(q){return capCall("store.list",{collection:n,query:q&&typeof q==="object"?q:{}})},
+put:function(i,v){return capCall("store.put",{collection:n,id:i===null||i===undefined?null:String(i),value:v===undefined?null:v})},
+delete:function(i){return capCall("store.delete",{collection:n,id:String(i)})},
+subscribe:function(f,q){if(typeof f!=="function")return function(){};var s={f:f,q:q&&typeof q==="object"?q:{}};(ssubs[n]=ssubs[n]||[]).push(s);return function(){ssubs[n]=(ssubs[n]||[]).filter(function(g){return g!==s})}}})}
+var caps={capabilities:Object.freeze(Object.assign({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open,files:Object.freeze(C.files.slice())},C.store?{store:Object.freeze(Object.keys(C.store))}:{},C.model?{model:true}:{},C.propose?{propose:true}:{},C.connectors?{connectors:JSON.parse(JSON.stringify(C.connectors))}:{})),
+connector:cconn,
+model:Object.freeze({ask:function(o){o=o&&typeof o==="object"?o:{};return capCall("model.ask",{prompt:o.prompt,system:o.system,schema:o.schema})}}),
+store:Object.freeze({collection:scol}),
 data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},
 subscribe:function(n,f,q){n=String(n);if(typeof f!=="function")return function(){};var s={f:f,q:q&&typeof q==="object"?q:{}};(dsubs[n]=dsubs[n]||[]).push(s);return function(){dsubs[n]=(dsubs[n]||[]).filter(function(g){return g!==s})}}}),
 viewer:Object.freeze({get:function(){return capCall("viewer.get",{})}}),
-open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({download:function(o){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}o=o&&typeof o==="object"?o:{};return capCall("files.download",{name:o.name,mime:o.mime,data:o.data},g)}})};`;
+open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({download:function(o){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}o=o&&typeof o==="object"?o:{};return capCall("files.download",{name:o.name,mime:o.mime,data:o.data},g)},
+add:function(){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}return capCall("files.add",{},g)},
+list:function(){return capCall("files.list",{})},get:function(i){return capCall("files.get",{id:String(i)})},remove:function(i){return capCall("files.remove",{id:String(i)})}})};
+function cpropose(o){o=typeof o==="string"?{content:o}:o&&typeof o==="object"?o:{};return capCall("page.propose",{content:o.content,title:o.title})}`;
 }
 
 /** The app's preview wrapper (a server document between the app and the
@@ -345,14 +362,17 @@ const STATE_BRIDGE_DEFINE = `try{Object.defineProperty(W,"sagax",{value:Object.f
  * capability calls beside `page`. Pure. */
 export function stateBridgeSource(caps?: PageCapabilities | null): string {
   if (!pageCapabilitiesAny(caps)) return STATE_BRIDGE_SOURCE;
+  // lot 6: propose sits on `page`, beside the state's own calls
+  const page = caps.propose ? "Object.assign(page,{propose:cpropose})" : "page";
   return STATE_BRIDGE_SOURCE.replace(STATE_BRIDGE_DEFINE,
-    `${capabilityParts(caps)}\ntry{Object.defineProperty(W,"sagax",{value:Object.freeze(Object.assign({page:Object.freeze(page)},caps)),writable:false,configurable:false,enumerable:false})}catch(x){}`);
+    `${capabilityParts(caps)}\ntry{Object.defineProperty(W,"sagax",{value:Object.freeze(Object.assign({page:Object.freeze(${page})},caps)),writable:false,configurable:false,enumerable:false})}catch(x){}`);
 }
 
 /** The app's preview frame has no shared state bridge: a page that declares
  * capabilities gets them alone on window.sagax. Pure. */
 export function capabilityBridgeSource(caps: PageCapabilities): string {
-  return `(function(){"use strict";${capabilityParts(caps)}\ntry{Object.defineProperty(window,"sagax",{value:Object.freeze(caps),writable:false,configurable:false,enumerable:false})}catch(x){}})();`;
+  const value = caps.propose ? "Object.assign({page:Object.freeze({propose:cpropose})},caps)" : "caps";
+  return `(function(){"use strict";${capabilityParts(caps)}\ntry{Object.defineProperty(window,"sagax",{value:Object.freeze(${value}),writable:false,configurable:false,enumerable:false})}catch(x){}})();`;
 }
 
 /** A presentation prints one slide per sheet: each slide is this tall in

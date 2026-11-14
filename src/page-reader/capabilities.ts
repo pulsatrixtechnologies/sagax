@@ -42,11 +42,16 @@ import {
   PAGE_CAP_DENY_REASONS,
   PAGE_CAP_FILE_MIMES,
   PAGE_CAP_LIMITS,
+  PAGE_FILE_ID,
+  PAGE_STORE_DOC_ID,
+  PAGE_STORE_NAME,
   pageCapFileData,
   pageCapFileName,
   pageDataParams,
   parsePageCapRequest,
   parsePageOpenRef,
+  parsePageModelQuestion,
+  parsePageStoreQuery,
   type PageCapabilities,
   type PageCapDenyReason,
   type PageCapError,
@@ -59,8 +64,10 @@ import { readerApi } from "./api";
 export const PAGE_FRAME_ORIGIN = "null";
 /** Window event the live stream raises for a `data` event (live.ts). */
 export const DATA_LIVE_EVENT = "sagax-live-data";
+/** Window event the live stream raises for a `store` event (lot 3). */
+export const STORE_LIVE_EVENT = "sagax-live-store";
 
-const KNOWN_ERRORS: readonly PageCapError[] = ["sign_in", "not_declared", "denied", "ask_first", "rate_limited", "too_large", "unavailable", "not_found", "bad_request", "shared_write_after_data"];
+const KNOWN_ERRORS: readonly PageCapError[] = ["sign_in", "not_declared", "denied", "ask_first", "rate_limited", "too_large", "unavailable", "not_found", "bad_request", "shared_write_after_data", "not_allowed"];
 const SOURCE_NAME = /^[\w-]{1,80}$/;
 const SET_MAX = 2_000;
 const EVENT_GAP_MS = 1_000;
@@ -100,7 +107,11 @@ export const CARD_GUARD_MS = 600;
 /** An address longer than this shows its middle cut, with a way to see it all. */
 export const LINK_SHOWN_CHARS = 120;
 
-export interface PendingApproval { id: number; name: string; label: string; at: number }
+/** A card the reader answers: `by` names who asks (the organization's rule,
+ * the reader's own rule, or the page for a change below Full access);
+ * `always` is false when the organization turned Always allow off (the
+ * button is then hidden). */
+export interface PendingApproval { id: number; name: string; label: string; at: number; by: "org" | "person" | "page"; always: boolean }
 /** A link the page asked to open: `host` apart, `rest` (path, query and
  * fragment, as is) under it; `always` when "Always allow this site" can be
  * offered (an http(s) site, not an e-mail address). */
@@ -146,7 +157,7 @@ export interface BrokerDeps {
   /** The page's frame window, when it is there. */
   frame(): Window | null;
   /** The server, with this reader's own session. Throws with `status`/`code`. */
-  api<T>(path: string, init?: { method: "POST"; body: unknown }): Promise<T>;
+  api<T>(path: string, init?: { method: "POST" | "PUT" | "DELETE"; body?: unknown }): Promise<T>;
   /** The window the capability messages come from: the page's frame (the
    * default origin is the sandbox's opaque "null"), or in the app's preview
    * the preview wrapper that relays them (PREVIEW_CAP_RELAY_SOURCE), whose
@@ -169,6 +180,9 @@ export interface BrokerDeps {
   now?(): number;
   /** Replaces the default files.download save (one anchor, cleaned name). */
   saveFile?(file: { name: string; mime: string; bytes: Uint8Array }): void;
+  /** Replaces the default files.add picker (one file input in the wrapper);
+   * null when the reader picked nothing. */
+  pickFile?(accept: readonly string[]): Promise<{ name: string; mime: string; bytes: Uint8Array } | null>;
 }
 
 export type ApprovalChoice = "once" | "always" | "decline";
@@ -182,6 +196,8 @@ export interface CapabilityBroker {
   guardOpen(event: { source: unknown; data: unknown }): boolean;
   /** The live stream says a data source changed. */
   dataChanged(name: string): void;
+  /** The live stream says a store collection changed (lot 3). */
+  storeChanged(name: string): void;
   /** The window came back to focus. */
   refocused(): void;
   /** Answers a card; Allow and Always allow are ignored for CARD_GUARD_MS after it appeared (returns false). */
@@ -250,6 +266,36 @@ function defaultSaveFile(file: { name: string; mime: string; bytes: Uint8Array }
   }
 }
 
+/** Default files.add picker: one file input in the wrapper, the reader's
+ * own choice, read once. */
+function defaultPickFile(accept: readonly string[]): Promise<{ name: string; mime: string; bytes: Uint8Array } | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept.join(",");
+    input.style.display = "none";
+    const done = (value: { name: string; mime: string; bytes: Uint8Array } | null) => {
+      input.remove();
+      resolve(value);
+    };
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return done(null);
+      void file.arrayBuffer().then((buffer) => done({ name: file.name, mime: file.type, bytes: new Uint8Array(buffer) }), () => done(null));
+    });
+    input.addEventListener("cancel", () => done(null));
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+/** Standard base64 of some bytes, in pieces (a large file). Pure. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) out += btoa(String.fromCharCode(...bytes.subarray(i, i + 0x8000)));
+  return out;
+}
+
 export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
   const now = () => deps.now?.() ?? Date.now();
   let state: CapabilityState = EMPTY;
@@ -298,11 +344,11 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     }
   };
 
-  const askFirst = (name: string): Promise<ApprovalChoice> => {
+  const askFirst = (name: string, shown?: string, how: Pick<PendingApproval, "by" | "always"> = { by: "org", always: true }): Promise<ApprovalChoice> => {
     const open = asking.get(name);
     if (open) return open;
     const id = ++seq;
-    const label = state.reads.find((entry) => entry.name === name)?.label ?? name;
+    const label = shown ?? state.reads.find((entry) => entry.name === name)?.label ?? name;
     const pending = new Promise<ApprovalChoice>((resolve) => {
       approvals.set(id, (choice) => {
         approvals.delete(id);
@@ -312,32 +358,42 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       });
     });
     asking.set(name, pending);
-    set({ approvals: [...state.approvals, { id, name, label, at: now() }] });
+    set({ approvals: [...state.approvals, { id, name, label, at: now(), ...how }] });
     return pending;
   };
 
-  const readData = async (name: string, fresh: boolean, params: Record<string, string> = {}, asked = false): Promise<unknown> => {
+  /** One call the organization may ask first about: the card, outside the
+   * page; the reader's own answer goes to the server, which records it, and
+   * only then is the call made again (no flag in the request is ever
+   * trusted). `key` names the card (one per key at a time). */
+  const withAskFirst = async <T,>(key: string, label: string | undefined, run: () => Promise<T>, asked = false): Promise<T> => {
     try {
-      const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(route(`data/${encodeURIComponent(name)}`, { ...(fresh ? { fresh: "1" } : {}), ...params }));
-      receivedData = true;
-      readNames.add(name);
-      // the exits the source named, as the server sent them: nothing is computed here
-      if (Array.isArray(body.links)) boundedAdd(links, body.links as string[]);
-      if (Array.isArray(body.refs)) boundedAdd(refs, body.refs as string[]);
-      return body.value ?? null;
+      return await run();
     } catch (cause) {
       const failure = capFailure(cause);
-      const approvalId = (cause as { body?: { approvalId?: unknown } }).body?.approvalId;
+      const said = (cause as { body?: { approvalId?: unknown; label?: unknown; by?: unknown; always?: unknown } }).body;
+      const approvalId = said?.approvalId;
       if (failure.error !== "ask_first" || asked || typeof approvalId !== "string") throw cause;
-      // the organization asks first: the card, outside the page; the reader's
-      // own answer goes to the server, which records it, and only then is the
-      // data read again (no flag in the request is ever trusted)
-      const choice = await askFirst(name);
+      // the server names what a call wants to do (lot 7: the connector, its tool, the reader's account)
+      // who asks, and whether Always allow may be kept, as the server said
+      const by = said?.by === "person" || said?.by === "page" ? said.by : "org";
+      const choice = await askFirst(key, label ?? (typeof said?.label === "string" ? said.label.slice(0, 160) : undefined), { by, always: said?.always !== false });
       await deps.api(`/api/pages/${encodeURIComponent(deps.pageId!)}/data-approvals/${encodeURIComponent(approvalId)}?lang=${deps.lang}`, { method: "POST", body: { answer: choice === "decline" ? "deny" : choice } });
-      if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? "Tu as refusé cette lecture." : "You declined this read."), { code: "denied", reason: "declined", status: 403 });
-      return readData(name, fresh, params, true);
+      const read = !key.includes(":") && key !== "model";
+      if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? (read ? "Tu as refusé cette lecture." : "Tu as refusé cette demande.") : (read ? "You declined this read." : "You declined this request.")), { code: "denied", reason: "declined", status: 403 });
+      return withAskFirst(key, label, run, true);
     }
   };
+
+  const readData = (name: string, fresh: boolean, params: Record<string, string> = {}): Promise<unknown> => withAskFirst(name, undefined, async () => {
+    const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(route(`data/${encodeURIComponent(name)}`, { ...(fresh ? { fresh: "1" } : {}), ...params }));
+    receivedData = true;
+    readNames.add(name);
+    // the exits the source named, as the server sent them: nothing is computed here
+    if (Array.isArray(body.links)) boundedAdd(links, body.links as string[]);
+    if (Array.isArray(body.refs)) boundedAdd(refs, body.refs as string[]);
+    return body.value ?? null;
+  });
 
   const open = async (args: Record<string, unknown> | undefined): Promise<{ ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }> => {
     const ref = typeof args?.ref === "string" ? args.ref : "";
@@ -354,6 +410,59 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       return { ok: true, value: true };
     }
     return { ok: true, value: await askLink(url) };
+  };
+
+  /** Lot 3: one store call, to the server's store routes. */
+  const storeCall = async (request: PageCapRequest, collection: string): Promise<{ ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }> => {
+    const id = request.args?.id;
+    const docPath = (doc: string) => `store/${encodeURIComponent(collection)}/${encodeURIComponent(doc)}`;
+    if (request.cap === "store.list") {
+      const query = parsePageStoreQuery(request.args?.query);
+      if (!query) return { ok: false, error: "bad_request", message: "This store query is not valid." };
+      const body = await deps.api<{ docs?: unknown }>(route(`store/${encodeURIComponent(collection)}`, Object.keys(query).length ? { q: JSON.stringify(query) } : {}));
+      return { ok: true, value: Array.isArray(body.docs) ? body.docs : [] };
+    }
+    if (request.cap === "store.put" && (id === null || id === undefined)) {
+      return { ok: true, value: await deps.api(route(`store/${encodeURIComponent(collection)}`), { method: "POST", body: { value: request.args?.value ?? null } }) };
+    }
+    if (typeof id !== "string" || !PAGE_STORE_DOC_ID.test(id)) return { ok: false, error: "bad_request", message: "A document id is 1 to 64 letters, digits, _ or -." };
+    if (request.cap === "store.get") {
+      try {
+        return { ok: true, value: await deps.api(route(docPath(id))) };
+      } catch (cause) {
+        // a document that is not there reads as null, not as an error
+        if (capFailure(cause).error === "not_found") return { ok: true, value: null };
+        throw cause;
+      }
+    }
+    if (request.cap === "store.put") return { ok: true, value: await deps.api(route(docPath(id)), { method: "PUT", body: { value: request.args?.value ?? null } }) };
+    await deps.api(route(docPath(id)), { method: "DELETE" });
+    return { ok: true, value: true };
+  };
+
+  /** Lot 5: the files readers add, through the server's files routes. */
+  const filesCall = async (request: PageCapRequest, fromClick: boolean): Promise<{ ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }> => {
+    if (request.cap === "files.list") {
+      const body = await deps.api<{ files?: unknown }>(route("files"));
+      return { ok: true, value: Array.isArray(body.files) ? body.files : [] };
+    }
+    if (request.cap === "files.add") {
+      // the picker opens from the reader's own click in the page, never on its own
+      if (!fromClick) return { ok: false, error: "bad_request", message: "A file is added from a click." };
+      const picked = await (deps.pickFile ?? defaultPickFile)(PAGE_CAP_FILE_MIMES);
+      if (!picked) return { ok: true, value: null };
+      if (!(PAGE_CAP_FILE_MIMES as readonly string[]).includes(picked.mime)) return { ok: false, error: "bad_request", message: "This file type is not allowed." };
+      if (picked.bytes.byteLength > PAGE_CAP_LIMITS.fileBytes) return { ok: false, error: "too_large", message: "This file is too large." };
+      const name = pageCapFileName(picked.name);
+      if (!name) return { ok: false, error: "bad_request", message: "This file name is not allowed." };
+      return { ok: true, value: await deps.api(route("files"), { method: "POST", body: { name, mime: picked.mime, data: bytesToBase64(picked.bytes) } }) };
+    }
+    const fileId = request.args?.id;
+    if (typeof fileId !== "string" || !PAGE_FILE_ID.test(fileId)) return { ok: false, error: "bad_request", message: "A file id is needed." };
+    const path = `files/${encodeURIComponent(fileId)}`;
+    if (request.cap === "files.get") return { ok: true, value: await deps.api(route(path)) };
+    await deps.api(route(path), { method: "DELETE" });
+    return { ok: true, value: true };
   };
 
   const linkRoute = (extra = "") => `/api/pages/${encodeURIComponent(deps.pageId!)}/link-approvals${extra}`;
@@ -445,15 +554,25 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       // A page can set gesture true on a load, so that flag is not the click.
       const fromClick = event.userActivation?.isActive === true;
       await (started ??= load());
-      const source = request.cap === "data.read" ? request.args?.name : undefined;
+      const storeCap = request.cap.startsWith("store.");
+      const source = request.cap === "data.read" ? request.args?.name : storeCap ? request.args?.collection : request.cap === "connector.call" ? request.args?.connector : undefined;
+      const tool = request.cap === "connector.call" ? request.args?.tool : undefined;
+      if (request.cap === "connector.call" && (typeof source !== "string" || typeof tool !== "string")) {
+        answer(id, { ok: false, error: "bad_request", message: "A connector and a tool are needed." });
+        return true;
+      }
       if (request.cap === "data.read" && (typeof source !== "string" || !SOURCE_NAME.test(source))) {
         answer(id, { ok: false, error: "bad_request", message: "A data source name is needed." });
         return true;
       }
+      if (storeCap && (typeof source !== "string" || !PAGE_STORE_NAME.test(source))) {
+        answer(id, { ok: false, error: "bad_request", message: "A collection name is needed." });
+        return true;
+      }
       // the server's declaration decides; a name it did not grant is
       // refused without a request (the server refuses it again anyway)
-      if (state.caps && !pageCapGranted(state.caps, request.cap, typeof source === "string" ? source : undefined)) {
-        answer(id, { ok: false, error: "not_declared", message: `This page does not declare ${request.cap === "data.read" ? `the data source ${String(source)}` : request.cap}.` });
+      if (state.caps && !pageCapGranted(state.caps, request.cap, typeof source === "string" ? source : undefined, typeof tool === "string" ? tool : undefined)) {
+        answer(id, { ok: false, error: "not_declared", message: `This page does not declare ${request.cap === "data.read" ? `the data source ${String(source)}` : storeCap ? `the collection ${String(source)}` : request.cap}.` });
         return true;
       }
       try {
@@ -473,6 +592,29 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           // the reader's name is personal data too: a link opens only with a question from now on
           receivedData = true;
           answer(id, { ok: true, value: info });
+        } else if (storeCap) {
+          answer(id, await storeCall(request, source as string));
+        } else if (request.cap === "model.ask") {
+          // lot 4: one question on the reader's own account
+          const question = parsePageModelQuestion(request.args);
+          if (question === null) answer(id, { ok: false, error: "bad_request", message: "A question needs a prompt." });
+          else if (question === "too_large") answer(id, { ok: false, error: "too_large", message: "This question is too long for a page." });
+          else answer(id, { ok: true, value: await withAskFirst("model", deps.lang === "fr" ? "une question à un modèle" : "a question to a model", () => deps.api(route("model"), { method: "POST", body: question })) });
+        } else if (request.cap === "connector.call") {
+          // lot 7: the reader's own connector; a change only from their click
+          const call = { connector: source as string, tool: tool as string, arguments: request.args?.arguments && typeof request.args.arguments === "object" ? request.args.arguments : {}, click: fromClick };
+          const value = await withAskFirst(`connector:${call.connector}/${call.tool}`, undefined, () => deps.api(route("connector"), { method: "POST", body: call }));
+          // the reader's own data: a link opens only with a question from now on
+          receivedData = true;
+          answer(id, { ok: true, value });
+        } else if (request.cap === "page.propose") {
+          // lot 6: a new proposed version, for the page's person and editors
+          const content = request.args?.content;
+          const title = request.args?.title;
+          if (typeof content !== "string" || !content.trim() || (title !== undefined && title !== null && typeof title !== "string")) answer(id, { ok: false, error: "bad_request", message: "A version needs its content." });
+          else answer(id, { ok: true, value: await deps.api(route("proposals"), { method: "POST", body: { content, ...(typeof title === "string" ? { title } : {}) } }) });
+        } else if (request.cap === "files.add" || request.cap === "files.list" || request.cap === "files.get" || request.cap === "files.remove") {
+          answer(id, await filesCall(request, fromClick));
         } else if (request.cap === "files.download" && state.caps) {
           answer(id, downloadFile(request, fromClick));
         } else if (!state.caps) {
@@ -497,6 +639,10 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     dataChanged(name) {
       if (!state.caps || !pageCapGranted(state.caps, "data.read", name)) return;
       post({ type: CAP_EVENT_MESSAGE, cap: "data", name });
+    },
+    storeChanged(name) {
+      if (!state.caps || !pageCapGranted(state.caps, "store.list", name)) return;
+      post({ type: CAP_EVENT_MESSAGE, cap: "store", name });
     },
     refocused() {
       const at = now();
@@ -542,7 +688,7 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
   if (!frame) return null;
   const broker = createCapabilityBroker({
     frame: () => frame.contentWindow,
-    api: <T,>(path: string, init?: { method: "POST"; body: unknown }) => readerApi<T>(path, init),
+    api: <T,>(path: string, init?: { method: "POST" | "PUT" | "DELETE"; body?: unknown }) => readerApi<T>(path, init),
     ...(input.pageId ? { pageId: input.pageId } : {}),
     signedIn: input.signedIn,
     lang: input.lang,
@@ -561,11 +707,16 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
     const name = parseDataEvent((event as CustomEvent).detail);
     if (name) broker.dataChanged(name);
   };
+  const onStore = (event: Event) => {
+    const name = parseDataEvent((event as CustomEvent).detail);
+    if (name) broker.storeChanged(name);
+  };
   const onFocus = () => broker.refocused();
   const onVisible = () => { if (document.visibilityState === "visible") broker.refocused(); };
   window.addEventListener("message", onMessage);
   window.addEventListener("message", onGuard, true);
   window.addEventListener(DATA_LIVE_EVENT, onData);
+  window.addEventListener(STORE_LIVE_EVENT, onStore);
   window.addEventListener("focus", onFocus);
   document.addEventListener("visibilitychange", onVisible);
   void broker.start();
@@ -575,6 +726,7 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onGuard, true);
       window.removeEventListener(DATA_LIVE_EVENT, onData);
+      window.removeEventListener(STORE_LIVE_EVENT, onStore);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     },

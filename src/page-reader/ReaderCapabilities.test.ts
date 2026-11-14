@@ -32,7 +32,7 @@ describe("ReaderCapabilities", () => {
   });
 
   it("opens by itself on an Ask first card, which has Allow, Always allow and Decline and shows what is read", () => {
-    const html = render({ caps: CAPS, reads: [{ name: "team-board", label: "The work of your coding teams" }], approvals: [{ id: 1, name: "team-board", label: "The work of your coding teams", at: 0 }] });
+    const html = render({ caps: CAPS, reads: [{ name: "team-board", label: "The work of your coding teams" }], approvals: [{ id: 1, name: "team-board", label: "The work of your coding teams", at: 0, by: "org" as const, always: true }] });
     expect(html).toContain("data-page-caps-panel");
     expect(html).toContain("The work of your coding teams");
     expect(html).toContain("data-cap-viewer");
@@ -65,11 +65,70 @@ describe("ReaderCapabilities", () => {
 describe("a file the page hands the reader", () => {
   it("shows one row, in the reader language", () => {
     const caps = { data: [], viewer: false, open: false, files: ["download"] } as NonNullable<CapabilityState["caps"]>;
-    const pending = { approvals: [{ id: 1, name: "file", label: "pending", at: 0 }] };
+    const pending = { approvals: [{ id: 1, name: "file", label: "pending", at: 0, by: "org" as const, always: true }] };
     const en = render({ caps, ...pending });
     expect(en.match(/A file it hands you/g)).toEqual(["A file it hands you"]);
     const fr = render({ caps, ...pending }, { ...BOOT, lang: "fr" });
     expect(fr.match(/Un fichier que cette page te remet/g)).toEqual(["Un fichier que cette page te remet"]);
     expect(fr).not.toContain("A file it hands you");
+  });
+});
+
+describe("what a page keeps, asks and calls (#3413 lots 3 to 7)", () => {
+  const ALL = {
+    data: [], viewer: false, open: false, files: ["add" as const],
+    store: { votes: { write: "signed_in" as const, scope: "shared" as const }, prefs: { write: "signed_in" as const, scope: "reader" as const } },
+    model: true as const, propose: true as const, connectors: { GitHub: ["create_issue"] },
+  };
+
+  it("lists each of them in the panel, nothing invisible", () => {
+    const html = render({ caps: ALL, approvals: [{ id: 1, name: "connector:GitHub__create_issue", label: "GitHub: create_issue (Ada account)", at: 0, by: "page" as const, always: true }] });
+    for (const marker of ["data-cap-files-add", "data-cap-store", "data-cap-store-mine", "data-cap-model", "data-cap-propose", "data-cap-connector"]) expect(html).toContain(marker);
+    expect(html).toContain("GitHub with your account: create_issue");
+  });
+
+  it("words a change the page asks for apart from a read, on the reader's own card", () => {
+    const html = render({ caps: ALL, approvals: [{ id: 1, name: "connector:GitHub__create_issue", label: "GitHub: create_issue (Ada account)", at: 0, by: "page" as const, always: true }] });
+    expect(html).toContain(readerText("en", "capAct"));
+    expect(html).toContain("It wants to use, with your account: GitHub: create_issue (Ada account)");
+    expect(html).not.toContain(readerText("en", "capAsk"));
+    const french = render({ caps: ALL, approvals: [{ id: 1, name: "model", label: "une question à un modèle", at: 0, by: "org" as const, always: true }] }, { ...BOOT, lang: "fr" });
+    expect(french).toContain("Ton organisation te demande d&#x27;abord.");
+    expect(french).toContain("Elle veut utiliser, avec ton compte : une question à un modèle");
+  });
+
+  it("says who asks: the organization's rule or the reader's own, not the page", () => {
+    const card = (by: "org" | "person") => render({ caps: ALL, approvals: [{ id: 1, name: "connector:GitHub__create_issue", label: "GitHub: create_issue (Ada account)", at: 0, by, always: true }] });
+    expect(card("org")).toContain(readerText("en", "capAsk"));
+    expect(card("org")).not.toContain(readerText("en", "capAct"));
+    expect(card("person")).toContain(readerText("en", "capOwnAsk"));
+    expect(card("person")).not.toContain(readerText("en", "capAct"));
+  });
+
+  it("hides Always allow while the organization turned it off", () => {
+    const on = render({ caps: ALL, approvals: [{ id: 1, name: "connector:GitHub__create_issue", label: "x", at: 0, by: "page", always: true }] });
+    const off = render({ caps: ALL, approvals: [{ id: 1, name: "connector:GitHub__create_issue", label: "x", at: 0, by: "page", always: false }] });
+    expect(on).toContain("data-cap-always");
+    expect(off).not.toContain("data-cap-always");
+    expect(off).toContain("data-cap-allow");
+  });
+
+  it("names the bar's button by what the page may do, and keeps Reads for a page that only reads", () => {
+    for (const lang of ["en", "fr"] as const) {
+      const does = render({ caps: ALL }, { ...BOOT, lang });
+      expect(does).toContain(`aria-label="${readerText(lang, "capDoes")}"`);
+      expect(does).toContain(`title="${readerText(lang, "capDoesHint")}"`);
+      expect(does).not.toContain(`>${readerText(lang, "capReads")}<`);
+      const reads = render({ caps: CAPS }, { ...BOOT, lang });
+      expect(reads).toContain(`aria-label="${readerText(lang, "capReads")}"`);
+      expect(reads).toContain(`title="${readerText(lang, "capReadsHint")}"`);
+    }
+  });
+
+  it("titles the panel by what the page may do, and keeps the read title for a page that only reads", () => {
+    expect(render({ caps: ALL, approvals: [{ id: 1, name: "model", label: "x", at: 0, by: "org", always: true }] })).toContain(`<h2>${readerText("en", "capTitleDo")}</h2>`);
+    expect(render({ caps: CAPS, approvals: [{ id: 1, name: "team-board", label: "x", at: 0, by: "org", always: true }] })).toContain(`<h2>${readerText("en", "capTitle")}</h2>`);
+    expect(render({ caps: ALL, approvals: [{ id: 1, name: "model", label: "x", at: 0, by: "org", always: true }] })).toContain(readerText("en", "capScopeDo"));
+    expect(render({ caps: CAPS, approvals: [{ id: 1, name: "team-board", label: "x", at: 0, by: "org", always: true }] })).toContain(readerText("en", "capScope"));
   });
 });

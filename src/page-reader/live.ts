@@ -4,7 +4,7 @@
 // to anyone else); the browser reconnects a dropped stream by itself.
 import { useEffect, useState } from "react";
 
-import { DATA_LIVE_EVENT, parseDataEvent } from "./capabilities";
+import { DATA_LIVE_EVENT, parseDataEvent, STORE_LIVE_EVENT } from "./capabilities";
 
 export interface LivePerson {
   id: string;
@@ -46,6 +46,13 @@ export function usePageLive(pageId: string | undefined): { people: LivePerson[];
       try {
         const name = parseDataEvent(JSON.parse((event as MessageEvent<string>).data));
         if (name) window.dispatchEvent(new CustomEvent(DATA_LIVE_EVENT, { detail: { name } }));
+      } catch { /* a bad frame changes nothing */ }
+    });
+    // a store collection the page keeps changed (#3413 lot 3): same way
+    source.addEventListener("store", (event) => {
+      try {
+        const name = parseDataEvent(JSON.parse((event as MessageEvent<string>).data));
+        if (name) window.dispatchEvent(new CustomEvent(STORE_LIVE_EVENT, { detail: { name } }));
       } catch { /* a bad frame changes nothing */ }
     });
     return () => source.close();

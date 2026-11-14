@@ -62,3 +62,44 @@ describe("a file the page hands you", () => {
     }
   });
 });
+
+describe("what a page keeps, asks and calls (#3413 lots 3 to 7)", () => {
+  const none = { data: [], viewer: false, open: false, files: [] };
+  const all: PageCapabilities = {
+    ...none,
+    files: ["add"],
+    store: { votes: { write: "signed_in", scope: "shared" }, prefs: { write: "signed_in", scope: "reader" } },
+    model: true,
+    propose: true,
+    connectors: { GitHub: ["search_issues", "create_issue"] },
+  };
+
+  it("names every part in words, nothing invisible", () => {
+    setLocale("en");
+    try {
+      // a page that keeps, asks or acts says what it may do, not "Reads"
+      expect(capabilityLine(all)).toBe("May do: files you add, documents it keeps for everyone who reads it, documents it keeps for you alone, a question to a model, with your account, proposes new versions of itself, GitHub with your account: search_issues, create_issue");
+      setLocale("fr");
+      expect(capabilityParts(all)).toEqual([
+        "les fichiers que tu y ajoutes",
+        "des documents qu'elle garde pour qui la lit",
+        "des documents qu'elle garde pour toi seulement",
+        "une question à un modèle, avec ton compte",
+        "propose de nouvelles versions d'elle-même",
+        "GitHub avec ton compte : search_issues, create_issue",
+      ]);
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("says what a new version adds: a collection, the model, proposals, a connector's new tool", () => {
+    const before: PageCapabilities = { ...none, store: { votes: { write: "signed_in", scope: "shared" } }, connectors: { GitHub: ["search_issues"] } };
+    const added = capabilitiesAdded(all, before)!;
+    expect(added.store).toEqual({ prefs: { write: "signed_in", scope: "reader" } });
+    expect(added.connectors).toEqual({ GitHub: ["create_issue"] });
+    expect(added.model).toBe(true);
+    expect(added.propose).toBe(true);
+    expect(capabilitiesAdded(all, all)).toBeNull();
+  });
+});

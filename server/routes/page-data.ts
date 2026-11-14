@@ -57,15 +57,15 @@ import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import type { PageLinkApprovals } from "../pages/page-link-approvals.ts";
 import { PageSourceError, type PageDataWatch, type PageSources } from "../pages/page-sources.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
+import { createPageCapCalls, PAGE_CONNECTOR_ROUTE, PAGE_FILES_ROUTE, PAGE_MODEL_ROUTE, PAGE_PROPOSE_ROUTE, PAGE_STORE_ROUTE, type PageCapCallDeps } from "./page-cap-calls.ts";
 import { pageAnnotator, pageMayEdit, type PageViewer } from "./published-pages.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
-export interface PageDataRouteDeps {
-  pages: {
+export interface PageDataRouteDeps extends Omit<PageCapCallDeps, "pages" | "names" | "approvals" | "now"> {
+  pages: PageCapCallDeps["pages"] & {
     get(id: string): PageRecord | null | undefined;
     capabilities(id: string, n?: number): PageCapabilities | null;
     policy(): PagesPolicy;
-    readerHandle(pageId: string, by: string): string;
   };
   /** The signed-in reader this caller is, or null. */
   reader(auth: RequestAuth): PageViewer;
@@ -75,9 +75,6 @@ export interface PageDataRouteDeps {
   ownerActive?(page: PageRecord): boolean;
   names?(ids: readonly string[]): Record<string, string>;
   sources: PageSources;
-  /** The organization's Deny and Ask first rules for the action `page_data`
-   * on this source, in the reader's context (never the page owner's bot). */
-  orgRule?(input: { source: string; auth: RequestAuth }): "deny" | "ask" | "none";
   approvals: PageDataApprovals;
   /** "Always allow this site" answers of the link card. */
   links?: PageLinkApprovals;
@@ -102,6 +99,7 @@ const TEXTS: Record<PageCapError, Record<Lang, string>> = {
   not_found: { en: "This page does not exist.", fr: "Cette page n'existe pas." },
   bad_request: { en: "This request is not valid.", fr: "Cette demande n'est pas valide." },
   shared_write_after_data: { en: "This page reads personal data: its shared state is read only while it is shared.", fr: "Cette page lit des données personnelles : son état partagé est en lecture seule tant qu'elle est partagée." },
+  not_allowed: { en: "Your role on this page does not allow this.", fr: "Ton rôle sur cette page ne permet pas ça." },
 };
 
 function langOf(url: URL, req: IncomingMessage): Lang {
@@ -113,6 +111,7 @@ function langOf(url: URL, req: IncomingMessage): Lang {
 
 export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
   const now = () => deps.now?.() ?? Date.now();
+  const calls = createPageCapCalls(deps);
   const reads = new Map<string, number[]>();
   const allowRead = (key: string): boolean => {
     const at = now();
@@ -131,7 +130,14 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     const approval = method === "POST" ? APPROVAL_ROUTE.exec(path) : null;
     const match = method === "GET" ? ROUTE.exec(path) : null;
     const link = deps.links && (method === "GET" || method === "POST" || method === "DELETE") ? LINK_ROUTE.exec(path) : null;
-    if (!approval && !match && !link) return PASS;
+    // #3413 lots 3 to 7 (server/routes/page-cap-calls.ts)
+    const store = method === "GET" || method === "POST" || method === "PUT" || method === "DELETE" ? PAGE_STORE_ROUTE.exec(path) : null;
+    const model = method === "POST" ? PAGE_MODEL_ROUTE.exec(path) : null;
+    const files = method === "GET" || method === "POST" || method === "DELETE" ? PAGE_FILES_ROUTE.exec(path) : null;
+    const propose = method === "POST" ? PAGE_PROPOSE_ROUTE.exec(path) : null;
+    const connector = method === "POST" ? PAGE_CONNECTOR_ROUTE.exec(path) : null;
+    const call = store ?? model ?? files ?? propose ?? connector;
+    if (!approval && !match && !link && !call) return PASS;
     res.setHeader?.("cache-control", "no-store");
     const lang = langOf(url, req);
     const refuse = (status: number, code: PageCapError, extra: Record<string, unknown> = {}) => json(res, status, { error: TEXTS[code][lang], code, ...extra });
@@ -139,7 +145,7 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     // a reader who is not signed in: no personal capability, and nothing
     // that says whether the page or its owner has data
     if (!viewer || (!viewer.principalId && !viewer.computerOwner)) return refuse(401, "sign_in");
-    const page = deps.pages.get((approval ?? match ?? link)![1]!);
+    const page = deps.pages.get((approval ?? match ?? link ?? call)![1]!);
     const who = page ? pageAnnotator(page, viewer, { policy: deps.pages.policy(), now: now(), ...(deps.teamsOf ? { teamsOf: deps.teamsOf } : {}), ownerActive: deps.ownerActive?.(page) ?? true }) : null;
     if (!page || !who) return refuse(404, "not_found");
 
@@ -186,6 +192,11 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     if (!who.owner && asked !== undefined && asked !== version) return refuse(404, "not_found");
     const caps = version === undefined ? null : deps.pages.capabilities(page.id, version);
 
+    if (call) {
+      const role = who.owner ? "owner" : pageMayEdit(page, viewer) ? "editor" : "signed_in";
+      return calls.handle({ req, res, url, method, path, auth, json, readBody, refuse, page, viewer, who, role, caps, version, lang });
+    }
+
     if (match![2] === "capabilities") {
       return json(res, 200, {
         version: version ?? null,
@@ -208,13 +219,14 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     const name = match![3]!;
     const source = deps.sources.get(name);
     if (!pageCapGranted(caps, "data.read", name) || !source || version === undefined) return refuse(403, "not_declared");
-    const rule = deps.orgRule?.({ source: name, auth }) ?? "none";
+    // the action page_data, in the reader's context (never the page owner's bot)
+    const rule = deps.orgRule?.({ tool: "page_data", mcpTool: `page_data_${name.replace(/-/g, "_")}`, summary: `A page reads ${name} for the person reading it`, input: JSON.stringify({ source: name }), readOnly: true, auth }) ?? "none";
     if (rule === "deny") return refuse(403, "denied", { reason: "org_rule" });
     const params = pageDataParams([...url.searchParams.entries()]);
     if (!params) return refuse(400, "bad_request");
     const ask = { person: who.by, pageId: page.id, version, source: name };
     if (rule === "ask" && !deps.approvals.allowed(ask)) {
-      const body: PageDataAskFirst = { error: TEXTS.ask_first[lang], code: "ask_first", approvalId: deps.approvals.open(ask), source: name as PageDataSource, version };
+      const body: PageDataAskFirst = { error: TEXTS.ask_first[lang], code: "ask_first", approvalId: deps.approvals.open(ask), source: name as PageDataSource, version, always: deps.approvals.alwaysOffered() };
       return json(res, 409, body);
     }
     if (!allowRead(`${page.id}\u0000${who.by.toLowerCase()}`)) return refuse(429, "rate_limited");

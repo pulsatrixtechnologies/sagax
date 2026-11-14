@@ -70,7 +70,7 @@ describe("the page's frame is the only one heard", () => {
 
   it("ignores a message that is not a well-formed call", async () => {
     const { broker, frame, sent } = setup({}, ROUTES);
-    for (const data of [null, "x", { type: CAP_MESSAGE, v: 2, id: 1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: -1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: 1.5, cap: "model.ask" }]) {
+    for (const data of [null, "x", { type: CAP_MESSAGE, v: 2, id: 1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: -1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: 1.5, cap: "later.call" }]) {
       expect(await broker.onMessage({ source: frame, origin: "null", data })).toBe(false);
     }
     expect(sent).toEqual([]);
@@ -78,7 +78,7 @@ describe("the page's frame is the only one heard", () => {
 
   it("#3657: answers unavailable to a call it does not know, never drops it, with no request", async () => {
     const { broker, frame, sent, api } = setup({}, ROUTES);
-    expect(await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "model.ask", args: {} } })).toBe(true);
+    expect(await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "later.call", args: {} } })).toBe(true);
     expect(sent).toEqual([expect.objectContaining({ type: CAP_RESULT_MESSAGE, v: 1, id: 7, ok: false, error: "unavailable" })]);
     expect(String(sent[0]!.message)).toMatch(/update/i);
     // a known call in a shape it does not take is answered the same way
@@ -89,7 +89,7 @@ describe("the page's frame is the only one heard", () => {
 
   it("#3657: says it in the reader's language", async () => {
     const { broker, frame, sent } = setup({ lang: "fr" }, ROUTES);
-    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "model.ask", args: {} } });
+    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "later.call", args: {} } });
     expect(sent).toEqual([expect.objectContaining({ id: 7, error: "unavailable", message: expect.stringMatching(/Mets l'app à jour/) })]);
   });
 
@@ -185,7 +185,7 @@ describe("Ask first", () => {
     const pending = call("data.read", { name: "team-board" });
     await flush();
     expect(broker.getState().approvals).toHaveLength(1);
-    expect(broker.getState().approvals[0]).toMatchObject({ name: "team-board", label: "The work of your coding teams" });
+    expect(broker.getState().approvals[0]).toMatchObject({ name: "team-board", label: "The work of your coding teams", by: "org", always: true });
     expect(posts).toEqual([]);
     clock.t += 700;
     broker.resolveApproval(broker.getState().approvals[0]!.id, "once");
@@ -790,5 +790,206 @@ describe("files.download", () => {
     expect(result(2)).toMatchObject({ ok: true, value: true });
     expect(openUrl).toHaveBeenCalledWith("https://example.com/after-file");
     expect(broker.getState().links).toEqual([]);
+  });
+});
+
+describe("store calls (#3413 lot 3)", () => {
+  const STORE_CAPS = { capabilities: { data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } }, reads: [] };
+  const base = "/api/pages/page_12345678";
+
+  it("sends each call to its store route, with the reader's session and the method it needs", async () => {
+    const methods: Array<{ path: string; method?: string; body?: unknown }> = [];
+    const routes = { [`${base}/capabilities`]: STORE_CAPS, [`${base}/store/votes`]: { docs: [{ id: "d1" }] } };
+    const { call, result, api } = setup({}, routes);
+    api.mockImplementation((async (path: string, init?: { method: string; body?: unknown }) => {
+      methods.push({ path, ...(init ? { method: init.method, body: init.body } : {}) });
+      if (path.startsWith(`${base}/capabilities`)) return STORE_CAPS;
+      if (path.startsWith(`${base}/store/votes/gone`)) throw new Refusal("nope", 404, "not_found");
+      return !init && path.startsWith(`${base}/store/votes?`) ? { docs: [{ id: "d1" }] } : { id: "d1" };
+    }) as never);
+    await call("store.put", { collection: "votes", id: null, value: { pick: 1 } }, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: { id: "d1" } });
+    await call("store.put", { collection: "votes", id: "d1", value: 2 }, 2);
+    await call("store.list", { collection: "votes", query: { where: { pick: 1 } } }, 3);
+    expect(result(3)).toMatchObject({ ok: true, value: [{ id: "d1" }] });
+    await call("store.get", { collection: "votes", id: "gone" }, 4);
+    expect(result(4)).toMatchObject({ ok: true, value: null });
+    await call("store.delete", { collection: "votes", id: "d1" }, 5);
+    expect(result(5)).toMatchObject({ ok: true, value: true });
+    const writes = methods.filter((entry) => entry.method);
+    expect(writes.map((entry) => [entry.method, entry.path.split("?")[0]])).toEqual([
+      ["POST", `${base}/store/votes`], ["PUT", `${base}/store/votes/d1`], ["DELETE", `${base}/store/votes/d1`],
+    ]);
+    expect(writes[0]!.body).toEqual({ value: { pick: 1 } });
+    expect(methods.find((entry) => entry.path.includes("q="))!.path).toContain(encodeURIComponent(JSON.stringify({ where: { pick: 1 } })));
+  });
+
+  it("refuses an undeclared collection, a bad name or a bad id without a request", async () => {
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: STORE_CAPS });
+    await call("store.list", { collection: "other" }, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+    await call("store.list", { collection: "Bad Name" }, 2);
+    expect(result(2)).toMatchObject({ ok: false, error: "bad_request" });
+    await call("store.get", { collection: "votes", id: "../x" }, 3);
+    expect(result(3)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(calls.filter((path) => path.includes("/store/"))).toEqual([]);
+  });
+
+  it("tells the page a declared collection changed, never another", async () => {
+    const { broker, sent } = setup({}, { [`${base}/capabilities`]: STORE_CAPS });
+    await broker.start();
+    broker.storeChanged("votes");
+    broker.storeChanged("other");
+    expect(sent.filter((message) => message.type === CAP_EVENT_MESSAGE)).toEqual([{ v: 1, type: CAP_EVENT_MESSAGE, cap: "store", name: "votes" }]);
+  });
+});
+
+describe("model.ask (#3413 lot 4)", () => {
+  const MODEL_CAPS = { capabilities: { data: [], viewer: false, open: false, files: [], model: true }, reads: [] };
+  const base = "/api/pages/page_12345678";
+
+  it("posts the question to the model route and gives the page the answer", async () => {
+    const { call, result, posts } = setup({}, { [`${base}/capabilities`]: MODEL_CAPS, [`${base}/model`]: { text: "hi" } });
+    await call("model.ask", { prompt: "Hello?", schema: { type: "object" } }, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: { text: "hi" } });
+    expect(posts).toEqual([{ path: `${base}/model?lang=en`, body: { prompt: "Hello?", schema: { type: "object" } } }]);
+  });
+
+  it("shows the organization's Ask first card, then asks again once the reader allowed it", async () => {
+    let first = true;
+    const { call, result, broker, posts } = setup({}, {
+      [`${base}/capabilities`]: MODEL_CAPS,
+      [`${base}/model`]: () => {
+        if (!first) return { text: "ok" };
+        first = false;
+        return new Refusal("ask", 409, "ask_first", { code: "ask_first", approvalId: "ap1" });
+      },
+      [`${base}/data-approvals/ap1`]: { ok: true },
+    });
+    const pending = call("model.ask", { prompt: "x" }, 1);
+    await flush();
+    await flush();
+    const card = broker.getState().approvals[0]!;
+    expect(card.name).toBe("model");
+    clock.t += CARD_GUARD_MS + 1;
+    broker.resolveApproval(card.id, "once");
+    await pending;
+    expect(result(1)).toMatchObject({ ok: true, value: { text: "ok" } });
+    expect(posts.map((entry) => entry.path)).toContain(`${base}/data-approvals/ap1?lang=en`);
+  });
+
+  it("refuses a question with no prompt, and an undeclared model, without a request", async () => {
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: { capabilities: { data: [], viewer: false, open: false, files: [] }, reads: [] } });
+    await call("model.ask", { prompt: "x" }, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+    expect(calls.filter((path) => path.includes("/model"))).toEqual([]);
+    const declared = setup({}, { [`${base}/capabilities`]: MODEL_CAPS });
+    await declared.call("model.ask", {}, 2);
+    expect(declared.result(2)).toMatchObject({ ok: false, error: "bad_request" });
+  });
+});
+
+describe("files added by readers (#3413 lot 5)", () => {
+  const ADD_CAPS = { capabilities: { data: [], viewer: false, open: false, files: ["add"] }, reads: [] };
+  const base = "/api/pages/page_12345678";
+  const click = { isActive: true };
+
+  it("opens the picker from a click only, and posts the picked file", async () => {
+    const pickFile = vi.fn(async () => ({ name: "dir/a.txt", mime: "text/plain", bytes: new TextEncoder().encode("hi") }));
+    const { broker, frame, result, posts } = setup({ pickFile }, { [`${base}/capabilities`]: ADD_CAPS, [`${base}/files`]: { id: "f".repeat(20), name: "a.txt" } });
+    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.add", args: {} } });
+    expect(result(1)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(pickFile).not.toHaveBeenCalled();
+    await broker.onMessage({ source: frame, origin: "null", userActivation: click, data: { type: CAP_MESSAGE, v: 1, id: 2, cap: "files.add", args: {} } });
+    expect(result(2)).toMatchObject({ ok: true, value: { name: "a.txt" } });
+    expect(posts).toEqual([{ path: `${base}/files?lang=en`, body: { name: "a.txt", mime: "text/plain", data: "aGk=" } }]);
+  });
+
+  it("answers null when the reader picks nothing, and refuses a type that is not allowed", async () => {
+    const nothing = setup({ pickFile: async () => null }, { [`${base}/capabilities`]: ADD_CAPS });
+    await nothing.broker.onMessage({ source: nothing.frame, origin: "null", userActivation: click, data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.add", args: {} } });
+    expect(nothing.result(1)).toMatchObject({ ok: true, value: null });
+    const html = setup({ pickFile: async () => ({ name: "x.html", mime: "text/html", bytes: new Uint8Array(1) }) }, { [`${base}/capabilities`]: ADD_CAPS });
+    await html.broker.onMessage({ source: html.frame, origin: "null", userActivation: click, data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.add", args: {} } });
+    expect(html.result(1)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(html.posts).toEqual([]);
+  });
+
+  it("lists, reads and removes through the files routes", async () => {
+    const id = "f".repeat(20);
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: ADD_CAPS, [`${base}/files/${id}`]: { id, data: "aGk=" }, [`${base}/files`]: { files: [{ id }] } });
+    await call("files.list", {}, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: [{ id }] });
+    await call("files.get", { id }, 2);
+    expect(result(2)).toMatchObject({ ok: true, value: { id, data: "aGk=" } });
+    await call("files.get", { id: "../x" }, 3);
+    expect(result(3)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(calls.some((path) => path.includes("../x"))).toBe(false);
+  });
+
+  it("refuses the files calls when only download is declared", async () => {
+    const { call, result } = setup({}, { [`${base}/capabilities`]: { capabilities: { data: [], viewer: false, open: false, files: ["download"] }, reads: [] } });
+    await call("files.list", {}, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+  });
+});
+
+describe("page.propose (#3413 lot 6)", () => {
+  const base = "/api/pages/page_12345678";
+  it("posts the new version to the proposals route", async () => {
+    const { call, result, posts } = setup({}, { [`${base}/capabilities`]: { capabilities: { data: [], viewer: false, open: false, files: [], propose: true }, reads: [] }, [`${base}/proposals`]: { version: 3 } });
+    await call("page.propose", { content: "<p>v3</p>", title: "T" }, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: { version: 3 } });
+    expect(posts).toEqual([{ path: `${base}/proposals?lang=en`, body: { content: "<p>v3</p>", title: "T" } }]);
+    await call("page.propose", { content: "" }, 2);
+    expect(result(2)).toMatchObject({ ok: false, error: "bad_request" });
+  });
+});
+
+describe("connector.call (#3413 lot 7)", () => {
+  const base = "/api/pages/page_12345678";
+  const CONN_CAPS = { capabilities: { data: [], viewer: false, open: true, files: [], connectors: { GitHub: ["create_issue"] } }, reads: [] };
+
+  it("sends the call with whether it came from a click, shows the server's card label, and calls again once allowed", async () => {
+    let first = true;
+    const { broker, frame, result, posts } = setup({}, {
+      [`${base}/capabilities`]: CONN_CAPS,
+      [`${base}/connector`]: () => {
+        if (!first) return { connector: "GitHub", account: "acc", tool: "create_issue", text: "done" };
+        first = false;
+        return new Refusal("ask", 409, "ask_first", { code: "ask_first", approvalId: "ap2", label: "GitHub: create_issue (acc)", by: "person", always: false });
+      },
+      [`${base}/data-approvals/ap2`]: { ok: true },
+    });
+    const pending = broker.onMessage({ source: frame, origin: "null", userActivation: { isActive: true }, data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "connector.call", args: { connector: "GitHub", tool: "create_issue", arguments: { title: "x" } } } });
+    await flush();
+    await flush();
+    const card = broker.getState().approvals[0]!;
+    expect(card.label).toBe("GitHub: create_issue (acc)");
+    // who asks and whether Always allow may be kept come from the server
+    expect(card).toMatchObject({ by: "person", always: false });
+    clock.t += CARD_GUARD_MS + 1;
+    broker.resolveApproval(card.id, "once");
+    await pending;
+    expect(result(1)).toMatchObject({ ok: true, value: { text: "done" } });
+    expect(posts.filter((entry) => entry.path.startsWith(`${base}/connector`)).map((entry) => entry.body)).toEqual([
+      { connector: "GitHub", tool: "create_issue", arguments: { title: "x" }, click: true },
+      { connector: "GitHub", tool: "create_issue", arguments: { title: "x" }, click: true },
+    ]);
+  });
+
+  it("refuses a tool the version does not name, without a request", async () => {
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: CONN_CAPS });
+    await call("connector.call", { connector: "GitHub", tool: "delete_repo" }, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+    expect(calls.some((path) => path.includes("/connector"))).toBe(false);
+  });
+
+  it("asks before opening a link once the page received the reader's connector data", async () => {
+    const { call, result, openUrl } = setup({}, { [`${base}/capabilities`]: CONN_CAPS, [`${base}/connector`]: { text: "x" }, [`${base}/link-approvals`]: { allowed: false } });
+    await call("connector.call", { connector: "GitHub", tool: "create_issue" }, 1);
+    await call("open", { ref: "https://example.com/out" }, 2);
+    expect(result(2)).toMatchObject({ ok: true, value: false });
+    expect(openUrl).not.toHaveBeenCalled();
   });
 });

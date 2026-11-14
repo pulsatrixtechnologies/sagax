@@ -249,7 +249,8 @@ describe("files.download in the frame", () => {
   it("parses files, drops unknown names, and grants only download", () => {
     const html = `<script type="application/sagax-capabilities+json">{ "files": ["download"] }</script>`;
     expect(pageCapabilitiesOf(html)).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
-    expect(parsePageCapabilities({ files: ["download", "add", "nope"] })).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
+    // lot 5 (#3413) made "add" a known name on purpose: "upload" stays unknown
+    expect(parsePageCapabilities({ files: ["download", "upload", "nope"] })).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
     expect(parsePageCapabilities({ data: ["team-board"], viewer: true })).toEqual({ data: ["team-board"], viewer: true, open: false, files: [] });
     expect(parsePageCapabilities({})).toEqual({ data: [], viewer: false, open: false, files: [] });
 
@@ -273,5 +274,119 @@ describe("files.download in the frame", () => {
       expect(source).toContain("userActivation");
       expect(source).toContain(frozen);
     }
+  });
+});
+
+describe("store in the frame (#3413 lot 3)", () => {
+  it("reads a store declaration: names, levels and scopes, nothing else", () => {
+    expect(parsePageCapabilities({ store: ["votes", "Bad Name", "votes"] })).toEqual({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } });
+    expect(parsePageCapabilities({ store: { prefs: { scope: "reader" }, decisions: "editors", odd: { scope: "everyone" }, bad: "root" } })!.store).toEqual({
+      prefs: { write: "signed_in", scope: "reader" },
+      decisions: { write: "editors", scope: "shared" },
+    });
+    expect(parsePageCapabilities({ store: {} })).toEqual({ data: [], viewer: false, open: false, files: [] });
+    const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`c${i}`, true]));
+    expect(Object.keys(parsePageCapabilities({ store: many })!.store!)).toHaveLength(20);
+    expect(pageCapabilitiesAny({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } })).toBe(true);
+    expect(pageCapGranted({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } }, "store.put", "votes")).toBe(true);
+    expect(pageCapGranted({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } }, "store.put", "other")).toBe(false);
+  });
+
+  it("gives the page store.collection(name), and reads a collection again on the wrapper's store event", async () => {
+    const caps = { data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in" as const, scope: "shared" as const } } };
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { capabilities: { store: string[] }; store: { collection(name: string): { put(id: unknown, value: unknown): Promise<unknown>; subscribe(fn: (docs: unknown) => void, q?: unknown): () => void } } };
+    expect(sagax.capabilities.store).toEqual(["votes"]);
+    const votes = sagax.store.collection("votes");
+    void votes.put(null, { pick: 1 });
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "store.put", args: { collection: "votes", id: null, value: { pick: 1 } } });
+    const seen: unknown[] = [];
+    votes.subscribe((docs) => seen.push(docs), { limit: 5 });
+    bridge.deliver(bridge.parent, { type: "sagax-cap-event", v: 1, cap: "store", name: "votes" });
+    const asked = bridge.posted.at(-1) as { id: number; cap: string; args: unknown };
+    expect(asked).toMatchObject({ cap: "store.list", args: { collection: "votes", query: { limit: 5 } } });
+    bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: asked.id, ok: true, value: [{ id: "d1" }] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(seen).toEqual([[{ id: "d1" }]]);
+  });
+});
+
+describe("model.ask in the frame (#3413 lot 4)", () => {
+  it("is declared by model: true only, and gives the page sagax.model.ask", () => {
+    expect(parsePageCapabilities({ model: true })).toEqual({ data: [], viewer: false, open: false, files: [], model: true });
+    expect(parsePageCapabilities({ model: "yes" })).toEqual({ data: [], viewer: false, open: false, files: [] });
+    const caps = { data: [], viewer: false, open: false, files: [], model: true as const };
+    expect(pageCapGranted(caps, "model.ask")).toBe(true);
+    expect(pageCapGranted({ ...caps, model: undefined }, "model.ask")).toBe(false);
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { model: { ask(question: unknown): Promise<unknown> } };
+    void sagax.model.ask({ prompt: "Hi", schema: { type: "string" } });
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "model.ask", args: { prompt: "Hi", schema: { type: "string" } } });
+  });
+});
+
+describe("files added by readers in the frame (#3413 lot 5)", () => {
+  it("reads files: add, and gives the page add, list, get and remove", () => {
+    expect(parsePageCapabilities({ files: ["add", "download", "other"] })).toEqual({ data: [], viewer: false, open: false, files: ["add", "download"] });
+    const caps = { data: [], viewer: false, open: false, files: ["add" as const] };
+    expect(pageCapGranted(caps, "files.list")).toBe(true);
+    expect(pageCapGranted(caps, "files.download")).toBe(false);
+    expect(pageCapGranted({ ...caps, files: ["download" as const] }, "files.add")).toBe(false);
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { files: { add(): Promise<unknown>; list(): Promise<unknown>; get(id: string): Promise<unknown>; remove(id: string): Promise<unknown> } };
+    void sagax.files.add();
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "files.add", gesture: false });
+    void sagax.files.get("abc");
+    expect(bridge.posted.at(-1)).toMatchObject({ cap: "files.get", args: { id: "abc" } });
+    void sagax.files.remove("abc");
+    expect(bridge.posted.at(-1)).toMatchObject({ cap: "files.remove", args: { id: "abc" } });
+  });
+});
+
+describe("page.propose in the frame (#3413 lot 6)", () => {
+  const caps = { data: [], viewer: false, open: false, files: [], propose: true as const };
+
+  it("puts propose on page, beside the state's own calls in a reading frame", () => {
+    expect(parsePageCapabilities({ propose: true })).toEqual({ data: [], viewer: false, open: false, files: [], propose: true });
+    expect(pageCapGranted(caps, "page.propose")).toBe(true);
+    expect(stateBridgeSource(caps)).toContain("Object.assign({page:Object.freeze(Object.assign(page,{propose:cpropose}))},caps)");
+    // a version that does not declare it keeps the state's page as it was
+    expect(stateBridgeSource({ ...caps, propose: undefined, viewer: true })).toContain("Object.assign({page:Object.freeze(page)},caps)");
+  });
+
+  it("gives the app's preview sagax.page.propose, which posts the content", () => {
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { page: { propose(input: unknown): Promise<unknown> } };
+    void sagax.page.propose("<p>v2</p>");
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "page.propose", args: { content: "<p>v2</p>" } });
+    void sagax.page.propose({ content: "<p>v3</p>", title: "T" });
+    expect(bridge.posted.at(-1)).toMatchObject({ cap: "page.propose", args: { content: "<p>v3</p>", title: "T" } });
+  });
+});
+
+describe("connector.call in the frame (#3413 lot 7)", () => {
+  it("reads connectors and tools by exact name, no wildcard, and counts them as personal data", () => {
+    const caps = parsePageCapabilities({ connectors: { GitHub: ["create_issue", "create_issue", "*"], "*": ["x"], " Padded": ["x"], Empty: [] } })!;
+    expect(caps.connectors).toEqual({ GitHub: ["create_issue"] });
+    expect(pageCapGranted(caps, "connector.call", "GitHub", "create_issue")).toBe(true);
+    expect(pageCapGranted(caps, "connector.call", "GitHub", "delete_repo")).toBe(false);
+    expect(pageCapGranted(caps, "connector.call", "github", "create_issue")).toBe(false);
+    expect(pageCapabilitiesPersonal(caps)).toBe(true);
+    expect(pageCapabilitiesPersonal(parsePageCapabilities({ store: ["votes"], model: true }))).toBe(false);
+  });
+
+  it("gives the page sagax.connector.call with whether it came from a click", () => {
+    const caps = { data: [], viewer: false, open: false, files: [], connectors: { GitHub: ["create_issue"] } };
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { capabilities: { connectors: unknown }; connector: { call(c: string, t: string, a: unknown): Promise<unknown> } };
+    expect(sagax.capabilities.connectors).toEqual({ GitHub: ["create_issue"] });
+    void sagax.connector.call("GitHub", "create_issue", { title: "x" });
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "connector.call", args: { connector: "GitHub", tool: "create_issue", arguments: { title: "x" } }, gesture: false });
   });
 });

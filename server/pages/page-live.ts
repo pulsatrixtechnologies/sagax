@@ -107,6 +107,20 @@ export class PageLive {
     }
   }
 
+  /** A store collection of the page changed (#3413 lot 3): every open bar,
+   * or only this person's for a collection each reader keeps for themselves. */
+  store(pageId: string, name: string, personId?: string): void {
+    const frame = sseEvent("store", { name });
+    if (personId === undefined) return this.send(pageId, frame);
+    const me = personId.toLowerCase();
+    for (const entry of this.rooms.get(pageId) ?? []) {
+      if (entry.id.toLowerCase() !== me) continue;
+      try {
+        entry.res.write(frame);
+      } catch { /* closed */ }
+    }
+  }
+
   /** The page is gone or no longer readable: every stream closes. */
   close(pageId: string): void {
     for (const entry of this.rooms.get(pageId) ?? []) entry.res.end();

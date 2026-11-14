@@ -216,6 +216,8 @@ body.sr-panel-open iframe { margin-right: 380px; width: calc(100% - 380px) !impo
 
 /* What the page may read (ReaderCapabilities.tsx, #3413) */
 .sr-cap-list { margin-bottom: 8px; }
+/* a capability says all of itself (a connector's every tool): it wraps, never cut */
+.sr-cap-list .sr-row-text > span { white-space: normal; overflow-wrap: anywhere; }
 .sr-cap-scope { margin: 0 0 4px; }
 .sr-cap-card { margin-top: 10px; }
 .sr-cap-card-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }

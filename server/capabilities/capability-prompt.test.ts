@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { capabilityPrompt, CAPABILITY_PROMPT_MAX_BYTES, type CapabilityPromptFile } from "./capability-prompt.ts";
+import { capabilityPrompt, CAPABILITY_INDEX_TURN_BYTES, CAPABILITY_PROMPT_MAX_BYTES, type CapabilityPromptFile } from "./capability-prompt.ts";
 const file = (name: string, text = "Verify the package."): CapabilityPromptFile => ({ kind: "skill", name, description: "Verify packing", path: `/workspace/sagax-plugins/packing/skills/${name}/SKILL.md`, read: () => text });
 
 describe("the same instructions for every engine, budgeted per capability", () => {
@@ -15,6 +15,21 @@ describe("the same instructions for every engine, budgeted per capability", () =
       expect(prompt.text).not.toContain("/workspace/");
       expect(prompt.byCapability.packing).toMatchObject({ skills: 1, omitted: 0 });
     }
+  });
+  it("sizes an index to one turn budget shared by its capabilities, and still names every reference (#4215)", () => {
+    const described = (name: string): CapabilityPromptFile => ({ ...file(name), description: "Plans, checks and reports one kind of recurring work for the person, with its own steps and sources." });
+    const groups = ["one", "two", "three", "four"].map((key) => ({ key, name: key, files: Array.from({ length: 25 }, (_, i) => described(`${key}-${i}`)) }));
+    for (const [engine, managedTools] of [["grok", true], ["codex", false]] as const) {
+      const prompt = capabilityPrompt(engine, groups, { managedTools });
+      const full = Object.values(prompt.byCapability).reduce((sum, row) => sum + row.bytes, 0);
+      expect(full).toBeLessThanOrEqual(CAPABILITY_INDEX_TURN_BYTES);
+      for (const group of groups) for (const one of group.files) expect(prompt.text).toContain(one.name);
+      // every capability keeps some described entries
+      for (const row of Object.values(prompt.byCapability)) expect(row.skills).toBeGreaterThan(0);
+    }
+    // an engine that cannot read a file keeps one budget per capability
+    const inline = capabilityPrompt("grok", groups.slice(0, 2).map((group) => ({ ...group, files: group.files.slice(0, 3) })));
+    expect(inline.byCapability.one).toMatchObject({ maxBytes: CAPABILITY_PROMPT_MAX_BYTES, skills: 3 });
   });
   it("inlines whole files only without managed reads, otherwise publishes an index", () => {
     for (const managedTools of [false, true]) {

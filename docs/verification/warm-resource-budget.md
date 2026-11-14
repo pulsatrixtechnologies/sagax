@@ -45,9 +45,12 @@ empties and its timer never keeps the server alive.
 Each process-table probe has a three-second hard timeout, including a stuck
 probe that ignores TERM; a failed probe preserves prior RSS and reservations.
 
-An active turn always keeps its resource, even when active usage alone exceeds
-the caps. Such excess is explicit in metrics and is reclaimed when resources
-become idle. These are retention caps, not a concurrency admission limit or a
+An active turn always keeps its resource, and (#4215) the caps measure only
+what is retained idle: active resources are charged in metrics but never make
+an idle one leave. Before #4215 they did, so a person or a server whose other
+engines were busy evicted each engine the moment its turn ended, and every
+next turn of that conversation started a new engine (path=spawn on each
+turn-latency line). These are retention caps, not a concurrency admission limit or a
 hard OS memory limit. Growth between samples and asynchronous teardown can
 temporarily exceed the caps. The cgroup emergency guard still handles broader
 server pressure, including browsers and memory outside these pools.

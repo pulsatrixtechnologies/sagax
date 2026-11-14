@@ -55,6 +55,24 @@ describe("turn latency line", () => {
     expect(turnLatencyParts(trace, marks).queueBy).toBe("admit:150,engines:40,compact:30,context:20,connector:10,dispatch:5750");
   });
 
+  // #4215: the self-knowledge lookup before the engine is its own part, and
+  // the main thread's busy time during the queue is named when it matters
+  it("names the self-knowledge lookup apart from admission and the main thread's busy time", () => {
+    const trace = newTurnLatency(10_000, 4_000);
+    trace.promptAt = 5_000;
+    const marks: Array<[string, number]> = [
+      ["start", 4_010],
+      ["help-start", 4_060],
+      ["help-prefetched", 4_170],
+      ["admitted", 4_200],
+    ];
+    expect(turnLatencyParts(trace, marks).queueBy).toBe("admit:90,help:110,dispatch:5800");
+    trace.queueBusyMs = 120;
+    expect(turnLatencyLine("grok", "t", trace, 6_000, "ok")).not.toContain("queueBusy=");
+    trace.queueBusyMs = 640.4;
+    expect(turnLatencyLine("grok", "t", trace, 6_000, "ok")).toContain(" queueBusy=640ms ");
+  });
+
   // #3561: one production line tells which part of queue and setup is slow
   it("names the parts of queue and setup on the same line, existing fields unchanged", () => {
     const trace = newTurnLatency(10_000, 4_000);

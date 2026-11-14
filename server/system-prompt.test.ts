@@ -470,6 +470,11 @@ describe("buildSystemPrompt volatile sections", () => {
     expect(build("A").stable).toBe(build("B").stable);
     for (const id of ids) expect(build("B").volatile).toContain(`${id}: B`);
   });
+  it("keeps the person's connectors list out of the stable prefix, so its background read never re-sends the opening block (#4215)", () => {
+    const build = (value: string) => buildSystemPrompt("Osprey", "", [{ id: "claude-ai", label: "Connectors", text: `\nConnectors: ${value}` }]);
+    expect(build("not read yet").stable).toBe(build("Mail, Calendar").stable);
+    expect(build("Mail, Calendar").volatile).toContain("Connectors: Mail, Calendar");
+  });
   it("returns the volatile half by section, in prompt order, for per-section delivery", () => {
     const built = buildSystemPrompt("I am Testy.", "", [
       { id: "memory", label: "Memory", text: "\n\nMemory: tea." },

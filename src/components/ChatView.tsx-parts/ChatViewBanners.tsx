@@ -57,7 +57,6 @@ export function ChatViewBanners({
 }) {
   return (
     <>
-      <TurnTimingLine timing={profile.tasks?.find((task) => task.threadId === bot.threadId)?.turnTiming} />
       {/* Banners sit below the floating header; the wrapper vanishes when
           none is showing so the transcript can run to the top. */}
       <div className="chat-banners pt-[52px] empty:hidden">
@@ -66,6 +65,9 @@ export function ChatViewBanners({
           the name chip; collapsed it keeps its own small row, expanded its
           card hangs over the thread */}
       <VoiceCallDock bot={bot} />
+      {/* #4215: the turn timing line sits below the floating header and its
+          fade, like the room's (GroupView), so every row reads the same. */}
+      <TurnTimingLine timing={profile.tasks?.find((task) => task.threadId === bot.threadId)?.turnTiming} />
       {/* Threads off = one unified conversation (2026-10-22): no
           cross-thread chrome at the top. The "Other activity" dropdown, the
           "New activity on an earlier topic" pill and the "Back to

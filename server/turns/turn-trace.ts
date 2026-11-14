@@ -5,6 +5,8 @@
 // never a secret, never more than the thread id's first 8 characters on the
 // optional line.
 import { createHash } from "node:crypto";
+import { performance, type EventLoopUtilization } from "node:perf_hooks";
+import type { WireTurnTiming } from "../../shared/wire.ts";
 
 const enabled = () => process.env.SAGAX_TURN_TRACE === "1";
 const MAX_CLOCKS = 500;
@@ -16,6 +18,16 @@ interface TurnClock {
   firstAt?: number;
   queueMs?: number;
   firstResponseMs?: number;
+  /** #4215: the prompt reached the engine, and whether it was already running */
+  engineAt?: number;
+  engineStart?: "warm" | "cold";
+  /** #4215: the turn ended */
+  settledAt?: number;
+  /** #4215: the server's main thread at the turn's start, and how long it
+   * was busy from there to the send (ms): near the queue, the wait is
+   * Sagax's own work (other turns, a save); near zero, it waited on I/O */
+  loopAtStart?: EventLoopUtilization;
+  queueBusyMs?: number;
   /** every step of this turn so far with its time (epoch ms), oldest first:
    * the per-turn latency line names its parts from them (#3561) */
   marks?: Array<[step: string, at: number]>;
@@ -33,10 +45,7 @@ const MAX_MARKS = 64;
 
 const clocks = new Map<string, TurnClock>();
 
-export interface TurnTiming {
-  queueMs?: number;
-  firstResponseMs?: number;
-}
+export type TurnTiming = WireTurnTiming;
 
 /** Writes the numbers onto the conversation. Absent in tests. */
 let writeTiming: ((threadId: string, timing: TurnTiming) => void) | null = null;
@@ -45,12 +54,48 @@ export function setTurnTimingWriter(writer: ((threadId: string, timing: TurnTimi
   writeTiming = writer;
 }
 
-function publish(threadId: string, row: TurnClock): void {
+/** The turn's numbers so far, from its own marks (#4215: send to first
+ * word, where it went, the total). A whole snapshot of this turn: nothing
+ * of the previous turn rides along. */
+export function turnTimingOf(row: TurnClock): TurnTiming {
+  const ms = (from: number | undefined, to: number | undefined) =>
+    from === undefined || to === undefined ? undefined : Math.max(0, Math.round(to - from));
+  const origin = row.queuedAt ?? row.startedAt;
   const timing: TurnTiming = {};
   if (row.queueMs !== undefined) timing.queueMs = row.queueMs;
   if (row.firstResponseMs !== undefined) timing.firstResponseMs = row.firstResponseMs;
-  if (timing.queueMs === undefined && timing.firstResponseMs === undefined) return;
+  const firstWordMs = ms(origin, row.firstAt);
+  if (firstWordMs !== undefined) timing.firstWordMs = firstWordMs;
+  const engineStartMs = ms(row.sentAt, row.engineAt);
+  if (engineStartMs !== undefined) timing.engineStartMs = engineStartMs;
+  if (row.engineStart) timing.engineStart = row.engineStart;
+  const totalMs = ms(origin, row.settledAt);
+  if (totalMs !== undefined) timing.totalMs = totalMs;
+  return timing;
+}
+
+function publish(threadId: string, row: TurnClock): void {
+  const timing = turnTimingOf(row);
+  if (!Object.keys(timing).length) return;
   writeTiming?.(threadId, timing);
+}
+
+/** #4215: the engine took this turn's prompt: how long it took to start
+ * (cold) or to be reached (warm) after the turn was handed to it. */
+export function noteEnginePrompt(threadId: string, warm: boolean, at = Date.now()): void {
+  const row = clocks.get(threadId);
+  if (!row || row.engineAt !== undefined || !Number.isFinite(at)) return;
+  row.engineAt = at;
+  row.engineStart = warm ? "warm" : "cold";
+  publish(threadId, row);
+}
+
+/** #4215: the turn ended: its total, from the person's message. */
+export function noteTurnSettled(threadId: string, at = Date.now()): void {
+  const row = clocks.get(threadId);
+  if (!row || row.settledAt !== undefined || row.sentAt === undefined || !Number.isFinite(at)) return;
+  row.settledAt = at;
+  publish(threadId, row);
 }
 
 function take(threadId: string): TurnClock {
@@ -92,6 +137,12 @@ export function noteFirstResponse(threadId: string, at = Date.now()): void {
 export function turnCounters(threadId: string): { queueMs: number | null; firstResponseMs: number | null } {
   const row = clocks.get(threadId);
   return { queueMs: row?.queueMs ?? null, firstResponseMs: row?.firstResponseMs ?? null };
+}
+
+/** #4215: how long the server's main thread was busy between this turn's
+ * start and its send, ms; undefined before the send. */
+export function turnQueueBusyMs(threadId: string): number | undefined {
+  return clocks.get(threadId)?.queueBusyMs;
 }
 
 /** The steps marked on this thread between `from` and `to` (epoch ms,
@@ -176,9 +227,40 @@ export function isToolListRequest(body: unknown): boolean {
   return frame.method === "tools/list" || (typeof frame.message === "object" && frame.message?.method === "tools/list");
 }
 
+/** #4215: sends that waited for their conversation's pre-warm before their
+ * turn started (server/index.ts startOrQueueDirectMessage): when the send
+ * arrived and when the wait ended (epoch ms). The turn's start takes it. */
+const arrivals = new Map<string, { arrivedAt: number; joinedAt: number }>();
+
+/** #4215: a send waited for the conversation's pre-warm (the engine the
+ * composer started) before its message was stored. Its turn counts from the
+ * send, and its line names the wait `prewarm`, instead of a wait no number
+ * showed. */
+export function noteTurnArrival(threadId: string, arrivedAt: number, joinedAt: number): void {
+  if (!threadId || !Number.isFinite(arrivedAt) || !Number.isFinite(joinedAt) || arrivedAt <= 0 || joinedAt < arrivedAt) return;
+  arrivals.set(threadId, { arrivedAt, joinedAt });
+  while (arrivals.size > MAX_CLOCKS) {
+    const oldest = arrivals.keys().next().value;
+    if (oldest === undefined) break;
+    arrivals.delete(oldest);
+  }
+}
+
+/** The send's turn started, or never will (queued, refused): forget it. */
+export function clearTurnArrival(threadId: string): void {
+  arrivals.delete(threadId);
+}
+
+/** #4215: when this turn's clock starts (the send's arrival when it waited
+ * for a pre-warm, else its message), epoch ms; undefined before. */
+export function turnQueuedAt(threadId: string): number | undefined {
+  return clocks.get(threadId)?.queuedAt;
+}
+
 /** Test helper. Production turns just age out of the map. */
 export function clearTurnCounters(): void {
   clocks.clear();
+  arrivals.clear();
   writeTiming = null;
 }
 
@@ -192,8 +274,18 @@ export function turnTrace(threadId: string, step: string, first = false): void {
     // Once a turn was sent, the next one is measured from its own message
     // (2026-10-28: the second turn kept the first one's time, so the wait
     // before send grew with the conversation's age).
-    const queuedAt = previous?.sentAt === undefined ? previous?.queuedAt : undefined;
-    clocks.set(threadId, { startedAt: now, ...(queuedAt !== undefined && queuedAt <= now ? { queuedAt } : {}) });
+    const carried = previous?.sentAt === undefined ? previous?.queuedAt : undefined;
+    // #4215: a send that waited for the pre-warm counts from its arrival;
+    // the wait is a step of its own, closed when the wait ended
+    const arrival = arrivals.get(threadId);
+    arrivals.delete(threadId);
+    const arrived = arrival && arrival.joinedAt <= now ? arrival : undefined;
+    const queuedAt = arrived && (carried === undefined || arrived.arrivedAt < carried) ? arrived.arrivedAt : carried;
+    clocks.set(threadId, {
+      startedAt: now, loopAtStart: performance.eventLoopUtilization(),
+      ...(queuedAt !== undefined && queuedAt <= now ? { queuedAt } : {}),
+      ...(arrived && arrived.joinedAt > arrived.arrivedAt ? { marks: [["prewarm-joined", arrived.joinedAt]] as Array<[string, number]> } : {}),
+    });
   } else {
     const row = take(threadId);
     row.startedAt ??= now;
@@ -204,6 +296,7 @@ export function turnTrace(threadId: string, step: string, first = false): void {
   if (marks.length > MAX_MARKS) marks.splice(0, marks.length - MAX_MARKS);
   if (step === "send" && row.sentAt === undefined) {
     row.sentAt = now;
+    if (row.loopAtStart) row.queueBusyMs = Math.round(performance.eventLoopUtilization(row.loopAtStart).active);
     const from = row.queuedAt ?? row.startedAt;
     if (from !== undefined) row.queueMs = Math.max(0, Math.round(now - from));
     publish(threadId, row);

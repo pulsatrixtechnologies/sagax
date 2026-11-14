@@ -57,8 +57,14 @@ that helpfully "remembers" a key it read from a `.env` does not get to keep it.
 ## What loads, and the budget
 
 At the start of every turn the **first 200 lines or 24 KB of `MEMORY.md`,
-whichever cuts first**, are placed into the bot's system prompt. Nothing past
-that line loads, and the bot is only told that the file was cut off. Topic files
+whichever cuts first**, are the file's load budget. A turn that can read the
+file itself (file tools, or `workspace_read` and the memory tools) is shown its
+first lines up to 8 KB, whole lines only (#4215); a line past them comes back
+with a message that shares its words, in the recalled block in front of that
+message, and the bot is told where the rest is. A turn with no way to read the
+file, or one shown to a narrower place (a room, a group), keeps the whole load
+budget in its prompt. Nothing past the load budget loads, and the bot is only
+told that the file was cut off. Topic files
 and daily logs are never loaded automatically; the bot reads a topic file with
 its file tools when it decides it needs it, and logs are for you.
 

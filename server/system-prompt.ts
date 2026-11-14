@@ -46,7 +46,13 @@ export function userProfileSystemPrompt(profile?: { aboutMe?: string }): string 
 // "goal" (server/solo-goal.ts) comes and goes with a 1:1 /goal: volatile,
 // so starting or finishing a goal never relaunches the engine.
 // "proactive-ask" (#3431) comes and goes with what the person decided.
-const VOLATILE_SECTIONS = new Set(["memory", "docs", "mentions", "outstanding", "recent", "voice-call", "availability", "model", "stream", "workplace", "reach", "goal", "plan", "routine-execution", "skill-instructions", "playbooks", "files-cwd", "group-memory", "proactive-ask"]);
+// "claude-ai" (#4215), the person's connectors list, follows a read made in
+// the background: the first turn of a server says "not read yet", the next
+// one the list, and an added or expired connector changes it again. In the
+// stable half each change re-sent the whole opening block into the session
+// (a second copy in its history, a new prefix for the provider's cache) and
+// relaunched an engine that keeps its process on the stable half.
+const VOLATILE_SECTIONS = new Set(["memory", "docs", "mentions", "outstanding", "recent", "voice-call", "availability", "model", "stream", "workplace", "reach", "goal", "plan", "routine-execution", "skill-instructions", "playbooks", "files-cwd", "group-memory", "proactive-ask", "claude-ai"]);
 /** These per-turn sections are volatile on every engine (#1997), including
  * selected skill bodies, routine execution, task folders and group memory.
  * Keep the exported set for older host callers that pass it explicitly.

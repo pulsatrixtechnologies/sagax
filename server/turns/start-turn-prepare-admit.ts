@@ -5,6 +5,7 @@ import { carryAutoComputerMoves, pinnedWorkspaceStart } from "../computer/auto-c
 import { turnLanguage } from "./turn-language.ts";
 import { turnClockIn } from "./turn-clock.ts";
 import { withHelpPrefetch } from "../self-knowledge/help-prefetch.ts";
+import { turnTrace } from "./turn-trace.ts";
 import { effortForEngine } from "../../shared/ultracode-effort.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
@@ -376,9 +377,13 @@ export function createPrepareAdmitStartTurn(
     const speakerId = organization ? orgSpeakerPrincipal(state.bot, state.speaker) : null;
     const person = speakerId ? principals.byId(speakerId) : null;
     const role = !organization || !person ? null : person.local === true || person.orgRole === "admin" ? "admin" : "member";
+    // #4215: the lookup is its own part of the turn's queue (help), so a
+    // slow one is named on the latency line instead of hiding in admit
+    turnTrace(state.threadId, "help-start");
     const prefetched = withHelpPrefetch(state.providerText, state.userMessage.text, await bundledKnowledgeIndex().catch(() => null), {
       organization, role, perspicaxTools: organization && Boolean(speakerId), release: releaseVersion()
     });
+    turnTrace(state.threadId, "help-prefetched");
     if (prefetched.ids.length) {
       state.providerText = prefetched.text;
       console.error(`[help-prefetch] thread=${state.threadId} sections=${prefetched.ids.length}`);

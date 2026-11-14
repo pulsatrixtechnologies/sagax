@@ -955,7 +955,7 @@ import { routeTurnModel } from "./turns/turn-model-routing.ts";
 import { effortAcceptedByModel, effortForModel } from "../shared/model-capabilities.ts";
 import { isAutoOptimize } from "../shared/model-auto-optimize.ts";
 import { VoiceLatencyLog } from "./voice/voice-latency.ts";
-import { noteTurnQueued, setTurnTimingWriter, turnTrace } from "./turns/turn-trace.ts";
+import { clearTurnArrival, noteTurnArrival, noteTurnQueued, setTurnTimingWriter, turnTrace, type TurnTiming } from "./turns/turn-trace.ts";
 import { unansweredCallMessage, VOICE_CALL_WATCHDOG_MS, voiceCallRecoveryPrompt } from "./voice/voice-call-watchdog.ts";
 import * as grokVoice from "./tts/grok.ts";
 import { realtimeUrl, WORK_TIMEOUT_MS as REALTIME_WORK_TIMEOUT_MS } from "./voice/realtime-call.ts";
@@ -11550,7 +11550,8 @@ if (claudeRetirement) retireEveryClaudeBot(cfg, store, saveConfig, claudeRetirem
 // response is noted on the first delta, and a synchronous bots save there
 // would hold that delta's SSE frame behind an fsync. Notes of one tick merge
 // into one save per conversation.
-const pendingTurnTimings = new Map<string, { queueMs?: number; firstResponseMs?: number }>();
+// Each note is the whole turn so far (turn-trace.ts): the latest one wins.
+const pendingTurnTimings = new Map<string, TurnTiming>();
 setTurnTimingWriter((threadId, timing) => {
   if (!pendingTurnTimings.size) setImmediate(() => {
     const due = [...pendingTurnTimings];
@@ -11560,7 +11561,7 @@ setTurnTimingWriter((threadId, timing) => {
       catch (error) { console.warn(`[turn-timing] ${id}: ${error instanceof Error ? error.message : String(error)}`); }
     }
   });
-  pendingTurnTimings.set(threadId, { ...pendingTurnTimings.get(threadId), ...timing });
+  pendingTurnTimings.set(threadId, timing);
 });
 // One-time notice (migration): Composio was removed this release. Connected
 // apps now come only from the engines' own connectors (Claude, Grok) and
@@ -18752,8 +18753,16 @@ async function startOrQueueDirectMessage(...args: Parameters<typeof startOrQueue
   }
   if (!threadPrewarm.has(threadId)) return startOrQueueDirectMessageNow(...args);
   const run = (async () => {
+    // #4215: the wait is the turn's own: its line counts from the send
+    // and names the wait (prewarm), its timing too
+    const arrivedAt = Date.now();
     await joinPrewarm(threadId);
-    return startOrQueueDirectMessageNow(...args);
+    noteTurnArrival(threadId, arrivedAt, Date.now());
+    try {
+      return await startOrQueueDirectMessageNow(...args);
+    } finally {
+      clearTurnArrival(threadId);
+    }
   })();
   prewarmSends.set(threadId, run);
   try {
@@ -35509,6 +35518,10 @@ const onListening = async () => {
   // #3599: plugin copies kept at start from another build are made again
   // now, asynchronously, never on the start path
   void installationPlugins.refreshStale().catch(() => undefined);
+  // #4215: the self-knowledge index a person's question about Sagax is
+  // looked up in (start-turn-prepare-admit.ts) is read and indexed once now,
+  // never on the first turn's queue (about 110 ms there in a reproduction)
+  void bundledKnowledgeIndex().catch(() => undefined);
   // Words queued before the restart start first, ahead of anything sent from
   // now on. Their turns wait for the engines read at start like every turn.
   followupsReady = true;

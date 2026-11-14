@@ -16,6 +16,8 @@
 // the part it names; a part the turn did not reach is left out.
 //   queueBy: admit (checks before the turn starts, and #3679 the message's
 //   admission and the claim after them), prewarm (a warm being joined),
+//   help (#4215: the sagax_help lookup run before the engine for a question
+//   about Sagax itself),
 //   engines (#3679: the engines' list read once after a start), compact
 //   (the fold check), context (selection, soul, skills), mcp (the tool
 //   servers' sign-in refresh and probe), connector (the account's connection, and
@@ -30,6 +32,10 @@
 //   start and handshake), session (session/new or load), model (model and
 //   mode), tools (the engine's tool servers answering), prompt (the rest
 //   until the prompt is sent).
+// #4215: queueBusy, when over 250 ms: how long the server's own main thread
+// was busy between the turn's start and its send. Near the queue, the wait
+// was Sagax's own work (other turns, a save, the collector); near zero, the
+// turn waited on I/O (a read, a sign-in refresh, the person's environment).
 // #3623: toolsBy names the servers the tools part waited for: Sagax's own
 // mounts by product name, the person's own connections as one count
 // (own:<count>:<longest ms>), pending:<count> when the wait hit its limit.
@@ -75,6 +81,8 @@ export interface TurnLatency {
   stallMs?: number;
   /** #3623: the engine's tool servers the setup waited for (toolsBy) */
   toolWait?: TurnToolWait;
+  /** #4215: the server's main thread busy during the queue, ms (queueBusy) */
+  queueBusyMs?: number;
 }
 
 /** #3623: the wait for the engine's tool servers, server by server. */
@@ -177,10 +185,13 @@ export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, a
 
 type Mark = readonly [step: string, at: number];
 
-const QUEUE_PARTS = ["admit", "prewarm", "engines", "compact", "context", "mcp", "connector", "place", "mounts", "plugins", "checkpoint", "browser", "prompt", "recall", "access", "slot", "send", "dispatch"] as const;
+const QUEUE_PARTS = ["admit", "prewarm", "help", "engines", "compact", "context", "mcp", "connector", "place", "mounts", "plugins", "checkpoint", "browser", "prompt", "recall", "access", "slot", "send", "dispatch"] as const;
 const QUEUE_STEP: Record<string, (typeof QUEUE_PARTS)[number]> = {
   start: "admit",
   "prewarm-joined": "prewarm",
+  // #4215: what ran before the lookup is admission; the lookup closes its own
+  "help-start": "admit",
+  "help-prefetched": "help",
   // #3679: what ran before the fold check closes its own part
   admitted: "admit",
   "connectors-planned": "connector",
@@ -269,6 +280,7 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
     if (queueBy) parts.push(`queueBy=${queueBy}`);
     if (setupBy) parts.push(`setupBy=${setupBy}`);
   }
+  if (trace.queueBusyMs !== undefined && trace.queueBusyMs > TOOLS_SLOW_MS) parts.push(`queueBusy=${Math.round(trace.queueBusyMs)}ms`);
   const toolsBy = turnToolsBy(trace.toolWait);
   if (toolsBy) parts.push(`toolsBy=${toolsBy}`);
   const toolsServed = turnToolsServed(trace.toolWait);

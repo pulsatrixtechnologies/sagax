@@ -122,10 +122,10 @@ export class WarmResourceBudget {
     entry.reserved = Math.max(0, typeof entry.bytes === "function" ? entry.bytes() : entry.bytes);
   }
 
-  private totals(includeClosing = true): { total: Totals; people: Map<string, Totals> } {
+  private totals(retainedOnly = false): { total: Totals; people: Map<string, Totals> } {
     const total = empty(), people = new Map<string, Totals>();
     for (const entry of this.entries) {
-      if (!includeClosing && entry.state === "closing") continue;
+      if (retainedOnly && entry.state !== "idle") continue;
       const person = people.get(entry.person) ?? empty();
       this.add(person, entry); this.add(total, entry);
       people.set(entry.person, person);
@@ -136,15 +136,19 @@ export class WarmResourceBudget {
   private enforce(): void {
     const limits = this.options.limits ?? warmResourceLimits();
     const overPerson = (t: Totals) => t.count > limits.personCount || t.memoryBytes > limits.personBytes;
-    // Closing resources remain charged in metrics, but are already scheduled
-    // to leave. Do not evict a whole pool while one slow child is exiting.
+    // The caps bound what is retained: idle resources only. Closing ones
+    // remain charged in metrics, but are already scheduled to leave. #4215:
+    // active turns used to count too, so a person (or a server) whose other
+    // engines were busy evicted every engine the moment its turn ended, and
+    // the conversation's next turn always paid a cold start. A running turn
+    // is not retention; real memory pressure stays with the cgroup guard
+    // (server/memory/engine-memory-guard.ts).
     const candidates = [...this.entries].filter(e => e.state === "idle").sort((a, b) => a.used - b.used);
-    // Local caps first, then the global cap. An active-only person's local
-    // excess does not prevent reclaiming global capacity from other idles.
+    // Local caps first, then the global cap.
     for (const scope of ["person", "global"] as const) {
       for (const entry of candidates) {
         if (entry.state !== "idle" || entry.protected?.()) continue;
-        const { total, people } = this.totals(false);
+        const { total, people } = this.totals(true);
         const over = scope === "person" ? overPerson(people.get(entry.person) ?? empty())
           : total.count > limits.count || total.memoryBytes > limits.bytes;
         if (!over) continue;

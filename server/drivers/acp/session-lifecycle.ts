@@ -6,7 +6,7 @@ import {
 import { ACP_STUCK_AFTER_MS, envOr, promptIdleTimeoutMs } from "./constants.ts";
 import { endTurn } from "./turn-end.ts";
 import { turnLatencyLine } from "./turn-latency.ts";
-import { turnTraceMarks } from "../../turns/turn-trace.ts";
+import { turnQueueBusyMs, turnTraceMarks } from "../../turns/turn-trace.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 import { reportBackgroundError } from "../../background-error.ts";
 
@@ -145,6 +145,7 @@ export function createSettle(deps: LifecycleDeps) {
     if (current.latency) {
       const latency = current.latency;
       const marks = turnTraceMarks(threadId, latency.receivedAt ?? latency.start, latency.promptAt ?? latency.start);
+      latency.queueBusyMs ??= turnQueueBusyMs(threadId);
       console.log(turnLatencyLine(DRIVER_KIND, threadId, latency, Date.now(), end.ok ? "ok" : (end.stopReason ?? "failed"), marks));
     }
     if (session.child.exitCode === null && !session.closing && !session.dead) {

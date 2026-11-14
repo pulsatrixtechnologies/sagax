@@ -29,6 +29,15 @@ export interface CapabilityPromptOptions {
   indexOnly?: boolean;
 }
 export const CAPABILITY_PROMPT_MAX_BYTES = 4_000;
+/** #4215: on a turn that reads a reference by name (an index, not whole
+ * files), the full entries of all capabilities share this size, split evenly
+ * between them; every other reference is still named, with its route. Four
+ * capabilities used to send up to 16 KB of index on every new conversation
+ * and every engine start (14 KB measured). */
+export const CAPABILITY_INDEX_TURN_BYTES = 4_000;
+/** A capability's share is never smaller than this, so its first entries
+ * keep their description. */
+export const CAPABILITY_INDEX_MIN_SHARE = 1_000;
 export const CAPABILITY_PROMPT_MAX_FILES = 30;
 export const CAPABILITY_DESCRIPTION_MAX_CHARS = 120;
 
@@ -75,6 +84,11 @@ export function capabilityPrompt(driverKind: string, groups: readonly Capability
   const byCapability: Record<string, CapabilityPromptIndex> = {};
   const blocks: string[] = [];
   let tailBytes = 0;
+  // #4215: an index shares one turn budget; whole files (an engine that
+  // cannot read them) keep one budget per capability
+  const filled = groups.filter((group) => group.files.length).length;
+  const maxBytes = inline || !filled ? CAPABILITY_PROMPT_MAX_BYTES
+    : Math.min(CAPABILITY_PROMPT_MAX_BYTES, Math.max(CAPABILITY_INDEX_MIN_SHARE, Math.floor(CAPABILITY_INDEX_TURN_BYTES / filled)));
   for (const group of groups) {
     if (!group.files.length) continue;
     const heading = `\n\nCapability ${JSON.stringify(group.name)} (${inline ? "instructions" : "file index"}):\n`;
@@ -93,7 +107,7 @@ export function capabilityPrompt(driverKind: string, groups: readonly Capability
         : `- ${file.kind} ${file.name}: ${indexDescription(file.description)}${managed ? "" : ` (${JSON.stringify(file.path)})`}`;
       // Keep files whole. A large first file cannot starve smaller files
       // from this capability, nor the independently budgeted next one.
-      if (Buffer.byteLength(body([...entries, entry]), "utf8") > CAPABILITY_PROMPT_MAX_BYTES) { rest.push(file); continue; }
+      if (Buffer.byteLength(body([...entries, entry]), "utf8") > maxBytes) { rest.push(file); continue; }
       entries.push(entry);
       parts[`${file.kind}s`]++;
     }
@@ -104,7 +118,7 @@ export function capabilityPrompt(driverKind: string, groups: readonly Capability
     const tail = namedTail(rest, inline, managed);
     tailBytes += Buffer.byteLength(tail, "utf8");
     blocks.push(budgeted + tail);
-    byCapability[group.key] = { bytes: Buffer.byteLength(budgeted, "utf8"), maxBytes: CAPABILITY_PROMPT_MAX_BYTES, skills: entries.length, maxSkills: CAPABILITY_PROMPT_MAX_FILES, omitted: unreadable, ...(rest.length ? { named: rest.length } : {}), parts };
+    byCapability[group.key] = { bytes: Buffer.byteLength(budgeted, "utf8"), maxBytes, skills: entries.length, maxSkills: CAPABILITY_PROMPT_MAX_FILES, omitted: unreadable, ...(rest.length ? { named: rest.length } : {}), parts };
   }
   const rows = Object.values(byCapability);
   const omitted = rows.reduce((sum, row) => sum + row.omitted, 0);
@@ -127,7 +141,7 @@ export function capabilityPrompt(driverKind: string, groups: readonly Capability
   return {
     text, byCapability,
     index: {
-      bytes: Buffer.byteLength(text, "utf8"), maxBytes: rows.length * CAPABILITY_PROMPT_MAX_BYTES + Buffer.byteLength(header + footer, "utf8") + tailBytes,
+      bytes: Buffer.byteLength(text, "utf8"), maxBytes: rows.length * maxBytes + Buffer.byteLength(header + footer, "utf8") + tailBytes,
       skills: rows.reduce((sum, row) => sum + row.skills, 0), maxSkills: rows.length * CAPABILITY_PROMPT_MAX_FILES, omitted,
       ...(named ? { named } : {}),
       parts: { skills: rows.reduce((sum, row) => sum + (row.parts?.skills ?? 0), 0), commands: rows.reduce((sum, row) => sum + (row.parts?.commands ?? 0), 0), agents: rows.reduce((sum, row) => sum + (row.parts?.agents ?? 0), 0) },

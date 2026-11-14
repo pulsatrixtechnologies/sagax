@@ -209,3 +209,71 @@ permission holds p50 4.5 s (n=2274); session/new|load p50 0.22 s; spawn -> promp
 - The provider sometimes sends nothing for 27-90 s, on short contexts too. The stall guard now
   waits 10 s on a short conversation and up to 30 s on a long one (grokAdaptiveStallMs);
   SAGAX_GROK_STALL_RETRY_MS still fixes it (0 turns it off).
+
+## Cold start on every turn (#4215, 2026-11-13)
+
+What the production lines showed: path=spawn on every turn, setup 2.7 to 13.6 s,
+no prompt cache hit. Two causes, reproduced through the real server and the
+fake engine (server/turn-start-latency.e2e.test.ts):
+
+- The warm budget (server/resources/warm-resources.ts) counted the running
+  turns of the same person (and of the server) against its retention caps. With
+  four teammates of the same person working, at the default caps, the
+  conversation's engine was closed `why=warm budget` each time its turn ended:
+  three turns, three spawns. The caps now bound idle retention only: the same
+  run reuses the engine (spawn, pooled, pooled).
+- The person's connectors list (section `claude-ai`) sat in the stable half.
+  Its first turn says "connectors not read yet", the background read lands
+  after it, so the second turn re-sent the whole opening block into the session
+  (prompt 22,766 characters instead of a short note): a second copy in the
+  session's history and a new prefix for the provider's cache. It is volatile
+  now: the second turn sends 577 characters (the changed section and the
+  request), the third 13.
+
+Queue: the first turn of a server read and indexed the self-knowledge base
+(the lookup for a question about Sagax itself) inside its queue, 111 ms of a
+202 ms queue in the reproduction. The index is built once when the server
+starts listening; the same first turn now queues 76 ms. The lookup is its own
+part of the line (`queueBy=help:`), and `queueBusy=` (over 250 ms) says how
+long the server's own main thread was busy during the queue: near the queue,
+the wait was Sagax's own work; near zero, the turn waited on I/O.
+
+The conversation's timing line (Settings, Turn timing) reads one turn: send to
+first word, the wait before send, the engine start (warm or cold), the first
+text after the hand-off, and the total (shared/wire.ts WireTurnTiming).
+
+Queue and the composer's warm. When the person starts typing, the composer
+warms the conversation's engine (server/threads/thread-prewarm.ts). A send that
+lands while that engine is still starting waits for it, up to 5 s, before its
+message is even stored (server/index.ts startOrQueueDirectMessage). That wait
+was on no line: the queue counted from the stored message. With the warm budget
+above, the warmed engine was then closed `why=warm budget`, and the turn
+started a second one: the engine start paid twice, once out of sight and once
+as setup. Reproduced with the fake engine starting in 1.5 s
+(FAKE_ACP_COLD_MS), four busy teammates, a warm before each send:
+
+- before: path=spawn on all three turns, queue 12, 13, 10 ms (the first send's
+  wait for the warm not counted), setup 1,687, 1,690, 1,710 ms, four engine
+  starts for three turns;
+- after: path=pooled on all three, queue 1,726 ms on the first turn
+  (`queueBy=...,prewarm:1706,...`: the rest of the engine start the typing
+  began, named) then 10 and 13 ms, setup 3, 2, 2 ms, one engine.
+
+The send's arrival now starts the turn's clock (turn-trace.ts noteTurnArrival):
+the line's queue, its `prewarm` part and the app's "send to first word" include
+the wait. The queue's other parts stay in tens of ms in the reproduction; a
+production queue of seconds reads `prewarm` (an engine start), `admit` (a
+first attempt on an engine that failed and handed the turn to its backup: the
+backup's run restarts the clock) or `queueBusy` (Sagax's own work).
+
+Memory and skills sized to the turn. A turn that can read MEMORY.md itself is
+shown its first lines up to 8 KB (MEMORY_TURN_BYTES, whole lines); a line past
+them comes back in the recalled block in front of the message that shares its
+words (server/recall/recall.ts memoryLinePassages), so it never changes the
+system prompt and its cached prefix. The skills index (an engine that reads a
+reference by name) shares one 4 KB budget for its full entries between its
+capabilities, at least 1 KB each; every other reference is still named with
+its route. A MEMORY.md of 190 lines (about 23 KB) and four capabilities of 30
+skills: memory section 25,770 to 9,840 bytes, skills index 15,607 to 6,319.
+Both are the same bytes on every turn of a conversation, so the provider's
+cache still holds them.

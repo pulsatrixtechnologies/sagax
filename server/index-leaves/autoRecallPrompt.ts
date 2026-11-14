@@ -4,7 +4,7 @@ import { buildRecall } from "../recall/recall.ts";
 export type Host = Record<string, any>;
 
 export function createAutoRecallPrompt(getHost: () => Host): any {
-function autoRecallPrompt(bot: BotRecord, threadId: string, message: string, opts: { conversations: boolean; userName: string; budget?: RecallBudget; audience?: MemoryDestination }) {
+function autoRecallPrompt(bot: BotRecord, threadId: string, message: string, opts: { conversations: boolean; userName: string; budget?: RecallBudget; audience?: MemoryDestination; memoryExcerptBytes?: number }) {
   const host = getHost();
   const { autoRecallEnabled, semanticRecallEnabled } = host;
 
@@ -40,6 +40,7 @@ function autoRecallPrompt(bot: BotRecord, threadId: string, message: string, opt
       author: (hit) => (hit.role === "user" ? hit.peer ?? opts.userName : hit.from ?? bot.name),
       ...(opts.budget ? { budget: opts.budget } : {}),
       ...(opts.audience ? { audience: opts.audience } : {}),
+      ...(opts.memoryExcerptBytes ? { memoryExcerptBytes: opts.memoryExcerptBytes } : {}),
       // the local semantic index (server/recall/semantic-index.ts): on unless
       // switched off; FTS5 still fills the block first
       semantic: semanticRecallEnabled(host.cfg)

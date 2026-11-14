@@ -14,6 +14,7 @@ import { warmCachePrime } from "./warm-cache-prime.ts";
 import { stablePromptSections } from "../system-prompt.ts";
 import { clockAtHandoff } from "./turn-clock.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
+import { turnQueuedAt } from "./turn-trace.ts";
 
 export function createDispatchStartTurn(host: StartTurnHost) {
   const {
@@ -166,7 +167,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...(state.compactPrompt ? { compactPrompt: state.compactPrompt } : {}),
       ...(state.agentsKnownUse ? { agentsKnownUse: state.agentsKnownUse } : {}),
       // the per-turn latency line's queue stage (drivers/acp/turn-latency.ts)
-      ...(!state.warmOnly && typeof state.userMessage.at === "number" ? { receivedAt: state.userMessage.at } : {}),
+      // #4215: from the send's arrival when it waited for the pre-warm
+      ...(!state.warmOnly && typeof state.userMessage.at === "number" ? { receivedAt: Math.min(turnQueuedAt(state.threadId) ?? state.userMessage.at, state.userMessage.at) } : {}),
       ...(turnAccess ? { access: turnAccess } : {}),
       // on a live call the engine process stays warm from turn to turn.
       // A warm uses the same flag so the first spoken turn's contract matches.

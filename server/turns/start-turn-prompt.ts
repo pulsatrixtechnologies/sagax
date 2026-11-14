@@ -7,6 +7,7 @@ import { FEEDBACK_PROMPT, IMAGE_PROMPT, routineExecutionPromptFor } from "../sys
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { compactBotLast } from "../context/compact-prompt.ts";
+import { memoryExcerptBytes } from "../workspace/workspace.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -290,6 +291,8 @@ export function createPromptStartTurn(host: StartTurnHost) {
       // reads before it can answer is the pause the person hears.
       conversations: state.commsDepth === 0 && !state.coordinationNode && !state.opts?.automationSource && !state.opts?.unattended && !state.onCall,
       userName: botUserName(state.bot),
+      // #4215: the same excerpt the memory section above showed this turn
+      memoryExcerptBytes: memoryExcerptBytes({ managedWrites: Boolean(state.integrations.agents), fileTools: state.worksInWorkspace }),
       ...(state.onCall ? { budget: CALL_RECALL_BUDGET } : state.compactPrompt ? { budget: LOCAL_RECALL_BUDGET } : {})
     });
     if (!state.warmOnly) turnTrace(state.threadId, "recall");

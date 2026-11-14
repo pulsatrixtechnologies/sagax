@@ -1050,6 +1050,11 @@ export function routineEndsOnAnnouncement(output: string | undefined): boolean {
   if (!text || text.length > 300) return false;
   const opens = /^(?:ok(?:ay)?[,.!]?\s+|d'accord[,.!]?\s+|parfait[,.!]?\s+|sure[,.!]?\s+)?(?:i'll|i will|i'm going to|i am going to|let me|now i'll|next,? i'll|je vais|laisse-moi|laissez-moi|je m'en occupe|je lance|starting|i'm starting|je commence)\b/i;
   if (!opens.test(text)) return false;
+  // #3990: a bare decision to leave an item ("I'll leave it: nothing
+  // urgent", "je vais le laisser.") is the run's outcome. Only the decision
+  // alone counts, closed by ":", ".", "!" or the end: "I'll let them know",
+  // "I'll let it run" or "je vais laisser un commentaire" still announce work.
+  if (/^(?:\S+[,.!]?\s+)?(?:i'll|i will|i'm going to|i am going to)\s+(?:leave (?:it|this|that|them)(?: (?:alone|as is|there|for now))?|let (?:it|this|that|them) be(?: for now)?)\s*(?:[:.!]|$)|^(?:\S+[,.!]?\s+)?je vais (?:(?:le|la|les) laisser|laisser ça)(?: (?:là|tel quel|telle quelle|comme ça|pour l'instant))?\s*(?:[:.!]|$)/i.test(text)) return false;
   return !/\b(?:done|completed|finished|found|sent|created|updated|no (?:issues|problems|items)|nothing to|fait|terminé|complété|envoyé|créé|trouvé|aucun|aucune|rien à)\b/i.test(text);
 }
 export const routineAnnouncementProblem = (output: string) =>
@@ -4918,7 +4923,9 @@ export class RoutineManager {
       problems.push(`Nobody answered the ${one ? "approval" : "approvals"} for ${trouble.unanswered.map((action) => `“${action}”`).join(", ")} in time, so ${one ? "that step" : "those steps"} did not run`);
     }
     if (trouble?.engine) problems.push(`The engine reported an error during the run: ${trouble.engine}`);
-    if (routineEndsOnAnnouncement(run.output)) problems.push(routineAnnouncementProblem(run.output!));
+    // #3990: a run its bot ended with NOTHING_TO_REPORT said it is done,
+    // with nothing for the person: its last words announce nothing undone
+    if (!outcome.quiet && routineEndsOnAnnouncement(run.output)) problems.push(routineAnnouncementProblem(run.output!));
     run.status = "completed";
     run.finishedAt = this.now();
     run.error = undefined;

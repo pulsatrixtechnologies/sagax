@@ -5403,6 +5403,21 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(routineEndsOnAnnouncement("Je vais te laisser savoir : aucune facture en retard.")).toBe(false);
     expect(routineEndsOnAnnouncement(`I'll summarize. ${"x".repeat(400)}`)).toBe(false);
     expect(routineEndsOnAnnouncement(undefined)).toBe(false);
+    // #3990: leaving an item is a decision, the run's outcome
+    expect(routineEndsOnAnnouncement("I'll leave it: nothing urgent, and it is no longer in the inbox.")).toBe(false);
+    expect(routineEndsOnAnnouncement("I'll let it be for now.")).toBe(false);
+    expect(routineEndsOnAnnouncement("Je vais le laisser : rien d'urgent.")).toBe(false);
+    expect(routineEndsOnAnnouncement("Je vais laisser ça là. Il n'est plus dans la boîte.")).toBe(false);
+    // a leave or let followed by work still announces it
+    for (const said of [
+      "I'll let them know.",
+      "I'll let them know about the overdue invoices.",
+      "Je vais laisser un commentaire sur le billet.",
+      "Je vais les laisser savoir.",
+      "I'll let it run and check back later.",
+      "Je vais le laisser rouler puis je reviens.",
+      "Ok, I'll let that finish then send the report.",
+    ]) expect(routineEndsOnAnnouncement(said), said).toBe(true);
   });
 
   it("a tool that failed then succeeded is a clean run", async () => {

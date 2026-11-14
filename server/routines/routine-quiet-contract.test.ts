@@ -642,8 +642,27 @@ describe("a run's outcome comes from explicit signals, never from its words (#39
   });
 
   it("an announcement stays one, whatever words follow it", async () => {
-    const cut = await ending("I'll leave it: nothing urgent, and it is no longer in the inbox.", []);
+    const cut = await ending("I'll check the inbox again: nothing urgent so far.", []);
     expect(cut.problems).toContain("announcement");
+  });
+
+  // #3990: the owner's screenshot showed "I'll leave it: nothing urgent, and
+  // it is no longer in the inbox." as Completed with problems. A decision to
+  // leave an item is the run's outcome, and a run its bot ended with
+  // NOTHING_TO_REPORT said it is done: neither is an announcement.
+  it("a run with nothing to do is never told as an announcement problem", async () => {
+    for (const said of [
+      "I'll leave it: nothing urgent, and it is no longer in the inbox.",
+      "Je vais le laisser : rien d'urgent, il n'est plus dans la boîte.",
+      "I'll leave it: nothing urgent, and it is no longer in the inbox.\nNOTHING_TO_REPORT",
+      "I'll check it again at the next pass.\nNOTHING_TO_REPORT",
+    ]) {
+      const done = await ending(said, []);
+      expect(done.status, said).toBe("completed");
+      expect(done.problems, said).toBeUndefined();
+    }
+    const quiet = await ending("I'll check it again at the next pass.\nNOTHING_TO_REPORT", []);
+    expect(quiet.quiet).toBe(true);
   });
 });
 

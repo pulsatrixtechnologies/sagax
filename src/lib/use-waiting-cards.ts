@@ -6,8 +6,9 @@
 // pendingQuestions), so an answer given here is the same answer.
 import { useEffect, useState } from "react";
 
-import { api, type Message } from "@/state/store";
+import type { Message } from "@/state/store";
 import { pendingQuestions } from "@/lib/pending-question";
+import { threadHeadPage } from "@/lib/thread-head-page";
 import { parallelPendings } from "@/components/parallel-approvals";
 import type { Pending } from "@/components/PendingApproval";
 
@@ -43,7 +44,7 @@ export function useWaitingCards(sources: readonly WaitingSource[], stamp: string
     if (!key) return;
     let live = true;
     void Promise.allSettled(sources.map(async (source) => {
-      const page = await api<{ messages?: Message[] }>(`/api/threads/${encodeURIComponent(source.threadId)}/messages?limit=60`);
+      const page = await threadHeadPage(source.threadId, stamp);
       return waitingItemsOf(page.messages ?? [], source);
     })).then((lists) => {
       if (live) setFound({ key, items: lists.flatMap((list) => list.status === "fulfilled" ? list.value : []) });

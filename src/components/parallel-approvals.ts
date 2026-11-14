@@ -22,8 +22,9 @@
 // dot point to it.
 import { useEffect, useState } from "react";
 
-import { api, type Bot } from "@/state/store";
+import type { Bot } from "@/state/store";
 import { isStreamSegment } from "@/lib/single-stream";
+import { threadHeadPage } from "@/lib/thread-head-page";
 import { pendingApprovals, type Pending } from "./PendingApproval";
 
 /** The parallel tasks of `threadId` that wait for the person. With `stream`
@@ -111,7 +112,8 @@ export function useParallelCards(bot: Bot | undefined, stream = false): { pendin
     let live = true;
     // one conversation that cannot be read never hides the others' cards
     void Promise.allSettled(waiting.map(async (task) => {
-      const page = await api(`/api/threads/${task.threadId}/messages?limit=60`) as { messages?: Parameters<typeof pendingApprovals>[0] };
+      // #4187: one request per change, shared with the card's inline questions
+      const page = await threadHeadPage(task.threadId, task.stamp);
       const messages = page.messages ?? [];
       const pendings = task.askedBy !== undefined ? interBotPendings(messages, { threadId: task.threadId, openedByName: task.askedBy }) : parallelPendings(messages, { threadId: task.threadId, title: task.title ?? "" });
       return pendings;

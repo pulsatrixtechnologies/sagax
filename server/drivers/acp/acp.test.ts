@@ -19,7 +19,7 @@ import { BUILT_IN_DATA_SYSTEM_PROMPT } from "../../data/instructions.ts";
 import type { ProviderInstance } from "../../contracts.ts";
 import { TurnNotStartedError } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
-import { promptSplitFingerprints, writePromptSplitReceipt } from "../prompt-split.ts";
+import { promptSplitFingerprints, VOLATILE_SECTIONS_NOTE_PREFIX, writePromptSplitReceipt } from "../prompt-split.ts";
 import { classifyError } from "../retry.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
 import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
@@ -613,6 +613,48 @@ describe("ACP turns (fake CLI)", () => {
     usage(90258);
     expect(await send("turn 2")).toBe("turn 2");
     expect(await send("turn 3")).toBe("turn 3");
+  });
+
+  // #4215: the opening block (62 to 85 KB on a hosted server) rode again
+  // every ninth turn of a session even when the session reported its
+  // context size on each turn, so its compactions were already seen.
+  it("never re-sends the opening block to a session that reports its context size each turn (#4215)", async () => {
+    const { usage, send } = await usageThread("measured-no-reanchor");
+    usage(30000);
+    const prompts: string[] = [];
+    for (let i = 0; i < 12; i++) prompts.push((await send("turn " + i))!);
+    expect(prompts[0]).toBe(OPENING + "\n\nturn 0");
+    for (let i = 1; i < 12; i++) expect(prompts[i]).toBe("turn " + i);
+  });
+
+  // #4215: a skill or rule edited mid-conversation changed the stable half,
+  // and the whole opening block rode again; only the changed section does now.
+  it("sends only the stable section that changed, not the whole opening block (#4215)", async () => {
+    const dump = join(scratch, "acp-stable-sections.json");
+    process.env.FAKE_ACP_DUMP = dump;
+    process.env.FAKE_ACP_DUMP_PROMPT = "1";
+    await create();
+    const threadId = "t-acp-stable-sections-" + randomUUID();
+    const send = async (text: string, skills: string) => {
+      const stableSections = [{ id: "soul", text: "Soul: calm and brief." }, { id: "skills", text: "\n\n" + skills }];
+      const stable = stableSections.map((section) => section.text).join("");
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId, text,
+        system: stable + "\n\nMemory: likes quiet hours.",
+        systemStable: stable,
+        systemVolatile: "Memory: likes quiet hours.",
+        systemStableSections: stableSections,
+        systemVolatileSections: [{ id: "memory", text: "Memory: likes quiet hours." }],
+      });
+      await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+      return (JSON.parse(readFileSync(dump + ".prompt.json", "utf8")) as Array<{ type: string; text: string }>)[0]?.text;
+    };
+    expect(await send("first", "Skills: weather.")).toBe("Soul: calm and brief.\n\nSkills: weather." + HINT + "\n\nMemory: likes quiet hours.\n\nfirst");
+    expect(await send("second", "Skills: weather.")).toBe("second");
+    const third = (await send("third", "Skills: weather, invoices."))!;
+    expect(third).toBe(VOLATILE_SECTIONS_NOTE_PREFIX + "\n\nSkills: weather, invoices.\n\nthird");
+    expect(third).not.toContain("Soul: calm and brief.");
+    expect(await send("fourth", "Skills: weather, invoices.")).toBe("fourth");
   });
 
   it("detects a collapse against the previous turn's context", async () => {

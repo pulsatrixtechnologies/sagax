@@ -6,6 +6,10 @@ import type { AcpTurnCtx } from "./turn-context.ts";
 
 type Section = { id: string; text: string };
 
+/** The id the support's standing line (stableSystemHint) carries among the
+ * stable sections, for the section prints of the split receipt. */
+const STANDING_LINE_SECTION = "standing-line";
+
 /** The opening system block: the stable half first, then the volatile half
  * (its per-conversation sections last, compact-prompt.ts), so two
  * conversations of one bot open with the same bytes up to what differs
@@ -18,7 +22,14 @@ export function openingSystem(input: {
   stableSections?: readonly Section[];
   volatileSections?: readonly Section[];
   extra: Section | null;
-}): { compose: (leftOut: ReadonlySet<string>) => string; present: ReadonlySet<string> } {
+}): {
+  compose: (leftOut: ReadonlySet<string>) => string;
+  present: ReadonlySet<string>;
+  /** The stable half section by section, the standing line last as one
+   * more, when the sections rebuild it byte for byte: a later change in it
+   * then rides as the sections that changed (#4215). */
+  stableSections?: readonly Section[];
+} {
   const join = (sections: readonly Section[], leftOut: ReadonlySet<string>) =>
     sections.filter((section) => !leftOut.has(section.id)).map((section) => section.text).join("");
   // Sections are used only when they rebuild the halves byte for byte; a
@@ -34,6 +45,7 @@ export function openingSystem(input: {
   const present = new Set([...(stableParts ?? []), ...(volatileParts ?? [])].map((section) => section.id));
   return {
     present,
+    ...(stableParts ? { stableSections: input.hint ? [...stableParts, { id: STANDING_LINE_SECTION, text: input.hint }] : stableParts } : {}),
     compose: (leftOut) => {
       const head = stableParts ? join(stableParts, leftOut) + input.hint : input.stable;
       const tail = volatileParts ? volatileOf(leftOut) : input.volatile;
@@ -109,6 +121,7 @@ export function composeAcpPromptInput(ctx: AcpTurnCtx): {
   Boolean(turn.mentionTurn),
   ACP_PROMPT_RE_ANCHOR_TURNS,
   volatileSections,
+  opening.stableSections,
   );
   let composed = compose(promptTurn.text);
   // The earlier-context line goes only with an opening block that needed it.

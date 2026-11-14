@@ -345,6 +345,9 @@ function settleAcpPromptOutcome(input: Pick<AcpTurnCtx,
         pendingSplitReceipt.key,
         {
           ...pendingSplitReceipt.receipt,
+          // A turn that reported its context size had a compaction seen,
+          // so the re-anchor's count starts again (#4215).
+          ...(state.usageLast !== null ? { unmeasuredTurns: 0 } : {}),
           ...(lastUsed === undefined ? {} : { lastUsed }),
           ...(state.usagePeak === null ? {} : { peakUsed: state.usagePeak }),
         },

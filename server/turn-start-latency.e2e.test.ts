@@ -25,7 +25,7 @@ type Fixture = {
   release: () => void;
 };
 
-async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
+async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number; toolMs?: number }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
   const fixture = await launchVerificationServer();
   const { dataDir, url, logPath } = fixture.info;
   let server: ChildProcess | undefined;
@@ -46,7 +46,9 @@ async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: b
     config.instances.grokfixture = {
       driver: "grokAgent", displayName: "Grok fixture",
       config: { cli: fileURLToPath(new URL("./testing/fake-acp-cli.ts", import.meta.url)) },
-      environment: { FAKE_ACP_TEXT_REPLY: "4", FAKE_ACP_RPC_APPEND_FILE: rpcFile, ...(options.coldMs ? { FAKE_ACP_COLD_MS: String(options.coldMs) } : {}) },
+      environment: { ...(options.toolMs ? {} : { FAKE_ACP_TEXT_REPLY: "4" }), FAKE_ACP_RPC_APPEND_FILE: rpcFile, ...(options.coldMs ? { FAKE_ACP_COLD_MS: String(options.coldMs) } : {}),
+        // a turn that runs one tool for toolMs before its answer
+        ...(options.toolMs ? { FAKE_ACP_MODE: "slow-tool", FAKE_ACP_TOOL_MS: String(options.toolMs) } : {}) },
     };
     // a teammate's engine that holds its turn open until the gate file exists
     if (options.busy) config.instances.grokbusy = {
@@ -193,3 +195,35 @@ it("never pays an engine start twice: a send after the composer's warm takes the
     fixture.release();
   });
 }, 180_000);
+
+/** queue + setup of a timing line: what the server adds before the engine's
+ * own time to its first text. */
+function serverShareMs(line: string): number {
+  return Number(/ queue=(\d+)ms/.exec(line)?.[1] ?? 0) + Number(/ setup=(\d+)ms/.exec(line)?.[1] ?? 0);
+}
+
+// #4215 targets, measured on the verification server with the fake engine (a
+// real engine's start shortened to 1.5 s): a no-tool turn and a turn with
+// tools on a warm conversation each reach the engine in well under 5 s of the
+// server's own time, on the warm engine, with no second copy of the opening
+// block. The lines are printed for the record.
+it("a warm conversation's no-tool and tool turns reach the engine without a start or a second opening block (#4215)", async () => {
+  for (const toolMs of [0, 400]) {
+    await withLatencyFixture({ coldMs: 1_500, ...(toolMs ? { toolMs } : {}) }, async (fixture) => {
+      const { bot } = await fixture.control("new-bot", "--name", toolMs ? "Tool bot" : "Arithmetic bot");
+      await fixture.api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "grokfixture", model: "grok-4.7" } });
+      const threadId = bot.activeTaskId;
+      await threeTurns(fixture, bot.id, threadId);
+      const lines = timingLines(fixture.serverLog(), threadId);
+      console.info(`[#4215] warm ${toolMs ? "tool" : "no-tool"} timing lines:\n${lines.join("\n")}`);
+      expect(lines).toHaveLength(3);
+      for (const line of lines.slice(1)) {
+        expect(/path=(\w+)/.exec(line)?.[1]).not.toBe("spawn");
+        expect(/full=(\w+)/.exec(line)?.[1]).toBe("no");
+        expect(serverShareMs(line)).toBeLessThan(5_000);
+      }
+      if (toolMs) for (const line of lines) expect(Number(/tools=(\d+)/.exec(line)?.[1])).toBeGreaterThanOrEqual(1);
+      expect(fixture.promptPids().size).toBe(1);
+    });
+  }
+}, 240_000);

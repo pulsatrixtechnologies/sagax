@@ -755,6 +755,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/data-approvals\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
+  {"method":"ANY","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/files(?:\\/([A-Za-z0-9_-]{16,40}))?$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/invite$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/link-approvals$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/link-approvals$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":true},

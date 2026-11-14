@@ -439,6 +439,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // #3413 lot 3: a page's store, for its reader (server/routes/page-cap-calls.ts:
   // the declaration, the reader's role and the isolation rules on every call)
   { methods: ["GET", "POST", "PUT", "DELETE"], path: /^\/api\/pages\/[\w-]+\/store\/[a-z][a-z0-9_-]{0,39}(?:\/[A-Za-z0-9_-]{1,64})?$/ },
+  // lot 5: the files a page's readers add (the handler keeps each reader to their own)
+  { methods: ["GET", "POST", "DELETE"], path: /^\/api\/pages\/[\w-]+\/files(?:\/[A-Za-z0-9_-]{16,40})?$/ },
   // lot 4: a page's question to a model, on the reader's own account (checked there)
   { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/model$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },

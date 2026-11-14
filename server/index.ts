@@ -1207,6 +1207,7 @@ import { createPersonNote, setPersonNoteSink } from "./team-work/person-note.ts"
 import { queueTeamWorkFrames } from "./team-work/frames.ts";
 import { createPageDataRoutes } from "./routes/page-data.ts";
 import { PageStore } from "./pages/page-store.ts";
+import { PageFiles } from "./pages/page-files.ts";
 import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
 import { PageDataApprovals } from "./pages/page-data-approvals.ts";
 import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
@@ -12757,16 +12758,20 @@ const pageLinkApprovals = new PageLinkApprovals(join(DATA_DIR, "page-link-approv
 // #3413 lot 3: the collections a page's script keeps (sagax.store), counted
 // in the page person's share; a revoke or a delete takes them, like the state
 const pageStore = new PageStore(join(DATA_DIR, "page-store"));
-publishedPages.countKeptBytes((pageId) => pageStore.bytes(pageId));
+// #3413 lot 5: the files a page's readers add, counted the same way
+const pageFiles = new PageFiles(join(DATA_DIR, "page-files"));
+publishedPages.countKeptBytes((pageId) => pageStore.bytes(pageId) + pageFiles.bytes(pageId));
 publishedPages.onRevoked((pageId) => {
   pageLinkApprovals.forgetPage(pageId);
   pageStore.forget(pageId);
+  pageFiles.forget(pageId);
 });
 // a deleted page takes its link and data approvals with it
 publishedPages.onRemoved((pageId) => {
   pageLinkApprovals.forgetPage(pageId);
   pageDataApprovals.forgetPage(pageId);
   pageStore.forget(pageId);
+  pageFiles.forget(pageId);
 });
 const pageDataWatch = new PageDataWatch(pageLive);
 store.onChange((change) => {
@@ -12797,6 +12802,7 @@ ROUTES.push(createPageDataRoutes({
   links: pageLinkApprovals,
   watch: pageDataWatch,
   store: pageStore,
+  files: pageFiles,
   live: pageLive,
   // #3413: the organization's Deny and Ask first for a call a page makes
   // (a model question, a connector call), in the reader's context

@@ -7,6 +7,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { PageCapabilities, PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import { PageSources } from "../pages/page-sources.ts";
+import { PageFiles } from "../pages/page-files.ts";
 import { PageStore } from "../pages/page-store.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
 import { createPageDataRoutes, type PageDataRouteDeps } from "./page-data.ts";
@@ -210,5 +211,59 @@ describe("model.ask (lot 4): one answer on the reader's own account", () => {
   it("says unavailable when no model of the reader can answer", async () => {
     const { routes } = world({ caps: MODEL, extra: { model: { ask: vi.fn(async () => { throw new Error("none"); }) } } });
     expect((await call(routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).body.code).toBe("unavailable");
+  });
+});
+
+describe("files added by readers (lot 5)", () => {
+  const ADD = { files: ["add" as const] };
+  const TEXT = Buffer.from("hello from A").toString("base64");
+  function withFiles(options: Parameters<typeof world>[0] = {}) {
+    const files = new PageFiles(null, () => NOW);
+    return { ...world({ caps: ADD, ...options, extra: { files, ...options.extra } }), files };
+  }
+
+  it("gives a reader their own files only: B never lists nor reads the file A added", async () => {
+    const { routes } = withFiles({ record: page({ ownerId: "person-o" }) });
+    const added = await call(routes, A, "/api/pages/page-1/files", "POST", { name: "a.txt", mime: "text/plain", data: TEXT });
+    expect(added.status).toBe(200);
+    expect(added.body).toMatchObject({ name: "a.txt", mime: "text/plain", size: 12, by: "h-person-a", writer: "Name person-a", mine: true });
+    const id = String(added.body.id);
+    expect((await call(routes, B, "/api/pages/page-1/files")).body).toEqual({ files: [] });
+    expect((await call(routes, B, `/api/pages/page-1/files/${id}`)).status).toBe(404);
+    expect((await call(routes, B, `/api/pages/page-1/files/${id}`, "DELETE")).status).toBe(404);
+    // A reads it back, bytes and all
+    expect((await call(routes, A, `/api/pages/page-1/files/${id}`)).body).toMatchObject({ id, data: TEXT, mine: true });
+    // the page's person reads every file of its readers
+    const owner = await call(routes, as("person-o"), "/api/pages/page-1/files");
+    expect((owner.body.files as Array<{ id: string; mine: boolean }>).map((file) => [file.id, file.mine])).toEqual([[id, false]]);
+  });
+
+  it("refuses a file on a shared page that reads personal data, before keeping anything", async () => {
+    const { routes, files } = withFiles({ personalShared: true, caps: { ...ADD, data: ["team-board"] } });
+    const answer = await call(routes, B, "/api/pages/page-1/files", "POST", { name: "b.txt", mime: "text/plain", data: TEXT });
+    expect(answer.body.code).toBe("shared_write_after_data");
+    expect(files.bytes("page-1")).toBe(0);
+  });
+
+  it("refuses an undeclared add, a type or name that is not allowed, and bad base64", async () => {
+    const download = withFiles({ caps: { files: ["download"] } });
+    expect((await call(download.routes, B, "/api/pages/page-1/files", "POST", { name: "b.txt", mime: "text/plain", data: TEXT })).body.code).toBe("not_declared");
+    const { routes } = withFiles();
+    expect((await call(routes, B, "/api/pages/page-1/files", "POST", { name: "b.html", mime: "text/html", data: TEXT })).body.code).toBe("bad_request");
+    expect((await call(routes, B, "/api/pages/page-1/files", "POST", { name: "..", mime: "text/plain", data: TEXT })).body.code).toBe("bad_request");
+    expect((await call(routes, B, "/api/pages/page-1/files", "POST", { name: "b.txt", mime: "text/plain", data: "not base64!" })).body.code).toBe("bad_request");
+    expect((await call(routes, as(null), "/api/pages/page-1/files")).body.code).toBe("sign_in");
+  });
+
+  it("keeps a file within the page person's share", async () => {
+    const { routes } = withFiles({ ownerBytes: 50 * 1024 * 1024 });
+    expect((await call(routes, A, "/api/pages/page-1/files", "POST", { name: "a.txt", mime: "text/plain", data: TEXT })).body.code).toBe("too_large");
+  });
+
+  it("lets its writer remove a file", async () => {
+    const { routes, files } = withFiles();
+    const id = String((await call(routes, A, "/api/pages/page-1/files", "POST", { name: "a.txt", mime: "text/plain", data: TEXT })).body.id);
+    expect((await call(routes, A, `/api/pages/page-1/files/${id}`, "DELETE")).body).toEqual({ ok: true });
+    expect(files.bytes("page-1")).toBe(0);
   });
 });

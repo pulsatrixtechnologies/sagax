@@ -12,6 +12,7 @@ const SOURCE_WORDS: Record<PageDataSource, () => string> = {
 
 const FILE_WORDS: Record<PageCapFile, () => string> = {
   download: () => t("pages.caps.files.download"),
+  add: () => t("pages.caps.files.add"),
 };
 
 /** The parts of a declaration, in words: each data source, the reader's

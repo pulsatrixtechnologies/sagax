@@ -10,6 +10,14 @@
 //   PUT    /api/pages/:id/store/:collection/:doc   { value }        PageStoreDoc
 //   DELETE /api/pages/:id/store/:collection/:doc                     { ok: true }
 //   POST   /api/pages/:id/model   PageModelQuestion   PageModelAnswer (lot 4)
+//   GET    /api/pages/:id/files                     { files: PageFileInfo[] } (lot 5)
+//   POST   /api/pages/:id/files   { name, mime, data }   PageFileInfo
+//   GET    /api/pages/:id/files/:fileId              PageFileData
+//   DELETE /api/pages/:id/files/:fileId              { ok: true }
+//
+// A file a reader adds is read by that reader and by who manages the page
+// (its person, its editors), never by another reader. Adding one is a
+// write others read: refused after personal data on a shared page.
 //
 // model.ask runs on the reader's own engine and account, never the page
 // owner's; the organization's Deny and Ask first apply to it (action
@@ -24,10 +32,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
-import { PAGE_CAP_LIMITS, pageModelJson, parsePageModelQuestion, parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageDataAskFirst, type PageModelAnswer, type PageModelQuestion, type PageStoreDoc } from "../../shared/page-capabilities.ts";
+import { PAGE_CAP_FILE_MIMES, PAGE_CAP_LIMITS, pageCapFileName, pageModelJson, parsePageModelQuestion, parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageDataAskFirst, type PageModelAnswer, type PageFileData, type PageFileInfo, type PageModelQuestion, type PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { stateMayWrite, type StateRole } from "../../shared/page-state.ts";
 import { PAGE_LIMITS } from "../../shared/published-pages.ts";
 import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
+import type { PageFiles, StoredFile } from "../pages/page-files.ts";
 import type { PageStore, StoredDoc } from "../pages/page-store.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
 import type { PageViewer } from "./published-pages.ts";
@@ -36,6 +45,16 @@ import type { RouteContext } from "./table.ts";
 /** The routes of this module, one per line with its method. */
 export const PAGE_STORE_ROUTE = /^\/api\/pages\/([\w-]+)\/store\/([a-z][a-z0-9_-]{0,39})(?:\/([A-Za-z0-9_-]{1,64}))?$/;
 export const PAGE_MODEL_ROUTE = /^\/api\/pages\/([\w-]+)\/model$/;
+export const PAGE_FILES_ROUTE = /^\/api\/pages\/([\w-]+)\/files(?:\/([A-Za-z0-9_-]{16,40}))?$/;
+
+/** The bytes of an added file: one standard base64 string, decoded at once
+ * (a whole upload, so the shared helper's per character check is not run
+ * on it). Null when it is not base64. */
+function base64Bytes(data: unknown): Buffer | null {
+  if (typeof data !== "string" || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) return null;
+  const bytes = Buffer.from(data, "base64");
+  return bytes.toString("base64") === data ? bytes : null;
+}
 
 /** The organization's Deny and Ask first for one call a page makes, in the
  * reader's context (an organization rule applies to every person). */
@@ -68,6 +87,8 @@ export interface PageCapCallDeps {
   /** Ask first answers (server/pages/page-data-approvals.ts). */
   approvals?: PageDataApprovals;
   actRule?: PageActRule;
+  /** Lot 5: the files readers add. */
+  files?: PageFiles;
   /** Lot 4: one tool-free answer on the reader's own engine and account. */
   model?: { ask(input: { auth: RequestAuth; viewer: NonNullable<PageViewer>; text: string; lang: "fr" | "en" }): Promise<string> };
   now?(): number;
@@ -151,9 +172,57 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
     return ctx.json(ctx.res, 200, answer);
   };
 
+  const fileInfo = (ctx: PageCapCallContext, file: StoredFile): PageFileInfo => ({
+    id: file.id,
+    name: file.name,
+    mime: file.mime,
+    size: file.size,
+    by: deps.pages.readerHandle(ctx.page.id, file.by),
+    writer: deps.names?.([file.by])[file.by] ?? "",
+    at: file.at,
+    mine: file.by.toLowerCase() === ctx.who.by.toLowerCase(),
+  });
+
+  const filesCall = async (ctx: PageCapCallContext): Promise<void> => {
+    if (!(ctx.caps?.files ?? []).includes("add") || !deps.files) return ctx.refuse(403, "not_declared");
+    const files = deps.files;
+    const id = PAGE_FILES_ROUTE.exec(ctx.path)![2];
+    // the reader's own files; who manages the page reads them all
+    const reader = { reader: ctx.who.by, all: ctx.role === "owner" || ctx.role === "editor" };
+    const missing = () => ctx.refuse(404, "not_found", { error: ctx.lang === "fr" ? "Ce fichier n'existe pas." : "This file does not exist." });
+    if (ctx.method === "GET" && !id) return ctx.json(ctx.res, 200, { files: files.list(ctx.page.id, reader).map((file) => fileInfo(ctx, file)) });
+    if (ctx.method === "GET") {
+      const found = files.get(ctx.page.id, id!, reader);
+      if (!found) return missing();
+      const answer: PageFileData = { ...fileInfo(ctx, found.file), data: Buffer.from(found.bytes).toString("base64") };
+      return ctx.json(ctx.res, 200, answer);
+    }
+    if (ctx.method === "DELETE") return id && files.remove(ctx.page.id, id, reader) ? ctx.json(ctx.res, 200, { ok: true }) : missing();
+    if (id) return ctx.refuse(400, "bad_request");
+    // what the page's person and editors read: never after personal data on a shared page
+    if (deps.pages.stateReadOnlyForData?.(ctx.page.id) === true) return ctx.refuse(409, "shared_write_after_data");
+    let body: Record<string, unknown> | null;
+    try {
+      body = await ctx.readBody(ctx.req, Math.ceil(PAGE_CAP_LIMITS.fileBytes / 3) * 4 + 64 * 1024) as Record<string, unknown> | null;
+    } catch {
+      return ctx.refuse(413, "too_large", { error: ctx.lang === "fr" ? "Ce fichier est trop grand." : "This file is too large." });
+    }
+    const mime = body?.mime;
+    if (typeof mime !== "string" || !(PAGE_CAP_FILE_MIMES as readonly string[]).includes(mime)) return ctx.refuse(400, "bad_request", { error: ctx.lang === "fr" ? "Ce type de fichier n'est pas permis." : "This file type is not allowed." });
+    const name = pageCapFileName(body?.name);
+    if (!name) return ctx.refuse(400, "bad_request", { error: ctx.lang === "fr" ? "Ce nom de fichier n'est pas permis." : "This file name is not allowed." });
+    const bytes = base64Bytes(body?.data);
+    if (!bytes) return ctx.refuse(400, "bad_request");
+    const room = roomOf(deps, ctx.page);
+    const added = files.add(ctx.page.id, { name, mime, bytes, by: ctx.who.by, ...(room !== undefined ? { room } : {}) });
+    if (!added.ok) return ctx.refuse(added.status, added.code, { error: ctx.lang === "fr" ? "Ce fichier est trop grand, ou les fichiers de cette page sont pleins." : "This file is too large, or this page's files are full." });
+    return ctx.json(ctx.res, 200, fileInfo(ctx, added.file));
+  };
+
   return {
     async handle(ctx) {
       if (PAGE_MODEL_ROUTE.test(ctx.path)) return modelCall(ctx);
+      if (PAGE_FILES_ROUTE.test(ctx.path)) return filesCall(ctx);
       return pageStoreCall(deps, ctx);
     },
   };

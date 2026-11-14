@@ -249,7 +249,8 @@ describe("files.download in the frame", () => {
   it("parses files, drops unknown names, and grants only download", () => {
     const html = `<script type="application/sagax-capabilities+json">{ "files": ["download"] }</script>`;
     expect(pageCapabilitiesOf(html)).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
-    expect(parsePageCapabilities({ files: ["download", "add", "nope"] })).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
+    // lot 5 (#3413) made "add" a known name on purpose: "upload" stays unknown
+    expect(parsePageCapabilities({ files: ["download", "upload", "nope"] })).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
     expect(parsePageCapabilities({ data: ["team-board"], viewer: true })).toEqual({ data: ["team-board"], viewer: true, open: false, files: [] });
     expect(parsePageCapabilities({})).toEqual({ data: [], viewer: false, open: false, files: [] });
 
@@ -324,5 +325,24 @@ describe("model.ask in the frame (#3413 lot 4)", () => {
     const sagax = bridge.win.sagax as { model: { ask(question: unknown): Promise<unknown> } };
     void sagax.model.ask({ prompt: "Hi", schema: { type: "string" } });
     expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "model.ask", args: { prompt: "Hi", schema: { type: "string" } } });
+  });
+});
+
+describe("files added by readers in the frame (#3413 lot 5)", () => {
+  it("reads files: add, and gives the page add, list, get and remove", () => {
+    expect(parsePageCapabilities({ files: ["add", "download", "other"] })).toEqual({ data: [], viewer: false, open: false, files: ["add", "download"] });
+    const caps = { data: [], viewer: false, open: false, files: ["add" as const] };
+    expect(pageCapGranted(caps, "files.list")).toBe(true);
+    expect(pageCapGranted(caps, "files.download")).toBe(false);
+    expect(pageCapGranted({ ...caps, files: ["download" as const] }, "files.add")).toBe(false);
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { files: { add(): Promise<unknown>; list(): Promise<unknown>; get(id: string): Promise<unknown>; remove(id: string): Promise<unknown> } };
+    void sagax.files.add();
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "files.add", gesture: false });
+    void sagax.files.get("abc");
+    expect(bridge.posted.at(-1)).toMatchObject({ cap: "files.get", args: { id: "abc" } });
+    void sagax.files.remove("abc");
+    expect(bridge.posted.at(-1)).toMatchObject({ cap: "files.remove", args: { id: "abc" } });
   });
 });

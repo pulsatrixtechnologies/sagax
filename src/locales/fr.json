@@ -10116,6 +10116,7 @@
   "pages.caps.viewer": "ton nom et ton rôle",
   "pages.caps.open": "ouvre des liens et des chats",
   "pages.caps.files.download": "un fichier que cette page te remet",
+  "pages.caps.files.add": "les fichiers que tu y ajoutes",
   "pages.caps.title": "Ce que cette page peut lire",
   "pages.caps.ask": "Ton organisation te demande d'abord. Cette page veut lire : {what}",
   "pages.caps.allow": "Permettre",

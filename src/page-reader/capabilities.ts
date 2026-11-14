@@ -42,6 +42,7 @@ import {
   PAGE_CAP_DENY_REASONS,
   PAGE_CAP_FILE_MIMES,
   PAGE_CAP_LIMITS,
+  PAGE_FILE_ID,
   PAGE_STORE_DOC_ID,
   PAGE_STORE_NAME,
   pageCapFileData,
@@ -175,6 +176,9 @@ export interface BrokerDeps {
   now?(): number;
   /** Replaces the default files.download save (one anchor, cleaned name). */
   saveFile?(file: { name: string; mime: string; bytes: Uint8Array }): void;
+  /** Replaces the default files.add picker (one file input in the wrapper);
+   * null when the reader picked nothing. */
+  pickFile?(accept: readonly string[]): Promise<{ name: string; mime: string; bytes: Uint8Array } | null>;
 }
 
 export type ApprovalChoice = "once" | "always" | "decline";
@@ -256,6 +260,36 @@ function defaultSaveFile(file: { name: string; mime: string; bytes: Uint8Array }
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
   }
+}
+
+/** Default files.add picker: one file input in the wrapper, the reader's
+ * own choice, read once. */
+function defaultPickFile(accept: readonly string[]): Promise<{ name: string; mime: string; bytes: Uint8Array } | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept.join(",");
+    input.style.display = "none";
+    const done = (value: { name: string; mime: string; bytes: Uint8Array } | null) => {
+      input.remove();
+      resolve(value);
+    };
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return done(null);
+      void file.arrayBuffer().then((buffer) => done({ name: file.name, mime: file.type, bytes: new Uint8Array(buffer) }), () => done(null));
+    });
+    input.addEventListener("cancel", () => done(null));
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+/** Standard base64 of some bytes, in pieces (a large file). Pure. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) out += btoa(String.fromCharCode(...bytes.subarray(i, i + 0x8000)));
+  return out;
 }
 
 export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
@@ -398,6 +432,31 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     return { ok: true, value: true };
   };
 
+  /** Lot 5: the files readers add, through the server's files routes. */
+  const filesCall = async (request: PageCapRequest, fromClick: boolean): Promise<{ ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }> => {
+    if (request.cap === "files.list") {
+      const body = await deps.api<{ files?: unknown }>(route("files"));
+      return { ok: true, value: Array.isArray(body.files) ? body.files : [] };
+    }
+    if (request.cap === "files.add") {
+      // the picker opens from the reader's own click in the page, never on its own
+      if (!fromClick) return { ok: false, error: "bad_request", message: "A file is added from a click." };
+      const picked = await (deps.pickFile ?? defaultPickFile)(PAGE_CAP_FILE_MIMES);
+      if (!picked) return { ok: true, value: null };
+      if (!(PAGE_CAP_FILE_MIMES as readonly string[]).includes(picked.mime)) return { ok: false, error: "bad_request", message: "This file type is not allowed." };
+      if (picked.bytes.byteLength > PAGE_CAP_LIMITS.fileBytes) return { ok: false, error: "too_large", message: "This file is too large." };
+      const name = pageCapFileName(picked.name);
+      if (!name) return { ok: false, error: "bad_request", message: "This file name is not allowed." };
+      return { ok: true, value: await deps.api(route("files"), { method: "POST", body: { name, mime: picked.mime, data: bytesToBase64(picked.bytes) } }) };
+    }
+    const fileId = request.args?.id;
+    if (typeof fileId !== "string" || !PAGE_FILE_ID.test(fileId)) return { ok: false, error: "bad_request", message: "A file id is needed." };
+    const path = `files/${encodeURIComponent(fileId)}`;
+    if (request.cap === "files.get") return { ok: true, value: await deps.api(route(path)) };
+    await deps.api(route(path), { method: "DELETE" });
+    return { ok: true, value: true };
+  };
+
   const linkRoute = (extra = "") => `/api/pages/${encodeURIComponent(deps.pageId!)}/link-approvals${extra}`;
   /** A link no data answer named: opens at once when the reader allowed
    * this site for this page (kept on the server, like the data approvals),
@@ -528,6 +587,8 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           if (question === null) answer(id, { ok: false, error: "bad_request", message: "A question needs a prompt." });
           else if (question === "too_large") answer(id, { ok: false, error: "too_large", message: "This question is too long for a page." });
           else answer(id, { ok: true, value: await withAskFirst("model", deps.lang === "fr" ? "Une question à un modèle, avec ton compte" : "A question to a model, with your account", () => deps.api(route("model"), { method: "POST", body: question })) });
+        } else if (request.cap === "files.add" || request.cap === "files.list" || request.cap === "files.get" || request.cap === "files.remove") {
+          answer(id, await filesCall(request, fromClick));
         } else if (request.cap === "files.download" && state.caps) {
           answer(id, downloadFile(request, fromClick));
         } else if (!state.caps) {

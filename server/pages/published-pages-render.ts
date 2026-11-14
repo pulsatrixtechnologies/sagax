@@ -292,7 +292,8 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * the wrapper's `data` event; #3449), `viewer.get`
  * and `open`, and `files.download` (gesture from userActivation), and
  * `store.collection(name)` (lot 3: get, list, put, delete, and subscribe,
- * read again on the wrapper's `store` event), and `model.ask` (lot 4). Every call is one message to the parent, the wrapper, which
+ * read again on the wrapper's `store` event), `model.ask` (lot 4), and
+ * `files.add` (from a click), `files.list`, `files.get`, `files.remove` (lot 5). Every call is one message to the parent, the wrapper, which
  * asks the server with the reader's own session; the server checks it
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
@@ -331,7 +332,9 @@ store:Object.freeze({collection:scol}),
 data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},
 subscribe:function(n,f,q){n=String(n);if(typeof f!=="function")return function(){};var s={f:f,q:q&&typeof q==="object"?q:{}};(dsubs[n]=dsubs[n]||[]).push(s);return function(){dsubs[n]=(dsubs[n]||[]).filter(function(g){return g!==s})}}}),
 viewer:Object.freeze({get:function(){return capCall("viewer.get",{})}}),
-open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({download:function(o){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}o=o&&typeof o==="object"?o:{};return capCall("files.download",{name:o.name,mime:o.mime,data:o.data},g)}})};`;
+open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({download:function(o){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}o=o&&typeof o==="object"?o:{};return capCall("files.download",{name:o.name,mime:o.mime,data:o.data},g)},
+add:function(){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}return capCall("files.add",{},g)},
+list:function(){return capCall("files.list",{})},get:function(i){return capCall("files.get",{id:String(i)})},remove:function(i){return capCall("files.remove",{id:String(i)})}})};`;
 }
 
 /** The app's preview wrapper (a server document between the app and the

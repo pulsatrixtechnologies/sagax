@@ -18770,7 +18770,8 @@
       "model.runsWith.builtin": "78a6a8fe9be5ec07665beecc3284374e1629c53a0df9f93ce41f9db742a6c576",
       "model.runsWith.ownHint": "b5ce2c4dc05fc2285432192ce4f1c59196f2fe9417c73338109c0582dd0f3aa7",
       "model.runsWith.openHint": "92a786f0dd77f17c059c35711c0f660072f6a3a2f13bfea95eb35c68737a8b95",
-      "model.runsWith.builtinHint": "20714f3aae1fddece71c4b456d51a1f307eb73cfa828ae185acfb90bebbfff15"
+      "model.runsWith.builtinHint": "20714f3aae1fddece71c4b456d51a1f307eb73cfa828ae185acfb90bebbfff15",
+      "pages.caps.files.add": "ac3e190aa4091e3de022c9a0dfb004fe719cb76ec629325daec8b7aeca872055"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

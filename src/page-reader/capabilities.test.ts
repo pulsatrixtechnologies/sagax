@@ -888,3 +888,48 @@ describe("model.ask (#3413 lot 4)", () => {
     expect(declared.result(2)).toMatchObject({ ok: false, error: "bad_request" });
   });
 });
+
+describe("files added by readers (#3413 lot 5)", () => {
+  const ADD_CAPS = { capabilities: { data: [], viewer: false, open: false, files: ["add"] }, reads: [] };
+  const base = "/api/pages/page_12345678";
+  const click = { isActive: true };
+
+  it("opens the picker from a click only, and posts the picked file", async () => {
+    const pickFile = vi.fn(async () => ({ name: "dir/a.txt", mime: "text/plain", bytes: new TextEncoder().encode("hi") }));
+    const { broker, frame, result, posts } = setup({ pickFile }, { [`${base}/capabilities`]: ADD_CAPS, [`${base}/files`]: { id: "f".repeat(20), name: "a.txt" } });
+    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.add", args: {} } });
+    expect(result(1)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(pickFile).not.toHaveBeenCalled();
+    await broker.onMessage({ source: frame, origin: "null", userActivation: click, data: { type: CAP_MESSAGE, v: 1, id: 2, cap: "files.add", args: {} } });
+    expect(result(2)).toMatchObject({ ok: true, value: { name: "a.txt" } });
+    expect(posts).toEqual([{ path: `${base}/files?lang=en`, body: { name: "a.txt", mime: "text/plain", data: "aGk=" } }]);
+  });
+
+  it("answers null when the reader picks nothing, and refuses a type that is not allowed", async () => {
+    const nothing = setup({ pickFile: async () => null }, { [`${base}/capabilities`]: ADD_CAPS });
+    await nothing.broker.onMessage({ source: nothing.frame, origin: "null", userActivation: click, data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.add", args: {} } });
+    expect(nothing.result(1)).toMatchObject({ ok: true, value: null });
+    const html = setup({ pickFile: async () => ({ name: "x.html", mime: "text/html", bytes: new Uint8Array(1) }) }, { [`${base}/capabilities`]: ADD_CAPS });
+    await html.broker.onMessage({ source: html.frame, origin: "null", userActivation: click, data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.add", args: {} } });
+    expect(html.result(1)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(html.posts).toEqual([]);
+  });
+
+  it("lists, reads and removes through the files routes", async () => {
+    const id = "f".repeat(20);
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: ADD_CAPS, [`${base}/files/${id}`]: { id, data: "aGk=" }, [`${base}/files`]: { files: [{ id }] } });
+    await call("files.list", {}, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: [{ id }] });
+    await call("files.get", { id }, 2);
+    expect(result(2)).toMatchObject({ ok: true, value: { id, data: "aGk=" } });
+    await call("files.get", { id: "../x" }, 3);
+    expect(result(3)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(calls.some((path) => path.includes("../x"))).toBe(false);
+  });
+
+  it("refuses the files calls when only download is declared", async () => {
+    const { call, result } = setup({}, { [`${base}/capabilities`]: { capabilities: { data: [], viewer: false, open: false, files: ["download"] }, reads: [] } });
+    await call("files.list", {}, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+  });
+});

@@ -51,7 +51,8 @@
 // fn, params?)`, `viewer.get()`, `open(ref)`, `files.download({ name, mime, data })`,
 // `store.collection(name)` (lot 3), `model.ask({ prompt, system?, schema? })`
 // (lot 4: PageModelAnswer; the organization's Ask first shows its card in
-// the wrapper's bar, as for a data read). `params` (#3449): `fresh: true`
+// the wrapper's bar, as for a data read), `files.add()`, `files.list()`,
+// `files.get(id)`, `files.remove(id)` (lot 5, PageFileInfo). `params` (#3449): `fresh: true`
 // skips the source's cache; other keys are the source's filter, string
 // values (PAGE_DATA_PARAMS). A `denied` refusal carries `reason`
 // (PageCapDenyReason) on the Error.
@@ -87,7 +88,7 @@ export const CAP_TAKEN_MESSAGE = "sagax-cap-taken";
 export const CAP_WAIT_MS = 10_000;
 
 /** The calls a page may make. */
-export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete", "model.ask"] as const;
+export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete", "model.ask", "files.add", "files.list", "files.get", "files.remove"] as const;
 export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
 /** #3657: the calls whose answer may wait on the reader (an Ask first card,
  * a link card) in an app released before the wrapper said taken. Behind a
@@ -100,8 +101,39 @@ export const PAGE_CAP_LEGACY_CARD_CALLS: readonly PageCapCall[] = ["data.read", 
 export const PAGE_DATA_SOURCES = ["team-board"] as const;
 export type PageDataSource = (typeof PAGE_DATA_SOURCES)[number];
 
-/** A file call a version may declare. The only name in this lot is download. */
-export type PageCapFile = "download";
+/** A file call a version may declare: `download` (lot 2, the page hands the
+ * reader a file) and `add` (lot 5: readers add files, then the page lists,
+ * reads and removes them). */
+export type PageCapFile = "download" | "add";
+
+/** A file a reader added (lot 5), as the page receives it: `by` is its
+ * writer's handle on this page, `writer` their display name, `mine` whether
+ * the reader added it. The reader who added a file and the people who
+ * manage the page (its person, its editors) read it; no other reader does.
+ *   GET    /api/pages/:id/files            { files: PageFileInfo[] }
+ *   POST   /api/pages/:id/files            { name, mime, data }  PageFileInfo
+ *   GET    /api/pages/:id/files/:fileId    PageFileData
+ *   DELETE /api/pages/:id/files/:fileId    { ok: true } (its writer, or who manages the page)
+ * `files.add()` asks the reader to pick a file in the wrapper, from a click
+ * in the page; MIME types of PAGE_CAP_FILE_MIMES only. */
+export interface PageFileInfo {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  by: string;
+  writer: string;
+  at: number;
+  mine: boolean;
+}
+
+export interface PageFileData extends PageFileInfo {
+  /** The bytes, as one standard base64 string. */
+  data: string;
+}
+
+/** A file id, as the server makes it. */
+export const PAGE_FILE_ID = /^[A-Za-z0-9_-]{16,40}$/;
 
 /** Whose documents a reader of a store collection sees (lot 3). */
 export type PageStoreScope = "shared" | "reader";
@@ -422,11 +454,11 @@ export function parsePageOpenRef(ref: unknown): { botId: string; threadId?: stri
 }
 
 const SOURCE_SET = new Set<string>(PAGE_DATA_SOURCES);
-const FILE_SET = new Set<string>(["download"]);
+const FILE_SET = new Set<string>(["download", "add"]);
 
 /** A declaration as the page wrote it: known source names only, exact, no
  * wildcard; `viewer` and `open` only when `true`. Known file names only
- * (`download`); a missing `files` key is an empty list. Pure. */
+ * (`download`, `add`); a missing `files` key is an empty list. Pure. */
 export function parsePageCapabilities(value: unknown): PageCapabilities | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
@@ -500,6 +532,7 @@ export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: P
   if (cap === "model.ask") return caps.model === true;
   if (cap === "viewer.get") return caps.viewer;
   if (cap === "files.download") return (caps.files ?? []).includes("download");
+  if (cap === "files.add" || cap === "files.list" || cap === "files.get" || cap === "files.remove") return (caps.files ?? []).includes("add");
   return caps.open;
 }
 

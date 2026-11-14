@@ -104,8 +104,10 @@ const watchSchema = z.object({
  * run log and the person's waiting items, posts the review and never starts a turn
  * (server/proactive/review-routines.ts). `flow_watch` (#4250, S5) is a
  * Pulsatrix Flow watch the person turned on: the check resolves the watch
- * and reads it through the routine watch engine (server/proactive/flow-watches.ts). */
-export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments", "daily_brief", "end_of_day_review", "weekly_review", "flow_watch"] as const;
+ * and reads it through the routine watch engine (server/proactive/flow-watches.ts).
+ * `heartbeat` (#4250, S5) runs the probes of the bot's HEARTBEAT.md
+ * checklist (server/heartbeat/heartbeat.ts). */
+export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments", "daily_brief", "end_of_day_review", "weekly_review", "flow_watch", "heartbeat"] as const;
 export const ROUTINE_CODE_CHECK_TIMEOUT_MS = 180_000;
 const codeSchema = z.object({
   kind: z.literal("code"),

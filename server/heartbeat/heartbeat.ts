@@ -7,12 +7,21 @@
 // probe understands) never wake the model on their own: with only notes, a
 // beat costs nothing; in a mixed list they ride along as context when a probe
 // finds a gap (#2820).
+//
+// #4250 (S5 `one-probe-engine`, step b): the lines are the pre-check of a
+// routine. A bot whose checklist has a line to check has one routine
+// « Checklist » (code check `heartbeat`, its interval the `every:` line), listed,
+// paused and edited like any routine; the routine scheduler beats, there is
+// no heartbeat timer any more. The check runs the probes and starts the run
+// only on a new gap, with the gaps and the notes as the run's data.
 
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
+import type { RoutinePrecheckVerdict } from "../routines/routine-precheck.ts";
+import type { Routine, RoutineInput } from "../routines/routines.ts";
 import { DATA_DIR } from "../config.ts";
 import { noteAtRestWrite, readAtRestTextSync } from "../encryption/content-at-rest.ts";
 import {
@@ -213,39 +222,55 @@ export async function evaluateHeartbeat(
   return { fresh, state };
 }
 
-/** The prompt of a heartbeat run: the gaps first, the notes as context. */
-export function heartbeatPrompt(fresh: readonly HeartbeatGap[], notes: readonly string[]): string {
+/** The gaps and the notes, as the data the routine's run reads. */
+export function heartbeatNote(fresh: readonly HeartbeatGap[], notes: readonly string[]): string {
   const lines = [
-    `[Heartbeat] Your ${HEARTBEAT_PATH} checklist found ${fresh.length === 1 ? "a gap" : `${fresh.length} gaps`}:`,
+    `Your ${HEARTBEAT_PATH} checklist found ${fresh.length === 1 ? "a gap" : `${fresh.length} gaps`}:`,
     ...fresh.map((gap) => `- ${gap.detail} (checklist: ${gap.line})`),
   ];
   if (notes.length) lines.push("", "Notes from the checklist:", ...notes.map((note) => `- ${note}`));
-  lines.push(
-    "",
-    `Handle what you can now and tell the person in this chat what you did or what they need to do. Keep it short. You can edit ${HEARTBEAT_PATH} with docs_update when an item is done or no longer needed.`,
-  );
   return lines.join("\n");
 }
 
-export interface HeartbeatEnqueue {
-  webhookId: string;
-  webhookName: string;
-  prompt: string;
-  botId: string;
-  runOn: "maus";
-  deliveryId: string;
-  receivedAt: number;
-  eventSource: "wait";
-  resultsThreadId: string;
+/** #4250: the routines' code check that beats a bot's checklist. */
+export const HEARTBEAT_CHECK = "heartbeat" as const;
+
+export type HeartbeatLanguage = "fr" | "en";
+
+export function heartbeatRoutineName(language: HeartbeatLanguage): string {
+  return language === "fr" ? "Liste de contrôle" : "Checklist";
+}
+
+/** The routine's instructions; the gaps reach the run as its data. */
+export function heartbeatRoutinePrompt(): string {
+  return `[Heartbeat] Your ${HEARTBEAT_PATH} checklist found a gap (what it found is below). Handle what you can now and tell the person in this chat what you did or what they need to do. Keep it short. You can edit ${HEARTBEAT_PATH} with docs_update when an item is done or no longer needed.`;
+}
+
+export function isHeartbeatRoutine(routine: Pick<Routine, "precheck">): boolean {
+  const precheck = routine.precheck as { kind?: string; check?: string } | undefined;
+  return precheck?.kind === "code" && precheck.check === HEARTBEAT_CHECK;
+}
+
+function heartbeatSchedule(everyMs: number, now: number): { type: "interval"; everyMinutes: number; anchorAt: number } {
+  return { type: "interval", everyMinutes: Math.min(1_440, Math.max(5, Math.round(everyMs / 60_000))), anchorAt: now };
+}
+
+/** What the checklist routines need of the routine manager. */
+export interface HeartbeatRoutineManager {
+  list(): readonly Routine[];
+  create(input: RoutineInput, runAs?: string): Routine;
+  update(id: string, patch: Partial<RoutineInput>): Routine | null;
 }
 
 export interface HeartbeatDeps {
   /** Bots that can beat: visible, with a main chat. */
   bots(): Array<{ id: string; name: string }>;
-  mainThread(botId: string): string | undefined;
   /** HEARTBEAT.md as text, "" when the bot has none. */
   read(botId: string): string;
-  enqueue(input: HeartbeatEnqueue): unknown;
+  routines(): HeartbeatRoutineManager | null;
+  /** The person the routine runs as (an organization server), if any. */
+  runAs?(botId: string): string | undefined;
+  language?(botId: string): HeartbeatLanguage;
   /** #2694: the person said "never" to heartbeat wakes, or voted them down
    * past the mute line (votes fade): the bot is not woken. */
   muted?(botId: string): boolean;
@@ -254,13 +279,17 @@ export interface HeartbeatDeps {
   now?: () => number;
 }
 
+/** How often the checklists are read again for a routine to make or move
+ * (an edit outside the journal, by a shell in the bot's folder). */
+export const HEARTBEAT_SYNC_MS = 60 * 60_000;
+
 export class HeartbeatManager {
   private readonly deps: HeartbeatDeps;
   private readonly file: string;
   private readonly now: () => number;
   private readonly probes: HeartbeatProbes;
   private state: Record<string, HeartbeatBotState> = {};
-  private ticking = false;
+  private syncedAt = Number.NEGATIVE_INFINITY;
 
   constructor(deps: HeartbeatDeps) {
     this.deps = deps;
@@ -290,66 +319,91 @@ export class HeartbeatManager {
     return this.state[botId];
   }
 
-  /** One pass over every bot; a bot is probed only once its interval is up. Returns the bots that were woken. */
-  async tick(): Promise<string[]> {
-    if (this.ticking) return [];
-    this.ticking = true;
-    const woken: string[] = [];
-    let changed = false;
+  private list(botId: string): HeartbeatChecklist {
     try {
-      const live = new Set<string>();
-      for (const bot of this.deps.bots()) {
-        live.add(bot.id);
-        let text = "";
-        try {
-          text = this.deps.read(bot.id);
-        } catch {
-          text = "";
-        }
-        const list = parseHeartbeat(text);
-        if (heartbeatEmpty(list)) {
-          if (this.state[bot.id]) {
-            delete this.state[bot.id];
-            changed = true;
-          }
-          continue;
-        }
-        const previous = this.state[bot.id];
-        const now = this.now();
-        if (previous && now - previous.lastBeatAt < list.everyMs) continue;
-        if (this.deps.muted?.(bot.id)) continue;
-        const threadId = this.deps.mainThread(bot.id);
-        if (!threadId) continue;
-        const { fresh, state } = await evaluateHeartbeat(list, previous, this.probes, now);
-        this.state[bot.id] = state;
-        changed = true;
-        // #2820: only a probe in gap wakes the model; notes are context, never a trigger
-        if (!fresh.length) continue;
-        const prompt = heartbeatPrompt(fresh, list.notes);
-        this.deps.enqueue({
-          webhookId: `heartbeat:${bot.id}`,
-          webhookName: `Heartbeat: ${bot.name}`,
-          prompt,
-          botId: bot.id,
-          runOn: "maus",
-          deliveryId: `heartbeat:${bot.id}:${now}`,
-          receivedAt: now,
-          eventSource: "wait",
-          resultsThreadId: threadId,
-        });
-        woken.push(bot.id);
-      }
-      for (const id of Object.keys(this.state)) {
-        if (!live.has(id)) {
-          delete this.state[id];
-          changed = true;
-        }
-      }
-    } finally {
-      if (changed) this.save();
-      this.ticking = false;
+      return parseHeartbeat(this.deps.read(botId));
+    } catch {
+      return parseHeartbeat("");
     }
-    return woken;
+  }
+
+  /** The bot's checklist routine, when it has one. */
+  routineOf(botId: string): Routine | undefined {
+    return this.deps.routines()?.list().find((routine) => routine.botId === botId && isHeartbeatRoutine(routine));
+  }
+
+  /** A checklist with a line to check has its routine, at its interval. A
+   * routine is never made for notes alone (they never wake the model), and
+   * never deleted or turned on from here: the person pauses it in the list. */
+  sync(botId: string): Routine | null {
+    const manager = this.deps.routines();
+    if (!manager || !this.deps.bots().some((bot) => bot.id === botId)) return null;
+    const list = this.list(botId);
+    const existing = this.routineOf(botId);
+    if (!list.items.length) return existing ?? null;
+    const schedule = heartbeatSchedule(list.everyMs, this.now());
+    if (existing) {
+      const every = existing.schedule.type === "interval" ? existing.schedule.everyMinutes : undefined;
+      return every === schedule.everyMinutes ? existing : manager.update(existing.id, { schedule });
+    }
+    return manager.create({
+      name: heartbeatRoutineName(this.deps.language?.(botId) ?? "en"),
+      prompt: heartbeatRoutinePrompt(),
+      botId,
+      enabled: true,
+      schedule,
+      precheck: { kind: "code", check: HEARTBEAT_CHECK },
+      overlap: "skip",
+    }, this.deps.runAs?.(botId));
+  }
+
+  /** Every bot (at start, and within the hour on a pass the server already
+   * makes); drops the state of a bot that is gone. */
+  syncAll(): void {
+    this.syncedAt = this.now();
+    const live = new Set<string>();
+    for (const bot of this.deps.bots()) {
+      live.add(bot.id);
+      try {
+        this.sync(bot.id);
+      } catch {
+        // the next pass tries again
+      }
+    }
+    let changed = false;
+    for (const id of Object.keys(this.state)) {
+      if (!live.has(id)) {
+        delete this.state[id];
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+  }
+
+  /** syncAll once the hour is up. */
+  syncDue(): void {
+    if (this.now() - this.syncedAt >= HEARTBEAT_SYNC_MS) this.syncAll();
+  }
+
+  /** #4250: the routine's code check: the probes of the checklist, the run
+   * only on a new gap. */
+  async check(routine: Pick<Routine, "botId">): Promise<RoutinePrecheckVerdict> {
+    const botId = routine.botId;
+    const list = this.list(botId);
+    if (heartbeatEmpty(list) || !list.items.length) {
+      if (this.state[botId]) {
+        delete this.state[botId];
+        this.save();
+      }
+      return { wake: false, reason: `${HEARTBEAT_PATH} has no line to check` };
+    }
+    if (this.deps.muted?.(botId)) return { wake: false, reason: "You muted the checklist's alerts" };
+    const { fresh, state } = await evaluateHeartbeat(list, this.state[botId], this.probes, this.now());
+    this.state[botId] = state;
+    this.save();
+    // #2820: only a probe in gap wakes the model; notes are context, never a trigger
+    if (!fresh.length) return { wake: false, reason: "Every line of the checklist is met" };
+    return { wake: true, note: heartbeatNote(fresh, list.notes) };
   }
 
   private save(): void {

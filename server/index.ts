@@ -684,6 +684,7 @@ import {
   flushAllMemoryJournals,
   journalMemoryWrite,
   journalTurnWrite,
+  onMemoryChange,
   type MemoryJournalEntry
 } from "./memory/memory-journal.ts";
 import {
@@ -777,7 +778,7 @@ import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
-import { HEARTBEAT_PATH, HeartbeatManager, heartbeatEmpty, parseHeartbeat } from "./heartbeat/heartbeat.ts";
+import { HEARTBEAT_CHECK, HEARTBEAT_PATH, HeartbeatManager, heartbeatEmpty, parseHeartbeat } from "./heartbeat/heartbeat.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
 import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
@@ -20426,6 +20427,8 @@ routines = new RoutineManager({
   evaluateCode: (routine, precheck) => {
     if (precheck.check === "daily_brief") return briefRoutineCheck(routine);
     if (precheck.check === FLOW_WATCH_CHECK) return flowWatches.check(routine);
+    // #4250 (S5): the bot's HEARTBEAT.md checklist (server/heartbeat/heartbeat.ts)
+    if (precheck.check === HEARTBEAT_CHECK) return heartbeat.check(routine);
     const review = reviewCheckKind(precheck.check);
     return review ? reviewRoutineCheck(routine, review) : claudeArtifactCommentsCheck(routine);
   },
@@ -20988,14 +20991,28 @@ const waitsBoot = createWaitsBootstrap({
 });
 const botWaits = waitsBoot.waits;
 // #2692: HEARTBEAT.md, probes first, the model only on a gap, in the bot's main chat.
+// #4250 (S5): the lines are the pre-check of the bot's « Checklist » routine
+// (code check `heartbeat`); the routine scheduler beats, no timer of its own.
 const heartbeat = new HeartbeatManager({
   bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
-  mainThread: (botId) => botMainThread(botId),
   read: (botId) => readMemoryDoc(botId, HEARTBEAT_PATH).text,
-  enqueue: (input) => routines!.enqueueWebhook(input),
+  routines: () => routines ? {
+    list: () => routines!.listRoutines(),
+    create: (input, runAs) => routines!.create(input, undefined, runAs ? { runAs } : undefined),
+    update: (id, patch) => routines!.update(id, patch)
+  } : null,
+  runAs: (botId) => {
+    const bot = store.bot(botId);
+    const owner = bot && IDENTITY.kind === "perspicax" ? (effectiveBotOwner(bot) || "").trim().toLowerCase() : "";
+    return owner || undefined;
+  },
+  language: (botId) => briefLanguage(botId),
   muted: (botId) => backgroundBriefs.wakeMuted(botId, "heartbeat"),
 });
-setInterval(() => { void heartbeat.tick().catch(reportBackgroundError); }, 60_000).unref?.();
+// an edit of HEARTBEAT.md makes or moves its routine at once
+onMemoryChange((botId, path) => {
+  if (path === HEARTBEAT_PATH) heartbeat.sync(botId);
+});
 store.onChange((change) => {
   if (change.type === "bot" && store.bot(change.botId)?.busy) botWaits.noteBotBusy(change.botId);
 });
@@ -26135,6 +26152,8 @@ if (!process.env.VITEST) {
   if (upgraded.created.length || upgraded.owed.length) console.log(`background brief: ${upgraded.created.length} routine(s) from saved settings, ${upgraded.owed.length} card(s) owed`);
   // #4250 (S5): the Flow watches the people turned on run as routines (a server before #4250 ran its own loop)
   if (IDENTITY.kind === "perspicax") void flowWatches.syncAll().catch(reportBackgroundError);
+  // #4250 (S5): a checklist of a server before #4250 becomes its bot's routine
+  try { heartbeat.syncAll(); } catch (error) { reportBackgroundError(error); }
   try {
     briefCardsPass();
   } catch (error) {
@@ -26148,6 +26167,8 @@ if (!process.env.VITEST) {
     }
     // #4250: the watch routines follow a Flow that changed, within the hour (no timer of their own)
     if (IDENTITY.kind === "perspicax") void flowWatches.syncStale().catch(reportBackgroundError);
+    // #4250: a checklist edited outside the journal (a shell in the bot's folder) within the hour
+    try { heartbeat.syncDue(); } catch (error) { reportBackgroundError(error); }
   }, 60_000).unref();
 }
 ROUTES.push(createBackgroundBriefRoutes({

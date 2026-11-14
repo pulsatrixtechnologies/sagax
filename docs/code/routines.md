@@ -228,9 +228,9 @@ with a problem for a routine that can run several times a day
 day; a proactive wake or a webhook's own run, without a routine of its own,
 counts as one), at the first run with a problem for a routine that runs at
 most once a day and for any other run without a routine (#4050: a
-wait_until follow-up, a heartbeat, the last run of a routine deleted once
-finished). A run in the person's own chat (a wait_until follow-up, a
-heartbeat: `eventSource` "wait") never reads the background rule nor the
+wait_until follow-up, the last run of a routine deleted once finished; the
+heartbeat is a routine since #4250). A run in the person's own chat (a
+wait_until follow-up: `eventSource` "wait") never reads the background rule nor the
 earlier problems: its prompt is saved there as the person's line. In both cases later runs count on that card in place and the first good
 run turns it to works again in place. A pre-flight block is one more run of
 the streak; only a run the person started gets its own notice line.
@@ -521,6 +521,23 @@ routine of each watch). A chosen watch
 passes the bot's switch, as a direct trigger. A paused domain says so once
 in the carrying bot's chat. A watch alert's "never" stops those watches in
 the person's choices. One domain, one bot, by construction (#3394).
+
+## The HEARTBEAT.md checklist is a routine (#4250, S5 step b)
+
+A bot whose HEARTBEAT.md has a line to check (`page`, `file`, `process`,
+`at`) has one routine « Checklist » (« Liste de contrôle »), run as its
+person, with the code check `heartbeat` (`server/heartbeat/heartbeat.ts`) and
+the `every:` line as its interval (5 minutes to a day). Listed, paused and
+edited like any routine; the routine scheduler beats it, there is no
+heartbeat timer any more. The check runs the probes (the same as
+`wait_until`, `server/waits/wait-probes.ts`) and starts the run only on a new
+gap, with the gaps and the notes as the run's data; notes alone never wake
+the model and make no routine. The routine follows the file at start, on
+each journaled edit (`onMemoryChange`), and within the hour on the brief
+cards pass (an edit by a shell in the bot's folder); it is never deleted or
+turned back on from there. The per bot state stays in
+`DATA_DIR/heartbeat.json` (version 1, readable by the previous version). The
+person's « never » on heartbeat wakes (#2694) keeps the check quiet.
 
 ## Edit routine, Grok-simple (2026-11-01)
 

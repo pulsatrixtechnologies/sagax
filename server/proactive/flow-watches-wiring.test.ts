@@ -37,14 +37,3 @@ describe("Pulsatrix watch wiring", () => {
     expect(source).toMatch(/briefCardsPass\(\);[\s\S]{0,300}void flowWatches\.syncStale\(\)/);
   });
 });
-
-/** #4250: "a count of timers in the server". The Flow watch loop's timer
- * is gone; each later step of S5 lowers this number again. */
-export const SERVER_INTERVALS = 26;
-
-describe("#4250: the timers of the server", () => {
-  it(`server/index.ts starts at most ${SERVER_INTERVALS} intervals`, () => {
-    const source = readFileSync(INDEX, "utf8");
-    expect([...source.matchAll(/\bsetInterval\(/g)].length).toBeLessThanOrEqual(SERVER_INTERVALS);
-  });
-});

@@ -959,7 +959,7 @@ describe("agents-proxy MCP surface", () => {
     const trigger = create.inputSchema.properties.trigger;
     expect(trigger.additionalProperties).toBe(false);
     expect(trigger.required).toEqual(["type"]);
-    expect(trigger.properties.type.enum).toEqual(["webhook", "email", "github"]);
+    expect(trigger.properties.type.enum).toEqual(["webhook", "email", "github", "product"]);
     const schedule = create.inputSchema.properties.schedule;
     // No composition keywords anywhere in the tool surface: several agent
     // CLIs flatten or drop oneOf/anyOf/const when converting MCP tools for

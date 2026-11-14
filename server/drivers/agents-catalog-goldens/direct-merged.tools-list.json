@@ -48,7 +48,7 @@
           },
           "wait": {
             "type": "boolean",
-            "description": "Default true: the card holds your turn (and a routine run waits on it); on some engines the turn then ends with this call. false: the card stays pending for the person and holds nothing; the turn goes on (ask the next item now), end the run or turn normally, and each answer arrives later as its own turn in this conversation."
+            "description": "Default true: the card holds your turn (and a routine run waits on it); on some engines the turn then ends with this call. In a background run of a routine that can run several times a day (a trigger or a clock that repeats within a day) the default is false, so the run never waits on it. false: the card stays pending for the person and holds nothing; the turn goes on (ask the next item now), end the run or turn normally, and each answer arrives later as its own turn in this conversation."
           },
           "decision": {
             "type": "boolean",
@@ -63,6 +63,10 @@
             "minLength": 1,
             "maxLength": 200,
             "description": "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed."
+          },
+          "tell": {
+            "type": "boolean",
+            "description": "A fact to know, no answer; options []."
           }
         },
         "required": [

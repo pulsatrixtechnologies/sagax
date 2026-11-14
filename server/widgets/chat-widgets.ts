@@ -38,6 +38,7 @@ import type { Message } from "../store.ts";
 import { askTextKey, closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
 import { resolveAddressee, roomPeopleLine, type RoomPerson } from "../rooms/room-ask-cards.ts";
 import type { AskAddressee } from "../../shared/wire.ts";
+import type { PeerOutcomeItem } from "../../shared/peer-outcome.ts";
 
 export type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
@@ -202,6 +203,18 @@ export function createAgentCard(args: {
     defaultId?: string | null;
     availability: PageTargetAvailability;
   };
+  /** #4238: the call comes from a thread another bot opened (a teammate's
+   * request) and `threadId` is the person's own conversation with this bot:
+   * a card there is the person's item, keyed, holding nothing, never
+   * answered for them; a tell is recorded. Each is recorded for the turn's
+   * outcome (server/turns/peer-outcome-relay.ts). */
+  peerOutcome?: {
+    record(item: PeerOutcomeItem): void;
+    /** The person already answered or put away the card with `key` (the
+     * answered handling of server/turns/person-item-cards.ts): their answer
+     * stands, the same item is not raised again. Their answer, if any. */
+    answered?(key: string): { answer?: string } | null;
+  };
 }): AgentCardResult {
   const { store, bot, threadId, input } = args;
   if (!isRecord(input) || input.tool === undefined) return createOptionsCard(args);
@@ -241,6 +254,10 @@ export function createAgentCard(args: {
   return { ok: true, messageId: patched.id, ...(widget.masked ? { masked: true as const } : {}) };
 }
 
+/** #4238: a tell outside work the person did not start: the person reads
+ * this conversation, so the bot says it in its reply. */
+export const TELL_IN_REPLY = "Nothing was drawn: the person reads this conversation, so say it in your reply.";
+
 /** ask_choice: any bot may draw the passive choice card. #1905 (2026-11-02):
  * under Full access a may-I ("May I continue?", "Should I contact the
  * verifier?") is the person's own answer already (full-access-gate.ts
@@ -271,6 +288,30 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     return { ok: true, messageId: "", retired: 1 };
   }
   const value = parsed.value;
+  // #4238: in a teammate's exchange every card is the person's item: keyed
+  // (the same item later replaces it), a decision, holding nothing
+  const peer = args.peerOutcome;
+  // an unkeyed ask is keyed by its words (#4233's text key)
+  if (peer && !value.key) value.key = askTextKey(value.subtitle);
+  if (value.tell) {
+    const key = value.key ?? askTextKey(value.subtitle);
+    if (!peer) return { ok: true, messageId: "", told: true, note: TELL_IN_REPLY };
+    peer.record({ key, kind: "tell", text: value.subtitle });
+    return { ok: true, messageId: "", told: true, toPerson: true };
+  }
+  if (peer) {
+    value.wait = false;
+    value.decision = true;
+    // the person already answered this item: their answer stands, no
+    // second card
+    const before = value.key && !findKeyed(value.key) ? peer.answered?.(value.key) : null;
+    if (before) return { ok: true, messageId: "", toPerson: true, alreadyAnswered: before.answer ?? "" };
+  }
+  const recordPeer = (result: AgentCardResult): AgentCardResult => {
+    if (!peer || !result.ok || !result.messageId || !value.key) return result;
+    peer.record({ key: value.key, kind: "ask", text: value.subtitle, messageId: result.messageId, ...(result.replaced ? { replaced: true as const } : {}) });
+    return { ...result, toPerson: true };
+  };
   const inRoom = Boolean(args.store.groupByThread(args.threadId));
   // #4219: the person of the room the card is addressed to (a room only,
   // never a conversation between a bot and a person or two people)
@@ -324,7 +365,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
         if (askTo && askTo.id !== found.message.card!.askTo?.id) args.notifyAddressee?.(found.threadId, patched.id);
         const waits = Boolean(card.requestId) && found.threadId === args.threadId;
         const to = card.askTo ? { addressedTo: card.askTo.name } : {};
-        return { ok: true, messageId: patched.id, replaced: true, ...to, ...roomPeopleResult, ...(waits ? { waitsForPerson: true as const } : {}), ...(holds ? {} : { holds: false as const }) };
+        return recordPeer({ ok: true, messageId: patched.id, replaced: true, ...to, ...roomPeopleResult, ...(waits ? { waitsForPerson: true as const } : {}), ...(holds ? {} : { holds: false as const }) });
       }
     }
   }
@@ -332,7 +373,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // its title as is, so the default one is worded in the conversation's
   // language, like a raised question card (#3158). The raised path keeps the
   // English default: raiseHarnessQuestion tells it apart from a given title.
-  const { key: _key, wait: _wait, decision: _decision, to: _to, ...cardValue } = value;
+  const { key: _key, wait: _wait, decision: _decision, to: _to, tell: _tell, ...cardValue } = value;
   const shownCard = input.title === undefined
     ? { ...cardValue, title: questionCardTitle(turnLanguage(lastPersonText(args.store.messagesFor(args.threadId)), args.personLanguage)) || cardValue.title }
     : cardValue;
@@ -363,7 +404,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
       if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, raised.messageId);
     }
     args.authored?.(raised.messageId);
-    return { ok: true, messageId: raised.messageId, waitsForPerson: true, ...addressed, ...roomPeopleResult, ...(holds ? {} : { holds: false as const }) };
+    return recordPeer({ ok: true, messageId: raised.messageId, waitsForPerson: true, ...addressed, ...roomPeopleResult, ...(holds ? {} : { holds: false as const }) });
   }
   // a direct thread replays a bot row that carries `from` as another bot's line
   // full-access: ask-choice
@@ -373,7 +414,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   });
   if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, message.id);
   args.authored?.(message.id);
-  return { ok: true, messageId: message.id, ...(holds ? {} : { holds: false as const }) };
+  return recordPeer({ ok: true, messageId: message.id, ...(holds ? {} : { holds: false as const }) });
 }
 
 /** #2048: choose which surface hosts a new page or artifact. One available

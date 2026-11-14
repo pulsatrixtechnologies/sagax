@@ -44,6 +44,9 @@ export interface AskChoiceInput extends OptionsCardInput {
   wait?: boolean;
   decision?: true;
   to?: string;
+  /** #4238: something the person should know, no answer needed (the same
+   * family as a keyed card: the same key replaces it). No options. */
+  tell?: true;
 }
 
 export type ParsedAskChoiceInput =
@@ -131,6 +134,8 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
     if (typeof given !== "string") return { ok: false, error: given.error };
     title = given;
   }
+  // #4238: a fact for the person, no choices to offer
+  if (value.tell === true) return { ok: true, value: { title, subtitle: question, options: [], ...extra, tell: true } };
   // #2909: an option is a short answer, or {label, detail}: the label is the
   // button and the answer, the detail says what it does
   if (!Array.isArray(value.options)) return { ok: false, error: "options must be an array of strings or {label, detail} objects." };

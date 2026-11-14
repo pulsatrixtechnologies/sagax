@@ -48,6 +48,16 @@ export type AgentCardResult =
       /** #4219: a routine run's card raised in its source room: the room's
        * name (its answer arrives as a turn there, not in the run). */
       inRoom?: string;
+      /** #4238: a tell, recorded for the person's outcome (no card), or,
+       * outside work the person did not start, to be said in the reply.
+       * `toPerson`: the card went to the person's own conversation with
+       * this bot (a teammate's exchange stays between the bots). */
+      told?: true;
+      note?: string;
+      toPerson?: true;
+      /** #4238: the person already answered or put away this item's card
+       * (their answer, empty when they put it away): no second card. */
+      alreadyAnswered?: string;
       auto?: { id: string; tool: string; name: string; description: string; icon?: string; reason: "single" | "default" };
       targets?: Array<{ id: string; tool: string; name: string; description: string; available: boolean; icon?: string; reason?: string }>;
     }

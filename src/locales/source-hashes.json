@@ -18595,7 +18595,19 @@
       "routine.problemCard.open": "55daf9697996255930ea294239b126726db20912c4836dde866deb0e99292578",
       "routine.problemCard.openDetail": "ec266d7db94f5d991067d6b0713f85b108456a88823c6908905ceb8c75c344b6",
       "routine.problemCard.problemOnce": "40f15670bc9cb799ea72d3ba892359eb7354c3dba23159c4726a3334e9896c93",
-      "approvals.kind.form": "2e0e960ab3204127b1dce399c9984c81f52a79f4d85cb0c3afddcfcfe8a2b48c"
+      "approvals.kind.form": "2e0e960ab3204127b1dce399c9984c81f52a79f4d85cb0c3afddcfcfe8a2b48c",
+      "chat.peerOutcome.from": "218197693424e0154cefc0af31aed96c084b987e08136e91d5528ddbb5461e24",
+      "chat.peerOutcome.needs.one": "8cf9c35c16689c80eade3ae25f2244f1d2134517cfc2f4985f9cdcd889cfd0b7",
+      "chat.peerOutcome.needs.other": "3235d3f86c3e35c3b2040a3b4f75a551ffd1689d4db2d99f6f25bb5d62929dfc",
+      "chat.peerOutcome.know.one": "709408cffb7313532929f2c10976b53e98b693925cc8d90cfdf8048bbe43d9a4",
+      "chat.peerOutcome.know.other": "f4fb80541d4beafa8cbf3d1589f4e7d9c1ac26fb4bcbb183187c4fafd5ac775b",
+      "chat.peerOutcome.nothing": "19814858a1e4b192cd82a3c249b3dac02d6e65f946a79dfcb1126e28db804e8d",
+      "chat.peerOutcome.title": "30014a1d7f1c91f46b3178ac1b897c8f9beceb75f7e795dbc356bdab0ca7ebfe",
+      "chat.peerOutcome.kind.ask": "289aff12b04274cb04b8f7dbf486ba8b3528c6fd16b60b9a31d31ce23b339236",
+      "chat.peerOutcome.kind.fix": "2d1e36cd477f2a509c5b28efe2e355cbfac32d06d9449af4f91b18f3a6f84e3d",
+      "chat.peerOutcome.kind.tell": "9ab8449665db4ae55297c417a8014732dfc030d79167136a07c03445be9501b8",
+      "chat.peerOutcome.openAria": "e3b298d5ba20573d1315b5c7ec0f9caaf061b4e78ba7fc62b0184c76fe03cf76",
+      "chat.peerOutcome.kind.answered": "665590354e719bcf6610c39fe617cf8cf8109e96a59e64c73a41a028b74369f9"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

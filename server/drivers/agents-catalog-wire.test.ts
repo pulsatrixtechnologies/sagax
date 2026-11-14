@@ -190,6 +190,9 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // measured wire.
 // 2026-11-08 (main-green-0868): catalog texts shortened (routine schemas, shared
 // outcome notes) to restore the soft-ceiling margin; baselines move to the measured wire.
+// 2026-11-13 (#4238): ask_choice takes tell (a fact for the person from a
+// teammate's exchange); the room non-chief baselines, left without margin by
+// the lots before it, move to the measured wire.
 const BUDGET_BASELINE: Record<string, number> = {
   // #2909: ask_choice says its answers must answer the question and takes
   // per-answer details (+266 bytes of ask_choice, measured).
@@ -243,19 +246,19 @@ const BUDGET_BASELINE: Record<string, number> = {
   "direct+skills+shared+voice+non-chief": 98357,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
   "room+non-chief": 86598,
-  "room+voice+non-chief": 85846,
-  "room+shared+non-chief": 86776,
-  "room+shared+voice+non-chief": 87740,
-  "room+skills+non-chief": 86243,
-  "room+skills+voice+non-chief": 87207,
-  "room+skills+shared+non-chief": 88137,
-  "room+skills+shared+voice+non-chief": 89101,
-  "room+own-thread+non-chief": 86909,
-  "room+own-thread+voice+non-chief": 87873,
-  "room+own-thread+shared+non-chief": 88803,
-  "room+own-thread+shared+voice+non-chief": 89767,
-  "room+own-thread+skills+non-chief": 88270,
-  "room+own-thread+skills+voice+non-chief": 89234,
+  "room+voice+non-chief": 87643,
+  "room+shared+non-chief": 88573,
+  "room+shared+voice+non-chief": 89537,
+  "room+skills+non-chief": 88040,
+  "room+skills+voice+non-chief": 89004,
+  "room+skills+shared+non-chief": 89934,
+  "room+skills+shared+voice+non-chief": 90898,
+  "room+own-thread+non-chief": 88706,
+  "room+own-thread+voice+non-chief": 89670,
+  "room+own-thread+shared+non-chief": 90600,
+  "room+own-thread+shared+voice+non-chief": 91564,
+  "room+own-thread+skills+non-chief": 90067,
+  "room+own-thread+skills+voice+non-chief": 91031,
   "room+own-thread+skills+shared+non-chief": 90164,
   "room+own-thread+skills+shared+voice+non-chief": 91128,
   // Annotations on check_delegation / wait_delegation (read-only policy).

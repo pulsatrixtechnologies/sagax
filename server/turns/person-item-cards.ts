@@ -27,8 +27,12 @@
 // The one conversion point for the two readers of personAttention:
 // syncRoutineRunToSource (a run's own end, which retires) and
 // relayPersonAttention (a run's late answer, which only raises or replaces:
-// a late answer is not a later run). Items outside a routine or a wake (a teammate's hand-off)
-// keep their attention card, unchanged.
+// a late answer is not a later run). #4238: the items of a teammate's
+// exchange take this same path under the peer scope, with retire false (an
+// exchange is not a run that lists them all): the tagged items the relay
+// reads there, and the ones the server raises from the bot's words
+// (server/turns/peer-outcome-relay.ts, its fallback and its start-up
+// back-fill).
 import { createHash } from "node:crypto";
 
 import { textLanguage } from "../../shared/looks-french.ts";
@@ -43,6 +47,10 @@ export const PERSON_ITEM_CHOICES = {
 } as const;
 
 const KEY_PREFIX = "item:";
+
+/** #4238: the scope of the items raised from a teammate's exchange (no
+ * routine id is this short word: routine ids are generated). */
+export const PEER_ITEM_SCOPE = "peer";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 

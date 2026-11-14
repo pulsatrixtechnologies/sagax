@@ -378,7 +378,8 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
                 ...(notification.messageId ? { cardId: notification.messageId } : {}),
               },
             );
-            host.notify(note && roomAudience ? { ...note, audience: roomAudience } : note);
+            // #4238: a card raised quiet shows and waits without ringing
+            if (event.quietAsk !== true) host.notify(note && roomAudience ? { ...note, audience: roomAudience } : note);
           };
           const clearReviewing = () => {
             const row = host.store.messagesFor(event.threadId).find((candidate) => candidate.id === message.id);

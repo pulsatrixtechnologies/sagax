@@ -58,6 +58,7 @@ export const ASK_CHOICE_DEF = {
         decision: { type: "boolean", description: "true for a business decision only the person makes: never answered for them, at any approval level." },
         retire: { type: "boolean", description: "true with key: close that pending card at once (question and options are then ignored); an answer to it starts nothing." },
         to: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.to, description: "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed." },
+        tell: { type: "boolean", description: "A fact to know, no answer; options []." },
       },
       required: ["question", "options"],
     },

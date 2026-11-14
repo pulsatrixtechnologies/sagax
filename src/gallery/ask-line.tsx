@@ -6,6 +6,8 @@
  * answer). No server. Every name and text is synthetic. Not shipped.
  * ?skin=<id>&lang=en|fr&side=sender|receiver|all|cards&n=<teammates>
  * &state=running|done|stopped&tools=1 (Tool calls shown)
+ * side=outcome (#4238): what a teammate's requests left for the person;
+ * &before=1: the same chat as it was before (no outcome, line or card).
  *
  * #3581: side=all is one chat with every trace between bots and every
  * background task in order (Asked; Asked by 1, 3 and 15 names, and 5
@@ -32,8 +34,9 @@ const fr = lang === "fr";
 const count = Math.max(1, Number(params.get("n") ?? "5"));
 const tools = params.get("tools") === "1";
 const sideParam = params.get("side");
-const side = sideParam === "receiver" || sideParam === "all" || sideParam === "cards" ? sideParam : "sender";
+const side = sideParam === "receiver" || sideParam === "all" || sideParam === "cards" || sideParam === "outcome" ? sideParam : "sender";
 const state = (params.get("state") ?? "done") as "running" | "done" | "stopped";
+const before = params.get("before") === "1";
 
 const NAMES = [
   "Wren", "Marlin", "Harbor", "Quill", "Beacon", "Ledger", "Cobalt", "Juniper", "Fable", "Atlas",
@@ -43,7 +46,8 @@ const NAMES = [
 const roster = side === "all" ? Math.max(count, 16) : count;
 const COLORS = ["violet", "blue", "orange", "green", "pink", "yellow"] as const;
 const at = Date.UTC(2026, 10, 9, 14, 0);
-const self = side !== "receiver"
+const receives = side === "receiver" || side === "outcome";
+const self = !receives
   ? { id: "scout", name: "Scout", color: "green" } as const
   : { id: "r0", name: "Wren", color: "violet" } as const;
 const asker = { id: "scout", name: "Scout", color: "green" } as const;
@@ -111,6 +115,51 @@ function receiverMessages(): Message[] {
     line("m1", "bot", answer, 21, { relayVia: "teammate", relayOf: "x1", relayAsk: { text: brief, by: asker.name, botId: asker.id } } as Partial<Message>),
     line("m2", "bot", "This request was stopped before an answer.", 30, { relayVia: "teammate", relayOf: "x2", relayTrace: "stopped" } as Partial<Message>),
     line("m3", "bot", "This request was stopped before an answer.", 31, { relayVia: "teammate", relayOf: "x3", relayTrace: "stopped", relayAsk: { text: brief, by: asker.name, botId: asker.id } } as Partial<Message>),
+  ];
+}
+
+/** #4238: the person's chat with their bot after a teammate's three
+ * requests: the "Asked by" line (each request's outcome behind it), the one
+ * line of what the last one left for the person, and its keyed cards. */
+function outcomeMessages(): Message[] {
+  const ref = { botId: self.id, threadId: "r0-w", title: fr ? "Revue de la journée" : "Day review" };
+  const from = { botId: asker.id, name: asker.name };
+  const asks = [
+    { key: "slot-0900", kind: "ask" as const, text: fr ? "Deux plages réservées à 9 h : laquelle garder, la visite client ou la revue ?" : "Two slots booked at 9:00: which one stays, the client visit or the review?" },
+    { key: "access:service-notes", kind: "fix" as const, text: fr ? "Corps des billets refusés : accorde la permission de lire les notes de service." : "Ticket bodies refused: grant the permission to read service notes." },
+    { key: "offline", kind: "tell" as const, text: fr ? "Deux ordinateurs étaient hors ligne ce matin." : "Two computers were offline this morning." },
+  ];
+  const outcome = (kind: "nothing" | "told" | "asked", items: typeof asks, second: number) => ({ kind, items, threadId: "r0-w", from, at: at + second * 1000 });
+  const incoming = (id: string, second: number, peerOutcome: ReturnType<typeof outcome>): Message => ({
+    id, role: "bot", kind: "activity", at: at + second * 1000,
+    from: { botId: asker.id, name: asker.name, color: asker.color },
+    tool: { name: `Asked by ${asker.name}`, ok: true, input: brief, handoffId: id },
+    threadRef: ref, peerOutcome,
+  }) as unknown as Message;
+  const card = (id: string, second: number, item: (typeof asks)[number], options: string[]): Message => ({
+    id, role: "bot", kind: "options", at: at + second * 1000,
+    card: { title: "", subtitle: "", options: [], requestId: `req-${id}`, requestType: "question", askKey: item.key, noHold: true, questionRequest: { version: 1, questions: [{ question: item.text, options: options.map((label) => ({ label })) }] } },
+  }) as unknown as Message;
+  // the same chat before #4238: the three requests' "Asked by" line alone
+  if (before) {
+    return [
+      line("u1", "user", fr ? "Salut Wren." : "Hi Wren.", 0),
+      line("b1", "bot", fr ? "Salut!" : "Hi!", 2),
+      ...(["in1", "in2", "in3"] as const).map((id, index) => {
+        const { peerOutcome: _none, ...row } = incoming(id, [5, 12, 20][index]!, outcome("nothing", [], 0)) as Message & { peerOutcome?: unknown };
+        return row as Message;
+      }),
+    ];
+  }
+  return [
+    line("u1", "user", fr ? "Salut Wren." : "Hi Wren.", 0),
+    line("b1", "bot", fr ? "Salut!" : "Hi!", 2),
+    incoming("in1", 5, outcome("nothing", [], 9)),
+    incoming("in2", 12, outcome("told", [asks[2]!], 15)),
+    incoming("in3", 20, outcome("asked", asks, 26)),
+    line("o1", "bot", "Scout: 2 things need you, 1 thing to know", 27, { peerOutcome: { ...outcome("asked", asks, 27), line: true }, threadRef: ref } as Partial<Message>),
+    card("c1", 28, asks[0]!, fr ? ["La visite client", "La revue"] : ["Client visit", "Review"]),
+    card("c2", 29, asks[1]!, fr ? ["C'est accordé", "Pas pour moi"] : ["Granted", "Not for me"]),
   ];
 }
 
@@ -199,10 +248,10 @@ function cardMessages(): Message[] {
   ];
 }
 
-const messages = side === "sender" ? senderMessages() : side === "all" ? allMessages() : side === "cards" ? cardMessages() : receiverMessages();
+const messages = side === "sender" ? senderMessages() : side === "all" ? allMessages() : side === "cards" ? cardMessages() : side === "outcome" ? outcomeMessages() : receiverMessages();
 // one branch: each line answers the one above it
 messages.forEach((message, i) => { if (i > 0) message.parentId = messages[i - 1]!.id; });
-const others = side === "receiver" ? [asker, ...teammates.slice(1)] : teammates;
+const others = receives ? [asker, ...teammates.slice(1)] : teammates;
 const owner: Bot = {
   id: self.id, threadId: `${self.id}-thread`, name: self.name, title: "", description: "", color: self.color,
   notifications: true, unread: false, busy: state === "running", messages, activeLeafId: messages.at(-1)?.id,

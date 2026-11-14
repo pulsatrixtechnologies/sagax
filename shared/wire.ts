@@ -9,6 +9,7 @@
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
 import type { PersonAttentionCard, RunStatusNote } from "./person-attention.ts";
+import type { PeerOutcome } from "./peer-outcome.ts";
 import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
@@ -1029,6 +1030,11 @@ export interface WireMessage extends WaitLineField {
    * into their own conversation with that bot (shared/person-attention.ts).
    * On a routine.run row it rides beside the report. `text` is the fallback. */
   attention?: PersonAttentionCard;
+  /** #4238: what a turn the person did not start (a teammate's request)
+   * concluded for them: on the request's "Asked by" receipt, on the one
+   * synthesized line in their conversation (`line`), and on the bot's last
+   * row of the exchange (shared/peer-outcome.ts). */
+  peerOutcome?: PeerOutcome;
   /** #3461: what the person wrote to a team bot in a thread this bot opened
    * (shared/team-work.ts), one quiet row in their conversation with this
    * bot; the bot reads it at its next turn. On a text row; `text` is the

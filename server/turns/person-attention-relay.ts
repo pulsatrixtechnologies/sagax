@@ -28,6 +28,7 @@ import type { WireMessage, WireTask } from "../../shared/wire.ts";
 import { withoutRoutineMarkers, withRunMarkers } from "../../shared/routine-result.ts";
 import { routineRowLogLine } from "../routines/routine-report.ts";
 import { openedByOwnBot } from "./bot-to-bot.ts";
+import { PEER_ITEM_SCOPE, personItemKey, type PersonItemCardsOutcome } from "./person-item-cards.ts";
 
 export interface AttentionBot {
   id: string;
@@ -85,6 +86,11 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
    * passes retire false: a late answer is not a later run, so the cards of
    * the run's items it does not mention stay open. */
   itemCards?(runThreadId: string, target: string, items: readonly PersonAttentionItem[], options: { retire: boolean }): PersonAttentionItem[] | undefined;
+  /** #4238: the items only the person can do of a teammate's exchange, each
+   * as its keyed card under the peer scope in the person's conversation
+   * `target` (the same item card path, retire false: an exchange is not a
+   * run that lists them all). */
+  peerItemCards?(bot: B, target: string, items: readonly PersonAttentionItem[]): PersonItemCardsOutcome;
   now?(): number;
 }
 
@@ -196,9 +202,18 @@ export function turnAsk(messages: readonly WireMessage[], turnId: string | undef
   return undefined;
 }
 
+/** #4238: what the relay carried to the person from a teammate's exchange,
+ * for the turn's outcome (server/turns/peer-outcome-relay.ts settles it,
+ * the one place that does): the items of the peer item cards by key and
+ * what became of each card, and the items left on the attention card. */
+export interface PeerCarried {
+  keyed: Array<{ key: string; text: string; state: "raised" | "replaced" | "kept" }>;
+  card?: { messageId?: string; items: PersonAttentionItem[] };
+}
+
 /** What happened (for tests and the log): the card's thread, or why not. */
 export type AttentionRelayOutcome =
-  | { posted: true; threadId: string; card: PersonAttentionCard; onRunCard?: true; keyed?: true }
+  | { posted: true; threadId: string; card: PersonAttentionCard; onRunCard?: true; keyed?: true; peer?: PeerCarried }
   | { posted: false; reason: "failed" | "no-task" | "confidential" | "agent" | "no-signal" | "run-reports" | "own-conversation" | "no-conversation" | "already" | "muted" | "for-opener" };
 
 export function relayPersonAttention<B extends AttentionBot>(
@@ -248,6 +263,24 @@ export function relayPersonAttention<B extends AttentionBot>(
     if (left && !left.length) return { posted: true, threadId: target, card, keyed: true };
     if (left) card = { ...card, items: left };
   }
+  // #4238: a teammate's exchange (no run): its items take the same keyed
+  // path under the peer scope, so the same sweep later replaces or keeps
+  // its cards instead of adding a second one
+  const peer = !run && deps.relayVia?.(bot.id, threadId) === "teammate";
+  const keyed: PeerCarried["keyed"] = [];
+  if (peer && found.kind === "human" && ring && deps.peerItemCards) {
+    const items = card.items;
+    const result = deps.peerItemCards(bot, target, items);
+    const textOf = (key: string) => items.filter((item) => personItemKey(PEER_ITEM_SCOPE, item) === key).map((item) => item.text).join("\n");
+    for (const [state, keys] of [["raised", result.raised], ["replaced", result.replaced], ["kept", result.kept]] as const) {
+      for (const key of keys) keyed.push({ key, text: textOf(key), state });
+    }
+    if (!result.left.length) return { posted: true, threadId: target, card, keyed: true, peer: { keyed } };
+    card = { ...card, items: result.left };
+  }
+  const carried = (row: unknown): { peer?: PeerCarried } => peer
+    ? { peer: { keyed, card: { items: card.items, ...(row && typeof row === "object" && typeof (row as WireMessage).id === "string" ? { messageId: (row as WireMessage).id } : {}) } } }
+    : {};
   if (runCard) {
     if (runCard.attention) return { posted: false, reason: "already" };
     deps.patch(target, runCard.id, { attention: card });
@@ -258,15 +291,15 @@ export function relayPersonAttention<B extends AttentionBot>(
       card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"));
     return { posted: true, threadId: target, card, onRunCard: true };
   }
-  deps.append(target, {
+  const row = deps.append(target, {
     role: "bot", kind: "text", text: personAttentionText(card), attention: card,
     threadRef: { botId: bot.id, threadId, title: task.title },
   });
-  if (!ring) return { posted: true, threadId: target, card };
+  if (!ring) return { posted: true, threadId: target, card, ...carried(row) };
   deps.markUnread(bot.id, target);
   deps.notify(bot, target, card.kind === "question" ? `${bot.name} has a question for you` : `${bot.name} needs you`,
     card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"));
-  return { posted: true, threadId: target, card };
+  return { posted: true, threadId: target, card, ...carried(row) };
 }
 
 export function attentionCard<B extends AttentionBot>(

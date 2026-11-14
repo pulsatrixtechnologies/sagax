@@ -150,7 +150,7 @@ import { cwRecordLink, cwSite } from "../shared/cw-widgets/links.ts";
 import { BOT_QUESTION_SWEEP } from "./turns/bot-to-bot.ts";
 import { attentionCard, mirrorBackgroundReply, mirrorLateRunReply, openCardIn, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
 import { personAttention, type PersonAttentionItem } from "../shared/person-attention.ts";
-import { answeredItemKeys, releasedItemCards, syncPersonItemCards } from "./turns/person-item-cards.ts";
+import { answeredItemKeys, PEER_ITEM_SCOPE, releasedItemCards, syncPersonItemCards } from "./turns/person-item-cards.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { skillEditorApiPath } from "../src/lib/skills-ui.ts";
@@ -180,6 +180,7 @@ import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
 import { AskKeyIndex, closedAskCard, raiseTextKeyedAsk } from "./widgets/ask-choice-keys.ts";
+import { backfillPeerOutcomes, PeerOutcomeLedger, settlePeerOutcome, type PeerOutcomeDeps } from "./turns/peer-outcome-relay.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
@@ -5367,6 +5368,8 @@ bindLeafHost({
   get rejectStagedSkillWrite() { return rejectStagedSkillWrite; },
   get relayAccountLabel() { return relayAccountLabel; },
   get relayPersonAttention() { return relayPersonAttention; },
+  get settlePeerOutcome() { return settlePeerOutcome; },
+  get peerOutcomeDeps() { return peerOutcomeDeps; },
   get releasePlain() { return releasePlain; },
   get releaseVersion() { return releaseVersion; },
   get remoteCallerIsAgent() { return remoteCallerIsAgent; },
@@ -16383,6 +16386,9 @@ type HarnessChoice = {
   card?: { askKey?: string; noHold?: true; askTo?: import("../shared/wire.ts").AskAddressee };
   /** #4219: in a room, the member bot that asks. */
   askerBotId?: string;
+  /** #4238: raised without ringing (the start-up back-fill rings its one
+   * grouped line instead). */
+  quiet?: true;
 };
 
 /** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
@@ -16558,13 +16564,21 @@ function personItemCards(run: Pick<RoutineRun, "id" | "routineId" | "routineName
   if (!bot || bot.hidden || !run.routineId) return undefined;
   const at = (one: Pick<RoutineRun, "finishedAt" | "scheduledFor">) => one.finishedAt ?? one.scheduledFor ?? 0;
   if (routines?.runsOfRoutineAsStored(run.routineId).some((other) => other.id !== run.id && other.status === "completed" && at(other) > at(run))) return undefined;
+  const person = run.runAs ?? attentionPerson(bot, threadId);
+  return syncItemCardsIn(bot, threadId, run, items, person, options).left;
+}
+
+/** #4233, #4238: the one item card path in `threadId` (the bot's
+ * conversation with the person) for `scope` (a routine, or the peer scope of
+ * a teammate's exchange): syncPersonItemCards over the bot's own ask_choice
+ * path (createAgentCard), its answered cards read in `threadId`. */
+function syncItemCardsIn(bot: BotRecord, threadId: string, scope: { routineId: string; routineName?: string }, items: readonly PersonAttentionItem[], person: string | undefined, options: { retire?: boolean; language?: "fr" | "en"; quiet?: boolean } = {}) {
   const group = store.groupByThread(threadId);
   const room = group && !group.dm && !group.peopleDm ? group : null;
   const keys = askKeysFor(bot, threadId, threadId);
   const own = (message: Message) => !message.from || message.from.botId === bot.id;
-  const person = run.runAs ?? attentionPerson(bot, threadId);
   const personLanguage = languageOfPerson(person);
-  return syncPersonItemCards(run, items, {
+  return syncPersonItemCards(scope, items, {
     pending: (key) => {
       const card = keys.find(key, own)?.message.card;
       return card ? { question: card.subtitle ?? "", options: card.options ?? [] } : null;
@@ -16579,11 +16593,11 @@ function personItemCards(run: Pick<RoutineRun, "id" | "routineId" | "routineName
       store, bot, threadId, input,
       approvalLevel: sourceApprovalMode(bot.id, threadId),
       personLanguage,
-      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, room ? { ...choice, askerBotId: bot.id } : choice, "output"),
+      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, { ...choice, ...(room ? { askerBotId: bot.id } : {}), ...(options.quiet ? { quiet: true as const } : {}) }, "output"),
       askKeys: keys,
       ...(room ? { room: { people: roomPeopleOf(room), name: room.name, fromRun: true }, notifyAddressee: notifyRoomAskAddressee } : {}),
     }).ok,
-  }, personLanguageCode(personLanguage), options).left;
+  }, options.language ?? personLanguageCode(personLanguage), options);
 }
 
 /** #4233: where a routine's fix card goes: the conversation its runs report
@@ -18297,6 +18311,8 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get registry() { return registry; },
   get relayParentThreads() { return relayParentThreads; },
   get relayPersonAttention() { return relayPersonAttention; },
+  get settlePeerOutcome() { return settlePeerOutcome; },
+  get peerOutcomeDeps() { return peerOutcomeDeps; },
   get relayShown() { return relayShown; },
   get relayStreams() { return relayStreams; },
   get releaseLocalVmThread() { return releaseLocalVmThread; },
@@ -18618,6 +18634,8 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
     const run = routines?.runForThread(runThreadId);
     return run ? personItemCards(run, target, items, options) : undefined;
   },
+  // #4238: a teammate's exchange's items as keyed cards, under the peer scope
+  peerItemCards: (bot, target, items) => syncItemCardsIn(bot, target, { routineId: PEER_ITEM_SCOPE, routineName: bot.name }, items, attentionPerson(bot, target), { retire: false }),
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
   feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
@@ -18632,6 +18650,70 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   // #3503: a thread another bot of the same person opened stays theirs
   sameOwner: sameBotOwner,
 };
+/** #4238: what a teammate's request concluded for the person
+ * (server/turns/peer-outcome-relay.ts): the items the bot raised during its
+ * turn, and the exchanges the server asked once. */
+const peerOutcomeLedger = new PeerOutcomeLedger();
+const peerOutcomeNudges = new Map<string, { words: string; at: number }>();
+/** The bot's conversations with the person of `target` (a key spans them). */
+function samePersonThreads(bot: BotRecord, target: string): (threadId: string) => boolean {
+  const owner = effectiveBotOwner(bot);
+  const whose = pageOwnerFor(store.taskByThread(bot.id, target), owner);
+  return (threadId) => {
+    if (threadId === target) return true;
+    const task = store.taskByThread(bot.id, threadId);
+    return Boolean(task) && !store.groupByThread(threadId) && pageOwnerFor(task, owner) === whose;
+  };
+}
+const peerOutcomeDeps: PeerOutcomeDeps<BotRecord> = {
+  ...personAttentionDeps,
+  takeRecorded: (threadId) => peerOutcomeLedger.take(threadId),
+  language: (bot, target) => personLanguageCode(languageOfPerson(attentionPerson(bot, target))),
+  // #4233's one item card path, under the peer scope; an exchange is not a
+  // run that lists all its items, so nothing is retired or released
+  itemCards: (bot, target, items, language, options) => syncItemCardsIn(bot, target, { routineId: PEER_ITEM_SCOPE, routineName: bot.name }, items, attentionPerson(bot, target), { retire: false, language, ...(options?.quiet ? { quiet: true } : {}) }),
+  itemState: (bot, target, key) => {
+    if (askKeyIndex.find(key, samePersonThreads(bot, target), (message) => !message.from || message.from.botId === bot.id)) return "pending";
+    return answeredItemCard(bot, target, key) ? "answered" : null;
+  },
+  // the server's one ask, as a control-plane turn in the same exchange once
+  // the turn that ended is folded; when it cannot start, the server raises
+  // the items itself
+  nudge: (bot, threadId, prompt) => {
+    const settleNow = () => {
+      try {
+        settlePeerOutcome({ bot, threadId, ok: true }, peerOutcomeDeps);
+      } catch (error) {
+        reportBackgroundError(error);
+      }
+    };
+    setTimeout(() => {
+      if (threadBusy(bot.id, threadId) || !store.taskByThread(bot.id, threadId)) return settleNow();
+      const speaker = threadContinuationSpeaker(threadId);
+      startTurn(bot.id, prompt, { threadId, cardContinuation: true, ...(speaker ? { speaker } : {}) })
+        .catch((error) => {
+          console.warn(`[peer-outcome] thread ${threadId.slice(0, 8)}: the ask could not start: ${error instanceof Error ? error.message : String(error)}`);
+          settleNow();
+        });
+    }, 0).unref?.();
+    return true;
+  },
+  nudges: peerOutcomeNudges,
+  log: (line) => console.info(line),
+};
+/** #4238: the newest card with `key` in the person's conversation
+ * `target` that they answered or put away (person-item-cards.ts
+ * answeredItemKeys), with their answer. */
+function answeredItemCard(bot: BotRecord, target: string, key: string): { answer?: string } | null {
+  const own = (message: Message) => !message.from || message.from.botId === bot.id;
+  const messages = store.messagesFor(target);
+  if (!answeredItemKeys(messages, key, own).includes(key)) return null;
+  const card = messages.findLast((message) => message.kind === "options" && message.card?.askKey === key && own(message))?.card;
+  const answer = card?.answeredText ?? card?.answered;
+  return answer ? { answer } : {};
+}
+/** #4238: how far back the start-up back-fill reads exchanges. */
+const PEER_OUTCOME_BACKFILL_MS = 3 * 24 * 60 * 60_000;
 /** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
  * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the
  * routine's). Chat has no role picker. Undefined: the default surface ("Moi"). */
@@ -23493,17 +23575,28 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const ask = body && typeof body === "object" && (body as { tool?: unknown }).tool === ASK_CHOICE_TOOL ? body as Record<string, unknown> : null;
       const keyedAsk = Boolean(ask && ((typeof ask.key === "string" && ask.key.trim()) || (typeof ask.to === "string" && ask.to.trim())));
       const runRoom = keyedAsk ? routineRunRoom(threadId, bot.id) : null;
-      const cardThread = runRoom ?? threadId;
+      // #4238: an ask_choice in a teammate's exchange is for the person: it
+      // goes to their own conversation with this bot, keyed, holding nothing
+      const peerHome = ask && !runRoom && !store.groupByThread(threadId) && relayViaOf(owning.id, threadId) === "teammate"
+        ? personAttentionDeps.conversation(owning, threadId) : undefined;
+      const personThread = peerHome && peerHome !== threadId ? peerHome : null;
+      const cardThread = runRoom ?? personThread ?? threadId;
       const cardRoom = store.groupByThread(cardThread);
       const room = cardRoom && !cardRoom.dm && !cardRoom.peopleDm ? { people: roomPeopleOf(cardRoom), name: cardRoom.name, ...(runRoom ? { fromRun: true } : {}) } : undefined;
-      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk);
+      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk) || Boolean(personThread);
       const posted = createAgentCard({
         store,
         bot,
         threadId: cardThread,
         input: body,
         // a card raised in the run's room is not the run's own line
-        ...(runRoom ? {} : { authored }),
+        // (#4238: nor one raised in the person's conversation)
+        ...(runRoom || personThread ? {} : { authored }),
+        ...(personThread ? { peerOutcome: {
+          record: (item: Parameters<PeerOutcomeLedger["record"]>[1]) => peerOutcomeLedger.record(threadId, item),
+          // #4233's answered handling: an item the person answered stands
+          answered: (key: string) => answeredItemCard(owning, personThread, key),
+        } } : {}),
         ...(room ? { room, notifyAddressee: notifyRoomAskAddressee } : {}),
         // #4233: a repeating routine's run: ask_choice holds nothing by default
         ...(routines?.asksHoldNothing(threadId) ? { repeatingRun: true } : {}),
@@ -35912,6 +36005,19 @@ const onListening = async () => {
   // #3296: a wait row the last process left open (killed mid-wait) ends now
   try { endSandboxWakeRowsLeftOpen(); } catch (error) { reportBackgroundError(error); }
   resumeTurnsCutByRestart();
+  // #4238: the last days' exchanges between bots that left something on the
+  // person with nothing raised for them: one grouped card per bot, once
+  try {
+    const since = Date.now() - PEER_OUTCOME_BACKFILL_MS;
+    const exchanges: Array<{ bot: BotRecord; threadId: string }> = [];
+    for (const bot of store.bots) {
+      for (const task of bot.tasks ?? []) {
+        if (task.openedBy?.botId && (task.updatedAt ?? task.createdAt) >= since) exchanges.push({ bot, threadId: task.threadId });
+      }
+    }
+    const cards = backfillPeerOutcomes(exchanges, peerOutcomeDeps);
+    if (cards) console.info(`[peer-outcome] back-fill: ${cards} grouped card(s) for exchanges that left something on the person`);
+  } catch (error) { reportBackgroundError(error); }
   // Tasks reserved for a scheduled run before a restart (pre-warm) that no
   // run took: empty and hidden, removed before schedules fire again.
   for (const bot of store.bots) {

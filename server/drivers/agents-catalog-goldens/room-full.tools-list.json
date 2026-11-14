@@ -63,6 +63,10 @@
             "minLength": 1,
             "maxLength": 200,
             "description": "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed."
+          },
+          "tell": {
+            "type": "boolean",
+            "description": "A fact to know, no answer; options []."
           }
         },
         "required": [

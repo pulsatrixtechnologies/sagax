@@ -28,6 +28,8 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
       ...(choice.pageTargetChoice ? { custom: false as const } : {}),
     }],
     origin, harnessAsk: true,
+    // #4238: a card raised quiet shows and waits, without a notification
+    ...(choice.quiet ? { quietAsk: true } : {}),
     ...(room && choice.askerBotId ? { askerBotId: choice.askerBotId } : {}),
     // #4205, #4219: the card's key, hold and addressee from its first frame,
     // so its notification reaches the right person

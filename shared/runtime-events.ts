@@ -216,6 +216,9 @@ export type RuntimeEvent = RuntimeEventBase &
          * reaches the bot as the person's next message (the late answer), so
          * no level answers it here and nothing is sent to an adapter. */
         harnessAsk?: true;
+        /** #4238: a harness ask raised quiet (the start-up back-fill of a
+         * teammate's exchanges): the card shows and waits, nothing rings. */
+        quietAsk?: true;
         /** #2048: publish-target choice payload carried onto the question card. */
         pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;
         approvalScope?: "local-computer";

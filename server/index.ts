@@ -1647,8 +1647,8 @@ import { createDispatchDelegationWake } from "./index-leaves/dispatchDelegationW
 import { createPerformAsMember } from "./index-leaves/performAsMember.ts";
 import { createBotOneShotAccess, createOrgTurnAccess } from "./index-leaves/orgTurnAccess.ts";
 import { createOneShotSignIn } from "./engines/one-shot-sign-in.ts";
-import { createSignInCards } from "./engines/sign-in-cards.ts";
-import { adminCardHomes, createEngineFallbackCards, engineFallbackKey, type EngineFallbackHome } from "./engines/engine-fallback-card.ts";
+import { createSignInCards, keyedCardPerson } from "./engines/sign-in-cards.ts";
+import { adminCardHomes, createEngineFallbackCards, engineFallbackKey, remindEngineFallbacks, type EngineFallbackHome, type OpenEngineFallback } from "./engines/engine-fallback-card.ts";
 import { createMountBotVps } from "./index-leaves/mountBotVps.ts";
 import { createApplyOrgEngineAllowList } from "./index-leaves/applyOrgEngineAllowList.ts";
 import { createScheduleApprovalExpiry } from "./index-leaves/scheduleApprovalExpiry.ts";
@@ -16843,11 +16843,12 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
     }
     return null;
   },
-  remind: (routine, found) => {
+  remind: (routine, found, step) => {
     const note = pendingQuestionNotice(found.threadId, found.message.id);
     const row = store.messagesFor(found.threadId).find((message) => message.id === found.message.id);
     if (row?.card) store.patchMessage(found.threadId, row.id, { card: { ...row.card, remindedAt: Date.now() } });
-    if (note) tellPerson(routineProblemPerson(routine), { key: routineProblemKey(routine.id), kind: ROUTINE_PROBLEM_KIND, bot: routine.botId, step: 1, notification: { notification: note } });
+    // #4250 (S3): a day, then weekly; each step rings once (the ledger's step)
+    if (note) tellPerson(routineProblemPerson(routine), { key: routineProblemKey(routine.id), kind: ROUTINE_PROBLEM_KIND, bot: routine.botId, step, notification: { notification: note } });
   },
   now: () => Date.now(),
   // #4250: the told state and the reminder step, in the person's signal ledger
@@ -17479,6 +17480,36 @@ const engineFallbackCards = createEngineFallbackCards({
     });
   },
 });
+/** #4250 (S3): the engine fix card still open under `key` for `person` (in
+ * `threadId`: a server engine's card in one administrators' home). */
+function openEngineFallback(key: string, person: string, threadId?: string): OpenEngineFallback | null {
+  const found = threadId ? null : signInCards.pendingKeyed(key, person);
+  const at = threadId ?? found?.threadId;
+  if (!at) return null;
+  const messageId = found?.messageId;
+  const message = store.messagesFor(at).findLast((row) => row.kind === "access" && row.access?.key === key
+    && (messageId ? row.id === messageId : keyedCardPerson(row.access) === person));
+  return message?.access ? { threadId: at, access: message.access, text: message.text ?? "" } : null;
+}
+/** #4250 (S3): an engine fix card still open is told again after a day, then
+ * weekly, one tellPerson step per ring (the fix ladder). */
+function remindEngineFallbackCards(): void {
+  remindEngineFallbacks({
+    ledger: signalLedger,
+    kind: ENGINE_FALLBACK_KIND,
+    pending: openEngineFallback,
+    ring: (person, entry, card, step) => {
+      const bot = store.bot(card.access.botId);
+      if (!bot) return;
+      const title = entry.label ?? card.access.engine ?? bot.name;
+      tellPerson(person, {
+        key: entry.key, kind: ENGINE_FALLBACK_KIND, bot: entry.bot, label: title, step,
+        notification: { notification: deliverableNotification("routine-deferred", bot, card.threadId, card.text, { title }), access: card.access },
+      });
+    },
+    now: () => Date.now(),
+  });
+}
 onEngineWorksAgain((engine, account, signedInOnly) => {
   signInCards.retireKeyed(engine, account, signedInOnly);
   // the spell is over: the next one is told again
@@ -36245,9 +36276,11 @@ const remindLearnedSkills = () => {
   try { remindWaitingLearnedSkills(store, (botId) => listStagedSkillWrites(botId).map((staged) => staged.id)); } catch (error) { reportBackgroundError(error); }
 };
 setInterval(remindLearnedSkills, 30 * 60_000).unref();
-// #4233: a routine's fix card still open a day later rings once more
+// #4233, #4250 (S3): a fix card still open (a routine's, an engine's) rings again a day later, then weekly
 setInterval(() => {
   try { routineProblemCards.remindDue(routines?.listRoutines() ?? []); } catch (error) { reportBackgroundError(error); }
+  // #4250 (S3): an engine's fix card ("Reconnect ...") follows the same fix ladder
+  try { remindEngineFallbackCards(); } catch (error) { reportBackgroundError(error); }
 }, 30 * 60_000).unref();
 workspaceAccess = createWorkspaceAccess({ sessions, cookieName: SESSION_COOKIE, closeSessionStreams });
 // Ten-second cadence plus the bridge's five-second backchannel deadline bounds

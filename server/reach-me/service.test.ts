@@ -13,9 +13,9 @@ import type { QuietHours } from "../../shared/signal-levels.ts";
 import type { PushMessage } from "../push/payload.ts";
 import type { ReachChannel, ReachOutbound } from "./channel.ts";
 import { composeReachText } from "./channel.ts";
-import { SignalLedger } from "../proactive/signal-ledger.ts";
 import { CARD_REMINDER_AFTER_MS, ReachMe, type ReachAuditRow, type ReachCard, type ReachRespondBody } from "./service.ts";
 import { createReachCodeStore, createReachMeStore } from "./store.ts";
+import { SignalLedger, signalLedgerDirStorage } from "../proactive/signal-ledger.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -23,9 +23,9 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Nimbus", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
 const PUSH: PushMessage = { kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 };
 
-function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number; quiet?: QuietHours | null; channels?: LevelChannels; signals?: SignalLedger } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "sagax-reach-"));
-  dirs.push(dir);
+function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number; quiet?: QuietHours | null; channels?: LevelChannels; signals?: SignalLedger; dir?: string; ledger?: (now: () => number) => SignalLedger; cards?: Map<string, ReachCard>; timeZone?: string } = {}) {
+  const dir = options.dir ?? mkdtempSync(join(tmpdir(), "sagax-reach-"));
+  if (!options.dir) dirs.push(dir);
   let now = options.now ?? Date.parse("2026-10-26T13:00:00Z");
   const store = createReachMeStore(dir, () => now);
   if (settings) store.set("pr_a", "b1", settings);
@@ -41,11 +41,12 @@ function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | n
   const responses: Array<{ person: string; body: ReachRespondBody; channel: string }> = [];
   const pushed: PushMessage[] = [];
   const audit: ReachAuditRow[] = [];
+  const signals = options.signals ?? options.ledger?.(() => now);
   const reach = new ReachMe({
     settings: store,
     codes,
     channels: { sms: channel("sms"), telegram: channel("telegram"), teams: channel("teams", false) },
-    card: () => card,
+    card: (threadId, requestId) => options.cards ? options.cards.get(`${threadId}:${requestId}`) ?? null : card,
     answerer: () => "pr_a",
     respond: async (person, _card, body, via) => {
       responses.push({ person, body, channel: via });
@@ -57,10 +58,10 @@ function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | n
     now: () => now,
     log: () => {},
     // #4250 (S2): the person's one quiet-hours setting and channels per level
-    attention: () => ({ quiet: options.quiet ?? null, ...(options.channels ? { channels: options.channels } : {}) }),
-    ...(options.signals ? { signals: options.signals } : {}),
+    attention: () => ({ quiet: options.quiet ?? null, ...(options.channels ? { channels: options.channels } : {}), ...(options.timeZone ? { timeZone: options.timeZone } : {}) }),
+    ...(signals ? { signals } : {}),
   });
-  return { reach, store, codes, sent, responses, pushed, audit, setCard: (next: ReachCard | null) => { card = next; }, setNow: (next: number) => { now = next; } };
+  return { signals, reach, store, codes, sent, responses, pushed, audit, setCard: (next: ReachCard | null) => { card = next; }, setNow: (next: number) => { now = next; } };
 }
 
 const SMS_AND_TELEGRAM: ReachMeSettings = { channels: ["sms", "telegram"], smsNumber: "+15145550123", hours: { always: true } };
@@ -77,12 +78,13 @@ describe("Reach me: a card left open is recalled (#2645)", () => {
     expect(pushed[0]).toMatchObject({ kind: "approval", threadId: "t1", requestId: "r1", title: "Toujours en attente (2 h) · Nimbus", id: "pr_a\u0000t1\u0000r1:reminder1" });
     setNow(1_000 + CARD_REMINDER_AFTER_MS[1]); reach.tick();
     setNow(1_000 + 3 * CARD_REMINDER_AFTER_MS[1]); reach.tick();
-    expect(pushed.map((p) => p.title)).toEqual(["Toujours en attente (2 h) · Nimbus", "Toujours en attente (24 h) · Nimbus"]);
+    // #4250 (S3): the morning line aside (its own test below)
+    expect(pushed.filter((p) => p.kind === "approval").map((p) => p.title)).toEqual(["Toujours en attente (2 h) · Nimbus", "Toujours en attente (24 h) · Nimbus"]);
     expect(reach.openCardCount()).toBe(0);
     reach.cardRaised({ ...PUSH, requestId: "r2" });
     setCard(null);
     setNow(1_000 + 10 * CARD_REMINDER_AFTER_MS[1]); reach.tick();
-    expect([pushed.length, reach.openCardCount()]).toEqual([2, 0]);
+    expect([pushed.filter((p) => p.kind === "approval").length, reach.openCardCount()]).toEqual([2, 0]);
   });
 
   it("#4250 (S9): a card answered after its last reminder ends answered in the ledger, one that expired ends expired", () => {
@@ -313,5 +315,181 @@ describe("Reach me: a notice (the background brief)", () => {
     expect(pushed).toHaveLength(1);
     expect(sent.map((entry) => entry.channel)).toEqual(["sms"]);
     expect(reach.deferredNoticeCount()).toBe(0);
+  });
+});
+
+describe("Reach me: the escalation ladder (#4250 S3)", () => {
+  const ledgerIn = (dir: string) => (now: () => number) => new SignalLedger({ storage: signalLedgerDirStorage(join(dir, "signal-ledger")), now, schedule: () => {} });
+  const DAY = 24 * 3_600_000;
+
+  it("an urgent card: 2 h, 24 h, then one line each morning, a restart in the middle repeating nothing, never a text message", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-ladder-"));
+    dirs.push(dir);
+    const cards = new Map([["t1:r1", CARD]]);
+    // raised at 22:00 in Montreal (03:00 UTC), quiet hours 22:00 to 07:00
+    const raisedAt = Date.parse("2026-11-10T03:00:00Z");
+    const everyChannel: ReachMeSettings = { ...SMS_AND_TELEGRAM, channels: ["push", "sms", "telegram"] };
+    const options = { now: raisedAt, dir, cards, quiet: { start: "22:00", end: "07:00", timeZone: "America/Toronto" }, timeZone: "America/Toronto" };
+    const first = setup(everyChannel, { ...options, ledger: ledgerIn(dir) });
+    let ledger = first.signals!;
+    first.reach.cardRaised(PUSH);
+    await first.reach.drain();
+    // the card itself went by the channels the person chose for that bot, once
+    expect(first.sent.map((entry) => entry.channel)).toEqual(["sms", "telegram"]);
+    first.setNow(raisedAt + 2 * 3_600_000); first.reach.tick(); first.reach.tick();
+    expect(first.pushed.map((push) => push.title)).toEqual(["Toujours en attente (2 h) · Nimbus"]);
+    ledger.flush();
+
+    // restart: the 2 h step is on disk, the clock kept
+    const second = setup(everyChannel, { ...options, now: raisedAt + 3 * 3_600_000, ledger: ledgerIn(dir) });
+    ledger = second.signals!;
+    second.reach.tick();
+    expect(second.pushed).toEqual([]);
+    // 07:30 the next morning: the morning line, once
+    second.setNow(Date.parse("2026-11-10T12:30:00Z")); second.reach.tick(); second.reach.tick();
+    expect(second.pushed).toHaveLength(1);
+    expect(second.pushed[0]).toMatchObject({ kind: "message", personId: "pr_a", threadId: "t1", botId: "b1", title: "1 chose t'attend encore" });
+    expect(second.pushed[0]!.body).toContain("Nimbus : Run a command?");
+    ledger.flush();
+
+    // restart again the same morning: no second line; 24 h: the last step
+    const third = setup(everyChannel, { ...options, now: Date.parse("2026-11-10T13:00:00Z"), ledger: ledgerIn(dir) });
+    ledger = third.signals!;
+    third.reach.tick();
+    expect(third.pushed).toEqual([]);
+    third.setNow(raisedAt + DAY); third.reach.tick(); third.reach.tick();
+    expect(third.pushed.map((push) => push.title)).toEqual(["Toujours en attente (24 h) · Nimbus"]);
+    // in the quiet hours of the next night: nothing; the next morning: one line
+    third.setNow(Date.parse("2026-11-11T05:00:00Z")); third.reach.tick();
+    third.setNow(Date.parse("2026-11-11T12:05:00Z")); third.reach.tick(); third.reach.tick();
+    expect(third.pushed.map((push) => push.kind)).toEqual(["approval", "message"]);
+    // answered: nothing the morning after
+    cards.clear();
+    third.reach.cardSettled("t1", "r1");
+    third.setNow(Date.parse("2026-11-12T12:05:00Z")); third.reach.tick();
+    expect(third.pushed).toHaveLength(2);
+    // never a text message after the card itself
+    await third.reach.drain();
+    expect([...first.sent, ...second.sent, ...third.sent].map((entry) => entry.channel)).toEqual(["sms", "telegram"]);
+  });
+
+  it("the morning line names what waited overnight, not a card raised this morning, nor a routine's fix card, and goes only where the person allows a push", () => {
+    const morning = Date.parse("2026-11-10T13:00:00Z"); // 08:00 in Montreal, no quiet hours
+    const fix: ReachCard = { ...CARD, requestId: "r3", title: "Mailbox sweep keeps failing", askKey: "routine-problem:x1" };
+    const cards = new Map<string, ReachCard>([["t1:r1", CARD], ["t2:r2", { ...CARD, threadId: "t2", requestId: "r2", botName: "Atlas", title: "Send the report?" }], ["t1:r3", fix], ["t1:r4", { ...CARD, requestId: "r4", title: "New one" }]]);
+    const a = setup(null, { now: morning - 10 * 3_600_000, cards, timeZone: "America/Toronto" });
+    a.reach.cardRaised(PUSH);
+    a.reach.cardRaised({ ...PUSH, threadId: "t2", requestId: "r2" });
+    a.reach.cardRaised({ ...PUSH, requestId: "r3" });
+    a.setNow(morning + 60_000);
+    a.reach.cardRaised({ ...PUSH, requestId: "r4" });
+    a.pushed.length = 0;
+    a.setNow(morning + 2 * 60_000); a.reach.tick();
+    const line = a.pushed.filter((push) => push.kind === "message");
+    expect(line).toHaveLength(1);
+    expect(line[0]!.title).toBe("2 choses t'attendent encore");
+    expect(line[0]!.body).toContain("Nimbus : Run a command?");
+    expect(line[0]!.body).toContain("Atlas : Send the report?");
+    expect(line[0]!.body).not.toContain("Mailbox sweep");
+    expect(line[0]!.body).not.toContain("New one");
+    // before the morning: nothing
+    const b = setup(null, { now: morning - 10 * 3_600_000, cards, timeZone: "America/Toronto" });
+    b.reach.cardRaised(PUSH);
+    b.setNow(morning - 60_000); b.reach.tick();
+    expect(b.pushed.filter((push) => push.kind === "message")).toEqual([]);
+    // no push for urgent: no line
+    const c = setup(null, { now: morning - 10 * 3_600_000, cards, timeZone: "America/Toronto", channels: { card: ["push"], urgent: ["telegram"] } });
+    c.reach.cardRaised(PUSH);
+    c.setNow(morning + 60_000); c.reach.tick();
+    expect(c.pushed).toEqual([]);
+  });
+
+  it("a routine's fix card is left to its own ladder (a day, then weekly): no 2 h phone reminder of its own", () => {
+    const fix: ReachCard = { ...CARD, askKey: "routine-problem:x1" };
+    const { reach, pushed, setNow } = setup(null, { now: 1_000, card: fix });
+    reach.cardRaised(PUSH);
+    setNow(1_000 + CARD_REMINDER_AFTER_MS[0]); reach.tick();
+    setNow(1_000 + CARD_REMINDER_AFTER_MS[1]); reach.tick();
+    expect(pushed).toEqual([]);
+  });
+
+  it("a fix card's reminder steps (its own needs-you again, once the reply code is gone) never send a text message", async () => {
+    const fix: ReachCard = { ...CARD, askKey: "routine-problem:x1" };
+    const { reach, sent, setNow } = setup(SMS_AND_TELEGRAM, { now: 1_000, card: fix });
+    reach.cardRaised(PUSH);
+    await reach.drain();
+    expect(sent.map((entry) => entry.channel)).toEqual(["sms", "telegram"]);
+    // the day step, then the first weekly step: the card's notify again, its code long expired
+    setNow(1_000 + DAY + 60_000); reach.cardRaised(PUSH); await reach.drain();
+    setNow(1_000 + 8 * DAY + 60_000); reach.cardRaised(PUSH); await reach.drain();
+    expect(sent).toHaveLength(2);
+  });
+
+  it("the morning line keeps each card apart, oldest first, then a count", () => {
+    const morning = Date.parse("2026-11-10T13:00:00Z");
+    const cards = new Map<string, ReachCard>([
+      ["t1:r1", CARD],
+      ["t2:r2", { ...CARD, threadId: "t2", requestId: "r2", botName: "Atlas", title: "Send the report?" }],
+      ["t3:r3", { ...CARD, threadId: "t3", requestId: "r3", botName: "Orion", title: "Secret plan", confidential: true }],
+      ["t4:r4", { ...CARD, threadId: "t4", requestId: "r4", botName: "Vega", title: "Book the room?" }],
+      ["t5:r5", { ...CARD, threadId: "t5", requestId: "r5", botName: "Lyra", title: "Pay the bill?" }],
+    ]);
+    const { reach, pushed, setNow } = setup(null, { now: morning - 10 * 3_600_000, cards, timeZone: "America/Toronto" });
+    for (const [index, threadId] of ["t1", "t2", "t3", "t4", "t5"].entries()) {
+      setNow(morning - (10 - index) * 3_600_000);
+      reach.cardRaised({ ...PUSH, threadId, requestId: `r${index + 1}` });
+    }
+    pushed.length = 0;
+    setNow(morning + 60_000); reach.tick();
+    const line = pushed.filter((push) => push.kind === "message");
+    expect(line).toHaveLength(1);
+    expect(line[0]!.title).toBe("5 choses t'attendent encore");
+    expect(line[0]!.body).toBe("Nimbus : Run a command? · Atlas : Send the report? · Orion · et 2 de plus");
+  });
+
+  it("the morning line names only the bot of a confidential conversation's card", () => {
+    const morning = Date.parse("2026-11-10T13:00:00Z");
+    const cards = new Map<string, ReachCard>([["t1:r1", { ...CARD, title: "Secret plan", line: "secret", confidential: true }]]);
+    const { reach, pushed, setNow } = setup(null, { now: morning - 10 * 3_600_000, cards, timeZone: "America/Toronto" });
+    reach.cardRaised(PUSH);
+    setNow(morning + 60_000); reach.tick();
+    const line = pushed.filter((push) => push.kind === "message");
+    expect(line).toHaveLength(1);
+    expect(line[0]!.body).toContain("Nimbus");
+    expect(line[0]!.body).not.toContain("Secret");
+  });
+
+  it("the morning line follows each bot's own channels: a bot without push is not named", () => {
+    const morning = Date.parse("2026-11-10T13:00:00Z");
+    const cards = new Map<string, ReachCard>([["t1:r1", CARD], ["t2:r2", { ...CARD, threadId: "t2", requestId: "r2", botId: "b2", botName: "Atlas", title: "Send the report?" }]]);
+    // b1 reaches the person by text message and Telegram only; b2 has no choice saved (a push)
+    const { reach, pushed, setNow } = setup(SMS_AND_TELEGRAM, { now: morning - 10 * 3_600_000, cards, timeZone: "America/Toronto" });
+    reach.cardRaised(PUSH);
+    reach.cardRaised({ ...PUSH, threadId: "t2", requestId: "r2", botId: "b2" });
+    setNow(morning + 60_000); reach.tick();
+    const line = pushed.filter((push) => push.kind === "message");
+    expect(line).toHaveLength(1);
+    expect(line[0]!.title).toBe("1 chose t'attend encore");
+    expect(line[0]!.body).toContain("Atlas : Send the report?");
+    expect(line[0]!.body).not.toContain("Run a command?");
+    // only b1's card waits: no line at all
+    const only = setup(SMS_AND_TELEGRAM, { now: morning - 10 * 3_600_000, cards: new Map([["t1:r1", CARD]]), timeZone: "America/Toronto" });
+    only.reach.cardRaised(PUSH);
+    only.setNow(morning + 60_000); only.reach.tick();
+    expect(only.pushed).toEqual([]);
+  });
+
+  it("a reminder rebuilt after a restart keeps a confidential card's words off the phone", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-ladder-"));
+    dirs.push(dir);
+    const secret: ReachCard = { ...CARD, title: "Secret plan", confidential: true };
+    const first = setup(null, { now: 1_000, dir, card: secret, ledger: ledgerIn(dir) });
+    first.reach.cardRaised(PUSH);
+    first.signals!.flush();
+    const second = setup(null, { now: 1_000 + CARD_REMINDER_AFTER_MS[0], dir, card: secret, ledger: ledgerIn(dir) });
+    second.reach.tick();
+    const reminders = second.pushed.filter((push) => push.kind === "approval");
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]!.body).not.toContain("Secret");
   });
 });

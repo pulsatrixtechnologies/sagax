@@ -33,14 +33,18 @@ import { randomBytes } from "node:crypto";
 
 import { plainPreviewLine } from "../../shared/plain-text.ts";
 import { channelsForLevel, withinQuietHours, type LevelChannels } from "../../shared/attention-policy.ts";
-import { DEFAULT_REACH_ME, splitReachReply, readReachDecision, type ReachChannelId, type ReachMeSettings } from "../../shared/reach-me.ts";
-import { signalLevelOfPush, type QuietHours, type SignalLevel } from "../../shared/signal-levels.ts";
+import { DEFAULT_REACH_ME, localClock, splitReachReply, readReachDecision, validTimeZone, type ReachChannelId, type ReachMeSettings } from "../../shared/reach-me.ts";
+import { localDayKey, signalLevelOfPush, type QuietHours, type SignalLevel } from "../../shared/signal-levels.ts";
 import type { PushMessage } from "../push/payload.ts";
 import { defang } from "../triggers/webhooks.ts";
 import type { ReachChannel, ReachInbound, ReachOutbound } from "./channel.ts";
 import type { ReachCode, ReachCodeStore, ReachMeStore } from "./store.ts";
 import { reportBackgroundError } from "../background-error.ts";
-import { SignalLedger } from "../proactive/signal-ledger.ts";
+import { SignalLedger, type SignalEntry } from "../proactive/signal-ledger.ts";
+import { MORNING_LINE_KIND, URGENT_LADDER, dueStep, hasNextStep, ladderFor, morningLineKey, morningMinute } from "../proactive/escalation-ladder.ts";
+import { ROUTINE_PROBLEM_KEY_PREFIX } from "../routines/routine-problem-card.ts";
+import { CONFIDENTIAL_NOTICE_BODY } from "../threads/confidential-threads.ts";
+import { serverTimeZone } from "../proactive/background-brief.ts";
 
 /** An open card, as the reach-me message names it. */
 export interface ReachCard {
@@ -53,6 +57,9 @@ export interface ReachCard {
   line: string;
   confidential: boolean;
   needsKey: boolean;
+  /** #4250 (S3): the card's key (a keyed ask_choice), when it has one. A
+   * routine's fix card follows its own ladder (a day, then weekly). */
+  askKey?: string;
 }
 
 /** Something the bot tells the person without asking (2026-10-29: the
@@ -109,7 +116,7 @@ export interface ReachMeDeps {
   /** #4250 (S2): the person's one quiet-hours setting and the channels each
    * level may use (their signal gate's preferences). Absent: no quiet hours,
    * every channel. */
-  attention?(person: string): { quiet: QuietHours | null; channels?: LevelChannels | null };
+  attention?(person: string): { quiet: QuietHours | null; channels?: LevelChannels | null; timeZone?: string };
 }
 
 /** #4250: the ledger kinds of a card followed for its reminders and of a
@@ -149,9 +156,22 @@ export function fenceReachReply(channel: ReachChannelId, text: string): string {
 const cardKey = (threadId: string, requestId: string) => `${threadId}\u0000${requestId}`;
 
 /** #2645: a card still open this long after it was raised reaches the phone again, once per step. In prod a card sat
- * 38 hours in a proactive conversation nobody opened. */
-export const CARD_REMINDER_AFTER_MS = [2 * 3_600_000, 24 * 3_600_000] as const;
+ * 38 hours in a proactive conversation nobody opened. #4250 (S3): the urgent steps of the one escalation ladder
+ * (server/proactive/escalation-ladder.ts); after them, the morning line. */
+export const CARD_REMINDER_AFTER_MS = URGENT_LADDER.steps as readonly [number, number];
 const REMINDER_PREFIX = { fr: "Toujours en attente", en: "Still waiting" } as const;
+/** #4250 (S3): the morning line's words: what still waits, in one push. */
+const MORNING_LINE_WORDS = {
+  fr: { title: (n: number) => n === 1 ? "1 chose t'attend encore" : `${n} choses t'attendent encore`, line: (bot: string, title: string) => `${bot} : ${title}`, more: (n: number) => `et ${n} de plus` },
+  en: { title: (n: number) => n === 1 ? "1 thing still waits on you" : `${n} things still wait on you`, line: (bot: string, title: string) => `${bot}: ${title}`, more: (n: number) => `and ${n} more` },
+} as const;
+const MORNING_LINE_SHOWN = 3;
+/** #4250 (S3): between the morning line's cards. */
+const MORNING_LINE_SEPARATOR = " · ";
+
+/** #4250 (S3): a card whose writer keeps its own ladder (a routine's fix
+ * card: a day, then weekly, through tellPerson). */
+const ownLadder = (card: ReachCard): boolean => Boolean(card.askKey?.startsWith(ROUTINE_PROBLEM_KEY_PREFIX));
 
 export class ReachMe {
   private readonly deps: ReachMeDeps;
@@ -189,7 +209,7 @@ export class ReachMe {
   }
 
   /** #4250 (S2): the person's quiet hours and channels per level. */
-  private attention(person: string): { quiet: QuietHours | null; channels?: LevelChannels | null } {
+  private attention(person: string): { quiet: QuietHours | null; channels?: LevelChannels | null; timeZone?: string } {
     try {
       return this.deps.attention?.(person) ?? { quiet: null };
     } catch {
@@ -222,12 +242,18 @@ export class ReachMe {
       const signalKey = reachCardSignalKey(message.threadId, message.requestId);
       const followed = this.signals.get(message.personId, message.botId, signalKey);
       // the same card heard twice keeps its first clock
-      if (!followed || (followed.state !== "open" && followed.state !== "told")) {
+      const alreadyFollowed = Boolean(followed && (followed.state === "open" || followed.state === "told"));
+      if (!alreadyFollowed) {
         if (followed) this.signals.forget(message.personId, message.botId, signalKey);
-        this.signals.note(message.personId, { key: signalKey, kind: REACH_CARD_KIND, level: "urgent", bot: message.botId, label: message.title, ref: { threadId: message.threadId, requestId: message.requestId } });
+        // #4250 (S3): the writer's level picks the card's ladder (a card a bot is blocked on is urgent)
+        this.signals.note(message.personId, { key: signalKey, kind: REACH_CARD_KIND, level: signalLevelOfPush(message), bot: message.botId, label: message.title, ref: { threadId: message.threadId, requestId: message.requestId } });
       }
       if (this.raised.size > 2_000) this.raised.delete(this.raised.keys().next().value!);
       this.raised.set(`${message.personId}\u0000${signalKey}`, message);
+      // #4250 (S3): a card the ledger already follows is a reminder step (a routine's fix card rings its own needs-you
+      // again) or a replay: the card went by the person's channels once, when it was raised. Never again, even once
+      // its reply code is gone: reminders ring the phone only, never an automatic text message.
+      if (alreadyFollowed) return;
       const settings = this.deps.settings.get(message.personId, message.botId);
       if (!settings) return;
       // a card is urgent: it passes the person's quiet hours
@@ -301,9 +327,11 @@ export class ReachMe {
     }
   }
 
-  /** Every minute: notices held for the person's quiet hours go out once they end, and a card left open is recalled. */
+  /** Every minute: notices held for the person's quiet hours go out once they end, a card left open is recalled, and
+   * each morning one line says what still waits. */
   tick(): void {
     this.remind();
+    this.morningLine();
     for (const [id, notice] of this.deferredNotices) {
       if (withinQuietHours(this.attention(notice.person).quiet, this.now())) continue;
       this.deferredNotices.delete(id);
@@ -312,9 +340,11 @@ export class ReachMe {
     }
   }
 
-  /** #2645: a card still open after each CARD_REMINDER_AFTER_MS step goes to the phone once more, where a push is among
-   * its bot's channels the person allows for its level (urgent: quiet hours do not hold it). The tap opens the card's
-   * own conversation. */
+  /** #2645, #4250 (S3): a card still open at each step of its level's ladder (urgent: 2 h, 24 h) goes to the phone
+   * once more, where a push is among its bot's channels the person allows for its level (urgent: quiet hours do not
+   * hold it). Never a text message: the card itself went by the person's channels when it was raised. The step is
+   * read from and written to the signal ledger, so a restart repeats nothing; a step missed while the server was down
+   * rings once. The tap opens the card's own conversation. */
   private remind(): void {
     const now = this.now();
     for (const { person, entry } of this.followedCards()) {
@@ -324,17 +354,19 @@ export class ReachMe {
         this.signals.settle(person, entry.bot, entry.key, "retired");
         continue;
       }
+      if (ownLadder(card)) continue;
+      const ladder = ladderFor(entry.level);
       const reminded = entry.reminded ?? 0;
-      const due = CARD_REMINDER_AFTER_MS[reminded];
-      if (due === undefined || now - entry.firstAt < due) continue;
+      const step = ladder ? dueStep(ladder, entry.firstAt, reminded, now) : null;
+      if (step === null) continue;
       const settings = this.deps.settings.get(person, entry.bot) ?? DEFAULT_REACH_ME;
-      const step = reminded + 1;
       const pushes = channelsForLevel(entry.level, this.attention(person).channels, settings.channels).includes("push");
       // the step is on disk before it rings: a restart never rings it again
       this.signals.reminded(person, entry.bot, entry.key, step, pushes ? ["push"] : []);
       if (!pushes) continue;
       const message: PushMessage = this.raised.get(`${person}\u0000${entry.key}`) ?? {
-        kind: "approval", personId: person, title: entry.label ?? card.botName, body: card.title,
+        // a confidential conversation's words never reach a lock screen (the notify of its card said only this much)
+        kind: "approval", personId: person, title: entry.label ?? card.botName, body: card.confidential ? CONFIDENTIAL_NOTICE_BODY : card.title,
         threadId, botId: entry.bot, requestId, prompt: card.kind, ...(card.needsKey ? { needsKey: true } : {}), at: entry.firstAt,
       };
       const hours = Math.floor((now - entry.firstAt) / 3_600_000);
@@ -350,8 +382,75 @@ export class ReachMe {
 
   /** Cards still followed for a reminder: open, with a step left. */
   private followedCards() {
+    return this.openCards().filter(({ entry }) => {
+      const ladder = ladderFor(entry.level);
+      return Boolean(ladder && hasNextStep(ladder, entry.firstAt, entry.reminded ?? 0));
+    });
+  }
+
+  /** Cards still open in the ledger, a step left or not. */
+  private openCards() {
     return this.signals.entries({ kind: REACH_CARD_KIND }).filter(({ entry }) =>
-      (entry.state === "open" || entry.state === "told") && entry.ref?.requestId && (entry.reminded ?? 0) < CARD_REMINDER_AFTER_MS.length);
+      (entry.state === "open" || entry.state === "told") && Boolean(entry.ref?.requestId));
+  }
+
+  /** #4250 (S3): once per local day, from the end of the person's quiet hours (none: 08:00), one push that names the
+   * urgent cards still open since before that morning, where the person allows a push for urgent. Told in the signal
+   * ledger before it rings (key `morning-line:<day>`), so a restart never sends it twice. Nothing waits: nothing goes.
+   * A routine's fix card keeps its own ladder; never a text message. */
+  private morningLine(): void {
+    const now = this.now();
+    const byPerson = new Map<string, SignalEntry[]>();
+    for (const { person, entry } of this.openCards()) {
+      if (entry.level !== "urgent") continue;
+      byPerson.set(person, [...(byPerson.get(person) ?? []), entry]);
+    }
+    for (const [person, candidates] of byPerson) {
+      const attention = this.attention(person);
+      // the morning starts at quiet.end, read in the quiet hours' own zone when they are set
+      const zone = [attention.quiet?.timeZone, attention.timeZone].find((value): value is string => Boolean(value && validTimeZone(value))) ?? serverTimeZone();
+      let minute: number;
+      try {
+        minute = localClock(now, zone).minute;
+      } catch {
+        continue;
+      }
+      const start = morningMinute(attention.quiet);
+      if (minute < start || withinQuietHours(attention.quiet, now)) continue;
+      const key = morningLineKey(localDayKey(now, zone));
+      if (this.signals.get(person, "", key)) continue;
+      // the morning began this long ago: a card raised since rang on its own
+      const morningAt = now - (minute - start) * 60_000;
+      const open: Array<{ entry: SignalEntry; card: ReachCard }> = [];
+      for (const entry of candidates) {
+        if (entry.firstAt >= morningAt) continue;
+        const { threadId, requestId } = entry.ref as { threadId: string; requestId: string };
+        const card = this.deps.card(threadId, requestId);
+        if (!card || ownLadder(card)) continue;
+        open.push({ entry, card });
+      }
+      if (!open.length) continue;
+      // each bot's own "Me joindre" choice, as a reminder follows it: a card is named only where its bot reaches the
+      // person by push for urgent
+      const waiting = open.filter(({ entry }) =>
+        channelsForLevel("urgent", attention.channels, (this.deps.settings.get(person, entry.bot) ?? DEFAULT_REACH_ME).channels).includes("push"));
+      waiting.sort((left, right) => left.entry.firstAt - right.entry.firstAt);
+      const pushes = waiting.length > 0;
+      const words = MORNING_LINE_WORDS[this.deps.language(person)];
+      // told before it rings: a restart never sends it again
+      this.signals.told(person, { key, kind: MORNING_LINE_KIND, level: "urgent", bot: "", label: words.title(pushes ? waiting.length : open.length) }, pushes ? ["push"] : []);
+      if (!pushes) continue;
+      // a confidential conversation's card names only its bot (as its text message does)
+      const lines = waiting.slice(0, MORNING_LINE_SHOWN).map(({ card }) => card.confidential ? card.botName : words.line(card.botName, card.title));
+      if (waiting.length > MORNING_LINE_SHOWN) lines.push(words.more(waiting.length - MORNING_LINE_SHOWN));
+      const oldest = waiting[0]!;
+      this.deps.push({
+        kind: "message", personId: person, title: words.title(waiting.length),
+        // one line per card, kept apart on one line (the preview folds every line break into a space)
+        body: plainPreviewLine(lines.join(MORNING_LINE_SEPARATOR), 600),
+        threadId: oldest.card.threadId, botId: oldest.card.botId, id: `${person}\u0000${key}`, at: now,
+      });
+    }
   }
 
   /** Open cards being followed for a reminder (tests). */

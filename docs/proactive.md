@@ -281,15 +281,17 @@ neither wakes twice, rings twice nor starts a reminder clock over:
   once per bot and cause until a run of that bot completes;
 - the reach-me open cards and their reminder steps (kind `reach-card`) and
   the notices sent (kind `reach-notice`);
-- the routine fix card's told state and its day reminder (kind
-  `routine-problem`, key `routine-problem:<routineId>`).
+- the routine fix card's told state and its reminder steps (kind
+  `routine-problem`, key `routine-problem:<routineId>`);
+- the morning line told each day (kind `morning-line`, key
+  `morning-line:<day>`).
 
 `tellPerson` (`createTellPerson`) is the one way a proactive item reaches
 `notify`: a run's failure, wait or away skips, a wake item's needs-you
 and a run's own needs-you card (key `needs-you:run:<runId>:<cardId>`), a
 routine paused (key `routine-suspended:<routineId>:<reason>:<at>`, once per
 pause), a daily suggestion (key `proposal:<proposalId>`), an engine's fix
-card, the fix card's reminder. The fix card's first ring goes through the
+card, the fix card's reminder steps. The fix card's first ring goes through the
 question card path, whose frame the one attention policy rules like every
 other (next section). It rings once per key and step, records the item as
 told, and ends in one `[signal]` log line. An item's `level` rides its
@@ -301,6 +303,54 @@ a file of the previous version moves into the ledger at load.
 
 Tests: `server/proactive/signal-ledger.test.ts` (one restart test per moved
 memory).
+
+## Escalation ladder (`server/proactive/escalation-ladder.ts`, #4250 S3)
+
+What still waits on the person is told again on a clock that depends on its
+level, read from the signal ledger (the steps already told are on disk), so
+a restart neither repeats a step nor starts a clock over. A step missed
+while the server was down rings once, as the last step due.
+
+- urgent (a card a bot is blocked on, kind `reach-card`): again on the phone
+  after 2 h and after 24 h, where a push is among the bot's channels the
+  person allows for urgent; quiet hours do not hold it. Then the morning
+  line.
+- the morning line: once per local day, from the end of the person's quiet
+  hours (read in the quiet hours' own time zone; none set: 08:00 in their
+  time zone), one push that names the urgent
+  cards still open since before that morning (at most three by name, then a
+  count, kept apart by " · "). Nothing waits: nothing goes. Told in the
+  ledger before it rings.
+  A card is named only where its bot's own "Me joindre" channels allow a
+  push for urgent (as its reminders), and a confidential conversation's
+  card names only its bot, never its words.
+- card (a fix item: the routine fix card, and the engine fix card
+  "Reconnect <engine>" or "<engine> is out of credit", key
+  `engine-sign-in:<engine>`, kind `engine-fallback`): told again after a
+  day, then weekly while it stays open, one `tellPerson` step per ring
+  (`RoutineProblemCards.remindDue`, `remindEngineFallbacks` in
+  `server/engines/engine-fallback-card.ts`; a server engine's card rings in
+  each administrators' home). The reach-me ladder leaves the routine fix card
+  to it, and the morning line does not name it. A card closed (the engine
+  works again, the person took it out) is not told again.
+- the ladder of a reach card is its writer's level: today every approval and
+  question a bot is blocked on is urgent. A writer that sets level `card` on
+  one would give it the fix ladder (a day, then weekly, no 2 h step) and
+  leave it out of the morning line.
+- fyi: never reminded.
+
+Never an automatic text message (the owner's decision): the card itself goes
+once, when raised, by the channels the person chose for that bot; its
+reminders and the morning line ring the phone only. A card the ledger
+already follows (a fix card's needs-you rung again at a step, or a replay)
+never goes through those channels again, even once its reply code expired
+(`ReachMe.cardRaised`). The card's own mark
+(`remindedAt`) is still written, so the previous version reads it back.
+
+Tests: `server/proactive/escalation-ladder.test.ts`,
+`server/reach-me/service.test.ts` (a restart in the middle),
+`server/engines/engine-fallback-card.test.ts` (a restart in the middle),
+`server/routines/routine-problem-card.test.ts`.
 
 ## One attention policy (`shared/attention-policy.ts`, #4250 S2)
 

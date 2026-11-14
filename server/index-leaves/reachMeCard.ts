@@ -20,7 +20,9 @@ function reachMeCard(threadId: string, requestId: string) {
     title: String(card.plain?.title ?? card.title ?? "Approval").slice(0, 300),
     line: String(card.plain?.line ?? card.subtitle ?? "").replace(/\s+/g, " ").slice(0, 400),
     confidential: host.store.isConfidentialThread(threadId),
-    needsKey: !question && Boolean(host.stepUpGate(person, threadId, requestId, "allow", {}, undefined))
+    needsKey: !question && Boolean(host.stepUpGate(person, threadId, requestId, "allow", {}, undefined)),
+    // #4250 (S3): a keyed card's key (a routine's fix card keeps its own ladder)
+    ...(typeof card.askKey === "string" && card.askKey ? { askKey: card.askKey } : {})
   };
 
 }

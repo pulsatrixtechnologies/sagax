@@ -183,7 +183,8 @@ describe("moved: reach reminders and sent notices", () => {
     expect(pushed).toHaveLength(1);
     clock.now = 1_000 + CARD_REMINDER_AFTER_MS[1];
     third.tick();
-    expect(pushed.map((push) => push.title)).toEqual(["Still waiting (2 h) · Nimbus", "Still waiting (24 h) · Nimbus"]);
+    // #4250 (S3): the morning line aside (server/reach-me/service.test.ts)
+    expect(pushed.filter((push) => push.kind === "approval").map((push) => push.title)).toEqual(["Still waiting (2 h) · Nimbus", "Still waiting (24 h) · Nimbus"]);
   });
 
   it("a notice sent before a restart is not sent again after it", () => {

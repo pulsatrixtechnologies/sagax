@@ -2998,7 +2998,9 @@ Values measured on Sagax's headless render (2026-11-14) against 8.9:
   line, the grey line 13px on 18px (`PLUGINS.rowName`, `PLUGINS.rowSub`). At
   the right one button, the 26px grey pill of Connect Apps
   (`pluginActionClass`, 96px wide at least): Sign in, Sign in again, Sign
-  out, Add key, Remove, Turn on, Turn off. Nothing to do: no button.
+  out, Add key, Remove, Turn on, Turn off. Remove is that same grey pill
+  (`ConfirmPill` with `pillClass`); only its armed words ("Confirm
+  removal") turn red. Nothing to do: no button.
 - A second account is a second line under the first, indented to the text,
   with its own button; nothing folds. The grey line is the account's email,
   a plan's own name, else the state ("Connected", "Session expired"); never a
@@ -3015,7 +3017,9 @@ Values measured on Sagax's headless render (2026-11-14) against 8.9:
   opens), Runs with (read only, hidden with one possible engine), Models
   ("6 of 6 on", opens Models), Advanced folded each time the page opens:
   who pays, the tool by its name (version, location, updates), a server's
-  address, the model list problem, Copy the identifier.
+  address, the model list problem, Copy the identifier, and on the first
+  signed-in account Add key: the vendor's key as the second way to pay,
+  until a line of the page holds it.
 
 Captures: `scripts/capture`-style headless Chrome of the gallery
 `src/gallery/settings-pages.html` (`&subPage=providers.provider:<id>`,

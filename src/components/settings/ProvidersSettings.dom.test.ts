@@ -25,10 +25,11 @@ const fixture = vi.hoisted(() => ({
   dispatch: vi.fn(),
   local: { expose: false, share: false, connected: false, endpoints: [], published: [], probes: [] } as Record<string, unknown>,
   piServers: [] as unknown[],
+  keys: [] as { provider: string; last4: string | null }[],
 }));
 
 const answers = (path: string): unknown => {
-  if (path === "/api/me/providers") return { keys: [], servers: [] };
+  if (path === "/api/me/providers") return { keys: fixture.keys, servers: [] };
   if (path === "/api/me/local-models") return fixture.local;
   if (path === "/api/me/pi-model-servers") return { servers: fixture.piServers };
   if (path.startsWith("/api/me/pi-model-servers/")) return {};
@@ -105,6 +106,7 @@ beforeEach(() => {
   fixture.dispatch = vi.fn();
   fixture.local = { expose: false, share: false, connected: false, endpoints: [], published: [], probes: [] };
   fixture.piServers = [];
+  fixture.keys = [];
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
   host = document.createElement("div");
   document.body.append(host);
@@ -209,6 +211,21 @@ describe("Settings > Providers: the short list (#4329 B1)", () => {
     await click(remove);
     expect(apiCalls("DELETE")).toEqual([["/api/me/providers/keys/mistral", null]]);
     expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ subPage: "providers.provider:mistral" }));
+  });
+
+  it("draws Remove as the same grey pill as the row's other buttons; only its armed words turn red", async () => {
+    fixture.local = { expose: true, share: false, connected: true, endpoints: [{ id: "e1", label: "", baseUrl: "http://127.0.0.1:8000/v1" }], published: [{ id: "e1", label: "", models: ["a"] }], probes: [] };
+    fixture.instances = [instance("mistral", "mistral", "Mistral")];
+    await render();
+    const remove = host.querySelector<HTMLElement>('[data-provider="mistral"] [data-provider-action="remove"] button')!;
+    const turnOff = host.querySelector<HTMLElement>('[data-provider="computer"] [data-provider-action="turnOff"]')!;
+    expect(turnOff).not.toBeNull();
+    expect(remove.className).toBe(turnOff.className);
+    expect(remove.className).not.toContain("text-danger");
+    await click(remove);
+    expect(remove.getAttribute("data-confirm-pill")).toBe("armed");
+    expect(remove.className).toContain("h-[26px]");
+    expect(remove.className).toContain("text-danger");
   });
 
   it("a server's Remove on the list asks to confirm as the server's own page does, then removes it", async () => {
@@ -379,6 +396,14 @@ describe("One provider's page (#4329 B3)", () => {
     for (const card of advanced.querySelectorAll("[data-engine-card]")) expect(card.childNodes.length).toBeGreaterThan(0);
   });
 
+  it("on a solo server, a signed-in account's Advanced adds the server's key for that vendor", async () => {
+    fixture.instances = [instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } })];
+    await page("anthropic");
+    await click(host.querySelector('[data-settings-card="providers.page.advanced.anthropic"] button[aria-expanded]'));
+    await click(host.querySelector('[data-provider-add-key-open="account:claude"]'));
+    expect(host.querySelector('[data-provider-add-key] [data-provider-key-dialog="anthropic"]')).not.toBeNull();
+  });
+
   it("keeps a saved key's Change key in Advanced: it opens the line's key", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
     await page("mistral");
@@ -428,6 +453,32 @@ describe("Settings > Providers, in an organization", () => {
     expect(host.querySelector('[data-provider="mistral"]')).toBeNull();
     expect(host.querySelector('a[href*="/console/settings"]')).toBeNull();
     expect(host.querySelector("[data-view-as-member]"), "no View as a member").toBeNull();
+  });
+
+  it("a member signed in with a vendor still adds their own key for it, in the page's Advanced (the key Grok voice uses, say)", async () => {
+    await page("openai");
+    expect(host.querySelector('[data-provider-line="account:codex"] [data-provider-action="signOut"]')).not.toBeNull();
+    await click(host.querySelector('[data-settings-card="providers.page.advanced.openai"] button[aria-expanded]'));
+    const open = host.querySelector<HTMLElement>('[data-provider-add-key-open="account:codex"]')!;
+    expect(open, "Add key in Advanced of the signed-in account").not.toBeNull();
+    expect(open.textContent).toBe("Add key");
+    await click(open);
+    const input = host.querySelector<HTMLInputElement>('[data-provider-add-key] [data-personal-provider-key-input="openai"]')!;
+    expect(input).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "sk-test-123");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.mocked(apiMock).mockClear();
+    await click([...host.querySelectorAll<HTMLElement>("[data-provider-add-key] button")].find((button) => button.textContent === "Save"));
+    expect(apiCalls("PUT")).toEqual([["/api/me/providers/keys/openai", JSON.stringify({ key: "sk-test-123" })]]);
+  });
+
+  it("offers the key once: not in Advanced when a line of the page already holds it", async () => {
+    fixture.keys = [{ provider: "openai", last4: "1234" }];
+    await page("openai");
+    expect(host.querySelector('[data-provider-line="personal-key:openai"]'), "the saved key is a line of its own").not.toBeNull();
+    expect(host.querySelector("[data-provider-add-key-open]")).toBeNull();
   });
 
   it("keeps the person's own sign-in with Sign out, and image generation read-only", async () => {

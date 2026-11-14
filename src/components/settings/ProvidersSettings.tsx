@@ -5,8 +5,8 @@
 // provider's page (ProviderPage.tsx), where everything else lives. "Add a
 // provider" is one list in two columns (the reference's Connect Apps grid),
 // then one step. Other services and Advanced stay as they were.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, Cpu, KeyRound, Plus, Search, Server } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, KeyRound, Plus, Search } from "lucide-react";
 
 import { useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -18,8 +18,6 @@ import { COMPUTER_PROVIDER_ID, vendorLabel, vendorOfEngineName } from "../../../
 import { takeProviderRow, useProviderRowRequest } from "@/lib/provider-row-request";
 import { PersonalProviderKey, PersonalProviderServerForm } from "./PersonalProviderAccount";
 import { HarnessConnectorsSection } from "../HarnessConnectorsSection";
-import { PresetProviderMark } from "../ProviderIcons";
-import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../../shared/provider-icon";
 import { MAIN_KEY_ROWS, MORE_KEY_ROWS, ProviderKeyDialog, ProviderKeyEditor, keyRowName, keyRowSaved, useOpenProviderKey, type KeyRowId } from "./ProviderKeys";
 import { CloudAgentProvidersSettings, useCloudAgentProviders } from "./CloudAgentProvidersSettings";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
@@ -149,7 +147,6 @@ export function addChoices(list: ProviderList, config: Parameters<typeof keyRowS
   return { signIn, keys, other };
 }
 
-const PRESETS: ReadonlySet<string> = new Set(PROVIDER_ICON_PRESETS);
 const CHOICE_LINE: Record<AddChoice["kind"], LocaleKey> = {
   signIn: "providers.add.accountLine",
   personalKey: "providers.add.keyLine",
@@ -160,13 +157,13 @@ const CHOICE_LINE: Record<AddChoice["kind"], LocaleKey> = {
   computer: "providers.add.computerLine",
 };
 
+/** A choice's mark: the provider's own tile (ProviderLogo), drawn for a
+ * choice with no group yet as the provider it adds. */
 function ChoiceLogo({ choice, list }: { choice: AddChoice; list: ProviderList }) {
-  const mark: ReactNode = choice.kind === "computer" ? <Cpu size={20} aria-hidden="true" className="text-ink-secondary" />
-    : choice.kind === "server" || choice.kind === "piServer" ? <Server size={20} aria-hidden="true" className="text-ink-secondary" />
-      : PRESETS.has(choice.id) ? <PresetProviderMark preset={choice.id as ProviderIconPreset} size={20} />
-        : null;
-  if (!mark && (choice.kind === "signIn" || choice.kind === "engineKey")) return <ProviderLogo group={choice.group} instances={list.instances} />;
-  return <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-ink/[0.06]">{mark ?? <KeyRound size={20} className="text-ink-secondary" />}</span>;
+  const group: ProviderGroup = choice.kind === "signIn" || choice.kind === "engineKey" ? choice.group
+    : { id: choice.id, name: choice.name, rows: [], state: "available",
+        kind: choice.kind === "computer" ? "computer" : choice.kind === "server" || choice.kind === "piServer" ? "server" : "key" };
+  return <ProviderLogo group={group} instances={list.instances} />;
 }
 
 /** "Add a provider" (#4329 B2): one list, two columns, a search; pick, then one step. */

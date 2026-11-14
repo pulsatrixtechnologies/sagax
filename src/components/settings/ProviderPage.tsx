@@ -35,7 +35,7 @@ import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../../shared/
 import { ConfirmPill, CountPill, DescribedRow, HelpTip, LinkRow, PILL, SettingsGroup, peekRequestedSettingsCard, requestSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { pluginActionClass } from "../plugins/plugins-style";
-import { ProviderKeyEditor, keyRowForEngine, removeProviderKey } from "./ProviderKeys";
+import { ProviderKeyEditor, keyRowForEngine, removeProviderKey, type KeyRowId } from "./ProviderKeys";
 import { ServerForm } from "./OpenAiCompatServers";
 import { PersonalProviderKey, PersonalProviderServerForm, removePersonalKey, removePersonalServer } from "./PersonalProviderAccount";
 import { LocalModelsSettings } from "./LocalModelsSettings";
@@ -188,7 +188,7 @@ export function LineButton({ row, group, list, onOpen }: { row: ProviderRow; gro
     <span className="flex shrink-0 flex-col items-end gap-1">
       {action === "remove"
         ? <span data-provider-action="remove" data-provider-action-row={row.id} className="flex">
-            <ConfirmPill label={t(ACTION_KEY.remove)} confirmLabel={t(pi ? "piServers.removeConfirm" : "common.confirmRemove")} ariaLabel={label} onConfirm={remove} disabled={busy} />
+            <ConfirmPill label={t(ACTION_KEY.remove)} confirmLabel={t(pi ? "piServers.removeConfirm" : "common.confirmRemove")} ariaLabel={label} onConfirm={remove} disabled={busy} pillClass={pluginActionClass("fill")} />
           </span>
         : <button type="button" data-provider-action={action} data-provider-action-row={row.id} onClick={click} aria-label={label} className={pluginActionClass("fill")}>{t(ACTION_KEY[action])}</button>}
       {error && <span role="alert" className="max-w-[220px] text-right text-[12px] text-danger">{error}</span>}
@@ -211,6 +211,38 @@ function rowInstances(row: ProviderRow, instances: readonly InstanceInfo[]): Ins
   return row.instanceIds.map((id) => instances.find((entry) => entry.instanceId === id)).filter((entry): entry is InstanceInfo => Boolean(entry));
 }
 
+/** The provider's key, the second way to pay beside an account (#4329 B3):
+ * the person's own key (an organization, or a vendor with no key row on this
+ * server), else the server's key row on a solo server the person manages. */
+type VendorKey = { personal: string } | { server: KeyRowId };
+export function vendorKeyOf(row: ProviderRow, group: ProviderGroup, list: Pick<ProviderList, "organization" | "manageKeys" | "instances">): VendorKey | null {
+  if (row.kind !== "account") return null;
+  const instance = rowInstances(row, list.instances)[0];
+  const vendor = group.id in PERSONAL_PROVIDER_NAMES ? group.id : null;
+  const server = !list.organization && list.manageKeys && instance ? keyRowForEngine(instance.driverKind, instance.instanceId) : null;
+  if (vendor && (list.organization || !server)) return { personal: vendor };
+  return server ? { server } : null;
+}
+
+/** The account line whose Advanced offers the key: the first signed-in one,
+ * when no line of the page holds that key yet and no account line waiting
+ * for a sign-in offers it already ("Use a key instead"). */
+export function keyOfferRow(group: ProviderGroup, list: Pick<ProviderList, "organization" | "manageKeys" | "instances">): { rowId: string; key: VendorKey } | null {
+  if (group.rows.some((row) => row.kind === "account" && row.state !== "connected")) return null;
+  const row = group.rows.find((entry) => entry.kind === "account" && entry.state === "connected");
+  const key = row ? vendorKeyOf(row, group, list) : null;
+  if (!row || !key) return null;
+  const held = group.rows.some((entry) => entry.kind === "key"
+    && ("personal" in key ? entry.accountProvider === key.personal : entry.keyRow === key.server));
+  return held ? null : { rowId: row.id, key };
+}
+
+function VendorKeyForm({ vendorKey, group, onClose }: { vendorKey: VendorKey; group: ProviderGroup; onClose: () => void }) {
+  return "personal" in vendorKey
+    ? <PersonalProviderKey provider={vendorKey.personal} name={groupName(group)} onDone={onClose} />
+    : <ProviderKeyEditor id={vendorKey.server} onClose={onClose} />;
+}
+
 /** What a line's button opens in place (first level): the sign-in card and
  * the sign-out of an account, the key. "Use a key instead" swaps the
  * sign-in for the provider's key. */
@@ -218,14 +250,8 @@ function ConnectionPanel({ row, group, list, onClose }: { row: ProviderRow; grou
   const [useKey, setUseKey] = useState(false);
   const instances = rowInstances(row, list.instances);
   const mineOf = (instance: InstanceInfo) => (list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined);
-  const vendorKey = group.id in PERSONAL_PROVIDER_NAMES ? group.id : null;
-  const serverKey = !list.organization && list.manageKeys && instances[0] ? keyRowForEngine(instances[0].driverKind, instances[0].instanceId) : null;
-  const keyOffer = row.kind === "account" && row.state !== "connected" && (vendorKey || serverKey);
-  if (useKey) {
-    return vendorKey && (list.organization || !serverKey)
-      ? <PersonalProviderKey provider={vendorKey} name={groupName(group)} onDone={onClose} />
-      : serverKey ? <ProviderKeyEditor id={serverKey} onClose={onClose} /> : null;
-  }
+  const vendorKey = row.state !== "connected" ? vendorKeyOf(row, group, list) : null;
+  if (useKey && vendorKey) return <VendorKeyForm vendorKey={vendorKey} group={group} onClose={onClose} />;
   if (row.kind === "key" && row.keyRow && row.manage && !row.voiceKey && !row.accountProvider) return <ProviderKeyEditor id={row.keyRow} onClose={onClose} />;
   if (row.accountProvider) return <PersonalProviderKey provider={row.accountProvider} name={groupName(group)} />;
   return (
@@ -233,7 +259,7 @@ function ConnectionPanel({ row, group, list, onClose }: { row: ProviderRow; grou
       {instances.map((instance) => (
         <EngineRow key={instance.instanceId} instance={instance} mine={mineOf(instance)} member={list.member} issuer={list.issuer} bare keysManaged part="access" />
       ))}
-      {keyOffer && (
+      {vendorKey && (
         <button type="button" data-provider-use-key="" onClick={() => setUseKey(true)} className="self-start text-[12.5px] text-ink-secondary underline-offset-2 hover:text-ink hover:underline">
           {t("providers.add.useKey")}
         </button>
@@ -245,9 +271,10 @@ function ConnectionPanel({ row, group, list, onClose }: { row: ProviderRow; grou
 /** Everything else a line had (#4329 B3 Advanced): who pays, the key in the
  * organization console, a server's address, the tool by its name with its
  * version, location and updates, the model list problem, the identifier. */
-function ConnectionAdvanced({ row, list, speakers, onEditKey }: { row: ProviderRow; list: ProviderList; speakers: ReturnType<typeof toolSpeakers>; onEditKey?: () => void }) {
+function ConnectionAdvanced({ row, group, list, speakers, onEditKey, vendorKey }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; speakers: ReturnType<typeof toolSpeakers>; onEditKey?: () => void; vendorKey?: VendorKey }) {
   const { state, dispatch } = useStore();
   const [editing, setEditing] = useState(false);
+  const [addingKey, setAddingKey] = useState(false);
   const instances = rowInstances(row, list.instances);
   const server = row.compatServerId ? state.config?.openaiCompatServers?.find((entry) => entry.instanceId === row.compatServerId) : undefined;
   const managed = list.organization && row.payer === "org";
@@ -297,6 +324,11 @@ function ConnectionAdvanced({ row, list, speakers, onEditKey }: { row: ProviderR
         <EngineRow key={`access:${instance.instanceId}`} instance={instance} mine={list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined}
           member={list.member} issuer={list.issuer} bare keysManaged part="access" />
       ))}
+      {/* a signed-in account: the vendor's key as the second way to pay; once
+          saved it is a line of its own (Remove there, Change key here) */}
+      {vendorKey && (addingKey
+        ? <div data-provider-add-key={row.id} className="flex min-w-0 flex-col gap-2"><VendorKeyForm vendorKey={vendorKey} group={group} onClose={() => setAddingKey(false)} /></div>
+        : <button type="button" data-provider-add-key-open={row.id} className={cn(PILL, "self-start")} onClick={() => setAddingKey(true)}>{t("providers.do.addKey")}</button>)}
       {/* a saved key: Remove sits on its line; Change key opens the line's key */}
       {onEditKey && (
         <button type="button" data-provider-change-key={row.id} className={cn(PILL, "self-start")} onClick={onEditKey}>{t("providers.changeKey")}</button>
@@ -387,6 +419,7 @@ export function ProviderPage({ providerId }: { providerId: string }) {
   if (group.id.startsWith(PI_SERVER_PREFIX)) return <PiServerPage group={group} list={list} />;
   const role = runsWith(group, list);
   const speakers = toolSpeakers(group.rows, list);
+  const keyOffer = keyOfferRow(group, list);
   const lineInstances = group.rows.filter((row) => row.kind === "account").flatMap((row) => rowInstances(row, list.instances));
   const adders = list.member ? [] : lineInstances.filter((instance, index) => lineInstances.findIndex((other) => other.driverKind === instance.driverKind) === index);
   return (
@@ -430,7 +463,8 @@ export function ProviderPage({ providerId }: { providerId: string }) {
       <ModelsRow group={group} list={list} />
       <PageAdvanced providerId={group.id}>
         {group.rows.map((row) => (
-          <ConnectionAdvanced key={row.id} row={row} list={list} speakers={speakers}
+          <ConnectionAdvanced key={row.id} row={row} group={group} list={list} speakers={speakers}
+            vendorKey={keyOffer?.rowId === row.id ? keyOffer.key : undefined}
             onEditKey={row.kind === "key" && lineAction(row, list) === "remove" ? () => show(row.id) : undefined} />
         ))}
       </PageAdvanced>

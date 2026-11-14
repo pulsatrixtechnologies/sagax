@@ -248,6 +248,9 @@ Models link ("N of M on", to Active models), and Advanced, folded each time
 the page opens. Advanced holds everything else: who pays and where the key
 lives, voice and images, the key in the organization console, a server's
 address and Edit, Change key for a saved key (it opens the line's key),
+Add key on the first signed-in account (the vendor's key as the second way
+to pay: the person's own key, or the server's key row on a solo server;
+gone once a line of the page holds that key),
 model list problems, the account part of a connected
 account whose line has no button (check, manage, Remove of a second Claude
 account), Copy the identifier, and once per tool its update notice, its

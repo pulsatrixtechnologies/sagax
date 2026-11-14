@@ -13,6 +13,11 @@
 // and a spend line keep their place in the chat, Today and the badge, and
 // go as `notify: false`: no sound, no banner, no bounce, no push.
 //
+// #4233 (2026-11-13): the person's quiet hours and day budget
+// (shared/signal-levels.ts) rule the same frame: an interrupting frame the
+// gate holds goes `notify: false` too, so the desktop, its shell and the
+// phone follow one verdict. What is urgent still rings.
+//
 // Delivery is a separate concern. The harness emits a frame; whoever is
 // listening decides what to do with it — desktop and paired-phone local
 // notifications today, and closed-app APNs delivery once a relay exists.
@@ -325,17 +330,74 @@ export function notifyLogLine(note: Pick<Notification, "kind" | "botId" | "threa
   return `[notify] kind=${note.kind} bot=${note.botId || "-"} thread=${note.threadId || "-"} audience=${audience} interrupts=${interrupts ? "yes" : "no"}`;
 }
 
+/** #4233: one person's verdict from their signal gate (shared/signal-levels.ts:
+ * their quiet hours and day budget, urgent always passes). */
+export interface SignalVerdict {
+  person: string;
+  decision: "push" | "hold";
+}
+
+/** #4233: the people a frame was held for, each one by their own gate. A
+ * person is held when every push of the frame for them was held. No person
+ * asked (nobody to push to) holds nobody: the frame keeps the kind's own rule. */
+export function heldBySignal(verdicts: readonly SignalVerdict[]): Set<string> {
+  const pushed = new Set<string>();
+  const held = new Set<string>();
+  for (const { person, decision } of verdicts) {
+    const key = person.trim().toLowerCase();
+    if (!key) continue;
+    (decision === "hold" ? held : pushed).add(key);
+  }
+  for (const key of pushed) held.delete(key);
+  return held;
+}
+
+/** #4233: the frames some (not all) of their people's gates held, with those
+ * people. The frame object is the one every stream and every replay reads
+ * (fanoutSsePayload, the replay buffer), so each viewer's projection
+ * (sseFrameFor) asks here whether it goes quiet for them. */
+const heldPeopleOfFrame = new WeakMap<object, ReadonlySet<string>>();
+
+/** #4233: true when this frame goes `notify: false` to this person's streams
+ * because their own quiet hours or day budget held it. */
+export function notifyHeldFor(payload: object, person: string | undefined | null): boolean {
+  const held = heldPeopleOfFrame.get(payload);
+  return Boolean(held && person && held.has(person.trim().toLowerCase()));
+}
+
+export interface RuleNotifyOptions {
+  adminOnly?: boolean;
+  /** #4233: the person's signal gate, asked once per person for a frame
+   * that would interrupt (it counts the day's budget and keeps a held
+   * frame's words for the brief). The desktop, its shell and the phone all
+   * follow each person's one verdict. */
+  signal?: (note: Notification) => readonly SignalVerdict[];
+}
+
 /** Every notify frame passes here on its way out (fanoutSsePayload): the
  * rule decides, a silent one goes as `notify: false` (the clients, the
  * desktop shell and the push relay all skip those), and the line is logged.
+ * An interrupting frame a person's quiet hours or day budget hold goes
+ * `notify: false` to that person (#4233): it keeps its place in the chat
+ * and the badge. Held for everyone it is for, the frame itself goes
+ * `notify: false`; held for some, their streams get it quiet
+ * (notifyHeldFor, read by sseFrameFor) and the others still ring.
  * Any other frame is returned as it is. */
-export function ruleNotifyFrame<T extends Record<string, unknown>>(payload: T, options: { adminOnly?: boolean } = {}): T {
+export function ruleNotifyFrame<T extends Record<string, unknown>>(payload: T, options: RuleNotifyOptions = {}): T {
   if (payload.kind !== "notify" || !payload.notification || typeof payload.notification !== "object") return payload;
   const note = payload.notification as Notification;
-  const interrupts = notificationInterrupts(note);
-  console.log(notifyLogLine(note, options, interrupts));
+  const asks = notificationInterrupts(note);
+  const verdicts = asks && options.signal ? options.signal(note) : [];
+  const heldPeople = heldBySignal(verdicts);
+  const asked = new Set(verdicts.map((verdict) => verdict.person.trim().toLowerCase()).filter(Boolean));
+  const everyone = heldPeople.size > 0 && heldPeople.size === asked.size;
+  const interrupts = asks && !everyone;
+  const heldLog = everyone ? " held=signal" : heldPeople.size > 0 ? ` held=signal:${heldPeople.size}` : "";
+  console.log(`${notifyLogLine(note, options, interrupts)}${heldLog}`);
   const { personTurn: _personTurn, ...wire } = note;
-  return { ...payload, notification: interrupts ? wire : { ...wire, notify: false } };
+  const out = { ...payload, notification: interrupts ? wire : { ...wire, notify: false } };
+  if (interrupts && heldPeople.size > 0) heldPeopleOfFrame.set(out, heldPeople);
+  return out;
 }
 
 /** A conversation on a live voice call does not buzz: the person hears the

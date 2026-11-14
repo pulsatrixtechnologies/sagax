@@ -2,7 +2,10 @@
 // tests are mostly about the cases where the answer is "stay quiet".
 import { describe, expect, it } from "vitest";
 
-import { buildNotification, buildSpendNotification, CALL_QUIET_MS, quietForCall, routineIncidentTitle, routineRunTitle, summarize } from "./notify.ts";
+import { PersonSignalGate, type QuietHours } from "../shared/signal-levels.ts";
+import type { Notification, NotifyKind } from "../shared/notification.ts";
+import { buildNotification, buildSpendNotification, CALL_QUIET_MS, notifyHeldFor, quietForCall, routineIncidentTitle, routineRunTitle, ruleNotifyFrame, summarize } from "./notify.ts";
+import { type FramePushDeps, pushesForFrame } from "./push/frames.ts";
 
 const bot = { id: "bot-1", name: "Scout", threadId: "thread-1" };
 
@@ -204,5 +207,85 @@ describe("a conversation on a live voice call", () => {
     expect(quietForCall({ kind: "spend" }, { at: now, voiceCall: { callId: "call-12345678" } }, now)).toBe(false);
     expect(quietForCall(done, undefined, now)).toBe(false);
     expect(quietForCall(null, { at: now, voiceCall: { callId: "call-12345678" } }, now)).toBe(false);
+  });
+});
+
+// #4233 Q6: one verdict for every device. The person's quiet hours and day
+// budget (the signal gate the phone already obeyed) now mark the frame itself
+// `notify: false`, so the desktop, its shell and the phone all stay quiet;
+// what is urgent still rings, and the frame keeps its place in the chat.
+describe("the desktop obeys the person's quiet hours and day budget (#4233)", () => {
+  const at = Date.UTC(2026, 10, 13, 3, 0); // 03:00 UTC
+  const night: QuietHours = { start: "22:00", end: "07:00", timeZone: "UTC" };
+  const deps = (people: string[] = ["person-1"]): FramePushDeps => ({
+    notificationPeople: () => people,
+    muted: () => false,
+    achievementNotifications: () => false,
+    achievementName: () => undefined,
+    now: () => at,
+  });
+  const frameOf = (kind: NotifyKind, extra: Partial<Notification> = {}) =>
+    ({ kind: "notify", notification: { kind, botId: "bot-1", botName: "Scout", threadId: "thread-1", title: "Scout finished", body: "the words", ...extra } as Notification });
+  // what the server does on its way out: the gate decides once per person
+  const ruled = (gate: PersonSignalGate, frame: ReturnType<typeof frameOf>, people?: string[]) =>
+    ruleNotifyFrame(frame, { signal: () => pushesForFrame(frame, deps(people)).map((message) => ({ person: message.personId, decision: gate.decide(message) })) });
+  const flag = (frame: { notification: unknown }) => (frame.notification as { notify?: boolean }).notify;
+
+  it("inside quiet hours an answer goes notify false, and its words wait for the brief", () => {
+    const gate = new PersonSignalGate(() => ({ budget: 20, quiet: night }), () => at);
+    const frame = ruled(gate, frameOf("done", { personTurn: true }));
+    expect(flag(frame)).toBe(false);
+    expect(frame.notification).toMatchObject({ kind: "done", threadId: "thread-1", title: "Scout finished" });
+    expect(gate.takeHeld("person-1")).toEqual([expect.objectContaining({ title: "Scout finished", threadId: "thread-1" })]);
+  });
+
+  it("past the day budget a card goes notify false; the one within it still rings", () => {
+    const gate = new PersonSignalGate(() => ({ budget: 1, quiet: null }), () => at);
+    expect(flag(ruled(gate, frameOf("proposal", { proposalId: "p1" })))).toBeUndefined();
+    expect(flag(ruled(gate, frameOf("proposal", { proposalId: "p2" })))).toBe(false);
+    expect(gate.sentToday("person-1")).toBe(1);
+  });
+
+  it("an urgent ask still rings inside quiet hours and past the budget", () => {
+    const gate = new PersonSignalGate(() => ({ budget: 5, quiet: night }), () => at);
+    for (const kind of ["approval", "question", "needs-you", "sign-in", "takeover"] as NotifyKind[]) {
+      expect(flag(ruled(gate, frameOf(kind)))).toBeUndefined();
+    }
+    expect(gate.takeHeld("person-1")).toEqual([]);
+  });
+
+  it("a frame that does not interrupt never reaches the gate", () => {
+    const gate = new PersonSignalGate(() => ({ budget: 1, quiet: null }), () => at);
+    let asked = 0;
+    const frame = ruleNotifyFrame(frameOf("routine-failed"), { signal: () => { asked += 1; return [{ person: "person-1", decision: "hold" }]; } });
+    expect(flag(frame)).toBe(false);
+    ruleNotifyFrame(frameOf("done"), { signal: () => { asked += 1; return [{ person: "person-1", decision: "hold" }]; } });
+    expect(asked).toBe(0);
+    expect(gate.sentToday("person-1")).toBe(0);
+  });
+
+  it("a frame for two people goes quiet on the held person's streams only, and rings for the other", () => {
+    const gate = new PersonSignalGate((person) => ({ budget: 20, quiet: person === "person-1" ? night : null }), () => at);
+    const frame = ruled(gate, frameOf("proposal", { proposalId: "p3" }), ["person-1", "person-2"]);
+    // the frame itself still rings for the person who may hear it
+    expect(flag(frame)).toBeUndefined();
+    expect(notifyHeldFor(frame, "person-1")).toBe(true);
+    expect(notifyHeldFor(frame, "Person-1")).toBe(true);
+    expect(notifyHeldFor(frame, "person-2")).toBe(false);
+    expect(gate.takeHeld("person-1")).toHaveLength(1);
+    expect(gate.sentToday("person-2")).toBe(1);
+  });
+
+  it("goes notify false for everyone when every person it is for is held", () => {
+    const gate = new PersonSignalGate(() => ({ budget: 20, quiet: night }), () => at);
+    expect(flag(ruled(gate, frameOf("proposal", { proposalId: "p4" }), ["person-1", "person-2"]))).toBe(false);
+  });
+
+  it("rings when nobody's gate was asked", () => {
+    let calls = 0;
+    const frame = ruleNotifyFrame(frameOf("proposal"), { signal: () => { calls += 1; return []; } });
+    expect(flag(frame)).toBeUndefined();
+    expect(notifyHeldFor(frame, "person-1")).toBe(false);
+    expect(calls).toBe(1);
   });
 });

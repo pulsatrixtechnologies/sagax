@@ -732,7 +732,7 @@ import { soloGoalLineText, type SoloGoalLine } from "../shared/solo-goal-line.ts
 import { relayAccountLabel } from "./run-with-engine.ts";
 import { approvalLevelPrompt, peerContactPrompt } from "./approvals/approval-level-prompt.ts";
 // #1905: Full access, one decision for every approval and choice card
-import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired, type FullAccessFacts } from "./approvals/full-access-gate.ts";
+import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired, ruleHoldFacts, type FullAccessFacts } from "./approvals/full-access-gate.ts";
 import { expandLearnTurnText, learnSource } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "./context/prompt-references.ts";
@@ -1210,6 +1210,7 @@ import { PageStore } from "./pages/page-store.ts";
 import { PageFiles } from "./pages/page-files.ts";
 import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
 import { PageDataApprovals } from "./pages/page-data-approvals.ts";
+import { pageActVerdict } from "./pages/page-act-verdict.ts";
 import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
 import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, waitingCardOf } from "./team-board/board.ts";
@@ -12752,7 +12753,9 @@ const personalHostChecks = new Map<string, { at: number; refused: boolean }>();
 // sources are registered where their own wiring lives (team-board below).
 const pageSources = new PageSources();
 // Ask first answers of page data reads: "Always allow" kept on disk per person
-const pageDataApprovals = new PageDataApprovals(join(DATA_DIR, "page-data-approvals.json"));
+// (the organization's Always allow policy, as for a bot's card: off, no
+// page card offers or keeps "Always allow")
+const pageDataApprovals = new PageDataApprovals(join(DATA_DIR, "page-data-approvals.json"), Date.now, () => customRules.orgPolicy().alwaysAllow);
 // "Always allow this site" answers of a page's link card, per person, page and origin; a revoke forgets them
 const pageLinkApprovals = new PageLinkApprovals(join(DATA_DIR, "page-link-approvals.jsonl"));
 // #3413 lot 3: the collections a page's script keeps (sagax.store), counted
@@ -12807,8 +12810,8 @@ ROUTES.push(createPageDataRoutes({
   propose: (pageId, input) => publishedPages.edit(pageId, input),
   redact: redactSecretsInText,
   live: pageLive,
-  // #3413: the organization's Deny and Ask first for a call a page makes
-  // (a model question, a connector call), in the reader's context
+  // #3413: the organization's Deny and Ask first for a model question a
+  // page asks, in the reader's context
   actRule: ({ tool, mcpTool, summary, input, readOnly }) => {
     const rules = customRules.orgRules().filter((rule) => rule.enabled);
     if (!rules.length) return "none";
@@ -12826,15 +12829,28 @@ ROUTES.push(createPageDataRoutes({
     },
   },
   // #3413 lot 7: the reader's own connectors, through the same hub and
-  // reading as call_connector; a change asks unless the reader's own
-  // Primary Bot runs at Full access; every call in their action journal
+  // reading as call_connector, judged by their bot's own approval path
+  // (owner decision of 2026-11-10): their own rules and the organization's
+  // (rulesOf), the one Full access decision with its holds (an org rule,
+  // their own rule, a security key they set), as myChromeHeldLevel reads
+  // it; every call in their action journal
   connectors: {
     principal: (viewer) => (IDENTITY.kind === "perspicax" ? viewer.principalId ?? "" : localPrincipalId()).trim().toLowerCase(),
     accounts: (principalId) => connectorRegistry.accounts(principalId),
     hub: () => connectorHub,
-    fullAccess: (viewer) => {
+    verdict: (viewer, call) => {
       const bot = pageReaderBot(viewer);
-      return Boolean(bot && approvalModeFor(bot) === "full");
+      const reader = bot ? approvalOwnerId(bot, bot.threadId) : (viewer.principalId ?? "").trim().toLowerCase();
+      const rules = reader || bot ? customRules.rulesOf(reader, bot?.id) : customRules.orgRules().filter((rule) => rule.enabled);
+      return pageActVerdict({
+        rules,
+        call: { tool: call.tool, mcpTool: call.mcpTool, summary: call.summary, input: call.input, hints: { readOnly: call.readOnly } },
+        botId: bot?.id ?? "",
+        level: bot ? approvalModeForTurn(store.projectBotForTask(bot.id, bot.threadId) ?? bot, false, bot.threadId) : undefined,
+        keyed: bot ? autoAnswerStepUp(bot, bot.threadId, { tool: call.mcpTool, summary: call.summary }).length > 0 : false,
+        home: serverHome(),
+        context: bot ? ruleProductsOf(bot.id) : {},
+      });
     },
     journal: ({ viewer, pageId, mcpTool, summary, decision, source }) => {
       const bot = pageReaderBot(viewer);
@@ -19780,7 +19796,6 @@ function myChromeHeldLevel(input: { botId: string; threadId: string; tool: strin
   const answerer = approvalOwnerId(found, input.threadId);
   const call = { tool: input.tool, summary: input.summary, input: input.summary };
   const { decision } = reviewCustomRules(answerer ? customRules.rulesOf(answerer, found.id) : [], call, found.id, serverHome(), { ...ruleProductsOf(found.id), startedBy: turnStartFor(input.threadId) });
-  const held = decision.kind === "ask" || decision.kind === "deny" ? decision : null;
   const keyed = autoAnswerStepUp(found, input.threadId, { tool: input.tool, summary: input.summary }).length > 0;
   const speaker = turnSpeakers.get(input.threadId);
   const speakerId = speaker && "principalId" in speaker ? speaker.principalId?.trim().toLowerCase() : undefined;
@@ -19788,8 +19803,7 @@ function myChromeHeldLevel(input: { botId: string; threadId: string; tool: strin
   return {
     level,
     facts: {
-      orgRule: held?.rule.org ? held.kind : null,
-      personRule: held && !held.rule.org ? held.kind : keyed ? "ask" : null,
+      ...ruleHoldFacts(decision, keyed),
       isolation: cloudGuestDriven(input.threadId) || botmailConfined(input.threadId) || otherPerson,
     },
   };

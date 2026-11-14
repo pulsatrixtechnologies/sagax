@@ -43,10 +43,30 @@ export class PageDataApprovals {
   private readonly file: string | null;
   private readonly now: () => number;
 
-  /** `file`: where "Always allow" is kept; null keeps it in memory (tests). */
-  constructor(file: string | null, now: () => number = Date.now) {
+  private readonly policy: () => boolean;
+
+  /** `file`: where "Always allow" is kept; null keeps it in memory (tests).
+   * `alwaysAllowed`: the organization's Always allow policy (the custom
+   * rules' orgPolicy, as for a bot's card): while it is off, no card offers
+   * "Always allow", an answer "always" counts once, and a kept one is not
+   * honoured (it comes back if the organization turns it on again). */
+  constructor(file: string | null, now: () => number = Date.now, alwaysAllowed: () => boolean = () => true) {
     this.file = file;
     this.now = now;
+    this.policy = alwaysAllowed;
+  }
+
+  /** The organization lets a person keep an "Always allow" (fails closed). */
+  alwaysOffered(): boolean {
+    try {
+      return this.policy();
+    } catch {
+      return false;
+    }
+  }
+
+  private keptAlways(ask: Pick<PageDataAsk, "person" | "pageId" | "source">): boolean {
+    return this.alwaysOffered() && this.alwaysMap().has(alwaysKey(ask));
   }
 
   private alwaysMap(): Map<string, Always> {
@@ -81,7 +101,7 @@ export class PageDataApprovals {
 
   /** The reader answered yes for this read (once, still valid, or always). */
   allowed(ask: PageDataAsk): boolean {
-    if (this.alwaysMap().has(alwaysKey(ask))) return true;
+    if (this.keptAlways(ask)) return true;
     const until = this.once.get(askKey(ask));
     if (until === undefined) return false;
     if (until < this.now()) {
@@ -94,7 +114,7 @@ export class PageDataApprovals {
   /** A change a page asks for (#3413 lot 7): "Always allow" holds, "Allow
    * once" lets exactly one call through and is used up here. */
   use(ask: PageDataAsk): boolean {
-    if (this.alwaysMap().has(alwaysKey(ask))) return true;
+    if (this.keptAlways(ask)) return true;
     const key = askKey(ask);
     const until = this.once.get(key);
     if (until === undefined) return false;
@@ -138,7 +158,7 @@ export class PageDataApprovals {
     this.pending.delete(id);
     const { at: _at, ...ask } = entry;
     if (!input.allow) return { ok: true, ask };
-    if (input.always) {
+    if (input.always && this.alwaysOffered()) {
       this.alwaysMap().set(alwaysKey(ask), { person: ask.person, pageId: ask.pageId, source: ask.source, at: this.now() });
       this.saveAlways();
     } else {

@@ -228,7 +228,7 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     if (!params) return refuse(400, "bad_request");
     const ask = { person: who.by, pageId: page.id, version, source: name };
     if (rule === "ask" && !deps.approvals.allowed(ask)) {
-      const body: PageDataAskFirst = { error: TEXTS.ask_first[lang], code: "ask_first", approvalId: deps.approvals.open(ask), source: name as PageDataSource, version };
+      const body: PageDataAskFirst = { error: TEXTS.ask_first[lang], code: "ask_first", approvalId: deps.approvals.open(ask), source: name as PageDataSource, version, always: deps.approvals.alwaysOffered() };
       return json(res, 409, body);
     }
     if (!allowRead(`${page.id}\u0000${who.by.toLowerCase()}`)) return refuse(429, "rate_limited");

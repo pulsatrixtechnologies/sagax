@@ -4,7 +4,7 @@
 // capability says so before it is published. The declaration is the
 // server's own reading of that version.
 import { t } from "@/lib/i18n";
-import { pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageCapFile, type PageDataSource } from "../../shared/page-capabilities";
+import { pageCapabilitiesAct, pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageCapFile, type PageDataSource } from "../../shared/page-capabilities";
 
 const SOURCE_WORDS: Record<PageDataSource, () => string> = {
   "team-board": () => t("pages.caps.source.team-board"),
@@ -63,7 +63,8 @@ export function capabilityLine(next: PageCapabilities | null | undefined, publis
   if (!pageCapabilitiesAny(next)) return null;
   const added = published !== undefined ? capabilitiesAdded(next, published) : null;
   if (published !== undefined && added) return t("pages.caps.adds", { what: capabilityParts(added).join(", ") });
-  return t("pages.caps.reads", { what: capabilityParts(next).join(", ") });
+  // a page that also keeps, adds, asks or acts says what it may do, not only read
+  return t(pageCapabilitiesAct(next) ? "pages.caps.does" : "pages.caps.reads", { what: capabilityParts(next).join(", ") });
 }
 
 const declared = new Map<string, Promise<PageCapabilities | null>>();

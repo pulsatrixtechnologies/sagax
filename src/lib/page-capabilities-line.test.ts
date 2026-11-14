@@ -77,7 +77,8 @@ describe("what a page keeps, asks and calls (#3413 lots 3 to 7)", () => {
   it("names every part in words, nothing invisible", () => {
     setLocale("en");
     try {
-      expect(capabilityLine(all)).toBe("Reads: files you add, documents it keeps for everyone who reads it, documents it keeps for you alone, a question to a model, with your account, proposes new versions of itself, GitHub with your account: search_issues, create_issue");
+      // a page that keeps, asks or acts says what it may do, not "Reads"
+      expect(capabilityLine(all)).toBe("May do: files you add, documents it keeps for everyone who reads it, documents it keeps for you alone, a question to a model, with your account, proposes new versions of itself, GitHub with your account: search_issues, create_issue");
       setLocale("fr");
       expect(capabilityParts(all)).toEqual([
         "les fichiers que tu y ajoutes",

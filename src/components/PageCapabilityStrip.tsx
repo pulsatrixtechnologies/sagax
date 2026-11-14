@@ -12,7 +12,7 @@ import { t } from "@/lib/i18n";
 import { openExternalLink } from "@/lib/app-links";
 import { capabilityLine } from "@/lib/page-capabilities-line";
 import { api, openBot, openThread, useStore } from "@/state/store";
-import { pageCapabilitiesAny } from "../../shared/page-capabilities";
+import { pageCapabilitiesAct, pageCapabilitiesAny } from "../../shared/page-capabilities";
 import { createCapabilityBroker, splitAddress, type CapabilityBroker, type PendingLink } from "../page-reader/capabilities";
 
 /** The open page's broker: one per drawn version, listening on this window.
@@ -69,13 +69,13 @@ export function PageCapabilityStrip({ broker }: { broker: CapabilityBroker }) {
   const line = capabilityLine(state.caps);
   return (
     <div data-page-caps-strip>
-      {line && <p role="status" title={t("pages.caps.title")} className="truncate border-y border-hairline/30 px-3 py-1.5 text-[12px] text-ink-secondary">{line}</p>}
+      {line && <p role="status" title={t(pageCapabilitiesAct(state.caps) ? "pages.caps.titleDo" : "pages.caps.title")} className="break-words border-y border-hairline/30 px-3 py-1.5 text-[12px] text-ink-secondary">{line}</p>}
       {state.approvals.map((entry) => (
         <div key={entry.id} role="alert" data-cap-approval={entry.name} className="flex flex-wrap items-center gap-2 border-b border-hairline/30 bg-accent/10 px-3 py-1.5 text-[12px] text-ink">
           <ShieldQuestion size={14} aria-hidden="true" className="shrink-0" />
-          <span className="min-w-0 flex-1">{entry.name.startsWith("connector:") ? t("pages.caps.act", { what: entry.label }) : entry.name === "model" ? t("pages.caps.askUse", { what: entry.label }) : t("pages.caps.ask", { what: entry.label })}</span>
+          <span className="min-w-0 flex-1">{entry.by === "page" ? t("pages.caps.act", { what: entry.label }) : entry.by === "person" ? t("pages.caps.ownUse", { what: entry.label }) : entry.name.startsWith("connector:") || entry.name === "model" ? t("pages.caps.askUse", { what: entry.label }) : t("pages.caps.ask", { what: entry.label })}</span>
           <button type="button" data-cap-decline className="rounded px-1.5 py-1 text-ink-secondary hover:bg-hover" onClick={() => broker.resolveApproval(entry.id, "decline")}>{t("pages.decline")}</button>
-          <button type="button" data-cap-always className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveApproval(entry.id, "always")}>{t("pages.caps.always")}</button>
+          {entry.always && <button type="button" data-cap-always className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveApproval(entry.id, "always")}>{t("pages.caps.always")}</button>}
           <button type="button" data-cap-allow className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveApproval(entry.id, "once")}>{t("pages.caps.allow")}</button>
         </div>
       ))}

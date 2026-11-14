@@ -185,7 +185,7 @@ describe("Ask first", () => {
     const pending = call("data.read", { name: "team-board" });
     await flush();
     expect(broker.getState().approvals).toHaveLength(1);
-    expect(broker.getState().approvals[0]).toMatchObject({ name: "team-board", label: "The work of your coding teams" });
+    expect(broker.getState().approvals[0]).toMatchObject({ name: "team-board", label: "The work of your coding teams", by: "org", always: true });
     expect(posts).toEqual([]);
     clock.t += 700;
     broker.resolveApproval(broker.getState().approvals[0]!.id, "once");
@@ -957,7 +957,7 @@ describe("connector.call (#3413 lot 7)", () => {
       [`${base}/connector`]: () => {
         if (!first) return { connector: "GitHub", account: "acc", tool: "create_issue", text: "done" };
         first = false;
-        return new Refusal("ask", 409, "ask_first", { code: "ask_first", approvalId: "ap2", label: "GitHub: create_issue (acc)" });
+        return new Refusal("ask", 409, "ask_first", { code: "ask_first", approvalId: "ap2", label: "GitHub: create_issue (acc)", by: "person", always: false });
       },
       [`${base}/data-approvals/ap2`]: { ok: true },
     });
@@ -966,6 +966,8 @@ describe("connector.call (#3413 lot 7)", () => {
     await flush();
     const card = broker.getState().approvals[0]!;
     expect(card.label).toBe("GitHub: create_issue (acc)");
+    // who asks and whether Always allow may be kept come from the server
+    expect(card).toMatchObject({ by: "person", always: false });
     clock.t += CARD_GUARD_MS + 1;
     broker.resolveApproval(card.id, "once");
     await pending;

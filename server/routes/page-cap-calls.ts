@@ -50,6 +50,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import { PAGE_CAP_FILE_MIMES, PAGE_CAP_LIMITS, pageCapFileName, pageModelJson, parsePageModelQuestion, parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageDataAskFirst, type PageModelAnswer, type PageActAskFirst, type PageConnectorAnswer, type PageFileData, type PageFileInfo, type PageModelQuestion, type PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { stateMayWrite, type StateRole } from "../../shared/page-state.ts";
 import { PAGE_LIMITS, parsePageTitle, type PageKind } from "../../shared/published-pages.ts";
+import type { PageActVerdict } from "../pages/page-act-verdict.ts";
 import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import type { ConnectorHub } from "../connectors/hub.ts";
 import type { ConnectorAccount } from "../connectors/types.ts";
@@ -117,10 +118,12 @@ export interface PageCapCallDeps {
     principal(viewer: NonNullable<PageViewer>): string;
     accounts(principalId: string): readonly ConnectorAccount[];
     hub(): ConnectorHub;
-    /** The reader's own approval level answers a change without a card. */
-    fullAccess?(viewer: NonNullable<PageViewer>): boolean;
+    /** The bot's approval path for this call, in the reader's context
+     * (server/pages/page-act-verdict.ts): their own rules and the
+     * organization's, and their one Full access decision. */
+    verdict(viewer: NonNullable<PageViewer>, call: { tool: string; mcpTool: string; summary: string; input: string; readOnly: boolean }): PageActVerdict;
     /** Every call, in the reader's action journal. */
-    journal?(input: { viewer: NonNullable<PageViewer>; pageId: string; mcpTool: string; summary: string; decision: "auto-approved" | "user-approved" | "auto-denied"; source: "connector-read" | "full-access" | "user" | "custom-rule-deny" }): void;
+    journal?(input: { viewer: NonNullable<PageViewer>; pageId: string; mcpTool: string; summary: string; decision: "auto-approved" | "user-approved" | "auto-denied"; source: "connector-read" | "full-access" | "user" | "custom-rule" | "custom-rule-deny" }): void;
   };
   /** Lot 5: the files readers add. */
   files?: PageFiles;
@@ -191,7 +194,7 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
     if (rule === "deny") return ctx.refuse(403, "denied", { reason: "org_rule", error: ctx.lang === "fr" ? "Ton organisation refuse cette question." : "Your organization refuses this question." });
     const ask = { person: ctx.who.by, pageId: ctx.page.id, version: ctx.version, source: "model" };
     if (rule === "ask" && deps.approvals && !deps.approvals.allowed(ask)) {
-      const body: Omit<PageDataAskFirst, "source"> & { source: string } = { error: ctx.lang === "fr" ? "Ton organisation te demande d'abord ta permission avant que cette page pose une question à un modèle avec ton compte." : "Your organization asks you first before this page asks a model a question with your account.", code: "ask_first", approvalId: deps.approvals.open(ask), source: "model", version: ctx.version };
+      const body: Omit<PageDataAskFirst, "source"> & { source: string } = { error: ctx.lang === "fr" ? "Ton organisation te demande d'abord ta permission avant que cette page pose une question à un modèle avec ton compte." : "Your organization asks you first before this page asks a model a question with your account.", code: "ask_first", approvalId: deps.approvals.open(ask), source: "model", version: ctx.version, always: deps.approvals.alwaysOffered() };
       return ctx.json(ctx.res, 409, body);
     }
     if (!allowQuestion(`${ctx.page.id}\u0000${ctx.who.by.toLowerCase()}`)) return ctx.refuse(429, "rate_limited", { error: ctx.lang === "fr" ? "Cette page pose trop de questions. Réessaie dans une minute." : "This page asks too many questions. Try again in a minute." });
@@ -300,28 +303,31 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
     }
     const { account, entry, toolId, mcpTool, outbound } = target;
     const summary = `${entry.name}: ${toolId} (${account.label})`;
-    const journal = (decision: "auto-approved" | "user-approved" | "auto-denied", source: "connector-read" | "full-access" | "user" | "custom-rule-deny") => {
+    const journal = (decision: "auto-approved" | "user-approved" | "auto-denied", source: "connector-read" | "full-access" | "user" | "custom-rule" | "custom-rule-deny") => {
       try {
         deps.connectors?.journal?.({ viewer: ctx.viewer, pageId: ctx.page.id, mcpTool, summary, decision, source });
       } catch { /* the journal never fails the call */ }
     };
-    const rule = deps.actRule?.({ tool: "call_connector", mcpTool, summary, input: JSON.stringify(args), readOnly: !outbound, auth: ctx.auth }) ?? "none";
-    if (rule === "deny") {
+    const verdict = deps.connectors.verdict(ctx.viewer, { tool: "call_connector", mcpTool, summary, input: JSON.stringify(args), readOnly: !outbound });
+    if (verdict.rule === "deny") {
       journal("auto-denied", "custom-rule-deny");
-      return ctx.refuse(403, "denied", { reason: "org_rule", error: fr ? "Ton organisation refuse cet appel." : "Your organization refuses this call." });
+      const org = verdict.by === "org";
+      return ctx.refuse(403, "denied", { reason: org ? "org_rule" : "person_rule", error: org ? (fr ? "Ton organisation refuse cet appel." : "Your organization refuses this call.") : (fr ? "Ta propre règle refuse cet appel." : "Your own rule refuses this call.") });
     }
     // a change starts from the reader's own click in the page
     if (outbound && body?.click !== true) return ctx.refuse(400, "bad_request", { error: fr ? "Un changement part d'un clic dans la page." : "A change starts from a click in the page." });
-    const card = rule === "ask" || (outbound && deps.connectors.fullAccess?.(ctx.viewer) !== true);
+    // as for their bot: a rule's Ask first, else a change below Full access
+    // (or held at Full) asks; an Allow rule of theirs lets it run
+    const card = verdict.rule === "ask" || (outbound && verdict.rule !== "allow" && !verdict.acts);
     if (card) {
       const ask = { person: ctx.who.by, pageId: ctx.page.id, version: ctx.version, source: `connector:${mcpTool}` };
       if (!deps.approvals || !deps.approvals.use(ask)) {
         if (!deps.approvals) return ctx.refuse(503, "unavailable");
-        const answer: PageActAskFirst = { error: fr ? `Cette page veut utiliser ${entry.name} avec ton compte : ${toolId}.` : `This page wants to use ${entry.name} with your account: ${toolId}.`, code: "ask_first", approvalId: deps.approvals.open(ask), source: ask.source, label: summary, version: ctx.version };
+        const answer: PageActAskFirst = { error: fr ? `Cette page veut utiliser ${entry.name} avec ton compte : ${toolId}.` : `This page wants to use ${entry.name} with your account: ${toolId}.`, code: "ask_first", approvalId: deps.approvals.open(ask), source: ask.source, label: summary, version: ctx.version, by: verdict.rule === "ask" && verdict.by ? verdict.by : "page", always: deps.approvals.alwaysOffered() };
         return ctx.json(ctx.res, 409, answer);
       }
     }
-    journal(card ? "user-approved" : "auto-approved", card ? "user" : outbound ? "full-access" : "connector-read");
+    journal(card ? "user-approved" : "auto-approved", card ? "user" : verdict.rule === "allow" ? "custom-rule" : outbound ? "full-access" : "connector-read");
     const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args as Record<string, unknown>, engine: "page" });
     if (result.needsSignIn) return ctx.refuse(503, "unavailable", { error: fr ? `${entry.name} attend que tu te connectes de nouveau.` : `${entry.name} is waiting for you to sign in again.` });
     if (result.isError) return ctx.refuse(502, "unavailable", { error: result.text.slice(0, 2_000) });

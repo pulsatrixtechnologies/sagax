@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Eye, Link2, ShieldQuestion, X } from "lucide-react";
 
-import { pageCapabilitiesAny } from "../../shared/page-capabilities";
+import { pageCapabilitiesAct, pageCapabilitiesAny } from "../../shared/page-capabilities";
 import { readerText, type ReaderBoot, type ReaderStringKey } from "../../shared/page-reader";
 import { splitAddress, type CapabilityBroker, type PendingLink } from "./capabilities";
 
@@ -38,6 +38,9 @@ export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker:
   // a page that declares nothing shows nothing: the bar is as it was
   if (!pageCapabilitiesAny(caps)) return null;
   const reads = caps.data.map((name) => state.reads.find((entry) => entry.name === name)?.label ?? name);
+  // a page that also keeps, adds, asks or acts says what it may do, not only read
+  const acts = pageCapabilitiesAct(caps);
+  const title = text(acts ? "capTitleDo" : "capTitle");
   return (
     <div className="sr-anchor sr-anchor-caps">
       <button type="button" className="sr-bar-button" data-reader-caps aria-expanded={shown} aria-haspopup="dialog" aria-label={text("capReads")} title={text("capReadsHint")} onClick={() => setOpen((value) => !value)}>
@@ -45,9 +48,9 @@ export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker:
         <span className="sr-bar-label">{text("capReads")}</span>
       </button>
       {shown && (
-        <div ref={ref} role="dialog" aria-label={text("capTitle")} data-page-caps-panel className="sr-popover">
+        <div ref={ref} role="dialog" aria-label={title} data-page-caps-panel className="sr-popover">
           <div className="sr-popover-head">
-            <h2>{text("capTitle")}</h2>
+            <h2>{title}</h2>
             {pending === 0 && <button type="button" className="sr-icon-button" aria-label={text("close")} onClick={close}><X size={15} aria-hidden="true" /></button>}
           </div>
           <ul className="sr-people sr-cap-list">
@@ -62,14 +65,14 @@ export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker:
             {caps.propose && <li className="sr-row" data-cap-propose><span className="sr-row-text"><span>{text("capPropose")}</span></span></li>}
             {Object.entries(caps.connectors ?? {}).map(([connector, tools]) => <li key={`c:${connector}`} className="sr-row" data-cap-connector><span className="sr-row-text"><span>{text("capConnector", { connector, tools: tools.join(", ") })}</span></span></li>)}
           </ul>
-          <p className="sr-muted sr-cap-scope">{text("capScope")}</p>
+          <p className="sr-muted sr-cap-scope">{text(acts ? "capScopeDo" : "capScope")}</p>
           {state.approvals.map((entry) => (
             <div key={entry.id} className="sr-confirm sr-cap-card" role="alert" data-cap-approval={entry.name}>
-              <span className="sr-cap-card-title"><ShieldQuestion size={14} aria-hidden="true" />{text(entry.name.startsWith("connector:") ? "capAct" : "capAsk")}</span>
+              <span className="sr-cap-card-title"><ShieldQuestion size={14} aria-hidden="true" />{text(entry.by === "page" ? "capAct" : entry.by === "person" ? "capOwnAsk" : "capAsk")}</span>
               <span>{text(entry.name.startsWith("connector:") || entry.name === "model" ? "capActWhat" : "capAskWhat", { what: entry.label })}</span>
               <div className="sr-confirm-actions">
                 <button type="button" className="sr-button sr-button-small" data-cap-decline onClick={() => broker.resolveApproval(entry.id, "decline")}>{text("decline")}</button>
-                <button type="button" className="sr-button sr-button-small" data-cap-always onClick={() => broker.resolveApproval(entry.id, "always")}>{text("capAlways")}</button>
+                {entry.always && <button type="button" className="sr-button sr-button-small" data-cap-always onClick={() => broker.resolveApproval(entry.id, "always")}>{text("capAlways")}</button>}
                 <button type="button" className="sr-button sr-button-small sr-button-primary" data-cap-allow onClick={() => broker.resolveApproval(entry.id, "once")}>{text("capAllow")}</button>
               </div>
             </div>

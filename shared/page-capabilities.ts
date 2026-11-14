@@ -197,6 +197,11 @@ export interface PageActAskFirst {
   /** What the card says the page wants to do. */
   label: string;
   version: number;
+  /** Who asks: the organization's rule, the reader's own rule (or security
+   * key), or the page itself (a change below Full access). */
+  by?: "org" | "person" | "page";
+  /** The card may offer "Always allow" (the organization's policy). */
+  always?: boolean;
 }
 
 /** Connectors a version declares, at most; tools per connector, at most. */
@@ -493,6 +498,8 @@ export interface PageDataAskFirst {
   approvalId: string;
   source: PageDataSource;
   version: number;
+  /** The card may offer "Always allow" (the organization's policy). */
+  always?: boolean;
 }
 
 /** The reader's answer to an Ask first card: allow this once (this page,
@@ -564,6 +571,13 @@ export function pageCapabilitiesOf(html: string): PageCapabilities | null {
 /** Whether a declaration grants anything at all. Pure. */
 export function pageCapabilitiesAny(caps: PageCapabilities | null | undefined): caps is PageCapabilities {
   return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0 || caps.model === true || caps.propose === true || Object.keys(caps.connectors ?? {}).length > 0));
+}
+
+/** Whether a declaration lets the page do more than read: keep documents,
+ * take files the reader adds, ask a model, propose a version or call a
+ * connector (#3413 lots 3 to 7). Its panel says what the page may do. Pure. */
+export function pageCapabilitiesAct(caps: PageCapabilities | null | undefined): boolean {
+  return Boolean(caps && ((caps.files ?? []).includes("add") || Object.keys(caps.store ?? {}).length > 0 || caps.model === true || caps.propose === true || Object.keys(caps.connectors ?? {}).length > 0));
 }
 
 /** Whether a declaration hands the page the reader's personal data (`data`,

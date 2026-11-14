@@ -1,13 +1,18 @@
 // Page capabilities that keep or act on something (#3413 lots 3 to 7). The
 // blocking rule first, in every lot: reader B never gets reader A's data.
+import { mkdtempSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { describe, expect, it, vi } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { ConnectorHub } from "../connectors/hub.ts";
 import type { ConnectorAccount } from "../connectors/types.ts";
 import type { PageCapabilities, PageStoreDoc } from "../../shared/page-capabilities.ts";
+import { pageActVerdict } from "../pages/page-act-verdict.ts";
 import { PageDataApprovals } from "../pages/page-data-approvals.ts";
+import { CustomRuleStore } from "../rules/custom-rules-store.ts";
 import { PageSources } from "../pages/page-sources.ts";
 import { PageFiles } from "../pages/page-files.ts";
 import { PageStore } from "../pages/page-store.ts";
@@ -311,25 +316,46 @@ describe("connector.call (lot 7): the reader's own connectors", () => {
     provider: "chatgpt-apps", instanceId: "i", slot: 0, key: `k-${who}`, label: `${who} account`, auth: "signed-in", at: 1,
     connectors: [{ name: "GitHub", state: "connected", tools: [{ id: "search_issues" }, { id: "create_issue" }] }],
   }) as unknown as ConnectorAccount;
-  function withConnectors(options: { full?: boolean; rule?: "deny" | "ask" | "none"; caps?: Partial<PageCapabilities>; who?: string[] } = {}) {
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  // the bot's own approval path, as server/index.ts wires it: the reader's
+  // rules and the organization's (rulesOf), their bot's level, and the
+  // organization's Always allow policy on every page card
+  function withConnectors(options: { full?: boolean; rule?: "deny" | "ask"; own?: { who: string; behavior: "deny" | "ask" | "allow" }; alwaysAllow?: boolean; keyed?: boolean; caps?: Partial<PageCapabilities>; who?: string[] } = {}) {
     const hubCall = vi.fn(async (input: { principalId: string; account: ConnectorAccount; tool: string; arguments: Record<string, unknown> }) => ({ text: `${input.tool} for ${input.principalId} on ${input.account.label}` }));
     const hub = { callable: () => true, ruleTool: (_p: unknown, entry: { name: string }, tool: string) => `${entry.name}__${tool}`, outbound: (id: string) => id.endsWith("create_issue"), call: hubCall } as unknown as ConnectorHub;
     const journal = vi.fn();
     const has = new Set(options.who ?? ["person-a", "person-b"]);
+    const dir = mkdtempSync(join(tmpdir(), "page-rules-"));
+    dirs.push(dir);
+    const rules = new CustomRuleStore(join(dir, "rules.json"), () => NOW);
+    if (options.rule) rules.addOrgRule({ when: "utiliser l'outil GitHub__create_issue", behavior: options.rule });
+    if (options.rule) rules.addOrgRule({ when: "utiliser l'outil GitHub__search_issues", behavior: options.rule });
+    if (options.own) rules.add({ ownerId: options.own.who, botId: null, when: "utiliser l'outil GitHub__create_issue", behavior: options.own.behavior });
+    if (options.alwaysAllow === false) rules.setOrgAlwaysAllow(false);
     const made = world({
       caps: options.caps ?? CONNECTORS,
       extra: {
+        approvals: new PageDataApprovals(null, () => NOW, () => rules.orgPolicy().alwaysAllow),
         connectors: {
           principal: (viewer) => viewer.principalId ?? "",
           accounts: (principalId) => (has.has(principalId) ? [accountOf(principalId)] : []),
           hub: () => hub,
-          fullAccess: () => options.full === true,
+          verdict: (viewer, input) => pageActVerdict({
+            rules: rules.rulesOf(viewer.principalId ?? "", `bot-of-${viewer.principalId}`),
+            call: { tool: input.tool, mcpTool: input.mcpTool, summary: input.summary, input: input.input, hints: { readOnly: input.readOnly } },
+            botId: `bot-of-${viewer.principalId}`,
+            level: options.full ? "full" : "ask",
+            keyed: options.keyed === true,
+            home: "/Users/example",
+          }),
           journal,
         },
-        actRule: () => options.rule ?? "none",
       },
     });
-    return { ...made, hubCall, journal };
+    return { ...made, hubCall, journal, rules };
   }
   const read = { connector: "GitHub", tool: "search_issues", arguments: { q: "bug" } };
   const change = { connector: "GitHub", tool: "create_issue", arguments: { title: "x" } };
@@ -404,6 +430,56 @@ describe("connector.call (lot 7): the reader's own connectors", () => {
     expect(deny.journal).toHaveBeenCalledWith(expect.objectContaining({ decision: "auto-denied" }));
     expect(deny.hubCall).not.toHaveBeenCalled();
     const ask = withConnectors({ rule: "ask", full: true });
-    expect((await call(ask.routes, B, "/api/pages/page-1/connector", "POST", read)).status).toBe(409);
+    const asked = await call(ask.routes, B, "/api/pages/page-1/connector", "POST", read);
+    expect(asked.status).toBe(409);
+    // the card says the organization asks, not the page
+    expect(asked.body).toMatchObject({ by: "org", always: true });
+  });
+
+  it("applies the reader's own Refuse rule at Full access, as their bot would; another reader's rule is not theirs", async () => {
+    const { routes, hubCall, journal } = withConnectors({ full: true, own: { who: "person-b", behavior: "deny" } });
+    const b = await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true });
+    expect(b.status).toBe(403);
+    expect(b.body).toMatchObject({ code: "denied", reason: "person_rule" });
+    expect(journal).toHaveBeenCalledWith(expect.objectContaining({ decision: "auto-denied", source: "custom-rule-deny" }));
+    expect(hubCall).not.toHaveBeenCalled();
+    // B's rule never reaches A: A at Full access runs the change
+    expect((await call(routes, A, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+    expect(hubCall.mock.calls[0]![0]).toMatchObject({ principalId: "person-a" });
+  });
+
+  it("holds a change at Full access for the reader's own Ask first rule or security key: their card says it is their rule", async () => {
+    const own = withConnectors({ full: true, own: { who: "person-b", behavior: "ask" } });
+    expect((await call(own.routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).body).toMatchObject({ code: "ask_first", by: "person" });
+    expect(own.hubCall).not.toHaveBeenCalled();
+    const keyed = withConnectors({ full: true, keyed: true });
+    expect((await call(keyed.routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).body).toMatchObject({ code: "ask_first", by: "person" });
+    expect(keyed.hubCall).not.toHaveBeenCalled();
+  });
+
+  it("runs a change at Ask for the reader's own Allow rule, as their bot would", async () => {
+    const { routes, journal } = withConnectors({ own: { who: "person-b", behavior: "allow" } });
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+    expect(journal).toHaveBeenCalledWith(expect.objectContaining({ decision: "auto-approved", source: "custom-rule" }));
+    // A has no such rule: A's change asks
+    expect((await call(routes, A, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(409);
+  });
+
+  it("never keeps Always allow while the organization turned it off, and the card does not offer it", async () => {
+    const { routes, hubCall, rules } = withConnectors({ alwaysAllow: false });
+    const asked = await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true });
+    expect(asked.body).toMatchObject({ code: "ask_first", by: "page", always: false });
+    // an answer "always" counts once
+    expect((await call(routes, B, `/api/pages/page-1/data-approvals/${String(asked.body.approvalId)}`, "POST", { answer: "always" })).status).toBe(200);
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(409);
+    expect(hubCall).toHaveBeenCalledTimes(1);
+    // one kept before the organization turned it off is not honoured
+    rules.setOrgAlwaysAllow(true);
+    const again = await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true });
+    await call(routes, B, `/api/pages/page-1/data-approvals/${String(again.body.approvalId)}`, "POST", { answer: "always" });
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+    rules.setOrgAlwaysAllow(false);
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(409);
   });
 });

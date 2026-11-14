@@ -107,7 +107,11 @@ export const CARD_GUARD_MS = 600;
 /** An address longer than this shows its middle cut, with a way to see it all. */
 export const LINK_SHOWN_CHARS = 120;
 
-export interface PendingApproval { id: number; name: string; label: string; at: number }
+/** A card the reader answers: `by` names who asks (the organization's rule,
+ * the reader's own rule, or the page for a change below Full access);
+ * `always` is false when the organization turned Always allow off (the
+ * button is then hidden). */
+export interface PendingApproval { id: number; name: string; label: string; at: number; by: "org" | "person" | "page"; always: boolean }
 /** A link the page asked to open: `host` apart, `rest` (path, query and
  * fragment, as is) under it; `always` when "Always allow this site" can be
  * offered (an http(s) site, not an e-mail address). */
@@ -340,7 +344,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     }
   };
 
-  const askFirst = (name: string, shown?: string): Promise<ApprovalChoice> => {
+  const askFirst = (name: string, shown?: string, how: Pick<PendingApproval, "by" | "always"> = { by: "org", always: true }): Promise<ApprovalChoice> => {
     const open = asking.get(name);
     if (open) return open;
     const id = ++seq;
@@ -354,7 +358,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       });
     });
     asking.set(name, pending);
-    set({ approvals: [...state.approvals, { id, name, label, at: now() }] });
+    set({ approvals: [...state.approvals, { id, name, label, at: now(), ...how }] });
     return pending;
   };
 
@@ -367,11 +371,13 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       return await run();
     } catch (cause) {
       const failure = capFailure(cause);
-      const said = (cause as { body?: { approvalId?: unknown; label?: unknown } }).body;
+      const said = (cause as { body?: { approvalId?: unknown; label?: unknown; by?: unknown; always?: unknown } }).body;
       const approvalId = said?.approvalId;
       if (failure.error !== "ask_first" || asked || typeof approvalId !== "string") throw cause;
       // the server names what a call wants to do (lot 7: the connector, its tool, the reader's account)
-      const choice = await askFirst(key, label ?? (typeof said?.label === "string" ? said.label.slice(0, 160) : undefined));
+      // who asks, and whether Always allow may be kept, as the server said
+      const by = said?.by === "person" || said?.by === "page" ? said.by : "org";
+      const choice = await askFirst(key, label ?? (typeof said?.label === "string" ? said.label.slice(0, 160) : undefined), { by, always: said?.always !== false });
       await deps.api(`/api/pages/${encodeURIComponent(deps.pageId!)}/data-approvals/${encodeURIComponent(approvalId)}?lang=${deps.lang}`, { method: "POST", body: { answer: choice === "decline" ? "deny" : choice } });
       const read = !key.includes(":") && key !== "model";
       if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? (read ? "Tu as refusé cette lecture." : "Tu as refusé cette demande.") : (read ? "You declined this read." : "You declined this request.")), { code: "denied", reason: "declined", status: 403 });

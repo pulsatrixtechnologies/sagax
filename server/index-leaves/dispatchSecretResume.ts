@@ -2,6 +2,7 @@
 /** dispatchSecretResume (#1388). Pure move from server/index.ts. */
 import { isCustomSecret, savedSecretText } from "../host/custom-secrets.ts";
 import { isTurnAdmissionBlocked } from "../turns/turn-dispatch-guard.ts";
+import { PRODUCT_KEY_TARGET } from "../../shared/credential-request.ts";
 export type Host = Record<string, any>;
 
 export function createDispatchSecretResume(getHost: () => Host): any {
@@ -11,7 +12,9 @@ function dispatchSecretResume(entry: SecretResumeEntry) {
   if (!owner) return;
   const customCard = host.secretMessage(entry.botId, entry.threadId, entry.messageId)?.secret;
   const prompt = entry.prompt ?? (
-    isCustomSecret(customCard)
+    customCard?.target === PRODUCT_KEY_TARGET
+      ? host.credentialUpdateText(entry.label, entry.outcome, customCard)
+      : isCustomSecret(customCard)
       ? (entry.outcome === "provided"
         ? `Sagax secret update: ${savedSecretText(entry.label, host.customSecretVault.savedFor(entry.messageId))} Continue the task that paused for it.`
         : `Sagax secret update: the person declined to provide ${entry.label}. Continue without it if you can, or say briefly what you cannot do. Do not ask for it in chat.`)

@@ -835,6 +835,8 @@ describe("agents-proxy MCP surface", () => {
       "remote_support_host_revoke",
       "remote_support_status",
       "remote_support_close",
+      // #4185: the Perspicax product key card
+      "request_product_key",
       "review_write",
       "place_phone_call",
       "phone_call_owner",

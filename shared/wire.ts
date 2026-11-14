@@ -45,7 +45,8 @@ import type { RemoteSessionView } from "./remote-session.ts";
 import type { ResourceUsageView } from "./resource-usage.ts";
 import type { ConnectorSetupView } from "./connector-setup.ts";
 import type { BotPublicProfile } from "./bot-public-profile.ts";
-import { CUSTOM_SECRET_TARGET, type CredentialTargetId, type SecretDelivery } from "./credential-request.ts";
+import { CUSTOM_SECRET_TARGET, PRODUCT_KEY_TARGET, type CredentialTargetId, type SecretDelivery } from "./credential-request.ts";
+import type { ProductCardReason } from "./person-products.ts";
 import type { VaultLoginTarget, VaultRequestCardData } from "./credential-vault.ts";
 import type { TeamSetupRequest } from "./team-setup.ts";
 import type { RoutineRequestCardData } from "./routine-request.ts";
@@ -951,7 +952,7 @@ export interface WireMessage extends WaitLineField {
   roomRequest?: { id: string; phase: "request" | "result" };
   id: string;
   role: "bot" | "user";
-  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
+  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "productKey" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
   text?: string;
   /** kind "routines" (2026-10-15): one compact line in the conversation
    * saying this turn turned routines on or off (server/routines/routine-chat-events.ts).
@@ -1590,7 +1591,7 @@ export interface SecretRequestCardData {
   /** Fixed allowlisted credential id, never a config path; CUSTOM_SECRET_TARGET: a secret the bot names, kept off Settings.
    * vaultLogin: a bot asks to use a login from the credential vault
    * (shared/credential-vault.ts); the card carries `vault` and no field. */
-  target: CredentialTargetId | VaultLoginTarget | typeof CUSTOM_SECRET_TARGET;
+  target: CredentialTargetId | VaultLoginTarget | typeof CUSTOM_SECRET_TARGET | typeof PRODUCT_KEY_TARGET;
   label: string;
   description: string;
   placeholder: string;
@@ -1614,6 +1615,13 @@ export interface SecretRequestCardData {
   error?: string;
   /** target vaultLogin only: what the bot asked for and what the person chose. */
   vault?: VaultRequestCardData;
+  /** target perspicaxProduct only (#4185): the product the key is for and
+   * why the card was raised. The card holds no form: it reads the product's
+   * current one from Perspicax when it draws. `for`: the person the card
+   * was raised for (the bot's owner); any other viewer sees a folded line. */
+  product?: { id: string; name: string; icon?: { domain: string }; reason: ProductCardReason; for?: string };
+  /** target perspicaxProduct: the last save's test, never a value. */
+  result?: { ok: boolean; code?: string; status?: number; at: number };
   /** Stop ended the turn this card paused: it offers no entry, and a key
    * saved afterwards is kept but continues nothing. */
   stopped?: boolean;

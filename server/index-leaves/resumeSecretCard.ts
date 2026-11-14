@@ -11,7 +11,7 @@ function resumeSecretCard(botId: string, threadId: string, messageId: string, ou
   if (message.secret.resumed) return true;
   // Vault login cards carry their own note (routes/credential-vault.ts). Mirror
   // sign-in: mark resumed only when a parked root takes the answer (R4).
-  const resumed = host.answerCardNode(threadId, messageId, prompt ?? host.credentialUpdateText(message.secret.label, outcome));
+  const resumed = host.answerCardNode(threadId, messageId, prompt ?? host.credentialUpdateText(message.secret.label, outcome, message.secret));
   host.store.patchMessage(threadId, message.id, {
     secret: {
       ...message.secret,

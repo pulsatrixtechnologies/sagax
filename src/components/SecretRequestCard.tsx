@@ -2,12 +2,13 @@ import { t } from "@/lib/i18n";
 import { useState, type FormEvent } from "react";
 import { ExternalLink, KeyRound, Loader2, LockKeyhole, RefreshCw, X } from "lucide-react";
 
-import { CUSTOM_SECRET_TARGET, credentialConfigPatch, credentialResumeOutcome, desktopCredentialSlot, isCredentialTargetId, type CredentialTargetId } from "../../shared/credential-request";
+import { CUSTOM_SECRET_TARGET, PRODUCT_KEY_TARGET, credentialConfigPatch, credentialResumeOutcome, desktopCredentialSlot, isCredentialTargetId, type CredentialTargetId } from "../../shared/credential-request";
 import { VAULT_LOGIN_TARGET } from "../../shared/credential-vault";
 import { cn } from "@/lib/cn";
 import { api, useStore, type ConfigStatus, type Message } from "@/state/store";
 import { ASK_FIELD, ASK_PRIMARY_BUTTON, ASK_QUIET_BUTTON, AskCard, AskSettledLine, returnFocusToComposer } from "./AskCard";
 import { VaultRequestCard } from "./VaultRequestCard";
+import { ProductKeyCard } from "./ProductKeyCard";
 import { readableError } from "@/lib/plain-error";
 
 // The key a bot asked for. It waits in the shared ask card with a masked
@@ -16,10 +17,14 @@ import { readableError } from "@/lib/plain-error";
 // A login request from the credential vault (target vaultLogin) is its own
 // card: the person allows a saved login instead of typing a key.
 // A custom secret (target customSecret) is kept behind the card as a one-use
-// ref or a private file, never in Settings.
+// ref or a private file, never in Settings. A Perspicax product's key
+// (target perspicaxProduct) is its own card too (ProductKeyCard.tsx).
 
 export function SecretRequestCard(props: { botId: string; threadId: string; message: Message }) {
-  return props.message.secret?.target === VAULT_LOGIN_TARGET ? <VaultRequestCard {...props} /> : <ApiKeyRequestCard {...props} />;
+  if (props.message.secret?.target === VAULT_LOGIN_TARGET) return <VaultRequestCard {...props} />;
+  // #4185: the person's own key of one Perspicax product, drawn from its form
+  if (props.message.secret?.target === PRODUCT_KEY_TARGET && props.message.secret.product) return <ProductKeyCard {...props} />;
+  return <ApiKeyRequestCard {...props} />;
 }
 
 function ApiKeyRequestCard({

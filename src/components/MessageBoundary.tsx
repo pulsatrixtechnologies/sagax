@@ -107,7 +107,7 @@ export class StepBoundary extends Component<
 
 /** The kinds this version knows how to draw. A newer server may send others. */
 const KNOWN_KINDS = new Set([
-  "text", "options", "activity", "screen", "video", "secret", "routine.run",
+  "text", "options", "activity", "screen", "video", "secret", "productKey", "routine.run",
   "goal.run", "digest", "compaction", "access", "nudge", "call", "widget", "routines",
 ]);
 

@@ -20,7 +20,7 @@ import type { WireMessage as Message } from "../../shared/wire.ts";
 export type UnfinishedKind = "announced" | "after_tools";
 
 /** Rows that hand the turn to the person: their answer is the next step. */
-const ASKS_THE_PERSON = new Set(["options", "widget", "app", "access", "secret", "call"]);
+const ASKS_THE_PERSON = new Set(["options", "widget", "app", "access", "secret", "productKey", "call"]);
 
 /** Tool rows that are a failure streak the loop guard is counting: at this
  * many failed calls in one turn, the guard is the one to act, not this. */

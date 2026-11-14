@@ -719,7 +719,7 @@ export class LiveCallController {
       this.onCard(call, message);
       return;
     }
-    if (message.kind === "secret" || message.kind === "signin") {
+    if (message.kind === "secret" || message.kind === "productKey" || message.kind === "signin") {
       this.onSetupCard(call, message);
       return;
     }

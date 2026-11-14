@@ -8,6 +8,7 @@ import { handleRemoteSupportCall } from "../../remote-support/remote-support-loc
 import { hostCodeCall } from "../../remote-support/remote-host-agent-tools.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
+import { productKeyCardShownText } from "../../../shared/person-products.ts";
 
 // Perspicax gateway tools: the meta-tools and memory tools Perspicax 1.8.28
 // serves on /mcp, under their real names and input schemas (connector
@@ -69,6 +70,10 @@ export const PERSPICAX_TOOLS = [
   }, ["host_id"]),
   pxTool("remote_support_status", "The state of a remote support session you opened: waiting, fetched, started, connected, ended or expired. Sagax already watches the session and connects it when the end user's computer joins: call this only to check, never in a loop. fetch_ip_count must be exactly 1 (one address took the script): above 1 someone else read the code, do not connect, close it (cancelled) and open a new one. When the end user has started, this same call connects this computer with the local technician key and marks the session connected; if it still says started, call it once more. Once connected, Sagax posts the session card and live screen itself: never save a screenshot or open Preview; use remote_session_snapshot. The address stays on this computer: never repeat it or run tailcat. Pass the code remote_support_open answered.", { code: { type: "string", description: "the code remote_support_open answered" }, mark_connected: { type: "boolean", description: "omit it. Sagax marks the session connected after the local key reaches the computer" } }, ["code"]),
   pxTool("remote_support_close", "Close a remote support session you opened: outcome ended for a session that ran, cancelled for one that never connected. The end user's script stops the tunnel within 10 s. Always call it at the end.", { code: { type: "string", description: "the code remote_support_open answered" }, outcome: { type: "string", enum: ["ended", "cancelled"] } }, ["code", "outcome"]),
+  // #4185: Sagax's own, never forwarded: a secure card in the person's chat for their own key of one product.
+  pxTool("request_product_key", "Show the person a secure card for their own key of one Perspicax product, when they ask to set it up or its key is missing, refused, expired or misfit. You never see the key: end the turn; you resume with the outcome.", {
+    product: { type: "string", minLength: 1, maxLength: 256, description: "product id as api_list names it" },
+  }, ["product"]),
   pxTool("review_write", "Approve or refuse a write waiting for an approver: the review id from the pending answer and decision approve or refuse. Only the named approver can decide it.", { id: { type: "string" }, decision: { type: "string", enum: ["approve", "refuse"] } }, ["id", "decision"]),
 ];
 export const PERSPICAX_TOOL_NAMES: ReadonlySet<string> = new Set(PERSPICAX_TOOLS.map((tool) => tool.name));
@@ -137,6 +142,18 @@ export async function callPerspicaxTool(name: string, args: Json, context: ToolC
   }
   if (!PERSPICAX_TOOL_NAMES.has(name)) return null;
   if (EXTERNAL_RUNTIME) return { text: `Unknown tool: ${name}`, isError: true };
+  if (name === "request_product_key") {
+    const product = typeof args?.product === "string" ? args.product.trim() : "";
+    if (!product) return { text: "request_product_key needs the product id as api_list names it.", isError: true };
+    const { ok, body } = await apiResponse("/api/internal/request-credential", {
+      method: "POST",
+      body: JSON.stringify({ fromBotId: context.botId, fromThreadId: context.threadId, productId: product }),
+    });
+    const label = typeof body.label === "string" ? body.label : product;
+    if (!ok) return { text: String(body.error ?? "The product key card could not be shown."), isError: true };
+    if (body.alreadyConfigured) return { text: `${label} is already connected. Continue the task.` };
+    return { text: productKeyCardShownText(label) };
+  }
   if (name === "remote_support_host_code") {
     const record = args && typeof args === "object" && !Array.isArray(args) ? args : {};
     return hostCodeCall({

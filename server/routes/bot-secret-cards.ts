@@ -7,10 +7,13 @@ import {
   credentialIsConfigured,
   credentialResumeOutcome,
   isCredentialTargetId,
+  PRODUCT_KEY_TARGET,
 } from "../../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET } from "../../shared/credential-vault.ts";
 import { SECRET_VALUE_MAX_BYTES } from "../secret-vault.ts";
 import { isCustomSecret } from "../host/custom-secrets.ts";
+import { PRODUCT_KEY_VALUE_MAX_BYTES } from "../../shared/person-products.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 
 const phoneSecretEnvelopeSchema = z.object({
   version: z.literal(PHONE_SECRET_PROTOCOL_VERSION),
@@ -25,6 +28,7 @@ const phoneSecretEnvelopeSchema = z.object({
 
 function secretSaved(cfg: AppConfig, secret: NonNullable<Message["secret"]>): boolean {
   if (isCustomSecret(secret)) return secret.savedAt !== undefined;
+  if (secret.target === PRODUCT_KEY_TARGET) return secret.result?.ok === true;
   if (!isCredentialTargetId(secret.target)) return false;
   return credentialIsConfigured(cfg, secret.target);
 }
@@ -39,10 +43,13 @@ export interface BotSecretCardRouteDeps {
   currentSecretState: (botId: string, threadId: string, messageId: string) => { provided: boolean; resumed: boolean } | null;
   /** Keep a custom secret behind the card and resume the turn. */
   saveCustomSecret?: (botId: string, threadId: string, messageId: string, value: unknown) => { status: number; body: Record<string, unknown> };
+  /** #4185: a product key card's values, sent to Perspicax as the person the
+   * card was raised for, then tested; never kept here. */
+  saveProductKey?: (auth: RequestAuth, botId: string, threadId: string, messageId: string, values: unknown) => Promise<{ status: number; body: Record<string, unknown> }>;
 }
 
 export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHandler {
-  return async ({ req, res, path, method, json, readBody }) => {
+  return async ({ req, res, path, method, auth, json, readBody }) => {
     const { getConfig, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState } = deps;
 
     // A custom secret typed in the app: JSON only, value never echoed.
@@ -61,6 +68,33 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
       const fields = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
       const threadId = String(fields.threadId ?? "");
       const result = deps.saveCustomSecret(m[1]!, threadId, m[2]!, fields.value);
+      json(res, result.status, result.body);
+      return;
+    }
+
+    // #4185: a product key typed on its card: JSON only, values never echoed,
+    // stored or logged; the answer is `no-store`.
+    m = path.match(/^\/api\/bots\/([\w-]+)\/secret-cards\/([\w-]+)\/product-key$/);
+    if (m && method === "POST") {
+      res.setHeader("cache-control", "no-store");
+      const mediaType = String(req.headers["content-type"] ?? "").split(";", 1)[0]!.trim().toLowerCase();
+      if (mediaType !== "application/json") {
+        json(res, 415, { error: "content-type must be application/json" });
+        return;
+      }
+      if (!deps.saveProductKey) {
+        json(res, 404, { error: "product keys are unavailable on this server" });
+        return;
+      }
+      let raw: unknown;
+      try {
+        raw = await readBody(req, PRODUCT_KEY_VALUE_MAX_BYTES * 2);
+      } catch {
+        json(res, 413, { error: "This key is too large." });
+        return;
+      }
+      const fields = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+      const result = await deps.saveProductKey(auth, m[1]!, String(fields.threadId ?? ""), m[2]!, fields.values);
       json(res, result.status, result.body);
       return;
     }

@@ -49,6 +49,10 @@ const PERSONAL: ReadonlyArray<readonly [string, string]> = [
   ["DELETE", "/api/custom-rules/rule-1"],
   ["DELETE", "/api/sidebar-sections"],
   ["DELETE", "/api/me/providers/keys/openai"],
+  // #4185: the person's own Perspicax product keys
+  ["PUT", "/api/me/perspicax/products/cw-1/key"],
+  ["DELETE", "/api/me/perspicax/products/cw-1/key"],
+  ["POST", "/api/me/perspicax/products/cw-1/test"],
 ];
 
 // Past the person's own space: other people, the organization, the shared

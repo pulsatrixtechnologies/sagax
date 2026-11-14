@@ -438,6 +438,14 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "POST", "DELETE"], path: /^\/api\/pages\/[\w-]+\/link-approvals$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:resume|dismiss)$/ },
+  // #4185: a product key card's Save. The handler lets through only the
+  // person the card was raised for, and writes with their own sign-in.
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/product-key$/ },
+  // #4185: the person's own Perspicax products (server/routes/person-products.ts):
+  // every call acts as the session's person with their own sign-in token.
+  { methods: ["GET"], path: /^\/api\/me\/perspicax\/products(?:\/[^/]{1,256})?$/ },
+  { methods: ["PUT", "DELETE"], path: /^\/api\/me\/perspicax\/products\/[^/]{1,256}\/key$/ },
+  { methods: ["POST"], path: /^\/api\/me\/perspicax\/products\/[^/]{1,256}\/test$/ },
   // A sign-in card's Done or Cancel. The bot's browser itself stays admin
   // scope: it can hold the owner's signed-in sessions.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/sign-in-cards\/[\w-]+\/(?:done|cancel)$/ },

@@ -46,6 +46,8 @@ const { ApprovalsJournal } = await import("@/components/approvals/ApprovalsJourn
 const { RuleTestResults } = await import("@/components/approvals/RuleTest");
 const { OutcomesCard } = await import("@/components/bot-profile/BotProfilePage.tsx-parts/Outcomes");
 const { outcomesOf } = await import("../../shared/outcomes");
+const { productRows } = await import("@/components/plugins/ProductRows");
+const { ProductDetailView } = await import("@/components/plugins/ProductDetailView");
 
 const BOT_ID = "5752d21c-e77c-4a83-84f0-66048216a5df";
 const THREAD_ID = "d4eb1f10-ceef-428a-afdd-d53d1194c2e7";
@@ -283,5 +285,19 @@ describe("no UUID on screen", () => {
     expectNoUuid(text);
     expect(text).toContain("Morning digest");
     expect(text).toContain("Vendor follow-up");
+  });
+  it("a Perspicax product's row and page name the product and its roles, never its id (#4185)", () => {
+    const product = {
+      id: BOT_ID, name: "Service Desk", state: "key_refused" as const, stateCode: "unauthorized",
+      roles: [{ name: "Technicians", mode: "read", personal: false }, { name: PERSON_ID, mode: "compact", personal: true }], actions: ["set_own_key" as const, "test" as const],
+      key: { source: "own" as const, own: true, named: true, kind: "api_key", name: THREAD_ID, ending: "a1b2", endingSlot: "token", lastTest: { at: "2026-11-13T10:00:00.000Z", ok: false, status: 401, code: "unauthorized" } },
+      form: { kind: "api_key", fields: [{ slot: "token", label: { en: "API token" }, secret: true, required: true }] },
+      consoleUrl: `https://console.example.test/products/${BOT_ID}`,
+    };
+    const rows = productRows([product], () => {});
+    const text = visibleText(createElement("div", null, rows[0]!.node, createElement(ProductDetailView, { product, onChanged: () => {}, onBack: () => {} })));
+    expectNoUuid(text);
+    expect(text).toContain("Service Desk");
+    expect(text).toContain("Technicians");
   });
 });

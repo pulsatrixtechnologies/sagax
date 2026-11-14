@@ -118,6 +118,20 @@ describe("scopes", () => {
       expect(routePermission(method, "/api/instances/mistral/api-key", { orgDirectory: true })).toBeNull();
     }
   });
+  // #4185: a member reads, keys and tests their own Perspicax products, from
+  // Connect Apps and from a chat key card, without an administrator.
+  it("lets a person manage their own Perspicax product keys without an admin", () => {
+    for (const [method, path] of [
+      ["GET", "/api/me/perspicax/products"],
+      ["GET", "/api/me/perspicax/products/cw-1"],
+      ["PUT", "/api/me/perspicax/products/cw-1/key"],
+      ["DELETE", "/api/me/perspicax/products/cw-1/key"],
+      ["POST", "/api/me/perspicax/products/cw-1/test"],
+      ["POST", "/api/bots/b/secret-cards/m-1/product-key"],
+    ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("client");
+    expect(requiredScope("POST", "/api/me/perspicax/products")).toBe("admin");
+    expect(requiredScope("GET", "/api/me/perspicax/products/cw-1/key")).toBe("admin");
+  });
   // #3471: a question in words of the person's own conversation is marked
   // handled or skipped from any client (the handler keeps it to their cards)
   it("lets a person mark or skip their own waiting card without an admin", () => {

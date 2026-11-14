@@ -12,6 +12,8 @@
  * Organization for that person. settings-subpage: a Settings sub-page in
  * the same window size, the navigation Connect apps' pages follow
  * (2026-10-28). The bot Rocket has its own plugins (For Rocket).
+ * &products=1 (#4185): the person's Perspicax products at the Me scope;
+ * &products=many: twelve of them, every state.
  * scripts/capture/connect-apps-grokbot.mjs clicks through the screens. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -27,6 +29,7 @@ import { loadLocale, t } from "../lib/i18n";
 import { flowSupersededFixture, flowSupersededPluginsFixture } from "../lib/flow-superseded.fixture";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore } from "../state/store";
+import { parsePersonProducts } from "../../shared/person-products";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -240,6 +243,58 @@ const MANAGE_API: Record<string, unknown> = {
 
 // The same contract, with independent state for the person's Me scope.
 MANAGE_API["/api/me/plugins"] = { ...(MANAGE_API["/api/bots/bot-a/plugins"] as object) };
+
+// ?products=1 (#4185): the person's Perspicax products at the Me scope, one
+// per state; without it the server has none to show (the window unchanged).
+// Neutral names; no key value ever appears, only a masked ending.
+if (params.has("products")) {
+  const form = { kind: "basic", fields: [
+    { slot: "username", label: { en: "Username", fr: "Nom d'utilisateur" }, secret: false, required: true },
+    { slot: "password", label: { en: "Password", fr: "Mot de passe" }, secret: true, required: true },
+  ] };
+  // Perspicax's own shape (crates/gateway/openapi.json PersonProduct): base_url,
+  // reason_code, profiles, key.source user/profile/default with auth_type and
+  // last4, actions as an object of booleans
+  const allowed = (...names: string[]) => Object.fromEntries(["set_own_key", "replace_key", "test", "remove_own_key", "sign_in", "sign_out"].map((name) => [name, names.includes(name)]));
+  const setup = { missing: [], per_customer_address: false };
+  const products = [
+    { id: "prod-psa", name: "Service Desk", auth_state: "ok", setup, state: "connected", base_url: "https://desk.example.com", reason_code: null, takes_key_kind: "basic",
+      profiles: [{ name: "Technicians", mode: "hybrid", personal: false }, { name: "direct", mode: "compact", personal: true }],
+      key: { source: "user", named: true, own: true, name: "Mine", auth_type: "basic", last4: "a1b2", last4_slot: "username", expires_at: new Date(Date.now() + 40 * 86_400_000).toISOString(),
+        last_test: { at: new Date(Date.now() - 3 * 3_600_000).toISOString(), ok: true, code: "ok", status: 200 } },
+      form, actions: allowed("set_own_key", "test", "remove_own_key"), console_url: "https://px.example.test/console/products/prod-psa" },
+    { id: "prod-docs", name: "Knowledge Base", auth_state: "missing", setup, state: "key_missing", base_url: "https://docs.example.org", reason_code: "no_key", takes_key_kind: "api_key",
+      profiles: [{ name: "Technicians", mode: "compact", personal: false }],
+      key: { source: null, named: false, own: false },
+      form: { kind: "api_key", fields: [{ slot: "token", label: { en: "API token", fr: "Jeton API" }, secret: true, required: true }] },
+      actions: allowed("set_own_key"), console_url: "https://px.example.test/console/products/prod-docs" },
+    { id: "prod-edr", name: "Endpoint Security", auth_state: "failing", setup, state: "key_refused", base_url: "https://edr.example.net", reason_code: "unauthorized", takes_key_kind: "basic",
+      profiles: [{ name: "Security", mode: "minimal", personal: false }],
+      key: { source: "profile", named: true, own: false, name: "Security team", auth_type: "basic", last4: "9f0c", last4_slot: "username",
+        last_test: { at: new Date(Date.now() - 20 * 60_000).toISOString(), ok: false, code: "unauthorized", status: 401, since: new Date(Date.now() - 2 * 86_400_000).toISOString() } },
+      form, actions: allowed("set_own_key", "replace_key", "test"), console_url: "https://px.example.test/console/products/prod-edr" },
+    { id: "prod-wiki", name: "Team Wiki", auth_state: "ok", setup, state: "connected", base_url: "https://wiki.example.org", reason_code: null, takes_key_kind: "bearer",
+      profiles: [{ name: "Technicians", mode: "group", personal: false }],
+      key: { source: "default", named: false, own: false }, form: null, actions: allowed("test"), console_url: "https://px.example.test/console/products/prod-wiki" },
+    { id: "prod-voice", name: "Phone Lines", auth_state: "none", setup: { missing: ["address"], per_customer_address: true }, state: "not_served", base_url: null, reason_code: null, takes_key_kind: null,
+      profiles: [], key: { source: null, named: false, own: false }, form: null, actions: allowed(), console_url: "https://px.example.test/console/products/prod-voice" },
+  ];
+  // &products=many: twelve rows, every state, the longest French ones, to
+  // check at phone width that a long state never cuts a product's name
+  if (params.get("products") === "many") {
+    const more: Array<[string, string]> = [
+      ["Remote Monitoring and Management", "key_expired"], ["Backup and Recovery", "key_misfit"],
+      ["Documentation Platform", "setup_incomplete"], ["Email Security Gateway", "sign_in_needed"],
+      ["Network Controller", "key_refused"], ["Password Manager", "setup_incomplete"],
+      ["Quoting and Procurement", "no_key_needed"], ["Dashboards", "unknown_state"],
+    ];
+    more.forEach(([name, state], index) => products.push({ id: `prod-more-${index}`, name, auth_state: "missing", setup, state, base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: null, named: false, own: false }, form: null, actions: allowed(), console_url: "" } as never));
+  }
+  // what Perspicax answers, read as the Sagax server reads it
+  const served = parsePersonProducts(products);
+  MANAGE_API["/api/me/perspicax/products"] = { products: served };
+  for (const product of served) MANAGE_API[`/api/me/perspicax/products/${product.id}`] = { product };
+}
 
 // ?superseded=1: the real member panel, with an obsolete bot tenant copy.
 // All /api responses and the removal stay inside this gallery.

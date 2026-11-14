@@ -437,6 +437,7 @@ export function MessagesListItem({
           />
         ) : null;
       case "secret":
+      case "productKey":
         return m.secret ? <SecretRequestCard botId={botId} threadId={threadId} message={m} /> : null;
       case "signin":
         return m.signIn ? <SignInRequestCard botId={botId} botName={botName} threadId={threadId} message={m} /> : null;

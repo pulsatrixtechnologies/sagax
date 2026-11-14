@@ -64,7 +64,7 @@ export function ownerScopedRoute(route: string): boolean {
 // reach them): their provider keys and model servers, their approval rules,
 // their custom review rules, their sidebar teams.
 const PERSONAL: readonly RegExp[] = [
-  /^me\/(?:providers|voice-keys|pi-model-servers)(?:\/|\(|$)/,
+  /^me\/(?:providers|voice-keys|pi-model-servers|perspicax\/products)(?:\/|\(|$)/,
   new RegExp(`^approval-rules\\/${ID}$`),
   new RegExp(`^custom-rules(?:\\/${ID})?$`),
   /^sidebar-sections$/,

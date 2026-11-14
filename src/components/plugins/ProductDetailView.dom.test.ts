@@ -61,6 +61,38 @@ describe("product rows", () => {
     expect(view.textContent).not.toContain("p1");
   });
 
+  it("line up with the Installed rows: the neighbours' state text and their trailing \"...\"", async () => {
+    const states: PersonProduct["state"][] = ["connected", "key_missing", "key_refused", "not_served"];
+    const rows = productRows(states.map((state, index) => ({ ...base, id: `p${index}`, name: `Product ${index}`, state, consoleUrl: "https://console.example/p" })), () => {});
+    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
+    for (const row of view.querySelectorAll("[data-person-product]")) {
+      // the same trailing slot as every neighbour row, so the states sit in one column
+      expect(row.lastElementChild?.querySelector("[data-entry-menu]")).not.toBeNull();
+      const state = row.querySelector<HTMLElement>("[data-product-state]");
+      if (state) {
+        expect(state.className).toContain("text-[13px]");
+        expect(state.className).toContain("font-normal");
+        expect(state.className).not.toContain("font-medium");
+      }
+    }
+    const refused = view.querySelector<HTMLElement>("[data-person-product='p2'] [data-product-state]")!;
+    expect(refused.className).toContain("text-warning");
+  });
+
+  it("offer the page's own \"...\" actions in the row: open in Perspicax, copy the id", async () => {
+    const view = await render(createElement("div", null, productRows([{ ...base, consoleUrl: "https://console.example/p" }], () => {})[0]!.node));
+    await act(async () => { view.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
+    const ids = [...view.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
+    expect(ids).toEqual(["open-console", "copy-id"]);
+  });
+
+  it("hide Open in Perspicax when Perspicax names no console page", async () => {
+    const view = await render(createElement("div", null, productRows([base], () => {})[0]!.node));
+    await act(async () => { view.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
+    const ids = [...view.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
+    expect(ids).toEqual(["copy-id"]);
+  });
+
   it("open the product's page", async () => {
     const opened = vi.fn();
     const view = await render(createElement("div", null, productRows([base], opened)[0]!.node));

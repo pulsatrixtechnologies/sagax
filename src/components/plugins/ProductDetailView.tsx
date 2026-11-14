@@ -6,10 +6,9 @@
 // exactly those Perspicax lists for the person: none other is drawn. The
 // "..." menu opens the product in Perspicax and copies its id.
 import { useState } from "react";
-import { Check, Copy, ExternalLink, FlaskConical, KeyRound, Loader2, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, FlaskConical, KeyRound, Loader2, Trash2, X } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
-import { copyText } from "@/lib/copy-text";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
@@ -22,7 +21,7 @@ import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader } from "./PluginParts";
 import { PluginActionsMenu } from "./PluginDetailView";
 import { ProductKeyForm } from "./ProductKeyForm";
-import { productIcon, ProductStateLabel } from "./ProductRows";
+import { productIcon, productMenuActions, ProductStateLabel } from "./ProductRows";
 import { PLUGINS } from "./plugins-style";
 
 function KeyRow({ label, value, title }: { label: string; value: string; title?: string }) {
@@ -106,10 +105,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
             <PluginActionsMenu
               name={product.name}
               busy={busy !== null}
-              actions={[
-                product.consoleUrl ? { id: "open-console", icon: <ExternalLink size={13} />, label: t("personProducts.openInPerspicax"), onSelect: () => void openExternalLink(product.consoleUrl!) } : undefined,
-                { id: "copy-id", icon: <Copy size={13} />, label: t("personProducts.copyId"), onSelect: () => { void copyText(product.id).then((result) => setCopied(result === "copied")); } },
-              ]}
+              actions={productMenuActions(product, 13, setCopied).map(({ run, ...action }) => ({ ...action, onSelect: run }))}
             />
           </div>
           {copied && <p role="status" className="basis-full text-right text-[12px] text-success">{t("personProducts.idCopied")}</p>}

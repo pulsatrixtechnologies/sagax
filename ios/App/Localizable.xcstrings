@@ -118070,6 +118070,22 @@
           }
         }
       }
+    },
+    "Mascot, shape, color, skin": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mascotte, forme, couleur, skin"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mascote, forma, cor, skin"
+          }
+        }
+      }
     }
   }
 }

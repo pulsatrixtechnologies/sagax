@@ -5,37 +5,39 @@
 // description, all edited in place. A top bar that condenses on scroll
 // (mascot 26, name 14), Private / Shared as a label, Share and the "…"
 // menu (Archive, Delete) only where this pairing allows them (hidden, never
-// greyed). Pill tabs General / Appearance / Knowledge / Analytics with a
-// search beside them. The tabs follow the desktop's page (#3398 to #3403):
-// General's Settings, Channels and Access cards with their controls
-// in place, Knowledge's To review and Skills cards, and Analytics opening
-// on the block of the reference.
+// greyed). Pill tabs General / Knowledge / Analytics with a search beside
+// them. The tabs follow the desktop's page (#3398 to #3403): General's
+// Settings, Channels and Access cards with their controls in place
+// (Appearance is a row of Settings opening its sub-page, #4162),
+// Knowledge's To review and Skills cards, and Analytics opening on the
+// block of the reference.
 import CompanionCore
 import SwiftUI
 import UIKit
 
 enum BotProfileTab: String, CaseIterable, Hashable, Identifiable {
-    case general, knowledge, appearance, stats, settings
+    case general, knowledge, stats, settings
     var id: String { rawValue }
 
     /// Visible pills, the desktop's BOT_PROFILE_TABS (#3017, G1): Settings
     /// is folded into General; Stats shows only where usage is reachable.
-    static var visible: [BotProfileTab] { [.general, .appearance, .knowledge, .stats] }
+    /// Appearance is a row of General's Settings card (#4162, the desktop's #4147).
+    static var visible: [BotProfileTab] { [.general, .knowledge, .stats] }
 
     var title: LocalizedStringKey {
         switch self {
         case .general: "General"
         case .knowledge: "Knowledge"
-        case .appearance: "Appearance"
         case .stats: "Analytics"
         case .settings: "Settings"
         }
     }
 }
 
-/// The desktop's Appearance pane on the phone: its own shell model, the way
-/// the bot wizard hosts the engines sheet.
-private struct PhoneAppearancePane: View {
+/// The desktop's Appearance pane on the phone, the sub-page General >
+/// Settings > Appearance pushes (#4162): its own shell model, the way the
+/// bot wizard hosts the engines sheet.
+struct BotAppearancePane: View {
     @Environment(\.themePalette) var themePalette
     @StateObject private var shell = DesktopShellModel()
     let bot: Bot
@@ -46,6 +48,9 @@ private struct PhoneAppearancePane: View {
             // the page's palette, light or dark, as the hero above it (#4041):
             // the desktop's default theme drew dark cards on a light page
             .environment(\.desktopTheme, DesktopTheme.of(themePalette))
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("bot-profile.appearance")
     }
 }
 
@@ -61,11 +66,6 @@ struct BotProfilePage: View {
     var slackURL: URL?
     /// iPad main column (#2136): X sits on the banner; no navigation back.
     var fillsMain = false
-    /// Open the Appearance tab (an avatar click, Edit bot > Appearance):
-    /// the desktop's `personaCategoryForSection(section) === "appearance"`.
-    var openAppearance = false
-    /// Told once the page has opened Appearance for `openAppearance`.
-    var onAppearanceOpened: (() -> Void)?
 
     @State private var tab: BotProfileTab
     @State private var modelLabel: String?
@@ -99,9 +99,7 @@ struct BotProfilePage: View {
         context: BotEditContext,
         actions: BotEditActions,
         slackURL: URL? = nil,
-        fillsMain: Bool = false,
-        openAppearance: Bool = false,
-        onAppearanceOpened: (() -> Void)? = nil
+        fillsMain: Bool = false
     ) {
         self.bot = bot
         self.startTab = startTab
@@ -109,10 +107,8 @@ struct BotProfilePage: View {
         self.actions = actions
         self.slackURL = slackURL
         self.fillsMain = fillsMain
-        self.openAppearance = openAppearance
-        self.onAppearanceOpened = onAppearanceOpened
         // Settings is no longer a tab (#2136); land on General.
-        var start: BotProfileTab = openAppearance ? .appearance : (startTab == .settings ? .general : startTab)
+        var start: BotProfileTab = startTab == .settings ? .general : startTab
         #if DEBUG
         // `-parityBotProfileTab knowledge` (the captures): open that tab
         if let raw = UserDefaults.standard.string(forKey: "parityBotProfileTab"), let asked = BotProfileTab(rawValue: raw) {
@@ -237,9 +233,7 @@ struct BotProfilePage: View {
         .navigationBarHidden(fillsMain)
         // One back button: ours, not the system one beside it.
         .navigationBarBackButtonHidden(true)
-        .onAppear { openAppearanceIfAsked(openAppearance) }
         .task(id: bot.id) { await loadSummaries() }
-        .onValueChange(of: openAppearance) { openAppearanceIfAsked($0) }
         .onValueChange(of: query) { _ in followSearch() }
         .sheet(isPresented: $reachOpen, onDismiss: { Task { await loadReach() } }) {
             NavigationStack {
@@ -448,12 +442,6 @@ struct BotProfilePage: View {
         if now != condensed { withAnimation(.easeOut(duration: 0.15)) { condensed = now } }
     }
 
-    private func openAppearanceIfAsked(_ asked: Bool) {
-        guard asked else { return }
-        withAnimation(.snappy(duration: 0.2)) { tab = .appearance }
-        onAppearanceOpened?()
-    }
-
     /// One move on the stage: a wing move for the owl, a Shapes move for a shape.
     private func playMove() {
         Haptics.selection()
@@ -593,7 +581,7 @@ struct BotProfilePage: View {
     }
 
     private func hit(_ row: LinkRow) -> Bool {
-        hit(Self.words(row.title) + " " + (row.subtitle ?? ""))
+        hit(([row.title] + row.keywords).map(Self.words).joined(separator: " ") + " " + (row.subtitle ?? ""))
     }
 
     private static let appearanceWords: [LocalizedStringKey] = ["Appearance", "Mascot", "Colour", "Picture", "Avatar", "Play a move"]
@@ -609,8 +597,6 @@ struct BotProfilePage: View {
             return hit(Self.words("General")) || generalHasHits
         case .knowledge:
             return knowledgeHasHits
-        case .appearance:
-            return Self.appearanceWords.contains { hit(Self.words($0)) }
         case .stats:
             return Self.statsWords.contains { hit(Self.words($0)) }
         }
@@ -640,7 +626,6 @@ struct BotProfilePage: View {
             switch tab {
             case .general, .settings: generalBody
             case .knowledge: knowledgeBody
-            case .appearance: appearanceBody
             case .stats: statsBody
             }
         }
@@ -654,6 +639,8 @@ struct BotProfilePage: View {
         let title: LocalizedStringKey
         var subtitle: String?
         let symbol: String
+        /// More words the search finds the row by (the former tab's).
+        var keywords: [LocalizedStringKey] = []
         let action: () -> Void
     }
 
@@ -680,7 +667,7 @@ struct BotProfilePage: View {
 
     /// The desktop's General > Settings (persona-sections.ts TAB_GROUPS):
     /// Personality (summary and soul), Model (where it works inside),
-    /// Before acting.
+    /// Appearance (#4162), Before acting.
     private var settingsRows: [LinkRow] {
         var rows: [LinkRow] = []
         if context.sections.contains(.soul) {
@@ -699,6 +686,15 @@ struct BotProfilePage: View {
                 symbol: settingsSymbol(.model)
             ) { actions.openSection(.model) })
         }
+        rows.append(LinkRow(
+            id: "bot-profile-settings.appearance",
+            title: "Appearance",
+            subtitle: PersonaWardrobe.lookName(current),
+            symbol: "paintpalette",
+            keywords: Self.appearanceWords
+        ) {
+            if let openAppearance = actions.openAppearance { openAppearance() } else { actions.editAvatar() }
+        })
         if context.sections.contains(.permissions) {
             rows.append(LinkRow(
                 id: "bot-profile-settings.permissions",
@@ -864,6 +860,7 @@ struct BotProfilePage: View {
     private static let rowDescriptions: [String: String] = [
         "bot-profile-settings.soul": "What it knows, how it speaks, what it won't do",
         "bot-profile-settings.model": "Engine, fallback, where it runs, who pays",
+        "bot-profile-settings.appearance": "Mascot, shape, color, skin",
         "bot-profile-settings.permissions": "What it does alone, what it asks",
         "bot-profile-more.sharing": "Who can talk to it, who sets it up",
         "bot-profile-more.rules": "When it wants to... it should...",
@@ -1382,23 +1379,7 @@ struct BotProfilePage: View {
         if let panelOpenChat { panelOpenChat() } else { actions.close() }
     }
 
-    // MARK: Appearance and Analytics
-
-    /// The desktop's Appearance pane in the page, on the iPad and the phone.
-    @ViewBuilder
-    private var appearanceBody: some View {
-        Group {
-            if fillsMain {
-                PersonaAppearancePane(bot: current)
-            } else {
-                PhoneAppearancePane(bot: current)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .padding(.horizontal, fillsMain ? 24 : Theme.Profile.cardMargin)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("bot-profile.appearance")
-    }
+    // MARK: Analytics
 
     /// Analytics (#3401): the block of the reference first (range, Messages,
     /// Hours saved, Top users), then our breakdown and the Usage page.

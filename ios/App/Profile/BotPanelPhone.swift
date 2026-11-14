@@ -605,6 +605,7 @@ private struct PhoneBotPanelContent: View {
                 case .activity: AnyView(activityPage.phonePanelColumn())
                 case .routines: AnyView(routinesPage.phonePanelColumn())
                 case .voiceChat: AnyView(BotPanelVoiceChatCard(bot: current, titled: false).phonePanelColumn())
+                case .appearance: AnyView(BotAppearancePane(bot: current).phonePanelColumn())
                 case .email:
                     if let mailRow { AnyView(emailCard(mailRow).phonePanelColumn()) }
                 case let .library(start):
@@ -824,7 +825,8 @@ private struct PhoneBotPanelContent: View {
             openFolder: {
                 path.append(PanelOverviewPage.library(.files(.all)))
             },
-            openPermissions: { path.append($0) }
+            openPermissions: { path.append($0) },
+            openAppearance: { path.append(PanelOverviewPage.appearance) }
         )
     }
 
@@ -988,7 +990,10 @@ private struct PhoneBotPanelContent: View {
             guard let route = UserDefaults.standard.string(forKey: "parityBotEditRoute") else { break }
             try? await Task.sleep(nanoseconds: 800_000_000)
             path.append(PanelProfileRoute(tab: .settings))
-            if let page = BotEditPageID(rawValue: route) {
+            if route == "appearance" {
+                // General > Settings > Appearance (#4162)
+                path.append(PanelOverviewPage.appearance)
+            } else if let page = BotEditPageID(rawValue: route) {
                 if page != .root { path.append(page) }
             } else if let section = DesktopPanelSection(rawValue: route) {
                 for page in BotEditTree.path(to: section, editContext) ?? [] { path.append(page) }
@@ -1018,6 +1023,8 @@ private struct PanelRulesRoute: Hashable {}
 /// A page pushed from a row of the panel (Computer has its own route).
 private enum PanelOverviewPage: Hashable {
     case activity, routines, voiceChat, email
+    /// General > Settings > Appearance on the bot page (#4162).
+    case appearance
     /// The Library, open on a chip.
     case library(BotLibraryChip)
 
@@ -1028,6 +1035,7 @@ private enum PanelOverviewPage: Hashable {
         case .library: "Library"
         case .voiceChat: "Voice chat"
         case .email: "Email address"
+        case .appearance: "Appearance"
         }
     }
 }

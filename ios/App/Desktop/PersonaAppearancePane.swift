@@ -154,6 +154,18 @@ enum PersonaWardrobe {
     static func shapeName(_ shape: MascotShape) -> String {
         PersonaMascotWords.shape[shape.rawValue].map(AppStrings.localized) ?? shape.rawValue.capitalized
     }
+
+    /// The bot page's Appearance row value (`appearanceRowValue`, #4162):
+    /// Picture when a picture replaces the mascot, else the mascot's name
+    /// (the shape's for Shapes).
+    static func lookName(_ bot: Bot) -> String {
+        let crop = bot.avatarCrop ?? .mascot
+        if resolveBotAvatarOutcome(crop: crop, hasUrl: bot.avatarUrl != nil, imageDecoded: true, failed: false) == .flatImage {
+            return AppStrings.localized("Picture")
+        }
+        let look = bot.resolvedMascotLook
+        return look.character == .shape ? shapeName(look.shape) : characterName(look.character)
+    }
 }
 
 /// The desktop's label keys for the skins and the shapes (`MascotLookEditor.tsx`).

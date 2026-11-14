@@ -95429,18 +95429,18 @@
         }
       }
     },
-    "When a bot does not name a method, it uses this one. Every purchase still asks you.": {
+    "When a bot does not name a method, it uses this one. A purchase asks you, unless the bot is at Full access or you always allowed that site.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When a bot does not name a method, it uses this one. Every purchase still asks you."
+            "value": "When a bot does not name a method, it uses this one. A purchase asks you, unless the bot is at Full access or you always allowed that site."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quand un bot ne nomme pas de moyen, il utilise celui-ci. Chaque achat te demande encore."
+            "value": "Quand un bot ne nomme pas de moyen, il utilise celui-ci. Un achat te demande ton accord, sauf si le bot est en Accès complet ou si tu as toujours permis ce site."
           }
         }
       }

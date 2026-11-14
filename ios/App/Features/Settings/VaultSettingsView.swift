@@ -205,7 +205,7 @@ struct VaultSettingsView: View {
                 }
             }
         }
-        SettingsFooter(text: "When a bot does not name a method, it uses this one. Every purchase still asks you.")
+        SettingsFooter(text: "When a bot does not name a method, it uses this one. A purchase asks you, unless the bot is at Full access or you always allowed that site.")
     }
 
     @ViewBuilder

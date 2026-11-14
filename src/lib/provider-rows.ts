@@ -23,6 +23,7 @@ import type { PersonalVoiceKeyProvider, PersonalVoiceKeysView } from "../../shar
 import { PERSONAL_VOICE_KEY_PROVIDERS } from "../../shared/person-voice-keys";
 import { PERSONAL_PROVIDER_NAMES, type ProviderAccountsView, type PersonalProviderServer } from "../../shared/provider-accounts";
 import { myTurnsReady } from "../../shared/org-engine-readiness";
+import { keyProvidersOfDriver } from "../../shared/harness-matrix";
 
 /** Who pays: the person, the organization, or nobody (a model of this computer). */
 export type ProviderPayer = "me" | "org" | "computer";
@@ -221,13 +222,12 @@ export function providerRows(input: ProviderInput): ProviderRow[] {
   const order: Record<ProviderKind, number> = { account: 0, key: 1, server: 2, local: 3 };
   const all = [...rows, ...keyRows.values(), ...local];
   if (input.accounts) {
-    const drivers: Record<string, string> = { claudeAgent: "anthropic", codex: "openai", grokAgent: "xai", grok: "xai", geminiAgent: "google", kimiAgent: "moonshot", mistral: "mistral", cerebras: "cerebras", groq: "groq", opencodeGo: "opencode", cursorAgent: "cursor", droidAgent: "factory", minimax: "minimax", hermesAgent: "openrouter" };
     const providerOf = (row: ProviderRow) => {
       const explicit = row.voiceKey ?? (row.keyRow === "fishAudio" ? "fish" : row.keyRow === "opencodeGo" ? "opencode" : row.keyRow);
       if (explicit) return explicit;
       const driver = input.instances.find((instance) => row.instanceIds.includes(instance.instanceId))?.driverKind ?? "";
       if (driver === "piAgent") return ["anthropic", "openai", "xai", "google", "moonshot"].find((provider) => input.accounts!.keys.some((key) => key.provider === provider));
-      return drivers[driver];
+      return billedProvider(driver);
     };
     for (const row of all) {
       const provider = providerOf(row);
@@ -290,12 +290,12 @@ export function providerReady(row: Pick<ProviderRow, "state">): boolean {
   return row.state === "connected";
 }
 
-/** The driver of an engine, as the provider it bills (one group per provider). */
-const DRIVER_PROVIDER: Record<string, string> = {
-  claudeAgent: "anthropic", codex: "openai", grokAgent: "xai", grok: "xai", geminiAgent: "google", kimiAgent: "moonshot",
-  mistral: "mistral", cerebras: "cerebras", groq: "groq", opencodeGo: "opencode", cursorAgent: "cursor", droidAgent: "factory",
-  minimax: "minimax", hermesAgent: "openrouter",
-};
+/** The driver of an engine, as the provider it bills (one group per
+ * provider): the first key that can pay it (shared/harness-matrix.ts). pi
+ * is paid by many providers and bills none on its own. */
+function billedProvider(driver: string): string | undefined {
+  return driver === "piAgent" ? undefined : keyProvidersOfDriver(driver)[0];
+}
 /** A key of the server's list, as the provider it bills. The custom image
  * key and an unnamed OpenAI-compatible key stay their own group. */
 const KEY_PROVIDER: Partial<Record<KeyRowId, string>> = {
@@ -323,7 +323,7 @@ export function providerGroupKey(row: ProviderRow, instances: ReadonlyArray<Pick
   const provider = row.accountProvider
     ?? row.voiceKey
     ?? (row.keyRow ? KEY_PROVIDER[row.keyRow] : undefined)
-    ?? DRIVER_PROVIDER[instances.find((instance) => row.instanceIds.includes(instance.instanceId))?.driverKind ?? ""];
+    ?? billedProvider(instances.find((instance) => row.instanceIds.includes(instance.instanceId))?.driverKind ?? "");
   return provider ? `provider:${provider}` : row.id;
 }
 

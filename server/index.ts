@@ -1501,7 +1501,7 @@ import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
-import { createInstancesRoutes } from "./routes/instances.ts";
+import { createInstancesRoutes, instancesInView } from "./routes/instances.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes } from "./routes/config-http.ts";
@@ -29850,7 +29850,24 @@ ROUTES.push(createProviderAccountsRoutes({
   owner: (auth) => {
     if (IDENTITY.kind !== "perspicax") return undefined;
     return providerAccountOwner(sessionPrincipal(auth));
-  }
+  },
+  // #4329: one list by provider, read from the same engines GET /api/instances lists
+  catalog: {
+    instances: async (auth) => await instancesInView({
+      resetPathCache,
+      instancesForViewer,
+      identityKind: () => IDENTITY.kind,
+      callerCan,
+      memberInstanceView: (instance, viewer) => memberInstanceView(instance as Parameters<typeof memberInstanceView>[0], viewer),
+      clientInstanceView: (instance) => clientInstanceView(instance as object),
+    }, auth),
+    botsLink: (auth) => {
+      const personId = sessionPrincipal(auth);
+      return personId ? grokBridgeService.view(personId) : null;
+    },
+    // an Azure resource behind an address row is served by the built in runtime only
+    instanceConfigs: () => providerConfigs(),
+  },
 }));
 // Capabilities lot 4 (server/routes/org-capabilities.ts): the organization's
 // capabilities, owned by Perspicax on a linked server that serves them,

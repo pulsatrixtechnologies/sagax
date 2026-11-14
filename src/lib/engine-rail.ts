@@ -2,6 +2,8 @@
 // and Local (no catalog — inject a model). A missing `access` is Cloud so
 // older payloads stay in the top group.
 import type { InstanceInfo } from "@/state/store";
+import { HARNESS_TOOL_NAME } from "../../shared/harness-matrix";
+import { vendorLabel, vendorOfDriver } from "../../shared/model-provider";
 
 /** The picker lists engines someone can use or finish setting up; the full
  * catalog stays in Settings. Each instance (so each Claude account) is judged
@@ -31,35 +33,19 @@ export type SignInFamily = "claude" | "openai";
 
 export function signInFamily(instance: { driverKind: string; access?: InstanceInfo["access"] } | undefined): SignInFamily | undefined {
   if (!instance || instance.access === "api") return undefined;
-  if (instance.driverKind === "claudeAgent") return "claude";
-  if (instance.driverKind === "codex") return "openai";
+  const vendor = vendorOfDriver(instance.driverKind);
+  if (vendor === "anthropic") return "claude";
+  if (vendor === "openai") return "openai";
   return undefined;
 }
 
-export const SIGN_IN_FAMILY_LABEL: Record<SignInFamily, string> = { claude: "Claude", openai: "OpenAI" };
+/** The provider's label (shared/model-provider.ts). */
+export const SIGN_IN_FAMILY_LABEL: Record<SignInFamily, string> = { claude: vendorLabel("anthropic"), openai: vendorLabel("openai") };
 
 /** #3116: the harness (the engine that runs a turn) named for the chat-bar
  * picker's first step: the CLI or API behind a provider's accounts. A kind
  * not listed falls back to the instance's display name. */
-export const HARNESS_LABEL: Record<string, string> = {
-  claudeAgent: "Claude Code",
-  claude: "Claude API",
-  codex: "Codex",
-  grokAgent: "Grok",
-  grok: "xAI API",
-  piAgent: "pi",
-  "openai-compat": "OpenAI-compatible",
-  mistral: "Mistral",
-  groq: "Groq",
-  cerebras: "Cerebras",
-  meta: "Meta",
-  antigravityAgent: "Antigravity",
-  geminiAgent: "Gemini CLI",
-  opencodeAgent: "OpenCode",
-  qwenAgent: "Qwen Code",
-  clineAgent: "Cline",
-  cursorAgent: "Cursor",
-};
+export const HARNESS_LABEL: Readonly<Record<string, string>> = HARNESS_TOOL_NAME;
 
 export function harnessLabel(instance: { driverKind: string; displayName: string }): string {
   return HARNESS_LABEL[instance.driverKind] ?? instance.displayName;

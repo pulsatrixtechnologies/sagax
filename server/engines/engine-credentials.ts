@@ -79,6 +79,8 @@ import { separateAccountInstance } from "./separate-account.ts";
 import { routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engine-access.ts";
 import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import type { TurnPayerMode } from "../../shared/turn-payer.ts";
+import { DRIVER_KEY_PROVIDERS } from "../../shared/harness-matrix.ts";
+import { ENGINE_VENDOR_ALIAS } from "../../shared/model-provider.ts";
 
 /** `server` is solo mode only (and rows written before 2026-10-01). */
 export type AccessVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
@@ -127,26 +129,8 @@ export interface TurnAccess {
   piModelServers?: PiModelServer[];
 }
 
-const DRIVER_PROVIDERS: Readonly<Record<string, readonly ModelProvider[]>> = {
-  claudeAgent: ["anthropic"],
-  codex: ["openai"],
-  grokAgent: ["xai"],
-  geminiAgent: ["google"],
-  kimiAgent: ["moonshot"],
-  grok: ["xai"],
-  mistral: ["mistral"],
-  cerebras: ["cerebras"],
-  groq: ["groq"],
-  opencodeGo: ["opencode"],
-  cursorAgent: ["cursor"],
-  droidAgent: ["factory"],
-  minimax: ["minimax"],
-  hermesAgent: ["openrouter", "glm", "zai"],
-  // pi is BYOK across providers: any key the person keeps serves it, and the
-  // model they pick decides which one a turn uses.
-  // #2024: every provider pi serves natively from a key.
-  piAgent: ["anthropic", "openai", "xai", "google", "moonshot", "openrouter", "mistral", "cerebras", "groq", "zai", "minimax", "opencode", "deepseek", "fireworks", "together", "huggingface", "nvidia", "kimi"],
-};
+// One table with the app (shared/harness-matrix.ts): which keys can pay which driver.
+const DRIVER_PROVIDERS = DRIVER_KEY_PROVIDERS as Readonly<Record<string, readonly ModelProvider[]>>;
 
 /** The model providers whose key can serve a driver, in preference order. */
 export function providersOfDriver(driver: string): readonly ModelProvider[] {
@@ -166,18 +150,12 @@ export function providerOfDriver(driver: string): ModelProvider | null {
 
 /** #3085: the key provider behind one of pi's own provider names (the part
  * before "/" in a pi model id), or null when no Perspicax key can pay for it
- * (amazon-bedrock, github-copilot, vercel-ai-gateway...). */
-const PI_PROVIDER_ALIAS: Readonly<Record<string, ModelProvider>> = {
-  moonshotai: "moonshot",
-  "moonshotai-cn": "moonshot",
-  "kimi-coding": "kimi",
-  "opencode-go": "opencode",
-};
-
+ * (amazon-bedrock, github-copilot, vercel-ai-gateway...). The engines'
+ * own vendor names live in shared/model-provider.ts. */
 export function piKeyProvider(piProvider: string | undefined): ModelProvider | null {
   const name = piProvider?.trim().toLowerCase() ?? "";
   if (!name) return null;
-  const alias = PI_PROVIDER_ALIAS[name];
+  const alias = ENGINE_VENDOR_ALIAS[name] as ModelProvider | undefined;
   if (alias) return alias;
   return (DRIVER_PROVIDERS.piAgent as readonly string[]).includes(name) ? name as ModelProvider : null;
 }

@@ -144,6 +144,27 @@ function isJsonContentType(req: IncomingMessage): boolean {
   return String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json");
 }
 
+/** The engines this caller sees, as GET /api/instances lists them (also
+ * read by GET /api/me/providers/catalog, so both say the same). */
+export async function instancesInView(
+  deps: Pick<InstancesRouteDeps, "resetPathCache" | "instancesForViewer" | "identityKind" | "callerCan" | "memberInstanceView" | "clientInstanceView">,
+  auth: RequestAuth,
+): Promise<unknown[]> {
+  deps.resetPathCache();
+  const viewer = viewerOf(auth);
+  const instances = await deps.instancesForViewer(viewer);
+  if (auth.scopes.includes("admin")) return instances;
+  // 2026-10-09: a person whose profile manages the engines reads them
+  // as an admin does (they install, sign in and update them).
+  if (deps.identityKind() === "perspicax" && deps.callerCan(auth, "engines.manage")) return instances;
+  // An organization member's copy (memberInstanceView); elsewhere a client
+  // session (a paired phone or tablet) reads the catalogue its model
+  // picker needs, not how the host is set up (clientInstanceView).
+  const organization = deps.identityKind() === "perspicax";
+  return instances.map((instance) =>
+    organization ? deps.memberInstanceView(instance, viewer) : deps.clientInstanceView(instance));
+}
+
 export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
   const proxied = deps.isProxied ?? isProxied;
   const loopbackHost = deps.isLoopbackHost ?? isLoopbackHost;
@@ -158,21 +179,7 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
       // run?", and the interesting case is a CLI installed since launch.
       // Windows never pushes PATH changes into a live process, so without
       // this the answer is frozen at boot and "check again" is a no-op.
-      deps.resetPathCache();
-      const viewer = viewerOf(auth);
-      const instances = await deps.instancesForViewer(viewer);
-      if (auth.scopes.includes("admin")) return json(res, 200, { instances });
-      // 2026-10-09: a person whose profile manages the engines reads them
-      // as an admin does (they install, sign in and update them).
-      if (deps.identityKind() === "perspicax" && deps.callerCan(auth, "engines.manage")) return json(res, 200, { instances });
-      // An organization member's copy (memberInstanceView); elsewhere a client
-      // session (a paired phone or tablet) reads the catalogue its model
-      // picker needs, not how the host is set up (clientInstanceView).
-      const organization = deps.identityKind() === "perspicax";
-      return json(res, 200, {
-        instances: instances.map((instance) =>
-          organization ? deps.memberInstanceView(instance, viewer) : deps.clientInstanceView(instance)),
-      });
+      return json(res, 200, { instances: await instancesInView(deps, auth) });
     }
 
     const companyMutation = /^\/api\/instances\/(company\.[\w.-]+)(?:\/|$)/.exec(path);

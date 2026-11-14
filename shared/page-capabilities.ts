@@ -63,6 +63,8 @@
 // Store (#3413 lot 3): `store.collection(name)` gives `get(id)`,
 // `list(query?)`, `put(id, value)` (id null: a new one), `delete(id)` and
 // `subscribe(fn, query?)` (read again on the wrapper's `store` event). A
+// list query (PageStoreQuery) answers every document by default; `limit`
+// and `offset` go through a long collection a part at a time. A
 // collection is declared with who writes it (the state's levels) and whose
 // documents a reader sees: `shared` (every reader of the page) or `reader`
 // (each reader their own, nobody else, the page's person included).
@@ -186,6 +188,8 @@ export interface PageConnectorAnswer {
   account: string;
   tool: string;
   text: string;
+  /** The text was cut to fit PAGE_CAP_LIMITS.answerBytes: the call ran. */
+  cut?: true;
 }
 
 export interface PageActAskFirst {
@@ -204,10 +208,6 @@ export interface PageActAskFirst {
   always?: boolean;
 }
 
-/** Connectors a version declares, at most; tools per connector, at most. */
-export const PAGE_CONNECTORS_MAX = 20;
-export const PAGE_CONNECTOR_TOOLS_MAX = 50;
-
 function connectorName(value: unknown, max: number): string | null {
   return typeof value === "string" && value.length > 0 && value.length <= max && value.trim() === value && !value.includes("*") ? value : null;
 }
@@ -218,10 +218,9 @@ function parsePageConnectors(value: unknown): Record<string, string[]> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const out: Record<string, string[]> = {};
   for (const [raw, tools] of Object.entries(value as Record<string, unknown>)) {
-    if (Object.keys(out).length >= PAGE_CONNECTORS_MAX) break;
     const name = connectorName(raw, 200);
     if (!name || !Array.isArray(tools)) continue;
-    const kept = [...new Set(tools.map((tool) => connectorName(tool, 300)).filter((tool): tool is string => tool !== null))].slice(0, PAGE_CONNECTOR_TOOLS_MAX);
+    const kept = [...new Set(tools.map((tool) => connectorName(tool, 300)).filter((tool): tool is string => tool !== null))];
     if (kept.length) out[name] = kept;
   }
   return Object.keys(out).length ? out : null;
@@ -287,19 +286,19 @@ export function pageModelJson(text: string): unknown {
 export const PAGE_STORE_NAME = /^[a-z][a-z0-9_-]{0,39}$/;
 /** A document id, as the page gives it or the server makes it. */
 export const PAGE_STORE_DOC_ID = /^[A-Za-z0-9_-]{1,64}$/;
-/** Documents one list answers at most (its `limit` is capped there). */
-export const PAGE_STORE_LIST_MAX = 500;
 const PAGE_STORE_FIELD = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const PAGE_STORE_WHERE_MAX = 8;
 
 /** A list query: `where` keeps the documents whose value has each of these
  * top-level fields equal to the given plain value; `order` sorts by a
  * top-level field (or `at`, the default, newest first when `desc`);
- * `limit` caps the answer (PAGE_STORE_LIST_MAX). */
+ * without `limit` a list answers every document; `offset` skips that many
+ * first, so a page can go through its documents a part at a time. */
 export interface PageStoreQuery {
   where?: Record<string, string | number | boolean | null>;
   order?: { by: string; desc?: boolean };
   limit?: number;
+  offset?: number;
 }
 
 /** One document as the page receives it: `by` is the writer's handle on
@@ -319,7 +318,7 @@ export function parsePageStoreQuery(value: unknown): PageStoreQuery | null {
   if (value === undefined || value === null) return {};
   if (typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  for (const key of Object.keys(record)) if (key !== "where" && key !== "order" && key !== "limit") return null;
+  for (const key of Object.keys(record)) if (key !== "where" && key !== "order" && key !== "limit" && key !== "offset") return null;
   const out: PageStoreQuery = {};
   if (record.where !== undefined) {
     if (!record.where || typeof record.where !== "object" || Array.isArray(record.where)) return null;
@@ -342,7 +341,11 @@ export function parsePageStoreQuery(value: unknown): PageStoreQuery | null {
   }
   if (record.limit !== undefined) {
     if (typeof record.limit !== "number" || !Number.isSafeInteger(record.limit) || record.limit < 1) return null;
-    out.limit = Math.min(record.limit, PAGE_STORE_LIST_MAX);
+    out.limit = record.limit;
+  }
+  if (record.offset !== undefined) {
+    if (typeof record.offset !== "number" || !Number.isSafeInteger(record.offset) || record.offset < 0) return null;
+    out.offset = record.offset;
   }
   return out;
 }

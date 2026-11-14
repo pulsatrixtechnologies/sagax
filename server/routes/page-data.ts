@@ -75,9 +75,6 @@ export interface PageDataRouteDeps extends Omit<PageCapCallDeps, "pages" | "name
   ownerActive?(page: PageRecord): boolean;
   names?(ids: readonly string[]): Record<string, string>;
   sources: PageSources;
-  /** The organization's Deny and Ask first rules for the action `page_data`
-   * on this source, in the reader's context (never the page owner's bot). */
-  orgRule?(input: { source: string; auth: RequestAuth }): "deny" | "ask" | "none";
   approvals: PageDataApprovals;
   /** "Always allow this site" answers of the link card. */
   links?: PageLinkApprovals;
@@ -222,7 +219,8 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     const name = match![3]!;
     const source = deps.sources.get(name);
     if (!pageCapGranted(caps, "data.read", name) || !source || version === undefined) return refuse(403, "not_declared");
-    const rule = deps.orgRule?.({ source: name, auth }) ?? "none";
+    // the action page_data, in the reader's context (never the page owner's bot)
+    const rule = deps.orgRule?.({ tool: "page_data", mcpTool: `page_data_${name.replace(/-/g, "_")}`, summary: `A page reads ${name} for the person reading it`, input: JSON.stringify({ source: name }), readOnly: true, auth }) ?? "none";
     if (rule === "deny") return refuse(403, "denied", { reason: "org_rule" });
     const params = pageDataParams([...url.searchParams.entries()]);
     if (!params) return refuse(400, "bad_request");

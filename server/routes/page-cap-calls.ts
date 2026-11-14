@@ -107,7 +107,9 @@ export interface PageCapCallDeps {
   live?: { store(pageId: string, name: string, personId?: string): void };
   /** Ask first answers (server/pages/page-data-approvals.ts). */
   approvals?: PageDataApprovals;
-  actRule?: PageActRule;
+  /** The organization's Deny and Ask first for one call the page makes (a
+   * data read, a model question), in the reader's context. */
+  orgRule?: PageActRule;
   /** Lot 6: a new proposed version, as the person's own edit
    * (PublishedPages.edit); `redact` masks secret-shaped text, as there. */
   propose?(pageId: string, input: { kind: PageKind; content: string; title?: string; by: string }): { ok: true; version: { n: number } } | { ok: false; status: number; error: string; code: string };
@@ -190,7 +192,7 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
     const question = parsePageModelQuestion(await ctx.readBody(ctx.req));
     if (question === "too_large") return ctx.refuse(413, "too_large", { error: ctx.lang === "fr" ? "Cette question est trop longue pour une page." : "This question is too long for a page." });
     if (!question) return ctx.refuse(400, "bad_request");
-    const rule = deps.actRule?.({ tool: "page_model", mcpTool: "page_model", summary: "A page asks a model a question for the person reading it", input: JSON.stringify({ prompt: question.prompt.slice(0, 500) }), readOnly: true, auth: ctx.auth }) ?? "none";
+    const rule = deps.orgRule?.({ tool: "page_model", mcpTool: "page_model", summary: "A page asks a model a question for the person reading it", input: JSON.stringify({ prompt: question.prompt.slice(0, 500) }), readOnly: true, auth: ctx.auth }) ?? "none";
     if (rule === "deny") return ctx.refuse(403, "denied", { reason: "org_rule", error: ctx.lang === "fr" ? "Ton organisation refuse cette question." : "Your organization refuses this question." });
     const ask = { person: ctx.who.by, pageId: ctx.page.id, version: ctx.version, source: "model" };
     if (rule === "ask" && deps.approvals && !deps.approvals.allowed(ask)) {
@@ -331,9 +333,8 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
     const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args as Record<string, unknown>, engine: "page" });
     if (result.needsSignIn) return ctx.refuse(503, "unavailable", { error: fr ? `${entry.name} attend que tu te connectes de nouveau.` : `${entry.name} is waiting for you to sign in again.` });
     if (result.isError) return ctx.refuse(502, "unavailable", { error: result.text.slice(0, 2_000) });
-    const answer: PageConnectorAnswer = { connector: entry.name, account: account.label, tool: toolId, text: result.text };
-    if (Buffer.byteLength(JSON.stringify(answer)) > PAGE_CAP_LIMITS.answerBytes) return ctx.refuse(413, "too_large");
-    return ctx.json(ctx.res, 200, answer);
+    // the call ran (a change is made): an answer too large is cut, never refused
+    return ctx.json(ctx.res, 200, fitAnswer({ connector: entry.name, account: account.label, tool: toolId, text: result.text }));
   };
 
   return {
@@ -345,6 +346,24 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
       return pageStoreCall(deps, ctx);
     },
   };
+}
+
+/** A connector's answer within PAGE_CAP_LIMITS.answerBytes: its text cut
+ * (marked `cut`) when the whole answer is larger. Pure. */
+function fitAnswer(answer: PageConnectorAnswer): PageConnectorAnswer {
+  const size = (value: PageConnectorAnswer) => Buffer.byteLength(JSON.stringify(value));
+  if (size(answer) <= PAGE_CAP_LIMITS.answerBytes) return answer;
+  let text = answer.text;
+  let cut: PageConnectorAnswer = { ...answer, text: "", cut: true };
+  while (text.length > 0) {
+    cut = { ...answer, text, cut: true };
+    const over = size(cut) - PAGE_CAP_LIMITS.answerBytes;
+    if (over <= 0) break;
+    text = text.slice(0, Math.max(0, text.length - Math.max(1, over)));
+    // never half of a surrogate pair
+    if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
+  }
+  return text.length > 0 ? cut : { ...answer, text: "", cut: true };
 }
 
 /** Lot 3: the store. */

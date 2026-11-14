@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { ConnectorHub } from "../connectors/hub.ts";
 import type { ConnectorAccount } from "../connectors/types.ts";
-import type { PageCapabilities, PageStoreDoc } from "../../shared/page-capabilities.ts";
+import { parsePageCapabilities, type PageCapabilities, type PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { pageActVerdict } from "../pages/page-act-verdict.ts";
 import { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import { CustomRuleStore } from "../rules/custom-rules-store.ts";
@@ -172,6 +172,25 @@ describe("store (lot 3): collections a page keeps", () => {
     expect((await call(routes, B, `/api/pages/page-1/store/votes?q=${encodeURIComponent("{\"nope\":1}")}`)).body.code).toBe("bad_request");
   });
 
+  it("lists every document of a collection past 500, and pages through it with limit and offset", async () => {
+    const { routes, store } = world({ caps: { store: { votes: { write: "signed_in", scope: "shared" }, prefs: { write: "signed_in", scope: "reader" } } } });
+    for (let i = 0; i < 620; i++) {
+      expect(store.put("page-1", "votes", { scope: "shared", by: "person-a", id: `v${i}`, value: { i } }).ok).toBe(true);
+      expect(store.put("page-1", "prefs", { scope: "reader", by: "person-a", id: `p${i}`, value: { i } }).ok).toBe(true);
+    }
+    const all = (await call(routes, B, "/api/pages/page-1/store/votes")).body.docs as PageStoreDoc[];
+    expect(all).toHaveLength(620);
+    const q = (query: unknown) => `/api/pages/page-1/store/votes?q=${encodeURIComponent(JSON.stringify(query))}`;
+    const newest = (await call(routes, B, q({ order: { by: "at", desc: true }, limit: 600 }))).body.docs as PageStoreDoc[];
+    expect(newest).toHaveLength(600);
+    const tail = (await call(routes, B, q({ limit: 100, offset: 600 }))).body.docs as PageStoreDoc[];
+    expect(tail.map((doc) => (doc.value as { i: number }).i)).toEqual(Array.from({ length: 20 }, (_, n) => 600 + n));
+    expect((await call(routes, B, q({ offset: -1 }))).body.code).toBe("bad_request");
+    // isolation: A's 620 reader documents are A's alone
+    expect(((await call(routes, A, "/api/pages/page-1/store/prefs")).body.docs as PageStoreDoc[])).toHaveLength(620);
+    expect((await call(routes, B, "/api/pages/page-1/store/prefs")).body).toEqual({ docs: [] });
+  });
+
   it("keeps a document within its size and the page person's share", async () => {
     const { routes } = world({ caps: { store: { votes: { write: "signed_in", scope: "shared" } } } });
     expect((await call(routes, A, "/api/pages/page-1/store/votes", "POST", { value: "x".repeat(33 * 1024) })).body.code).toBe("too_large");
@@ -226,10 +245,10 @@ describe("model.ask (lot 4): one answer on the reader's own account", () => {
   });
 
   it("applies the organization's Deny, and Ask first through the reader's own card", async () => {
-    const deny = withModel({ actRule: () => "deny" });
+    const deny = withModel({ orgRule: () => "deny" });
     expect((await call(deny.routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).body).toMatchObject({ code: "denied", reason: "org_rule" });
     expect(deny.ask).not.toHaveBeenCalled();
-    const first = withModel({ actRule: ({ tool }) => (tool === "page_model" ? "ask" : "none") });
+    const first = withModel({ orgRule: ({ tool }) => (tool === "page_model" ? "ask" : "none") });
     const asked = await call(first.routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" });
     expect(asked.status).toBe(409);
     expect(asked.body).toMatchObject({ code: "ask_first", source: "model", version: 1 });
@@ -413,6 +432,26 @@ describe("connector.call (lot 7): the reader's own connectors", () => {
     const { routes, journal } = withConnectors();
     expect((await call(routes, B, "/api/pages/page-1/connector", "POST", read)).status).toBe(200);
     expect(journal).toHaveBeenCalledWith(expect.objectContaining({ mcpTool: "GitHub__search_issues", decision: "auto-approved", source: "connector-read", viewer: { principalId: "person-b", computerOwner: false } }));
+  });
+
+  it("cuts an answer too large for the page instead of refusing a change already made", async () => {
+    const { routes, hubCall } = withConnectors({ full: true });
+    hubCall.mockImplementation(async () => ({ text: "y".repeat(2 * 1024 * 1024) }));
+    const done = await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true });
+    expect(done.status).toBe(200);
+    expect(done.body).toMatchObject({ connector: "GitHub", tool: "create_issue", cut: true });
+    expect(Buffer.byteLength(JSON.stringify(done.body))).toBeLessThanOrEqual(1024 * 1024);
+    expect(hubCall).toHaveBeenCalledTimes(1);
+    // isolation: A's call of the same tool never carries B's answer
+    hubCall.mockImplementation(async (input) => ({ text: `for ${input.principalId}` }));
+    expect((await call(routes, A, "/api/pages/page-1/connector", "POST", { ...change, click: true })).body).toMatchObject({ text: "for person-a" });
+  });
+
+  it("keeps every connector and tool a version declares", () => {
+    const connectors = Object.fromEntries(Array.from({ length: 30 }, (_, n) => [`C${n}`, Array.from({ length: 70 }, (_, t) => `tool_${t}`)]));
+    const caps = parsePageCapabilities({ connectors });
+    expect(Object.keys(caps?.connectors ?? {})).toHaveLength(30);
+    expect(caps?.connectors?.C29).toHaveLength(70);
   });
 
   it("runs a change only from a click, and through the reader's card: Allow once is one call", async () => {

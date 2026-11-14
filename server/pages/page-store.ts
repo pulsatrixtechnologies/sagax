@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { PAGE_CAP_LIMITS, PAGE_STORE_DOC_ID, PAGE_STORE_LIST_MAX, type PageStoreQuery, type PageStoreScope } from "../../shared/page-capabilities.ts";
+import { PAGE_CAP_LIMITS, PAGE_STORE_DOC_ID, type PageStoreQuery, type PageStoreScope } from "../../shared/page-capabilities.ts";
 
 export interface StoredDoc {
   id: string;
@@ -123,7 +123,8 @@ export class PageStore {
     return Object.keys(data).length ? Buffer.byteLength(JSON.stringify(data)) : 0;
   }
 
-  /** The documents this reader sees in one collection, filtered, sorted, capped. */
+  /** The documents this reader sees in one collection, filtered, sorted,
+   * then the part the query asks for (offset, limit); every one by default. */
   list(pageId: string, collection: string, input: { scope: PageStoreScope; reader: string; query?: PageStoreQuery }): StoredDoc[] {
     const docs = Object.entries(this.load(pageId)[collection] ?? {}).filter(([key, doc]) => mine(input.scope, key, doc, input.reader)).map(([, doc]) => doc);
     const where = Object.entries(input.query?.where ?? {});
@@ -132,7 +133,8 @@ export class PageStore {
     kept.sort(order && order.by !== "at"
       ? (a, b) => compare(field(a.value, order.by), field(b.value, order.by)) * (order.desc ? -1 : 1)
       : (a, b) => (a.at - b.at) * (order?.desc ? -1 : 1));
-    return kept.slice(0, Math.min(input.query?.limit ?? PAGE_STORE_LIST_MAX, PAGE_STORE_LIST_MAX)).map(copy);
+    const from = input.query?.offset ?? 0;
+    return kept.slice(from, input.query?.limit !== undefined ? from + input.query.limit : undefined).map(copy);
   }
 
   /** One document this reader sees, or null. */

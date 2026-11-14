@@ -41,11 +41,12 @@ export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker:
   // a page that also keeps, adds, asks or acts says what it may do, not only read
   const acts = pageCapabilitiesAct(caps);
   const title = text(acts ? "capTitleDo" : "capTitle");
+  const label = text(acts ? "capDoes" : "capReads");
   return (
     <div className="sr-anchor sr-anchor-caps">
-      <button type="button" className="sr-bar-button" data-reader-caps aria-expanded={shown} aria-haspopup="dialog" aria-label={text("capReads")} title={text("capReadsHint")} onClick={() => setOpen((value) => !value)}>
+      <button type="button" className="sr-bar-button" data-reader-caps aria-expanded={shown} aria-haspopup="dialog" aria-label={label} title={text(acts ? "capDoesHint" : "capReadsHint")} onClick={() => setOpen((value) => !value)}>
         <Eye size={14} aria-hidden="true" />
-        <span className="sr-bar-label">{text("capReads")}</span>
+        <span className="sr-bar-label">{label}</span>
       </button>
       {shown && (
         <div ref={ref} role="dialog" aria-label={title} data-page-caps-panel className="sr-popover">

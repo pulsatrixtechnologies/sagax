@@ -12792,13 +12792,13 @@ ROUTES.push(createPageDataRoutes({
   },
   names: (ids) => Object.fromEntries(ids.map((id) => [id, pageThreadName(id)])),
   sources: pageSources,
-  // the organization's Deny and Ask first for the action page_data, in the
-  // reader's context: no bot of the page's owner is named (an organization
-  // rule applies to every bot and person)
-  orgRule: ({ source }) => {
+  // the organization's Deny and Ask first for one call a page makes (a data
+  // read, a model question), in the reader's context: no bot of the page's
+  // owner is named (an organization rule applies to every bot and person)
+  orgRule: ({ tool, mcpTool, summary, input, readOnly }) => {
     const rules = customRules.orgRules().filter((rule) => rule.enabled);
     if (!rules.length) return "none";
-    const { decision } = reviewCustomRules(rules, { tool: "page_data", mcpTool: `page_data_${source.replace(/-/g, "_")}`, summary: `A page reads ${source} for the person reading it`, input: JSON.stringify({ source }), hints: { readOnly: true } }, "");
+    const { decision } = reviewCustomRules(rules, { tool, mcpTool, summary, input, hints: { readOnly } }, "");
     return decision.kind === "deny" ? "deny" : decision.kind === "ask" ? "ask" : "none";
   },
   approvals: pageDataApprovals,
@@ -12810,14 +12810,6 @@ ROUTES.push(createPageDataRoutes({
   propose: (pageId, input) => publishedPages.edit(pageId, input),
   redact: redactSecretsInText,
   live: pageLive,
-  // #3413: the organization's Deny and Ask first for a model question a
-  // page asks, in the reader's context
-  actRule: ({ tool, mcpTool, summary, input, readOnly }) => {
-    const rules = customRules.orgRules().filter((rule) => rule.enabled);
-    if (!rules.length) return "none";
-    const { decision } = reviewCustomRules(rules, { tool, mcpTool, summary, input, hints: { readOnly } }, "");
-    return decision.kind === "deny" ? "deny" : decision.kind === "ask" ? "ask" : "none";
-  },
   // #3413 lot 4: one tool-free answer on the reader's own engine and account:
   // their Primary Bot's (else their first visible bot's), never the page owner's
   model: {

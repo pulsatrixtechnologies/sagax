@@ -113,6 +113,18 @@ describe("what a page keeps, asks and calls (#3413 lots 3 to 7)", () => {
     expect(off).toContain("data-cap-allow");
   });
 
+  it("names the bar's button by what the page may do, and keeps Reads for a page that only reads", () => {
+    for (const lang of ["en", "fr"] as const) {
+      const does = render({ caps: ALL }, { ...BOOT, lang });
+      expect(does).toContain(`aria-label="${readerText(lang, "capDoes")}"`);
+      expect(does).toContain(`title="${readerText(lang, "capDoesHint")}"`);
+      expect(does).not.toContain(`>${readerText(lang, "capReads")}<`);
+      const reads = render({ caps: CAPS }, { ...BOOT, lang });
+      expect(reads).toContain(`aria-label="${readerText(lang, "capReads")}"`);
+      expect(reads).toContain(`title="${readerText(lang, "capReadsHint")}"`);
+    }
+  });
+
   it("titles the panel by what the page may do, and keeps the read title for a page that only reads", () => {
     expect(render({ caps: ALL, approvals: [{ id: 1, name: "model", label: "x", at: 0, by: "org", always: true }] })).toContain(`<h2>${readerText("en", "capTitleDo")}</h2>`);
     expect(render({ caps: CAPS, approvals: [{ id: 1, name: "team-board", label: "x", at: 0, by: "org", always: true }] })).toContain(`<h2>${readerText("en", "capTitle")}</h2>`);

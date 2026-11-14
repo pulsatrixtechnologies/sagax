@@ -21,7 +21,8 @@
  * (state=before: the released rule drew it as a passing banner only).
  * Neutral fictional bots and routines; a mocked fetch answers
  * /api, nothing reaches a server. Not shipped in the app.
- * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|streak-failed|daily-first|proactive|watch-wake&state=before|after */
+ * case=form (#4234): a routine run's form drawn at its row, see FORM.
+ * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|streak-failed|daily-first|proactive|watch-wake|form&state=before|after */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -30,6 +31,7 @@ import { StoreProvider, useStore, type Bot, type Message } from "../state/store"
 import { DesktopCapabilitiesProvider } from "../components/DesktopCapabilities";
 import { ChatView } from "../components/ChatView";
 import type { RoutineRunCardData } from "../../shared/routine-run";
+import { parseWidgetInput, widgetToText } from "../../shared/widget";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -137,7 +139,51 @@ const WATCH_WAKE: Message[] = [
   }).flat(),
   person("u3", 70, say("Thanks, that is all for today.", "Merci, c'est tout pour aujourd'hui.")),
 ];
-const messages = which === "chat" ? CHAT : which === "streak-failed" ? STREAK_FAILED : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
+/** #4234: the owner's daily routine that drafts replies and lets the person
+ * choose them (case=form): state=before, as the released app drew it (the
+ * rounded card with the run's last sentence; the form stayed in the run's
+ * hidden task); state=after, the reference's line with the run's words and
+ * its form under it, usable there; a plain result and a result with a
+ * question for the person beside it. A widget the bot drew in the chat
+ * itself (the conforming neighbour) opens the scene. */
+const LONG_NAME = say("Nightly backup verification for every site", "Vérification nocturne des sauvegardes de chaque site");
+const DRAFT_WORDS = say(
+  "I drafted 2 replies for tonight's messages.\n\nUncheck one or hit Skip tonight and that account stays quiet.",
+  "J'ai préparé 2 réponses pour les messages de ce soir.\n\nDécoche-en une ou appuie sur Passer ce soir et ce compte reste silencieux.",
+);
+const draftsForm = parseWidgetInput({
+  type: "Card", title: say("Tonight's replies", "Réponses de ce soir"), children: [
+    { type: "Checkbox", name: "supplier", label: say("Reply to the supplier: the order ships Monday", "Répondre au fournisseur : la commande part lundi"), defaultChecked: true },
+    { type: "Checkbox", name: "landlord", label: say("Reply to the landlord: the visit is confirmed", "Répondre au propriétaire : la visite est confirmée"), defaultChecked: true },
+  ],
+  confirm: { label: say("Send", "Envoyer"), action: { type: "send_drafts" } },
+  cancel: { label: say("Skip tonight", "Passer ce soir"), action: { type: "skip" } },
+});
+const neighbourForm = parseWidgetInput({
+  type: "Card", title: say("Pick a time", "Choisis une heure"), children: [
+    { type: "RadioGroup", name: "slot", label: say("Time", "Heure"), options: [{ label: "9:00", value: "9" }, { label: "13:00", value: "13" }] },
+  ],
+  confirm: { label: say("Book", "Réserver"), action: { type: "book" } },
+});
+const widgetRow = (id: string, minute: number, parsed: ReturnType<typeof parseWidgetInput>): Message[] =>
+  parsed.ok ? [{ id, role: "bot", kind: "widget", at: at + minute * M, text: widgetToText(parsed.value), widget: { v: 1, root: parsed.value } } as Message] : [];
+const FORM: Message[] = [
+  person("u1", 0, say("Book me a call tomorrow.", "Réserve-moi un appel demain.")),
+  ...widgetRow("w-neighbour", 1, neighbourForm),
+  run("backups", 40, { routineName: BACKUP, status: "completed", summary: say("All 12 backups completed tonight.", "Les 12 sauvegardes ont réussi ce soir.") }),
+  { ...run("invoice", 50, { routineName: say("Invoice check", "Vérification des factures"), status: "completed", summary: say("One invoice waits for your answer.", "Une facture attend ta réponse.") }),
+    attention: { kind: "human", items: [{ text: say("Send invoice 100203 now?", "Envoyer la facture 100203 maintenant ?") }], botId: "atlas", botName: "Atlas", threadId: "t-atlas", sourceMessageId: "m" } } as Message,
+  run("drafts", 60, { routineName: say("Evening replies", "Réponses du soir"), status: "completed", summary: DRAFT_WORDS, ...(before ? {} : { widgetId: "w-drafts" }) }),
+  // the server moves the run's form here and the run's row draws it
+  ...(before ? [] : widgetRow("w-drafts", 60, draftsForm)),  // a long name and a long brief: at a narrow width the status words and
+  // the brief are cut, the name keeps its room
+  run("long-done", 70, { routineName: LONG_NAME, status: "completed", summary: say(
+    "Every site answered and all nightly copies were checked against last week's size; two sites took longer than usual but finished before the morning window.",
+    "Tous les sites ont répondu et chaque copie de la nuit a été comparée à la taille de la semaine passée ; deux sites ont pris plus de temps que d'habitude, mais ont fini avant la fenêtre du matin.",
+  ) }),
+  run("long-running", 80, { routineName: LONG_NAME, status: "running", startedAt: at + 79 * M }),
+];
+const messages = which === "form" ? FORM : which === "chat" ? CHAT : which === "streak-failed" ? STREAK_FAILED : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
 
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {

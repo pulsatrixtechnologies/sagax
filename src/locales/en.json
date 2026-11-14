@@ -9478,6 +9478,7 @@
   "approvals.kind.question": "Question",
   "approvals.kind.proposal": "Proposal",
   "approvals.kind.attention": "Needs you",
+  "approvals.kind.form": "Form",
   "approvals.todayTitle": "Today",
   "approvals.attention.handled": "Mark as handled",
   "approvals.proactive.accept": "Yes, go ahead",

@@ -60,6 +60,7 @@ import type { TranscriptLookups } from "@/lib/transcript-derivations";
 import type { Dispatch } from "react";
 import type { AppState } from "@/state/store";
 import { ActivityChip, AttentionRow, RoutineRunRow } from "./chips";
+import { routineRunWidgetRow } from "@/lib/routine-result-stack";
 import { Bubble } from "./Bubble";
 import { FailedTurnRow } from "./ErrorRows";
 import type { ListedItem } from "./types";
@@ -445,7 +446,8 @@ export function MessagesListItem({
         // a bot-authored live HTML surface, drawn in the sandboxed app frame
         return <MessageBoundary fallbackText={m.text ?? ""}><AppMessage message={m} /></MessageBoundary>;
       case "routine.run":
-        return <RoutineRunRow message={m} botId={botId} threadId={threadId} />;
+        // #4234: its widget, from the transcript the list hid it from
+        return <RoutineRunRow message={m} botId={botId} threadId={threadId} widget={routineRunWidgetRow(transcript, m)} />;
       case "routines":
         return <ConversationRoutineToggle message={m} />;
       case "call":

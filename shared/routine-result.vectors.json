@@ -186,6 +186,30 @@
       "from": "end",
       "text": "   ",
       "brief": ""
+    },
+    {
+      "name": "#4234: a sentence that points at the form the run drew is never the brief; the result before it is",
+      "from": "end",
+      "text": "I drafted 3 replies for tonight's messages.\n\nUncheck one or hit Skip tonight and that account stays quiet.",
+      "brief": "I drafted 3 replies for tonight's messages."
+    },
+    {
+      "name": "#4234: a report that only points at its form has no brief",
+      "from": "end",
+      "text": "Uncheck it or hit Skip tonight and the account stays quiet.",
+      "brief": ""
+    },
+    {
+      "name": "#4234: the same in French",
+      "from": "end",
+      "text": "J'ai préparé 2 brouillons pour ce soir.\n\nDécoche ceux que tu ne veux pas, puis appuie sur Envoyer.",
+      "brief": "J'ai préparé 2 brouillons pour ce soir."
+    },
+    {
+      "name": "#4234: a fact that starts with check is a fact",
+      "from": "end",
+      "text": "Check-in for Friday's flight opens at noon.",
+      "brief": "Check-in for Friday's flight opens at noon."
     }
   ]
 }

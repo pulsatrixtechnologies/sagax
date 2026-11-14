@@ -320,6 +320,10 @@ export interface RoutineRun {
   /** 2026-10-22: a completed run that had nothing for the person; nothing
    * was posted to their conversation (server/routines/routine-report.ts). */
   quiet?: true;
+  /** #4234: the form (show_widget) this run drew for the person, moved into
+   * the conversation it reports to: that row waits on the person until it
+   * is answered (Today, the pinned row, the connector's list). */
+  form?: { threadId: string; widgetId: string };
   /** 2026-11-01: completed, but not all of it went right: why ("Completed
    * with problems"). Counts as a problem run. */
   problems?: string;

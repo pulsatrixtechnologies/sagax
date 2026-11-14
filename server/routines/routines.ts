@@ -3388,6 +3388,26 @@ export class RoutineManager {
     return true;
   }
 
+  /** #4234: where the form this run drew for the person now sits (its row
+   * in the conversation the run reports to). Kept quietly: the run's row
+   * already says it, so nothing is emitted. */
+  noteRunForm(runId: string, form: { threadId: string; widgetId: string }): boolean {
+    const run = this.runs.find((candidate) => candidate.id === runId);
+    if (!run) return false;
+    if (run.form?.threadId === form.threadId && run.form.widgetId === form.widgetId) return true;
+    run.form = { threadId: form.threadId, widgetId: form.widgetId };
+    this.saveLater();
+    return true;
+  }
+
+  /** #4234: the forms runs moved into a conversation, with their bot and
+   * routine, newest first: Today checks each one's row (answered or not). */
+  runForms(): Array<{ botId: string; threadId: string; widgetId: string; routineName: string }> {
+    const out: Array<{ botId: string; threadId: string; widgetId: string; routineName: string }> = [];
+    for (const run of this.runs) if (run.form) out.push({ botId: run.botId, threadId: run.form.threadId, widgetId: run.form.widgetId, routineName: run.routineName });
+    return out;
+  }
+
   /** Active (running or waiting) proactive wake for a bot, if any. */
   activeProactiveWake(botId: string): RoutineRun | undefined {
     return this.runs.find((run) =>

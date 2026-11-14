@@ -5,15 +5,20 @@
 // import goes round (#4164). Read it through shared/waiting-items.ts.
 
 /** What waits: a permission card, a question card, a question in words
- * (answered with the person's own words), a proposal or offer card. */
-export type WaitingKind = "approval" | "question" | "request" | "proposal";
+ * (answered with the person's own words), a proposal or offer card, or
+ * (#4234) a routine run's form, answered in the conversation at the run's
+ * row. An app that does not know a kind draws its text in its pinned row
+ * and opens its conversation (an older Today page shows a `form` row with
+ * an empty kind pill and a generic title). */
+export type WaitingKind = "approval" | "question" | "request" | "proposal" | "form";
 
 /** How it is answered: allow or deny, one of its options, or words. */
 export type WaitingAnswerWith = "decision" | "option" | "text";
 
 export interface WaitingItem {
   /** What answers it: a card's request id, `attention:<messageId>` for a
-   * question in words, `proactive:<proposalId>` for an offer. */
+   * question in words, `proactive:<proposalId>` for an offer,
+   * `form:<messageId>` for a routine run's form (#4234). */
   id: string;
   kind: WaitingKind;
   /** The bot whose conversation holds it. */

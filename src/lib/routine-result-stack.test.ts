@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
 import type { RoutineRunCardData } from "../../shared/routine-run";
-import { routineResultFolded, routineResultNeedsPerson } from "./routine-result-stack";
+import { routineResultFolded, routineResultNeedsPerson, routineRunWidgetRow, routineWidgetsAtRuns } from "./routine-result-stack";
 
 const result = (id: string, run: Partial<RoutineRunCardData> = {}, extra: Partial<Message> = {}): Message => ({
   id, role: "bot", kind: "routine.run", at: 1,
@@ -45,5 +45,25 @@ describe("#3581 a stack of routine results", () => {
   it("a 17 results burst in one hour: one card, sixteen rows", () => {
     const rows = Array.from({ length: 17 }, (_, index) => result(`r${index}`));
     expect(rows.filter((row) => !routineResultFolded(rows, row.id))).toHaveLength(1);
+  });
+});
+
+// #4234: a routine run's widget is drawn at the run's row, never listed twice
+describe("routineWidgetsAtRuns", () => {
+  const run = (id: string, widgetId?: string) => ({ id, role: "bot" as const, kind: "routine.run" as const, routineRun: { runId: `run-${id}`, routineId: "r", routineName: "Drafts", status: "completed" as const, ...(widgetId ? { widgetId } : {}) } });
+  const widget = (id: string) => ({ id, role: "bot" as const, kind: "widget" as const });
+  it("names the widget rows the shown routine rows draw, found in the same transcript", () => {
+    const rows = [run("a", "w-1"), widget("w-1"), run("b"), run("c", "w-2"), widget("w-2"), widget("w-3")];
+    expect([...routineWidgetsAtRuns(rows, rows)]).toEqual(["w-1", "w-2"]);
+    // a run's row that is not shown draws nothing: its widget stays a row
+    expect([...routineWidgetsAtRuns(rows.filter((row) => row.id !== "c"), rows)]).toEqual(["w-1"]);
+    expect(routineRunWidgetRow(rows, rows[0]!)?.id).toBe("w-1");
+  });
+  // a side pane or a preview draws its own transcript: a widget its row
+  // cannot find there is never hidden, so the form is never in no place
+  it("hides nothing its row cannot find in that transcript", () => {
+    const pane = [run("a", "w-1")];
+    expect(routineWidgetsAtRuns(pane, pane).size).toBe(0);
+    expect(routineRunWidgetRow(pane, pane[0]!)).toBeUndefined();
   });
 });

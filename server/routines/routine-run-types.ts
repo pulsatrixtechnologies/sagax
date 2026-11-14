@@ -142,6 +142,10 @@ export interface RoutineRun {
   /** 2026-10-22: a completed run whose final message had nothing for the
    * person (server/routines/routine-report.ts): nothing is posted to their chat. */
   quiet?: true;
+  /** #4234: the form (show_widget) this run drew for the person, moved into
+   * the conversation it reports to: that row waits on the person until it
+   * is answered (Today, the pinned row, the connector's list). */
+  form?: { threadId: string; widgetId: string };
   error?: string;
   cost?: number | null;
   denials?: string[];

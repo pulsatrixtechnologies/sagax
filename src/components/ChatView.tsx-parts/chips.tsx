@@ -16,6 +16,8 @@ import { answerPersonRequest, cardPlace, InputRequestCard, skipPersonRequest } f
 import { RenameTitle } from "../RenameTitle";
 import { delegateModelLabel } from "../DelegationList";
 import { RoutineRunCard } from "../RoutineRunCard";
+import { MessageBoundary } from "../MessageBoundary";
+import { WidgetMessage } from "../widget/WidgetMessage";
 import { BotAvatar } from "../Avatar";
 import { normalizeState } from "@/lib/mascot";
 import { ToolActivity, botNames } from "../ToolActivity";
@@ -143,7 +145,7 @@ export function AttentionRow({ message, threadId, botId }: { message: Message; t
  * watches too); the thumbs and « Moins de ça » stay. */
 const WATCH_FEEDBACK = ["up", "down", "less"] as const;
 
-export function RoutineRunRow({ message, botId, threadId, onResume }: { message: Message; botId: string; threadId?: string; onResume?: () => void }) {
+export function RoutineRunRow({ message, botId, threadId, onResume, widget }: { message: Message; botId: string; threadId?: string; onResume?: () => void; widget?: Message }) {
   "use memo";
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
@@ -176,9 +178,14 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
   // « Arrêter ce domaine », for the bot's owner, at once
   const watchAlert = watchAlertOf(run);
   const ownsWatch = useOwnsBot(ownerId);
+  // #4234: `widget` is the widget the run drew for the person, read by the
+  // list from the transcript it draws (MessagesListItem), drawn at the run's
+  // row and usable here: its answer is the person's message in this
+  // conversation
   return (
     <div className="flex min-w-0 flex-col gap-1">
     <RoutineRunCard
+      widget={widget ? <MessageBoundary fallbackText={widget.text ?? ""}><WidgetMessage botId={botId} threadId={threadId} message={widget} /></MessageBoundary> : undefined}
       message={message}
       bot={owner}
       folded={folded}

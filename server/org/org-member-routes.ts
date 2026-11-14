@@ -67,7 +67,7 @@ import { can, permissionLabel, type PermissionKey, type PermissionPrincipal } fr
 import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../shared/skill-request.ts";
 import { terminalRequestBehavior } from "../../shared/terminal-request.ts";
-import { OFFER_ID_PREFIX, REQUEST_ID_PREFIX, type WaitingItem } from "../../shared/waiting-items.ts";
+import { FORM_ID_PREFIX, OFFER_ID_PREFIX, REQUEST_ID_PREFIX, type WaitingItem } from "../../shared/waiting-items.ts";
 import { parseMemoryPath } from "../memory/memory-store.ts";
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
@@ -220,7 +220,7 @@ export interface OrgMemberRouteDeps {
   /** #3512: a question in words settled from an AI client: `answered` once
    * the person's words went to the waiting work, `skipped` without an
    * answer (the waiting work is told). False when it is not open. */
-  settleRequest?(person: MemberPerson, where: { botId: string; threadId: string; messageId: string }, how: "answered" | "skipped"): boolean;
+  settleRequest?(person: MemberPerson, where: { botId: string; threadId: string; messageId: string; answer?: string }, how: "answered" | "skipped"): boolean;
 }
 
 interface Answer {
@@ -627,6 +627,12 @@ export function memberWaitingApproval(item: WaitingItem): MemberApproval {
     createdAt: item.at,
     expiresAt: null,
   };
+}
+
+/** #3512: an id of the one source of what waits that is not a card's: a
+ * question in words, an offer, or (#4234) a routine run's form. */
+function waitingItemId(id: string): boolean {
+  return id.startsWith(REQUEST_ID_PREFIX) || id.startsWith(OFFER_ID_PREFIX) || id.startsWith(FORM_ID_PREFIX);
 }
 
 /** What `POST approvals/{id}` asks Sagax's respond route, or why it cannot. */
@@ -1423,7 +1429,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
       const extra: MemberWaitingFields = { waitingKind: item.kind, text: item.text, ageMs: item.ageMs, skippable: true };
       const shown = objectOf(message);
       const card = objectOf(shown?.card);
-      if (!item.id.startsWith(REQUEST_ID_PREFIX) && !item.id.startsWith(OFFER_ID_PREFIX) && shown && card) {
+      if (!waitingItemId(item.id) && shown && card) {
         deps.expireDueApprovals?.(item.threadId);
         const info = deps.approvalAnswerer?.(item.threadId, item.id) ?? null;
         if (info && !info.open) continue;
@@ -1480,7 +1486,8 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     if (!words) return fail(409, "text_required", choices.length ? `Send text with the person's own words, or option, one of ${optionList(choices)}.` : "Send text with the person's own words.", { options: choices, freeText: true });
     const reply = await deps.perform(person, { method: "POST", path: `/api/bots/${encodeURIComponent(item.workBotId ?? item.botId)}/messages`, body: { text: words, threadId: item.workThreadId ?? item.threadId } });
     if (!okStatus(reply)) return passThrough(reply, "The answer could not be sent.");
-    deps.settleRequest?.(person, where, "answered");
+    // #4234: a routine run's form is drawn answered with the person's words
+    deps.settleRequest?.(person, item.kind === "form" ? { ...where, answer: words } : where, "answered");
     return done("allow", "answered", picked ? "option" : "text", picked?.label);
   };
 
@@ -1938,7 +1945,7 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         const read = await readThread(person, threadId, null, 1);
         if (!isRead(read)) return read;
         // #3512: a question in words or an offer is the person's own
-        if (params.id!.startsWith(REQUEST_ID_PREFIX) || params.id!.startsWith(OFFER_ID_PREFIX)) {
+        if (waitingItemId(params.id!)) {
           const listed = deps.waitingItems?.(person)?.some(({ item }) => item.id === params.id && item.threadId === threadId) ?? false;
           if (!listed) return fail(404, "not_found", "No such approval in this conversation.");
           return answer({ id: params.id!, threadId, open: true, canAnswer: true, whoCanApprove: { kind: "owner", principalId: person.principalId, name: person.name || null, sentence: "You." } });
@@ -1995,7 +2002,7 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         if (skip === true && (decision !== undefined || option !== undefined || text !== undefined)) return fail(400, "bad_request", "Send skip alone.");
         if (deps.confidential?.(threadId)) return fail(404, "not_found", "No such approval in this conversation.");
         // #3512: a question in words or an offer, from the one source
-        if (params.id!.startsWith(REQUEST_ID_PREFIX) || params.id!.startsWith(OFFER_ID_PREFIX)) {
+        if (waitingItemId(params.id!)) {
           if (!deps.waitingItems) return fail(404, "not_found", "No such approval in this conversation.");
           return answerWaiting(person, threadId, params.id!, {
             ...(decision ? { decision: decision as "allow" | "deny" } : {}),

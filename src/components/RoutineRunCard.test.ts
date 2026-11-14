@@ -58,17 +58,20 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
   it("a finished run with a 3,000 character report is an AskCard with at most two lines and no report bubble", () => {
     expect(LONG_REPORT.length).toBeGreaterThan(2_000);
     const markup = draw({ message: message("completed", { summary: LONG_REPORT }), onOpen: vi.fn() });
-    expect(markup).toContain('data-ask-card="result"');
+    // #4234: no card surface: the reference's line, the words under it
+    expect(markup).not.toContain("data-ask-card");
+    expect(markup).not.toContain("rounded-3xl");
     expect(markup).toContain('data-routine-run-form="card"');
     expect(markup).not.toContain("data-routine-run-bubble");
     expect(markup).not.toContain("<table");
     expect(markup).not.toContain("Board state");
     // the brief: the closing line, two lines at most
-    expect(markup).toMatch(/data-routine-run-brief[^>]*class="line-clamp-2"[^>]*>3 tickets reassigned, 2 over SLA; nothing else needs a decision tonight.</);
+    expect(markup).toMatch(/data-routine-run-brief[^>]*class="[^"]*line-clamp-2[^"]*"[^>]*>3 tickets reassigned, 2 over SLA; nothing else needs a decision tonight.</);
     expect(markup).toMatch(/data-routine-run-name[^>]*>Morning brief</);
     // a finished result without problems has no state word
     expect(markup).not.toContain("data-routine-run-status");
-    expect(markup).toMatch(/data-routine-run-open[^>]*>Details/);
+    // #4234: the routine's chip (glyph and name) is the run's Details
+    expect(markup).toMatch(/<button[^>]*data-routine-run-open[^>]*title="Details"[^>]*>.*data-routine-run-name[^>]*>Morning brief</);
     expect(markup).toContain('aria-label="View run for Morning brief"');
     expect(markup).toContain('aria-label="Morning brief routine run: Done"');
   });
@@ -94,13 +97,12 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     }
   });
 
-  it("a folded result is the one quiet row: tick, name, brief, time, Details", () => {
+  it("a folded result is the one quiet line: glyph, name, brief, time, the name opening Details", () => {
     const markup = draw({ message: message("completed", { summary: LONG_REPORT }), folded: true, onOpen: vi.fn() });
-    expect(markup).toContain('data-ask-card="settled"');
     expect(markup).toContain('data-routine-run-form="row"');
-    expect(markup).not.toContain('data-ask-card="result"');
-    expect(words(markup)).toContain("Morning brief · 3 tickets reassigned, 2 over SLA; nothing else needs a decision tonight. · ");
-    expect(markup).toMatch(/data-routine-run-open[^>]*>Details/);
+    expect(markup).not.toContain("data-routine-run-brief");
+    expect(words(markup)).toMatch(/Morning brief\s*·\s*3 tickets reassigned, 2 over SLA; nothing else needs a decision tonight\.\s*·/);
+    expect(markup).toMatch(/data-routine-run-open[^>]*>.*Morning brief/);
   });
 
   it("a result with problems stays a card with its state line and the count of a lasting problem", () => {
@@ -185,9 +187,9 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(blocked).toContain("The team needs a missing credential.");
   });
 
-  it("items for the person stay on the card", () => {
+  it("answered items for the person stay on the card", () => {
     const markup = draw({
-      message: { ...message("completed", { summary: "Two invoices wait for you." }), attention: { kind: "human", items: [{ text: "Approve sheet 100203" }], botId: "b", botName: "Bot B", threadId: "t", sourceMessageId: "m" } } as Message,
+      message: { ...message("completed", { summary: "Two invoices wait for you." }), attention: { kind: "human", items: [{ text: "Approve sheet 100203" }], botId: "b", botName: "Bot B", threadId: "t", sourceMessageId: "m", handledAt: 5 } } as Message,
     });
     expect(markup).toContain('data-routine-run-form="card"');
     expect(markup).toContain("data-routine-run-attention");
@@ -197,7 +199,7 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
   it("a pass with nothing for the person is one quiet row", () => {
     const markup = draw({ message: message("nothing_to_report"), onOpen: vi.fn() });
     expect(markup).toContain('data-routine-run-form="row"');
-    expect(words(markup)).toContain("Morning brief · Nothing to report");
+    expect(words(markup)).toMatch(/Morning brief\s*·\s*Nothing to report/);
     expect(markup).toContain('aria-label="Morning brief routine run: Nothing to report"');
   });
 
@@ -317,6 +319,93 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(hasRoutineExecutionTask(tasks, "execution-thread")).toBe(true);
     expect(hasRoutineExecutionTask(tasks, "deleted-thread")).toBe(false);
     expect(hasRoutineExecutionTask(undefined, "execution-thread")).toBe(false);
+  });
+});
+
+// #4234 (the owner, 2026-11-13: "c'est laid"): what a routine's row carries
+// in the chat, drawn as the reference draws a routine there (a system event
+// line), never the rounded card taller than its content.
+describe("RoutineRunCard (#4234): the reference's line, the result under it, the run's widget in place", () => {
+  const DRAFTS = "I drafted 3 replies for tonight's messages.\n\nUncheck one or hit Skip tonight and that account stays quiet.";
+
+  it("a run with a widget: its words stand alone, the widget is drawn under the row, usable there", () => {
+    const widget = createElement("form", { "data-test-widget": "drafts" }, createElement("input", { type: "checkbox", name: "draft-1" }));
+    const markup = draw({ message: message("completed", { summary: DRAFTS, widgetId: "widget-1" }), onOpen: vi.fn(), widget });
+    expect(markup).toContain('data-routine-run-form="card"');
+    expect(markup).toMatch(/data-routine-run-brief[^>]*>I drafted 3 replies for tonight&#x27;s messages\.</);
+    // the sentence that only points at the form is never the row's words
+    expect(words(markup)).not.toContain("Uncheck one or hit Skip");
+    expect(markup).toMatch(/data-routine-run-widget[^>]*><form data-test-widget="drafts"><input type="checkbox" name="draft-1"\/><\/form>/);
+    // the widget comes last, after the line and the words
+    expect(markup.indexOf("data-routine-run-line")).toBeLessThan(markup.indexOf("data-routine-run-brief"));
+    expect(markup.indexOf("data-routine-run-brief")).toBeLessThan(markup.indexOf("data-routine-run-widget"));
+  });
+
+  it("a run whose words only point at its widget has the line and the widget, no stray sentence", () => {
+    const widget = createElement("form", { "data-test-widget": "drafts" });
+    const markup = draw({ message: message("completed", { summary: "Uncheck it or hit Skip tonight and the account stays quiet.", widgetId: "widget-1" }), onOpen: vi.fn(), widget });
+    expect(markup).toContain('data-routine-run-form="card"');
+    expect(markup).not.toContain("data-routine-run-brief");
+    expect(words(markup)).not.toContain("Uncheck");
+    expect(markup).toContain("data-routine-run-widget");
+  });
+
+  it("a run with plain text: the reference's line (chip with the glyph and the name, then the time), its words under the name, no band, Details at the line's end", () => {
+    const markup = draw({ message: message("completed", { summary: "All 12 backups completed tonight." }), onOpen: vi.fn() });
+    // the reference's system event: 24px tall, 12px type on a 16px line
+    expect(markup).toMatch(/data-routine-run-line[^>]*class="[^"]*min-h-6[^"]*text-\[12px\] leading-4/);
+    // its chip: 24px, pill corners, 4px before the glyph, 6px after the name, 2px between
+    expect(markup).toMatch(/<button[^>]*data-routine-run-open[^>]*class="inline-flex h-6 min-w-0 shrink-0 items-center gap-0\.5 rounded-full ps-1 pe-1\.5 text-ink-secondary max-w-\[calc\(100%-7\.5rem\)\]/);
+    expect(markup).toContain("lucide-clock");
+    // the dot after the chip: its 6px end padding before, as much after
+    expect(markup).toContain('<span aria-hidden="true" class="shrink-0 text-ink-tertiary pe-1.5">·</span>');
+    // the words start where the name does (4px + 12px glyph + 2px)
+    expect(markup).toMatch(/data-routine-run-brief[^>]*class="ps-\[18px\] line-clamp-2 text-\[13px\] leading-\[18px\]/);
+    // the chip opens the run, and the old row's Details entry stays on the
+    // line (a touch screen has no hover): both open the same window
+    expect(markup.match(/data-routine-run-open/g)).toHaveLength(1);
+    expect(markup).toMatch(/<button[^>]*data-routine-run-details[^>]*aria-label="[^"]+"[^>]*><span class="max-sm:hidden">Details<\/span>/);
+    expect(markup).not.toContain("data-ask-card");
+    // the time sits on the line, right after the name
+    const line = markup.slice(markup.indexOf("data-routine-run-line"), markup.indexOf("data-routine-run-brief"));
+    expect(line).toContain("<time");
+  });
+
+  it("a run with a question for the person: its items stay under the row, with its words", () => {
+    const markup = draw({
+      message: { ...message("completed", { summary: "One invoice waits for your answer." }), attention: { kind: "human", items: [{ text: "Send invoice 100203 now?" }], botId: "b", botName: "Bot B", threadId: "t", sourceMessageId: "m" } } as Message,
+      onOpen: vi.fn(),
+    });
+    expect(markup).toContain('data-routine-run-form="card"');
+    expect(markup).toMatch(/data-routine-run-brief[^>]*>One invoice waits for your answer\.</);
+    // unanswered, the question is drawn once, in the pinned zone (#4204):
+    // the run says it in one quiet line, never its items again
+    expect(markup).toMatch(/data-routine-run-attention="pinned"[^>]*><div[^>]*>Bot B needs you</);
+    expect(markup).not.toContain("Send invoice 100203 now?");
+    expect(markup).not.toContain("data-attention-items");
+    expect(markup.indexOf("data-routine-run-brief")).toBeLessThan(markup.indexOf("data-routine-run-attention"));
+    expect(markup).toContain("lucide-triangle-alert");
+  });
+
+  it("an answered question keeps its items under the run, the record of what was asked", () => {
+    const markup = draw({
+      message: { ...message("completed", { summary: "One invoice waits for your answer." }), attention: { kind: "human", items: [{ text: "Send invoice 100203 now?" }], botId: "b", botName: "Bot B", threadId: "t", sourceMessageId: "m", handledAt: 5 } } as Message,
+    });
+    expect(markup).toContain('data-routine-run-attention="answered"');
+    expect(markup).toContain("Send invoice 100203 now?");
+  });
+
+  it("a narrow line cuts the status words before the routine's name (review: \"Backup che...\")", () => {
+    const markup = draw({ message: message("running", { routineName: "Nightly backup verification for every site", startedAt: 1 }), onOpen: vi.fn(), onStop: vi.fn() });
+    const chip = markup.match(/<button[^>]*data-routine-run-open[^>]*class="([^"]*)"/)?.[1] ?? "";
+    // the name's chip never shrinks (the status words are cut first, and
+    // keep a few letters); only a name longer than the line less its other
+    // parts at their smallest is cut
+    expect(chip.split(" ")).toContain("shrink-0");
+    expect(chip.split(" ")).not.toContain("shrink");
+    // a live run keeps room for Stop as well
+    expect(chip).toContain("max-w-[calc(100%-10.5rem)]");
+    expect(markup).toMatch(/data-routine-run-status="true"[^>]*class="min-w-8 truncate/);
   });
 });
 

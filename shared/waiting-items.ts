@@ -27,6 +27,8 @@ import type { ServedWaitingItem, WaitingItem } from "./waiting-item.ts";
 export const REQUEST_ID_PREFIX = "attention:";
 /** The id prefix of a proactive offer: `proactive:<proposalId>`. */
 export const OFFER_ID_PREFIX = "proactive:";
+/** #4234: the id prefix of a routine run's form: `form:<messageId>`. */
+export const FORM_ID_PREFIX = "form:";
 
 export type { ServedWaitingItem, WaitingAnswerWith, WaitingItem, WaitingKind } from "./waiting-item.ts";
 
@@ -83,6 +85,21 @@ export function waitingItemOf(row: InboxApproval, now: number): WaitingItem | nu
       freeText: true,
       ...(workThreadId ? { workThreadId } : {}),
       ...(workBotId ? { workBotId } : {}),
+    };
+  }
+  if (row.kind === "form") {
+    // #4234: a routine run's form, answered in the conversation at the run's
+    // row (a press there), or with the person's words to the bot
+    const text = textOf(message?.text) || textOf(row.routineName);
+    return {
+      ...base,
+      id: row.requestId,
+      kind: "form",
+      title: firstLine(text),
+      text,
+      options: [],
+      answerWith: "text",
+      freeText: true,
     };
   }
   const title = textOf(card?.title);
@@ -175,9 +192,11 @@ export function waitingChangeFrame(
   const threadId = frame.threadId;
   if (typeof threadId !== "string" || (!threads.has(threadId) && !waiting.has(threadId))) return false;
   const message = frame.message && typeof frame.message === "object"
-    ? frame.message as { role?: unknown; attention?: unknown; inputRequest?: unknown; card?: { requestId?: unknown; proactiveProposal?: unknown } | null }
+    ? frame.message as { role?: unknown; kind?: unknown; attention?: unknown; inputRequest?: unknown; card?: { requestId?: unknown; proactiveProposal?: unknown } | null }
     : undefined;
   if (!message) return false;
   if (message.attention || message.inputRequest || message.card?.requestId || message.card?.proactiveProposal) return true;
+  // #4234: a routine run's form changed (answered) where something waits
+  if (frame.kind === "message.patch" && message.kind === "widget" && waiting.has(threadId)) return true;
   return frame.kind === "message" && message.role === "user" && waiting.has(threadId);
 }

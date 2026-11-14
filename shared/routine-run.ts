@@ -70,4 +70,9 @@ export interface RoutineRunCardData {
   forPerson?: true;
   /** #2694: the person's feedback on that wake, kept across card updates. */
   feedback?: "up" | "down" | "less" | "never";
+  /** #4234: the widget (show_widget) the run drew for the person, moved
+   * from its hidden task into this conversation: the id of that widget row
+   * here. The row draws it at the run's place, usable there; its answer is
+   * the person's message to the bot in this conversation. */
+  widgetId?: string;
 }

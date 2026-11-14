@@ -74,7 +74,10 @@ describe("opening a routine run", () => {
     const message = report();
     message.routineRun = { ...message.routineRun!, executionThreadId: undefined };
     flushSync(() => root.render(createElement(RoutineRunCard, { message, onOpen: () => {} })));
-    expect(host.textContent).toContain("Details");
+    // #4234: the routine's chip is its Details (the reference's entry)
+    const entry = host.querySelector("[data-routine-run-open]");
+    expect(entry?.getAttribute("title")).toBe("Details");
+    expect(entry?.textContent).toContain("Project health watch");
     expect(host.textContent).not.toContain("View run");
     root.unmount();
   });

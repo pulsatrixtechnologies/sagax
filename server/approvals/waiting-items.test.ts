@@ -16,7 +16,8 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import { createOrgMemberRoutes, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps } from "../org/org-member-routes.ts";
 import { createApprovalsInboxRoutes } from "../routes/approvals-inbox.ts";
 import { PASS } from "../routes/table.ts";
-import { settlePersonRequestCard, todayRows, type TodayDeps, type TodayMessage } from "./today-rows.ts";
+import { settlePersonRequestCard, todayRows, type TodayDeps, type TodayForm, type TodayMessage } from "./today-rows.ts";
+import { settleRoutineForm } from "../routines/routine-run-widget.ts";
 import { closePersonRequest } from "./waiting-card-skip.ts";
 import type { Message } from "../store.ts";
 
@@ -43,6 +44,8 @@ const offerCard = { title: "Garder le brief du jour ?", subtitle: "Si tu dis oui
 
 let messages: Record<string, TodayMessage[]> = conversation();
 let proposalOpen = true;
+// #4234: the forms routine runs moved into the conversation
+let forms: TodayForm[] = [];
 
 function todayDeps(): TodayDeps {
   const bots = [{ id: "b1", name: "Nimbus" }];
@@ -53,6 +56,7 @@ function todayDeps(): TodayDeps {
     messages: (threadId) => messages[threadId] ?? [],
     isViewers: () => true,
     proposals: () => (proposalOpen ? [{ id: "x1", botId: "b1", threadId: "conv", messageId: "m-offer", createdAt: 3_000 }] : []),
+    forms: () => forms,
     // the message as the conversation shows it: the offer with its words
     project: (_threadId, message) => (message.id === "m-offer" ? { ...message, card: offerCard } : message),
   };
@@ -115,12 +119,15 @@ const memberDeps: OrgMemberRouteDeps = {
   settleRequest: (_person, where, how) => {
     settled.push({ messageId: where.messageId, how });
     // the one settle path (#3543), with the host's close on these rows
-    return settlePersonRequestCard({ ...todayDeps(), close: (threadId, message) => closePersonRequest({
+    return settlePersonRequestCard({ ...todayDeps(), close: (threadId, message) => (message.kind === "widget"
+      // #4234: as server/index.ts closes a routine run's form
+      ? settleRoutineForm((messageId, widget) => { patchMessage(threadId, messageId, { widget }); }, message as unknown as Message, { label: where.answer ?? "Skipped, no answer", skipped: how !== "answered", at: NOW })
+      : closePersonRequest({
       patch: (id, messageId, patch) => { patchMessage(id, messageId, patch as Partial<TodayMessage>); },
       answerWork: () => true,
       noteWork: () => {},
       now: () => NOW,
-    }, threadId, message as unknown as Message, { kind: how }) }, where.botId, where.threadId, where.messageId);
+    }, threadId, message as unknown as Message, { kind: how })) }, where.botId, where.threadId, where.messageId);
   },
 };
 
@@ -175,6 +182,7 @@ afterAll(async () => {
 beforeEach(() => {
   messages = conversation();
   proposalOpen = true;
+  forms = [];
   performed = [];
   settled = [];
 });
@@ -254,5 +262,43 @@ describe("one source for what waits on the person (#3512)", () => {
     // the parked work got its answer in its own thread (settleInputRequests)
     patchMessage("conv", "m-input", { inputRequest: { ...messages.conv!.find((row) => row.id === "m-input")!.inputRequest!, answered: true } });
     expect(await counts()).toEqual({ today: 4, pinned: 4, connector: 4 });
+  });
+});
+
+// #4234: a routine run's form moved into the conversation waits on the
+// person: one item on every surface, answered by the person's words or
+// skipped through the connector, and gone once it is answered.
+describe("a routine run's form waits on the person (#4234)", () => {
+  const openForm = () => {
+    messages.conv = [...messages.conv!, { id: "m-form", at: 4_000, role: "bot", kind: "widget", text: "Tonight's drafts", widget: { root: { type: "Card", id: "n0" } } }];
+    forms = [{ botId: "b1", threadId: "conv", widgetId: "m-form", routineName: "Evening drafts" }];
+  };
+
+  it("is one item in the pinned row, Today and the connector's list", async () => {
+    openForm();
+    expect(await counts()).toEqual({ today: 6, pinned: 6, connector: 6 });
+    const listed = (await connector("GET", "approvals?status=pending")).body.approvals as any[];
+    expect(listed.find((row) => row.id === "form:m-form")).toMatchObject({ threadId: "conv", waitingKind: "form", title: "Tonight's drafts", freeText: true, skippable: true });
+    expect((await pinned()).waiting.find((item: any) => item.id === "form:m-form")).toMatchObject({ kind: "form", messageId: "m-form" });
+  });
+
+  it("leaves every surface once answered in the conversation, or answered or skipped through the connector", async () => {
+    openForm();
+    patchMessage("conv", "m-form", { widget: { root: { type: "Card", id: "n0" }, settled: { ref: "confirm" } } });
+    expect(await counts()).toEqual({ today: 5, pinned: 5, connector: 5 });
+
+    messages = conversation();
+    openForm();
+    const words = await connector("POST", "approvals/form:m-form", { threadId: "conv", text: "Send the first one" });
+    expect(words.status, JSON.stringify(words.body)).toBe(200);
+    expect(performed.at(-1)?.request).toMatchObject({ method: "POST", path: "/api/bots/b1/messages", body: { text: "Send the first one", threadId: "conv" } });
+    expect(messages.conv!.find((row) => row.id === "m-form")!.widget?.settled).toMatchObject({ label: "Send the first one", tone: "submit" });
+    expect(await counts()).toEqual({ today: 5, pinned: 5, connector: 5 });
+
+    messages = conversation();
+    openForm();
+    expect((await connector("POST", "approvals/form:m-form", { threadId: "conv", skip: true })).body).toMatchObject({ closed: true, state: "skipped" });
+    expect(messages.conv!.find((row) => row.id === "m-form")!.widget?.settled).toMatchObject({ tone: "cancel" });
+    expect(await counts()).toEqual({ today: 5, pinned: 5, connector: 5 });
   });
 });

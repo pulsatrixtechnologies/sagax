@@ -58,6 +58,37 @@ row or the person's own line lands in a conversation, and sends the
 `routine` frame of each routine whose need moved. Nothing of what the row
 gate decides changes, and no chat row is written for it.
 
+## A run's widget in the chat (#4234, 2026-11-13)
+
+A routine run works in its own hidden task, so a widget it draws there
+(`show_widget`: its drafts as a form, Send and Skip) used to stay there, and
+the chat showed only the run's closing sentence, which pointed at that form.
+When a finished run's row is written into the conversation it reports to
+(`syncRoutineRunToSource`, a conversation with the person, never a room), its
+last open widget moves there (`server/routines/routine-run-widget.ts`
+`routineRunWidget`: one copy, the task's row is removed) and the row names it
+(`RoutineRunCardData.widgetId`, kept across updates). The chat draws it under
+the run's row (`RoutineRunRow`) and lists it nowhere else
+(`routineWidgetsAtRuns`); a press is the person's message to the bot in that
+conversation, on the route every widget press takes. The row's words never
+are a sentence that only points at a control (`isPointerLine` in
+`shared/routine-result.ts`, with its vectors, also run by the phone).
+
+The row finds its widget in the same transcript the list is drawn from (a
+side pane's or a preview's own copy included), and the list leaves the widget
+out only when a shown run row found it, so the form is always in one place.
+Until it is answered, the form waits on the person: the run keeps where it
+sits (`RoutineRun.form`, `noteRunForm`), and Today lists it as one `form` row
+(`server/approvals/today-rows.ts`), read by the pinned row and the
+connector's list as a `form` waiting item (`shared/waiting-items.ts`). In
+an app that does not know that kind, the pinned row and the connector draw
+its text and open the conversation, where "See in the conversation" lands on
+the run's row; an older desktop's Today page (0.8.105 and before) lists the
+row with an empty kind pill and its generic "Take an action" title, and its
+detail pane opens the chat. Through the connector, the
+person's words go to the bot and the form is drawn answered with them, or a
+skip draws it skipped (`settleRoutineForm`).
+
 ## What enters a bot's main chat (#3581, 2026-11-11)
 
 One rule, `shared/chat-relevance.ts` (`chatPlace`, `chatOrigin`,

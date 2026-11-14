@@ -61,3 +61,25 @@ export function routineResultFolded(messages: readonly Row[], messageId: string)
   }
   return false;
 }
+
+/** #4234: the widget row a routine run's row draws at its place (its card
+ * names it, `widgetId`), read from the same rows the list is drawn from
+ * (`lookup`): a side pane's or a preview's transcript, never the store. */
+export function routineRunWidgetRow<T extends Row>(lookup: readonly T[], message: Pick<Message, "kind" | "routineRun">): T | undefined {
+  const id = message.kind === "routine.run" ? message.routineRun?.widgetId : undefined;
+  return id ? lookup.find((row) => row.id === id && row.kind === "widget") : undefined;
+}
+
+/** #4234: the widget rows the shown routine rows (`shown`) draw at their
+ * place: the conversation lists none of them a second time. Only a widget
+ * its row resolves in `lookup` leaves the list, so a widget is always drawn
+ * in one place: a run's row that is not shown, or that cannot find its
+ * widget, leaves it a row of its own. */
+export function routineWidgetsAtRuns(shown: readonly Row[], lookup: readonly Row[]): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const message of shown) {
+    const widget = routineRunWidgetRow(lookup, message);
+    if (widget) ids.add(widget.id);
+  }
+  return ids;
+}

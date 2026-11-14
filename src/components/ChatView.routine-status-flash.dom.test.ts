@@ -242,12 +242,14 @@ describe("a routine run's card flipping status fast", () => {
     expect(report.cardRemounts).toBe(0);
     expect(report.cardGone).toBe(0);
     // #3581: the burst draws once: the live row (Running) holds through every
-    // flip, then the settled result becomes its card, one swap, at the end
+    // flip, then the settled result becomes its card at the end. #4234: the
+    // row and the card are one line (the reference's), so even that change
+    // keeps its node: only its text and classes change
     expect(report.formsShown).toEqual(["row", "card"]);
-    expect(report.bubbleRemounts).toBe(1);
+    expect(report.bubbleRemounts).toBe(0);
     expect(report.bubbleSizes.length).toBeLessThanOrEqual(2);
-    // nothing came and went but that one swap (the row out, the card in)
-    expect(report.toggled).toEqual(["div[aria-label][data-ask-card] +1 -1"]);
+    // nothing came and went
+    expect(report.toggled).toEqual([]);
     // a finished result without problems has no state word (#2283)
     expect(report.statusesShown).toEqual(["Running", ""]);
     // nothing outside the card changed, the column is the same, no jump

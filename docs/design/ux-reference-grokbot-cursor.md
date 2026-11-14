@@ -677,19 +677,39 @@ dessous (« écran de » suivi du nom du bot).
   qui attend la personne ; puis les étapes groupées ; les faits repliés sous Détails.
   Historique : liste datée avec un mot d'état vert (« Réussi ») ou rouge. Le rapport
   arrive dans la conversation unique du bot.
-- **Résultat dans le chat (#3581)** : la carte compacte du chat (`AskCard`, la même surface
-  que la carte d'approbation compacte) : le glyphe de routine (le triangle d'avertissement
-  quand il y a un problème), le nom de la routine en titre, l'heure à droite, puis une ou deux
-  lignes tirées des propres mots du bot (sa ligne de conclusion, `reportBrief`), jamais un appel
-  de modèle. Une ligne d'état seulement s'il y a quelque chose à dire (« Terminé avec des
-  problèmes · même problème depuis… », « Bloqué : … », « Fonctionne de nouveau »), les points
-  pour la personne, la ligne « A demandé » des coéquipiers, puis « Détails » à droite. Le
-  rapport ne se déplie jamais dans la carte : « Détails » ouvre la fenêtre de l'exécution avec
-  le rapport entier, comme un message normal du bot. Une passe en cours, en file, en attente,
-  échouée, annulée ou sans rien à dire est une seule rangée discrète (`AskSettledLine`) ; un
-  résultat suivi d'un résultat plus récent se replie en rangée, un résultat qui demande la
-  personne reste une carte jusqu'à ce qu'il soit réglé. Aucune police de terminal, aucune
-  pastille.
+- **Résultat dans le chat (#3581, refait par #4234)** : JC le 2026-11-13 sur la grande carte
+  arrondie (« c'est laid ») : plus de surface ni de carte, la rangée suit la façon dont la
+  référence dessine une routine dans son chat, un événement système. Valeurs mesurées dans
+  le bundle installé de la référence (lecture seule, valeurs seulement, app jamais lancée) :
+  - Rangée : flex, alignée au début, `min-height` 24 px, toute la largeur, `gap` 2 px ;
+    texte 12 px sur une ligne de 16 px, poids normal, encre secondaire ; un texte trop long
+    se coupe avec des points de suspension.
+  - Puce de la routine : `inline-flex`, hauteur 24 px, coins en pilule (9999 px), 4 px avant
+    le glyphe et 6 px après le nom, 4 px en haut et en bas, `gap` 2 px, fond transparent ;
+    au survol le fond secondaire et l'encre principale, en 120 ms. Le glyphe de routine est
+    une horloge de 12 px (taille `sm` de la référence). La puce ouvre la routine : chez nous
+    elle ouvre la fenêtre de l'exécution (ses Détails, infobulle « Détails »).
+  - Un formulaire (widget) sous la rangée : largeur max `min(88 %, 520 px, 100 % - 82 px)`,
+    coins de 24 px, aligné au début ; une carte de question : `min(80 %, 560 px, 100 % - 82 px)`,
+    coins de 24 px. Espacements de la référence : 4, 8 et 12 px.
+  Chez nous (`RoutineRunCard`, une seule forme pour chaque rangée de routine du chat) : la
+  ligne porte la puce (glyphe et nom ; le triangle d'avertissement quand il y a un problème,
+  la roue pendant qu'elle roule), puis « · » et ce qu'elle dit quand c'est une rangée (en
+  cours, en file, échouée, repliée), puis « · » et l'heure juste après, en encre tertiaire,
+  puis Reprendre, Arrêter et « Détails › » en puces au bout (Détails ouvre la même fenêtre
+  que la puce, au toucher aussi : l'entrée Détails de l'ancienne rangée reste). La puce du nom
+  ne rétrécit jamais avant les mots d'état (`shrink-0`, au plus 70 % de la ligne) : à la
+  largeur étroite, ce sont les mots d'état qui se coupent, jamais le nom en premier. Un résultat met ses mots sous le nom (alignés
+  sur le nom, 18 px), 13 px sur 18 px en encre principale, une ou deux lignes tirées des
+  propres mots du bot (sa ligne de conclusion, `reportBrief`), jamais une phrase qui ne fait
+  que pointer un formulaire (« Décoche-le ou appuie sur Passer », `isPointerLine`), jamais un
+  appel de modèle. Puis la ligne d'état s'il y a quelque chose à dire, les points pour la
+  personne (une question sans réponse : une seule ligne calme « X a besoin de toi », ses
+  options sont dans la zone épinglée, une seule fois, #4204 ; répondue, ses points restent), la ligne « A demandé » des coéquipiers, et enfin le widget que la passe a dessiné
+  pour la personne, utilisable sur place : sa réponse est le message de la personne au bot
+  dans cette conversation. Aucune bande vide, aucun « Détails » détaché en bas à droite de la carte. Le
+  rapport ne se déplie jamais dans le chat : la puce ouvre la fenêtre de l'exécution avec le
+  rapport entier, comme un message normal du bot. Aucune police de terminal.
 
 ### 2.8 Bibliothèque, skills, Connecter des apps
 

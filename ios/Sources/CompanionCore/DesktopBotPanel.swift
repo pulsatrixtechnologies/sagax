@@ -509,6 +509,7 @@ public enum WebhookPublicURL {
         "issue.unresolved": "Issue unresolved again",
         "alert.triggered": "Alert triggered",
         "error.created": "Error captured",
+        "resource.changed": "Resource changed",
         "incident.triggered": "Incident triggered",
         "incident.acknowledged": "Incident acknowledged",
         "incident.escalated": "Incident escalated",

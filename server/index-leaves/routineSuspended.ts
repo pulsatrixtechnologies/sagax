@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** routineSuspended (#1388). Pure move from server/index.ts. */
 import { redactSecretsInText } from "../redact.ts";
+import { signalKeys } from "../proactive/signal-ledger.ts";
 export type Host = Record<string, any>;
 
 export function createRoutineSuspended(getHost: () => Host): any {
@@ -32,7 +33,15 @@ function routineSuspended(routine: Routine, run: RoutineRun | null, reason: Rout
   } catch (error) {
     console.error(`routine: the pause card could not be written: ${error instanceof Error ? error.message : String(error)}`);
   }
-  host.notifyAccess(deliverableNotification("routine-failed", bot, threadId, `${redactSecretsInText(routine.name)}: paused (${reason === "person_out" ? "its person was signed out by Perspicax" : "its person can no longer run this bot"})`), card, run?.id);
+  // #4250: told through tellPerson, once per pause (a restart included)
+  host.tellPerson(host.routineProblemPerson(routine), {
+    key: signalKeys.routineSuspended(routine.id, routine.suspended ?? { reason, at: 0 }), kind: "routine-suspended", bot: bot.id,
+    label: card.routineName, ref: { threadId },
+    notification: {
+      notification: deliverableNotification("routine-failed", bot, threadId, `${redactSecretsInText(routine.name)}: paused (${reason === "person_out" ? "its person was signed out by Perspicax" : "its person can no longer run this bot"})`),
+      access: card, ...(run?.id ? { routineRunId: run.id } : {}),
+    },
+  });
 
 }
   return routineSuspended;

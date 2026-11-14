@@ -1,11 +1,23 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 import { isTransientChatNotice } from "../../shared/transient-notices.ts";
 import { routineRunReportable } from "../routines/routine-report.ts";
+import { createTellPerson, SignalLedger, signalKeys, signalLedgerDirStorage } from "../proactive/signal-ledger.ts";
 import { createRoutineRunLateRow, createSyncRoutineRunToSource } from "./syncRoutineRunToSource.ts";
 
 type Row = { id: string; kind: string; text?: string; routineRun?: { runId: string; wakeTopic?: string }; attention?: unknown };
+
+/** #4250: the server's tellPerson on a ledger, ringing into `rang`. */
+function tellInto(rang: string[], ledger: SignalLedger = new SignalLedger({ schedule: () => {} })) {
+  return {
+    tellPerson: createTellPerson<{ notification: string }>({ ledger, notify: ({ notification }) => { rang.push(notification); }, log: () => {} }),
+    routineRunPerson: (run: { runAs?: string }) => run.runAs ?? "pr_owner",
+  };
+}
 
 /** #2694 review: the attention a finished routine puts on its own card reads
  * the person's feedback (thumbs-down, "less", "never") like a relayed card. */
@@ -35,14 +47,14 @@ function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown>
       patchGroup: () => {},
       bot: () => bot,
       patchMessage: (_t: string, id: string, patch: Partial<Row>) => { const at = rows.findIndex((row) => row.id === id); rows[at] = { ...rows[at]!, ...patch }; },
-      appendMessage: (_t: string, message: Omit<Row, "id">) => { rows.push({ ...message, id: `m${rows.length}` }); },
+      appendMessage: (_t: string, message: Omit<Row, "id">) => { rows.push({ ...message, id: `m${rows.length}` }); return rows.at(-1); },
     },
     routineRunCard: (r: { id: string; proactive?: unknown }) => ({ runId: r.id, ...(r.proactive ? { wakeTopic: "mail" } : {}) }),
     routineRunFallbackText: () => "Hourly pass",
     attentionCard: () => ({ kind: "action", items: [{ text: "decide" }] }),
     attentionTicketUrl: undefined,
     deliverableNotification: (kind: string) => kind,
-    notify: (kind: string) => { rang.push(kind); },
+    ...tellInto(rang, extra.ledger as SignalLedger | undefined),
     ...extra,
   };
   const sync = createSyncRoutineRunToSource(() => host);
@@ -190,7 +202,7 @@ function ruleWorld(run: Record<string, unknown>, postResults = true, needsPerson
     attentionCard: () => ({ kind: "action", items: [{ text: "decide" }] }),
     attentionTicketUrl: undefined,
     deliverableNotification: (kind: string) => kind,
-    notify: (kind: string) => { rang.push(kind); },
+    ...tellInto(rang),
   };
   const sync = createSyncRoutineRunToSource(() => host);
   const theRun = { id: "run-1", botId: bot.id, routineName: "Hourly pass", status: "completed", target: "bot", threadId: "run", output: "Two new invoices.", ...run };
@@ -291,5 +303,32 @@ describe("a run's late answer goes through the run's own card write (#3581)", ()
 
   it("a thread with no run gives no card", () => {
     expect(lateWorld("UTC").late("other", "main", "words")).toBeUndefined();
+  });
+});
+
+describe("#4250: a run's needs-you ring goes through tellPerson", () => {
+  it("rings once per run and card, a restart included, in the run's person's ledger", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-run-needs-you-"));
+    try {
+      const storage = signalLedgerDirStorage(join(dir, "signal-ledger"));
+      const before = new SignalLedger({ storage, schedule: () => {} });
+      const first = world("normal", { runAs: "pr_member" }, false, { ledger: before });
+      first.sync();
+      expect(first.rang).toEqual(["needs-you"]);
+      expect(before.get("pr_member", "bot-atlas", signalKeys.runNeedsYou("run-1", "m0"))).toMatchObject({ state: "told", kind: "needs-you" });
+      before.flush();
+      // the server restarts before the card's row reached storage: the same
+      // run draws the same card again, and the person is not rung twice
+      const after = world("normal", { runAs: "pr_member" }, false, { ledger: new SignalLedger({ storage, schedule: () => {} }) });
+      after.sync();
+      expect(after.rows[0]?.attention).toBeTruthy();
+      expect(after.rang).toEqual([]);
+      // another run's card rings
+      const next = world("normal", { id: "run-2", runAs: "pr_member" }, false, { ledger: new SignalLedger({ storage, schedule: () => {} }) });
+      next.sync();
+      expect(next.rang).toEqual(["needs-you"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

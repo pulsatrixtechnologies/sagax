@@ -38,6 +38,7 @@
 //   reason and the events' labels, never their content.
 
 import { runFailureIsProviderLimit } from "../peers/ops-incidents.ts";
+import { SignalLedger } from "./signal-ledger.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -162,7 +163,6 @@ export const PROACTIVE_GATHER_MS = 30_000;
 /** At most this many events are listed in one wake; the rest are counted. */
 export const PROACTIVE_EVENTS_PER_WAKE = 20;
 const DETAIL_MAX = 4_000;
-const KEYS_KEPT = 2_000;
 
 /** A wake is at most every 2 minutes per bot and 12 an hour: a cost bound,
  * not a filter (events in between wait for the next wake). */
@@ -344,7 +344,13 @@ export interface ProactiveWakerDeps {
   clearTimer?: (handle: unknown) => void;
   budget?: ProactiveBudgetOptions;
   gatherMs?: number;
+  /** #4250: the signal ledger that keeps the event keys (a second offer of a
+   * key is a duplicate, a restart included). Absent: one in memory. */
+  signals?: SignalLedger;
 }
+
+/** #4250: the ledger kind of a waker event key. */
+export const WAKE_EVENT_KIND = "event";
 
 interface Pending {
   botId: string;
@@ -379,8 +385,7 @@ export class ProactiveWaker {
   private readonly deps: ProactiveWakerDeps;
   private readonly budget: ProactiveBudget;
   private readonly pending = new Map<string, Pending>();
-  private readonly keys: string[] = [];
-  private readonly keySet = new Set<string>();
+  private readonly signals: SignalLedger;
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
@@ -403,6 +408,7 @@ export class ProactiveWaker {
     });
     this.clearTimer = deps.clearTimer ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
     this.gatherMs = deps.gatherMs ?? PROACTIVE_GATHER_MS;
+    this.signals = deps.signals ?? new SignalLedger({ now: this.now });
   }
 
   /** One event for one bot. Cheap and synchronous: the filter, then the
@@ -424,13 +430,10 @@ export class ProactiveWaker {
     // do not start another wake that would fail the same way.
     if (this.deps.engineExpired?.(event.botId)) return "auth";
     if (!proactiveRelevance(event)) return "irrelevant";
-    const key = `${event.botId}\u0000${event.key}`;
-    if (this.keySet.has(key)) return "duplicate";
-    this.keySet.add(key);
-    this.keys.push(key);
-    if (this.keys.length > KEYS_KEPT) this.keySet.delete(this.keys.shift()!);
     // 2026-11-03 (audit S-2): never one wake for two people's events
     const person = this.personOf(event);
+    // #4250: the key is kept in the person's signal ledger, on disk
+    if (!this.signals.note(person, { key: event.key, kind: WAKE_EVENT_KIND, bot: event.botId, label: event.label }).fresh) return "duplicate";
     const group = pendingKey(event.botId, person);
     const pending = this.pending.get(group);
     if (pending) {
@@ -576,10 +579,7 @@ export class ProactiveWaker {
     // its cadence: its key must not read as a duplicate then
     for (const event of events) {
       if (event.source !== "watch") continue;
-      const key = `${event.botId}\u0000${event.key}`;
-      if (!this.keySet.delete(key)) continue;
-      const at = this.keys.indexOf(key);
-      if (at >= 0) this.keys.splice(at, 1);
+      this.signals.forget(this.personOf(event), event.botId, event.key);
     }
     try {
       this.deps.dropped?.(botId, events);

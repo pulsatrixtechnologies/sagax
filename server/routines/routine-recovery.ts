@@ -209,7 +209,16 @@ export function retryNote(cause: RoutineRetryCause): string {
     "check what it did (files, messages sent, anything started) so nothing is done twice; then finish the routine.]";
 }
 
-export function firstOwnerNotice(notices: RoutineOwnerNotice[], botId: string, cause: RoutineOwnerNotice["cause"], at: number): boolean {
+/** #4250: where "told once per bot and cause" is kept: the routine manager's
+ * signal ledger (on disk, per person), or a plain list (tests, a reader of
+ * the previous file format). */
+export interface OwnerNoticeBook {
+  /** True the first time (bot, cause) is told; it is then told. */
+  first(botId: string, cause: RoutineOwnerNotice["cause"], at: number): boolean;
+}
+
+export function firstOwnerNotice(notices: RoutineOwnerNotice[] | OwnerNoticeBook, botId: string, cause: RoutineOwnerNotice["cause"], at: number): boolean {
+  if (!Array.isArray(notices)) return notices.first(botId, cause, at);
   if (notices.some((notice) => notice.botId === botId && notice.cause === cause)) return false;
   notices.push({ botId, cause, at });
   return true;
@@ -217,7 +226,7 @@ export function firstOwnerNotice(notices: RoutineOwnerNotice[], botId: string, c
 
 /** What a failed attempt becomes. A queued run is changed in place; a failing one is the caller's to fail with `error`.
  * `words`: the language and zone of the person the run is for (its notices are theirs to read). */
-export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailureFacts, now: number, notices: RoutineOwnerNotice[],
+export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailureFacts, now: number, notices: RoutineOwnerNotice[] | OwnerNoticeBook,
   words: RoutineLimitWordsOptions = {}, beforeTellingRun = false): RoutineRecovery {
   const said: RoutineLimitWordsOptions = { ...words, timeZone: words.timeZone ?? hostTimeZone() };
   // The engine that refused, as the limit failover host saw it dispatched (a wake's fast model on another engine,

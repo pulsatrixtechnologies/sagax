@@ -38,7 +38,7 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
     list.push(withoutRunMarkersIn({ id: `m${next++}`, at: next, role: "bot", kind: "text", text, turnId } as WireMessage));
     threads.set(threadId, list);
   };
-  const notified: Array<{ threadId: string; title: string; body: string }> = [];
+  const notified: Array<{ threadId: string; title: string; body: string; source?: { threadId: string; messageId: string } }> = [];
   const unread: string[] = [];
   const deps: AttentionRelayDeps<AttentionBot> = {
     task: (_botId, threadId) => tasks.get(threadId) as never,
@@ -60,12 +60,21 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
     agentConversation: () => false,
     routineRun: (threadId) => threadId === "run" ? opts.run ?? null : null,
     ticketUrl: (_threadId, id) => `https://cw.example.com/v4_6_release/services/system_io/router/openrecord.rails?recordType=ServiceFv&recid=${id}`,
-    notify: (_bot, threadId, title, body) => { notified.push({ threadId, title, body }); },
+    notify: (_bot, threadId, title, body, source) => { notified.push({ threadId, title, body, source }); },
   };
   return { deps, say, threads, notified, unread };
 }
 
 describe("relayPersonAttention", () => {
+  it("#4250: the ring names the bot message it is about, in the conversation it was said in", () => {
+    const w = world();
+    w.say("work", REPORT);
+    const said = w.threads.get("work")!.at(-1)!;
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toMatchObject({ posted: true, threadId: "main" });
+    expect(w.notified).toHaveLength(1);
+    expect(w.notified[0]!.source).toEqual({ threadId: "work", messageId: said.id });
+  });
+
   it("#2915: an archived teammate thread the owner continues still rings the person", () => {
     const w = world();
     const work = w.deps.task("atlas", "work") as Partial<WireTask>;
@@ -133,7 +142,7 @@ describe("relayPersonAttention", () => {
     expect(card.threadRef).toEqual({ botId: "bot-atlas", threadId: "work", title: "@Nova · work" });
     expect(card.text).toContain("Atlas needs you");
     expect(w.unread).toEqual(["main"]);
-    expect(w.notified).toEqual([{ threadId: "main", title: "Atlas needs you", body: expect.stringContaining("100201 (board 1)") }]);
+    expect(w.notified).toEqual([{ threadId: "main", title: "Atlas needs you", body: expect.stringContaining("100201 (board 1)"), source: { threadId: "work", messageId: "m0" } }]);
   });
 
   it("posts one card per message, never in the person's own conversation, never for a failed turn", () => {

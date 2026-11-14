@@ -84,8 +84,9 @@ import {
 import type { LoginDriver } from "../engines/principal-engine-logins.ts";
 import {
   classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, engineTakeovers, loadOwnerNotices, recoverRun, requeueOnce, retryNote, usedRetry, ROUTINE_LIMIT_TAKEOVERS, ROUTINE_LIMIT_WAIT_MS, weekRuns,
-  type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
+  type OwnerNoticeBook, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
+import { SignalLedger } from "../proactive/signal-ledger.ts";
 import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { routineLimitUnknownEngineText } from "./routine-limit-words.ts";
 import { hostTimeZone } from "../turns/turn-clock.ts";
@@ -541,7 +542,8 @@ interface RoutineFile {
   /** The desktop launch whose startup runs were already queued
    * (RoutineManagerOptions.launchId). */
   startupLaunchId?: string;
-  /** Who was told about an owner-only failure (signed out, no credit...), until a run of that bot completes. */
+  /** Who was told about an owner-only failure (signed out, no credit...), until a run of that bot completes.
+   * #4250: kept in the signal ledger; still written here, from it, for the previous version for one release. */
   ownerNotices?: RoutineOwnerNotice[];
   /** 2026-10-22: existing routines were pinned postResults=true once, so an
    * upgrade never silences a person's already-visible routine results. */
@@ -550,9 +552,17 @@ interface RoutineFile {
    * -> names). Absent on an older file: folders come from the routines. */
   folders?: Record<string, string[]>;
   /** #4233: the people already told their login engine expired
-   * (`person\0Engine`), so a restart does not ring again. */
+   * (`person\0Engine`), so a restart does not ring again.
+   * #4250: kept in the signal ledger; still written here, from it, for the previous version for one release. */
   engineReconnectNotified?: string[];
 }
+
+/** #4250: the ledger kinds and keys of an engine's sign-in notice (per
+ * person) and of a bot's owner notice (per bot and cause). */
+export const ENGINE_SIGN_IN_KIND = "engine-sign-in";
+export const OWNER_NOTICE_KIND = "owner-notice";
+export const engineSignInKey = (engineName: string) => `engine-sign-in:${engineName}`;
+export const ownerNoticeKey = (cause: string) => `owner-notice:${cause}`;
 
 const webhookRunReceiptSchema = z.object({
   webhookId: z.string().min(1).max(200),
@@ -804,6 +814,13 @@ export interface RoutineManagerOptions {
   presence?: (routine: Routine) => AwayVerdict;
   /** 2026-10-16: the person is back; `skips` is what was skipped meanwhile. */
   onAwaySkipsReported?: (routine: Routine, skips: RoutineAwaySkips) => void;
+  /** #4250: the signal ledger that keeps who was told an engine expired and
+   * a bot's owner notices. Absent: one in memory (the file's own copy still
+   * carries them across a restart). */
+  signals?: SignalLedger;
+  /** #4250: whose ledger a bot's notice goes in (the run's person, else the
+   * bot's owner). */
+  personOf?: (who: { botId: string; runAs?: string }) => string | undefined;
   /** A routine that starts from a webhook or an email was removed, or its
    * schedule stopped being a trigger. The owned webhook is deleted with it. */
   onTriggerRoutineRemoved?: (routine: Routine) => void;
@@ -1893,7 +1910,8 @@ export class RoutineManager {
   /** Run ids the constructor kept running after a restart (takeRestartResumes). */
   private readonly restartResumes: string[] = [];
   private ticking = false;
-  private ownerNotices: RoutineOwnerNotice[] = [];
+  /** #4250: what was told once (owner notices, engine sign-in notices). */
+  private readonly signals: SignalLedger;
   private readonly failureFacts = new Map<string, RoutineFailureFacts>();
   /** 2026-11-01: what the harness saw go wrong in a run's turns (in memory:
    * a restart reruns the turn and sees again): tool calls that failed and
@@ -1916,9 +1934,6 @@ export class RoutineManager {
   private passAgain = false;
   /** routine id -> the occurrence (nextRunAt) already pre-woken. */
   private readonly prewoken = new Map<string, number>();
-  /** People+engine already told for the current expired spell (`person\0Engine`),
-   * kept on disk (#4233: a restart does not ring again). */
-  private readonly engineReconnectNotified = new Set<string>();
   /** Bots whose login engine is expired: their next starts wait for reconnect. */
   private readonly engineReconnectPauseBots = new Map<string, string>();
   /** routine id -> the task reserved and warmed for its next occurrence. */
@@ -1944,6 +1959,7 @@ export class RoutineManager {
     this.file = options.file ?? join(DATA_DIR, "routines.json");
     this.disk = new OwnedFile(this.file, { mode: 0o600 });
     this.now = options.now ?? Date.now;
+    this.signals = options.signals ?? new SignalLedger({ now: this.now });
     try {
       const text = readFileSync(this.file, "utf8");
       const disk = JSON.parse(text) as Partial<RoutineFile>;
@@ -2089,10 +2105,18 @@ export class RoutineManager {
             return parsed.success ? [parsed.data] : [];
           })
         : [];
-      this.ownerNotices = loadOwnerNotices(disk.ownerNotices);
+      // #4250: a file of the previous version: what it says was told goes
+      // into the ledger, unless the ledger already knows that signal
+      for (const notice of loadOwnerNotices(disk.ownerNotices)) {
+        if (!this.signals.find(notice.botId, ownerNoticeKey(notice.cause))) this.tellOwnerNotice(notice.botId, notice.cause, undefined, notice.at);
+      }
       this.folderOrder = loadFolderOrder(disk.folders);
       if (Array.isArray(disk.engineReconnectNotified)) {
-        for (const key of disk.engineReconnectNotified.slice(0, 2_000)) if (typeof key === "string" && key.length <= 400) this.engineReconnectNotified.add(key);
+        for (const key of disk.engineReconnectNotified.slice(0, 2_000)) {
+          if (typeof key !== "string" || key.length > 400) continue;
+          const [person, engineName] = key.split("\0");
+          if (person && engineName && !this.signals.get(person, "", engineSignInKey(engineName))) this.signals.told(person, { key: engineSignInKey(engineName), kind: ENGINE_SIGN_IN_KIND });
+        }
       }
       this.frozenPending = disk.frozenResultsCleared !== true;
       if (typeof disk.startupLaunchId === "string") this.startupLaunchId = disk.startupLaunchId;
@@ -2495,7 +2519,54 @@ export class RoutineManager {
    * same cause rings once. */
   private ownerNoticeTells(run: RoutineRun, cause: RoutineOwnerNotice["cause"]): boolean {
     if (this.beforeTellingRun(run)) return true;
-    return firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now());
+    return firstOwnerNotice(this.ownerNoticeBook(run), run.botId, cause, this.now());
+  }
+
+  /** #4250: a bot's owner notices, in the signal ledger: told once per bot
+   * and cause until a run of that bot completes. */
+  private ownerNoticeBook(run: Pick<RoutineRun, "runAs">): OwnerNoticeBook {
+    return {
+      first: (botId, cause) => {
+        if (this.signals.find(botId, ownerNoticeKey(cause))?.entry.state === "told") return false;
+        this.tellOwnerNotice(botId, cause, run.runAs);
+        this.saveLater();
+        return true;
+      },
+    };
+  }
+
+  private tellOwnerNotice(botId: string, cause: string, runAs?: string, at?: number): void {
+    const known = this.signals.find(botId, ownerNoticeKey(cause));
+    const person = known?.person ?? this.personOf({ botId, ...(runAs ? { runAs } : {}) });
+    this.signals.told(person, { key: ownerNoticeKey(cause), kind: OWNER_NOTICE_KIND, bot: botId }, [], at);
+  }
+
+  /** #4250: what the previous version reads in the file (ownerNotices,
+   * engineReconnectNotified), from the ledger. */
+  private legacyToldFields(): Pick<RoutineFile, "ownerNotices" | "engineReconnectNotified"> {
+    const ownerNotices: RoutineOwnerNotice[] = this.signals.entries({ kind: OWNER_NOTICE_KIND })
+      .filter(({ entry }) => entry.state === "told")
+      .map(({ entry }) => ({ botId: entry.bot, cause: entry.key.slice(ownerNoticeKey("").length) as RoutineOwnerNotice["cause"], at: entry.toldAt ?? entry.lastAt }));
+    const engine = [...this.engineReconnectTold()];
+    return { ...(ownerNotices.length ? { ownerNotices: loadOwnerNotices(ownerNotices) } : {}), ...(engine.length ? { engineReconnectNotified: engine } : {}) };
+  }
+
+  private personOf(who: { botId: string; runAs?: string }): string {
+    try {
+      return this.options.personOf?.(who)?.trim() || who.runAs?.trim() || "";
+    } catch {
+      return who.runAs?.trim() ?? "";
+    }
+  }
+
+  /** #4250: who was told their login engine expired (`person\0Engine`), read
+   * from the ledger. */
+  private engineReconnectTold(): Set<string> {
+    const told = new Set<string>();
+    for (const { person, entry } of this.signals.entries({ kind: ENGINE_SIGN_IN_KIND })) {
+      if (entry.state === "told") told.add(`${person}\0${entry.key.slice(engineSignInKey("").length)}`);
+    }
+    return told;
   }
 
   /** #3695, #3990: what a run reads of its streak: the rule (the person
@@ -3653,7 +3724,7 @@ export class RoutineManager {
       botDriver: gate.botDriver,
       botPayer: gate.payer,
       expired: gate.expired,
-      alreadyNotified: this.engineReconnectNotified,
+      alreadyNotified: this.engineReconnectTold(),
     });
     // Keep bots paused while their engine stays expired (including once due).
     for (const botId of Array.from(this.engineReconnectPauseBots.keys())) {
@@ -3664,10 +3735,10 @@ export class RoutineManager {
     for (const [botId, engineName] of result.pauseEngineByBot) {
       this.engineReconnectPauseBots.set(botId, engineName);
     }
-    const toldBefore = this.engineReconnectNotified.size;
     let toldChanged = false;
     for (const entry of result.notify) {
-      this.engineReconnectNotified.add(`${entry.principalId}\0${entry.engineName}`);
+      this.signals.told(entry.principalId, { key: engineSignInKey(entry.engineName), kind: ENGINE_SIGN_IN_KIND });
+      toldChanged = true;
       try {
         gate.onAheadNotify?.(
           entry.principalId,
@@ -3679,17 +3750,14 @@ export class RoutineManager {
       } catch { /* best effort */ }
     }
     // Drop notify dedupe for people whose engine is no longer expired.
-    for (const key of Array.from(this.engineReconnectNotified)) {
-      const [person, engineName] = key.split("\0");
-      if (!person || !engineName) {
-        toldChanged = this.engineReconnectNotified.delete(key) || toldChanged;
-        continue;
-      }
+    for (const { person, entry } of this.signals.entries({ kind: ENGINE_SIGN_IN_KIND })) {
+      if (entry.state !== "told") continue;
+      const engineName = entry.key.slice(engineSignInKey("").length);
       const driver = (Object.entries(LOGIN_ENGINE_LABEL) as Array<[LoginDriver, string]>)
         .find(([, label]) => label === engineName)?.[0];
-      if (!driver || !gate.expired(person, driver)) toldChanged = this.engineReconnectNotified.delete(key) || toldChanged;
+      if (!driver || !gate.expired(person, driver)) toldChanged = this.signals.settle(person, "", entry.key, "retired") || toldChanged;
     }
-    if (toldChanged || this.engineReconnectNotified.size !== toldBefore) this.saveLater();
+    if (toldChanged) this.saveLater();
   }
 
   /** Cheap live check: is this bot's login engine marked expired right now? */
@@ -4940,7 +5008,7 @@ export class RoutineManager {
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
     if (engine) clearEngineRefusal(engine.engine, engine.account, this.now());
     // A run that completes ends the owner's open notices for its bot.
-    this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId);
+    if (this.signals.settleWhere({ kind: OWNER_NOTICE_KIND, bot: run.botId }, "retired")) this.saveLater();
     return false;
   }
 
@@ -5013,7 +5081,7 @@ export class RoutineManager {
     const beforeTellingRun = this.beforeTellingRun(run);
     const recovery = recoverRun(run, said, {
       ...(limit ? { ...facts, limit } : facts), nextScheduled: nextScheduledRun(run, this.routines),
-    }, this.now(), this.ownerNotices, {
+    }, this.now(), this.ownerNoticeBook(run), {
       ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
     }, beforeTellingRun);
     if ("waiting" in recovery && recovery.waiting) {
@@ -5080,15 +5148,7 @@ export class RoutineManager {
       this.engineReconnectPauseBots.clear();
     }
     // Allow a fresh ahead notification if that engine expires again later.
-    const toldBefore = this.engineReconnectNotified.size;
-    if (engineName) {
-      for (const key of Array.from(this.engineReconnectNotified)) {
-        if (key.endsWith(`\0${engineName}`)) this.engineReconnectNotified.delete(key);
-      }
-    } else {
-      this.engineReconnectNotified.clear();
-    }
-    if (this.engineReconnectNotified.size !== toldBefore) this.saveLater();
+    if (this.signals.settleWhere({ kind: ENGINE_SIGN_IN_KIND, ...(engineName ? { key: engineSignInKey(engineName) } : {}) }, "retired")) this.saveLater();
     if (!resumed.length) return [];
     this.saveLater();
     for (const run of resumed) {
@@ -6065,9 +6125,9 @@ export class RoutineManager {
       routineRequestReceipts: this.routineRequestReceipts,
       webhookRunReceipts: this.webhookRunReceipts,
       ...(this.startupLaunchId === undefined ? {} : { startupLaunchId: this.startupLaunchId }),
-      ...(this.ownerNotices.length ? { ownerNotices: this.ownerNotices } : {}),
+      // #4250: the signal ledger's copy, for the previous version (one release)
+      ...this.legacyToldFields(),
       ...(this.folderOrder.size ? { folders: Object.fromEntries(this.folderOrder) } : {}),
-      ...(this.engineReconnectNotified.size ? { engineReconnectNotified: [...this.engineReconnectNotified] } : {}),
     } satisfies RoutineFile));
   }
 }

@@ -351,7 +351,7 @@ export function backfillPeerOutcomes<B extends AttentionBot>(
       threadRef: { botId: group.bot.id, threadId: newest.threadId, title: newest.title ?? "" },
     });
     deps.markUnread(group.bot.id, group.target);
-    if (fresh.some((item) => item.kind !== "tell")) deps.notify(group.bot, group.target, group.bot.name, text);
+    if (fresh.some((item) => item.kind !== "tell")) deps.notify(group.bot, group.target, group.bot.name, text, { threadId: newest.threadId, messageId: newest.messageId });
     lines += 1;
   }
   return lines;

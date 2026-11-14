@@ -20,13 +20,21 @@
  *   marked on the card so a restart never rings it again.
  *
  * RoutineNeedsWatch calls `sync` on every pass with every routine; the
- * server's sweep calls `remindDue`. */
+ * server's sweep calls `remindDue`.
+ *
+ * #4250 (S1): the told state is the signal ledger's (key
+ * `routine-problem:<routineId>` in the person's store): raised is told, the
+ * reminder is its step 1, a good run retires it. The card in storage is read
+ * only for a streak a previous version told. */
 import type { ApprovalWords } from "../../shared/approval-describe.ts";
 import { ASK_CHOICE_TOOL } from "../../shared/options-card.ts";
 import type { RoutineNeedsPerson } from "../../shared/routines.ts";
 import { INPUT_REMIND_REPEAT_MS } from "../runtime/types.ts";
+import type { SignalLedger } from "../proactive/signal-ledger.ts";
 
 export const ROUTINE_PROBLEM_KEY_PREFIX = "routine-problem:";
+/** #4250: the ledger kind of a routine's fix card. */
+export const ROUTINE_PROBLEM_KIND = "routine-problem";
 
 /** The key of a routine's fix card. */
 export function routineProblemKey(routineId: string): string {
@@ -97,7 +105,7 @@ export interface PendingProblemCard {
   message: { id: string; at: number; card?: { remindedAt?: number } };
 }
 
-export interface RoutineProblemCardsDeps<R extends { id: string; name: string }> {
+export interface RoutineProblemCardsDeps<R extends { id: string; name: string; botId?: string }> {
   /** The routine's need now, read without its cards and items (only a
    * problem or a pause counts here). */
   need(routine: R): RoutineNeedsPerson | null;
@@ -116,6 +124,9 @@ export interface RoutineProblemCardsDeps<R extends { id: string; name: string }>
   /** Ring the card's own needs-you again and mark it reminded. */
   remind(routine: R, card: PendingProblemCard): void;
   now(): number;
+  /** #4250: the signal ledger, and whose store a routine's card is in. */
+  signals?: SignalLedger;
+  person?(routine: R): string;
 }
 
 interface Shown<R> {
@@ -125,7 +136,7 @@ interface Shown<R> {
   question: string;
 }
 
-export class RoutineProblemCards<R extends { id: string; name: string }> {
+export class RoutineProblemCards<R extends { id: string; name: string; botId?: string }> {
   private readonly shown = new Map<string, Shown<R>>();
   private readonly deps: RoutineProblemCardsDeps<R>;
 
@@ -162,14 +173,21 @@ export class RoutineProblemCards<R extends { id: string; name: string }> {
     const input = routineProblemCardInput(routine, need, this.deps.facts(routine, need), this.deps.words(routine));
     if (last && last.episode === episode && last.question === input.question) return;
     this.shown.set(routine.id, { routine, episode, question: input.question });
-    if (!this.deps.pending(routine, key)) {
+    const open = this.deps.pending(routine, key);
+    if (!open) {
       // the person answered this streak's card: it is told, never raised
-      // again; after a restart the card in storage says so
+      // again; after a restart the ledger says so (a previous version's
+      // streak: the card in storage)
       if (last?.episode === episode) return;
-      const told = this.deps.latest(routine, key);
-      if (told && told.at >= need.since) return;
+      // the later of the two: a card in storage newer than the ledger (a
+      // rollback, then an upgrade) still counts
+      const told = [this.signal(routine)?.toldAt, this.deps.latest(routine, key)?.at].filter((at): at is number => at !== undefined);
+      if (told.length && Math.max(...told) >= need.since) return;
     }
     this.deps.ask(routine, input);
+    const note = { key, kind: ROUTINE_PROBLEM_KIND, level: "card" as const, bot: routine.botId ?? "", label: input.title };
+    if (open) this.deps.signals?.note(this.person(routine), note);
+    else this.deps.signals?.told(this.person(routine), note);
   }
 
   /** The cards still open a day after they were raised: one reminder each. */
@@ -177,7 +195,7 @@ export class RoutineProblemCards<R extends { id: string; name: string }> {
     const now = this.deps.now();
     for (const routine of routines) {
       const found = this.deps.pending(routine, routineProblemKey(routine.id));
-      if (!found || found.message.card?.remindedAt) continue;
+      if (!found || found.message.card?.remindedAt || (this.signal(routine)?.reminded ?? 0) >= 1) continue;
       if (now - found.message.at < INPUT_REMIND_REPEAT_MS) continue;
       this.deps.remind(routine, found);
     }
@@ -186,5 +204,14 @@ export class RoutineProblemCards<R extends { id: string; name: string }> {
   private retire(routine: R): void {
     const key = routineProblemKey(routine.id);
     if (this.deps.pending(routine, key)) this.deps.ask(routine, { tool: ASK_CHOICE_TOOL, key, retire: true });
+    this.deps.signals?.settle(this.person(routine), routine.botId ?? "", key, "retired");
+  }
+
+  private signal(routine: R) {
+    return this.deps.signals?.get(this.person(routine), routine.botId ?? "", routineProblemKey(routine.id));
+  }
+
+  private person(routine: R): string {
+    return this.deps.person?.(routine) ?? "";
   }
 }

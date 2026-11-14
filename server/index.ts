@@ -210,7 +210,7 @@ import { DataFailure } from "./data/types.ts";
 import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
 import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
-import { type BotVisibility, type RelayVia, type ResolvedSender, type WaitingOnCard, type WireBot, type WireTask } from "../shared/wire.ts";
+import { type BotVisibility, type RelayVia, type ResolvedSender, type WaitingOnCard, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
 import { backgroundCardHome as backgroundCardHomeOf, backgroundRelayAllowed, earlierThreadCardHome, mcpThreadAnswerer, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
 import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
@@ -786,7 +786,8 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
-import { RoutineProblemCards } from "./routines/routine-problem-card.ts";
+import { RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
+import { createTellPerson, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage } from "./proactive/signal-ledger.ts";
 import { clipReadable } from "../shared/routine-result.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
@@ -1642,7 +1643,7 @@ import { createPerformAsMember } from "./index-leaves/performAsMember.ts";
 import { createBotOneShotAccess, createOrgTurnAccess } from "./index-leaves/orgTurnAccess.ts";
 import { createOneShotSignIn } from "./engines/one-shot-sign-in.ts";
 import { createSignInCards } from "./engines/sign-in-cards.ts";
-import { adminCardHomes, createEngineFallbackCards, type EngineFallbackHome } from "./engines/engine-fallback-card.ts";
+import { adminCardHomes, createEngineFallbackCards, engineFallbackKey, type EngineFallbackHome } from "./engines/engine-fallback-card.ts";
 import { createMountBotVps } from "./index-leaves/mountBotVps.ts";
 import { createApplyOrgEngineAllowList } from "./index-leaves/applyOrgEngineAllowList.ts";
 import { createScheduleApprovalExpiry } from "./index-leaves/scheduleApprovalExpiry.ts";
@@ -6564,6 +6565,9 @@ bindLeafHost({
   get quietTurnThreads() { return quietTurnThreads; },
   get QUIET_TURN_NEWS() { return QUIET_TURN_NEWS; },
   get notify() { return notify; },
+  get tellPerson() { return tellPerson; },
+  get routineRunPerson() { return routineRunPerson; },
+  get routineProblemPerson() { return routineProblemPerson; },
   get HIDDEN_APPROVAL_TTL_MS() { return HIDDEN_APPROVAL_TTL_MS; },
   get ROUTINE_APPROVAL_WAIT_MS() { return ROUTINE_APPROVAL_WAIT_MS; },
   get raiseHarnessQuestion() { return raiseHarnessQuestion; },
@@ -8839,6 +8843,32 @@ const signalGate = new PersonSignalGate((person) => {
   // #4233: the budget day starts at the person's own midnight
   return readSignalPrefs(prefs, readerTimeZone(person));
 }, Date.now, signalGateFileStorage(join(DATA_DIR, "signal-gate.json")));
+/** #4250 (S1): the signal ledger, one store per person on disk of what was
+ * noticed and told (server/proactive/signal-ledger.ts). */
+const signalLedger = new SignalLedger({ storage: signalLedgerDirStorage(join(DATA_DIR, "signal-ledger")) });
+/** #4250: a proactive item for the person, as `notify` (or its access
+ * variant) takes it. */
+interface ProactiveNotice {
+  notification: Parameters<typeof notify>[0];
+  access?: WireAccessCard;
+  routineRunId?: string;
+}
+/** #4250: the one way a proactive item reaches notify: told once per key and
+ * step, in the person's ledger, with one log line. */
+const tellPerson = createTellPerson<ProactiveNotice>({
+  ledger: signalLedger,
+  notify: ({ notification, access, routineRunId }) => {
+    if (access) notifyAccess(notification, access, routineRunId);
+    else notify(notification);
+  },
+});
+/** #4250: the ledger kind of a run's own notice (failed, waiting, skipped). */
+const ROUTINE_RUN_SIGNAL_KIND = "routine-run";
+/** #4250: a short stable tag of a notice's words, so the same words for the
+ * same run are told once and new words are told. */
+function signalWordsTag(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 12);
+}
 /** "Me joindre" (server/reach-me/): set once its channels exist, further down. */
 let reachMeService: ReachMe | null = null;
 let reachMeTeams: ReachTeams | null = null;
@@ -16668,14 +16698,21 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
     }
     return null;
   },
-  remind: (_routine, found) => {
+  remind: (routine, found) => {
     const note = pendingQuestionNotice(found.threadId, found.message.id);
     const row = store.messagesFor(found.threadId).find((message) => message.id === found.message.id);
     if (row?.card) store.patchMessage(found.threadId, row.id, { card: { ...row.card, remindedAt: Date.now() } });
-    if (note) notify(note);
+    if (note) tellPerson(routineProblemPerson(routine), { key: routineProblemKey(routine.id), kind: ROUTINE_PROBLEM_KIND, bot: routine.botId, step: 1, notification: { notification: note } });
   },
   now: () => Date.now(),
+  // #4250: the told state and the reminder step, in the person's signal ledger
+  signals: signalLedger,
+  person: (routine) => routineProblemPerson(routine),
 });
+/** #4250: whose signal ledger a routine's fix card is in. */
+function routineProblemPerson(routine: Routine): string {
+  return routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }) ?? "";
+}
 
 /** The bot's ask_choice as a question request: the same path as an engine's
  * own question tool (request.opened), so the card carries a requestId and
@@ -17276,6 +17313,8 @@ store.onChange((change) => {
 // #4233: an engine signed out or out of credit with a backup running in its
 // place is told once, as a fix card for the person who can fix it, and the
 // card closes when the engine works again (server/engines/engine-fallback-card.ts).
+/** #4250: the ledger kind of an engine's fix card. */
+const ENGINE_FALLBACK_KIND = "engine-fallback";
 const engineFallbackCards = createEngineFallbackCards({
   pendingKeyed: (key, person) => signInCards.pendingKeyed(key, person),
   append: (threadId, access, text) => {
@@ -17284,10 +17323,22 @@ const engineFallbackCards = createEngineFallbackCards({
   },
   notify: (access, threadId, text, title, routineRunId) => {
     const bot = store.bot(access.botId);
-    if (bot) notifyAccess(deliverableNotification("routine-deferred", bot, threadId, text, { title }), access, routineRunId);
+    if (!bot) return;
+    // #4250: one ring per person and engine for the spell, a restart
+    // included; a server engine's card rings in each administrators' home
+    const payer = access.payerPrincipalId?.trim();
+    const key = access.key ?? `${ENGINE_FALLBACK_KIND}:${access.botId}`;
+    tellPerson(payer || "server", {
+      key: payer ? key : signalKeys.inHome(key, threadId), kind: ENGINE_FALLBACK_KIND, bot: access.botId, label: title,
+      notification: { notification: deliverableNotification("routine-deferred", bot, threadId, text, { title }), access, ...(routineRunId ? { routineRunId } : {}) },
+    });
   },
 });
-onEngineWorksAgain((engine, account, signedInOnly) => { signInCards.retireKeyed(engine, account, signedInOnly); });
+onEngineWorksAgain((engine, account, signedInOnly) => {
+  signInCards.retireKeyed(engine, account, signedInOnly);
+  // the spell is over: the next one is told again
+  settleKeyed(signalLedger, { kind: ENGINE_FALLBACK_KIND, key: engineFallbackKey(engine) }, "retired");
+});
 /** #4233: a server engine on an organization server is reconnected by the
  * administrators: its fix card is theirs, in a conversation each of them can
  * read (adminCardHomes): the one the backup ran in when they can read it,
@@ -18637,7 +18688,13 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   // #4238: a teammate's exchange's items as keyed cards, under the peer scope
   peerItemCards: (bot, target, items) => syncItemCardsIn(bot, target, { routineId: PEER_ITEM_SCOPE, routineName: bot.name }, items, attentionPerson(bot, target), { retire: false }),
   ticketUrl: attentionTicketUrl,
-  notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
+  // #4250: told once per bot message it is about, in the ledger of the
+  // person of the conversation it was said in (a shared bot's member keeps
+  // their own)
+  notify: (bot, threadId, title, body, source) => tellPerson(attentionPerson(bot, source.threadId) || effectiveBotOwner(bot) || "", {
+    key: signalKeys.needsYou(source), kind: "needs-you", bot: bot.id, label: title,
+    notification: { notification: deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title }) },
+  }),
   feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
   // #3581, #4051: a run's late answer goes onto the run's own card (the card
   // write of syncRoutineRunToSource, with that answer as its report), through
@@ -19966,6 +20023,8 @@ const proactiveEngine = new ProactiveEngine({
 /** 2026-11-02: gathered events survive a restart (ids only). */
 const proactivePending = new ProactivePendingFile(join(DATA_DIR, "proactive-pending.json"));
 const proactiveWaker = new ProactiveWaker({
+  // #4250: event keys in the person's signal ledger (a restart wakes once)
+  signals: signalLedger,
   pendingChanged: (botId, events) => proactivePending.set(botId, events),
   // 2026-11-03 (audit S-2): events gather per (bot, person); an event
   // without runAs is the owner's
@@ -20574,7 +20633,10 @@ routines = new RoutineManager({
         const engine = engineDisplayName(instance);
         const access = accessCardFor(planned, refusal, engine);
         store.appendMessage(threadId, { role: "bot", kind: "access", access });
-        if (alert !== null) notifyAccess(deliverableNotification("turn-failed", bot, threadId, engineAccessNotice(refusal.reason, engine, refusal), { avatarUrl: bot.avatarUrl }), access, run.id);
+        if (alert !== null) tellPerson(routineRunPerson(run, bot), {
+          key: `run-access:${run.id}`, kind: ROUTINE_RUN_SIGNAL_KIND, bot: bot.id,
+          notification: { notification: deliverableNotification("turn-failed", bot, threadId, engineAccessNotice(refusal.reason, engine, refusal), { avatarUrl: bot.avatarUrl }), access, routineRunId: run.id },
+        });
         console.error(`[routine] bot=${bot.id} refused: ${refusal.reason}${refusal.cause ? `/${refusal.cause}` : ""} (${instance.instanceId})`);
         return;
       }
@@ -20587,7 +20649,11 @@ routines = new RoutineManager({
     const runKind = run.proactive ? "proactive" as const : run.webhookId ? "webhook" as const : "routine" as const;
     const blocked = run.status === "blocked";
     const title = blocked ? routineRunTitle(notificationBot.name, run, "blocked") ?? "Routine blocked" : routineRunTitle(notificationBot.name, run, "failed");
-    notify(deliverableNotification(blocked ? "routine-deferred" : "routine-failed", notificationBot, routineSourceThread(run) ?? run.threadId ?? bot.threadId, detail, title ? { title } : {}));
+    // #4250: told once per run and status, a restart included
+    tellPerson(routineRunPerson(run, notificationBot), {
+      key: signalKeys.runProblem(run.id, run.status), kind: ROUTINE_RUN_SIGNAL_KIND, bot: notificationBot.id, ...(title ? { label: title } : {}),
+      notification: { notification: deliverableNotification(blocked ? "routine-deferred" : "routine-failed", notificationBot, routineSourceThread(run) ?? run.threadId ?? bot.threadId, detail, title ? { title } : {}) },
+    });
     // 2026-10-30: the bot may look into its own failed run (never a failed wake of its own)
     // 2026-11-01: nor a restart's cut or a missed occurrence (runFailureWakesBot)
     if (runFailureWakesBot(run)) offerProactive({
@@ -20611,7 +20677,11 @@ routines = new RoutineManager({
     const notificationBot = routineSourceOwner(run)?.bot ?? bot;
     // A waiting proactive wake or webhook run (a limit's reset, a busy target) is not "a routine" either.
     const title = routineRunTitle(notificationBot.name, run, "waiting");
-    notify(deliverableNotification("routine-deferred", notificationBot, routineSourceThread(run) ?? bot.threadId, detail, title ? { title } : undefined));
+    // #4250: the same words for the same run are told once
+    tellPerson(routineRunPerson(run, notificationBot), {
+      key: `run-deferred:${run.id}:${signalWordsTag(detail)}`, kind: ROUTINE_RUN_SIGNAL_KIND, bot: notificationBot.id, ...(title ? { label: title } : {}),
+      notification: { notification: deliverableNotification("routine-deferred", notificationBot, routineSourceThread(run) ?? bot.threadId, detail, title ? { title } : undefined) },
+    });
   },
   engineReconnect: {
     botDriver: (botId) => {
@@ -20664,10 +20734,26 @@ routines = new RoutineManager({
   onAwaySkipsReported: (routine, skips) => {
     const bot = store.bot(routine.botId);
     if (!bot) return;
-    notify(deliverableNotification("routine-deferred", bot, bot.threadId, awaySkipsDetail(redactSecretsInText(routine.name), skips),
-      { title: "Routines skipped while you were away" }));
-  }
+    const detail = awaySkipsDetail(redactSecretsInText(routine.name), skips);
+    tellPerson(routineProblemPerson(routine), {
+      // #4250: once per away period, the next one is told again
+      key: signalKeys.awaySkips(routine.id, skips), kind: ROUTINE_RUN_SIGNAL_KIND, bot: bot.id,
+      notification: { notification: deliverableNotification("routine-deferred", bot, bot.threadId, detail, { title: "Routines skipped while you were away" }) },
+    });
+  },
+  // #4250: owner and engine sign-in notices, in the person's signal ledger
+  signals: signalLedger,
+  personOf: (who) => {
+    if (who.runAs) return who.runAs;
+    const bot = store.bot(who.botId);
+    return bot ? effectiveBotOwner(bot) || undefined : undefined;
+  },
 });
+/** #4250: whose signal ledger a run's notice is in: the run's person, else
+ * the owner of the bot that tells it. */
+function routineRunPerson(run: RoutineRun, bot: BotRecord): string {
+  return run.runAs || effectiveBotOwner(bot) || "";
+}
 // Lot E/F wiring (waits, saved-steps, loop-guard, read-and-draft): keep this block small.
 // directChatOf is defined just above RoutineManager (wait joinConversation + waits boot).
 const waitDrafted = new Map<string, Set<string>>();
@@ -25264,7 +25350,11 @@ function postDailySuggestions(botId: string, threadId: string, suggestions: read
     // #2697: the card also reaches the phone, with Do it / Not now on the
     // banner; a card-level signal (budget and quiet hours, #2695, decide)
     const bot = store.bot(botId);
-    if (bot) notify(deliverableNotification("proposal", bot, threadId, card.subtitle, { avatarUrl: bot.avatarUrl, title: card.title, proposalId: proposal.id }));
+    // #4250: told through tellPerson, once per proposal
+    if (bot) tellPerson(attentionPerson(bot, threadId) || effectiveBotOwner(bot) || "", {
+      key: signalKeys.proposal(proposal.id), kind: "proposal", bot: bot.id, label: card.title, ref: { threadId },
+      notification: { notification: deliverableNotification("proposal", bot, threadId, card.subtitle, { avatarUrl: bot.avatarUrl, title: card.title, proposalId: proposal.id }) },
+    });
   }
   return picked.length;
 }
@@ -28992,7 +29082,9 @@ reachMeService = new ReachMe({
   respond: reachMeRespond,
   push: (message) => pushHub.submit(message),
   language: reachMeLanguage,
-  audit: reachMeAudit
+  audit: reachMeAudit,
+  // #4250: reminder clocks and notices sent, in the person's signal ledger
+  signals: signalLedger
 });
 setReachMeSmsHandler((input) => reachMeService!.handleReply({ channel: "sms", person: reachMePerson(input.ownerPrincipalId), text: input.text, from: input.from }));
 setInterval(() => {
@@ -36125,6 +36217,8 @@ const gracefulShutdown = createGracefulShutdown({
       // for the next start, and the conversations it cuts say so now.
       coordinator.close();
       noteTurnsCutByShutdown();
+      // #4250: what was told this tick reaches the disk before the restart
+      signalLedger.flush();
       if (workspaceAccessTimer) clearInterval(workspaceAccessTimer);
       // Child MCP processes and the HTTP listener can remain alive while the
       // asynchronous shutdown jobs drain. Invalidate their turn bearers before

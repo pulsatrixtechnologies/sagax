@@ -43,6 +43,7 @@ import jmespath from "jmespath";
 
 import { writeFileAtomic } from "../atomic.ts";
 import type { RoutinePrecheckVerdict } from "../routines/routine-precheck.ts";
+import type { RoutineRunProactive } from "../routines/routine-run-types.ts";
 import type { BuiltWatchPrecheck } from "../routines/routine-watch.ts";
 import type { Routine, RoutineInput } from "../routines/routines.ts";
 import { classifyProactiveActionKind } from "./proactive.ts";
@@ -237,6 +238,34 @@ export function domainLabel(listing: Pick<FlowWatchListing, "domains"> | undefin
 /** The tools a watch declares; without Flow's list, its observe tool. */
 export function declaredTools(watch: Pick<FlowWatch, "tools" | "observe">): string[] {
   return watch.tools.length ? [...watch.tools] : "tool" in watch.observe ? [watch.observe.tool] : [];
+}
+
+/** #3431 (decision 3): the tools a watch declares that the person's
+ * connection marks read-only: what their yes to its domain covers. */
+export function watchReadTools(watches: readonly FlowWatch[], readOnly: ReadonlySet<string>): string[] {
+  const out = new Set<string>();
+  for (const watch of watches) {
+    for (const tool of declaredTools(watch)) if (readOnly.has(tool)) out.add(tool);
+  }
+  return [...out].sort();
+}
+
+/** #4250 (S5): the wake identity a watch alert carries, as the proactive
+ * wake of the loop before it did (its run's `proactive`): source "watch",
+ * the watch and its domain, and the read-only tools the person's yes
+ * covers. Its card keeps « Arrêter cette veille » (#3457), its reads pass
+ * without a card (#3431), and an old mute of the bot's wakes never quiets
+ * it (#3423). */
+export function watchWakeIdentity(watch: Pick<FlowWatch, "id" | "domain" | "tools" | "observe">, readOnly: ReadonlySet<string>): RoutineRunProactive {
+  const reads = watchReadTools([watch as FlowWatch], readOnly);
+  return {
+    mode: "proactive",
+    hops: 0,
+    sources: ["watch"],
+    // what the person chose posts its report (proactive-wake.ts wakeAlwaysReports)
+    alwaysReport: true,
+    watches: [{ id: watch.id, domain: watch.domain, ...(reads.length ? { reads } : {}) }],
+  };
 }
 
 /** The helper's stdout, read whole. Bad JSON is no watch at all. */
@@ -1048,7 +1077,7 @@ export class FlowWatches {
     this.deps.memory.observed(person, watch.id);
     if (verdict.wake) this.deps.memory.alerted(person, watch.id, this.now());
     this.deps.memory.save();
-    return verdict;
+    return verdict.wake ? { ...verdict, proactive: watchWakeIdentity(watch, reads!.readOnly) } : verdict;
   }
 
   /** #3140: a skip posts its line once per cause; the same cause stays

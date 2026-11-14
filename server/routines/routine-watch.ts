@@ -645,9 +645,11 @@ function describeWatchCondition(watch: BuiltWatchPrecheck): string | null {
 function whenOn(watch: BuiltWatchPrecheck, snapshot: WatchSnapshot): { snapshot: WatchSnapshot; condition: { holds: boolean; seen: string } } | null {
   if (watch.when === undefined) return null;
   const { holds, key } = evaluateWhen(watch.when, snapshot.facts !== undefined ? snapshot.facts : snapshot.text);
+  // a reading cut at its limit is no JSON: `when` cannot hold on it, and says why
+  const seen = holds ? `its result ${key}` : snapshot.truncated ? "the result was cut at its limit, so the condition could not be read" : "its result is empty";
   return {
     snapshot: { ...snapshot, fingerprint: holds ? `when:${key}` : "@@false" },
-    condition: { holds, seen: holds ? `its result ${key}` : "its result is empty" },
+    condition: { holds, seen },
   };
 }
 

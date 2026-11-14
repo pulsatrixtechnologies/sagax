@@ -33,6 +33,7 @@ import {
   loadRoutinePrecheck,
   parseRoutinePrecheck,
   runRoutinePrecheck,
+  storedRoutinePrecheck,
   type RoutineCodePrecheck,
   type RoutinePrecheck,
   type RoutinePrecheckFacts,
@@ -4200,6 +4201,12 @@ export class RoutineManager {
               continue;
             }
             this.precheckPassed.add(run.id);
+            // #4250 (S5): a check that stands for a proactive kind (a Flow
+            // watch, the checklist) gives the run its wake identity
+            if (verdict.verdict.proactive && !run.proactive) {
+              run.proactive = structuredClone(verdict.verdict.proactive);
+              this.saveLater();
+            }
             if (verdict.verdict.note) {
               run.watchNote = verdict.verdict.note.slice(0, ROUTINE_WATCH_LIMITS.maxNoteChars);
               this.saveLater();
@@ -6159,7 +6166,9 @@ export class RoutineManager {
       version: 1,
       ...(this.frozenPending ? {} : { frozenResultsCleared: true }),
       ...(this.postResultsPending ? {} : { postResultsMigrated: true }),
-      routines: [...this.routines, ...this.unloadedRoutines],
+      // #4250 (S5): a code check the previous release does not know is
+      // written as a check it reads and that never wakes (one release)
+      routines: [...this.routines.map((routine) => routine.precheck ? { ...routine, precheck: storedRoutinePrecheck(routine.precheck) } : routine), ...this.unloadedRoutines],
       runs,
       routineRequestReceipts: this.routineRequestReceipts,
       webhookRunReceipts: this.webhookRunReceipts,

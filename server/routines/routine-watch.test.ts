@@ -351,6 +351,17 @@ describe("a built tool pre-check with a JMESPath condition (#4250)", () => {
       .toMatchObject({ wake: false, reason: "No change since the last check" });
   });
 
+  it("a reading cut at its limit says so when the condition cannot hold on it, never a silent no", () => {
+    const watch = flow();
+    const whole = snapshotOf(watch, { kind: "output", text: "", value: { tickets: [{ id: 1, late: true }] }, truncated: false });
+    const first = decideWatch(watch, null, whole, 1);
+    const cut = snapshotOf(watch, { kind: "output", text: '{"tickets":[{"id":1,"late":tr', truncated: true });
+    expect(decideWatch(watch, first.state, cut, 2).verdict).toMatchObject({ wake: false, reason: expect.stringMatching(/cut at its limit/) });
+    // a whole reading that does not hold stays the plain reason
+    const empty = snapshotOf(watch, { kind: "output", text: "", value: { tickets: [{ id: 2, late: false }] }, truncated: false });
+    expect(decideWatch(watch, first.state, empty, 2).verdict).toMatchObject({ wake: false, reason: expect.stringMatching(/its result is empty/) });
+  });
+
   it("a Flow read is a read: flow_run read and flow_action without confirm; never a confirmed action", () => {
     expect(watchToolRefusal("flow_run", { command: "read", args: ["recipe", "plan", "x"] })).toBeNull();
     expect(watchToolRefusal("flow_action", { action: "late_tickets", params: {} })).toBeNull();

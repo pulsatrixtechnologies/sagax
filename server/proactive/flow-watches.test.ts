@@ -16,6 +16,10 @@ import {
   WATCH_RELOAD_MS, readableName, watchesForBot, watchMissing, watchRoutineInput, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchesDeps, type ObserveConnection,
 } from "./flow-watches.ts";
 import { ProactivePendingFile } from "./proactive-wake.ts";
+import { watchReadCovered } from "./proactive-ask.ts";
+import { routineRunCard } from "../routines/routine-run-card.ts";
+import type { RoutineRun } from "../routines/routines.ts";
+import { routineAttentionLevel } from "../index-leaves/syncRoutineRunToSource.ts";
 
 const FIXTURE = readFileSync(join(import.meta.dirname, "fixtures", "flow-proactive.json"), "utf8");
 const ZONE = "America/New_York";
@@ -43,7 +47,7 @@ function watch(overrides: Partial<FlowWatch> = {}): FlowWatch {
 
 type HarnessBot = { id: string; owner: string; primary?: boolean; mode?: unknown; hidden?: boolean };
 type HarnessChoice = { person: string; domains: Array<{ domain: string; botId: string; watchesOff?: string[] }> };
-type Woken = { routineId: string; botId: string; runAs?: string; name: string; prompt: string; note: string };
+type Woken = { routineId: string; botId: string; runAs?: string; name: string; prompt: string; note: string; proactive?: RoutineRun["proactive"] };
 
 /** `choices`: the people's chosen domains (default: person-1 chose the
  * service domain on b1). The routines live in a small routine manager; a
@@ -147,7 +151,7 @@ function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: u
         failures.push(error instanceof Error ? error.message : String(error));
         continue;
       }
-      if (verdict.wake) woken.push({ routineId: routine.id, botId: routine.botId, runAs: routine.runAs, name: routine.name, prompt: routine.prompt, note: verdict.note ?? "" });
+      if (verdict.wake) woken.push({ routineId: routine.id, botId: routine.botId, runAs: routine.runAs, name: routine.name, prompt: routine.prompt, note: verdict.note ?? "", ...(verdict.proactive ? { proactive: verdict.proactive } : {}) });
     }
   };
   return {
@@ -717,6 +721,48 @@ describe("the watch routines", () => {
     expect(raw.version).toBe(2);
     expect(raw.people["person-1"]!["w-open"]!.alertAt).toBe(5);
     expect(new WatchMemory(file).byRoutine("r1")).toMatchObject({ person: "person-1", watchId: "w-open" });
+  });
+});
+
+describe("#4250: a watch alert keeps its identity as a wake", () => {
+  /** The run the scheduler starts from the check (routines.ts copies the
+   * verdict's identity onto the run). */
+  async function alert(): Promise<RoutineRun> {
+    const h = harness({ readOnly: ["cw_psa_service_query"], watches: [watch({ tools: ["cw_psa_service_query", "cw_psa_service_write"] })] });
+    await h.pass();
+    expect(h.woken).toHaveLength(1);
+    return {
+      id: "run-1", routineId: h.woken[0]!.routineId, routineName: "Open tickets.", botId: "b1", runAs: "person-1",
+      status: "completed", output: "Two tickets are late.", scheduledFor: MONDAY_15H, createdAt: MONDAY_15H, proactive: h.woken[0]!.proactive,
+    } as unknown as RoutineRun;
+  }
+
+  it("the check gives the run the watch, its domain and the read-only tools it declares, source watch", async () => {
+    const run = await alert();
+    expect(run.proactive).toEqual({
+      mode: "proactive", hops: 0, sources: ["watch"], alwaysReport: true,
+      watches: [{ id: "w-open", domain: "service", reads: ["cw_psa_service_query"] }],
+    });
+  });
+
+  it("#3431 (decision 3): the person's yes covers the reads the watch declares inside its alert", async () => {
+    const run = await alert();
+    const choices = { domains: { service: { state: "on" as const, botId: "b1", coversReads: true, at: 1, via: "settings" as never, by: "person-1" } } };
+    expect(watchReadCovered({ tool: "mcp__pulsatrix__cw_psa_service_query", botId: "b1", watches: run.proactive?.watches, choices })).toBe(true);
+    // a write it declares is never covered
+    expect(watchReadCovered({ tool: "cw_psa_service_write", botId: "b1", watches: run.proactive?.watches, choices })).toBe(false);
+  });
+
+  it("#3457: the alert's card is a watch wake with its watches (the exits « Arrêter cette veille », « Arrêter ce domaine »)", async () => {
+    const card = routineRunCard(await alert());
+    expect(card.wakeTopic).toBe("watch");
+    expect(card.watches).toEqual([{ id: "w-open", domain: "service" }]);
+    expect(card.forPerson).toBe(true);
+  });
+
+  it("#3423: an old mute of the bot's wakes never quiets a chosen watch's alert", async () => {
+    const host = { backgroundBriefs: { wakeLevel: () => "muted" } };
+    expect(routineAttentionLevel(host, await alert())).toBe("normal");
   });
 });
 

@@ -1,6 +1,8 @@
 import { z } from "zod";
 
+import { canonicalJson } from "../../shared/canonical-json.ts";
 import { ROUTINE_WATCH_LIMITS, ROUTINE_WATCH_OPS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
+import type { RoutineRunProactive } from "./routine-run-types.ts";
 import { watchToolRefusal } from "./routine-watch-tools.ts";
 
 /** A routine's optional pre-check: a deterministic test the scheduler runs
@@ -130,8 +132,12 @@ export interface RoutinePrecheckFacts {
 }
 
 export type RoutinePrecheckVerdict =
-  /** `note`: what a watch saw change, for the woken run (bounded, data). */
-  | { wake: true; note?: string }
+  /** `note`: what a watch saw change, for the woken run (bounded, data).
+   * `proactive` (#4250, S5): the wake identity of a code check that stands
+   * for a proactive kind (a Flow watch, the checklist): the run carries it
+   * as a proactive wake did (its topic, its watches, the reads its yes
+   * covers), so its feedback, its exits and its attention stay the same. */
+  | { wake: true; note?: string; proactive?: RoutineRunProactive }
   | { wake: false; reason: string };
 
 /** Hard cap for one evaluation, so a pre-check never holds the scheduler. */
@@ -152,9 +158,44 @@ export function parseRoutinePrecheck(value: unknown): RoutinePrecheck {
   return parsed.data as RoutinePrecheck;
 }
 
+/** #4250 (S5): the code checks the release before #4250 does not know.
+ * That release drops a pre-check it cannot read and would then start a
+ * model turn at each due time of these routines (every 15 minutes for some
+ * watches), beside its own loop and timer. On disk they are written as a
+ * file watch every release reads and that never wakes: it waits for a file
+ * of the bot's folder that nothing creates. This release reads it back as
+ * its code check. Kept for one release. */
+const CHECKS_UNKNOWN_BEFORE = new Set<string>(["flow_watch", "heartbeat"]);
+const STORED_CHECK_FOLDER = ".sagax-code-check";
+
+/** The pre-check as written to disk (see CHECKS_UNKNOWN_BEFORE). */
+export function storedRoutinePrecheck(precheck: RoutinePrecheck): RoutinePrecheck {
+  if (precheck.kind !== "code" || !CHECKS_UNKNOWN_BEFORE.has(precheck.check)) return precheck;
+  return {
+    kind: "watch",
+    source: { type: "files", path: `${STORED_CHECK_FOLDER}/${precheck.check}` },
+    wakeOn: "match",
+    condition: { test: "json_path", path: "exists", op: "eq", value: true },
+  };
+}
+
+/** The code check a stored never-waking file watch stands for, if it is one. */
+function storedCodeCheck(value: unknown): RoutineCodePrecheck | undefined {
+  const row = value as { kind?: unknown; source?: { type?: unknown; path?: unknown } } | null;
+  if (!row || row.kind !== "watch" || row.source?.type !== "files" || typeof row.source.path !== "string") return undefined;
+  const prefix = `${STORED_CHECK_FOLDER}/`;
+  if (!row.source.path.startsWith(prefix)) return undefined;
+  const check = row.source.path.slice(prefix.length);
+  if (!CHECKS_UNKNOWN_BEFORE.has(check)) return undefined;
+  const stored = storedRoutinePrecheck({ kind: "code", check } as RoutineCodePrecheck);
+  return canonicalJson(stored) === canonicalJson(value) ? { kind: "code", check } as RoutineCodePrecheck : undefined;
+}
+
 /** A stored pre-check, or undefined when it does not read (dropped, so a
  * damaged value never blocks a routine forever nor runs something unknown). */
 export function loadRoutinePrecheck(value: unknown): RoutinePrecheck | undefined {
+  const code = storedCodeCheck(value);
+  if (code) return code;
   const parsed = routinePrecheckSchema.safeParse(value);
   return parsed.success ? parsed.data as RoutinePrecheck : undefined;
 }
@@ -200,7 +241,8 @@ export async function runRoutinePrecheck(
     }
     if (verdict.wake) {
       const note = typeof verdict.note === "string" ? verdict.note.slice(0, ROUTINE_WATCH_LIMITS.maxNoteChars) : "";
-      return note ? { wake: true, note } : { wake: true };
+      const proactive = verdict.proactive ? { proactive: structuredClone(verdict.proactive) } : {};
+      return note ? { wake: true, note, ...proactive } : { wake: true, ...proactive };
     }
     return { wake: false, reason: String(verdict.reason ?? "Nothing to report").slice(0, 200) };
   } finally {

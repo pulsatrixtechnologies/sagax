@@ -5,7 +5,10 @@ import {
   parseRoutinePrecheck,
   runRoutinePrecheck,
   RoutinePrecheckError,
+  routinePrecheckSchema,
+  storedRoutinePrecheck,
 } from "./routine-precheck.ts";
+import { decideWatch, snapshotOf } from "./routine-watch.ts";
 
 const now = Date.parse("2026-10-20T12:00:00Z");
 
@@ -107,5 +110,26 @@ describe("routine watch pre-check validation (2026-10-26)", () => {
     await expect(runRoutinePrecheck(() => ({ wake: true, note: "n".repeat(10_000) })))
       .resolves.toMatchObject({ wake: true, note: "n".repeat(4_000) });
     await expect(runRoutinePrecheck(() => ({ wake: true }))).resolves.toEqual({ wake: true });
+  });
+});
+
+describe("#4250 (S5): the code checks the previous release does not know", () => {
+  it.each(["flow_watch", "heartbeat"] as const)("%s is written as a file watch any release reads, that never wakes, and read back as its code check", (check) => {
+    const stored = storedRoutinePrecheck({ kind: "code", check });
+    // the previous release reads it as an ordinary watch (its schema has no such code check)
+    expect(stored).toMatchObject({ kind: "watch", source: { type: "files" }, wakeOn: "match" });
+    expect(routinePrecheckSchema.safeParse(stored).success).toBe(true);
+    // a file nothing creates: its condition never holds, so no turn ever starts
+    const missing = snapshotOf(stored as never, { kind: "files", exists: false, entries: [], truncated: false });
+    expect(decideWatch(stored as never, null, missing, 1).verdict.wake).toBe(false);
+    expect(decideWatch(stored as never, decideWatch(stored as never, null, missing, 1).state, missing, 2).verdict.wake).toBe(false);
+    // this release reads its own check back, also after a JSON round trip
+    expect(loadRoutinePrecheck(JSON.parse(JSON.stringify(stored)))).toEqual({ kind: "code", check });
+  });
+
+  it("the checks the previous release knows, and a person's own file watch, are written as they are", () => {
+    expect(storedRoutinePrecheck({ kind: "code", check: "daily_brief" })).toEqual({ kind: "code", check: "daily_brief" });
+    const own = { kind: "watch" as const, source: { type: "files" as const, path: ".sagax-code-check/heartbeat" }, wakeOn: "change" as const };
+    expect(loadRoutinePrecheck(own)).toMatchObject({ kind: "watch" });
   });
 });

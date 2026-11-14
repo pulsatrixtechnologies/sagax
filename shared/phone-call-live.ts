@@ -5,6 +5,8 @@
 // transfer) are shown as rows in the transcript stream. The recording URL
 // is a Sagax proxy path, never a raw Twilio URL.
 
+import { PLACE_PHONE_CALL_TOOL_SPEC } from "./outbound-call.ts";
+
 export const PHONE_CALL_PHASES = [
   "dialing",
   "ringing",
@@ -71,29 +73,13 @@ export function parseDtmfDigits(raw: unknown): string | null {
   return DTMF_DIGITS.test(digits) ? digits : null;
 }
 
-/** Tool specs offered beside place_phone_call while Perspicax is linked. */
+/** Tool specs offered beside place_phone_call while Perspicax is linked.
+ *  place_call is the kept alias: same live conversation, same schema (#4193). */
 export const PLACE_CALL_TOOL_SPEC = {
   name: PLACE_CALL_TOOL,
   description:
-    "Same as place_phone_call: place a phone call for the person (message or conversation). Prefer place_phone_call; this name is kept for compatibility.",
-  inputSchema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      to: { type: "string", description: "The number to call, such as +1 514 555 0142. Canada only." },
-      mode: { type: "string", enum: ["message", "conversation"], description: "message or conversation." },
-      objective: { type: "string", description: "conversation: what you must obtain or say." },
-      instructions: { type: "string", description: "conversation: guidance during the call." },
-      max_minutes: { type: "integer", minimum: 1, maximum: 20 },
-      voicemail: { type: "string" },
-      from: { type: "string" },
-      purpose: { type: "string" },
-      message: { type: "string" },
-      language: { type: "string", enum: ["fr", "en"] },
-      account: { type: "string" },
-    },
-    required: ["to"],
-  },
+    "Same as place_phone_call: place a phone call for the person as a live two-way conversation with your voice, never a recorded or spoken message. Needs objective (the conversation goal, never a script read aloud). Prefer place_phone_call; this name is kept for compatibility.",
+  inputSchema: PLACE_PHONE_CALL_TOOL_SPEC.inputSchema,
 } as const;
 
 export const SEND_DTMF_TOOL_SPEC = {

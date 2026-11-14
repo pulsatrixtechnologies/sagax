@@ -10,6 +10,7 @@ import {
   readablePhone,
   voiceCallArgs,
 } from "./outbound-call.ts";
+import { PLACE_CALL_TOOL_SPEC } from "./phone-call-live.ts";
 
 const good = { to: "514-555-0142", objective: "Confirmer le rendez-vous de mardi à 10 h" };
 
@@ -41,6 +42,15 @@ describe("outbound call", () => {
     for (const gone of ["message", "from", "account", "mode", "purpose"]) expect(properties, gone).not.toHaveProperty(gone);
     expect(PLACE_PHONE_CALL_TOOL_SPEC.description).toContain("never a recorded or spoken message");
     expect(PLACE_PHONE_CALL_TOOL_SPEC.description).not.toMatch(/message \(default\)|said twice|hangs up\b/);
+  });
+
+  it("the place_call alias offers the same live conversation, never the removed message mode (#4193)", () => {
+    expect(PLACE_CALL_TOOL_SPEC.inputSchema).toEqual(PLACE_PHONE_CALL_TOOL_SPEC.inputSchema);
+    const properties = PLACE_CALL_TOOL_SPEC.inputSchema.properties as Record<string, unknown>;
+    expect(Object.keys(properties).sort()).toEqual(["instructions", "language", "max_minutes", "objective", "to", "voicemail"]);
+    expect(PLACE_CALL_TOOL_SPEC.inputSchema.required).toEqual(["to", "objective"]);
+    expect(PLACE_CALL_TOOL_SPEC.description).toContain("live two-way conversation");
+    expect(PLACE_CALL_TOOL_SPEC.description).not.toMatch(/message or conversation/);
   });
 
   it("masks and formats", () => {

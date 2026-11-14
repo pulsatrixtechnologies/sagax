@@ -1,0 +1,20 @@
+# Issue 503: the provisioner denies the cluster API's public address in every
+# person's policy. On AKS that address changes at each cluster start, and the
+# `kubernetes` Service ClusterIP a pod is handed is translated to it before the
+# policy is evaluated, so only the API's FQDN keeps the deny right. Replace the
+# placeholder with the OpenTofu output api_server_fqdn (or
+# az aks show --query fqdn) before applying. Left as is, the provisioner
+# refuses to start instead of running without the deny.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sagax-sandboxd
+  namespace: sandboxes
+spec:
+  template:
+    spec:
+      containers:
+        - name: sandboxd
+          env:
+            - name: SAGAX_SANDBOX_K8S_DENY_HOSTS
+              value: REPLACE_WITH_API_SERVER_FQDN

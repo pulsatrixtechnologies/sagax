@@ -5,6 +5,11 @@
 // sandbox off the control plane. SAGAX_SANDBOX_K8S_DENY_HOSTS names the API
 // (its FQDN, or IPv4 addresses): the provisioner resolves it at start and
 // every minute, and every sandbox NetworkPolicy denies each address as a /32.
+// 2026-11-14 (issue 503): unset, nothing is denied here, on purpose. The pod's
+// KUBERNETES_SERVICE_HOST is the `kubernetes` Service ClusterIP, the address
+// the policy never sees, so it is no default. The Azure adapter sets the API
+// FQDN (OpenTofu output api_server_fqdn) and ships a placeholder this parser
+// refuses, so a rebuild left unfilled stops at start instead of running open.
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIPv4 } from "node:net";
 

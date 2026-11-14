@@ -11,3 +11,4 @@ resources:
   - backup-location.yaml
 patches:
   - path: service-internal-lb.yaml
+  - path: sandboxd-deny-hosts.yaml

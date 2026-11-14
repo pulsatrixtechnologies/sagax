@@ -76,6 +76,10 @@ Overlays are deep-merged, not replacements:
   names a disk encryption set. The placeholder
   `REPLACE_WITH_DISK_ENCRYPTION_SET_ID` has to be replaced with the set the
   Azure module outputs.
+- The Azure kustomize adapter (`sandboxes/adapters/azure`) sets the
+  provisioner's `SAGAX_SANDBOX_K8S_DENY_HOSTS` to
+  `REPLACE_WITH_API_SERVER_FQDN`: replace it with the module output
+  `api_server_fqdn`. Left as is, the provisioner refuses to start.
 - `values-k3s.yaml` turns on the named-admin ClusterRoleBinding.
 
 What the chart renders:
@@ -145,5 +149,5 @@ credentials unless you intend to create the cluster. The examples keep
 ## Validate
 
 `scripts/validate.sh` lints and renders the chart (default, Azure, k3s),
-checks the audit policy copies match, and runs `tofu validate` on both
-stacks. It does not call a cloud API.
+renders the Azure kustomize adapter (`kubectl kustomize`), checks the audit
+policy copies match, and runs `tofu validate` on both stacks. It does not call a cloud API.

@@ -2644,10 +2644,7 @@
   "leftOut.reason.intervalRoutine": "ele se repete em um intervalo que não cabe em um horário; adicione-o de novo com um horário do dia",
   "leftOut.reason.onceRoutine": "ele roda só uma vez, então não foi agendado; rode-o à mão se ainda for necessário",
   "leftOut.reason.invalidYaml": "não é um YAML válido",
-  "model.step.harness": "Harness",
-  "model.step.provider": "Provedor",
   "model.step.model": "Modelo",
-  "model.step.providers": "{count} provedores",
   "model.step.models": "{count} modelos",
   "model.step.oneModel": "1 modelo"
 }

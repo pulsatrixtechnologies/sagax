@@ -1,12 +1,12 @@
-// #3116: the chat-bar model picker in three steps. Picking a model kept
-// being painful: one scrolling list under a search field, chips and a
-// settings footer left the models squashed into a few rows. The picker
-// now reads like Cursor's: first the harness (the engine that runs the
-// turn: Claude Code, Codex, Grok, pi, local models), then the provider
-// (the accounts of that harness: a sign-in, a pasted key), then the model.
-// A harness with a single provider skips the second step. Every step shows
-// only what the step before it allows; an impossible choice is not drawn.
-// Typing in the search field leaves the steps and lists every match flat.
+// #3116, #4329 (lot 3): the chat-bar model picker in two steps. First the
+// provider (who gives the models: Claude, OpenAI, the xAI group, a server
+// the person added, this computer), then its models. The provider of a row
+// is said once, in shared/model-provider.ts; the sections arrive already
+// grouped by it (ModelPicker.tsx-parts/buildSections.ts). The accounts and
+// engines of one provider stay pooled out of sight: one model, one row.
+// A menu with a single provider opens straight on its models. Typing in the
+// search field leaves the steps and lists every match flat.
+import { harnessRole, type HarnessRole } from "../../shared/harness-matrix";
 import {
   CURRENT_KEY_PREFIX,
   FAVORITE_KEY_PREFIX,
@@ -17,88 +17,51 @@ import {
   type ModelMenuSection,
 } from "./model-menu";
 
-/** A harness entry's key in the list, beside the rows' and providers' keys. */
-export const HARNESS_KEY_PREFIX = "harness:";
-
-export interface ModelMenuHarness {
-  /** `harness:` and the harness key (a driver kind, or `local`). */
-  key: string;
-  harness: string;
-  label: string;
-  /** Its provider sections, in menu order (the bot's own engine first). */
-  sections: ModelMenuSection[];
-  /** The current model runs on it. */
-  current: boolean;
-  /** How many models its providers offer in all. */
-  models: number;
-}
-
 /** The sections that are providers: headed, not the top rows nor Favorites. */
-function providerSections(sections: readonly ModelMenuSection[]): ModelMenuSection[] {
+export function providerSections(sections: readonly ModelMenuSection[]): ModelMenuSection[] {
   return sections.filter((section) => section.label && section.key !== "top" && section.key !== "favorites" && section.rows.length > 0);
-}
-
-/** The harnesses of the menu, in the order their first provider appears.
- * A section without a harness is a harness of its own (older callers,
- * the gallery). */
-export function modelMenuHarnesses(sections: readonly ModelMenuSection[]): ModelMenuHarness[] {
-  const out: ModelMenuHarness[] = [];
-  for (const section of providerSections(sections)) {
-    const harness = section.harness ?? section.key;
-    const existing = out.find((entry) => entry.harness === harness);
-    const current = section.rows.some((row) => row.current);
-    const models = section.rows.filter((row) => row.kind === "model").length;
-    if (existing) {
-      existing.sections.push(section);
-      existing.current ||= current;
-      existing.models += models;
-      continue;
-    }
-    out.push({ key: `${HARNESS_KEY_PREFIX}${harness}`, harness, label: section.harnessLabel ?? section.label ?? harness, sections: [section], current, models });
-  }
-  return out;
 }
 
 export function providerOf(section: ModelMenuSection): ModelMenuProvider {
   return { key: `${PROVIDER_KEY_PREFIX}${section.key}`, section, current: section.rows.some((row) => row.current) };
 }
 
-/** Where the person is in the steps: nothing (the harnesses), a harness
- * (its providers), or a harness and a provider (its models). */
+/** The providers of the menu, in menu order. */
+export function modelMenuProviders(sections: readonly ModelMenuSection[]): ModelMenuProvider[] {
+  return providerSections(sections).map(providerOf);
+}
+
+/** Where the person is in the steps: nothing (the providers) or a provider
+ * (its models). */
 export interface ModelStepPath {
-  harness?: string;
   provider?: string;
 }
 
-export type ModelStepLevel = "harness" | "provider" | "model";
+export type ModelStepLevel = "provider" | "model";
 
 /** One line the arrow keys reach: a model row (under the key the step draws
- * it with), a harness or a provider. */
+ * it with) or a provider. */
 export interface ModelStepEntry {
   key: string;
   current: boolean;
   row?: ModelMenuRow;
-  harness?: ModelMenuHarness;
   provider?: ModelMenuProvider;
 }
 
 export interface ModelStepView {
   level: ModelStepLevel;
-  /** The harness open (steps 2 and 3). */
-  harness?: ModelMenuHarness;
-  /** The provider open (step 3), or the only one of the harness. */
+  /** The provider open (step 2), or the only one. */
   provider?: ModelMenuProvider;
-  /** The harness was not chosen but the only one: the step draws the top
-   * rows over its content and has no step to go back to. */
+  /** The provider was not chosen but the only one: the step draws the top
+   * rows over its models and has no step to go back to. */
   skipped: boolean;
   /** Step 1 (and a skipped one): Auto, the bot's model, the current model,
    * the favorites. */
   top: ModelMenuRow[];
   current?: ModelMenuRow;
   favorites: ModelMenuRow[];
-  harnesses: ModelMenuHarness[];
   providers: ModelMenuProvider[];
-  /** Step 3: the provider's rows, unavailable ones included (drawn dimmed). */
+  /** Step 2: the provider's rows, unavailable ones included (drawn dimmed). */
   rows: ModelMenuRow[];
   /** What the arrow keys and Enter reach, in order. */
   entries: ModelStepEntry[];
@@ -107,86 +70,94 @@ export interface ModelStepView {
 const pickable = (row: ModelMenuRow) => !row.unavailable;
 
 /** The view of one step. A path that names nothing known falls back to the
- * harnesses; a harness with one provider opens straight on its models. */
+ * providers; a lone provider opens straight on its models. */
 export function modelMenuStepView(sections: readonly ModelMenuSection[], path: ModelStepPath, favoriteKeys: readonly string[]): ModelStepView {
   const root = modelMenuRoot(sections, favoriteKeys);
-  const harnesses = modelMenuHarnesses(sections);
-  const chosen = path.harness ? harnesses.find((entry) => entry.harness === path.harness) : undefined;
-  // one harness: nothing to choose at step 1, the menu opens on it
-  const skipped = !chosen && harnesses.length === 1;
-  const harness = chosen ?? (skipped ? harnesses[0] : undefined);
+  const providers = modelMenuProviders(sections);
+  const chosen = path.provider ? providers.find((entry) => entry.section.key === path.provider) : undefined;
+  const skipped = !chosen && providers.length === 1;
+  const provider = chosen ?? (skipped ? providers[0] : undefined);
   const topEntries: ModelStepEntry[] = [
     ...root.top.filter(pickable).map((row) => ({ key: row.key, current: row.current, row })),
     ...(root.current && pickable(root.current) ? [{ key: `${CURRENT_KEY_PREFIX}${root.current.key}`, current: true, row: root.current }] : []),
     ...root.favorites.filter(pickable).map((row) => ({ key: `${FAVORITE_KEY_PREFIX}${row.key}`, current: row.current, row })),
   ];
-  const base = { top: root.top, current: root.current, favorites: root.favorites, harnesses, skipped };
-  if (!harness) {
-    return {
-      ...base,
-      level: "harness",
-      providers: [],
-      rows: [],
-      entries: [...topEntries, ...harnesses.map((entry) => ({ key: entry.key, current: entry.current, harness: entry }))],
-    };
-  }
-  const providers = harness.sections.map(providerOf);
-  const provider = providers.length === 1 ? providers[0] : path.provider ? providers.find((entry) => entry.section.key === path.provider) : undefined;
-  const lead = skipped ? topEntries : [];
+  const base = { top: root.top, current: root.current, favorites: root.favorites, providers, skipped };
   if (!provider) {
     return {
       ...base,
       level: "provider",
-      harness,
-      providers,
       rows: [],
-      entries: [...lead, ...providers.map((entry) => ({ key: entry.key, current: entry.current, provider: entry }))],
+      entries: [...topEntries, ...providers.map((entry) => ({ key: entry.key, current: entry.current, provider: entry }))],
     };
   }
   return {
     ...base,
     level: "model",
-    harness,
     provider,
-    providers,
     rows: provider.section.rows,
-    entries: [...lead, ...provider.section.rows.filter(pickable).map((row) => ({ key: row.key, current: row.current, row }))],
+    entries: [...(skipped ? topEntries : []), ...provider.section.rows.filter(pickable).map((row) => ({ key: row.key, current: row.current, row }))],
   };
 }
 
-/** The path after opening a harness or a provider entry; a model entry
- * leaves the path alone (Enter picks it). */
+/** The path after opening a provider entry; a model entry leaves the path
+ * alone (Enter picks it). */
 export function stepPathInto(path: ModelStepPath, entry: ModelStepEntry): ModelStepPath {
-  if (entry.harness) return { harness: entry.harness.harness };
-  if (entry.provider) return { harness: path.harness, provider: entry.provider.section.key };
+  if (entry.provider) return { provider: entry.provider.section.key };
   return path;
 }
 
 /** The path one step back, or null when there is no step before (the
- * harnesses, or the only harness): the caller closes the menu. A harness
- * that skipped its provider step goes back to the harnesses. */
-export function stepPathBack(view: ModelStepView, path: ModelStepPath): ModelStepPath | null {
-  if (view.level === "harness") return null;
-  if (view.level === "model" && view.providers.length > 1) return { harness: view.harness?.harness ?? path.harness };
-  if (view.skipped) return null;
+ * providers, or the only provider): the caller closes the menu. */
+export function stepPathBack(view: ModelStepView): ModelStepPath | null {
+  if (view.level === "provider" || view.skipped) return null;
   return {};
 }
 
 /** The path that shows the current model (where a reopened menu could start). */
 export function stepPathOfCurrent(sections: readonly ModelMenuSection[]): ModelStepPath {
-  for (const harness of modelMenuHarnesses(sections)) {
-    const section = harness.sections.find((candidate) => candidate.rows.some((row) => row.current));
-    if (section) return harness.sections.length > 1 ? { harness: harness.harness, provider: section.key } : { harness: harness.harness };
-  }
-  return {};
+  const provider = modelMenuProviders(sections).find((entry) => entry.current);
+  return provider ? { provider: provider.section.key } : {};
 }
 
-/** The breadcrumb of a step: the harness (when there was a choice), then
- * the provider when the harness has several (a lone provider is the
- * harness itself). */
+/** The provider that holds the current model, if any. */
+export function currentProvider(sections: readonly ModelMenuSection[]): ModelMenuProvider | undefined {
+  return modelMenuProviders(sections).find((entry) => entry.current);
+}
+
+/** The breadcrumb of a step: the provider, when there was a choice. */
 export function stepCrumbs(view: ModelStepView): string[] {
-  const crumbs: string[] = [];
-  if (view.harness && !view.skipped) crumbs.push(view.harness.label);
-  if (view.level === "model" && view.provider && view.providers.length > 1) crumbs.push(view.provider.section.label ?? view.provider.section.key);
-  return crumbs;
+  return view.level === "model" && view.provider && !view.skipped ? [view.provider.section.label ?? view.provider.section.key] : [];
+}
+
+/** One engine that can run the model in use, as "Runs with" offers it. */
+export interface RunsWithEntry {
+  /** The engine (a driver kind). */
+  harness: string;
+  role: HarnessRole;
+  /** The row a pick switches to: the same model on that engine. */
+  row: ModelMenuRow;
+  current: boolean;
+}
+
+const ROLE_ORDER: readonly HarnessRole[] = ["own", "builtin", "pi", "opencode", "tool"];
+
+/**
+ * #4329: the engines that can run the model in use, one per engine (the
+ * accounts of one engine stay pooled), the one in use kept. Read from the
+ * provider's row and the rows pooled under it; the role says how the person
+ * reads each (shared/harness-matrix.ts). Empty on Auto, on the bot's model
+ * in a thread, or when the model in use is in no provider.
+ */
+export function runsWithEntries(sections: readonly ModelMenuSection[]): RunsWithEntry[] {
+  const provider = currentProvider(sections);
+  const row = provider?.section.rows.find((candidate) => candidate.current && candidate.kind === "model");
+  if (!provider || !row?.harness) return [];
+  const vendor = provider.section.key;
+  const out: RunsWithEntry[] = [];
+  for (const candidate of [row, ...(row.alternatives ?? [])]) {
+    if (!candidate.harness || candidate.unavailable || out.some((entry) => entry.harness === candidate.harness)) continue;
+    out.push({ harness: candidate.harness, role: harnessRole(candidate.harness, vendor), row: candidate, current: candidate === row });
+  }
+  return out.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
 }

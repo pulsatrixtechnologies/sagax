@@ -49,17 +49,19 @@ function input(instance: InstanceInfo, orgMode: boolean): ModelPickerSectionsInp
 }
 
 describe("pi model servers in the picker (#2963)", () => {
-  it("offers px-org and px-own models on an organization server, labelled by server", () => {
+  it("offers px-org and px-own models on an organization server, each server a provider under its name (#4329)", () => {
     const { menuSections } = buildModelPickerSections(input(pi(true), true));
-    const section = menuSections.find((candidate) => candidate.key === "pi");
-    expect(section?.rows.map((row) => row.modelId)).toEqual(["px-org-lab/qwen-35b", "px-own-mac/ornith-122b"]);
-    expect(section?.rows[0]?.detail).toContain("Lab GPU");
-    expect(section?.rows[0]?.detail).not.toContain("px-org-lab");
+    const servers = menuSections.filter((candidate) => candidate.key.startsWith("server:"));
+    expect(servers.map((section) => [section.key, section.label, section.rows.map((row) => row.modelId)])).toEqual([
+      ["server:px-org-lab", "Lab GPU", ["px-org-lab/qwen-35b"]],
+      ["server:px-own-mac", "My Mac", ["px-own-mac/ornith-122b"]],
+    ]);
+    expect(JSON.stringify(menuSections)).not.toContain('"label":"px-org-lab');
   });
 
   it("offers them when pi has no sign-in of its own (solo)", () => {
     const { menuSections } = buildModelPickerSections(input(pi(false), false));
-    const ids = menuSections.find((candidate) => candidate.key === "pi")?.rows.map((row) => row.modelId);
+    const ids = menuSections.flatMap((section) => section.rows).map((row) => row.modelId);
     expect(ids).toContain("px-own-mac/ornith-122b");
     expect(ids).not.toContain("typed-here");
   });

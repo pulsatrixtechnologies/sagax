@@ -270,9 +270,10 @@ describe("the Grok list", () => {
     expect(row(opened, "grok-4.7-build-fast")).toBeUndefined();
     expect(html).not.toContain("Grok 4.5");
     expect(html).not.toContain("Grok 4.6");
-    // #3116: the menu opens on the harnesses: Grok, and the local models as their own
-    expect(html).toContain('data-model-harness="grokAgent"');
-    expect(html).toContain('data-model-harness="local"');
+    // #4329: the menu opens on the providers: the xAI group, and this computer's models
+    expect(html).toContain('data-model-provider="xai"');
+    expect(html).toContain('data-model-provider="computer"');
+    expect(html).not.toContain("data-model-harness");
     expect(row(opened, "dwarfstar::qwen3.8-flash-next")).toBeDefined();
     expect(html).not.toContain("data-model-unavailable");
   });
@@ -423,20 +424,20 @@ describe("the composer's model menu (2026-10-12)", () => {
     it("hides a model its engine cannot run, which the window still shows greyed", () => {
       fixture.instances = [signedIn(), gemini(true)];
       const opened = open(bot("claude", "claude-opus-5-5"), composer);
-      expect(rowIds(opened, "gemini")).toEqual(["gemini-pro"]);
+      expect(rowIds(opened, "google")).toEqual(["gemini-pro"]);
     });
 
     it("drops a provider with no model that works", () => {
       fixture.instances = [signedIn(), gemini(false)];
       const opened = open(bot("claude", "claude-opus-5-5"), composer);
-      expect(sectionKeys(opened)).toEqual(["top", "claude"]);
-      expect(opened.html).not.toContain('data-model-provider="gemini"');
+      expect(sectionKeys(opened)).toEqual(["top", "anthropic"]);
+      expect(opened.html).not.toContain('data-model-provider="google"');
     });
 
     it("keeps the model in use, checked, saying it does not respond", () => {
       fixture.instances = [signedOut(), codex];
       const opened = open(bot("claude", "claude-opus-5-5"), composer);
-      const claudeRows = lists(opened)[0]!.props.sections.find((section) => section.key === "claude")!.rows;
+      const claudeRows = lists(opened)[0]!.props.sections.find((section) => section.key === "anthropic")!.rows;
       expect(claudeRows.map((candidate) => candidate.modelId)).toEqual(["claude-opus-5-5"]);
       expect(claudeRows[0]).toMatchObject({ current: true, warning: "Not responding" });
       // the root shows it with its warning
@@ -444,15 +445,15 @@ describe("the composer's model menu (2026-10-12)", () => {
       expect(opened.html).toContain("Not responding");
       // a working one has no warning
       fixture.values = [];
-      const working = lists(open(bot("codex", "gpt-5.6"), composer))[0]!.props.sections.find((section) => section.key === "codex")!.rows;
+      const working = lists(open(bot("codex", "gpt-5.6"), composer))[0]!.props.sections.find((section) => section.key === "openai")!.rows;
       expect(working[0]!.warning).toBeUndefined();
     });
 
     it("keeps the model in use of an engine that is not installed any more", () => {
       fixture.instances = [notFound(), codex];
       const opened = open(bot("claude", "claude-opus-5-5"), composer);
-      expect(rowIds(opened, "claude")).toEqual(["claude-opus-5-5"]);
-      expect(sectionKeys(opened)).toEqual(["top", "claude", "codex"]);
+      expect(rowIds(opened, "anthropic")).toEqual(["claude-opus-5-5"]);
+      expect(sectionKeys(opened)).toEqual(["top", "anthropic", "openai"]);
     });
   });
 
@@ -562,6 +563,48 @@ describe("the composer's model menu (2026-10-12)", () => {
     });
   });
 
+  // #4329 (lot 3): "Runs with", the engines that can run the model in use,
+  // drawn only when there is a choice; a pick keeps the model.
+  describe("Runs with", () => {
+    const piEngine = (): InstanceInfo => ({
+      instanceId: "pi", driverKind: "piAgent", displayName: "pi", access: "custom",
+      snapshot: { state: "available", authenticated: true },
+      models: { default: "anthropic/claude-opus-5-5", options: [{ id: "anthropic/claude-opus-5-5", label: "Opus 5.5", provider: "anthropic" }] },
+      capabilities: { withholdsHostTools: true },
+    });
+
+    it("is not drawn when one engine runs the model", () => {
+      fixture.instances = [signedIn(), codex];
+      const opened = open(bot("claude", "claude-opus-5-5"), composer);
+      expect(settings(opened)!.props.runsWith ?? []).toHaveLength(1);
+      expect(opened.html).not.toContain("data-model-settings-runs-with");
+    });
+
+    it("offers the vendor's own tool and pi for a model both list, in plain words, and a pick keeps the model", () => {
+      fixture.instances = [signedIn(), piEngine()];
+      const opened = open(bot("claude", "claude-opus-5-5"), composer);
+      // one model, one row: pi's copy rides on Claude's
+      expect(lists(opened)[0]!.props.sections.filter((section) => section.rows.some((candidate) => candidate.modelId?.endsWith("claude-opus-5-5"))).map((section) => section.key)).toEqual(["anthropic"]);
+      const choices = settings(opened)!.props.runsWith!;
+      expect(choices.map((choice) => [choice.key, choice.label, choice.current, choice.recommended])).toEqual([
+        ["claudeAgent", "Its own tool", true, true],
+        ["piAgent", "pi", false, false],
+      ]);
+      // the tool's name only in the opened list's grey line
+      expect(choices[0]!.hint).toBe("Claude Code, made by the provider");
+      expect(opened.html).toContain("data-model-settings-runs-with");
+      expect(opened.html).not.toContain(">Claude Code<");
+      choices[1]!.onPick();
+      expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ selection: { instanceId: "pi", model: "anthropic/claude-opus-5-5" } }));
+    });
+
+    it("is not drawn on Auto", () => {
+      fixture.instances = [signedIn(), piEngine()];
+      const onAuto = { ...bot("claude", "claude-opus-5-5"), modelSelection: { instanceId: "claude", model: "claude-opus-5-5", auto: true as const } };
+      expect(open(onAuto, composer).html).not.toContain("data-model-settings-runs-with");
+    });
+  });
+
   it("leaves out an engine to install, and on an organization server one nothing pays for yet unless it is the bot's", () => {
     fixture.org = { org: { name: "Example", identity: { kind: "perspicax", issuer: "https://px.example.test" } }, link: { state: "ok" }, viewerRole: "member", settings: {} };
     const grok: InstanceInfo = {
@@ -575,7 +618,7 @@ describe("the composer's model menu (2026-10-12)", () => {
     fixture.myEngines = [facts("claude", "none"), facts("codex", "org-key"), facts("grok", "none")];
     fixture.instances = [signedIn(), codex, grok];
     const opened = open(bot("claude", "claude-opus-5-5"), composer);
-    expect(lists(opened)[0]!.props.sections.map((section) => section.key)).toEqual(["top", "claude", "codex"]);
+    expect(lists(opened)[0]!.props.sections.map((section) => section.key)).toEqual(["top", "anthropic", "openai"]);
   });
 });
 
@@ -597,9 +640,11 @@ describe("the models window (windowOnly, #2963)", () => {
   it("lists each engine in its column and its models with a star and a switch", () => {
     fixture.instances = [signedIn(), codex];
     const shown = render(bot("claude", "claude-opus-5-5"), { windowOnly: true, threadId: undefined });
-    expect(shown.html).toContain('data-model-manager-engine="claude"');
-    expect(shown.html).toContain('data-model-manager-engine="codex"');
-    const opus = manager(shown)!.props.sections.find((section) => section.key === "claude")!.rows.find((candidate) => candidate.modelId === "claude-opus-5-5")!;
+    // #4329: the window's column lists the same providers as the menu
+    expect(shown.html).toContain('data-model-manager-engine="anthropic"');
+    expect(shown.html).toContain('data-model-manager-engine="openai"');
+    expect(shown.html).not.toContain(">Codex<");
+    const opus = manager(shown)!.props.sections.find((section) => section.key === "anthropic")!.rows.find((candidate) => candidate.modelId === "claude-opus-5-5")!;
     expect(shown.html).toContain(`data-model-favorite="${opus.key}"`);
     expect(shown.html).toContain("data-model-switch=");
     expect(shown.html).toContain(">Models<");

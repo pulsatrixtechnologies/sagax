@@ -6,14 +6,15 @@ import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
 import { ModelMenuItem, ModelSearchList, type ModelMenuRow, type ModelMenuSection } from "../ModelMenu";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { ModelMenuSettings } from "../ModelMenuSettings";
+import { ModelMenuSettings, type RunsWithChoice } from "../ModelMenuSettings";
 import { ModelNoEngineNotice } from "../ModelNoEngineNotice";
 import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
 import { MENU_MAX_HEIGHT, MENU_WIDTH, menuListMinHeight } from "./helpers";
-import { modelMenuHarnesses } from "@/lib/model-menu-steps";
+import { runsWithEntries, type RunsWithEntry } from "@/lib/model-menu-steps";
+import { HARNESS_TOOL_NAME } from "../../../shared/harness-matrix";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
 
@@ -131,6 +132,10 @@ export function ModelPickerMenu({
   const fastTwin = active && !autoOn ? fastTwinOf(activeOptions, selection.model) : undefined;
   const engineEfforts = active?.capabilities?.effortLevels;
   const menuEfforts = active?.capabilities?.modelVariants ? [] : modelEffortLevels(activeOption, engineEfforts);
+  // #4329: "Runs with", the engines that can run the model in use (a pick
+  // keeps the model and changes what runs it); drawn with two or more.
+  const runsWith = autoOn ? [] : runsWithEntries(menuSections);
+  const runsWithChoices = runsWithLabels(runsWith, onRow);
   const settingsPanel = active ? (
     <ModelMenuSettings
       disabled={Boolean(bot.busy)}
@@ -148,6 +153,7 @@ export function ModelPickerMenu({
         modelDefault: modelDefaultEffort(activeOption, engineEfforts),
         onPick: setEffort,
       } : undefined}
+      runsWith={runsWithChoices}
     />
   ) : null;
 
@@ -236,13 +242,6 @@ export function ModelPickerMenu({
         ? menuRoomAbove(menuAt.bottom)
         : MENU_MAX_HEIGHT
     : undefined;
-  // #3116: a harness's mark is its first provider's (an engine instance,
-  // or the local group's monitor)
-  const harnesses = modelMenuHarnesses(menuSections);
-  const harnessMark = (harness: string): ReactNode => {
-    const entry = harnesses.find((candidate) => candidate.harness === harness);
-    return entry && engineMark ? engineMark(entry.sections[0].key) : null;
-  };
   const content = (
     <>
       <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)}
@@ -251,7 +250,7 @@ export function ModelPickerMenu({
         after={below}
         custom={customModel}
         showAll
-        steps={{ mark: harnessMark }}
+        steps={{ mark: engineMark }}
         listMinHeight={menuListMinHeight(menuMaxHeight ?? MENU_MAX_HEIGHT)}
         autoPanel={autoPanel} />
     </>
@@ -303,4 +302,19 @@ export function ModelPickerMenu({
   );
 
   return menuPanel;
+}
+
+/** #4329: the words of "Runs with" (design of #4329, B5): the vendor's own
+ * tool, pi, OpenCode or Built in on the line; the tool by its name only in
+ * the opened list. Recommended: the vendor's own tool, else Built in. */
+export function runsWithLabels(entries: readonly RunsWithEntry[], onRow: (row: ModelMenuRow) => void): RunsWithChoice[] {
+  const recommended = entries.find((entry) => entry.role === "own") ?? entries.find((entry) => entry.role === "builtin");
+  return entries.map((entry) => {
+    const tool = HARNESS_TOOL_NAME[entry.harness] ?? entry.harness;
+    const words = entry.role === "own" ? { label: t("model.runsWith.own"), hint: t("model.runsWith.ownHint", { tool }) }
+      : entry.role === "builtin" ? { label: t("model.runsWith.builtin"), hint: t("model.runsWith.builtinHint") }
+        : entry.role === "pi" || entry.role === "opencode" ? { label: tool, hint: t("model.runsWith.openHint") }
+          : { label: tool, hint: undefined };
+    return { key: entry.harness, ...words, recommended: entry === recommended, current: entry.current, onPick: () => onRow(entry.row) };
+  });
 }

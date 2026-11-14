@@ -10,9 +10,9 @@ const fixture = vi.hoisted(() => {
 });
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => false, setAdvancedMode: () => {} }));
 vi.mock("./MenuMotion", () => ({ useMenuMotion: () => ({ shown: true, closing: false, className: "", exitProps: {} }) }));
-// #3116: the chat bar menu opens on its first step (the harnesses); a test
-// that reads the models of one harness opens the menu on that step.
-const steps = vi.hoisted(() => ({ path: {} as { harness?: string; provider?: string } }));
+// #3116, #4329: the chat bar menu opens on its first step (the providers);
+// a test that reads the models of one provider opens the menu on that step.
+const steps = vi.hoisted(() => ({ path: {} as { provider?: string } }));
 vi.mock("./ModelMenu", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./ModelMenu")>();
   return {
@@ -74,26 +74,30 @@ const html = () => renderToStaticMarkup(createElement(ModelPicker, { bot: bot() 
 beforeEach(() => { steps.path = {}; });
 
 describe("model picker in Simple mode", () => {
-  it("opens on the harnesses, with Auto and the bot's model on top (#3116)", () => {
+  it("opens on the providers, with Auto and the bot's model on top (#3116, #4329)", () => {
     fixture.instances = [claude(true)];
     const markup = html();
     expect(markup).toContain('data-model-search-list="popover"');
     expect(markup).toContain('placeholder="Search models"');
-    expect(markup).toContain('data-model-step="harness"');
+    expect(markup).toContain('data-model-step="provider"');
     expect(markup).toContain('data-model-row-key="auto"');
     expect(markup).toContain("Opus");
-    expect(markup).toContain('data-model-harness="claudeAgent"');
-    expect(markup).toContain(">Claude Code<");
-    // the custom ollama model makes a Local harness of its own
-    expect(markup).toContain('data-model-harness="local"');
+    expect(markup).toContain('data-model-provider="anthropic"');
+    expect(markup).toContain(">Claude<");
+    // never the tool's name, never a harness step
+    expect(markup).not.toContain("Claude Code");
+    expect(markup).not.toContain("data-model-harness");
+    // the custom ollama model sits under This computer
+    expect(markup).toContain('data-model-provider="computer"');
+    expect(markup).toContain(">This computer<");
     expect(markup).toContain(">1 model<");
-    // a harness's models wait for its step
+    // a provider's models wait for its step
     expect(markup).not.toContain("Extra three");
   });
 
   it("keeps the model list and hides effort, catalog chrome and settings links", () => {
     fixture.instances = [claude(true)];
-    steps.path = { harness: "claudeAgent" };
+    steps.path = { provider: "anthropic" };
     const markup = html();
     expect(markup).toContain('data-model-step="model"');
     expect(markup).toContain("data-model-step-back");
@@ -112,18 +116,18 @@ describe("model picker in Simple mode", () => {
   it("labels the composer chip with the effort, as in Advanced", () => {
     fixture.instances = [claude(true)];
     const markup = renderToStaticMarkup(createElement(ModelPicker, { bot: bot(), inComposer: true }));
-    // #3116: the chip reads the steps: the harness, then the model and its effort
-    expect(markup).toMatch(/<span class="truncate">Claude Code · Opus High<\/span>/);
+    // #4329: the chip names the provider, never the tool, then the model and its effort
+    expect(markup).toMatch(/<span class="truncate">Claude · Opus High<\/span>/);
   });
 
-  it("lists local models under Local in Simple too", () => {
+  it("lists local models under This computer in Simple too", () => {
     const instance = claude(true);
     instance.models.options.push({ id: "dwarfstar::qwen3.8-flash-next-chat", label: "DwarfStar: Qwen3.8 Flash Next", custom: true, local: true, anthropic: true });
     fixture.instances = [instance];
-    expect(html()).toContain('data-model-harness="local"');
-    steps.path = { harness: "local" };
+    expect(html()).toContain('data-model-provider="computer"');
+    steps.path = { provider: "computer" };
     const markup = html();
-    expect(markup).toContain('data-model-section="local:this-computer"');
+    expect(markup).toContain('data-model-section="computer"');
     expect(markup).toContain("DwarfStar: Qwen3.8 Flash Next");
     expect(markup).not.toContain("data-model-local-entry");
   });
@@ -140,7 +144,7 @@ describe("model picker in Simple mode", () => {
       { id: "desk8002abc::Twin-Model", label: "Twin-Model", server: ":8002", custom: true, local: true, anthropic: true },
     );
     fixture.instances = [instance];
-    steps.path = { harness: "local" };
+    steps.path = { provider: "computer" };
     const markup = html();
     expect(markup).toContain("Ornith-1.5-122B-oQ4e-mtp");
     expect(markup).not.toContain(":8000:");

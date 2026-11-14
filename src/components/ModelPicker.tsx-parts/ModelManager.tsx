@@ -12,7 +12,7 @@ import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { canEditConfig } from "@/lib/viewer";
 import { t } from "@/lib/i18n";
 import { filterModelSections, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
-import { toggleModelFavorite } from "@/lib/model-favorites";
+import { favoriteKey, toggleModelFavorite } from "@/lib/model-favorites";
 import { modelKey, modelOffer, type ModelSwitches } from "../../../shared/offered-models";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
@@ -22,25 +22,31 @@ import { FIELD, Switch } from "../SettingsPrimitives";
 import { EffortSegments } from "../ModelMenuSettings";
 import { engineSections } from "../ModelMenu";
 import { switchableModels, toggledList } from "../settings/ModelSwitchesSettings";
+import { providerOfModel } from "../../../shared/model-provider";
 import { EffortRow } from "./EffortControls";
 
-/** The engine groups the window lists: each engine's models in use, plus the
- * ones this person turned off (switch off, not pickable). What the
- * organization turned off stays out of sight. */
+/** The provider groups the window lists (#4329: the same providers, names
+ * and order as the chat bar menu): each provider's models in use, plus the
+ * ones this person turned off on its engines (switch off, not pickable).
+ * What the organization turned off stays out of sight. */
 export function managerSections(
   sections: readonly ModelMenuSection[],
   instances: readonly InstanceInfo[],
   switches: ModelSwitches,
 ): ModelMenuSection[] {
   return engineSections(sections).map((section) => {
-    const instance = instances.find((candidate) => candidate.instanceId === section.key);
-    const seen = new Set(section.rows.map((row) => row.modelId));
-    const off: ModelMenuRow[] = instance
-      ? switchableModels(instance)
-        .filter((model) => !seen.has(model.id) && modelOffer(switches, instance.instanceId, model.id) === "personOff")
-        .map((model) => ({ key: modelKey(instance.instanceId, model.id), kind: "model", instanceId: instance.instanceId, modelId: model.id, label: model.label, current: false }))
-      : [];
-    return { ...section, rows: [...section.rows.filter((row) => row.kind === "model"), ...off] };
+    const rows = section.rows.filter((row) => row.kind === "model");
+    const pooled = rows.flatMap((row) => [row, ...(row.alternatives ?? [])]);
+    const engines = instances.filter((instance) => pooled.some((row) => row.instanceId === instance.instanceId));
+    const seen = new Set(pooled.flatMap((row) => [row.key, favoriteKey(row.instanceId ?? "", row.modelId ?? "")]));
+    const off: ModelMenuRow[] = engines.flatMap((instance) => switchableModels(instance)
+      .filter((model) => {
+        if (seen.has(favoriteKey(instance.instanceId, model.id)) || modelOffer(switches, instance.instanceId, model.id) !== "personOff") return false;
+        const option = instance.models.options.find((candidate) => candidate.id === model.id) ?? model;
+        return providerOfModel(instance, option).id === section.key;
+      })
+      .map((model) => ({ key: modelKey(instance.instanceId, model.id), kind: "model", instanceId: instance.instanceId, modelId: model.id, label: model.label, current: false })));
+    return { ...section, rows: [...rows, ...off] };
   });
 }
 

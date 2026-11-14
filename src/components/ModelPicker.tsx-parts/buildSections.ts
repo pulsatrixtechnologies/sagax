@@ -2,7 +2,6 @@
 import { localModelSubtext } from "@/lib/local-model-label";
 import { isDesktopModelId, localModelRows, localRowUnavailable } from "@/lib/local-models";
 import { modelOn } from "../../../shared/offered-models";
-import { SIGN_IN_FAMILY_LABEL, harnessLabel, signInFamily } from "@/lib/engine-rail";
 import { needsCli, needsSignIn } from "../EngineSetup";
 import type { ModelMenuRow, ModelMenuSection } from "../ModelMenu";
 import { equivalentOfferedModel } from "../../../shared/payable-model";
@@ -17,7 +16,8 @@ import type { InstanceInfo, ModelSelection, Bot } from "@/state/store";
 import type { ModelSwitches } from "../../../shared/offered-models";
 import type { ModelOption } from "./helpers";
 import { modelLabel } from "./helpers";
-import { unifyProviderSections } from "../../../shared/model-provider-unify";
+import { providerCatalog } from "../../../shared/provider-catalog";
+import { canonicalModelId, COMPUTER_PROVIDER_ID, providerOfModel, splitEngine, type ProviderRef } from "../../../shared/model-provider";
 import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
 import { isModelServerOption } from "../../../shared/model-server-option";
 
@@ -50,7 +50,6 @@ export interface ModelPickerSectionsInput {
 }
 
 export interface ModelPickerSections {
-  flatSections: ModelMenuSection[];
   menuSections: ModelMenuSection[];
 }
 
@@ -102,24 +101,23 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       return reason === "anthropic" ? t("model.localUnavailable.anthropic") : t("model.localUnavailable.engine", { engine: instance.displayName });
     };
     return {
-      official: options.filter((option) => !option.custom),
       cloud: cloudOf(offered.filter((option) => !isLocal(option))),
       // Loaded local models first, as the old local list did.
       local: [...localOptions.filter((option) => option.loaded), ...localOptions.filter((option) => !option.loaded)],
-      signInFirst,
       unavailable,
     };
   };
 
   // A row reads "name" then, muted, what a pick would run it with: the
-  // provider (OpenRouter), the effort kept on the same engine, the variant
-  // of the current model, Local. In a thread, the bot's own model is the
+  // effort kept on the same engine, the variant of the current model, Fast.
+  // #4329: the provider's heading names where the model comes from (a
+  // vendor, a server, this computer), so the row does not. In a thread, the bot's own model is the
   // row above the engines ("<bot>'s model"), not a tag here.
   // The effort shown is the one a pick would run (Cursor's "Grok 4.7 High"):
   // the level kept when this model takes it, else the model's own default.
-  // A folded row (`twin`, the composer's menu) stands for a model and its
-  // fast twin and says Fast while the bot runs the twin.
-  const modelRow = (instance: InstanceInfo, option: ModelOption, local: boolean, unavailable: string | undefined, saysLocal: boolean, twin?: ModelOption): ModelMenuRow => {
+  // A folded row (`twin`) stands for a model and its fast twin and says
+  // Fast while the bot runs the twin.
+  const modelRow = (instance: InstanceInfo, option: ModelOption, local: boolean, unavailable: string | undefined, twin?: ModelOption): ModelMenuRow => {
     const sameEngine = instance.instanceId === selection.instanceId;
     const onTwin = Boolean(twin && sameEngine && selection.model === twin.id);
     const runs = onTwin && twin ? twin : option;
@@ -136,7 +134,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     const effortLevel = instance.capabilities?.modelVariants ? undefined
       : effortForModel(sameEngine ? selection.effort : undefined, runs, levels) ?? modelDefaultEffort(runs, levels);
     const runsWith = [variant ?? (effortLevel ? effortLabel(effortLevel) : undefined), onTwin ? t("model.fastTag") : undefined].filter(Boolean).join(" ");
-    const detail = [isModelServerOption(option) ? option.server ?? option.provider : option.provider, runsWith || undefined, local && saysLocal ? t("model.localGroup") : undefined].filter(Boolean).join(" · ") || undefined;
+    const detail = runsWith || undefined;
     return {
       key: favoriteKey(instance.instanceId, option.id),
       kind: "model",
@@ -157,22 +155,18 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       keywords: [instance.displayName, twin?.label, twin?.id].filter(Boolean).join(" "),
     };
   };
-  // Under an engine's own heading a local model says Local; under Cloud
-  // and Local headings (the window's engine mode) the heading says it.
-  // `fold`: a fast twin rides its model's row (the composer's menu, which
-  // has the Fast switch); the window lists both.
-  const rowsOf = (instance: InstanceInfo, saysLocal: boolean, fold = false) => {
+  // A fast twin rides its model's row (the menu has the Fast switch).
+  const rowsOf = (instance: InstanceInfo) => {
     const catalog = catalogOf(instance);
     const options = instance.models.options;
-    const shown = (option: ModelOption) => !fold || !fastBaseOf(options, option.id);
+    const shown = (option: ModelOption) => !fastBaseOf(options, option.id);
     const twinOf = (option: ModelOption) => {
-      const id = fold ? fastTwinOf(options, option.id) : undefined;
+      const id = fastTwinOf(options, option.id);
       return id ? options.find((candidate) => candidate.id === id) : undefined;
     };
     return {
-      catalog,
-      cloud: catalog.cloud.filter(shown).map((option) => modelRow(instance, option, false, undefined, saysLocal, twinOf(option))),
-      local: catalog.local.filter(shown).map((option) => modelRow(instance, option, true, catalog.unavailable(option.id), saysLocal, twinOf(option))),
+      cloud: catalog.cloud.filter(shown).map((option) => modelRow(instance, option, false, undefined, twinOf(option))),
+      local: catalog.local.filter(shown).map((option) => modelRow(instance, option, true, catalog.unavailable(option.id), twinOf(option))),
     };
   };
 
@@ -198,30 +192,10 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     }] : []),
   ];
 
-  // The menu and the window's Auto mode list every engine the bot can use:
-  // its own first, then the others the server allows. An engine to install
-  // or blocked by a policy stays in the window; on an organization server
-  // an engine nothing pays for yet stays there too, unless it is the bot's.
-  // #2106: subscription families use the family name (Claude, OpenAI) so
-  // several accounts collapse to one section; API engines keep their name.
-  const engineLabel = (instance: InstanceInfo) => {
-    if (instance.access === "api") return instance.displayName;
-    const family = signInFamily(instance);
-    return family ? SIGN_IN_FAMILY_LABEL[family] : instance.displayName;
-  };
-  const sectionAccess = (instance: InstanceInfo): ModelMenuSection["access"] => (
-    instance.access === "api" ? "api" : instance.access === "custom" ? undefined : "subscription"
-  );
-  const sectionFamily = (instance: InstanceInfo): string | undefined => {
-    if (instance.access === "api" || instance.access === "custom") return undefined;
-    return signInFamily(instance);
-  };
-  const accessNote = (instance: InstanceInfo): string | undefined => {
-    if (needsSignIn(instance)) return t("model.signInRequired");
-    if (instance.access === "api") return t("model.access.api");
-    if (instance.access === "custom") return undefined;
-    return t("model.access.account");
-  };
+  // The menu lists every engine the bot can use: its own first, then the
+  // others the server allows. An engine to install or blocked by a policy
+  // stays out; on an organization server an engine nothing pays for yet
+  // stays out too, unless it is the bot's.
   const menuInstances = [
     ...selectable.filter((instance) => instance.instanceId === selection.instanceId),
     ...selectable.filter((instance) => instance.instanceId !== selection.instanceId),
@@ -235,100 +209,103 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
   // composer's menu still shows the model in use, with its warning.
   const currentEngineHidden = autoOn || follows === true ? [] : selectable.filter((instance) =>
     instance.instanceId === selection.instanceId && !menuInstances.includes(instance) && !engineRuns(instance, health));
-  // Models that run on this computer get their own section, whatever engine
-  // runs them (2026-10-14): never mixed into "Claude" or another provider.
-  const LOCAL_SECTION_KEY = "local:this-computer";
-  /** #3116: the local models are one harness of their own in the step picker. */
-  const LOCAL_HARNESS = "local";
-  // Every engine offers the same local models (DwarfStar through Claude, Grok,
-  // Codex, pi...): list each model once. Rows come in engine order with the
-  // bot's own engine first, so the first one kept is the engine already in use.
-  // The "Local" tag goes: the section already says it. The label is the model
-  // name alone (2026-10-26); a server shows only as a detail when two servers
-  // of one computer share a name (`option.server`).
-  const uniqueLocalRows = (rows: readonly ModelMenuRow[]): ModelMenuRow[] => {
-    const seen = new Map<string, ModelMenuRow>();
-    for (const row of rows) {
-      const id = row.modelId ?? row.key;
-      const kept = seen.get(id);
-      if (kept && !(row.current && !kept.current)) continue;
-      const localTag = t("model.localGroup");
-      seen.set(id, {
-        ...row,
-        tags: row.tags?.filter((tag) => tag !== localTag && tag.toLowerCase() !== "local"),
-      });
-    }
-    return [...seen.values()];
-  };
-  const sectionsOf = (fold: boolean): ModelMenuSection[] => {
-    const localRows: ModelMenuRow[] = [];
-    const engineSections = menuInstances.map((instance) => {
-      const { catalog, cloud, local } = rowsOf(instance, true, fold);
-      localRows.push(...local.filter((row) => Boolean(row.modelId && modelOn(switches, instance.instanceId, row.modelId) && modelUsable(instance, row.modelId, health) && !row.unavailable)));
-      return {
-        key: instance.instanceId,
-        label: engineLabel(instance),
-        note: catalog.signInFirst ? t("model.signInRequired") : accessNote(instance),
-        access: sectionAccess(instance),
-        family: sectionFamily(instance),
-        rows: cloud,
-      };
-    }).filter((section) => section.rows.length > 0 || section.note);
-    return unifyProviderSections([
-      { key: "top", rows: topRows },
-      ...engineSections,
-      ...(localRows.length > 0 ? [{ key: LOCAL_SECTION_KEY, label: t("model.localGroup"), rows: uniqueLocalRows(localRows) }] : []),
-    ]);
-  };
-  const allSections = sectionsOf(false);
-  const flatSections = allSections.map((section) => ({ ...section, rows: section.rows.filter((row) => row.kind !== "model" || Boolean(row.instanceId && row.modelId && modelOn(switches, row.instanceId, row.modelId) && modelUsable(instances.find((instance) => instance.instanceId === row.instanceId)!, row.modelId, health) && !row.unavailable)) })).filter((section) => section.rows.length > 0);
-  // The composer's menu lists only the models that can run a turn now
-  // (src/lib/model-health.ts, 2026-10-14): a provider left with none
-  // goes. The model in use stays, checked, saying it does not respond.
-  // #2106: several Claude accounts collapse to one provider section; Favorites
-  // sit under Auto in the same scrolling list.
-  const menuLocalRows: ModelMenuRow[] = [];
-  const rawMenuSections: ModelMenuSection[] = [
-    { key: "top", rows: topRows },
-    ...[...currentEngineHidden, ...menuInstances].map((instance) => {
-      const { cloud, local } = rowsOf(instance, true, true);
-      const rows = [...cloud, ...local];
-      const localKeys = new Set(local.map((row) => row.key));
-      const ownCurrent = !autoOn && follows !== true && instance.instanceId === selection.instanceId;
-      const runsOf = (row: ModelMenuRow) => row.modelId !== undefined && modelUsable(instance, row.modelId, health);
-      const shown = rows.filter((row) => (row.current && ownCurrent) || runsOf(row));
-      if (ownCurrent && !shown.some((row) => row.current)) {
-        // a signed-out engine's catalog drops its cloud models: the one in use comes back
-        const option = instance.models.options.find((candidate) => candidate.id === selection.model);
-        if (option) shown.unshift(modelRow(instance, option, false, undefined, true));
-      }
-      const marked = shown.map((row) => (row.current && !runsOf(row) ? { ...row, warning: t("model.notResponding") } : row));
-      menuLocalRows.push(...marked.filter((row) => localKeys.has(row.key)));
-      return {
-        key: instance.instanceId,
-        label: engineLabel(instance),
-        note: accessNote(instance),
-        access: sectionAccess(instance),
-        family: sectionFamily(instance),
-        harness: instance.driverKind,
-        harnessLabel: harnessLabel(instance),
-        rows: marked.filter((row) => !localKeys.has(row.key)),
-      };
-    }).filter((section) => section.rows.length > 0),
-  ];
-  if (menuLocalRows.length > 0) rawMenuSections.push({ key: LOCAL_SECTION_KEY, label: t("model.localGroup"), harness: LOCAL_HARNESS, harnessLabel: t("model.localGroup"), rows: uniqueLocalRows(menuLocalRows) });
-  const unified = unifyProviderSections(rawMenuSections);
-  const modelRows = unified.flatMap((section) => section.rows.filter((row) => row.kind === "model"));
-  const favoriteRows = favoriteKeys.flatMap((key) => modelRows.filter((row) => row.key === key).slice(0, 1));
-  const menuSections: ModelMenuSection[] = [];
-  for (const section of unified) {
-    if (section.key === "top") {
-      menuSections.push(section);
-      if (favoriteRows.length > 0) menuSections.push({ key: "favorites", label: t("model.favorites"), rows: favoriteRows });
-      continue;
-    }
-    menuSections.push(section);
-  }
+  const engines = [...currentEngineHidden, ...menuInstances];
 
-  return { flatSections, menuSections };
+  // #4329 lot 3: the menu is grouped by provider (shared/model-provider.ts,
+  // the one grouping), in the provider catalog's order. Each engine's rows
+  // land under the provider that gives the model: a vendor's tool and its
+  // API key under the vendor, a pi or OpenCode row under the vendor before
+  // the slash of its id, a server added by address under its own name, a
+  // model of this computer under "This computer" whatever engine runs it.
+  // The accounts and engines of one provider are pooled: one model is one
+  // row, the others ride on it as its alternatives ("Runs with").
+  const order = providerCatalog({ instances: engines, place: orgMode ? "organization" : "solo" }).providers.map((provider) => provider.id);
+  const computer: ProviderRef = { id: COMPUTER_PROVIDER_ID, label: t("model.computerProvider"), kind: "computer" };
+  const localTag = t("model.localGroup");
+  interface Pool { ref: ProviderRef; models: Map<string, ModelMenuRow[]>; instances: InstanceInfo[] }
+  const pools = new Map<string, Pool>();
+  // the vendor's own engines first, so a model reads as its vendor names it
+  const byRole = [...engines].sort((a, b) => Number(splitEngine(a.driverKind)) - Number(splitEngine(b.driverKind)));
+  for (const instance of byRole) {
+    const { cloud, local } = rowsOf(instance);
+    const rows = [...cloud, ...local];
+    const localKeys = new Set(local.map((row) => row.key));
+    const ownCurrent = !autoOn && follows !== true && instance.instanceId === selection.instanceId;
+    const runsOf = (row: ModelMenuRow) => row.modelId !== undefined && modelUsable(instance, row.modelId, health);
+    // The menu lists only the models that can run a turn now
+    // (src/lib/model-health.ts, 2026-10-14). The model in use stays,
+    // checked, saying it does not respond.
+    const shown = rows.filter((row) => (row.current && ownCurrent) || runsOf(row));
+    if (ownCurrent && !shown.some((row) => row.current)) {
+      // a signed-out engine's catalog drops its cloud models: the one in use comes back
+      const option = instance.models.options.find((candidate) => candidate.id === selection.model);
+      if (option) shown.unshift(modelRow(instance, option, false, undefined));
+    }
+    for (const row of shown) {
+      const marked = row.current && !runsOf(row) ? { ...row, warning: t("model.notResponding") } : row;
+      const option = instance.models.options.find((candidate) => favoriteKey(instance.instanceId, candidate.id) === row.key)
+        ?? instance.models.options.find((candidate) => candidate.id === row.modelId)
+        ?? { id: row.modelId ?? row.key, label: row.label };
+      const isLocal = localKeys.has(row.key);
+      const ref = isLocal ? computer : providerOfModel(instance, option);
+      const id = isLocal ? option.id : canonicalModelId(instance, option);
+      let pool = pools.get(ref.id);
+      if (!pool) {
+        pool = { ref, models: new Map(), instances: [] };
+        pools.set(ref.id, pool);
+      }
+      if (!pool.instances.includes(instance)) pool.instances.push(instance);
+      // the provider's heading already says Local
+      const entry: ModelMenuRow = { ...marked, harness: instance.driverKind,
+        ...(isLocal ? { tags: marked.tags?.filter((tag) => tag !== localTag && tag.toLowerCase() !== "local") } : {}) };
+      const same = pool.models.get(id);
+      if (same) same.push(entry);
+      else pool.models.set(id, [entry]);
+    }
+  }
+  // The row a model is drawn with: the one in use, else the one on the bot's
+  // engine, else one on the same kind of engine (a pick keeps what runs the
+  // bot), else the vendor's own engine.
+  const selectedDriver = instances.find((instance) => instance.instanceId === selection.instanceId)?.driverKind;
+  const lead = (candidates: readonly ModelMenuRow[]): ModelMenuRow =>
+    candidates.find((row) => row.current)
+      ?? candidates.find((row) => row.instanceId === selection.instanceId)
+      ?? (selectedDriver ? candidates.find((row) => row.harness === selectedDriver) : undefined)
+      ?? candidates[0]!;
+  const rank = (id: string) => {
+    const at = order.indexOf(id);
+    return at < 0 ? order.length : at;
+  };
+  const providerSections: ModelMenuSection[] = [...pools.values()]
+    .sort((a, b) => rank(a.ref.id) - rank(b.ref.id))
+    .map((pool) => ({
+      key: pool.ref.id,
+      label: pool.ref.label,
+      // every engine behind it waits for a sign-in
+      note: pool.instances.every((instance) => needsSignIn(instance)) ? t("model.signInRequired") : undefined,
+      rows: [...pool.models.values()].map((candidates) => {
+        const shownRow = lead(candidates);
+        const others = candidates.filter((row) => row !== shownRow);
+        if (others.length === 0) return shownRow;
+        return {
+          ...shownRow,
+          alternatives: others,
+          keywords: [shownRow.keywords, ...others.map((row) => row.keywords)].filter(Boolean).join(" "),
+        };
+      }),
+    }))
+    .filter((section) => section.rows.length > 0);
+
+  // #2106: Favorites sit under Auto in the same list. A model starred on
+  // an engine now pooled under another row still shows, as starred.
+  const shownRows = providerSections.flatMap((section) => section.rows);
+  const pooledRows = shownRows.flatMap((row) => row.alternatives ?? []);
+  const favoriteRows = favoriteKeys.flatMap((key) => [...shownRows, ...pooledRows].filter((row) => row.key === key).slice(0, 1));
+  const menuSections: ModelMenuSection[] = [
+    { key: "top", rows: topRows },
+    ...(favoriteRows.length > 0 ? [{ key: "favorites", label: t("model.favorites"), rows: favoriteRows }] : []),
+    ...providerSections,
+  ];
+
+  return { menuSections };
 }

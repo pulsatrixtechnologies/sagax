@@ -2349,10 +2349,7 @@
   "leftOut.reason.intervalRoutine": "він повторюється з інтервалом, що не вкладається в розклад; додайте його знову із часом доби",
   "leftOut.reason.onceRoutine": "він запускається лише раз, тож його не заплановано; запустіть вручну, якщо він ще потрібен",
   "leftOut.reason.invalidYaml": "це не коректний YAML",
-  "model.step.harness": "Harness",
-  "model.step.provider": "Провайдер",
   "model.step.model": "Модель",
-  "model.step.providers": "{count} провайдерів",
   "model.step.models": "{count} моделей",
   "model.step.oneModel": "1 модель"
 }

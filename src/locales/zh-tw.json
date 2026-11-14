@@ -3611,10 +3611,7 @@
   "leftOut.reason.intervalRoutine": "它以無法對應到時間表的間隔重複；請設定一天中的時間後重新加入",
   "leftOut.reason.onceRoutine": "它只執行一次，因此沒有排程；如仍需要請手動執行",
   "leftOut.reason.invalidYaml": "這不是有效的 YAML",
-  "model.step.harness": "Harness",
-  "model.step.provider": "提供者",
   "model.step.model": "模型",
-  "model.step.providers": "{count} 個提供者",
   "model.step.models": "{count} 個模型",
   "model.step.oneModel": "1 個模型"
 }

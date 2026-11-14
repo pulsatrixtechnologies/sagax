@@ -1848,10 +1848,7 @@
   "leftOut.reason.intervalRoutine": "यह ऐसे अंतराल पर दोहराता है जो किसी समय-सारिणी में नहीं बैठता; दिन का समय चुनकर इसे फिर जोड़ें",
   "leftOut.reason.onceRoutine": "यह सिर्फ़ एक बार चलता है, इसलिए शेड्यूल नहीं किया गया; अगर अब भी ज़रूरी हो तो इसे हाथ से चलाएँ",
   "leftOut.reason.invalidYaml": "यह मान्य YAML नहीं है",
-  "model.step.harness": "हार्नेस",
-  "model.step.provider": "प्रदाता",
   "model.step.model": "मॉडल",
-  "model.step.providers": "{count} प्रदाता",
   "model.step.models": "{count} मॉडल",
   "model.step.oneModel": "1 मॉडल"
 }

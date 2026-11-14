@@ -144,7 +144,7 @@ describe("PluginsPanel modal", () => {
     if (link) await act(async () => { link.click(); });
   };
 
-  it("opens Plugins as a centred modal dialog", async () => {
+  it("opens Connect Apps as a centred modal dialog", async () => {
     await act(async () => {
       root.render(createElement(PluginsPanel));
     });
@@ -156,7 +156,8 @@ describe("PluginsPanel modal", () => {
     expect(dialog?.className).toContain(CATEGORY_MODAL.frame.split(" ")[0]!);
     expect(host.querySelector("[data-tour=\"apps-close\"]")).not.toBeNull();
     expect(host.querySelector("[data-apps-back]")).toBeNull();
-    expect(host.textContent).toMatch(/Plugins/);
+    // the window's name since #4169 (owner request #4153)
+    expect(host.textContent).toMatch(/Connect Apps/);
   });
 
   it.each(["en", "fr"])("a member removes only the obsolete bot copy in one click (%s)", async (lang) => {

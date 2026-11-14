@@ -116,12 +116,15 @@ it("iOS string catalogs have no em or en dashes", () => {
   expect(offending).toEqual([]);
 });
 
-// Plugins (2026-10-30 Capabilities; renamed #2104): one name for the page that adds plugins, skills,
-// MCP servers and connectors, and no text that points to a tab that is gone.
-it("names the Plugins page and no retired tab", () => {
+// Connect Apps (2026-10-30 Capabilities; Plugins with #2104; Connect Apps with #4169 on the
+// owner's request #4153): one name for the window that adds plugins, skills, MCP servers and
+// connectors, and no text that points to a tab that is gone or calls the window by an old name.
+it("names the Connect Apps page and no retired tab", () => {
   const fr = JSON.parse(readFileSync(new URL("./fr.json", import.meta.url), "utf8")) as Record<string, string>;
-  const retiredEn = [/Connect apps/i, /Connected apps/i, /Plugins →/, /Manage > Advanced/, /> Manage\b/, /Managed on Grok/, /under Plugins/];
-  const retiredFr = [/Connecter des app/i, /Applications connectées/i, /plugiciel/i, /Gérer > Avancé/, /Géré dans Grok/];
+  expect(en["connectApps.title"]).toBe("Connect Apps");
+  expect(fr["connectApps.title"]).toBe("Connecter des apps");
+  const retiredEn = [/Connect apps/, /Connected apps/i, /Plugins →/, /Plugins >/, /Manage > Advanced/, /> Manage\b/, /Managed on Grok/, /under Plugins/];
+  const retiredFr = [/Connecter des Apps/, /Applications connectées/i, /plugiciel/i, /Plugins >/, /Gérer > Avancé/, /Géré dans Grok/];
   const offending = [
     ...Object.entries(en).filter(([, value]) => retiredEn.some((word) => word.test(value))).map(([key]) => `en ${key}`),
     ...Object.entries(fr).filter(([, value]) => retiredFr.some((word) => word.test(value))).map(([key]) => `fr ${key}`),

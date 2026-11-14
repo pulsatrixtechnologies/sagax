@@ -111,7 +111,7 @@ describe("a plugin's page in its tab", () => {
     expect(html).toMatch(/data-plugins-main="installed"[^>]*data-plugins-subpage=""[\s\S]*?data-test-page/);
     expect(html).not.toContain("data-test-scope");
     // the window keeps its accessible name, hidden from view
-    expect(html).toMatch(/<h2 id="plugins-title" class="sr-only">Plugins<\/h2>/);
+    expect(html).toMatch(/<h2 id="plugins-title" class="sr-only">Connect Apps<\/h2>/);
     expect(html).not.toMatch(/>I</);
   });
 

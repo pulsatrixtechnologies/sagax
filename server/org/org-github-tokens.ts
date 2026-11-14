@@ -201,8 +201,8 @@ export class OrgGithubTokens {
     }
     const source = this.keySource();
     if (source.kind === "unavailable") {
-      this.loaded = true;
-      this.unreadable = source.reason;
+      // Not cached (#4155): the key may come later in this launch, and the
+      // move into github-credentials.enc retries on the next call.
       throw new OrgGithubTokensError(source.reason, "store_unavailable", 503);
     }
     let raw: string;

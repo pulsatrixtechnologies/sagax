@@ -19,6 +19,8 @@ export interface GithubCredentialsView {
   canManageOrg: boolean;
   /** the organization's GitHub OAuth App is set: Connect GitHub runs the device flow */
   deviceFlow: boolean;
+  /** #4155: the saved list does not open on this server; adding a credential again starts a new one */
+  unreadable?: "sealed";
 }
 
 export type GithubCredentialChange =

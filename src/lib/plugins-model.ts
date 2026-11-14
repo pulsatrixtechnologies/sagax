@@ -47,7 +47,7 @@ export interface PluginItem {
   merged?: string[];
   /** an MCP server that reads the person's GitHub account (the GitHub
    * plugin's token placeholder): whether that account is connected */
-  githubAccount?: "connected" | "missing";
+  githubAccount?: "connected" | "missing" | "unreadable";
   /** #2759: a marketplace plugin Sagax converted from another format
    * ("cursor"), and what did not convert (codes, shown on its page) */
   convertedFrom?: string;
@@ -98,7 +98,7 @@ interface McpListing {
   managedBy?: string;
   source?: string;
   /** reads the person's GitHub account (server/github/github-mcp-token.ts) */
-  github?: "connected" | "missing";
+  github?: "connected" | "missing" | "unreadable";
 }
 interface FeaturedListing {
   id: string; name: string; description: string; url: string; domain: string; auth: string; installed?: boolean;
@@ -306,7 +306,8 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
     const domain = mark?.site ?? null;
     // a server that reads the GitHub account is connected when the account
     // is (its own sign-in state is the placeholder's, not the person's)
-    const needsAuth = server.github ? server.github === "missing" : server.auth === "required" || server.auth === "expired" || server.auth === "error";
+    // (#4155: an account kept but unreadable this launch is not connected either)
+    const needsAuth = server.github ? server.github !== "connected" : server.auth === "required" || server.auth === "expired" || server.auth === "error";
     items.push({
       key: `mcp:${server.name}`,
       kind: "mcp",

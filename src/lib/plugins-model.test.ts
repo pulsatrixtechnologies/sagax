@@ -263,7 +263,7 @@ describe("a marketplace plugin's mark (2026-10-28)", () => {
 });
 
 describe("the GitHub plugin's server reads the person's GitHub account (2026-10-28)", () => {
-  const server = (github?: "connected" | "missing") => ({
+  const server = (github?: "connected" | "missing" | "unreadable") => ({
     name: "github-github", enabled: true, url: "https://api.githubcopilot.com/mcp/", auth: "none", source: "claude-plugins-official",
     ...(github ? { github } : {}),
   });
@@ -273,6 +273,9 @@ describe("the GitHub plugin's server reads the person's GitHub account (2026-10-
     expect(missing).toMatchObject({ status: "needs_auth", githubAccount: "missing" });
     const connected = buildPluginItems({ servers: [{ ...server("connected"), auth: "error" }] }).find((item) => item.key === "mcp:github-github");
     expect(connected).toMatchObject({ status: "connected", githubAccount: "connected" });
+    // #4155: a saved account this launch cannot read is not connected, and stays told apart from a missing one
+    const unreadable = buildPluginItems({ servers: [server("unreadable")] }).find((item) => item.key === "mcp:github-github");
+    expect(unreadable).toMatchObject({ status: "needs_auth", githubAccount: "unreadable" });
     // any other server keeps its own state
     expect(buildPluginItems({ servers: [server()] }).find((item) => item.key === "mcp:github-github")).toMatchObject({ status: "connected" });
     expect(buildPluginItems({ servers: [server()] }).find((item) => item.key === "mcp:github-github")?.githubAccount).toBeUndefined();

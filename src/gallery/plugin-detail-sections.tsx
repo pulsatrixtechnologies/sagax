@@ -4,6 +4,8 @@
  * stand-in /api answers the GitHub connection. Not shipped in the app.
  * ?case=neither|account|tools|both|github|uses-github|sign-in|connector
  *   &skin=<id>&lang=<code>
+ *   &credentials=sealed (#4155: the saved list does not open on this server)
+ *   or error (a read that failed this time: the server's 503)
  * scripts/capture/plugin-detail-sections.mjs takes the shots. */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -33,10 +35,15 @@ const API: Record<string, unknown> = {
     { id: "gt_0000000000000011", label: "Second GitHub organization", hint: "9c1d", owner: "mine", chosenBy: 1 },
   ] },
 };
+const credentialsCase = params.get("credentials");
+if (credentialsCase === "sealed") API["/api/me/github/credentials"] = { canManageOrg: false, deviceFlow: true, credentials: [], unreadable: "sealed" };
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
   if (!url.pathname.startsWith("/api/")) return realFetch(input, init);
+  if (credentialsCase === "error" && url.pathname === "/api/me/github/credentials") {
+    return new Response(JSON.stringify({ error: "The saved credentials could not be read.", code: "store_unavailable" }), { status: 503, headers: { "content-type": "application/json" } });
+  }
   return new Response(JSON.stringify(API[url.pathname] ?? {}), { status: 200, headers: { "content-type": "application/json" } });
 }) as typeof window.fetch;
 

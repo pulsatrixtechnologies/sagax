@@ -244,8 +244,9 @@ function migrateOnePerson(
   if (existsSync(connections) && !existsSync(capabilities)) {
     // Lot 2 migrates on first PersonConnections.read. Copy sealed bytes
     // only when the new file is still absent so a crash mid-read cannot
-    // leave the person without either file; PersonConnections will rewrite
-    // with the v2 AAD on the next successful read.
+    // leave the person without either file; PersonConnections opens these
+    // legacy-sealed bytes and rewrites them with the v2 AAD on its next read
+    // (#4155: before that, the copy never opened and the account looked gone).
     copyFileSync(connections, capabilities);
     imported.push(`person:${personId}:person-connections-legacy`);
   } else if (existsSync(capabilities)) {

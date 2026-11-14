@@ -33,13 +33,15 @@ const toolsOnly = plugin("design-kit");
 const both = plugin("issues-kit");
 const github = plugin("github");
 const usesGithub = plugin("repo-tools");
+const keptGithub = plugin("repo-kept");
 const items = [
-  neither, toolsOnly, both, github, usesGithub,
+  neither, toolsOnly, both, github, usesGithub, keptGithub,
   child(toolsOnly, "skill", "interface-review"),
   child(both, "mcp", "issues"),
   child(both, "skill", "triage"),
   child(github, "mcp", "github-github", { githubAccount: "missing", status: "needs_auth" }),
   child(usesGithub, "mcp", "repo-chores", { githubAccount: "missing", status: "needs_auth" }),
+  child(keptGithub, "mcp", "repo-kept-chores", { githubAccount: "unreadable", status: "needs_auth" }),
 ];
 const marketplaces: MarketplaceListing[] = [{ name: MARKET, source: "example-org/example-market", plugins: [] }];
 
@@ -91,6 +93,16 @@ const BOX = /\brounded[\w-[\]]*\b/;
 const FRAME = /(?:^|\s)(?:border(?:-\[[^\]]+\])?|border-hairline\S*|bg-inset|bg-raised\S*|bg-ink\/\[[^\]]+\])(?:\s|$)/;
 const boxesIn = (element: HTMLElement) => [...element.querySelectorAll("div, section, form")]
   .filter((node) => BOX.test(node.getAttribute("class") ?? "") && FRAME.test(node.getAttribute("class") ?? ""));
+
+describe("a saved GitHub account this launch cannot read (#4155)", () => {
+  it("the plugin's account line says it is saved and points to the GitHub plugin's page, never \"not connected\"", () => {
+    const page = detail(keptGithub);
+    const line = page.querySelector("[data-plugin-github-account]")!;
+    expect(line.getAttribute("data-plugin-github-account")).toBe("unreadable");
+    expect(line.textContent).toContain("saved but can't be read right now");
+    expect(line.textContent).not.toContain("not connected");
+  });
+});
 
 describe("plugin detail sections (#4154)", () => {
   it("a plugin with neither an account nor a tool draws neither section, and still its Details under the head", () => {

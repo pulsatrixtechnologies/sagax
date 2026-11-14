@@ -1,5 +1,5 @@
 import { createCipheriv, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -527,6 +527,23 @@ describe("vault", () => {
     expect(readFileSync(file, "utf8")).toBe(onDisk);
   });
 
+  it("a sign-in made again over a vault sealed with a key that is gone keeps that file beside and saves (#4155)", async () => {
+    fake = await startFakeOAuthMcp();
+    const oauth = manager();
+    await signIn(oauth, "notes", remote(fake.mcpUrl));
+    const record = oauth.vault.get("notes")!;
+    const file = join(dir, "mcp-oauth.enc");
+    const onDisk = readFileSync(file, "utf8");
+    const other = new McpOAuthVault(dir, () => ({ kind: "key", key: Buffer.alloc(32, 9) }));
+    expect(other.unavailableReason()).toMatch(/could not be decrypted/);
+    other.set("notes", record);
+    expect(other.unavailableReason()).toBeNull();
+    expect(other.get("notes")).toEqual(record);
+    const kept = readdirSync(dir).filter((name) => name.startsWith("mcp-oauth.enc.unreadable-"));
+    expect(kept).toHaveLength(1);
+    expect(readFileSync(join(dir, kept[0]!), "utf8")).toBe(onDisk);
+  });
+
   it("uses the desktop key, refuses to invent one under the desktop, and makes a 0600 key file otherwise", () => {
     const hex = "ab".repeat(32);
     expect(resolveVaultKey(dir, { SAGAX_MCP_OAUTH_KEY: hex })).toEqual({ kind: "key", key: Buffer.from(hex, "hex") });
@@ -535,6 +552,36 @@ describe("vault", () => {
     expect(made.kind).toBe("key");
     expect(resolveVaultKey(dir, {})).toEqual(made);
     if (process.platform !== "win32") expect(statSync(join(dir, "mcp-oauth.key")).mode & 0o777).toBe(0o600);
+  });
+
+  it("never makes a new key over a key file it cannot read, so the sealed stores still open at the next start (#4155)", () => {
+    const first = resolveVaultKey(dir, {});
+    const file = join(dir, "mcp-oauth.key");
+    const saved = readFileSync(file, "utf8");
+    if (process.platform !== "win32" && process.getuid?.() !== 0) {
+      // A newer build started as a user that cannot read the 0600 file yet.
+      chmodSync(file, 0o000);
+      try {
+        expect(resolveVaultKey(dir, {})).toMatchObject({ kind: "unavailable" });
+      } finally {
+        chmodSync(file, 0o600);
+      }
+      expect(readFileSync(file, "utf8")).toBe(saved);
+    }
+    expect(resolveVaultKey(dir, {})).toEqual(first);
+  });
+
+  it("keeps a key file that holds no key beside and makes a new key, so sign-ins are not blocked (#4155)", () => {
+    const file = join(dir, "mcp-oauth.key");
+    writeFileSync(file, "not-a-key\n", { mode: 0o600 });
+    const fresh = resolveVaultKey(dir, {});
+    expect(fresh.kind).toBe("key");
+    expect(readFileSync(file, "utf8").trim()).toMatch(/^[0-9a-f]{64}$/);
+    const kept = readdirSync(dir).filter((name) => name.startsWith("mcp-oauth.key.invalid-"));
+    expect(kept).toHaveLength(1);
+    expect(readFileSync(join(dir, kept[0]!), "utf8")).toBe("not-a-key\n");
+    // The next start reads the new key.
+    expect(resolveVaultKey(dir, {})).toEqual(fresh);
   });
 
   it("reports an unavailable store as an error and injects nothing", () => {

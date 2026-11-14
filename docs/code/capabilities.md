@@ -318,7 +318,32 @@ routes use that same store. The first successful read of `connections.enc`
 writes version 2 atomically and keeps the encrypted original for recovery.
 An existing new file always wins, including an empty document; a corrupt
 new file is never replaced from the legacy copy. A store that cannot be
-decrypted is never overwritten.
+decrypted is never overwritten. #4155: a `capabilities.enc` that holds
+legacy-sealed bytes (the lot 5 start copies `connections.enc` there) opens as
+the legacy document and is sealed again. When the store does not open with the
+key there is, the GitHub status says so (`code: "store_sealed"`) and Connect
+GitHub again keeps the old file beside as `capabilities.enc.unreadable-<ms>`
+and saves the new account in a new store; with no key this launch
+(`code: "store_unavailable"`) the account is kept and Connect is not offered;
+when that key is the desktop's own (its saved keys could not be read, which only
+this app's local page can see), the card offers the existing Reset saved keys.
+Every surface reads that one verdict: the Sources row says the saved account
+cannot be read, and the GitHub plugin's server row is `github: "unreadable"`
+(never `missing`), whose detail points to the GitHub plugin's page. A
+vault key file that cannot be read is never replaced by a new key; one that
+holds no key is kept beside as `mcp-oauth.key.invalid-<ms>`.
+The cause that repeated after each update (#4155): a device-flow sign-in
+through a GitHub App (an `Iv1.` client id, organization override or
+`SAGAX_GITHUB_CLIENT_ID`) gets a user token that ends after 8 hours plus a
+refresh token, and Sagax kept only the token, so the account showed "GitHub
+refused this token" within hours. The connection now keeps `refreshToken`,
+`expiresAt`, `refreshTokenExpiresAt` and the app's `clientId`;
+`GithubConnect` renews the token 10 minutes before its end (a timer, set for
+every saved connection at each start), before a status probe or a turn's
+environment sync, and once after a 401, then saves it and puts it in the
+person's environment like a new sign-in. A refresh finished after a
+disconnect or a new sign-in never writes over it. An OAuth App's token does
+not expire and is stored as before.
 
 Plugin records share `server/capabilities/capability-plugin-state.ts`. `BotPlugins` takes
 an optional scoped storage adapter; `personalPluginStorage`

@@ -43,8 +43,11 @@ export function GithubAccountSection({ connection }: {
 }) {
   // #2109: Connect GitHub (link plus pairing code) leads; the tokens for
   // other organizations or hosts are the last resort, under Advanced. A
-  // server without the person's connection has only the tokens: open.
-  const [advanced, setAdvanced] = useState(!connection);
+  // server without the person's connection has only the tokens: open. A
+  // saved list the server cannot open (#4155) opens it too, to say so.
+  const { view } = useGithubCredentials();
+  const [chosen, setAdvanced] = useState<boolean | null>(null);
+  const advanced = chosen ?? (!connection || view?.unreadable === "sealed");
   return (
     <section className="py-2" data-accounts-github>
       <div className="mb-1 flex items-center gap-2">
@@ -63,7 +66,7 @@ export function GithubAccountSection({ connection }: {
         className="inline-flex w-fit items-center gap-1 text-[12px] font-medium text-ink-secondary hover:text-ink"
         aria-expanded={advanced}
         data-github-credentials-advanced
-        onClick={() => setAdvanced((open) => !open)}
+        onClick={() => setAdvanced(!advanced)}
       >
         <ChevronRight aria-hidden="true" size={12} className={advanced ? "rotate-90 transition-transform" : "transition-transform"} />
         {t("sources.github.advanced")}
@@ -121,7 +124,8 @@ function GithubCredentialList() {
         )}
       </div>
       <p className="text-[12px] leading-relaxed text-ink-secondary">{t("sources.github.credentialsHint")}</p>
-      {view.credentials.length === 0 && !adding && (
+      {view.unreadable === "sealed" && <p role="alert" className="text-[12px] text-danger" data-github-credentials-sealed>{t("sources.github.credentialsSealed")}</p>}
+      {view.credentials.length === 0 && !adding && view.unreadable !== "sealed" && (
         <p className="py-1 text-[12px] text-ink-secondary" data-github-credentials-empty>{t("sources.github.empty")}</p>
       )}
       {view.credentials.length > 0 && (

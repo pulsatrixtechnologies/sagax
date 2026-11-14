@@ -23,10 +23,12 @@
 // the mcp-oauth vault key, mode 0600, left out of workspace backups. No
 // listing returns a token (a label and the last 4 characters at most);
 // nothing here logs one. An unreadable file is never replaced with an empty
-// one. The migration is idempotent: it marks what it took in, reuses ids, and
+// one: a read that fails is asked again, and a file that does not open with
+// the key (#4155) is kept beside as github-credentials.enc.unreadable-<ms>
+// only when a credential is added again. The migration is idempotent: it marks what it took in, reuses ids, and
 // removes an old file only after the new one is written.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -43,6 +45,7 @@ const SCOPE = /^[\w-]{1,80}$/;
 // oxlint-disable-next-line no-control-regex -- a label must not carry control characters
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const MAX_TOTAL = 2000;
+const SEALED_MESSAGE = "The saved GitHub tokens can't be opened on this server anymore. Add them again.";
 
 /** The owner of the organization's shared credentials. */
 export const ORG_OWNER = "org";
@@ -173,7 +176,10 @@ export class GithubCredentials {
   private readonly file: string;
   private readonly keySource: () => VaultKeySource;
   private cached: Document | null = null;
-  private unreadable: string | null = null;
+  /** The file is there and the key too, but it does not open with that key
+   * (sealed under another one, or damaged), #4155. Kept for the launch; adding
+   * a credential sets the file aside. */
+  private sealed = false;
   private loaded = false;
 
   constructor(dataDir: string, keySource: () => VaultKeySource) {
@@ -218,6 +224,10 @@ export class GithubCredentials {
   /** Apply one change to `owner`'s list. Another owner's credential is not
    * found. Removing one sends the marketplaces that picked it back to Automatic. */
   change(owner: string, change: CredentialChange): void {
+    // #4155: adding again over a list that does not open with this key keeps
+    // that file beside as github-credentials.enc.unreadable-<ms> (it opens
+    // again if its key comes back) and starts a new list.
+    if (change.op === "add" && this.unreadable() === "sealed") this.setAside();
     const document = this.read();
     const credentials = document.credentials.map((entry) => ({ ...entry }));
     let choices = document.choices;
@@ -426,9 +436,33 @@ export class GithubCredentials {
     };
   }
 
+  /** Why the list cannot be read on this launch (#4155): `sealed`, the
+   * file does not open with the key there is (adding a credential again
+   * works); `key`, no key or a read that failed this time (asked again on
+   * the next read); null when it reads. */
+  unreadable(): "sealed" | "key" | null {
+    try {
+      this.read();
+      return null;
+    } catch (error) {
+      return error instanceof GithubCredentialsError && error.code === "store_sealed" ? "sealed" : "key";
+    }
+  }
+
+  private setAside(): void {
+    try {
+      renameSync(this.file, `${this.file}.unreadable-${Date.now()}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new GithubCredentialsError("The credential could not be saved.", "store_unavailable", 503);
+    }
+    this.cached = this.empty();
+    this.sealed = false;
+    this.loaded = true;
+  }
+
   private read(): Document {
     if (this.loaded) {
-      if (this.unreadable || !this.cached) throw new GithubCredentialsError(this.unreadable ?? "The saved credentials could not be read.", "store_unavailable", 503);
+      if (this.sealed || !this.cached) throw new GithubCredentialsError(SEALED_MESSAGE, "store_sealed", 503);
       return this.copy(this.cached);
     }
     const source = this.keySource();
@@ -443,12 +477,12 @@ export class GithubCredentials {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         this.cached = this.empty();
         this.loaded = true;
-        this.unreadable = null;
+        this.sealed = false;
         return this.copy(this.cached);
       }
-      this.loaded = true;
-      this.unreadable = "The saved credentials could not be read.";
-      throw new GithubCredentialsError(this.unreadable, "store_unavailable", 503);
+      // #4155: not cached, a read that failed this time (a permission, a
+      // passing I/O error) is asked again; never taken for a sealed list.
+      throw new GithubCredentialsError("The saved credentials could not be read.", "store_unavailable", 503);
     }
     try {
       const envelope = JSON.parse(raw) as { v?: unknown; iv?: unknown; tag?: unknown; data?: unknown };
@@ -459,17 +493,17 @@ export class GithubCredentials {
       const plain = Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]).toString("utf8");
       this.cached = documentSchema.parse(JSON.parse(plain));
       this.loaded = true;
-      this.unreadable = null;
+      this.sealed = false;
       return this.copy(this.cached);
     } catch {
       this.loaded = true;
-      this.unreadable = "The saved credentials could not be read.";
-      throw new GithubCredentialsError(this.unreadable, "store_unavailable", 503);
+      this.sealed = true;
+      throw new GithubCredentialsError(SEALED_MESSAGE, "store_sealed", 503);
     }
   }
 
   private write(document: Document): void {
-    if (this.unreadable) throw new GithubCredentialsError(this.unreadable, "store_unavailable", 503);
+    if (this.sealed) throw new GithubCredentialsError(SEALED_MESSAGE, "store_sealed", 503);
     let parsed: Document;
     try {
       parsed = documentSchema.parse(document);

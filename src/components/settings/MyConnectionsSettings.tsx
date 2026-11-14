@@ -19,11 +19,12 @@ import { openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 import { readableError, retryTransient } from "@/lib/plain-error";
 import {
-  addPersonalServer, connectGithubToken, disconnectGithub, GITHUB_MCP_URL, importPersonalServers, loadMyConnections, parseArgsLine,
+  addPersonalServer, connectGithubToken, disconnectGithub, GITHUB_MCP_URL, githubUnreadable, importPersonalServers, loadMyConnections, parseArgsLine,
   parseEnvLines, startGithubDevice, suggestServerName, updatePersonalServer,
   type MyConnections, type NewPersonalServer, type PersonalServer,
 } from "@/lib/my-connections";
 import { PillSelect } from "../SettingsPrimitives";
+import { useSavedKeysUnreadable } from "../SavedKeysReset";
 
 const message = readableError;
 const inputClass = "w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:border-border-strong focus:outline-none";
@@ -83,6 +84,8 @@ export function MyGithubSummary({ initial }: { initial?: MyConnections }) {
   const { data } = useMyConnections(initial, () => false);
   if (!data) return null;
   if (data.github.state === "connected") return <>{t("myConnections.github.connectedAs", { login: data.github.login })}</>;
+  // #4155: a saved account this launch cannot read is never a plain "not connected".
+  if (githubUnreadable(data.github)) return <>{t("myConnections.github.unreadableSummary")}</>;
   if (data.github.state === "error" && data.github.login) {
     return <>{t("myConnections.github.reconnectAs", { login: data.github.login })}</>;
   }
@@ -98,6 +101,12 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [token, setToken] = useState("");
+  // #4155: no key on the server this launch. The account is kept and comes back with the key; connecting
+  // could not be saved either, so no Connect is offered. When that key is this desktop's own (its saved keys
+  // could not be read: only ever true on this app's local page, never on an organization server's page), the
+  // one action is the existing Reset saved keys: this card names it and the Apps panel's notice above holds it
+  // (SavedKeysResetNotice), so the same button is never drawn twice in one window.
+  const savedKeysUnreadable = useSavedKeysUnreadable();
   const run = async (work: () => Promise<unknown>, device = false) => {
     setBusy(true);
     setError(null);
@@ -111,6 +120,15 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
       setBusy(false);
     }
   };
+  if (github.state === "error" && github.code === "store_unavailable") {
+    return (
+      <div className="flex flex-col gap-2.5 text-[13px]" data-github-state={github.state}>
+        <p role="alert" className="text-[12px] text-danger" data-github-auth-error>
+          {t(savedKeysUnreadable ? "myConnections.github.savedKeysUnreadable" : "myConnections.github.storeUnavailable")}
+        </p>
+      </div>
+    );
+  }
   return (
       <div className="flex flex-col gap-2.5 text-[13px]" data-github-state={github.state}>
         {github.state === "connected" && (
@@ -138,7 +156,7 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
         )}
         {(github.state === "none" || github.state === "error") && (
           <>
-            {github.state === "error" && <p role="alert" className="text-[12px] text-danger" data-github-auth-error>{github.error}</p>}
+            {github.state === "error" && <p role="alert" className="text-[12px] text-danger" data-github-auth-error>{github.code === "store_sealed" ? t("myConnections.github.storeSealed") : github.error}</p>}
             {github.state === "error" && github.login && (
               <p className="text-[12px] text-ink-secondary" data-github-reconnect-hint>{t("myConnections.github.reconnectHint", { login: github.login })}</p>
             )}

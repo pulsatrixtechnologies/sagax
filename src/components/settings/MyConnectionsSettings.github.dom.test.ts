@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
 import type { MyConnections } from "@/lib/my-connections";
-import { MyGithubConnection, PersonalServerForm } from "./MyConnectionsSettings";
+import { MyGithubConnection, MyGithubSummary, PersonalServerForm } from "./MyConnectionsSettings";
 
 const fixture = vi.hoisted(() => ({
   data: null as unknown,
@@ -114,5 +114,57 @@ describe("Connect GitHub (#2109)", () => {
     expect(option.getAttribute("aria-disabled")).toBeNull();
     expect($("[data-github-auth-hint]")).not.toBeNull();
     expect($("[data-add-personal-server] input[type=password]")).toBeNull();
+  });
+});
+
+describe("A saved GitHub account a launch cannot read (#4155)", () => {
+  it("sealed under another key: says it in the person's language and Connect GitHub (or a token) reconnects", async () => {
+    setLocale("fr");
+    const sealed: MyConnections = { ...none, github: { state: "error", deviceFlow: true, error: "server sentence", code: "store_sealed" } };
+    fixture.data = sealed;
+    render(createElement(MyGithubConnection, { initial: sealed }));
+    expect($("[data-github-auth-error]")!.textContent).toContain("Connecte GitHub de nouveau");
+    expect(host.textContent).not.toContain("server sentence");
+    fixture.data = { ...none, github: { state: "pending", userCode: "ABCD-1234", verificationUri: "https://github.com/login/device", expiresAt: Date.now() + 600_000, deviceFlow: true } };
+    flushSync(() => $<HTMLButtonElement>("[data-github-connect]")!.click());
+    expect(fixture.startGithubDevice).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect($("[data-github-code]")?.textContent).toContain("ABCD-1234"));
+  });
+
+  it("no key on the server this launch: says the account is kept and offers no action that cannot be saved", () => {
+    const keyless: MyConnections = { ...none, github: { state: "error", deviceFlow: true, error: "server sentence", code: "store_unavailable" } };
+    render(createElement(MyGithubConnection, { initial: keyless }));
+    expect($("[data-github-auth-error]")!.textContent).toContain("still saved");
+    expect($("[data-github-connect]")).toBeNull();
+    expect($("[data-github-advanced-toggle]")).toBeNull();
+    expect($("[data-github-fallback-hint]")).toBeNull();
+    // Only the desktop's own key store offers Reset saved keys.
+    expect($("[data-saved-keys-reset]")).toBeNull();
+  });
+
+  it("no key because this desktop's saved keys could not be read: the card says it and names Reset saved keys, never goes blank", async () => {
+    const unreadable = vi.fn(async () => true);
+    vi.stubGlobal("ogb", { credentialStore: { unreadable, reset: vi.fn() }, remoteClient: { active: false } });
+    try {
+      const keyless: MyConnections = { ...none, github: { state: "error", deviceFlow: true, error: "server sentence", code: "store_unavailable" } };
+      render(createElement(MyGithubConnection, { initial: keyless }));
+      await vi.waitFor(() => expect($("[data-github-auth-error]")!.textContent).toContain("keys saved on this computer could not be read"));
+      expect($("[data-github-auth-error]")!.textContent).toContain("Reset saved keys");
+      // The button itself is the Apps panel's notice's (SavedKeysResetNotice): never drawn twice in one window.
+      expect($("[data-saved-keys-reset]")).toBeNull();
+      expect($("[data-github-connect]")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("the Sources row never says not connected for a kept account", () => {
+    for (const code of ["store_unavailable", "store_sealed"] as const) {
+      const kept: MyConnections = { ...none, github: { state: "error", deviceFlow: true, error: "server sentence", code } };
+      render(createElement(MyGithubSummary, { key: code, initial: kept }));
+      expect(host.textContent).toBe("Your saved GitHub account can't be read right now.");
+    }
+    render(createElement(MyGithubSummary, { key: "none", initial: none }));
+    expect(host.textContent).toBe("GitHub is not connected.");
   });
 });

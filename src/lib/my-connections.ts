@@ -10,8 +10,16 @@ export type GithubStatus =
   | { state: "none"; deviceFlow: boolean }
   | { state: "pending"; deviceFlow: true; userCode: string; verificationUri: string; expiresAt: number }
   | { state: "connected"; deviceFlow: boolean; login: string; name?: string; scopes?: string[]; via: "device" | "token"; connectedAt: number; fineGrained?: boolean; orgAccessUrl?: string }
-  /** Stored token refused by GitHub (401): Reconnect, never a healthy Connected. */
-  | { state: "error"; deviceFlow: boolean; error: string; login?: string };
+  /** Stored token refused by GitHub (401): Reconnect, never a healthy Connected. `code` (#4155): the saved
+   * account could not be read on this launch; `store_sealed`, Connect GitHub again works; `store_unavailable`,
+   * the server has no key this launch and the account comes back with it. */
+  | { state: "error"; deviceFlow: boolean; error: string; login?: string; code?: "store_sealed" | "store_unavailable" };
+
+/** #4155: the person's saved GitHub account could not be read on this launch (one verdict, read by every surface that
+ * says whether GitHub is connected). */
+export function githubUnreadable(status: GithubStatus): boolean {
+  return status.state === "error" && (status.code === "store_sealed" || status.code === "store_unavailable");
+}
 
 export type PersonalAuthState = "connected" | "ready" | "needs_sign_in" | "needs_github" | "needs_token" | "expired" | "error" | "no_environment";
 

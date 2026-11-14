@@ -2494,12 +2494,14 @@ bindLeafHost({
   get personBrowserSession() { return personBrowserSession; },
   get personGithub() { return personGithub; },
   get usablePersonGithub() { return usablePersonGithub; },
+  get freshPersonGithub() { return freshPersonGithub; },
   get githubClientId() { return githubClientId; },
   get historicalPluginMarketplacePolicy() { return historicalPluginMarketplacePolicy; },
   get orgCapabilitiesOwner() { return orgCapabilitiesOwner; },
   get pluginMarketplacePolicy() { return pluginMarketplacePolicy; },
   get credentialOwner() { return credentialOwner; },
   get githubAccountToken() { return githubAccountToken; },
+  get githubAccountUnreadable() { return githubAccountUnreadable; },
   get orgCapabilityMounts() { return orgCapabilityMounts; },
   get orgMemberActive() { return orgMemberActive; },
   get personalRemoteSpec() { return personalRemoteSpec; },
@@ -12338,15 +12340,32 @@ const cloudAgentStore = new CloudAgentStore(DATA_DIR);
 const cloudAgentCredentials = new CloudAgentCredentialStore(DATA_DIR, vaultKeySource);
 let cloudAgentManager!: CloudAgentManager;
 const personOAuthManagers = new Map<string, McpOAuthManager>();
-/** A person's GitHub connection, or none (an unreadable store is none). */
+/** A person's GitHub connection, or why their saved one could not be read on
+ * this launch (#4155: shown, never taken for a sign-out). */
+function readPersonGithub(principalId: string | null | undefined): ReturnType<PersonConnections["readGithub"]> {
+  return principalId ? personConnections.readGithub(principalId.trim().toLowerCase()) : {};
+}
+/** A person's GitHub connection, or none (an unreadable store is none here; its status says why). */
 function personGithub(principalId: string | null | undefined) {
-  if (!principalId) return undefined;
-  try { return personConnections.github(principalId.trim().toLowerCase()); } catch { return undefined; }
+  return readPersonGithub(principalId).connection;
+}
+/** The GitHub status of the person's own pages: an unreadable store is said, with Connect again. */
+function personGithubStatus(principalId: string) {
+  const { connection, unreadable } = readPersonGithub(principalId);
+  return githubConnect.status(principalId, connection, unreadable);
 }
 /** The connection a turn, a clone or a private skill may use. */
 function usablePersonGithub(principalId: string | null | undefined) {
   if (!principalId) return undefined;
-  return personGithub(principalId);
+  const connection = personGithub(principalId);
+  // #4155: an expiring token (a GitHub App's, 8 hours) is renewed in the background before it ends.
+  if (connection && githubConnect.needsRefresh(connection)) void githubConnect.refresh(principalId.trim().toLowerCase(), connection).catch(reportBackgroundError);
+  return connection;
+}
+/** The person's connection with a live token, renewed first when it is about to end (#4155). */
+async function freshPersonGithub(principalId: string | null | undefined) {
+  if (!principalId) return undefined;
+  return githubConnect.fresh(principalId.trim().toLowerCase(), personGithub(principalId));
 }
 /** The GitHub OAuth App for the device flow: the organization's (Settings >
  * Developer), else SAGAX_GITHUB_CLIENT_ID, else Sagax's built-in one
@@ -12375,6 +12394,7 @@ const githubConnectCards = new GithubConnectCards({
 });
 const githubConnect = new GithubConnect({
   clientId: githubClientId,
+  current: (principalId) => personGithub(principalId),
   save: (principalId, connection) => {
     // The connection a new one replaces: its token in the server environment is Sagax's too.
     const before = personGithub(principalId);
@@ -12389,6 +12409,17 @@ const githubConnect = new GithubConnect({
   },
   onFlowEnded: (principalId, outcome) => githubConnectCards.settle(principalId, outcome)
 });
+// #4155: a start renews each saved expiring token before it ends, so a new
+// version (or any restart) never leaves a GitHub App's token to run out.
+setTimeout(() => {
+  if (IDENTITY.kind !== "perspicax") return;
+  for (const principal of principals.list()) {
+    const connection = personGithub(principal.id);
+    if (!connection?.refreshToken) continue;
+    if (githubConnect.needsRefresh(connection)) void githubConnect.refresh(principal.id.trim().toLowerCase(), connection).catch(reportBackgroundError);
+    else githubConnect.watch(principal.id.trim().toLowerCase(), connection);
+  }
+}, 0).unref?.();
 /** The organization admin's historical marketplace list, kept in this
  * server's config (absent: any marketplace). */
 function historicalPluginMarketplacePolicy(): MarketplacePolicy | undefined {
@@ -12445,6 +12476,11 @@ let githubCredentialsMigrated = false;
 function githubAccountToken(principalId: string | null | undefined): string | undefined {
   if (IDENTITY.kind === "perspicax") return usablePersonGithub(principalId)?.token;
   return githubCredentialsFor(localPrincipalId())[0]?.token;
+}
+/** #4155: the viewer's saved GitHub account is there but could not be read on
+ * this launch: the GitHub plugin's server says so, never "not connected". */
+function githubAccountUnreadable(principalId: string | null | undefined): boolean {
+  return Boolean(readPersonGithub(IDENTITY.kind === "perspicax" ? principalId : localPrincipalId()).unreadable);
 }
 /** The marketplaces' side of the list for server/bots/bot-plugins.ts: each
  * marketplace's pick of a credential, and what read it last. */
@@ -12927,11 +12963,14 @@ ROUTES.push(createPersonConnectionRoutes({
   ownIntegrationsRefusal,
   sandboxConfigured: () => Boolean(userSandbox),
   github: {
-    status: (principalId) => githubConnect.probeStatus(principalId, personGithub(principalId)),
+    status: (principalId) => {
+      const { connection, unreadable } = readPersonGithub(principalId);
+      return githubConnect.probeStatus(principalId, connection, unreadable);
+    },
     startDevice: (principalId) => githubConnect.startDeviceFlow(principalId),
     connectToken: async (principalId, token) => {
       await githubConnect.connectWithToken(principalId, token);
-      return githubConnect.status(principalId, personGithub(principalId));
+      return personGithubStatus(principalId);
     },
     disconnect: async (principalId) => {
       const previous = personGithub(principalId);
@@ -28918,7 +28957,7 @@ const orgPersonConnectionDeps: OrgPersonConnectionsDeps = {
     const found = principals.byId(id);
     return found ? { id: found.id } : null;
   },
-  githubStatus: (id) => githubConnect.status(id, personGithub(id)),
+  githubStatus: (id) => personGithubStatus(id),
   servers: (id) => personConnections.servers(id),
   lastUsed: (id, server) => stdioRelay.lastUsed(id, server),
   plugins: (id) => store.bots.flatMap((bot) => {
@@ -31143,7 +31182,7 @@ const orgPeopleDeps: PeopleDeps = {
   },
   revokeConnections: (principalId, body) => revokeOrgConnections(orgPersonConnectionDeps, principalId, body),
   connectionListing: (principalId) => orgConnectionListing({
-    principalId, github: githubConnect.status(principalId, personGithub(principalId)),
+    principalId, github: personGithubStatus(principalId),
     servers: personConnections.servers(principalId), lastUsed: (name) => stdioRelay.lastUsed(principalId, name), plugins: orgPersonConnectionDeps.plugins(principalId)
   })
 };

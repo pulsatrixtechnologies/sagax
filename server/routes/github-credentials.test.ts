@@ -1,7 +1,7 @@
 // /api/me/github/credentials: a member keeps their own credentials with no
 // admin; the organization's need an organization admin; no answer carries a
 // token (a label and the last 4 characters).
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,9 +19,11 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 
 const session = (principalId: string) => ({ kind: "session", via: "bearer", scopes: ["client"], session: { principalId } }) as unknown as RequestAuth;
 
-function setup(options: { denied?: boolean } = {}) {
+function setup(options: { denied?: boolean; sealedBefore?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-gh-cred-route-"));
   dirs.push(dir);
+  // A list sealed with a key this server no longer has (#4155).
+  if (options.sealedBefore) new GithubCredentials(dir, () => ({ kind: "key", key: Buffer.alloc(32, 3) })).change("p-alice", { op: "add", label: "Lost", token: SHARED });
   const store = new GithubCredentials(dir, () => ({ kind: "key", key: Buffer.alloc(32, 9) }));
   const audits: unknown[] = [];
   const route = createGithubCredentialRoutes({
@@ -45,7 +47,7 @@ function setup(options: { denied?: boolean } = {}) {
     });
     return { status, body: sent as Record<string, unknown> };
   };
-  return { store, call, audits };
+  return { store, call, audits, dir };
 }
 
 describe("/api/me/github/credentials", () => {
@@ -70,6 +72,19 @@ describe("/api/me/github/credentials", () => {
     expect((replaced.body.credentials as Array<{ hint: string }>)[0]!.hint).toBe("8888");
     const removed = await call("POST", { op: "remove", id: entry!.id }, member);
     expect(removed.body.credentials).toEqual([]);
+  });
+
+  it("a list this server cannot open says so, and adding a credential again works (#4155)", async () => {
+    const { call, dir } = setup({ sealedBefore: true });
+    const member = session("p-alice");
+    const listed = await call("GET", undefined, member);
+    expect(listed.status).toBe(200);
+    expect(listed.body).toMatchObject({ credentials: [], unreadable: "sealed" });
+    const added = await call("POST", { op: "add", label: "Other organization", token: MINE }, member);
+    expect(added.status).toBe(200);
+    expect(added.body.unreadable).toBeUndefined();
+    expect((added.body.credentials as Array<{ label: string }>).map((entry) => entry.label)).toEqual(["Other organization"]);
+    expect(readdirSync(dir).some((name) => name.startsWith("github-credentials.enc.unreadable-"))).toBe(true);
   });
 
   it("the organization's list: an admin changes it, a member sees it and cannot", async () => {

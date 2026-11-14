@@ -18,13 +18,14 @@ function mcpServerResponse(viewer?: string | null) {
   const personalNames = host.personalMcpNamesForGuard();
   // a server that reads the GitHub connection (server/github/github-mcp-token.ts)
   // is connected when the viewer has one; never the token itself
-  let viewerGithub: boolean | undefined;
-  const githubState = (name: string): { github?: "connected" | "missing" } => {
+  // (#4155: a saved account this launch cannot read is "unreadable", never "missing")
+  let viewerGithub: "connected" | "missing" | "unreadable" | undefined;
+  const githubState = (name: string): { github?: "connected" | "missing" | "unreadable" } => {
     const spec = remote[name];
     // undefined: the caller is not known here (the next listing says)
     if (!spec || viewer === undefined || !readsGithubToken(spec)) return {};
-    viewerGithub ??= Boolean(host.githubAccountToken(viewer));
-    return { github: viewerGithub ? "connected" : "missing" };
+    viewerGithub ??= host.githubAccountToken(viewer) ? "connected" : host.githubAccountUnreadable(viewer) ? "unreadable" : "missing";
+    return { github: viewerGithub };
   };
   const servers = listMcpServers(host.cfg.mcpServers).map(server => {
     const auth = "url" in server && remote[server.name] ? host.mcpOAuth.status(server.name, remote[server.name]) : undefined;

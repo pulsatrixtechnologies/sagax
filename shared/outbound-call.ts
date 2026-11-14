@@ -285,8 +285,8 @@ export function ownerCallToPlaceArgs(
     language === "fr"
       ? "Tu appelles la personne elle-même. Une seule ouverture courte (\"petite question pour toi\"), puis une question à la fois, dans l'ordre. Après chaque réponse, redis ce que tu as noté, puis passe à la suivante. Quand toutes sont répondues, raccroche poliment. Jamais de ton centre d'appels."
       : "You are calling the person themself. Say one short opening once (\"quick question for you\"), then ask one question at a time, in order. After each answer, read back what you recorded, then move on. When every question is answered, hang up politely. Never help-desk phrasing.",
-    // #4304: counted in the guidance budget, so it always goes with the questions
-    CHOICE_ANSWER_RULE[language],
+    // #4304: the choice rule is not counted here; callGuidance adds it when
+    // it fits, so it never takes room from the person's questions
     language === "fr" ? "Questions :" : "Questions:",
     numbered,
     ...(context ? [language === "fr" ? `Contexte : ${context}` : `Context: ${context}`] : []),

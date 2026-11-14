@@ -294,11 +294,11 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * `store.collection(name)` (lot 3: get, list, put, delete, and subscribe,
  * read again on the wrapper's `store` event), `model.ask` (lot 4), and
  * `files.add` (from a click), `files.list`, `files.get`, `files.remove` (lot 5),
- * and `page.propose` (lot 6, on `page`). Every call is one message to the parent, the wrapper, which
+ * `page.propose` (lot 6, on `page`), and `connector.call` (lot 7). Every call is one message to the parent, the wrapper, which
  * asks the server with the reader's own session; the server checks it
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
-  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [], ...(caps.store ? { store: caps.store } : {}), ...(caps.model ? { model: true } : {}), ...(caps.propose ? { propose: true } : {}) }).replace(/</g, "\\u003c");
+  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [], ...(caps.store ? { store: caps.store } : {}), ...(caps.model ? { model: true } : {}), ...(caps.propose ? { propose: true } : {}), ...(caps.connectors ? { connectors: caps.connectors } : {}) }).replace(/</g, "\\u003c");
   // capPost forwards the frame's transient activation. Chrome leaves the parent's
   // MessageEvent.userActivation inactive unless postMessage opts in. A load has
   // no activation, so a download on load still is not a click.
@@ -322,12 +322,14 @@ else if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){v
 else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name,gs={};(dsubs[n]||[]).forEach(function(s){var k=JSON.stringify(s.q);(gs[k]=gs[k]||{q:s.q,l:[]}).l.push(s.f)});Object.keys(gs).forEach(function(k){var g=gs[k];capCall("data.read",{name:n,params:g.q}).then(function(v){g.l.forEach(function(f){try{f(v)}catch(x){}})},function(){})})}
 else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="store"&&typeof d.name==="string"&&ssubs[d.name]){var sn=d.name,sg={};(ssubs[sn]||[]).forEach(function(s){var k=JSON.stringify(s.q);(sg[k]=sg[k]||{q:s.q,l:[]}).l.push(s.f)});Object.keys(sg).forEach(function(k){var g=sg[k];capCall("store.list",{collection:sn,query:g.q}).then(function(v){g.l.forEach(function(f){try{f(v)}catch(x){}})},function(){})})}});
 try{CP.postMessage({type:"${CAP_HELLO_MESSAGE}",v:1},"*")}catch(x){}
+var cconn=Object.freeze({call:function(c,t,a){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}return capCall("connector.call",{connector:String(c),tool:String(t),arguments:a&&typeof a==="object"?a:{}},g)}});
 function scol(n){n=String(n);return Object.freeze({get:function(i){return capCall("store.get",{collection:n,id:String(i)})},
 list:function(q){return capCall("store.list",{collection:n,query:q&&typeof q==="object"?q:{}})},
 put:function(i,v){return capCall("store.put",{collection:n,id:i===null||i===undefined?null:String(i),value:v===undefined?null:v})},
 delete:function(i){return capCall("store.delete",{collection:n,id:String(i)})},
 subscribe:function(f,q){if(typeof f!=="function")return function(){};var s={f:f,q:q&&typeof q==="object"?q:{}};(ssubs[n]=ssubs[n]||[]).push(s);return function(){ssubs[n]=(ssubs[n]||[]).filter(function(g){return g!==s})}}})}
-var caps={capabilities:Object.freeze(Object.assign({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open,files:Object.freeze(C.files.slice())},C.store?{store:Object.freeze(Object.keys(C.store))}:{},C.model?{model:true}:{},C.propose?{propose:true}:{})),
+var caps={capabilities:Object.freeze(Object.assign({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open,files:Object.freeze(C.files.slice())},C.store?{store:Object.freeze(Object.keys(C.store))}:{},C.model?{model:true}:{},C.propose?{propose:true}:{},C.connectors?{connectors:JSON.parse(JSON.stringify(C.connectors))}:{})),
+connector:cconn,
 model:Object.freeze({ask:function(o){o=o&&typeof o==="object"?o:{};return capCall("model.ask",{prompt:o.prompt,system:o.system,schema:o.schema})}}),
 store:Object.freeze({collection:scol}),
 data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},

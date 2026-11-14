@@ -4,6 +4,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
+import type { ConnectorHub } from "../connectors/hub.ts";
+import type { ConnectorAccount } from "../connectors/types.ts";
 import type { PageCapabilities, PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import { PageSources } from "../pages/page-sources.ts";
@@ -300,5 +302,108 @@ describe("page.propose (lot 6): the page proposes a new version of itself", () =
     expect(propose.mock.calls[0]![1].content).toBe("<p>key [secret]</p>");
     expect((await call(routes, A, "/api/pages/page-1/proposals", "POST", { content: "  " })).body.code).toBe("bad_request");
     expect((await call(routes, A, "/api/pages/page-1/proposals", "POST", { content: "x".repeat(513 * 1024) })).body.code).toBe("too_large");
+  });
+});
+
+describe("connector.call (lot 7): the reader's own connectors", () => {
+  const CONNECTORS = { connectors: { GitHub: ["search_issues", "create_issue"] } };
+  const accountOf = (who: string) => ({
+    provider: "chatgpt-apps", instanceId: "i", slot: 0, key: `k-${who}`, label: `${who} account`, auth: "signed-in", at: 1,
+    connectors: [{ name: "GitHub", state: "connected", tools: [{ id: "search_issues" }, { id: "create_issue" }] }],
+  }) as unknown as ConnectorAccount;
+  function withConnectors(options: { full?: boolean; rule?: "deny" | "ask" | "none"; caps?: Partial<PageCapabilities>; who?: string[] } = {}) {
+    const hubCall = vi.fn(async (input: { principalId: string; account: ConnectorAccount; tool: string; arguments: Record<string, unknown> }) => ({ text: `${input.tool} for ${input.principalId} on ${input.account.label}` }));
+    const hub = { callable: () => true, ruleTool: (_p: unknown, entry: { name: string }, tool: string) => `${entry.name}__${tool}`, outbound: (id: string) => id.endsWith("create_issue"), call: hubCall } as unknown as ConnectorHub;
+    const journal = vi.fn();
+    const has = new Set(options.who ?? ["person-a", "person-b"]);
+    const made = world({
+      caps: options.caps ?? CONNECTORS,
+      extra: {
+        connectors: {
+          principal: (viewer) => viewer.principalId ?? "",
+          accounts: (principalId) => (has.has(principalId) ? [accountOf(principalId)] : []),
+          hub: () => hub,
+          fullAccess: () => options.full === true,
+          journal,
+        },
+        actRule: () => options.rule ?? "none",
+      },
+    });
+    return { ...made, hubCall, journal };
+  }
+  const read = { connector: "GitHub", tool: "search_issues", arguments: { q: "bug" } };
+  const change = { connector: "GitHub", tool: "create_issue", arguments: { title: "x" } };
+
+  it("calls with the reader's own account, never the page owner's: B's answer is B's", async () => {
+    const { routes, hubCall } = withConnectors();
+    const b = await call(routes, B, "/api/pages/page-1/connector", "POST", read);
+    expect(b.status).toBe(200);
+    expect(b.body).toEqual({ connector: "GitHub", account: "person-b account", tool: "search_issues", text: "search_issues for person-b on person-b account" });
+    expect(hubCall.mock.calls[0]![0]).toMatchObject({ principalId: "person-b", arguments: { q: "bug" } });
+    expect(JSON.stringify(b.body)).not.toContain("person-a");
+  });
+
+  it("answers not_found to a reader who has no such connector, without reaching the owner's", async () => {
+    const { routes, hubCall } = withConnectors({ who: ["person-a"] });
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", read)).body.code).toBe("not_found");
+    expect(hubCall).not.toHaveBeenCalled();
+  });
+
+  it("refuses a connector or tool the version does not name exactly, and a reader not signed in", async () => {
+    const { routes, hubCall } = withConnectors({ caps: { connectors: { GitHub: ["search_issues"] } } });
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", change)).body.code).toBe("not_declared");
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...read, connector: "github" })).body.code).toBe("not_declared");
+    expect((await call(routes, as(null), "/api/pages/page-1/connector", "POST", read)).body.code).toBe("sign_in");
+    expect(hubCall).not.toHaveBeenCalled();
+  });
+
+  it("runs a read at once and writes it in the reader's journal", async () => {
+    const { routes, journal } = withConnectors();
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", read)).status).toBe(200);
+    expect(journal).toHaveBeenCalledWith(expect.objectContaining({ mcpTool: "GitHub__search_issues", decision: "auto-approved", source: "connector-read", viewer: { principalId: "person-b", computerOwner: false } }));
+  });
+
+  it("runs a change only from a click, and through the reader's card: Allow once is one call", async () => {
+    const { routes, hubCall, journal } = withConnectors();
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", change)).body.code).toBe("bad_request");
+    const asked = await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true });
+    expect(asked.status).toBe(409);
+    expect(asked.body).toMatchObject({ code: "ask_first", source: "connector:GitHub__create_issue", label: "GitHub: create_issue (person-b account)", version: 1 });
+    expect(hubCall).not.toHaveBeenCalled();
+    // another person and a bot's act copy cannot answer the reader's card
+    const id = String(asked.body.approvalId);
+    expect((await call(routes, A, `/api/pages/page-1/data-approvals/${id}`, "POST", { answer: "once" })).status).toBe(404);
+    expect((await call(routes, as("person-b", true), `/api/pages/page-1/data-approvals/${id}`, "POST", { answer: "once" })).status).toBe(403);
+    expect((await call(routes, B, `/api/pages/page-1/data-approvals/${id}`, "POST", { answer: "once" })).status).toBe(200);
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+    expect(hubCall).toHaveBeenCalledTimes(1);
+    expect(journal).toHaveBeenLastCalledWith(expect.objectContaining({ decision: "user-approved", source: "user" }));
+    // once was one call: the next change asks again
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(409);
+    // A's own approval never covers B
+    expect((await call(routes, A, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(409);
+  });
+
+  it("keeps Always allow for that page and tool", async () => {
+    const { routes } = withConnectors();
+    const asked = await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true });
+    await call(routes, B, `/api/pages/page-1/data-approvals/${String(asked.body.approvalId)}`, "POST", { answer: "always" });
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+  });
+
+  it("runs a clicked change without a card at the reader's Full access, as their bot would", async () => {
+    const { routes, journal } = withConnectors({ full: true });
+    expect((await call(routes, B, "/api/pages/page-1/connector", "POST", { ...change, click: true })).status).toBe(200);
+    expect(journal).toHaveBeenCalledWith(expect.objectContaining({ decision: "auto-approved", source: "full-access" }));
+  });
+
+  it("applies the organization's Deny and Ask first, even on a read and at Full access", async () => {
+    const deny = withConnectors({ rule: "deny", full: true });
+    expect((await call(deny.routes, B, "/api/pages/page-1/connector", "POST", read)).body).toMatchObject({ code: "denied", reason: "org_rule" });
+    expect(deny.journal).toHaveBeenCalledWith(expect.objectContaining({ decision: "auto-denied" }));
+    expect(deny.hubCall).not.toHaveBeenCalled();
+    const ask = withConnectors({ rule: "ask", full: true });
+    expect((await call(ask.routes, B, "/api/pages/page-1/connector", "POST", read)).status).toBe(409);
   });
 });

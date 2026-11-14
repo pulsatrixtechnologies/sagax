@@ -12819,18 +12819,35 @@ ROUTES.push(createPageDataRoutes({
   // their Primary Bot's (else their first visible bot's), never the page owner's
   model: {
     ask: async ({ viewer, text }) => {
-      const engine = pageReaderTextEngine(viewer);
+      const bot = pageReaderBot(viewer);
+      const engine = bot ? botTextEngine(bot.id, "page-model") : null;
       if (!engine) throw new Error("no engine of the reader can answer");
       return engine.generateText(text, { noThinking: true });
     },
+  },
+  // #3413 lot 7: the reader's own connectors, through the same hub and
+  // reading as call_connector; a change asks unless the reader's own
+  // Primary Bot runs at Full access; every call in their action journal
+  connectors: {
+    principal: (viewer) => (IDENTITY.kind === "perspicax" ? viewer.principalId ?? "" : localPrincipalId()).trim().toLowerCase(),
+    accounts: (principalId) => connectorRegistry.accounts(principalId),
+    hub: () => connectorHub,
+    fullAccess: (viewer) => {
+      const bot = pageReaderBot(viewer);
+      return Boolean(bot && approvalModeFor(bot) === "full");
+    },
+    journal: ({ viewer, pageId, mcpTool, summary, decision, source }) => {
+      const bot = pageReaderBot(viewer);
+      appendDecision(DATA_DIR, { threadId: bot?.threadId ?? `page:${pageId}`, ...(bot ? { botId: bot.id, botName: bot.name } : {}), tool: mcpTool, summary: `A page: ${summary}`, decision, source });
+    },
   }
 }));
-/** The reader's own one-shot text engine (#3413 lot 4): their Primary Bot's. */
-function pageReaderTextEngine(viewer: { principalId?: string; computerOwner?: boolean }): ReturnType<typeof botTextEngine> {
+/** The reader's own Primary Bot (else their first visible bot), #3413: whose
+ * engine answers a page's model question and whose level a page's change follows. */
+function pageReaderBot(viewer: { principalId?: string; computerOwner?: boolean }): BotRecord | undefined {
   const owner = viewer.computerOwner ? "" : (viewer.principalId ?? "").trim().toLowerCase();
-  if (!viewer.computerOwner && !owner) return null;
-  const bot = store.primaryBotOf(owner) ?? store.bots.find((candidate) => !candidate.hidden && effectiveBotOwner(candidate) === owner);
-  return bot ? botTextEngine(bot.id, "page-model") : null;
+  if (!viewer.computerOwner && !owner) return undefined;
+  return store.primaryBotOf(owner) ?? store.bots.find((candidate) => !candidate.hidden && effectiveBotOwner(candidate) === owner);
 }
 ROUTES.push(createPublishedPageRoutes({
   pages: publishedPages,

@@ -91,6 +91,17 @@ export class PageDataApprovals {
     return true;
   }
 
+  /** A change a page asks for (#3413 lot 7): "Always allow" holds, "Allow
+   * once" lets exactly one call through and is used up here. */
+  use(ask: PageDataAsk): boolean {
+    if (this.alwaysMap().has(alwaysKey(ask))) return true;
+    const key = askKey(ask);
+    const until = this.once.get(key);
+    if (until === undefined) return false;
+    this.once.delete(key);
+    return until >= this.now();
+  }
+
   /** A card for this read: its id (the same while one is pending). */
   open(ask: PageDataAsk): string {
     const at = this.now();

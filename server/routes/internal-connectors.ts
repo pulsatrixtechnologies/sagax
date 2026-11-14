@@ -185,6 +185,50 @@ function connectorRank(hub: ConnectorHub, account: ConnectorAccount, entry: Conn
   return (hub.callable(account.provider) ? 0 : 2) + (entry.state === "connected" ? 0 : 1);
 }
 
+/** One call a person may make on their own connector: the account and
+ * connector it reaches, the provider's own tool id, its rule name and
+ * whether it reaches outside. */
+export interface ConnectorCallTarget {
+  ok: true;
+  account: ConnectorAccount;
+  entry: ConnectorEntry;
+  toolId: string;
+  mcpTool: string;
+  outbound: boolean;
+}
+
+export type ConnectorCallMiss = { ok: false; reason: "no_connector" | "not_callable" | "needs_sign_in" | "no_tool"; error: string };
+
+/** The connector named, among this person's own accounts (the best one
+ * first: callable, then connected), and its tool. The one reading of a call
+ * for call_connector and for a page's connector.call (#3413 lot 7). Pure. */
+export function findConnectorCall(hub: ConnectorHub, accounts: readonly ConnectorAccount[], connector: string, tool: string): ConnectorCallTarget | ConnectorCallMiss {
+  const candidates = accounts.flatMap((account) => account.connectors
+    .filter((entry) => entryMatches(entry, connector))
+    .map((entry) => ({ account, entry })))
+    .sort((a, b) => connectorRank(hub, a.account, a.entry) - connectorRank(hub, b.account, b.entry));
+  const found = candidates[0];
+  if (!found) return { ok: false, reason: "no_connector", error: `No connector named ${connector} on this person's accounts. Call connectors with no argument for the list.` };
+  const { account, entry } = found;
+  if (!hub.callable(account.provider)) {
+    return { ok: false, reason: "not_callable", error: `${entry.name} (${account.label}) is not callable through call_connector yet. Use it on its own engine, or answer in words.` };
+  }
+  // Only a sign-in Sagax knows is missing answers here (the bot can post
+  // the card); "unknown" and "failed" go to the host, so the provider's
+  // own error comes back (P7).
+  if (entry.state === "needs-sign-in") {
+    return { ok: false, reason: "needs_sign_in", error: `${entry.name} (${account.label}) is waiting for a new sign-in: open_connector_setup posts the card.` };
+  }
+  const listed = entry.tools.find((candidate) => candidate.id === tool) ?? entry.tools.find((candidate) => candidate.id.toLowerCase() === tool.toLowerCase());
+  if (entry.tools.length && !listed) {
+    const names = entry.tools.slice(0, CONNECTOR_TOOLS_MAX).map((candidate) => candidate.id).join(", ");
+    return { ok: false, reason: "no_tool", error: `${entry.name} has no tool named ${tool}. Its tools: ${names}.` };
+  }
+  const toolId = listed?.id ?? tool;
+  const mcpTool = hub.ruleTool(account.provider, entry, toolId);
+  return { ok: true, account, entry, toolId, mcpTool, outbound: hub.outbound(mcpTool) };
+}
+
 export function createCallConnectorInternalRoute(deps: CallConnectorRouteDeps): InternalRouteHandler {
   return async ({ res, path, method, json, capability, readBody }) => {
     if (path !== CALL_CONNECTOR_INTERNAL_PATH) return PASS;
@@ -202,38 +246,16 @@ export function createCallConnectorInternalRoute(deps: CallConnectorRouteDeps): 
       return json(res, 200, { ok: false, error: "No person of this server speaks in this turn, so there is no connector to call. Answer in words." });
     }
     const hub = deps.hub();
-    const candidates = deps.accounts(principalId).flatMap((account) => account.connectors
-      .filter((entry) => entryMatches(entry, connector))
-      .map((entry) => ({ account, entry })))
-      .sort((a, b) => connectorRank(hub, a.account, a.entry) - connectorRank(hub, b.account, b.entry));
-    const found = candidates[0];
-    if (!found) {
-      return json(res, 200, { ok: false, error: `No connector named ${connector} on this person's accounts. Call connectors with no argument for the list.` });
-    }
-    const { account, entry } = found;
-    if (!hub.callable(account.provider)) {
-      return json(res, 200, { ok: false, error: `${entry.name} (${account.label}) is not callable through call_connector yet. Use it on its own engine, or answer in words.` });
-    }
-    // Only a sign-in Sagax knows is missing answers here (the bot can post
-    // the card); "unknown" and "failed" go to the host, so the provider's
-    // own error comes back (P7).
-    if (entry.state === "needs-sign-in") {
-      return json(res, 200, { ok: false, error: `${entry.name} (${account.label}) is waiting for a new sign-in: open_connector_setup posts the card.` });
-    }
-    const listed = entry.tools.find((candidate) => candidate.id === tool) ?? entry.tools.find((candidate) => candidate.id.toLowerCase() === tool.toLowerCase());
-    if (entry.tools.length && !listed) {
-      const names = entry.tools.slice(0, CONNECTOR_TOOLS_MAX).map((candidate) => candidate.id).join(", ");
-      return json(res, 200, { ok: false, error: `${entry.name} has no tool named ${tool}. Its tools: ${names}.` });
-    }
-    const toolId = listed?.id ?? tool;
-    const mcpTool = hub.ruleTool(account.provider, entry, toolId);
+    const target = findConnectorCall(hub, deps.accounts(principalId), connector, tool);
+    if (!target.ok) return json(res, 200, { ok: false, error: target.error });
+    const { account, entry, toolId, mcpTool } = target;
     const held = deps.hold({
       botId: capability.botId,
       threadId: capability.threadId,
       mcpTool,
       summary: `${entry.name}: ${toolId} (${account.label})`,
       input,
-      outbound: hub.outbound(mcpTool)
+      outbound: target.outbound
     });
     if (!held) return json(res, 200, { ok: false, error: "No turn is running in this conversation, so the call cannot be approved." });
     const decision = await held.decision;

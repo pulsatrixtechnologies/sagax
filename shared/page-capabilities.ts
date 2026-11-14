@@ -53,7 +53,8 @@
 // (lot 4: PageModelAnswer; the organization's Ask first shows its card in
 // the wrapper's bar, as for a data read), `files.add()`, `files.list()`,
 // `files.get(id)`, `files.remove(id)` (lot 5, PageFileInfo), and on `page`
-// `propose({ content, title? })` (lot 6, PageProposal). `params` (#3449): `fresh: true`
+// `propose({ content, title? })` (lot 6, PageProposal), and
+// `connector.call(connector, tool, args)` (lot 7, PageConnectorAnswer). `params` (#3449): `fresh: true`
 // skips the source's cache; other keys are the source's filter, string
 // values (PAGE_DATA_PARAMS). A `denied` refusal carries `reason`
 // (PageCapDenyReason) on the Error.
@@ -89,7 +90,7 @@ export const CAP_TAKEN_MESSAGE = "sagax-cap-taken";
 export const CAP_WAIT_MS = 10_000;
 
 /** The calls a page may make. */
-export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete", "model.ask", "files.add", "files.list", "files.get", "files.remove", "page.propose"] as const;
+export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete", "model.ask", "files.add", "files.list", "files.get", "files.remove", "page.propose", "connector.call"] as const;
 export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
 /** #3657: the calls whose answer may wait on the reader (an Ask first card,
  * a link card) in an app released before the wrapper said taken. Behind a
@@ -161,6 +162,64 @@ export interface PageCapabilities {
   model?: true;
   /** Lot 6: page.propose, a new proposed version from the page itself. */
   propose?: true;
+  /** Lot 7: the reader's own connectors the page may call, each with its
+   * tools, by exact name (no wildcard). */
+  connectors?: Record<string, string[]>;
+}
+
+/** connector.call (lot 7, decided 2026-11-10): the page calls a tool of
+ * one of the READER's own connectors, never the page owner's, declared by
+ * exact connector and tool names:
+ *   "connectors": { "GitHub": ["search_issues", "create_issue"] }
+ * `sagax.connector.call(connector, tool, args)` resolves with
+ * PageConnectorAnswer. A read runs at once; a change (a tool that writes or
+ * sends) runs only from the reader's click in the page, through the same
+ * approval path as their own bot's action: the organization's Deny refuses
+ * it, its Ask first and the reader's own approval level (anything but Full
+ * access) show the card in the wrapper's bar ("Allow once" is one call,
+ * "Always allow" holds for this page and tool). Every call is written in
+ * the reader's action journal. The answer is the reader's personal data.
+ *   POST /api/pages/:id/connector  { connector, tool, arguments?, click }  PageConnectorAnswer
+ *   409 ask_first: PageActAskFirst; the answer goes to the data approvals route. */
+export interface PageConnectorAnswer {
+  connector: string;
+  account: string;
+  tool: string;
+  text: string;
+}
+
+export interface PageActAskFirst {
+  error: string;
+  code: "ask_first";
+  approvalId: string;
+  /** The card's key: `connector:<rule name of the tool>`. */
+  source: string;
+  /** What the card says the page wants to do. */
+  label: string;
+  version: number;
+}
+
+/** Connectors a version declares, at most; tools per connector, at most. */
+export const PAGE_CONNECTORS_MAX = 20;
+export const PAGE_CONNECTOR_TOOLS_MAX = 50;
+
+function connectorName(value: unknown, max: number): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= max && value.trim() === value && !value.includes("*") ? value : null;
+}
+
+/** The connectors part of a declaration: names and tools as written,
+ * exact, no wildcard; null when nothing valid is declared. Pure. */
+function parsePageConnectors(value: unknown): Record<string, string[]> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: Record<string, string[]> = {};
+  for (const [raw, tools] of Object.entries(value as Record<string, unknown>)) {
+    if (Object.keys(out).length >= PAGE_CONNECTORS_MAX) break;
+    const name = connectorName(raw, 200);
+    if (!name || !Array.isArray(tools)) continue;
+    const kept = [...new Set(tools.map((tool) => connectorName(tool, 300)).filter((tool): tool is string => tool !== null))].slice(0, PAGE_CONNECTOR_TOOLS_MAX);
+    if (kept.length) out[name] = kept;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** page.propose (lot 6): the page's script proposes a new version of itself
@@ -482,7 +541,12 @@ export function parsePageCapabilities(value: unknown): PageCapabilities | null {
     ? [...new Set(record.files.filter((name): name is PageCapFile => typeof name === "string" && FILE_SET.has(name)))]
     : [];
   const store = parsePageStore(record.store);
-  return { data, viewer: record.viewer === true, open: record.open === true, files, ...(store ? { store } : {}), ...(record.model === true ? { model: true as const } : {}), ...(record.propose === true ? { propose: true as const } : {}) };
+  return { data, viewer: record.viewer === true, open: record.open === true, files, ...(store ? { store } : {}), ...(record.model === true ? { model: true as const } : {}), ...(record.propose === true ? { propose: true as const } : {}), ...connectorsOf(record.connectors) };
+}
+
+function connectorsOf(value: unknown): { connectors?: Record<string, string[]> } {
+  const connectors = parsePageConnectors(value);
+  return connectors ? { connectors } : {};
 }
 
 /** The declaration in a page's HTML: its first capabilities block, or null
@@ -499,14 +563,15 @@ export function pageCapabilitiesOf(html: string): PageCapabilities | null {
 
 /** Whether a declaration grants anything at all. Pure. */
 export function pageCapabilitiesAny(caps: PageCapabilities | null | undefined): caps is PageCapabilities {
-  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0 || caps.model === true || caps.propose === true));
+  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0 || caps.model === true || caps.propose === true || Object.keys(caps.connectors ?? {}).length > 0));
 }
 
-/** Whether a declaration hands the page the reader's personal data (`data`
- * today; later any capability that returns the reader's data). A page that
- * does, while shared, keeps its shared state read only. Pure. */
+/** Whether a declaration hands the page the reader's personal data (`data`,
+ * and the reader's own connectors, lot 7). A page that does, while shared,
+ * keeps what other readers read (its shared state, a shared store
+ * collection, files, a proposal) read only. Pure. */
 export function pageCapabilitiesPersonal(caps: PageCapabilities | null | undefined): boolean {
-  return Boolean(caps && caps.data.length > 0);
+  return Boolean(caps && (caps.data.length > 0 || Object.keys(caps.connectors ?? {}).length > 0));
 }
 
 /** A call the frame posted, checked, or null. Pure: the wrapper trusts no
@@ -537,9 +602,11 @@ export function pageCapCallId(data: unknown): number | null {
 }
 
 /** Whether a call is granted by a declaration (`data.read` also needs its
- * source named, a `store.*` call its collection). Pure. */
-export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: PageCapCall, source?: string): boolean {
+ * source named, a `store.*` call its collection, `connector.call` its
+ * connector and `tool`). Pure. */
+export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: PageCapCall, source?: string, tool?: string): boolean {
   if (!caps) return false;
+  if (cap === "connector.call") return typeof source === "string" && typeof tool === "string" && Boolean(caps.connectors) && Object.prototype.hasOwnProperty.call(caps.connectors, source) && caps.connectors![source]!.includes(tool);
   if (cap === "data.read") return typeof source === "string" && (caps.data as string[]).includes(source);
   if (cap.startsWith("store.")) return typeof source === "string" && Boolean(caps.store) && Object.prototype.hasOwnProperty.call(caps.store, source);
   if (cap === "model.ask") return caps.model === true;

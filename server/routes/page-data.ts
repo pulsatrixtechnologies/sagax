@@ -57,7 +57,7 @@ import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import type { PageLinkApprovals } from "../pages/page-link-approvals.ts";
 import { PageSourceError, type PageDataWatch, type PageSources } from "../pages/page-sources.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
-import { createPageCapCalls, PAGE_FILES_ROUTE, PAGE_MODEL_ROUTE, PAGE_PROPOSE_ROUTE, PAGE_STORE_ROUTE, type PageCapCallDeps } from "./page-cap-calls.ts";
+import { createPageCapCalls, PAGE_CONNECTOR_ROUTE, PAGE_FILES_ROUTE, PAGE_MODEL_ROUTE, PAGE_PROPOSE_ROUTE, PAGE_STORE_ROUTE, type PageCapCallDeps } from "./page-cap-calls.ts";
 import { pageAnnotator, pageMayEdit, type PageViewer } from "./published-pages.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -138,7 +138,8 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     const model = method === "POST" ? PAGE_MODEL_ROUTE.exec(path) : null;
     const files = method === "GET" || method === "POST" || method === "DELETE" ? PAGE_FILES_ROUTE.exec(path) : null;
     const propose = method === "POST" ? PAGE_PROPOSE_ROUTE.exec(path) : null;
-    const call = store ?? model ?? files ?? propose;
+    const connector = method === "POST" ? PAGE_CONNECTOR_ROUTE.exec(path) : null;
+    const call = store ?? model ?? files ?? propose ?? connector;
     if (!approval && !match && !link && !call) return PASS;
     res.setHeader?.("cache-control", "no-store");
     const lang = langOf(url, req);

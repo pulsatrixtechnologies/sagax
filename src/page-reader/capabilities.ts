@@ -367,9 +367,11 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       return await run();
     } catch (cause) {
       const failure = capFailure(cause);
-      const approvalId = (cause as { body?: { approvalId?: unknown } }).body?.approvalId;
+      const said = (cause as { body?: { approvalId?: unknown; label?: unknown } }).body;
+      const approvalId = said?.approvalId;
       if (failure.error !== "ask_first" || asked || typeof approvalId !== "string") throw cause;
-      const choice = await askFirst(key, label);
+      // the server names what a call wants to do (lot 7: the connector, its tool, the reader's account)
+      const choice = await askFirst(key, label ?? (typeof said?.label === "string" ? said.label.slice(0, 160) : undefined));
       await deps.api(`/api/pages/${encodeURIComponent(deps.pageId!)}/data-approvals/${encodeURIComponent(approvalId)}?lang=${deps.lang}`, { method: "POST", body: { answer: choice === "decline" ? "deny" : choice } });
       const read = !key.includes(":") && key !== "model";
       if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? (read ? "Tu as refusé cette lecture." : "Tu as refusé cette demande.") : (read ? "You declined this read." : "You declined this request.")), { code: "denied", reason: "declined", status: 403 });
@@ -547,7 +549,12 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       const fromClick = event.userActivation?.isActive === true;
       await (started ??= load());
       const storeCap = request.cap.startsWith("store.");
-      const source = request.cap === "data.read" ? request.args?.name : storeCap ? request.args?.collection : undefined;
+      const source = request.cap === "data.read" ? request.args?.name : storeCap ? request.args?.collection : request.cap === "connector.call" ? request.args?.connector : undefined;
+      const tool = request.cap === "connector.call" ? request.args?.tool : undefined;
+      if (request.cap === "connector.call" && (typeof source !== "string" || typeof tool !== "string")) {
+        answer(id, { ok: false, error: "bad_request", message: "A connector and a tool are needed." });
+        return true;
+      }
       if (request.cap === "data.read" && (typeof source !== "string" || !SOURCE_NAME.test(source))) {
         answer(id, { ok: false, error: "bad_request", message: "A data source name is needed." });
         return true;
@@ -558,7 +565,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       }
       // the server's declaration decides; a name it did not grant is
       // refused without a request (the server refuses it again anyway)
-      if (state.caps && !pageCapGranted(state.caps, request.cap, typeof source === "string" ? source : undefined)) {
+      if (state.caps && !pageCapGranted(state.caps, request.cap, typeof source === "string" ? source : undefined, typeof tool === "string" ? tool : undefined)) {
         answer(id, { ok: false, error: "not_declared", message: `This page does not declare ${request.cap === "data.read" ? `the data source ${String(source)}` : storeCap ? `the collection ${String(source)}` : request.cap}.` });
         return true;
       }
@@ -587,6 +594,13 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           if (question === null) answer(id, { ok: false, error: "bad_request", message: "A question needs a prompt." });
           else if (question === "too_large") answer(id, { ok: false, error: "too_large", message: "This question is too long for a page." });
           else answer(id, { ok: true, value: await withAskFirst("model", deps.lang === "fr" ? "Une question à un modèle, avec ton compte" : "A question to a model, with your account", () => deps.api(route("model"), { method: "POST", body: question })) });
+        } else if (request.cap === "connector.call") {
+          // lot 7: the reader's own connector; a change only from their click
+          const call = { connector: source as string, tool: tool as string, arguments: request.args?.arguments && typeof request.args.arguments === "object" ? request.args.arguments : {}, click: fromClick };
+          const value = await withAskFirst(`connector:${call.connector}/${call.tool}`, undefined, () => deps.api(route("connector"), { method: "POST", body: call }));
+          // the reader's own data: a link opens only with a question from now on
+          receivedData = true;
+          answer(id, { ok: true, value });
         } else if (request.cap === "page.propose") {
           // lot 6: a new proposed version, for the page's person and editors
           const content = request.args?.content;

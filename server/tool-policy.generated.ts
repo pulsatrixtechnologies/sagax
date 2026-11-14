@@ -754,6 +754,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments\\/([\\w-]+)$","tier":"admin","readOnly":false,"scope":"pages:admin","defaultEnabled":false,"destructive":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
+  {"method":"ANY","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/connector$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/data-approvals\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/files(?:\\/([A-Za-z0-9_-]{16,40}))?$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/invite$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},

@@ -443,6 +443,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "POST", "DELETE"], path: /^\/api\/pages\/[\w-]+\/files(?:\/[A-Za-z0-9_-]{16,40})?$/ },
   // lot 6: a version the page proposes, for its person and editors (checked there)
   { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/proposals$/ },
+  // lot 7: a page calls the reader's own connector (declaration, Deny and
+  // Ask first, the reader's level and click checked there)
+  { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/connector$/ },
   // lot 4: a page's question to a model, on the reader's own account (checked there)
   { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/model$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },

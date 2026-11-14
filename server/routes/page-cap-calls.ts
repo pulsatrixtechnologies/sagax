@@ -16,6 +16,15 @@
 //   DELETE /api/pages/:id/files/:fileId              { ok: true }
 //
 //   POST   /api/pages/:id/proposals  PageProposal  { version } (lot 6)
+//   POST   /api/pages/:id/connector  { connector, tool, arguments?, click }  PageConnectorAnswer (lot 7)
+//
+// connector.call runs with the reader's own connections, never the page
+// owner's (findConnectorCall on the reader's own accounts, the one reading
+// call_connector has). A read runs at once; a change runs only from the
+// reader's click and through the reader's own approval path: the
+// organization's Deny refuses it, its Ask first and any level but Full
+// access ask the reader on the card (Allow once is one call). Every call
+// goes to the reader's action journal.
 //
 // A version the page proposes is the edit of the reader who clicked, for
 // the page's person and its editors only (anyone else: not_allowed); it is a
@@ -38,11 +47,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
-import { PAGE_CAP_FILE_MIMES, PAGE_CAP_LIMITS, pageCapFileName, pageModelJson, parsePageModelQuestion, parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageDataAskFirst, type PageModelAnswer, type PageFileData, type PageFileInfo, type PageModelQuestion, type PageStoreDoc } from "../../shared/page-capabilities.ts";
+import { PAGE_CAP_FILE_MIMES, PAGE_CAP_LIMITS, pageCapFileName, pageModelJson, parsePageModelQuestion, parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageDataAskFirst, type PageModelAnswer, type PageActAskFirst, type PageConnectorAnswer, type PageFileData, type PageFileInfo, type PageModelQuestion, type PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { stateMayWrite, type StateRole } from "../../shared/page-state.ts";
 import { PAGE_LIMITS, parsePageTitle, type PageKind } from "../../shared/published-pages.ts";
 import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
+import type { ConnectorHub } from "../connectors/hub.ts";
+import type { ConnectorAccount } from "../connectors/types.ts";
 import type { PageFiles, StoredFile } from "../pages/page-files.ts";
+import { findConnectorCall } from "./internal-connectors.ts";
 import type { PageStore, StoredDoc } from "../pages/page-store.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
 import type { PageViewer } from "./published-pages.ts";
@@ -51,6 +63,7 @@ import type { RouteContext } from "./table.ts";
 /** The routes of this module, one per line with its method. */
 export const PAGE_STORE_ROUTE = /^\/api\/pages\/([\w-]+)\/store\/([a-z][a-z0-9_-]{0,39})(?:\/([A-Za-z0-9_-]{1,64}))?$/;
 export const PAGE_MODEL_ROUTE = /^\/api\/pages\/([\w-]+)\/model$/;
+export const PAGE_CONNECTOR_ROUTE = /^\/api\/pages\/([\w-]+)\/connector$/;
 export const PAGE_PROPOSE_ROUTE = /^\/api\/pages\/([\w-]+)\/proposals$/;
 export const PAGE_FILES_ROUTE = /^\/api\/pages\/([\w-]+)\/files(?:\/([A-Za-z0-9_-]{16,40}))?$/;
 
@@ -98,6 +111,17 @@ export interface PageCapCallDeps {
    * (PublishedPages.edit); `redact` masks secret-shaped text, as there. */
   propose?(pageId: string, input: { kind: PageKind; content: string; title?: string; by: string }): { ok: true; version: { n: number } } | { ok: false; status: number; error: string; code: string };
   redact?(text: string): string;
+  /** Lot 7: the reader's own connectors. */
+  connectors?: {
+    /** The reader's connector principal; "" for nobody. */
+    principal(viewer: NonNullable<PageViewer>): string;
+    accounts(principalId: string): readonly ConnectorAccount[];
+    hub(): ConnectorHub;
+    /** The reader's own approval level answers a change without a card. */
+    fullAccess?(viewer: NonNullable<PageViewer>): boolean;
+    /** Every call, in the reader's action journal. */
+    journal?(input: { viewer: NonNullable<PageViewer>; pageId: string; mcpTool: string; summary: string; decision: "auto-approved" | "user-approved" | "auto-denied"; source: "connector-read" | "full-access" | "user" | "custom-rule-deny" }): void;
+  };
   /** Lot 5: the files readers add. */
   files?: PageFiles;
   /** Lot 4: one tool-free answer on the reader's own engine and account. */
@@ -253,8 +277,62 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
     return ctx.json(ctx.res, 200, { version: result.version.n });
   };
 
+  const connectorCall = async (ctx: PageCapCallContext): Promise<void> => {
+    const fr = ctx.lang === "fr";
+    const body = await ctx.readBody(ctx.req) as Record<string, unknown> | null;
+    const connector = body?.connector;
+    const tool = body?.tool;
+    const args = body?.arguments ?? {};
+    if (typeof connector !== "string" || typeof tool !== "string") return ctx.refuse(400, "bad_request");
+    if (!ctx.caps?.connectors || !Object.prototype.hasOwnProperty.call(ctx.caps.connectors, connector) || !ctx.caps.connectors[connector]!.includes(tool) || !deps.connectors || ctx.version === undefined) return ctx.refuse(403, "not_declared");
+    if (!args || typeof args !== "object" || Array.isArray(args)) return ctx.refuse(400, "bad_request");
+    const hub = deps.connectors.hub();
+    const principalId = deps.connectors.principal(ctx.viewer);
+    if (!principalId) return ctx.refuse(503, "unavailable");
+    // the reader's own accounts, never the page owner's
+    const target = findConnectorCall(hub, deps.connectors.accounts(principalId), connector, tool);
+    if (!target.ok) {
+      const said = target.reason === "no_connector" ? (fr ? `Tu n'as pas de connecteur ${connector}.` : `You have no connector named ${connector}.`)
+        : target.reason === "no_tool" ? (fr ? `${connector} n'a pas d'outil ${tool}.` : `${connector} has no tool named ${tool}.`)
+          : target.reason === "needs_sign_in" ? (fr ? `${connector} attend que tu te connectes de nouveau.` : `${connector} is waiting for you to sign in again.`)
+            : (fr ? `${connector} ne peut pas encore être appelé d'une page.` : `${connector} cannot be called from a page yet.`);
+      return ctx.refuse(target.reason === "no_connector" || target.reason === "no_tool" ? 404 : 503, target.reason === "no_connector" || target.reason === "no_tool" ? "not_found" : "unavailable", { error: said });
+    }
+    const { account, entry, toolId, mcpTool, outbound } = target;
+    const summary = `${entry.name}: ${toolId} (${account.label})`;
+    const journal = (decision: "auto-approved" | "user-approved" | "auto-denied", source: "connector-read" | "full-access" | "user" | "custom-rule-deny") => {
+      try {
+        deps.connectors?.journal?.({ viewer: ctx.viewer, pageId: ctx.page.id, mcpTool, summary, decision, source });
+      } catch { /* the journal never fails the call */ }
+    };
+    const rule = deps.actRule?.({ tool: "call_connector", mcpTool, summary, input: JSON.stringify(args), readOnly: !outbound, auth: ctx.auth }) ?? "none";
+    if (rule === "deny") {
+      journal("auto-denied", "custom-rule-deny");
+      return ctx.refuse(403, "denied", { reason: "org_rule", error: fr ? "Ton organisation refuse cet appel." : "Your organization refuses this call." });
+    }
+    // a change starts from the reader's own click in the page
+    if (outbound && body?.click !== true) return ctx.refuse(400, "bad_request", { error: fr ? "Un changement part d'un clic dans la page." : "A change starts from a click in the page." });
+    const card = rule === "ask" || (outbound && deps.connectors.fullAccess?.(ctx.viewer) !== true);
+    if (card) {
+      const ask = { person: ctx.who.by, pageId: ctx.page.id, version: ctx.version, source: `connector:${mcpTool}` };
+      if (!deps.approvals || !deps.approvals.use(ask)) {
+        if (!deps.approvals) return ctx.refuse(503, "unavailable");
+        const answer: PageActAskFirst = { error: fr ? `Cette page veut utiliser ${entry.name} avec ton compte : ${toolId}.` : `This page wants to use ${entry.name} with your account: ${toolId}.`, code: "ask_first", approvalId: deps.approvals.open(ask), source: ask.source, label: summary, version: ctx.version };
+        return ctx.json(ctx.res, 409, answer);
+      }
+    }
+    journal(card ? "user-approved" : "auto-approved", card ? "user" : outbound ? "full-access" : "connector-read");
+    const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args as Record<string, unknown>, engine: "page" });
+    if (result.needsSignIn) return ctx.refuse(503, "unavailable", { error: fr ? `${entry.name} attend que tu te connectes de nouveau.` : `${entry.name} is waiting for you to sign in again.` });
+    if (result.isError) return ctx.refuse(502, "unavailable", { error: result.text.slice(0, 2_000) });
+    const answer: PageConnectorAnswer = { connector: entry.name, account: account.label, tool: toolId, text: result.text };
+    if (Buffer.byteLength(JSON.stringify(answer)) > PAGE_CAP_LIMITS.answerBytes) return ctx.refuse(413, "too_large");
+    return ctx.json(ctx.res, 200, answer);
+  };
+
   return {
     async handle(ctx) {
+      if (PAGE_CONNECTOR_ROUTE.test(ctx.path)) return connectorCall(ctx);
       if (PAGE_PROPOSE_ROUTE.test(ctx.path)) return proposeCall(ctx);
       if (PAGE_MODEL_ROUTE.test(ctx.path)) return modelCall(ctx);
       if (PAGE_FILES_ROUTE.test(ctx.path)) return filesCall(ctx);

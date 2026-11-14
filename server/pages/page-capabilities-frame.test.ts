@@ -368,3 +368,25 @@ describe("page.propose in the frame (#3413 lot 6)", () => {
     expect(bridge.posted.at(-1)).toMatchObject({ cap: "page.propose", args: { content: "<p>v3</p>", title: "T" } });
   });
 });
+
+describe("connector.call in the frame (#3413 lot 7)", () => {
+  it("reads connectors and tools by exact name, no wildcard, and counts them as personal data", () => {
+    const caps = parsePageCapabilities({ connectors: { GitHub: ["create_issue", "create_issue", "*"], "*": ["x"], " Padded": ["x"], Empty: [] } })!;
+    expect(caps.connectors).toEqual({ GitHub: ["create_issue"] });
+    expect(pageCapGranted(caps, "connector.call", "GitHub", "create_issue")).toBe(true);
+    expect(pageCapGranted(caps, "connector.call", "GitHub", "delete_repo")).toBe(false);
+    expect(pageCapGranted(caps, "connector.call", "github", "create_issue")).toBe(false);
+    expect(pageCapabilitiesPersonal(caps)).toBe(true);
+    expect(pageCapabilitiesPersonal(parsePageCapabilities({ store: ["votes"], model: true }))).toBe(false);
+  });
+
+  it("gives the page sagax.connector.call with whether it came from a click", () => {
+    const caps = { data: [], viewer: false, open: false, files: [], connectors: { GitHub: ["create_issue"] } };
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { capabilities: { connectors: unknown }; connector: { call(c: string, t: string, a: unknown): Promise<unknown> } };
+    expect(sagax.capabilities.connectors).toEqual({ GitHub: ["create_issue"] });
+    void sagax.connector.call("GitHub", "create_issue", { title: "x" });
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "connector.call", args: { connector: "GitHub", tool: "create_issue", arguments: { title: "x" } }, gesture: false });
+  });
+});

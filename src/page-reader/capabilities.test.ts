@@ -945,3 +945,49 @@ describe("page.propose (#3413 lot 6)", () => {
     expect(result(2)).toMatchObject({ ok: false, error: "bad_request" });
   });
 });
+
+describe("connector.call (#3413 lot 7)", () => {
+  const base = "/api/pages/page_12345678";
+  const CONN_CAPS = { capabilities: { data: [], viewer: false, open: true, files: [], connectors: { GitHub: ["create_issue"] } }, reads: [] };
+
+  it("sends the call with whether it came from a click, shows the server's card label, and calls again once allowed", async () => {
+    let first = true;
+    const { broker, frame, result, posts } = setup({}, {
+      [`${base}/capabilities`]: CONN_CAPS,
+      [`${base}/connector`]: () => {
+        if (!first) return { connector: "GitHub", account: "acc", tool: "create_issue", text: "done" };
+        first = false;
+        return new Refusal("ask", 409, "ask_first", { code: "ask_first", approvalId: "ap2", label: "GitHub: create_issue (acc)" });
+      },
+      [`${base}/data-approvals/ap2`]: { ok: true },
+    });
+    const pending = broker.onMessage({ source: frame, origin: "null", userActivation: { isActive: true }, data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "connector.call", args: { connector: "GitHub", tool: "create_issue", arguments: { title: "x" } } } });
+    await flush();
+    await flush();
+    const card = broker.getState().approvals[0]!;
+    expect(card.label).toBe("GitHub: create_issue (acc)");
+    clock.t += CARD_GUARD_MS + 1;
+    broker.resolveApproval(card.id, "once");
+    await pending;
+    expect(result(1)).toMatchObject({ ok: true, value: { text: "done" } });
+    expect(posts.filter((entry) => entry.path.startsWith(`${base}/connector`)).map((entry) => entry.body)).toEqual([
+      { connector: "GitHub", tool: "create_issue", arguments: { title: "x" }, click: true },
+      { connector: "GitHub", tool: "create_issue", arguments: { title: "x" }, click: true },
+    ]);
+  });
+
+  it("refuses a tool the version does not name, without a request", async () => {
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: CONN_CAPS });
+    await call("connector.call", { connector: "GitHub", tool: "delete_repo" }, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+    expect(calls.some((path) => path.includes("/connector"))).toBe(false);
+  });
+
+  it("asks before opening a link once the page received the reader's connector data", async () => {
+    const { call, result, openUrl } = setup({}, { [`${base}/capabilities`]: CONN_CAPS, [`${base}/connector`]: { text: "x" }, [`${base}/link-approvals`]: { allowed: false } });
+    await call("connector.call", { connector: "GitHub", tool: "create_issue" }, 1);
+    await call("open", { ref: "https://example.com/out" }, 2);
+    expect(result(2)).toMatchObject({ ok: true, value: false });
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+});

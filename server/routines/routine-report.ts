@@ -78,6 +78,9 @@ export interface RoutineReportOutcome {
   declared?: { status: "failed" | "partial"; reason: string };
   /** #3479: the bot said its problem is the same as the previous run's. */
   sameProblem?: true;
+  /** #3990: the bot ended its run with the nothing-to-report line itself:
+   * its own word that the run found nothing to do (ROUTINE_NOTHING_TO_DO_RULE). */
+  nothingToDo?: true;
 }
 
 /** Flow engine refusals that must end a Sagax routine run as blocked, not completed. */
@@ -221,10 +224,10 @@ function rawReportOutcome(output: string | undefined): RoutineReportOutcome {
   if (personAttention(text)) return { quiet: false, report: lines.filter((line) => !QUIET_MARKER_LINE.test(line.trim())).join("\n").trim() };
   const last = lines.findLastIndex((line) => line.trim() !== "");
   if (last >= 0 && QUIET_MARKER_LINE.test(lines[last]!.trim())) {
-    return { quiet: true, report: lines.slice(0, last).join("\n").trim() };
+    return { quiet: true, report: lines.slice(0, last).join("\n").trim(), nothingToDo: true };
   }
   if (QUIET_MARKER_LINE.test(lines[0]!.trim())) {
-    return { quiet: true, report: lines.slice(1).join("\n").trim() };
+    return { quiet: true, report: lines.slice(1).join("\n").trim(), nothingToDo: true };
   }
   // A question is always for the person; otherwise only a whole-message no-op
   // is silent (the marker is the real mechanism, this is a safety net).

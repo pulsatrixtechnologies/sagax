@@ -32,6 +32,7 @@ import {
   type RoutineManagerOptions,
   type RoutineRun,
   type RoutineSchedule,
+  routineItemGone,
 } from "./routines.ts";
 
 const dirs: string[] = [];
@@ -5724,6 +5725,49 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(partial.problems).toBe("two PDFs could not be opened");
     expect(partial.quiet).toBeUndefined();
     expect(partial.output).toBe("Read 10 of 12 invoices.");
+  });
+
+  it("a run whose bot ended with NOTHING_TO_REPORT is not completed with problems for a tool it moved past (#3990)", async () => {
+    // A new-mail run read a message already moved out of the inbox: the
+    // read failed twice, the bot found nothing to do and said so. It was
+    // told as "Completed with problems" on the person's chat.
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const graph = "Managed MCP gateway tool call failed: Microsoft Graph API error: 404 Not Found";
+    tool(h, "thread-1", "a", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-1", "b", "mcp__outlook__get_message", false, graph);
+    say(h, "thread-1", "Rien d'urgent, et le courriel n'est plus dans la boîte.\nNOTHING_TO_REPORT");
+    done(h, "thread-1");
+    const quiet = runOf(h);
+    expect(quiet.status).toBe("completed");
+    expect(quiet.problems).toBeUndefined();
+    expect(quiet.quiet).toBe(true);
+
+    // the same failures under a report for the person still count
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-2", "a", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-2", "b", "mcp__outlook__get_message", false, graph);
+    say(h, "thread-2", "Two invoices wait for your review.");
+    done(h, "thread-2");
+    expect(h.manager.listRuns().find(run => run.threadId === "thread-2")!.problems).toContain("failed 2 times");
+
+    // a missing tool is no gone item: it stays a problem
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-3", "a", "mcp__outlook__get_message", false, "Tool not found: outlook__get_message");
+    tool(h, "thread-3", "b", "mcp__outlook__get_message", false, "Tool not found: outlook__get_message");
+    say(h, "thread-3", "NOTHING_TO_REPORT");
+    done(h, "thread-3");
+    expect(h.manager.listRuns().find(run => run.threadId === "thread-3")!.problems).toContain("failed 2 times");
+    expect(routineItemGone("ErrorItemNotFound: The specified object was not found in the store.")).toBe(true);
+    expect(routineItemGone("403 Forbidden")).toBe(false);
+
+    // a connector sign-in the person must renew is told, marker or not
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-4", "a", "cursor__user-X-search_5fposts_5fall", false, "Managed MCP gateway tool call failed: Cursor connector needs re-authentication in Cursor: X won't turn on API access");
+    say(h, "thread-4", "NOTHING_TO_REPORT");
+    done(h, "thread-4");
+    expect(h.manager.listRuns().find(run => run.threadId === "thread-4")!.problems).toContain("needs a new sign-in");
   });
 
   it("an approval nobody answered in time is the run's own outcome, named in words, never an engine error (2026-11-02)", async () => {

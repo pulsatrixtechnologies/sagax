@@ -913,20 +913,41 @@ async function stopUtilityServer(proc, timeoutMs = UTILITY_SERVER_STOP_TIMEOUT_M
   if (!proc) return true;
   const exited = utilityServerExits.get(proc);
   if (!exited) return false;
+  const kill = () => {
+    try {
+      proc.kill();
+    } catch {
+      // The tracked exit promise below is still the authority. A throw can mean
+      // the process crossed the exit boundary immediately before kill().
+    }
+  };
+  const exitWithin = (ms) => {
+    let timer;
+    return Promise.race([
+      exited.then(() => true),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(false), ms);
+        timer.unref?.();
+      }),
+    ]).finally(() => clearTimeout(timer));
+  };
+  // The server's graceful stop (server/process/graceful-shutdown.ts): its
+  // turns drain and its deferred saves land. Windows has no SIGTERM, and
+  // kill() there ends the process at once, so it is asked over the parent
+  // port, and killed only when it did not stop in time (#4107, #3812).
+  let asked = false;
   try {
-    proc.kill();
+    proc.postMessage({ type: "sagax:graceful-stop" });
+    asked = true;
   } catch {
-    // The tracked exit promise below is still the authority. A throw can mean
-    // the process crossed the exit boundary immediately before kill().
+    // Already gone, or its port closed: kill() below.
   }
-  let timer;
-  return Promise.race([
-    exited.then(() => true),
-    new Promise((resolve) => {
-      timer = setTimeout(() => resolve(false), timeoutMs);
-      timer.unref?.();
-    }),
-  ]).finally(() => clearTimeout(timer));
+  const windowsAsked = asked && process.platform === "win32";
+  if (!windowsAsked) kill();
+  const stopped = await exitWithin(timeoutMs);
+  if (stopped || !windowsAsked) return stopped;
+  kill();
+  return exitWithin(timeoutMs);
 }
 let phoneSecretIdentity = null;
 let desktopRemoteAccess = null;

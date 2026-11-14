@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { verificationServerArgs, verificationServerEnvironment } from "../control-omb.ts";
-import { removeTempDir, waitForExit } from "../../server/testing/cleanup.ts";
+import { removeTempDir, stopGracefully, waitForExit } from "../../server/testing/cleanup.ts";
 import { freePortBlock } from "../../server/testing/ports.ts";
 import type { EngineProfile } from "./engines.ts";
 
@@ -110,10 +110,13 @@ export class QualServer {
       this.port,
     );
     Object.assign(childEnv, this.options.serverEnv ?? {});
+    // An IPC channel, as the desktop app has: the only graceful stop Windows
+    // has (stop() below, #3812).
+    childEnv.SAGAX_TEST_DESKTOP_IPC = "1";
     const child = spawn(process.execPath, verificationServerArgs(childEnv), {
       cwd: ROOT,
       env: childEnv,
-      stdio: "ignore",
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
     });
     this.child = child;
     const deadline = Date.now() + 30_000;
@@ -133,6 +136,9 @@ export class QualServer {
     return Boolean(this.child && this.child.exitCode === null && this.child.signalCode === null);
   }
 
+  /** How the last stopped server ended: a graceful stop exits on its own (code 0, no signal). */
+  lastExit: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+
   /** Stop the server, politely or by force, and wait until it is gone. */
   async stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM"): Promise<void> {
     const child = this.child;
@@ -141,8 +147,9 @@ export class QualServer {
       child.kill("SIGKILL");
       await waitForExit(child, { graceMs: 5_000 });
     } else {
-      await waitForExit(child, { signal: "SIGTERM" });
+      await stopGracefully(child);
     }
+    this.lastExit = { code: child.exitCode, signal: child.signalCode };
   }
 
   /** Start the same server again on the same data and port. */

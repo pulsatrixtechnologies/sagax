@@ -7,6 +7,7 @@
 // instead of being re-derived (or forgotten) per suite.
 import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
+import { GRACEFUL_STOP_MESSAGE } from "../process/graceful-shutdown.ts";
 
 /** How `waitForExit` should end the child, and how long to allow. */
 export interface WaitForExitOptions {
@@ -69,6 +70,27 @@ export function waitForExit(
     }, graceMs);
     timer.unref?.();
   });
+}
+
+/**
+ * Stop a server child gracefully, as the desktop app does: over its IPC
+ * channel when it has one, else by SIGTERM. Windows has no SIGTERM: a kill
+ * there ends the server at once, before the turns drain and the deferred
+ * saves land, so a "graceful" stop by signal would be a crash there (#4107,
+ * #3812). SIGKILL follows after `graceMs`: by default longer than the
+ * server's own bounds (a 5 s turn drain plus 1 s, then 6 s of cleanup), so a
+ * graceful stop is never cut into a crash.
+ */
+export function stopGracefully(child: ChildProcess | undefined, graceMs = 15_000): Promise<void> {
+  if (child?.connected && child.exitCode === null && child.signalCode === null) {
+    try {
+      child.send({ type: GRACEFUL_STOP_MESSAGE });
+      return waitForExit(child, { graceMs });
+    } catch {
+      /* the channel closed under us: fall back to the signal */
+    }
+  }
+  return waitForExit(child, { signal: "SIGTERM", graceMs });
 }
 
 /**

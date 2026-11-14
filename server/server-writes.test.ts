@@ -3,7 +3,7 @@
 // lands in one deferred write off the event loop (#3663), and a change of access at once, on the loop.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Spied, not replaced: every call reaches the real filesystem, and a test counts the renames a save costs.
@@ -18,8 +18,9 @@ const { RoutineManager } = await import("./routines/routines.ts");
 type RuntimeEvent = import("./contracts.ts").RuntimeEvent;
 
 const selection = () => ({ instanceId: "claude", model: "claude-sonnet-5" });
-const writesOf = (name: string) => vi.mocked(fs.renameSync).mock.calls.filter(([, to]) => String(to).endsWith(`/${name}`)).length;
-const reads = (name: string) => vi.mocked(fs.readFileSync).mock.calls.filter(([path]) => String(path).endsWith(`/${name}`)).length;
+// By file name, not by a "/" suffix: a Windows path ends with "\bots.json" (#4175).
+const writesOf = (name: string) => vi.mocked(fs.renameSync).mock.calls.filter(([, to]) => basename(String(to)) === name).length;
+const reads = (name: string) => vi.mocked(fs.readFileSync).mock.calls.filter(([path]) => basename(String(path)) === name).length;
 const bots = () => readFileSync(join(DATA_DIR, "bots.json"), "utf8");
 
 describe("bots.json saves", () => {
@@ -65,12 +66,15 @@ describe("bots.json saves", () => {
     expect(task.usage).toMatchObject({ input: 10, output: 5, turns: 1 });
   });
 
+  // #4226 (one approval level per bot): a conversation's own level is only a Primary Bot's hand-off ("delegated")
+  // wider than its bot's, so that is the permission change below.
   it("write a permission change at once, even inside a batch", () => {
     const store = new Store(selection);
     const bot = store.createBot({ name: "Pepper" });
+    store.patchBot(bot.id, { approvalMode: "ask", autoApprove: false });
     batchSaves(() => {
-      store.patchTask(bot.id, bot.threadId, { approvalMode: "ask" });
-      expect(new Store(selection).taskByThread(bot.id, bot.threadId)?.approvalMode).toBe("ask");
+      store.patchTask(bot.id, bot.threadId, { approvalMode: "full", approvalOwn: "delegated" });
+      expect(new Store(selection).taskByThread(bot.id, bot.threadId)?.approvalMode).toBe("full");
     });
   });
 

@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Spied, not replaced: every call reaches the real filesystem, and a test fails a save where a real disk does, at the
@@ -21,7 +21,8 @@ const locked = () => Object.assign(new Error("EPERM: operation not permitted, re
 /** The file whose renames fail with `failure`, while set. */
 let failing: { file: string; failure: () => Error } | undefined;
 vi.mocked(fs.renameSync).mockImplementation((from, to) => {
-  if (failing && String(to).endsWith(`/${failing.file}`)) throw failing.failure();
+  // By file name, not by a "/" suffix: a Windows path ends with "\bots.json" (#4106).
+  if (failing && basename(String(to)) === failing.file) throw failing.failure();
   realFs.renameSync(from, to);
 });
 
@@ -119,16 +120,19 @@ describe("bots.json save failures", () => {
     expect(bot.unread).toBeFalsy();
   });
 
+  // #4226 (one approval level per bot): a conversation holds a level of its own only as a Primary Bot's hand-off
+  // ("delegated") wider than its bot's level, so the level below is one; any other conversation level is dropped.
   it("keeps a revoked approval live when its save fails, and never applies an unsaved widening", async () => {
     const { store, bot, second } = storeWithTwoThreads();
-    store.patchTask(bot.id, second.threadId, { approvalMode: "full", autoApprove: false, alwaysAllow: ["tool-a"] });
+    store.patchBot(bot.id, { approvalMode: "ask", autoApprove: false });
+    store.patchTask(bot.id, second.threadId, { approvalMode: "full", autoApprove: false, approvalOwn: "delegated", alwaysAllow: ["tool-a"] });
     await flushOwnedFiles();
 
-    expect(() => failingSaves(() => store.patchTask(bot.id, second.threadId, { approvalMode: "ask", autoApprove: false, alwaysAllow: [] }))).toThrow(BotsSaveError);
+    expect(() => failingSaves(() => store.patchTask(bot.id, second.threadId, { approvalMode: "ask", autoApprove: false, approvalOwn: "delegated", alwaysAllow: [] }))).toThrow(BotsSaveError);
     expect(second).toMatchObject({ approvalMode: "ask", alwaysAllow: [] });
     expect(new Store(selection).taskByThread(bot.id, second.threadId)).toMatchObject({ approvalMode: "full" });
 
-    expect(() => failingSaves(() => store.patchTask(bot.id, second.threadId, { approvalMode: "full" }))).toThrow(BotsSaveError);
+    expect(() => failingSaves(() => store.patchTask(bot.id, second.threadId, { approvalMode: "full", approvalOwn: "delegated" }))).toThrow(BotsSaveError);
     expect(second.approvalMode).toBe("ask");
     expect(() => failingSaves(() => store.patchTask(bot.id, second.threadId, { alwaysAllow: ["tool-b"] }))).toThrow(BotsSaveError);
     expect(second.alwaysAllow).toEqual([]);

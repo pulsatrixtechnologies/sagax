@@ -275,3 +275,39 @@ describe("files.download in the frame", () => {
     }
   });
 });
+
+describe("store in the frame (#3413 lot 3)", () => {
+  it("reads a store declaration: names, levels and scopes, nothing else", () => {
+    expect(parsePageCapabilities({ store: ["votes", "Bad Name", "votes"] })).toEqual({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } });
+    expect(parsePageCapabilities({ store: { prefs: { scope: "reader" }, decisions: "editors", odd: { scope: "everyone" }, bad: "root" } })!.store).toEqual({
+      prefs: { write: "signed_in", scope: "reader" },
+      decisions: { write: "editors", scope: "shared" },
+    });
+    expect(parsePageCapabilities({ store: {} })).toEqual({ data: [], viewer: false, open: false, files: [] });
+    const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`c${i}`, true]));
+    expect(Object.keys(parsePageCapabilities({ store: many })!.store!)).toHaveLength(20);
+    expect(pageCapabilitiesAny({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } })).toBe(true);
+    expect(pageCapGranted({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } }, "store.put", "votes")).toBe(true);
+    expect(pageCapGranted({ data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } }, "store.put", "other")).toBe(false);
+  });
+
+  it("gives the page store.collection(name), and reads a collection again on the wrapper's store event", async () => {
+    const caps = { data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in" as const, scope: "shared" as const } } };
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { capabilities: { store: string[] }; store: { collection(name: string): { put(id: unknown, value: unknown): Promise<unknown>; subscribe(fn: (docs: unknown) => void, q?: unknown): () => void } } };
+    expect(sagax.capabilities.store).toEqual(["votes"]);
+    const votes = sagax.store.collection("votes");
+    void votes.put(null, { pick: 1 });
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "store.put", args: { collection: "votes", id: null, value: { pick: 1 } } });
+    const seen: unknown[] = [];
+    votes.subscribe((docs) => seen.push(docs), { limit: 5 });
+    bridge.deliver(bridge.parent, { type: "sagax-cap-event", v: 1, cap: "store", name: "votes" });
+    const asked = bridge.posted.at(-1) as { id: number; cap: string; args: unknown };
+    expect(asked).toMatchObject({ cap: "store.list", args: { collection: "votes", query: { limit: 5 } } });
+    bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: asked.id, ok: true, value: [{ id: "d1" }] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(seen).toEqual([[{ id: "d1" }]]);
+  });
+});

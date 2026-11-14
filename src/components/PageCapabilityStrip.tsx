@@ -29,7 +29,7 @@ export function usePageCapabilityBroker(input: { pageId: string; drawn: string; 
     frameOrigin: () => { try { return new URL(input.preview()?.src ?? "", location.href).origin; } catch { return ""; } },
     openFrame: input.frame,
     ...(input.version !== undefined ? { version: input.version } : {}),
-    api: <T,>(path: string, init?: { method: "POST"; body: unknown }) => api<T>(path, init ? { method: init.method, body: JSON.stringify(init.body) } : undefined),
+    api: <T,>(path: string, init?: { method: "POST" | "PUT" | "DELETE"; body?: unknown }) => api<T>(path, init ? { method: init.method, ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}) } : undefined),
     pageId: input.pageId,
     signedIn: true,
     lang: typeof document !== "undefined" && document.documentElement.lang.startsWith("en") ? "en" : "fr",

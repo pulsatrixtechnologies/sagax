@@ -622,7 +622,7 @@ export class PublishedPages {
     if (input.pageId && (!page || (page.threadId !== input.threadId && !sharedRefresh && (page.botId !== input.botId || !sameOwner(page.ownerId, input.ownerId))))) {
       return refuse(404, "not_found", "page_id: no page of this conversation has that id. Leave it out to propose a new page.");
     }
-    const sizeOf = (entry: PageRecord) => entry.versions.reduce((inner, version) => inner + version.bytes, 0);
+    const sizeOf = (entry: PageRecord) => entry.versions.reduce((inner, version) => inner + version.bytes, 0) + this.keptBytes(entry.id);
     const total = pages.reduce((sum, entry) => sum + sizeOf(entry), 0);
     if (total + bytes > PAGE_LIMITS.totalBytes) return refuse(409, "server_full", "Published pages are full on this server; the person must delete some first.");
     // The person's own share, for a new page and for a new version alike
@@ -802,6 +802,22 @@ export class PublishedPages {
   /** The page's shared state (#1544). */
   state(id: string): Record<string, PageStateEntry> {
     return this.get(id)?.state ?? {};
+  }
+
+  /** #3413 lots 3 and 5: what a page keeps beside its versions (its store,
+   * the files its readers added), counted in its person's share. */
+  private keptBytes: (pageId: string) => number = () => 0;
+
+  /** Where the bytes a page keeps beside its versions are read from. */
+  countKeptBytes(of: (pageId: string) => number): void {
+    this.keptBytes = of;
+  }
+
+  /** Every byte one person's pages keep: versions, store and files. */
+  ownerBytes(ownerId: string | undefined): number {
+    return this.snapshot()
+      .filter((page) => sameOwner(page.ownerId, ownerId))
+      .reduce((sum, page) => sum + page.versions.reduce((inner, version) => inner + version.bytes, 0) + this.keptBytes(page.id), 0);
   }
 
   /** Who set a value, as a handle of this page only: the same writer gets

@@ -436,6 +436,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // "Always allow this site" on a page's link card: the reader's own (the
   // handler refuses a bot's act copy), read, kept or forgotten
   { methods: ["GET", "POST", "DELETE"], path: /^\/api\/pages\/[\w-]+\/link-approvals$/ },
+  // #3413 lot 3: a page's store, for its reader (server/routes/page-cap-calls.ts:
+  // the declaration, the reader's role and the isolation rules on every call)
+  { methods: ["GET", "POST", "PUT", "DELETE"], path: /^\/api\/pages\/[\w-]+\/store\/[a-z][a-z0-9_-]{0,39}(?:\/[A-Za-z0-9_-]{1,64})?$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:resume|dismiss)$/ },
   // #4185: a product key card's Save. The handler lets through only the

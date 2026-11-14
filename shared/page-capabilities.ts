@@ -48,10 +48,22 @@
 //
 // In the page (window.sagax, beside `page`): `capabilities` (what this
 // version was granted), `data.read(name, params?)`, `data.subscribe(name,
-// fn, params?)`, `viewer.get()`, `open(ref)`, `files.download({ name, mime, data })`. `params` (#3449): `fresh: true`
+// fn, params?)`, `viewer.get()`, `open(ref)`, `files.download({ name, mime, data })`,
+// `store.collection(name)` (lot 3). `params` (#3449): `fresh: true`
 // skips the source's cache; other keys are the source's filter, string
 // values (PAGE_DATA_PARAMS). A `denied` refusal carries `reason`
 // (PageCapDenyReason) on the Error.
+
+//
+// Store (#3413 lot 3): `store.collection(name)` gives `get(id)`,
+// `list(query?)`, `put(id, value)` (id null: a new one), `delete(id)` and
+// `subscribe(fn, query?)` (read again on the wrapper's `store` event). A
+// collection is declared with who writes it (the state's levels) and whose
+// documents a reader sees: `shared` (every reader of the page) or `reader`
+// (each reader their own, nobody else, the page's person included).
+//   "store": ["votes"]   or   "store": { "votes": "signed_in", "prefs": { "scope": "reader" } }
+
+import { STATE_DEFAULT_LEVEL, STATE_WRITE_LEVELS, type StateWriteLevel } from "./page-state.ts";
 
 export const PAGE_CAPABILITIES_TYPE = "application/sagax-capabilities+json";
 
@@ -73,7 +85,7 @@ export const CAP_TAKEN_MESSAGE = "sagax-cap-taken";
 export const CAP_WAIT_MS = 10_000;
 
 /** The calls a page may make. */
-export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download"] as const;
+export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete"] as const;
 export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
 /** #3657: the calls whose answer may wait on the reader (an Ask first card,
  * a link card) in an app released before the wrapper said taken. Behind a
@@ -89,12 +101,112 @@ export type PageDataSource = (typeof PAGE_DATA_SOURCES)[number];
 /** A file call a version may declare. The only name in this lot is download. */
 export type PageCapFile = "download";
 
-/** What a version declares, as the server read it. */
+/** Whose documents a reader of a store collection sees (lot 3). */
+export type PageStoreScope = "shared" | "reader";
+export const PAGE_STORE_SCOPES: readonly PageStoreScope[] = ["shared", "reader"];
+
+/** A declared collection: who writes it (shared/page-state.ts levels; a
+ * reader not signed in reaches no capability, so `anyone` is `signed_in`
+ * here) and whose documents a reader sees. */
+export interface PageStoreRule {
+  write: StateWriteLevel;
+  scope: PageStoreScope;
+}
+
+/** What a version declares, as the server read it. A key of a later lot is
+ * present only when the version declares it. */
 export interface PageCapabilities {
   data: PageDataSource[];
   viewer: boolean;
   open: boolean;
   files: PageCapFile[];
+  /** Lot 3: the store collections, by name. */
+  store?: Record<string, PageStoreRule>;
+}
+
+/** A collection name: lower case, a letter first. */
+export const PAGE_STORE_NAME = /^[a-z][a-z0-9_-]{0,39}$/;
+/** A document id, as the page gives it or the server makes it. */
+export const PAGE_STORE_DOC_ID = /^[A-Za-z0-9_-]{1,64}$/;
+/** Documents one list answers at most (its `limit` is capped there). */
+export const PAGE_STORE_LIST_MAX = 500;
+const PAGE_STORE_FIELD = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+const PAGE_STORE_WHERE_MAX = 8;
+
+/** A list query: `where` keeps the documents whose value has each of these
+ * top-level fields equal to the given plain value; `order` sorts by a
+ * top-level field (or `at`, the default, newest first when `desc`);
+ * `limit` caps the answer (PAGE_STORE_LIST_MAX). */
+export interface PageStoreQuery {
+  where?: Record<string, string | number | boolean | null>;
+  order?: { by: string; desc?: boolean };
+  limit?: number;
+}
+
+/** One document as the page receives it: `by` is the writer's handle on
+ * this page (the state's `me`), `name` their display name, `mine` whether
+ * the reader wrote it. Never an id or an email. */
+export interface PageStoreDoc {
+  id: string;
+  value: unknown;
+  by: string;
+  name: string;
+  at: number;
+  mine: boolean;
+}
+
+/** A list query as the page passed it, checked, or null. Pure. */
+export function parsePageStoreQuery(value: unknown): PageStoreQuery | null {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) if (key !== "where" && key !== "order" && key !== "limit") return null;
+  const out: PageStoreQuery = {};
+  if (record.where !== undefined) {
+    if (!record.where || typeof record.where !== "object" || Array.isArray(record.where)) return null;
+    const entries = Object.entries(record.where as Record<string, unknown>);
+    if (entries.length > PAGE_STORE_WHERE_MAX) return null;
+    const where: Record<string, string | number | boolean | null> = {};
+    for (const [field, wanted] of entries) {
+      if (!PAGE_STORE_FIELD.test(field)) return null;
+      if (wanted !== null && typeof wanted !== "string" && typeof wanted !== "number" && typeof wanted !== "boolean") return null;
+      if (typeof wanted === "string" && wanted.length > 500) return null;
+      where[field] = wanted;
+    }
+    out.where = where;
+  }
+  if (record.order !== undefined) {
+    const order = record.order as { by?: unknown; desc?: unknown } | null;
+    if (!order || typeof order !== "object" || typeof order.by !== "string" || !PAGE_STORE_FIELD.test(order.by)) return null;
+    if (order.desc !== undefined && typeof order.desc !== "boolean") return null;
+    out.order = { by: order.by, ...(order.desc === true ? { desc: true } : {}) };
+  }
+  if (record.limit !== undefined) {
+    if (typeof record.limit !== "number" || !Number.isSafeInteger(record.limit) || record.limit < 1) return null;
+    out.limit = Math.min(record.limit, PAGE_STORE_LIST_MAX);
+  }
+  return out;
+}
+
+/** The store part of a declaration: an array of names (signed_in, shared)
+ * or an object of name to a level or { write?, scope? }. Unknown names,
+ * levels and scopes are left out; at most PAGE_CAP_LIMITS.storeCollections.
+ * Null when nothing valid is declared. Pure. */
+function parsePageStore(value: unknown): Record<string, PageStoreRule> | null {
+  const out: Record<string, PageStoreRule> = {};
+  const add = (name: unknown, raw: unknown) => {
+    if (typeof name !== "string" || !PAGE_STORE_NAME.test(name) || Object.prototype.hasOwnProperty.call(out, name)) return;
+    if (Object.keys(out).length >= PAGE_CAP_LIMITS.storeCollections) return;
+    const record = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as { write?: unknown; scope?: unknown } : { write: raw };
+    const write = record.write === undefined || record.write === true ? STATE_DEFAULT_LEVEL
+      : typeof record.write === "string" && (STATE_WRITE_LEVELS as readonly string[]).includes(record.write) ? record.write as StateWriteLevel : null;
+    const scope = record.scope === undefined ? "shared" : (PAGE_STORE_SCOPES as readonly unknown[]).includes(record.scope) ? record.scope as PageStoreScope : null;
+    if (!write || !scope) return;
+    out[name] = { write, scope };
+  };
+  if (Array.isArray(value)) for (const name of value) add(name, undefined);
+  else if (value && typeof value === "object") for (const [name, raw] of Object.entries(value as Record<string, unknown>)) add(name, raw);
+  return Object.keys(out).length ? out : null;
 }
 
 export const PAGE_CAP_LIMITS = {
@@ -135,7 +247,9 @@ export type PageCapFileMime = (typeof PAGE_CAP_FILE_MIMES)[number];
  * reader on its Ask first card (`reason` tells which, PageCapDenyReason);
  * `ask_first`: an organization rule asks the reader first;
  * `shared_write_after_data`: a frame that received personal data writes to
- * what other readers read on a page that is not private. */
+ * what other readers read on a page that is not private; `not_allowed`: the
+ * reader's role on the page does not reach this call (a store collection
+ * its declaration lets editors or the page's person write). */
 export type PageCapError =
   | "sign_in"
   | "not_declared"
@@ -146,7 +260,8 @@ export type PageCapError =
   | "unavailable"
   | "not_found"
   | "bad_request"
-  | "shared_write_after_data";
+  | "shared_write_after_data"
+  | "not_allowed";
 
 /** Who refused a `denied` read (#3449): `org_rule`, an organization's Deny
  * rule; `declined`, the reader on the Ask first card. The code stays
@@ -195,12 +310,11 @@ export type PageCapResult =
   | { type: typeof CAP_RESULT_MESSAGE; v: 1; id: number; ok: true; value: unknown }
   | { type: typeof CAP_RESULT_MESSAGE; v: 1; id: number; ok: false; error: PageCapError; message?: string; reason?: PageCapDenyReason };
 
-export interface PageCapEvent {
-  type: typeof CAP_EVENT_MESSAGE;
-  v: 1;
-  cap: "data";
-  name: PageDataSource;
-}
+/** Something a page reads changed: a `data` source (its name), or a
+ * `store` collection (lot 3, its name). */
+export type PageCapEvent =
+  | { type: typeof CAP_EVENT_MESSAGE; v: 1; cap: "data"; name: PageDataSource }
+  | { type: typeof CAP_EVENT_MESSAGE; v: 1; cap: "store"; name: string };
 
 /** GET /api/pages/:id/data/<source>: the source's value for the reader, the
  * addresses the source names as exits (a link to one of them opens without a
@@ -272,7 +386,8 @@ export function parsePageCapabilities(value: unknown): PageCapabilities | null {
   const files = Array.isArray(record.files)
     ? [...new Set(record.files.filter((name): name is PageCapFile => typeof name === "string" && FILE_SET.has(name)))]
     : [];
-  return { data, viewer: record.viewer === true, open: record.open === true, files };
+  const store = parsePageStore(record.store);
+  return { data, viewer: record.viewer === true, open: record.open === true, files, ...(store ? { store } : {}) };
 }
 
 /** The declaration in a page's HTML: its first capabilities block, or null
@@ -289,7 +404,7 @@ export function pageCapabilitiesOf(html: string): PageCapabilities | null {
 
 /** Whether a declaration grants anything at all. Pure. */
 export function pageCapabilitiesAny(caps: PageCapabilities | null | undefined): caps is PageCapabilities {
-  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0));
+  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0));
 }
 
 /** Whether a declaration hands the page the reader's personal data (`data`
@@ -327,10 +442,11 @@ export function pageCapCallId(data: unknown): number | null {
 }
 
 /** Whether a call is granted by a declaration (`data.read` also needs its
- * source named). Pure. */
+ * source named, a `store.*` call its collection). Pure. */
 export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: PageCapCall, source?: string): boolean {
   if (!caps) return false;
   if (cap === "data.read") return typeof source === "string" && (caps.data as string[]).includes(source);
+  if (cap.startsWith("store.")) return typeof source === "string" && Boolean(caps.store) && Object.prototype.hasOwnProperty.call(caps.store, source);
   if (cap === "viewer.get") return caps.viewer;
   if (cap === "files.download") return (caps.files ?? []).includes("download");
   return caps.open;

@@ -792,3 +792,54 @@ describe("files.download", () => {
     expect(broker.getState().links).toEqual([]);
   });
 });
+
+describe("store calls (#3413 lot 3)", () => {
+  const STORE_CAPS = { capabilities: { data: [], viewer: false, open: false, files: [], store: { votes: { write: "signed_in", scope: "shared" } } }, reads: [] };
+  const base = "/api/pages/page_12345678";
+
+  it("sends each call to its store route, with the reader's session and the method it needs", async () => {
+    const methods: Array<{ path: string; method?: string; body?: unknown }> = [];
+    const routes = { [`${base}/capabilities`]: STORE_CAPS, [`${base}/store/votes`]: { docs: [{ id: "d1" }] } };
+    const { call, result, api } = setup({}, routes);
+    api.mockImplementation((async (path: string, init?: { method: string; body?: unknown }) => {
+      methods.push({ path, ...(init ? { method: init.method, body: init.body } : {}) });
+      if (path.startsWith(`${base}/capabilities`)) return STORE_CAPS;
+      if (path.startsWith(`${base}/store/votes/gone`)) throw new Refusal("nope", 404, "not_found");
+      return !init && path.startsWith(`${base}/store/votes?`) ? { docs: [{ id: "d1" }] } : { id: "d1" };
+    }) as never);
+    await call("store.put", { collection: "votes", id: null, value: { pick: 1 } }, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: { id: "d1" } });
+    await call("store.put", { collection: "votes", id: "d1", value: 2 }, 2);
+    await call("store.list", { collection: "votes", query: { where: { pick: 1 } } }, 3);
+    expect(result(3)).toMatchObject({ ok: true, value: [{ id: "d1" }] });
+    await call("store.get", { collection: "votes", id: "gone" }, 4);
+    expect(result(4)).toMatchObject({ ok: true, value: null });
+    await call("store.delete", { collection: "votes", id: "d1" }, 5);
+    expect(result(5)).toMatchObject({ ok: true, value: true });
+    const writes = methods.filter((entry) => entry.method);
+    expect(writes.map((entry) => [entry.method, entry.path.split("?")[0]])).toEqual([
+      ["POST", `${base}/store/votes`], ["PUT", `${base}/store/votes/d1`], ["DELETE", `${base}/store/votes/d1`],
+    ]);
+    expect(writes[0]!.body).toEqual({ value: { pick: 1 } });
+    expect(methods.find((entry) => entry.path.includes("q="))!.path).toContain(encodeURIComponent(JSON.stringify({ where: { pick: 1 } })));
+  });
+
+  it("refuses an undeclared collection, a bad name or a bad id without a request", async () => {
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: STORE_CAPS });
+    await call("store.list", { collection: "other" }, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+    await call("store.list", { collection: "Bad Name" }, 2);
+    expect(result(2)).toMatchObject({ ok: false, error: "bad_request" });
+    await call("store.get", { collection: "votes", id: "../x" }, 3);
+    expect(result(3)).toMatchObject({ ok: false, error: "bad_request" });
+    expect(calls.filter((path) => path.includes("/store/"))).toEqual([]);
+  });
+
+  it("tells the page a declared collection changed, never another", async () => {
+    const { broker, sent } = setup({}, { [`${base}/capabilities`]: STORE_CAPS });
+    await broker.start();
+    broker.storeChanged("votes");
+    broker.storeChanged("other");
+    expect(sent.filter((message) => message.type === CAP_EVENT_MESSAGE)).toEqual([{ v: 1, type: CAP_EVENT_MESSAGE, cap: "store", name: "votes" }]);
+  });
+});

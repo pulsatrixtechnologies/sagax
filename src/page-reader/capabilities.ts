@@ -42,11 +42,14 @@ import {
   PAGE_CAP_DENY_REASONS,
   PAGE_CAP_FILE_MIMES,
   PAGE_CAP_LIMITS,
+  PAGE_STORE_DOC_ID,
+  PAGE_STORE_NAME,
   pageCapFileData,
   pageCapFileName,
   pageDataParams,
   parsePageCapRequest,
   parsePageOpenRef,
+  parsePageStoreQuery,
   type PageCapabilities,
   type PageCapDenyReason,
   type PageCapError,
@@ -59,8 +62,10 @@ import { readerApi } from "./api";
 export const PAGE_FRAME_ORIGIN = "null";
 /** Window event the live stream raises for a `data` event (live.ts). */
 export const DATA_LIVE_EVENT = "sagax-live-data";
+/** Window event the live stream raises for a `store` event (lot 3). */
+export const STORE_LIVE_EVENT = "sagax-live-store";
 
-const KNOWN_ERRORS: readonly PageCapError[] = ["sign_in", "not_declared", "denied", "ask_first", "rate_limited", "too_large", "unavailable", "not_found", "bad_request", "shared_write_after_data"];
+const KNOWN_ERRORS: readonly PageCapError[] = ["sign_in", "not_declared", "denied", "ask_first", "rate_limited", "too_large", "unavailable", "not_found", "bad_request", "shared_write_after_data", "not_allowed"];
 const SOURCE_NAME = /^[\w-]{1,80}$/;
 const SET_MAX = 2_000;
 const EVENT_GAP_MS = 1_000;
@@ -146,7 +151,7 @@ export interface BrokerDeps {
   /** The page's frame window, when it is there. */
   frame(): Window | null;
   /** The server, with this reader's own session. Throws with `status`/`code`. */
-  api<T>(path: string, init?: { method: "POST"; body: unknown }): Promise<T>;
+  api<T>(path: string, init?: { method: "POST" | "PUT" | "DELETE"; body?: unknown }): Promise<T>;
   /** The window the capability messages come from: the page's frame (the
    * default origin is the sandbox's opaque "null"), or in the app's preview
    * the preview wrapper that relays them (PREVIEW_CAP_RELAY_SOURCE), whose
@@ -182,6 +187,8 @@ export interface CapabilityBroker {
   guardOpen(event: { source: unknown; data: unknown }): boolean;
   /** The live stream says a data source changed. */
   dataChanged(name: string): void;
+  /** The live stream says a store collection changed (lot 3). */
+  storeChanged(name: string): void;
   /** The window came back to focus. */
   refocused(): void;
   /** Answers a card; Allow and Always allow are ignored for CARD_GUARD_MS after it appeared (returns false). */
@@ -356,6 +363,34 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     return { ok: true, value: await askLink(url) };
   };
 
+  /** Lot 3: one store call, to the server's store routes. */
+  const storeCall = async (request: PageCapRequest, collection: string): Promise<{ ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }> => {
+    const id = request.args?.id;
+    const docPath = (doc: string) => `store/${encodeURIComponent(collection)}/${encodeURIComponent(doc)}`;
+    if (request.cap === "store.list") {
+      const query = parsePageStoreQuery(request.args?.query);
+      if (!query) return { ok: false, error: "bad_request", message: "This store query is not valid." };
+      const body = await deps.api<{ docs?: unknown }>(route(`store/${encodeURIComponent(collection)}`, Object.keys(query).length ? { q: JSON.stringify(query) } : {}));
+      return { ok: true, value: Array.isArray(body.docs) ? body.docs : [] };
+    }
+    if (request.cap === "store.put" && (id === null || id === undefined)) {
+      return { ok: true, value: await deps.api(route(`store/${encodeURIComponent(collection)}`), { method: "POST", body: { value: request.args?.value ?? null } }) };
+    }
+    if (typeof id !== "string" || !PAGE_STORE_DOC_ID.test(id)) return { ok: false, error: "bad_request", message: "A document id is 1 to 64 letters, digits, _ or -." };
+    if (request.cap === "store.get") {
+      try {
+        return { ok: true, value: await deps.api(route(docPath(id))) };
+      } catch (cause) {
+        // a document that is not there reads as null, not as an error
+        if (capFailure(cause).error === "not_found") return { ok: true, value: null };
+        throw cause;
+      }
+    }
+    if (request.cap === "store.put") return { ok: true, value: await deps.api(route(docPath(id)), { method: "PUT", body: { value: request.args?.value ?? null } }) };
+    await deps.api(route(docPath(id)), { method: "DELETE" });
+    return { ok: true, value: true };
+  };
+
   const linkRoute = (extra = "") => `/api/pages/${encodeURIComponent(deps.pageId!)}/link-approvals${extra}`;
   /** A link no data answer named: opens at once when the reader allowed
    * this site for this page (kept on the server, like the data approvals),
@@ -445,15 +480,20 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       // A page can set gesture true on a load, so that flag is not the click.
       const fromClick = event.userActivation?.isActive === true;
       await (started ??= load());
-      const source = request.cap === "data.read" ? request.args?.name : undefined;
+      const storeCap = request.cap.startsWith("store.");
+      const source = request.cap === "data.read" ? request.args?.name : storeCap ? request.args?.collection : undefined;
       if (request.cap === "data.read" && (typeof source !== "string" || !SOURCE_NAME.test(source))) {
         answer(id, { ok: false, error: "bad_request", message: "A data source name is needed." });
+        return true;
+      }
+      if (storeCap && (typeof source !== "string" || !PAGE_STORE_NAME.test(source))) {
+        answer(id, { ok: false, error: "bad_request", message: "A collection name is needed." });
         return true;
       }
       // the server's declaration decides; a name it did not grant is
       // refused without a request (the server refuses it again anyway)
       if (state.caps && !pageCapGranted(state.caps, request.cap, typeof source === "string" ? source : undefined)) {
-        answer(id, { ok: false, error: "not_declared", message: `This page does not declare ${request.cap === "data.read" ? `the data source ${String(source)}` : request.cap}.` });
+        answer(id, { ok: false, error: "not_declared", message: `This page does not declare ${request.cap === "data.read" ? `the data source ${String(source)}` : storeCap ? `the collection ${String(source)}` : request.cap}.` });
         return true;
       }
       try {
@@ -473,6 +513,8 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           // the reader's name is personal data too: a link opens only with a question from now on
           receivedData = true;
           answer(id, { ok: true, value: info });
+        } else if (storeCap) {
+          answer(id, await storeCall(request, source as string));
         } else if (request.cap === "files.download" && state.caps) {
           answer(id, downloadFile(request, fromClick));
         } else if (!state.caps) {
@@ -497,6 +539,10 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     dataChanged(name) {
       if (!state.caps || !pageCapGranted(state.caps, "data.read", name)) return;
       post({ type: CAP_EVENT_MESSAGE, cap: "data", name });
+    },
+    storeChanged(name) {
+      if (!state.caps || !pageCapGranted(state.caps, "store.list", name)) return;
+      post({ type: CAP_EVENT_MESSAGE, cap: "store", name });
     },
     refocused() {
       const at = now();
@@ -542,7 +588,7 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
   if (!frame) return null;
   const broker = createCapabilityBroker({
     frame: () => frame.contentWindow,
-    api: <T,>(path: string, init?: { method: "POST"; body: unknown }) => readerApi<T>(path, init),
+    api: <T,>(path: string, init?: { method: "POST" | "PUT" | "DELETE"; body?: unknown }) => readerApi<T>(path, init),
     ...(input.pageId ? { pageId: input.pageId } : {}),
     signedIn: input.signedIn,
     lang: input.lang,
@@ -561,11 +607,16 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
     const name = parseDataEvent((event as CustomEvent).detail);
     if (name) broker.dataChanged(name);
   };
+  const onStore = (event: Event) => {
+    const name = parseDataEvent((event as CustomEvent).detail);
+    if (name) broker.storeChanged(name);
+  };
   const onFocus = () => broker.refocused();
   const onVisible = () => { if (document.visibilityState === "visible") broker.refocused(); };
   window.addEventListener("message", onMessage);
   window.addEventListener("message", onGuard, true);
   window.addEventListener(DATA_LIVE_EVENT, onData);
+  window.addEventListener(STORE_LIVE_EVENT, onStore);
   window.addEventListener("focus", onFocus);
   document.addEventListener("visibilitychange", onVisible);
   void broker.start();
@@ -575,6 +626,7 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onGuard, true);
       window.removeEventListener(DATA_LIVE_EVENT, onData);
+      window.removeEventListener(STORE_LIVE_EVENT, onStore);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     },

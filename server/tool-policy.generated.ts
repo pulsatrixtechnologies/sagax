@@ -768,6 +768,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"PUT","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/state\\/lock$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/state$","tier":"admin","readOnly":false,"scope":"pages:admin","defaultEnabled":false,"destructive":true},
   {"method":"PUT","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/state$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
+  {"method":"ANY","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/store\\/([a-z][a-z0-9_-]{0,39})(?:\\/([A-Za-z0-9_-]{1,64}))?$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/threads\\/([\\w-]+)\\/accept$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/threads\\/([\\w-]+)\\/decline$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/threads\\/([\\w-]+)\\/replies\\/([\\w-]+)$","tier":"admin","readOnly":false,"scope":"pages:admin","defaultEnabled":false,"destructive":true},

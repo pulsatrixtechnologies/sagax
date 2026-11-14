@@ -57,15 +57,15 @@ import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import type { PageLinkApprovals } from "../pages/page-link-approvals.ts";
 import { PageSourceError, type PageDataWatch, type PageSources } from "../pages/page-sources.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
+import { PAGE_STORE_ROUTE, pageStoreCall, type PageCapCallDeps } from "./page-cap-calls.ts";
 import { pageAnnotator, pageMayEdit, type PageViewer } from "./published-pages.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
-export interface PageDataRouteDeps {
-  pages: {
+export interface PageDataRouteDeps extends Omit<PageCapCallDeps, "pages" | "names"> {
+  pages: PageCapCallDeps["pages"] & {
     get(id: string): PageRecord | null | undefined;
     capabilities(id: string, n?: number): PageCapabilities | null;
     policy(): PagesPolicy;
-    readerHandle(pageId: string, by: string): string;
   };
   /** The signed-in reader this caller is, or null. */
   reader(auth: RequestAuth): PageViewer;
@@ -102,6 +102,7 @@ const TEXTS: Record<PageCapError, Record<Lang, string>> = {
   not_found: { en: "This page does not exist.", fr: "Cette page n'existe pas." },
   bad_request: { en: "This request is not valid.", fr: "Cette demande n'est pas valide." },
   shared_write_after_data: { en: "This page reads personal data: its shared state is read only while it is shared.", fr: "Cette page lit des données personnelles : son état partagé est en lecture seule tant qu'elle est partagée." },
+  not_allowed: { en: "Your role on this page does not allow this.", fr: "Ton rôle sur cette page ne permet pas ça." },
 };
 
 function langOf(url: URL, req: IncomingMessage): Lang {
@@ -131,7 +132,10 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     const approval = method === "POST" ? APPROVAL_ROUTE.exec(path) : null;
     const match = method === "GET" ? ROUTE.exec(path) : null;
     const link = deps.links && (method === "GET" || method === "POST" || method === "DELETE") ? LINK_ROUTE.exec(path) : null;
-    if (!approval && !match && !link) return PASS;
+    // #3413 lots 3 to 7 (server/routes/page-cap-calls.ts)
+    const store = method === "GET" || method === "POST" || method === "PUT" || method === "DELETE" ? PAGE_STORE_ROUTE.exec(path) : null;
+    const call = store;
+    if (!approval && !match && !link && !call) return PASS;
     res.setHeader?.("cache-control", "no-store");
     const lang = langOf(url, req);
     const refuse = (status: number, code: PageCapError, extra: Record<string, unknown> = {}) => json(res, status, { error: TEXTS[code][lang], code, ...extra });
@@ -139,7 +143,7 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     // a reader who is not signed in: no personal capability, and nothing
     // that says whether the page or its owner has data
     if (!viewer || (!viewer.principalId && !viewer.computerOwner)) return refuse(401, "sign_in");
-    const page = deps.pages.get((approval ?? match ?? link)![1]!);
+    const page = deps.pages.get((approval ?? match ?? link ?? call)![1]!);
     const who = page ? pageAnnotator(page, viewer, { policy: deps.pages.policy(), now: now(), ...(deps.teamsOf ? { teamsOf: deps.teamsOf } : {}), ownerActive: deps.ownerActive?.(page) ?? true }) : null;
     if (!page || !who) return refuse(404, "not_found");
 
@@ -185,6 +189,12 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
       : page.currentVersion ?? undefined;
     if (!who.owner && asked !== undefined && asked !== version) return refuse(404, "not_found");
     const caps = version === undefined ? null : deps.pages.capabilities(page.id, version);
+
+    if (call) {
+      const role = who.owner ? "owner" : pageMayEdit(page, viewer) ? "editor" : "signed_in";
+      const ctx = { req, res, url, method, path, auth, json, readBody, refuse, page, viewer, who, role, caps, lang } as const;
+      return pageStoreCall(deps, ctx);
+    }
 
     if (match![2] === "capabilities") {
       return json(res, 200, {

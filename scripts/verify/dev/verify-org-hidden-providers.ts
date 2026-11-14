@@ -122,7 +122,7 @@ try {
     page.on("pageerror", (error) => errors.push(String(error)));
     const shot = async (name: string) => { await page.waitForTimeout(500); await page.screenshot({ path: join(shotsDir, `${phase}-${name}.png`) }); };
     const grokOffered = async (where: string) => {
-      const found = await page.locator('[data-rail-provider="grok"], [data-model-provider="grok"], [data-model-section="grok"], [data-rail-provider="xaiApi"], [data-model-provider="xaiApi"], [data-model-section="xaiApi"]').count();
+      const found = await page.locator('[data-rail-provider="grok"], [data-model-provider="grok"], [data-model-section="grok"], [data-model-provider="xai"], [data-model-section="xai"],[data-rail-provider="xaiApi"], [data-model-provider="xaiApi"], [data-model-section="xaiApi"]').count();
       if (phase === "after" && found > 0) fail(`${where}: Grok is still offered`);
       if (phase === "before" && found === 0) console.log(`[verify] note: ${where} shows no Grok row before (layout)`);
     };

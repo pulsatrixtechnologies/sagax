@@ -308,13 +308,13 @@ describe("control-omb ui drives the real renderer", () => {
       await expect.poll(() => evaluate(`document.querySelector('[data-models-page]').textContent`)).toContain("azure-chat");
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-models.png"));
       await evaluate(`document.querySelector('[aria-label="Close settings"]').click(); true`);
-      // #2106: the chat bar's model chip opens the model menu. Since #3116 it
-      // has two steps: the harness (the server's own, "OpenAI-compatible"),
-      // then that harness's models under the provider's name.
+      // #2106: the chat bar's model chip opens the model menu. Since #4329 it
+      // has two steps: the providers ("a server added by address is a
+      // provider under the name the person gave it"), then its models.
       await clickWhenShown('main [data-composer-actions] button[data-tour="model"]');
       await expect.poll(() => evaluate(`(() => {
         if (document.querySelector('[data-model-option="azure-chat"]')) return true;
-        [...document.querySelectorAll('[data-model-menu] [data-model-harness]')].find((row) => (row.textContent || "").trim().startsWith("OpenAI-compatible"))?.click();
+        [...document.querySelectorAll('[data-model-menu] [data-model-provider^="server:"]')].find((row) => (row.textContent || "").trim().startsWith("Azure Foundry"))?.click();
         return false;
       })()`), { timeout: 10_000 }).toBe(true);
       expect(await evaluate(`document.querySelector('[data-model-menu]').textContent`)).toContain("Azure Foundry");

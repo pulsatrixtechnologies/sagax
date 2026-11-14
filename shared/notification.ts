@@ -2,7 +2,7 @@
  * interrupting someone for, emitted as the `notify` live frame. Single home
  * in shared/ so the server emitter and the client banner stack agree;
  * server/notify.ts re-exports under the historical name. */
-import type { SignalLevel } from "./signal-levels.ts";
+import type { SignalLevel } from "./attention-levels.ts";
 
 export type NotifyKind =
   | "approval"

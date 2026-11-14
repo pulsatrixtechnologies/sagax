@@ -50,8 +50,13 @@ describe("stores sealed with the key a reset dropped", () => {
     const dir = dataDir();
     sealWithOldKey(dir);
     const keys = launch(dir, NEW_KEY);
-    expect(() => new McpOAuthVault(dir, keys).set("notes", record)).toThrow(/could not be decrypted/);
     expect(() => new CredentialVault(dir, keys).create(LOCAL_VAULT_PRINCIPAL, login)).toThrow(/could not be decrypted/);
+    // #4294 (Refs #4155) decided that signing in again over a sign-in vault
+    // sealed under another key keeps the old file beside and saves, so a new
+    // MCP or provider sign-in is never refused for good. The old file is kept.
+    new McpOAuthVault(dir, keys).set("notes", record);
+    expect(new McpOAuthVault(dir, keys).get("notes")).toEqual(record);
+    expect(readdirSync(dir).some(name => name.startsWith("mcp-oauth.enc.unreadable-"))).toBe(true);
   });
 
   it("are moved aside, kept, and the stores accept writes under the new key", () => {

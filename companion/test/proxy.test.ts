@@ -634,7 +634,9 @@ describe("the sidecar in front of an unmodified harness", () => {
       // cursor. Rewriting the payload must not disturb it.
       const { body } = await device("GET", "/api/bots");
       const botId = body.bots[0].id;
-      await device("POST", `/api/bots/${botId}/read`);
+      // #4259 (Fixes #4187): a read that flips nothing sends no bot frame
+      // any more, so a bot change is the broadcast here.
+      expect((await device("PATCH", `/api/bots/${botId}`, { body: { proactiveMode: "off" } })).status).toBe(200);
 
       const frame = await nextEvent((e) => e.startsWith("id: "));
       expect(frame).not.toBeNull();

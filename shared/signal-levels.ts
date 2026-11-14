@@ -9,12 +9,13 @@
  * together), not to one bot. Both are person preferences
  * (shared/user-preferences.ts), set in Settings > Notifications. */
 import { decideAttention, isSignalLevel, NOTIFY_CHANNELS_KEY, readLevelChannels, type AttentionDecision, type LevelChannels } from "./attention-policy.ts";
+import type { QuietHours, SignalLevel } from "./attention-levels.ts";
 import { validTimeZone } from "./reach-me.ts";
 
 // #4250 (S2): the quiet hours test lives with the one attention policy
 export { withinQuietHours } from "./attention-policy.ts";
 
-export type SignalLevel = "fyi" | "card" | "urgent";
+export type { QuietHours, SignalLevel } from "./attention-levels.ts";
 
 /** Cards a person gets in their local day before cards wait for the brief. */
 export const SIGNAL_BUDGET_KEY = "sagax.notifyBudget.v1";
@@ -22,12 +23,6 @@ export const SIGNAL_BUDGET_KEY = "sagax.notifyBudget.v1";
 export const QUIET_HOURS_KEY = "sagax.quietHours.v1";
 export const SIGNAL_BUDGET_DEFAULT = 20;
 export const SIGNAL_BUDGET_CHOICES = [5, 10, 20, 50] as const;
-
-export interface QuietHours {
-  start: string;
-  end: string;
-  timeZone: string;
-}
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 

@@ -6,7 +6,9 @@
  * `routine-problem:<routineId>`, the streak's summary and the failing
  * readiness line as its words, choices to run a check, pause the routine or
  * open it. It is the existing question card: it sits in the pinned zone and
- * in Today, rings once as a question when raised, and holds nothing.
+ * in Today, rings once as a question when raised, and holds nothing. When
+ * the run it is raised for already rang its own failure (routine-failed),
+ * it is raised quiet: one failure is told once (#4316).
  *
  * - While the problem lasts, a later run only replaces its words in place
  *   (the count moves); nothing rings again.
@@ -117,7 +119,11 @@ export interface RoutineProblemCardsDeps<R extends { id: string; name: string; b
   words(routine: R): ApprovalWords;
   /** ask_choice as the routine's bot, in its conversation with the person:
    * raises, replaces in place (same key) or retires (`retire` true). */
-  ask(routine: R, input: RoutineProblemCardInput | { tool: typeof ASK_CHOICE_TOOL; key: string; retire: true }): void;
+  ask(routine: R, input: RoutineProblemCardInput | { tool: typeof ASK_CHOICE_TOOL; key: string; retire: true }, options?: { quiet?: boolean }): void;
+  /** Whether the run the need names already rang its own failure (the
+   * routine-failed notification of that run): the card it raises then
+   * shows without a second ring for the same run. */
+  runFailureTold?(routine: R, need: RoutineNeedsPerson): boolean;
   /** The pending card raised with `key` in the bot's conversations with the
    * person, or null. */
   pending(routine: R, key: string): PendingProblemCard | null;
@@ -189,7 +195,10 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
       const told = [this.signal(routine)?.toldAt, this.deps.latest(routine, key)?.at].filter((at): at is number => at !== undefined);
       if (told.length && Math.max(...told) >= need.since) return;
     }
-    this.deps.ask(routine, input);
+    // #4316: one failure, one ring. A card raised for a run whose own
+    // failure already rang is shown quiet; a replace never rings anyway.
+    const quiet = !open && this.deps.runFailureTold?.(routine, need) === true;
+    this.deps.ask(routine, input, quiet ? { quiet } : undefined);
     const note = { key, kind: ROUTINE_PROBLEM_KIND, level: "card" as const, bot: routine.botId ?? "", label: input.title };
     if (open) this.deps.signals?.note(this.person(routine), note);
     else this.deps.signals?.told(this.person(routine), note);

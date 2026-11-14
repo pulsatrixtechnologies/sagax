@@ -26,6 +26,16 @@ describe("personAttention", () => {
     expect(found?.items).toHaveLength(2);
   });
 
+  it("keeps the bold of an item's ticket and drops the marks around its tag (#4316)", () => {
+    expect(personAttention("- [HUMAIN] **100201** (board 1) : still New.")?.items).toEqual([{ text: "**100201** (board 1) : still New.", ticketId: 100201 }]);
+    expect(personAttention("- **[HUMAIN]** **100202**: close it by hand.")?.items).toEqual([{ text: "**100202**: close it by hand.", ticketId: 100202 }]);
+    expect(personAttention("- **[HUMAIN]**: plain words")?.items).toEqual([{ text: "plain words" }]);
+    expect(personAttention("**[HUMAIN]:** call back")?.items).toEqual([{ text: "call back" }]);
+    expect(personAttention("- **[HUMAIN] :** close 100201")?.items).toEqual([{ text: "close 100201" }]);
+    expect(personAttention("**[HUMAIN] 100201 : fermer**")?.items).toEqual([{ text: "100201 : fermer", ticketId: 100201 }]);
+    expect(personAttention("- **[HUMAIN]**: **100203** reopen it")?.items).toEqual([{ text: "**100203** reopen it", ticketId: 100203 }]);
+  });
+
   it("reads the other tags and a needs_human array in a JSON block", () => {
     expect(personAttention("1. [NEEDS_HUMAN] #12345: approve the quote")?.items[0]).toMatchObject({ ticketId: 12345, text: "#12345: approve the quote" });
     expect(personAttention("**[HUMAN]** call the client back")?.items[0]?.text).toBe("call the client back");

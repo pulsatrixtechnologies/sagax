@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProactiveMode } from "../../shared/proactive-mode.ts";
 import { ROUTINE_RESTARTED } from "../routines/routines.ts";
+import { SignalLedger } from "./signal-ledger.ts";
 import {
   PEER_WAKE_RULES,
   PeerNoticeHops,
@@ -34,7 +35,7 @@ import {
   type ProactiveWakeBatch,
 } from "./proactive-wake.ts";
 
-function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined } = {}) {
+function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined; signals?: SignalLedger } = {}) {
   let now = 1_000_000;
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];
@@ -49,6 +50,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
     pendingChanged: (botId, events) => changes.push({ botId, keys: events.map((event) => event.key) }),
     ...(opts.engineExpired ? { engineExpired: opts.engineExpired } : {}),
     ...(opts.owner ? { owner: opts.owner } : {}),
+    ...(opts.signals ? { signals: opts.signals } : {}),
     now: () => now,
     setTimer: (fn, ms) => {
       const timer = { at: now + ms, fn, live: true };
@@ -621,6 +623,27 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("#4316: a gathered notice a restart cut before its wake wakes after it, though the ledger kept its key (#4250)", () => {
+    // one ledger outlives the restart, as its file on disk does
+    const signals = new SignalLedger();
+    const before = harness({ wren: "proactive" }, { signals });
+    expect(before.waker.offer(notice("wren", 1))).toBe("gathered");
+    // the server stops before the gather window ends: no wake ran
+    expect(before.woken).toHaveLength(0);
+    const after = harness({ wren: "proactive" }, { signals });
+    // an ordinary second offer of the key is still a duplicate
+    expect(after.waker.offer(notice("wren", 1))).toBe("duplicate");
+    after.waker.replayPending([{ botId: "wren", key: "peer-notice:node-1" }], () => {
+      expect(after.waker.offer(notice("wren", 1))).toBe("gathered");
+      // once per row
+      expect(after.waker.offer(notice("wren", 1))).toBe("duplicate");
+    });
+    // after the replay, the key is a duplicate again
+    expect(after.waker.offer(notice("wren", 1))).toBe("duplicate");
+    after.advance(30_000);
+    expect(after.woken.map((batch) => batch.events.map((event) => event.key))).toEqual([["peer-notice:node-1"]]);
   });
 
   it("#3581, #4051: a wake on a teammate's message posts no report; one on a two-bot DM or a room post that names the bot posts what it tells the person", () => {

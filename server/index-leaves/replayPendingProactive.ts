@@ -6,7 +6,10 @@ export function createReplayPendingProactive(getHost: () => Host): any {
 function replayPendingProactive() {
   const host = getHost();
 
-  for (const row of host.proactivePending.take()) {
+  const rows = host.proactivePending.take();
+  // #4250: each row's key was noted before the restart; its replay is its first wake
+  host.proactiveWaker.replayPending(rows, () => {
+  for (const row of rows) {
     try {
       if (row.ref.kind === "peer") {
         const child = host.coordinator.node(row.ref.noticeId);
@@ -28,6 +31,7 @@ function replayPendingProactive() {
       console.warn(`[proactive] a pending event could not be replayed: ${error instanceof Error ? error.name : "error"}`);
     }
   }
+  });
 
 }
   return replayPendingProactive;

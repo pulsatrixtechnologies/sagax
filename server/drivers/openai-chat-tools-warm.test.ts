@@ -20,10 +20,16 @@ describe("openai-chat tools warm cache", () => {
   it("uses the shared LRU and never evicts mounts claimed by an active turn", async () => {
     const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 1, bytes: 1000 * MiB, personCount: 10, personBytes: 1000 * MiB } });
     const cache = createWarmToolSessions({ budget });
-    const active = fixtureSession(), idle = fixtureSession();
+    // #4228 (#4215): the caps bound idle retention only; a running turn is
+    // not retention. So the cap of one evicts the older of two idle mounts,
+    // never the active one.
+    const active = fixtureSession(), older = fixtureSession(), newer = fixtureSession();
     cache.set("active", "same", active, { person: "osprey", active: true });
-    cache.keep("idle", idle, "same", { person: "wren" });
-    await budget.settled(); expect(cache.get("active", "same", "osprey")).toBe(active); expect(cache.has("idle")).toBe(false);
+    cache.keep("older", older, "same", { person: "wren" });
+    await budget.settled(); expect(cache.has("older")).toBe(true);
+    cache.keep("newer", newer, "same", { person: "wren" });
+    await budget.settled(); expect(cache.get("active", "same", "osprey")).toBe(active);
+    expect(cache.has("older")).toBe(false); expect(cache.has("newer")).toBe(true);
     cache.keep("active", active, "same", { person: "osprey" });
     await cache.releaseAll(); expect(budget.stats().resources).toBe(0);
   });

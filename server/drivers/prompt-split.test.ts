@@ -121,6 +121,19 @@ describe("splitSessionPrompt", () => {
     expect(fourth.text).toBe(VOLATILE_SECTIONS_NOTE_PREFIX + "\n\nSkills D.\n\nfourth");
   });
 
+  // #4215: every session driver now hands its turn's stable sections over;
+  // sections that do not rebuild the stable half (a driver that added to it)
+  // cannot describe its change, so the whole block rides as before.
+  it("ignores stable sections that do not rebuild the stable half (#4215)", () => {
+    const stableOf = (skills: string) => [{ id: "soul", text: "Soul." }, { id: "skills", text: skills }];
+    const send = (skills: string, previous: PromptSplitReceipt | null, text: string) =>
+      splitSessionPrompt(`Soul.${skills} Driver line.`, "", previous, "full", text, false, 0, undefined, stableOf(skills));
+    const first = send("Skills A.", null, "first");
+    expect(first.receipt.stableSections).toBeUndefined();
+    const second = send("Skills B.", first.receipt, "second");
+    expect(second.text).toBe("full\n\nsecond");
+  });
+
   it("delivers the full prompt to an untracked session, then sends later turns bare", () => {
     const first = splitSessionPrompt("stable rules.", "memory", null, fullSystem, "first");
     expect(first.text).toBe(fullSystem + "\n\nfirst");

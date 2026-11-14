@@ -16,6 +16,7 @@ import { ensureDirs, NATIVE_DIR } from "../config.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
 import { encodeInjectId, localHost } from "./local-inject.ts";
+import { VOLATILE_SECTIONS_NOTE_PREFIX } from "./prompt-split.ts";
 import { sagaxInternalSelfAnswers } from "../sagax-internal-tools.ts";
 import {
   applyPiLocalCatalog,
@@ -695,6 +696,42 @@ describe("PiDriver turns (fake CLI)", () => {
     const third = await send("third", "Memory: moved to Toronto.", first.cursor);
     expect(third.message)
       .toBe("Context from Sagax updated since this conversation started; it replaces any earlier copy:\n\nMemory: moved to Toronto.\n\nthird");
+  });
+
+  // #4215: a skill or a rule edited mid-conversation re-sent the whole opening
+  // block (62 to 85 KB) on pi; only the section that changed rides now.
+  it("rides a changed stable section alone instead of the whole opening block (#4215)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-pi-stable-split-"));
+    const dump = join(dir, "dump.jsonl");
+    await create(undefined, { FAKE_PI_DUMP: dump });
+    const threadId = "t-pi-stable-split-" + randomUUID();
+    const prompts = () =>
+      readFileSync(dump, "utf8").split("\n").filter(Boolean)
+        .map((line) => JSON.parse(line) as { prompt?: { message?: string } })
+        .filter((row) => row.prompt).map((row) => row.prompt!.message!);
+    const send = async (text: string, skills: string, cursor?: string) => {
+      const stableSections = [{ id: "soul", text: "Standing rules." }, { id: "skills", text: `\n\n${skills}` }];
+      const stable = stableSections.map((section) => section.text).join("");
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId,
+        text,
+        system: `${stable}\n\nMemory: likes quiet hours.`,
+        systemStable: stable,
+        systemVolatile: "Memory: likes quiet hours.",
+        systemStableSections: stableSections,
+        systemVolatileSections: [{ id: "memory", text: "Memory: likes quiet hours." }],
+        ...(cursor ? { resumeCursor: cursor } : {}),
+      });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      const session = recorder.events.find((e) => e.type === "session.started" && e.turnId === turnId) as { sessionId: string };
+      return { message: prompts().at(-1)!, cursor: session.sessionId };
+    };
+
+    const first = await send("first", "Skill: invoices.");
+    expect(first.message).toBe("Standing rules.\n\nSkill: invoices.\n\nMemory: likes quiet hours.\n\nfirst");
+    // the skills section changed: it rides alone, the rest of the block stays in the session
+    const second = await send("second", "Skill: quotes.", first.cursor);
+    expect(second.message).toBe(`${VOLATILE_SECTIONS_NOTE_PREFIX}\n\nSkill: quotes.\n\nsecond`);
   });
 
   it("re-establishes the full prompt after pi compaction summarizes the session", async () => {

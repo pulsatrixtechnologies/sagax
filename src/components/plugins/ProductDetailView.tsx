@@ -186,7 +186,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
                 return (
                   <li key={role.slug} className="flex min-h-[38px] items-center gap-3 py-1.5" title={role.slug}>
                     <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink">{role.name}</span>
-                    {mode && <span className="shrink-0 text-[12.5px] text-ink-secondary">{mode}</span>}
+                    {mode && <span className="shrink-0 text-[12.5px] text-ink-secondary" data-person-product-mode>{mode}</span>}
                   </li>
                 );
               })}

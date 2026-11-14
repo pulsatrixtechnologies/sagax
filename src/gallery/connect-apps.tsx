@@ -12,7 +12,8 @@
  * Organization for that person. settings-subpage: a Settings sub-page in
  * the same window size, the navigation Connect apps' pages follow
  * (2026-10-28). The bot Rocket has its own plugins (For Rocket).
- * &products=1 (#4185): the person's Perspicax products at the Me scope.
+ * &products=1 (#4185): the person's Perspicax products at the Me scope;
+ * &products=many: twelve of them, every state.
  * scripts/capture/connect-apps-grokbot.mjs clicks through the screens. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -253,19 +254,30 @@ if (params.has("products")) {
   ] };
   const products = [
     { id: "prod-psa", name: "Service Desk", icon: { domain: "example.com" }, state: "connected", address: "https://desk.example.com",
-      access: { roles: [{ slug: "tech", name: "Technicians", mode: "dispatch" }] },
+      access: { roles: [{ slug: "tech", name: "Technicians", mode: "hybrid" }] },
       key: { source: "own", kind: "basic", ending: "a1b2", last_test: { at: new Date(Date.now() - 3 * 3_600_000).toISOString(), ok: true } },
       form, actions: ["set_own_key", "test", "remove_own_key"], console_url: "https://px.example.test/console/products/prod-psa" },
     { id: "prod-docs", name: "Knowledge Base", state: "key_missing", address: "https://docs.example.org",
-      access: { roles: [{ slug: "tech", name: "Technicians", mode: "read" }] },
+      access: { roles: [{ slug: "tech", name: "Technicians", mode: "compact" }] },
       form: { kind: "api_key", fields: [{ slot: "token", label: { en: "API token", fr: "Jeton API" }, secret: true, required: true }] },
       actions: ["set_own_key"], console_url: "https://px.example.test/console/products/prod-docs" },
     { id: "prod-edr", name: "Endpoint Security", state: "key_refused", state_code: "unauthorized",
-      access: { roles: [{ slug: "sec", name: "Security", mode: "read" }] },
+      access: { roles: [{ slug: "sec", name: "Security", mode: "minimal" }] },
       key: { source: "own", kind: "api_key", ending: "9f0c", last_test: { at: new Date(Date.now() - 20 * 60_000).toISOString(), ok: false, code: "unauthorized", status: 401 } },
       form, actions: ["set_own_key", "test", "remove_own_key"] },
     { id: "prod-voice", name: "Phone Lines", state: "not_served", access: { roles: [] }, actions: [], console_url: "https://px.example.test/console/products/prod-voice" },
   ];
+  // &products=many: twelve rows, every state, the longest French ones, to
+  // check at phone width that a long state never cuts a product's name
+  if (params.get("products") === "many") {
+    const more: Array<[string, string]> = [
+      ["Remote Monitoring and Management", "key_expired"], ["Backup and Recovery", "key_misfit"],
+      ["Documentation Platform", "setup_incomplete"], ["Email Security Gateway", "sign_in_needed"],
+      ["Network Controller", "key_refused"], ["Password Manager", "setup_incomplete"],
+      ["Quoting and Procurement", "no_key_needed"], ["Dashboards", "unknown_state"],
+    ];
+    more.forEach(([name, state], index) => products.push({ id: `prod-more-${index}`, name, state, access: { roles: [{ slug: "tech", name: "Technicians", mode: "group" }] }, actions: [] } as never));
+  }
   // what Perspicax answers, read as the Sagax server reads it
   const served = parsePersonProducts(products);
   MANAGE_API["/api/me/perspicax/products"] = { products: served };

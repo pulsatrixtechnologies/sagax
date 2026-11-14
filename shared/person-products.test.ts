@@ -9,7 +9,7 @@ const product = {
   id: "psa", name: "Acme PSA", icon: { domain: "acme.example" },
   state: "key_refused", state_code: "expired",
   address: "https://psa.acme.example",
-  access: { roles: [{ slug: "tech", name: "Technicians", mode: "dispatch" }] },
+  access: { roles: [{ slug: "tech", name: "Technicians", mode: "hybrid" }] },
   key: { source: "own", kind: "basic", name: "mine", ending: "1a2b", expires_at: "2026-12-01T00:00:00Z", last_test: { at: "2026-11-13T10:00:00Z", ok: false, code: "unauthorized", status: 401 } },
   form: { kind: "basic", fields: [
     { slot: "username", label: { en: "Username", fr: "Nom d'utilisateur" }, secret: false, required: true },
@@ -26,7 +26,7 @@ describe("person products contract", () => {
     const parsed = parsePersonProduct(product)!;
     expect(parsed).toMatchObject({
       id: "psa", name: "Acme PSA", icon: { domain: "acme.example" }, state: "key_refused", stateCode: "expired",
-      address: "https://psa.acme.example", roles: [{ slug: "tech", name: "Technicians", mode: "dispatch" }],
+      address: "https://psa.acme.example", roles: [{ slug: "tech", name: "Technicians", mode: "hybrid" }],
       key: { source: "own", kind: "basic", ending: "1a2b", lastTest: { ok: false, code: "unauthorized", status: 401 } },
       actions: ["set_own_key", "test", "remove_own_key"],
       consoleUrl: "https://console.example/products/psa",

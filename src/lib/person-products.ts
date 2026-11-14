@@ -126,20 +126,23 @@ export function productKindLabel(kind: string | undefined): string {
   return t(key ?? "personProducts.kind.other");
 }
 
+// The serving modes Perspicax names for a held profile (#1960; Perspicax
+// docs/mcp-surface.md): how the product's tools are laid out for the bot.
 const MODE_KEY: Record<string, LocaleKey> = {
-  read: "personProducts.mode.read",
-  read_only: "personProducts.mode.read",
-  write: "personProducts.mode.write",
-  read_write: "personProducts.mode.write",
-  dispatch: "personProducts.mode.dispatch",
-  full: "personProducts.mode.full",
+  model: "personProducts.mode.model",
+  per_operation: "personProducts.mode.perOperation",
+  compact: "personProducts.mode.compact",
+  minimal: "personProducts.mode.minimal",
+  group: "personProducts.mode.group",
+  hybrid: "personProducts.mode.hybrid",
 };
 
-/** A role's serving mode in words; an unknown one shows as given. */
+/** A profile's serving mode in words; a mode Perspicax has not named yet is
+ * hidden, never shown as a raw slug. */
 export function productModeLabel(mode: string | undefined): string | null {
   if (!mode) return null;
-  const key = MODE_KEY[mode.toLowerCase()];
-  return key ? t(key) : mode;
+  const key = MODE_KEY[mode.toLowerCase().replace(/[\s-]+/g, "_")];
+  return key ? t(key) : null;
 }
 
 /** A form field's label in the reader's language. */

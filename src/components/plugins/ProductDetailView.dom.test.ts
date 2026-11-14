@@ -23,7 +23,7 @@ const { ProductDetailView } = await import("./ProductDetailView");
 const { ProductKeyCard } = await import("../ProductKeyCard");
 
 const base: PersonProduct = {
-  id: "psa-1f0c", name: "Acme PSA", state: "connected", roles: [{ slug: "tech", name: "Technicians", mode: "dispatch" }],
+  id: "psa-1f0c", name: "Acme PSA", state: "connected", roles: [{ slug: "tech", name: "Technicians", mode: "hybrid" }],
   address: "https://psa.acme.example", actions: [],
 };
 const form = { kind: "basic", fields: [
@@ -49,6 +49,16 @@ afterEach(() => {
 });
 
 describe("product rows", () => {
+  it("keep the name readable at phone width: the state wraps beside it, never shrink-0", async () => {
+    const rows = productRows([{ ...base, name: "Endpoint Security", state: "key_refused" }], () => {});
+    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
+    const state = view.querySelector("[data-person-product] [data-plugin-status]")!;
+    // the state never holds its width against the name: it may go to its own line under it
+    expect(state.className).not.toMatch(/\bshrink-0\b/);
+    expect(state.parentElement?.matches("[data-person-product-line]")).toBe(true);
+    expect(state.parentElement?.className).toMatch(/\bflex-wrap\b/);
+  });
+
   it("say each state in words, at the row's right, once", async () => {
     const states: PersonProduct["state"][] = ["connected", "key_missing", "key_refused", "not_served"];
     const rows = productRows(states.map((state, index) => ({ ...base, id: `p${index}`, name: `Product ${index}`, state })), () => {});
@@ -102,6 +112,17 @@ describe("product rows", () => {
 });
 
 describe("product page", () => {
+  it("words each serving mode Perspicax names and hides one it does not, never a raw slug", async () => {
+    const modes = ["model", "per_operation", "compact", "minimal", "group", "hybrid", "dispatch"];
+    const roles = modes.map((mode, index) => ({ slug: `r-${mode}`, name: `Role ${index}`, mode }));
+    const view = await render(createElement(ProductDetailView, { product: { ...base, roles }, onChanged: () => {}, onBack: () => {} }));
+    const words = [...view.querySelectorAll("[data-person-product-roles] li")].map((item) => item.querySelector("[data-person-product-mode]")?.textContent ?? null);
+    expect(words).toEqual([
+      "One tool per resource", "One tool per operation", "Compact tools", "Search only", "Grouped tools", "Grouped tools and recipes", null,
+    ]);
+    expect(view.textContent).not.toMatch(/per_operation|dispatch|Asks before writing/);
+  });
+
   it("hides every action Perspicax did not list", async () => {
     const view = await render(createElement(ProductDetailView, { product: { ...base, key: { source: "role", kind: "api_key" } }, onChanged: () => {}, onBack: () => {} }));
     expect(view.querySelector("[data-person-product-actions]")).toBeNull();
@@ -111,7 +132,7 @@ describe("product page", () => {
   });
 
   it("names the role of a role key only when the person holds exactly one role", async () => {
-    const roles = [{ slug: "tech", name: "Technicians", mode: "dispatch" }, { slug: "lead", name: "Leads", mode: "dispatch" }];
+    const roles = [{ slug: "tech", name: "Technicians", mode: "hybrid" }, { slug: "lead", name: "Leads", mode: "hybrid" }];
     const view = await render(createElement(ProductDetailView, { product: { ...base, roles, key: { source: "role", kind: "api_key" } }, onChanged: () => {}, onBack: () => {} }));
     expect(view.textContent).toContain("A key of one of your roles");
     expect(view.textContent).not.toContain("A key of the role");
@@ -130,7 +151,7 @@ describe("product page", () => {
     expect(actions).toEqual(["replace_own", "test"]);
   });
 
-  it("builds the key form from the product's fields, masks a secret one and sends every value at once", async () => {
+  it("builds the key form from the product's fields, masks a secret one and sends every value at once, a secret exactly as typed", async () => {
     const changed = vi.fn();
     const product: PersonProduct = { ...base, state: "key_missing", form, actions: ["set_own_key"] };
     api.mockResolvedValue({ product: { ...product, state: "connected", key: { source: "own", lastTest: { at: new Date().toISOString(), ok: true } } } });
@@ -145,10 +166,10 @@ describe("product page", () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     };
-    await act(async () => { type(inputs[0]!, "ada"); type(inputs[1]!, "pw"); });
+    await act(async () => { type(inputs[0]!, " ada "); type(inputs[1]!, " pw "); });
     expect(save.disabled).toBe(false);
     await act(async () => { save.click(); });
-    expect(api).toHaveBeenCalledWith("/api/me/perspicax/products/psa-1f0c/key", { method: "PUT", body: JSON.stringify({ values: { username: "ada", password: "pw" } }) });
+    expect(api).toHaveBeenCalledWith("/api/me/perspicax/products/psa-1f0c/key", { method: "PUT", body: JSON.stringify({ values: { username: "ada", password: " pw " } }) });
     expect(changed).toHaveBeenCalledWith(expect.objectContaining({ state: "connected" }));
   });
 });

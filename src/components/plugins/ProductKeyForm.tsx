@@ -34,8 +34,11 @@ export function ProductKeyForm({ form, productName, variant, onSave, onCancel, s
     try {
       const sent: Record<string, string> = {};
       for (const field of form.fields) {
-        const value = values[field.slot]?.trim();
-        if (value) sent[field.slot] = value;
+        // a secret is sent exactly as typed (its spaces may be part of it);
+        // a plain field such as a user name or an address is trimmed
+        const typed = values[field.slot];
+        const value = field.secret ? typed : typed?.trim();
+        if (value?.trim()) sent[field.slot] = value;
       }
       await onSave(sent);
       setValues({});

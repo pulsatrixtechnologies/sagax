@@ -18731,10 +18731,6 @@
       "personProducts.kind.other": "99a52df3ff3d499488e2fa28150c4106a2cb5e928891a830a9aa3922b2d32160",
       "personProducts.kind.tokenLogin": "a564984d271b73f86967bf13259d0c03911a5e349930eab987a0737583855b01",
       "personProducts.kind.webSession": "6c31a921c64248ca826148a648e77bdade47e636d8f7c87d4c29250c32120d71",
-      "personProducts.mode.dispatch": "834f219b7e512c4bbe49ebcb43fb03fbb4900f274bcf333cd7e543ea19d249e4",
-      "personProducts.mode.full": "f19611c61ca5f369db615827ee6eab5ece095cc483c9abfd4f8b1a0cc77d7cf3",
-      "personProducts.mode.read": "9b9a8d05a7ec353bda84f9c1bb3178c299de3001b5e970508ddc889c487f92ca",
-      "personProducts.mode.write": "822da963c0e743de0a50fc932b5b8977c41a20d40b15a245ce840a2c64400e2b",
       "personProducts.openInPerspicax": "42fe19e26205f8f02780f1c4b54305bc329c65d4369db91af394a9439f281fa0",
       "personProducts.state.connected": "22965568d22a14ee17af055d2870b50afcfe9fd94a83eec3196e266932297bb2",
       "personProducts.state.keyExpired": "a8898a2cc5dbea9ff399090ecb1bdb12f15aac21c295630c07d7367aac7773e1",
@@ -18759,7 +18755,13 @@
       "productKeyCard.why.misfit": "e29ba984c57300c7d0a1daac99047c6206bf9afe032450ed31d664bb29aef5b9",
       "productKeyCard.why.missing": "0cdc1d1fcfe846e6807e6224e9463ded3fb4c39450a547b6dee97730ff71eb0e",
       "productKeyCard.why.refused": "4e9bed2dc08d3b854d76c1cda5014dfa746823a50795d098081bcc84cb3b1b5a",
-      "productKeyCard.why.setup": "cad111f34402ee9886029fbd6b2c4576adf364b3bf4e1c713946f7730507a239"
+      "productKeyCard.why.setup": "cad111f34402ee9886029fbd6b2c4576adf364b3bf4e1c713946f7730507a239",
+      "personProducts.mode.model": "0c1c6bdad00d0d989c0314ea66cfa9390d25f61dae91965acf9ab203e5a82839",
+      "personProducts.mode.perOperation": "805b2aa9867ef99d8f964c3ef09800b8be7a30c8fcdcd8afb55a26c37ef32fda",
+      "personProducts.mode.compact": "0dbc8321b0556b9bc6a36592b23aa3c312f19e698d2fcf2fce0d6cfbcf1d2ef8",
+      "personProducts.mode.minimal": "d76b2ecd1b1091b071bdcfad005ea4fac52cf24715042149df474239688fdee2",
+      "personProducts.mode.group": "d3f66320eeecc9f5a809c06c2c0913dcb9da495035f8424c2140365a5c099e3b",
+      "personProducts.mode.hybrid": "780874ecb64d92015e6894e659712e206335236ced9cd1b4ea5c4a41937e287b"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

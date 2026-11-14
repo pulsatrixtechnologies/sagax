@@ -73,7 +73,7 @@ function ownerProductRefusal(error: Exclude<OwnerProductRead, { ok: true }>["err
 /** The text of a product key card: what a released app that does not know
  * the card shows instead of it (shared/credential-request.ts PRODUCT_KEY_KIND). */
 function productKeyHandoff(botName: string, productName: string): string {
-  return `${botName} needs your key for ${productName}. Update Sagax to enter it securely on this card; never paste it in the chat.`;
+  return `${botName} needs your key for ${productName}. Enter it securely on this card in Sagax on your computer; never paste it in the chat.`;
 }
 
 function credentialDesktopHandoff(label: string): string {

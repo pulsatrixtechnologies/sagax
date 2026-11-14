@@ -343,7 +343,11 @@ describe("createInternalIntegrationsRoutes", () => {
     // its own kind: a released app draws its text (never a one-field key form), which says what to do
     expect(card.kind).toBe("productKey");
     expect(card.text).toMatch(/Acme PSA/);
-    expect(card.text).toMatch(/update Sagax/i);
+    // true on the phone (no product key card there yet) and on an older desktop:
+    // the card is entered in Sagax on a computer, never "update Sagax"
+    expect(card.text).toMatch(/in Sagax on your computer/);
+    expect(card.text).toMatch(/never paste it in the chat/);
+    expect(card.text).not.toMatch(/update Sagax/i);
     expect(card.secret).not.toHaveProperty("form");
     expect(patchMessage).toHaveBeenCalledOnce();
     expect(patchMessage).toHaveBeenCalledWith("t-1", "old", { secret: expect.objectContaining({ superseded: true }) });

@@ -34,16 +34,25 @@ export function productMenuActions(product: Pick<PersonProduct, "id" | "consoleU
 
 /** The state at a row's (or a page's) right, in words, in the neighbours'
  * state style (13px, normal weight; the warning colour when it needs the
- * person). */
-export function ProductStateLabel({ product }: { product: Pick<PersonProduct, "state" | "stateCode"> }) {
+ * person). In a row (`wrap`) it may break onto its own line under the name
+ * when both do not fit, so a long French state never cuts the product's name
+ * at phone width. */
+export function ProductStateLabel({ product, wrap = false }: { product: Pick<PersonProduct, "state" | "stateCode">; wrap?: boolean }) {
   const tone = productStateTone(product.state);
-  if (tone === "connected") return <PluginStatusLabel status="connected" className="text-[13px] font-normal" />;
+  if (tone === "connected") {
+    const mark = <PluginStatusLabel status="connected" className="text-[13px] font-normal" />;
+    return wrap ? <span className="ml-auto flex">{mark}</span> : mark;
+  }
   return (
     <span
       data-plugin-status={tone === "attention" ? "needs_auth" : "off"}
       data-product-state={product.state}
       title={product.stateCode}
-      className={cn("shrink-0 text-[13px] font-normal", tone === "attention" ? "text-warning" : "text-ink-secondary")}
+      className={cn(
+        "text-[13px] font-normal",
+        wrap ? "ml-auto min-w-0 max-w-full text-right leading-[18px]" : "shrink-0",
+        tone === "attention" ? "text-warning" : "text-ink-secondary",
+      )}
     >
       {productStateLabel(product.state)}
     </span>
@@ -60,11 +69,14 @@ export function productRows(products: readonly PersonProduct[], onOpen: (product
           <button type="button" onClick={() => onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
             aria-label={t("connectApps.openAria", { name: product.name })}>
             <PluginIcon item={productIcon(product)} className="size-10 rounded-[10px]" />
-            <span className="min-w-0 flex-1">
-              <span className={PLUGINS.rowName}>{product.name}</span>
-              {sub && <span className={PLUGINS.rowSub}>{sub}</span>}
+            {/* the name keeps its whole width; the state goes under it when both do not fit */}
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1" data-person-product-line>
+              <span className="min-w-0 max-w-full flex-[1_0_auto]">
+                <span className={PLUGINS.rowName}>{product.name}</span>
+                {sub && <span className={PLUGINS.rowSub}>{sub}</span>}
+              </span>
+              <ProductStateLabel product={product} wrap />
             </span>
-            <ProductStateLabel product={product} />
           </button>
           <EntryMenu name={product.name} actions={{ links: productMenuActions(product, 14) }} updateWaiting={false} hoverOnly />
         </div>

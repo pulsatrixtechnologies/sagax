@@ -1,15 +1,15 @@
 // Bot avatar in the sidebar: shared pointer gaze, lean, and tap reactions.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { botMascotLook, completeMascotLook } from "../../shared/mascot-look";
-import { isShapeMove, type ShapeMove } from "./shape-engine";
+import type { ShapeMove } from "./shape-engine";
 import { pointerGazeOffset } from "@/lib/owl/owl-art";
 import { pickSidebarReaction, type SidebarMascotReactionKind } from "@/lib/sidebar-mascot/interaction";
 import { attachSidebarMascotRoot, registerSidebarMascot, refreshSidebarMascotReducedMotion } from "@/lib/sidebar-mascot/loop";
-import { FX_FULL_MIN, useReducedMotion } from "./skin-fx/skin-fx";
+import { useReducedMotion, type FxMoveRequest } from "./skin-fx/skin-fx";
 import { BotAvatar, type BotAvatarProps, type MausAvatarHandle } from "./Avatar";
-import type { FxMoveRequest } from "./skin-fx/skin-fx";
 
-const SHAPE_REACT: Partial<Record<SidebarMascotReactionKind, ShapeMove>> = {
+/** The Shapes move a tap plays on a shape in a row (ShapeMascot plays it at any size, then rests on its still). */
+const SHAPE_REACT: Readonly<Record<SidebarMascotReactionKind, ShapeMove>> = {
   wink: "wink",
   blink: "alert",
   hop: "burst",
@@ -39,27 +39,19 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
   const wrap = useRef<HTMLSpanElement>(null);
   const box = useRef<HTMLSpanElement>(null);
   const mascotRef = useRef<MausAvatarHandle>(null);
-  const shapeGazeRef = useRef<((gaze: { x: number; y: number }) => void) | null>(null);
   const reduced = useReducedMotion();
-  const [tapMove, setTapMove] = useState<FxMoveRequest | null>(null);
-  useEffect(() => {
-    if (!tapMove) return;
-    const t = window.setTimeout(() => setTapMove(null), 900);
-    return () => window.clearTimeout(t);
-  }, [tapMove]);
   const look = completeMascotLook(botMascotLook(avatarProps.bot.mascotLook));
-  const alive = !reduced && !avatarProps.animated;
+  // a shape in a row is the engine's still (#4145): it joins no pointer loop; a tap plays a move on it
+  const [tapMove, setTapMove] = useState<FxMoveRequest | null>(null);
+  const alive = !reduced && !avatarProps.animated && look.character !== "shape";
 
   useEffect(() => {
     if (!alive) return;
     return registerSidebarMascot({
       getBox: () => box.current?.getBoundingClientRect() ?? null,
       leanTarget: wrap.current,
-      onRest: () => {
-        shapeGazeRef.current?.({ x: 0, y: 0 });
-      },
+      onRest: () => {},
       onGaze: (gaze) => {
-        shapeGazeRef.current?.(gaze);
         const rect = box.current?.getBoundingClientRect();
         if (!rect) return;
         const reach = Math.max(rect.width * 3, 240);
@@ -80,12 +72,8 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
       return;
     }
     if (look.character === "shape") {
-      const clip = SHAPE_REACT[kind] ?? "wink";
-      if (isShapeMove(clip)) {
-        setTapMove({ clip, key: Date.now() });
-        // a small shape cannot play the move (no live loop): it blinks (ShapeMascot) and squishes below
-        if ((avatarProps.size ?? 44) >= FX_FULL_MIN) return;
-      }
+      setTapMove({ clip: SHAPE_REACT[kind], key: Date.now() });
+      return;
     }
     // Rigid squish on the wrapper for every other character.
     if (!wrap.current) return;
@@ -114,10 +102,8 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
         <BotAvatar
           {...avatarProps}
           fillBox
-          animated={avatarProps.animated || Boolean(tapMove)}
-          sidebarAlive={alive && !tapMove}
+          sidebarAlive={alive}
           mascotRef={mascotRef}
-          shapeGazeRef={shapeGazeRef}
           characterMove={tapMove ?? avatarProps.characterMove}
         />
       </span>

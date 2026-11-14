@@ -175,7 +175,6 @@ export type BotAvatarProps = Omit<MausAvatarProps, "color"> & {
   sidebarAlive?: boolean;
   /** Blink / hop for owls in the sidebar. */
   mascotRef?: React.Ref<MausAvatarHandle>;
-  shapeGazeRef?: React.MutableRefObject<((gaze: { x: number; y: number }) => void) | null>;
   bot: {
     name?: string;
     color: MausColor;
@@ -327,20 +326,16 @@ function CharacterAvatar({
   size,
   state,
   animated = true,
-  sidebarGaze = false,
   label,
   move,
-  shapeGazeRef,
 }: {
   look: MascotLook;
   color: MausColor;
   size: number;
   state?: MausState;
   animated?: boolean;
-  sidebarGaze?: boolean;
   label?: string | null;
   move?: FxMoveRequest | null;
-  shapeGazeRef?: React.MutableRefObject<((gaze: { x: number; y: number }) => void) | null>;
 }) {
   const full = completeMascotLook(look);
   if (full.character === "shape") {
@@ -352,8 +347,6 @@ function CharacterAvatar({
         size={size}
         mood={shapeMoodFor(state)}
         animated={animated}
-        sidebarGaze={sidebarGaze}
-        sidebarGazeRef={shapeGazeRef}
         move={move}
         moveBody
         avatarDef={full.avatarDef}
@@ -458,7 +451,6 @@ function BotAvatarImage({
   characterMove,
   sidebarAlive,
   mascotRef,
-  shapeGazeRef,
   ...mascotProps
 }: Omit<BotAvatarProps, "primary" | "primaryRingClassName">) {
   const profile = botAvatarProfile(bot);
@@ -482,8 +474,6 @@ function BotAvatarImage({
         size={size}
         state={mascotProps.state}
         animated={mascotProps.animated}
-        sidebarGaze={sidebarGaze}
-        shapeGazeRef={shapeGazeRef}
         label={label ?? bot.name}
         move={characterMove}
       />

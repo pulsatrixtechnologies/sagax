@@ -30,12 +30,13 @@ comment tout fonctionne et comment en ajouter une.
 | Route interne de génération | `/api/internal/shape-avatar/generate` |
 | Contour vivant à partir d'une définition | `shared/shape-avatar-outline.ts` |
 | Géométrie partagée (64 rayons par corps, ancres de visage, yeux, peaux) | `shared/mascot-geometry.json` |
-| Moteur desktop | `src/components/shape-*.ts`, `ShapeMascot.tsx` |
+| Dessin desktop (moteur open-bot-avatar, #4145) | `src/components/shape-avatar.ts`, `ShapeMascot.tsx`, `shared/shape-avatars.json` |
+| Moteur de référence du téléphone | `src/components/shape-engine.ts`, `shape-volume.ts`, `shape-motion.ts`, `shape-moves.ts` |
 | Moteur iOS | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeAvatar*.swift`, `ShapeMascotView.swift` |
 | Données iOS générées | `ios/Sources/CompanionCore/ShapeGeometryData.swift` |
 | Cuisson des objets en rayons | `scripts/bake-object-shapes.mjs` |
 | Script de génération pour développeur | `scripts/generate-shape.mjs` |
-| Captures et contrôles visuels | `scripts/capture/shapes.mjs`, `src/gallery/shape-set.html` |
+| Captures et contrôles visuels | `scripts/capture/shape-mascots.mjs`, `src/gallery/shape-set.html` |
 
 `server/media/shape-avatar.ts` garde `GENERATE_SHAPE_AVATAR_TOOL` : c'est la
 définition d'outil, appelable par un script, mais elle n'est plus branchée au
@@ -130,11 +131,14 @@ visage.
 
 ## Contrôles visuels (obligatoires)
 
-- `node scripts/capture/shapes.mjs` (headless, rien ne s'ouvre à l'écran) :
-  captures de chaque forme au repos, par peau, par humeur et à mi-mouvement,
-  plus les contrôles sur la mise en page réelle du navigateur. Première fois
-  pour une nouvelle forme : `--update` pour écrire ses références, puis
-  regarder les images dans `docs/screenshots/shapes`.
+- Depuis #4145, le desktop dessine les formes avec le moteur open-bot-avatar :
+  après un ajout dans `mascot-geometry.json`, lancer
+  `node scripts/bake-engine-shapes.mjs` (écrit `shared/shape-avatars.json`
+  et les images fixes de chaque forme dans `src/components/shape-stills/`),
+  puis `src/components/shape-avatar.test.ts` valide chaque définition.
+- `node scripts/capture/shape-mascots.mjs` (headless, rien ne s'ouvre à
+  l'écran) : captures de chaque surface et de chaque humeur, et la mesure
+  d'une barre latérale de quarante bots.
 - Yeux : les deux dans le visage, la paire égale et de niveau, ancre `face`
   cohérente avec la silhouette (pas sur une anse ou un bord).
 - Aucune pièce détachée : chaque tranche chevauche le visage, la tige tient

@@ -7,7 +7,9 @@
  * - owl: the Sagax owl; its color is the bot's color and its skin the bot's
  *   mascotSkin (shared/mascot-skins.ts). A stored `style` of `3d` still
  *   validates. The desktop always draws the flat owl.
- * - shape: one of the shapes (a clay body with two eyes on it), in the bot's color, with a shape skin (plain is clay).
+ * - shape: one of the shapes (a body with two eyes on it, drawn by the
+ *   open-bot-avatar engine, src/components/shape-avatar.ts), in the bot's
+ *   color, with a shape skin.
  * - trombi: the Hibou 98 paperclip, with a Trombi skin.
  * - bunbu: Bunbu, our own collectible-vinyl little monster (long upright
  *   ears, plush body, a toothy grin), in the bot's color, with a Bunbu skin.
@@ -39,7 +41,7 @@ export const MASCOT_CHARACTERS = ["owl", "crab", "shape", "trombi", "bunbu", "sh
 export type MascotCharacter = (typeof MASCOT_CHARACTERS)[number];
 
 /**
- * The shapes, in the picker's order (2026-10-28, objects 2026-11-01): the
+ * Our shapes, in the picker's order (2026-10-28, objects 2026-11-01): the
  * bloub network's bodies (shared/mascot-geometry.json, MIT, see NOTICE), our
  * pumpkin, and eight object silhouettes (pad, cup, bulb, say, sprout, tin,
  * tome, ship) with portable JSON definitions (shared/shape-avatar-def.ts).
@@ -47,7 +49,7 @@ export type MascotCharacter = (typeof MASCOT_CHARACTERS)[number];
  * (bean is the pebble, pill the capsule, pick the triangle, drop the
  * teardrop), so a stored look keeps its place; the others are new ids.
  */
-export const MASCOT_SHAPES = [
+export const BODY_SHAPES = [
   "circle",
   "bean",
   "squircle",
@@ -90,7 +92,25 @@ export const MASCOT_SHAPES = [
   "tome",
   "ship",
 ] as const;
+/** The shapes with a body in shared/mascot-geometry.json (the phone's set too). */
+export type BodyShape = (typeof BODY_SHAPES)[number];
+
+/**
+ * The open-bot-avatar engine's own avatars (#4145, MIT, see NOTICE), offered
+ * after ours under the engine's ids: its gallery and examples that none of
+ * our shapes already stands for. Drawn by the engine only
+ * (src/components/shape-avatar.ts); they have no body in mascot-geometry.json.
+ */
+export const GALLERY_SHAPES = ["brain", "bull", "bunny", "camera", "magnifier", "paint-brush", "palette", "witch-hat", "barbell", "watering-can"] as const;
+
+/** Every shape, in the picker's order: ours, then the engine's gallery. */
+export const MASCOT_SHAPES = [...BODY_SHAPES, ...GALLERY_SHAPES] as const;
 export type MascotShape = (typeof MASCOT_SHAPES)[number];
+
+/** Whether a shape has a body in mascot-geometry.json (the radii the older drawings and the phone read). */
+export function isBodyShape(shape: string): shape is BodyShape {
+  return (BODY_SHAPES as readonly string[]).includes(shape);
+}
 
 /** Object-shaped bodies that also ship a portable JSON definition. */
 export const OBJECT_MASCOT_SHAPES = ["pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship"] as const;

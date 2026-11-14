@@ -11,11 +11,9 @@ import { describe, expect, it } from "vitest";
 import { mascotLook as mainMascotLook, SHAPES as MAIN_SHAPES } from "../../../electron/floating-bot-window.mjs";
 import { completeMascotLook, MASCOT_CHARACTERS, MASCOT_SHAPES, type MascotLook } from "../../../shared/mascot-look";
 import { OBJECT_SHAPE_BY_ID } from "../../../shared/shape-avatar-presets";
-import { avatarDefForShape } from "../ShapeMascot";
-import { stillFrame } from "../shape-engine";
+import { lookDefinition } from "../shape-avatar";
 import { mascotFor } from "./mascots";
 
-const COLOR = "#22c55e";
 
 /** What the desktop window draws from: the look as main passes it, serialized like the snapshot (FloatingBotStage's `look`). */
 function desktopLook(look: MascotLook) {
@@ -23,11 +21,10 @@ function desktopLook(look: MascotLook) {
   return completeMascotLook(JSON.parse(JSON.stringify(sent)));
 }
 
-/** The shape's outline and eyes at rest, as ShapeMascot resolves them (preset or the person's own def). */
+/** The shape's outline and eyes, as ShapeMascot resolves them (the engine's definition of the shape, or the person's own drawing). */
 function outline(look: ReturnType<typeof completeMascotLook>) {
-  const def = avatarDefForShape(look.shape, look.avatarDef);
-  const frame = stillFrame({ shape: look.shape, expression: "neutral", color: COLOR, ...(def ? { avatarDef: def } : {}) });
-  return { body: frame.body, eyes: frame.eyes };
+  const def = lookDefinition(look.shape, look.avatarDef);
+  return { body: def.body.path, eyes: def.eyes };
 }
 
 const custom: MascotLook = {

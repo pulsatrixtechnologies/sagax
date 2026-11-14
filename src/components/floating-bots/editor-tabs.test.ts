@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { loadAllBakedStills } from "../shape-stills";
 import { NOTHING_LOCKED } from "../../../shared/achievements";
 import { resetAchievementsForTests } from "@/lib/achievements";
 import en from "@/locales/en.json";
@@ -17,6 +18,9 @@ import { botMascotSkin, LEGACY_OWL_SKINS, MASCOT_SKIN_IDS, mascotSkinSchema, OWL
 import { parseBotProfilePatch } from "../../../server/bots/bot-profile";
 import MascotLookEditor, { EDITOR_TABS, COLOR_GROUP_LABEL, OWL_SKIN_LABEL } from "./MascotLookEditor";
 import { colorTabFor, colorTabs, nextTab, SKIN_TIERS, skinTabFor, skinTierTabs } from "./editor-tabs";
+
+// the shapes' baked stills, as a page loads them the first time a shape shows (#4145)
+beforeAll(() => loadAllBakedStills());
 
 beforeEach(() => resetAchievementsForTests({ unlocks: NOTHING_LOCKED }));
 
@@ -133,9 +137,10 @@ describe("color palettes", () => {
       const hex = MASCOT_COLOR_HEX[name];
       expect(contrastRatio(hex, eyeInkOn(hex)), name).toBeGreaterThanOrEqual(3);
     }
-    // a shape's eyes are two opaque capsules in their own ink (light on a dark body), on any body color
+    // a shape's eyes are two opaque bars in their own ink (light on a dark body), on any body color (the engine's still, #4145)
     const html = renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "midnight", mascotLook: { character: "shape" } } as never, size: 40 }));
-    expect(html).toMatch(/<path d="M[^"M]+M[^"M]+" fill="#f4f1ea"[^>]*data-shape-eyes=""/);
+    const still = decodeURIComponent(/<img src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/.exec(html)?.[1] ?? "");
+    expect(still.match(new RegExp(`<rect [^>]*fill="${eyeInkOn(MASCOT_COLOR_HEX.midnight)}"`, "gi"))).toHaveLength(2);
   });
 
   it("keeps the owl's eye readable in its socket on every color and skin", () => {
@@ -206,7 +211,7 @@ describe("Shape grid thumbnails", () => {
   it("preview the current color and skin, still and cheap, on every shape", () => {
     for (const [color, skin] of [["coral", "galaxy"], ["mint", "plain"], ["navy", "neon"]] as const) {
       const html = render({ color, mascotLook: { character: "shape", shape: "cloud", skins: { shape: skin } } });
-      const thumbs = [...html.matchAll(/data-character-shape="([a-z]+)"[^>]*>(<span[^>]*>)/g)];
+      const thumbs = [...html.matchAll(/data-character-shape="([a-z-]+)"[^>]*>(<span[^>]*>)/g)];
       expect(thumbs.map((match) => match[1])).toEqual([...MASCOT_SHAPES]);
       for (const [, shape, span] of thumbs) {
         expect(span, shape).toContain(`data-shape="${shape}"`);
@@ -215,10 +220,11 @@ describe("Shape grid thumbnails", () => {
         expect(span).not.toContain("skin-fx-live");
       }
     }
-    // the body is the bot's own colour, one flat fill (2026-10-18: no clay gradient any more);
-    // since #1602 the face is drawn from the one outline kept in <defs>, so it carries data-shape-face
+    // the body is the bot's own colour, one flat fill: each tile is the engine's still in it (#4145)
     const plain = render({ color: "mint", mascotLook: { character: "shape", skins: { shape: "plain" } } });
     const grid = plain.slice(plain.indexOf("data-character-shape"), plain.indexOf("data-color-tabs"));
-    expect(grid.match(new RegExp(`class="shape-fill" d="[^"]+" fill-rule="evenodd" data-shape-face="" fill="${MASCOT_COLOR_HEX.mint}"`, "gi"))?.length).toBe(MASCOT_SHAPES.length);
+    const stills = [...grid.matchAll(/<img src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/g)].map((m) => decodeURIComponent(m[1]!));
+    expect(stills).toHaveLength(MASCOT_SHAPES.length);
+    for (const still of stills) expect(still.toLowerCase()).toContain(`fill="${MASCOT_COLOR_HEX.mint.toLowerCase()}"`);
   });
 });

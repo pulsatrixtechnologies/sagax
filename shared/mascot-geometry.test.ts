@@ -6,13 +6,13 @@
 // ShapeGeometryData.swift, checked by ios-mascot-export.test.ts).
 import { describe, expect, it } from "vitest";
 import geometry from "./mascot-geometry.json";
-import { MASCOT_SHAPES, SHAPE_SKINS } from "./mascot-look";
+import { BODY_SHAPES, SHAPE_SKINS } from "./mascot-look";
 
 const EXPRESSIONS = ["neutral", "attentive", "surprised", "excited", "happy", "laughing", "angry", "sad", "scared", "suspicious", "confused", "curious", "proud", "shy", "bored", "sleepy"];
 
 describe("the shapes' geometry file", () => {
   it("names exactly the shapes the app lists, in the picker's order, each with 64 positive radii and a face anchor inside the body", () => {
-    expect(Object.keys(geometry.shapes)).toEqual([...MASCOT_SHAPES]);
+    expect(Object.keys(geometry.shapes)).toEqual([...BODY_SHAPES]);
     for (const [shape, entry] of Object.entries(geometry.shapes)) {
       expect(entry.radii, shape).toHaveLength(geometry.radiiCount);
       expect(entry.radii.every((r) => Number.isFinite(r) && r > 0.3 && r < 1.4), shape).toBe(true);

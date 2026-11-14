@@ -7,10 +7,12 @@
  * shared/mascot-geometry.json, and this pins it.
  *
  * Each shape's resting look (its outline, its size in its box, its eyes) is
- * written to __snapshots__/shape-look.json. A shape's look changes only with
+ * written to __snapshots__/shape-look.json. Since #4145 (the owner's word,
+ * 2026-11-13) a shape is the open-bot-avatar engine's definition
+ * (shape-avatar.ts): the file pins that definition. A shape's look changes only with
  * the owner's word: when he asks for one, update the file with
  * `vitest run src/components/shape-object-look.regression.test.ts -u` and
- * show him the before and after gallery (scripts/capture/shapes.mjs).
+ * show him the before and after gallery (scripts/capture/shape-mascots.mjs).
  * The picker's tile (bot profile, Appearance, Shape tab) is pinned too: the
  * size a shape is drawn at in its tile.
  */
@@ -25,27 +27,28 @@ import { OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
 import type { ShapeAvatarDef } from "../../shared/shape-avatar-def";
 import { resetAchievementsForTests } from "@/lib/achievements";
 import MascotLookEditor from "./floating-bots/MascotLookEditor";
-import { avatarDefForShape } from "./ShapeMascot";
-import { stillFrame } from "./shape-engine";
+import { lookDefinition, shapeDefinition } from "./shape-avatar";
 
 const OWNER = "a shape's look changes only with the owner's word (see the head of this file)";
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
-/** A shape's resting look, as the app draws it: outline box, outline commands and a digest of the outline, eyes. */
+/** A shape's resting look, as the app draws it: the engine definition's outline box, commands and digest, and its eyes. */
 function lookOf(shape: (typeof MASCOT_SHAPES)[number]) {
-  const frame = stillFrame({ shape, expression: "neutral", color: "#000000", avatarDef: avatarDefForShape(shape) });
-  const points = flattenPath(frame.body).flat();
+  const def = shapeDefinition(shape);
+  const body = def.body.path;
+  const points = flattenPath(body).flat();
   const xs = points.map(([x]) => x);
   const ys = points.map(([, y]) => y);
   const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(r1);
-  const rounded = frame.body.replace(/-?\d*\.?\d+(?:e-?\d+)?/g, (n) => String(Math.round(Number(n))));
+  const rounded = body.replace(/-?\d*\.?\d+(?:e-?\d+)?/g, (n) => String(Math.round(Number(n))));
   return {
+    engine: def.id,
     box,
     size: [r1(box[2] - box[0]), r1(box[3] - box[1])],
-    commands: (frame.body.match(/[MLCQZA]/gi) ?? []).length,
-    subpaths: frame.body.split("M").length - 1,
+    commands: (body.match(/[MLCQZA]/gi) ?? []).length,
+    subpaths: body.split(/[Mm]/).length - 1,
     outline: createHash("sha256").update(rounded).digest("hex").slice(0, 16),
-    eyes: frame.eyeShapes.map((e) => [e.x, e.y, e.w, e.h].map(r1)),
+    eyes: [def.eyes.x, def.eyes.y, def.eyes.spacing, def.eyes.scale].map(r1),
   };
 }
 
@@ -81,12 +84,12 @@ describe("every shape keeps its approved look", () => {
     }
   });
 
-  it("a saved copy of an object preset follows the current preset", () => {
+  it("a saved copy of an object preset follows the current shape", () => {
     for (const shape of ["say", "sprout"] as const) {
       const stale: ShapeAvatarDef = { ...OBJECT_SHAPE_BY_ID[shape], body: { kind: "path", d: "M20 8L80 8L80 92L20 92Z" } };
-      expect(avatarDefForShape(shape, stale)).toBe(OBJECT_SHAPE_BY_ID[shape]);
+      expect(lookDefinition(shape, stale)).toBe(shapeDefinition(shape));
     }
     const custom: ShapeAvatarDef = { ...OBJECT_SHAPE_BY_ID.say, id: "custom-1" };
-    expect(avatarDefForShape("say", custom)).toBe(custom);
+    expect(lookDefinition("say", custom).id).toBe("custom-1");
   });
 });

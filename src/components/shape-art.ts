@@ -8,8 +8,8 @@
 //
 // Nothing here describes a shape: to add or change a body, its eye anchor
 // or a move's body, edit the JSON. This file only turns radii into paths.
-import type { MascotShape } from "../../shared/mascot-look";
-import geometry from "../../shared/mascot-geometry.json";
+import type { BodyShape } from "../../shared/mascot-look";
+import geometry from "../../shared/mascot-geometry.json" with { type: "json" };
 
 type Point = [number, number];
 
@@ -118,14 +118,14 @@ export function radiiOf(inside: (x: number, y: number) => boolean, reach = 2.4):
 }
 
 /** Every body, in R units. */
-export const SHAPE_RADII: Readonly<Record<MascotShape, Radii>> = Object.fromEntries(
+export const SHAPE_RADII: Readonly<Record<BodyShape, Radii>> = Object.fromEntries(
   Object.entries(geometry.shapes).map(([shape, entry]) => [shape, entry.radii]),
-) as unknown as Record<MascotShape, Radii>;
+) as unknown as Record<BodyShape, Radii>;
 
 /** Where each body's face rests (R, from the body's middle; x right, y down): the middle between the two eyes before any turn. */
-export const FACE_ANCHOR: Readonly<Record<MascotShape, Point>> = Object.fromEntries(
+export const FACE_ANCHOR: Readonly<Record<BodyShape, Point>> = Object.fromEntries(
   Object.entries(geometry.shapes).map(([shape, entry]) => [shape, [entry.face[0], entry.face[1]] as Point]),
-) as unknown as Record<MascotShape, Point>;
+) as unknown as Record<BodyShape, Point>;
 
 /** The whole bodies some moves turn into (never a dot or a bar: the body stays a body). */
 export const MOVE_RADII: Readonly<Record<"egg" | "hexagon" | "triangle", Radii>> = geometry.moveBodies as Record<"egg" | "hexagon" | "triangle", Radii>;
@@ -179,9 +179,9 @@ export interface ShapeArt {
   face: Point;
 }
 
-export const SHAPE_ART: Record<MascotShape, ShapeArt> = Object.fromEntries(
-  (Object.keys(SHAPE_RADII) as MascotShape[]).map((shape) => [shape, { d: outlinePath(SHAPE_RADII[shape]), face: toBox(FACE_ANCHOR[shape]) }]),
-) as Record<MascotShape, ShapeArt>;
+export const SHAPE_ART: Record<BodyShape, ShapeArt> = Object.fromEntries(
+  (Object.keys(SHAPE_RADII) as BodyShape[]).map((shape) => [shape, { d: outlinePath(SHAPE_RADII[shape]), face: toBox(FACE_ANCHOR[shape]) }]),
+) as Record<BodyShape, ShapeArt>;
 
 /**
  * The resting eye, as a half-size in box units (the app icon draws its

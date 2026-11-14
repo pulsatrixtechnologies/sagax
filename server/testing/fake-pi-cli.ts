@@ -6,6 +6,10 @@
 // modes mirror how the real CLI misbehaves:
 //
 //   FAKE_PI_MODE   happy (default) | tooluse | mcpgateway | permission | interleave | question-select | question-input
+//                  | mcp-call (#3286: connect the "agents" server of SAGAX_MCP_CONFIG
+//                  as pi's own MCP client, call FAKE_PI_MCP_CALLS="tool,tool" in order
+//                  with FAKE_PI_MCP_CALL_ARGS='{"tool":{...}}', each as a tool row, and
+//                  reply "agents:<tool> -> <result>" per call)
 //                  | turn-error | no-models | exit-early | compaction | compaction-recovery
 //                  | compaction-recovery-upstream | prompt-reject | omp-chunk | stderr-flood
 //                  | extension-load-error (pi cannot load the `-e` extension whose
@@ -25,6 +29,7 @@
 
 import { appendFileSync, closeSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { callMcp, scriptedCalls } from "./fake-mcp-stdio-client.ts";
 
 const mode = process.env.FAKE_PI_MODE ?? "happy";
 const modelPairs = (process.env.FAKE_PI_MODELS ?? "ollama-cloud/glm-5.2,openai/gpt-4o")
@@ -295,6 +300,32 @@ const streamGatewayTurn = () => {
   send({ type: "agent_end" });
 };
 
+const streamMcpCallTurn = async () => {
+  send({ type: "agent_start" });
+  send({ type: "turn_start" });
+  const config = readConfig() as { mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }> } | null;
+  const agents = config?.mcpServers?.agents;
+  const calls = scriptedCalls("FAKE_PI");
+  const lines: string[] = [];
+  if (!agents?.command) {
+    lines.push(...calls.map((call) => `agents:${call.name} -> error not mounted`));
+  } else {
+    for (const [index, call] of calls.entries()) {
+      const id = `mcp_${index}`;
+      send({ type: "tool_execution_start", toolCallId: id, toolName: `agents_${call.name}`, args: call.args });
+      const [result = ""] = await callMcp({ command: agents.command, args: agents.args, env: agents.env }, [call]);
+      const failed = result.startsWith("error ");
+      send({ type: "tool_execution_end", toolCallId: id, toolName: `agents_${call.name}`, isError: failed, result: { content: [{ type: "text", text: result }] } });
+      lines.push(`agents:${call.name} -> ${result}`);
+    }
+  }
+  send({ type: "turn_end", message: { stopReason: "toolUse", usage: { input: 5, output: 1 } }, usage: { input: 5, output: 1 } });
+  send({ type: "turn_start" });
+  send({ type: "message_update", usage: { input: 0, output: 0 }, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: lines.join("\n") } });
+  send({ type: "turn_end", message: { stopReason: "end_turn", usage: { input: 12, output: 2 } }, usage: { input: 12, output: 2 } });
+  send({ type: "agent_end" });
+};
+
 // tooluse: one tool turn (stopReason toolUse, pi auto-continues) then a text
 // turn — exactly the sequence that broke the settle-on-toolUse bug.
 const streamToolTurn = () => {
@@ -489,6 +520,7 @@ function handle(cmd: any) {
       send({ type: "response", command: "prompt", success: true });
       if (mode === "tooluse") streamToolTurn();
       else if (mode === "mcpgateway") streamGatewayTurn();
+      else if (mode === "mcp-call") void streamMcpCallTurn();
       else if (mode === "permission") streamPermissionTurn();
       else if (mode === "question-select") streamQuestionSelectTurn();
       else if (mode === "question-input") streamQuestionInputTurn();

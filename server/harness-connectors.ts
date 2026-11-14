@@ -16,7 +16,15 @@ import type { AccessVia } from "./engines/engine-credentials.ts";
 //     that keeps them and sets ENABLE_CLAUDEAI_MCP_SERVERS=false for every
 //     other isolated turn. --setting-sources project stays either way.
 //
-// Speaker pays, speaker connects: a turn keeps the connectors only when it
+// #3286: these rules decide only the native mount, a shortcut on the turn's
+// own engine. Every connector of the person, whatever provider brings it, is
+// callable from a turn on any engine through call_connector and the connector
+// hub (server/connectors/hub.ts, design docs/design/connectors-across-engines.md),
+// with the person's approval settings deciding; the connector matrix
+// (server/connectors/connector-matrix.e2e.test.ts) checks each engine and
+// provider pair.
+//
+// Speaker pays, speaker connects: a turn keeps the native mount only when it
 // runs on the speaker's own subscription. On an organization server that is
 // the `subscription` access (the owner speaking, from their own login
 // directory); a member on someone else's bot runs on a key and has none. On
@@ -27,7 +35,7 @@ import type { AccessVia } from "./engines/engine-credentials.ts";
 // auth ("ChatGPT connectors require Codex backend auth" in codex-cli
 // 0.153.0). Sagax's ChatGPT plan mode passes a token to a custom provider
 // with an ephemeral credential store, and an API key has none, so those
-// bring no ChatGPT apps; nothing here mounts them. #3353 (L10): the person's
+// bring no ChatGPT apps natively; nothing here mounts them. #3353 (L10): the person's
 // own Codex sign-in on ChatGPT brings them through the connector registry
 // (server/connectors/providers/chatgpt-apps.ts), listed and called by the
 // Codex host with no model, so `codex` answers them from the registry below.

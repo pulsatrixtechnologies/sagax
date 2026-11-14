@@ -1071,7 +1071,7 @@ import { BOT_MAIL_ASSERTION_ACTORS, botmailEvent, botmailTaggedPrompt, createBot
 import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bots/bot-inbound-telephony.ts";
 import { PublicReceptionTurns, receptionAskOutcome } from "./bots/public-reception.ts";
 import { PERSPICAX_EVENTS_ACTORS, createPerspicaxEventsRoute } from "./perspicax/perspicax-events.ts";
-import { ProductFixCards, type ProductFixPlace } from "./perspicax/product-fix-cards.ts";
+import { ProductFixCards, productFixStateFile, type ProductFixPlace } from "./perspicax/product-fix-cards.ts";
 import { createPhoneLineContactInternalRoute, PhoneLineContactsStore } from "./phone/phone-line-contacts.ts";
 import { SmsConversation } from "./sms-conversation.ts";
 import { BotMailAddresses } from "./mail/bot-mail-addresses.ts";
@@ -24897,7 +24897,12 @@ const productFixCards = new ProductFixCards({
   words: (principalId) => serverApprovalWords(languageOfPerson(principalId)),
   productName: (place, api) => perspicaxMcp?.apiName(place.botId, api),
   signals: signalLedger,
+  // #4303: each key's latest state, so a repeated or late event changes
+  // nothing after a restart either
+  storage: productFixStateFile(join(DATA_DIR, "perspicax-product-health.json")),
 });
+// #4303: a failing state that waited to be told when the server stopped
+productFixCards.resume();
 /** Whose a `perspicax` trigger is: the person its routine runs as, else its
  * bot's owner. */
 function productTriggerPerson(hook: { botId: string; routineId?: string }): string | undefined {

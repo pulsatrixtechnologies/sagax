@@ -20,6 +20,7 @@ import {
   answerWithoutPreamble,
   formatQuestionAnswers,
   MAX_CUSTOM_ANSWER,
+  QUESTION_TITLE_MAX,
   questionAnswersByQuestion,
   type AskQuestion,
 } from "../../shared/ask-question";
@@ -117,7 +118,7 @@ const OTHER_ROW = "\u0000other";
 
 /** Up to this length the question is the card's title. A longer one keeps
  * a short title and opens below it with its own "show full question". */
-const TITLE_MAX = 160;
+const TITLE_MAX = QUESTION_TITLE_MAX;
 
 /**
  * The one line an answered card folds into: what was asked, then what was

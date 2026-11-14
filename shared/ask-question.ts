@@ -26,6 +26,10 @@ export const MAX_OPTIONS = 12;
 /** Long enough for a real question. The card collapses the preview and
  * expands to this whole text; cutting it here would throw the rest away. */
 export const MAX_QUESTION_TEXT = 8_000;
+/** Up to this length a single question is the card's title, shown whole
+ * (the pinned card too); a longer one keeps a short title and folds its
+ * text below. */
+export const QUESTION_TITLE_MAX = 160;
 const MAX_LABEL = 120;
 const MAX_DESCRIPTION = 400;
 /** One free-text answer. Long enough for a sentence or two of context. */

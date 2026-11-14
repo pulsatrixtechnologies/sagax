@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of the card pinned over the
  * composer with what the bot waits on (#3214). Not shipped in the app.
- * ?lang=<code>&skin=<id>&case=question|two|collapsed|approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered&width=1440|390
+ * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered&width=1440|390
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -123,12 +123,29 @@ const roomKeyed = (more: Record<string, unknown> = {}): Message => {
 const roomOpen = roomKeyed();
 const roomAnswered = roomKeyed({ answered: "answer", answeredText: roomChoices[0], answeredBy: { kind: "session", id: "p-ana", name: "Ana" } });
 
+// #4303: a phone line fix card. Before: the lead and the whole reason of
+// the organization server, folded under a generic title. After: the lead
+// and the reason's whole sentences that fit, shown whole as the title.
+const fixLead = fr ? "Les appels à ta ligne +15145550100 n'ont pas la voix." : "Calls to your phone line +15145550100 do not get the voice.";
+const fixReason = fr
+  ? ["La voix en temps réel n'a pas répondu au dernier test.", "Les appelants entendent le message de relève au lieu du bot tant que le compte de voix ne répond pas."]
+  : ["The realtime voice did not answer the last health check.", "Callers hear the fallback message instead of the bot until the voice account answers again."];
+const fixChoices = fr ? ["Vérifier la ligne", "Expliquer la correction"] : ["Check the line", "Explain the fix"];
+const fixCard = (id: string, question: string): Message => {
+  const base = ask(id, 50, question, fixChoices);
+  return { ...base, card: { ...base.card!, askKey: "voice-line", noHold: true } } as Message;
+};
+const fixBefore = fixCard("fb", `${fixLead}\n\n${fixReason.join(" ")}`);
+const fixAfter = fixCard("fa", `${fixLead} ${fixReason[0]}`);
+
 const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message }> = {
   "room-keyed": { approvals: [], questions: [roomOpen], room: true, inline: roomOpen },
   "room-keyed-other": { approvals: [], questions: [], room: true, inline: roomOpen },
   "room-answered": { approvals: [], questions: [], room: true, inline: roomAnswered },
   "routine-before": { approvals: [], questions: [routineBefore], inline: routineBefore },
   "routine-after": { approvals: [], questions: routineAfter, inline: routineAfter[0] },
+  "fix-before": { approvals: [], questions: [fixBefore], inline: fixBefore },
+  "fix-after": { approvals: [], questions: [fixAfter], inline: fixAfter },
   question: { approvals: [], questions: [q1] },
   two: { approvals: [], questions: [q1, q2] },
   collapsed: { approvals: [], questions: [q1], collapsed: true },

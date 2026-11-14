@@ -76,6 +76,11 @@ struct RoutineEditorView: View {
     @State private var whereHelp = false
     /// The routine after "Create its webhook" (the page reloads on save).
     @State private var savedRoutine: Routine?
+    /// #4250: the server is linked to Perspicax (GET /api/org), so "When
+    /// something changes in a product" is offered.
+    @State private var productLinked = false
+    /// What the viewer can watch, offered beside the watched resources field.
+    @State private var watchable: [WatchableResource] = []
 
     /// `presetBotId`: a new routine made from a bot's profile starts on that bot.
     /// `seed`: a new routine from the Automations calendar ("More options"
@@ -233,6 +238,8 @@ struct RoutineEditorView: View {
             }
             // asked again when the bot, the routine type or the room changes
             .task(id: "\(botId)|\(target)|\(groupId)") { await loadRunAsOptions() }
+            .task { await loadProductLinked() }
+            .task(id: "\(botId)|\(form.recurrence == .product)") { await loadWatchable() }
         }
     }
 
@@ -257,6 +264,23 @@ struct RoutineEditorView: View {
     }
 
     // MARK: Runs as (organization server)
+
+    /// #4250: a server linked to Perspicax receives product changes (the
+    /// desktop's usePerspicaxOrg). A solo server answers 404: not offered.
+    private func loadProductLinked() async {
+        guard let client = session.callClient else { return }
+        let org = try? await client.organization()
+        guard !Task.isCancelled else { return }
+        productLinked = org?.isPerspicax == true
+    }
+
+    /// What the viewer can watch, read once the product choice is made.
+    private func loadWatchable() async {
+        guard form.recurrence == .product, !botId.isEmpty, let client = session.callClient else { return }
+        let list = (try? await client.watchableResources(botId: botId)) ?? []
+        guard !Task.isCancelled else { return }
+        watchable = list
+    }
 
     private func loadRunAsOptions() async {
         guard !botId.isEmpty, let client = session.callClient else { runAsOptions = nil; return }
@@ -325,7 +349,7 @@ struct RoutineEditorView: View {
     private var whenSection: some View {
         Section {
             Picker("Repeats", selection: Binding(get: { form.recurrence }, set: selectRecurrence)) {
-                ForEach(RoutineEditorRules.repeatChoices(current: form.recurrence, teamGoal: isTeamGoal), id: \.self) { choice in
+                ForEach(RoutineEditorRules.repeatChoices(current: form.recurrence, teamGoal: isTeamGoal, productLinked: productLinked), id: \.self) { choice in
                     Text(verbatim: Self.repeatLabel(choice)).tag(choice)
                 }
             }
@@ -342,6 +366,9 @@ struct RoutineEditorView: View {
                 Text("Starts when an email arrives at the bot’s address.")
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
+            case .product:
+                RoutineProductTriggerFields(form: $form, watchable: watchable)
+                    .disabled(readOnly)
             default:
                 Group {
                     RoutineScheduleFields(form: $form)
@@ -377,6 +404,7 @@ struct RoutineEditorView: View {
         case .advanced: String(localized: "Advanced")
         case .webhook: String(localized: "When a webhook arrives")
         case .email: String(localized: "When email arrives")
+        case .product: String(localized: "When something changes in a product")
         }
     }
 
@@ -961,8 +989,9 @@ struct RoutineScheduleFields: View {
             previewRows
             Button("Choose a simple schedule") { form.chooseSimpleSchedule() }
                 .accessibilityIdentifier("routine-editor-simple-schedule")
-        case .webhook, .email:
-            // started by a trigger: the editor shows the webhook instead
+        case .webhook, .email, .product:
+            // started by a trigger: the editor shows the webhook, or the
+            // watched resources, instead
             EmptyView()
         }
     }
@@ -1262,6 +1291,7 @@ enum RoutineEditorWording {
         case .schedule(.noTime): String(localized: "Add at least one time.")
         case .schedule(.badTime): String(localized: "Choose a valid time.")
         case let .cron(message): cron(message)
+        case .productResources: String(localized: "Enter at least one watched address (perspicax://...), with any {...} part filled in.")
         }
     }
 

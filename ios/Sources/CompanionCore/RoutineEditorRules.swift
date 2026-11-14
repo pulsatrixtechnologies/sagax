@@ -50,11 +50,15 @@ public enum RoutineEditorRules {
 
     /// The choices of Repeat: "When a webhook arrives" for a bot routine,
     /// "When email arrives" only while the routine already starts that way,
-    /// "Advanced" only for a schedule no choice can say.
-    public static func repeatChoices(current: RoutineRecurrence, teamGoal: Bool) -> [RoutineRecurrence] {
+    /// "Advanced" only for a schedule no choice can say, and "When
+    /// something changes in a product" for a bot routine on a server linked
+    /// to Perspicax (`productLinked`, GET /api/org) or a routine that already
+    /// starts that way (the desktop's productTriggerOffered, #4250).
+    public static func repeatChoices(current: RoutineRecurrence, teamGoal: Bool, productLinked: Bool = false) -> [RoutineRecurrence] {
         var choices: [RoutineRecurrence] = [.none, .hourly, .daily, .weekdays, .days, .monthly, .yearly, .interval]
         if current == .advanced { choices.append(.advanced) }
         if !teamGoal { choices.append(.webhook) }
+        if current == .product || (!teamGoal && productLinked) { choices.append(.product) }
         if current == .email { choices.append(.email) }
         return choices
     }

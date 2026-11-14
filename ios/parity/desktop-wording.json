@@ -1701,5 +1701,15 @@
   "Learn from use": "botPanel.skills.learning",
   "After a failure or a correction while a skill is in use, the bot revises that skill. After a long task that went well, it offers a new skill you can keep in one click. Every change shows in the skill's history and can be undone.": "botPanel.skills.learningHelp",
   "botPanel.skills.reviewChanges": "botPanel.skills.reviewChanges",
-  "The bot's engine loads this from the folder under Source. Edit or remove it there.": "skills.origin.nativeHint"
+  "The bot's engine loads this from the folder under Source. Edit or remove it there.": "skills.origin.nativeHint",
+  "Resource changed": "triggers.event.resource_changed",
+  "Bot phone": "triggers.source.telephony",
+  "Product change": "triggers.source.perspicax",
+  "Product change: %@": "schedule.incomingProduct",
+  "When %@ changes": "schedule.compact.product",
+  "When something changes in a product": "routineTrigger.product",
+  "Watched resources": "routineTrigger.product.resources",
+  "One per line, as Perspicax lists it. The routine runs only when one of them changes.": "routineTrigger.product.resourcesHint",
+  "To complete: fill in the {...} part in the field": "routineTrigger.product.templates",
+  "Enter at least one watched address (perspicax://...), with any {...} part filled in.": "routineTrigger.product.invalid"
 }

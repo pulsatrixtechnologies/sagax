@@ -15271,6 +15271,22 @@
         }
       }
     },
+    "Bot phone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot phone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléphone du bot"
+          }
+        }
+      }
+    },
     "Bot settings": {
       "localizations": {
         "fr": {
@@ -30475,6 +30491,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entre une adresse courriel ou un numéro de téléphone."
+          }
+        }
+      }
+    },
+    "Enter at least one watched address (perspicax://...), with any {...} part filled in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter at least one watched address (perspicax://...), with any {...} part filled in."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entre au moins une adresse suivie (perspicax://...), avec toute partie {...} remplie."
           }
         }
       }
@@ -54187,6 +54219,22 @@
         }
       }
     },
+    "One per line, as Perspicax lists it. The routine runs only when one of them changes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One per line, as Perspicax lists it. The routine runs only when one of them changes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une par ligne, comme Perspicax la liste. La routine roule seulement quand l'une d'elles change."
+          }
+        }
+      }
+    },
     "Open %@'s chat": {
       "localizations": {
         "fr": {
@@ -54231,6 +54279,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conversations parallèles"
+          }
+        }
+      }
+    },
+    "Product change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Product change"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changement dans un produit"
+          }
+        }
+      }
+    },
+    "Product change: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Product change: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changement dans un produit : %@"
+          }
+        }
+      }
+    },
+    "Resource changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resource changed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ressource changée"
           }
         }
       }
@@ -54421,6 +54517,22 @@
         }
       }
     },
+    "To complete: fill in the {...} part in the field": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To complete: fill in the {...} part in the field"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À compléter : remplis la partie {...} dans le champ"
+          }
+        }
+      }
+    },
     "Top users": {
       "localizations": {
         "en": {
@@ -54523,6 +54635,22 @@
         }
       }
     },
+    "Watched resources": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watched resources"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ressources suivies"
+          }
+        }
+      }
+    },
     "What it may do on its own.": {
       "localizations": {
         "en": {
@@ -54551,6 +54679,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce que le bot apprend à l'usage s'affiche ici avant qu'il l'applique."
+          }
+        }
+      }
+    },
+    "When %@ changes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When %@ changes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand %@ change"
           }
         }
       }
@@ -95653,6 +95797,22 @@
         }
       }
     },
+    "When something changes in a product": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When something changes in a product"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand quelque chose change dans un produit"
+          }
+        }
+      }
+    },
     "When the app is not in front, your phone shows the unlock.": {
       "localizations": {
         "en": {
@@ -97776,6 +97936,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Você ainda pode escrever para %@ na demonstração."
+          }
+        }
+      }
+    },
+    "You can watch (%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can watch (%lld)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu peux suivre (%lld)"
           }
         }
       }

@@ -61,3 +61,11 @@ shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space
 # so they run two files at a time: about 75 s on a busy machine (240 s one
 # at a time).
 source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Localizable\.xcstrings$|ios/parity/desktop-wording\.json$|apps/docs/content/docs/providers/model-providers\.mdx$|scripts/testing/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)'; then G="$(node scripts/verify/release/guard-tests.mjs --source-text)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; fi; fi
+
+# phone-parity (#4305): src/components/ios-trigger-parity.test.ts holds the
+# phone's trigger kinds and sources (ios/Sources/CompanionCore/DesktopBotPanel.swift)
+# to the desktop's (src/locales/en.json, shared/trigger-sources.ts), the list
+# the Swift package test ParityR1TriggersTests pins after a merge. A lot that
+# touches src/ runs it in source-text; a lot that touches only the source
+# types or the phone's copy runs it here, alone (well under a second).
+phone-parity: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^src/'; then :; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(shared/trigger-sources\.ts|ios/Sources/CompanionCore/DesktopBotPanel\.swift)$'; then ./node_modules/.bin/vitest run --reporter=dot src/components/ios-trigger-parity.test.ts; fi

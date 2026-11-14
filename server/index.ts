@@ -8767,6 +8767,9 @@ setDesktopInjectModels(() => desktopLocalModels.modelsFor(null));
 const desktopTunnels = new DesktopTunnels(liveSessionPerson);
 const bridgeAudit = createBridgeAudit(join(DATA_DIR, "desktop-bridge-audit.jsonl"));
 const userPreferenceStore = createUserPreferenceStore(DATA_DIR);
+// Read once at start, before the server listens: a person's first turn looks
+// their language up here and never pays the file's read and parse (#3539).
+userPreferenceStore.load();
 // The bot creation wizard's drafts (server/bots/bot-wizard-store.ts).
 const botWizardStore = createBotWizardStore(DATA_DIR);
 const viewerBotOverrideStore = createViewerBotOverrideStore(DATA_DIR);

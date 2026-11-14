@@ -48,6 +48,11 @@ export interface PersonPreferences {
 }
 
 export interface UserPreferenceStore {
+  /** Read and parse the file now (the server calls it once at start, before
+   * it listens), so no person's turn pays the read: the first turn after a
+   * start looked a person's language up through this store (#3539). Later
+   * calls do nothing. */
+  load(): void;
   get(principalId: string): PersonPreferences;
   /** Replace this person's preferences with the known keys of `input`. */
   put(principalId: string, input: unknown): PersonPreferences;
@@ -114,6 +119,9 @@ export function createUserPreferenceStore(dataDir: string, now: () => number = D
   };
 
   return {
+    load() {
+      load();
+    },
     get(principalId) {
       requirePerson(principalId);
       const entry = load()[principalId];

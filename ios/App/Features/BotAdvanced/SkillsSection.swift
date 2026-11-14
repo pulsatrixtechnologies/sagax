@@ -14,6 +14,11 @@ struct SkillSheet: Identifiable {
     let text: String
     /// Open the editor already in Edit mode (row menu Edit).
     var startEditing: Bool = false
+    /// Open on Review changes (the iPad row menu's Review changes, #4165).
+    var startReview: Bool = false
+    /// Where the skill lives (nil: the bot's own): the editor reads, saves
+    /// and reviews it there, as the desktop's `skillEditorApiPath` does.
+    var origin: SkillOrigin? = nil
     var id: String { skill.name }
 }
 
@@ -131,24 +136,24 @@ final class BotSkillsModel: ObservableObject {
         }
     }
 
-    func view(_ skill: ManagedSkill, startEditing: Bool = false) async {
+    func view(_ skill: ManagedSkill, startEditing: Bool = false, startReview: Bool = false, origin: SkillOrigin? = nil) async {
         guard let client else { return }
         error = ""
         do {
-            let payload = try await client.skillEditor(botId: botId, name: skill.name)
-            viewing = SkillSheet(skill: skill, text: payload.text, startEditing: startEditing)
+            let payload = try await client.skillEditor(botId: botId, name: skill.name, origin: origin)
+            viewing = SkillSheet(skill: skill, text: payload.text, startEditing: startEditing, startReview: startReview, origin: origin)
         } catch {
             self.error = error.localizedDescription
         }
     }
 
-    func saveSkill(_ skill: ManagedSkill, name: String, description: String, instructions: String) async -> Bool {
+    func saveSkill(_ skill: ManagedSkill, name: String, description: String, instructions: String, origin: SkillOrigin? = nil) async -> Bool {
         guard let client else { return false }
         working = skill.name
         error = ""
         defer { working = "" }
         do {
-            try await client.saveSkill(botId: botId, name: skill.name, newName: name, description: description, instructions: instructions)
+            try await client.saveSkill(botId: botId, name: skill.name, newName: name, description: description, instructions: instructions, origin: origin)
             viewing = nil
             await refresh()
             return true
@@ -158,13 +163,13 @@ final class BotSkillsModel: ObservableObject {
         }
     }
 
-    func reviewSkill(_ skill: ManagedSkill, action: String) async -> Bool {
+    func reviewSkill(_ skill: ManagedSkill, action: String, origin: SkillOrigin? = nil) async -> Bool {
         guard let client else { return false }
         working = skill.name
         error = ""
         defer { working = "" }
         do {
-            try await client.reviewSkill(botId: botId, name: skill.name, action: action)
+            try await client.reviewSkill(botId: botId, name: skill.name, origin: origin, action: action)
             viewing = nil
             await refresh()
             return true
@@ -402,6 +407,9 @@ struct SkillTextSheet: View {
     @Environment(\.themePalette) var themePalette
     let sheet: SkillSheet
     @ObservedObject var model: BotSkillsModel
+    /// What the iPad's compact skill row no longer shows (#4165): sharing,
+    /// where it was learned, its warnings and its actions.
+    var details: AnyView? = nil
 
     @State private var editing = false
     @State private var name: String = ""
@@ -421,7 +429,7 @@ struct SkillTextSheet: View {
                         Text(String(localized: "stored SKILL.md changed after review - enablement is blocked"))
                             .font(.footnote)
                             .foregroundStyle(Theme.warning)
-                        Button(String(localized: "Review changes")) { reviewingChanges = true }
+                        Button(AppStrings.localized("botPanel.skills.reviewChanges")) { reviewingChanges = true }
                             .accessibilityIdentifier("skill-review-changes")
                     }
                 }
@@ -461,6 +469,9 @@ struct SkillTextSheet: View {
                         .disabled(!editing)
                         .accessibilityIdentifier("skill-text")
                     }
+                    if let details, !editing {
+                        Section { details }
+                    }
                 }
                 if !model.error.isEmpty {
                     Section {
@@ -479,19 +490,19 @@ struct SkillTextSheet: View {
                     if reviewingChanges {
                         Menu {
                             Button(String(localized: "Accept")) {
-                                Task { _ = await model.reviewSkill(sheet.skill, action: "accept") }
+                                Task { _ = await model.reviewSkill(sheet.skill, action: "accept", origin: sheet.origin) }
                             }
                             Button(String(localized: "Revert"), role: .destructive) {
-                                Task { _ = await model.reviewSkill(sheet.skill, action: "revert") }
+                                Task { _ = await model.reviewSkill(sheet.skill, action: "revert", origin: sheet.origin) }
                             }
                         } label: {
-                            Text(String(localized: "Review changes"))
+                            Text(verbatim: AppStrings.localized("botPanel.skills.reviewChanges"))
                         }
                         .disabled(model.working == sheet.skill.name)
                     } else if editing {
                         Button(String(localized: "Save")) {
                             Task {
-                                if await model.saveSkill(sheet.skill, name: name, description: description, instructions: instructions) {
+                                if await model.saveSkill(sheet.skill, name: name, description: description, instructions: instructions, origin: sheet.origin) {
                                     editing = false
                                 }
                             }
@@ -509,13 +520,14 @@ struct SkillTextSheet: View {
                 loaded = true
                 editing = sheet.startEditing
                 if let client = model.client,
-                   let payload = try? await client.skillEditor(botId: model.botId, name: sheet.skill.name) {
+                   let payload = try? await client.skillEditor(botId: model.botId, name: sheet.skill.name, origin: sheet.origin) {
                     name = payload.name
                     description = payload.description
                     currentText = payload.text
                     instructions = Self.body(from: payload.text)
                     changedAfterReview = payload.changedAfterReview
                     reviewedText = payload.reviewedText
+                    reviewingChanges = sheet.startReview && payload.changedAfterReview
                 } else {
                     name = sheet.skill.name
                     description = sheet.skill.description

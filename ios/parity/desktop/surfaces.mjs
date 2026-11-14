@@ -640,6 +640,41 @@ add({ id: "bot-edit", phase: "main", note: "Edit bot page opened from the sideba
     await ctx.sleep(900);
   } });
 
+// The Skills page's compact row (#4148 desktop, #4165 iPad) with the skills
+// lab (PARITY_SKILLS=1, ios/parity/skills-lab.mjs): the more menu of a skill
+// changed after its review, and a shared skill opened. Without the lab the
+// row is missing and the surface is skipped.
+async function openSkillRow(ctx, name) {
+  const skip = await openEditBotTab(ctx, "skills");
+  if (skip) return skip;
+  const row = `[data-skill-row="${name}"]`;
+  // behind the card's fold (#4104): Show N more first
+  if (!(await ctx.exists(row)) && (await ctx.exists('button[data-skills-fold="more"]'))) {
+    await ctx.click('button[data-skills-fold="more"]');
+    await ctx.sleep(300);
+  }
+  if (!(await ctx.exists(row))) return { skip: `no skill ${name} (run the fixture with PARITY_SKILLS=1)` };
+  await ctx.eval(`document.querySelector(${jsLiteral(row)})?.scrollIntoView({ block: "center" })`);
+  await ctx.sleep(300);
+  return null;
+}
+add({ id: "panel-more-skills-menu", phase: "main", note: "Edit bot > Skills: a skill's more menu open (skills lab)",
+  open: async (ctx) => {
+    const skip = await openSkillRow(ctx, "meeting-notes-summarizer");
+    if (skip) return skip;
+    await ctx.click('button[data-skill-row-menu="meeting-notes-summarizer"]');
+    await ctx.sleep(600);
+    return null;
+  } });
+add({ id: "panel-more-skills-open", phase: "main", note: "Edit bot > Skills: a shared skill opened (skills lab)",
+  open: async (ctx) => {
+    const skip = await openSkillRow(ctx, "password-rotation-reminder");
+    if (skip) return skip;
+    await ctx.click('[data-skill-row="password-rotation-reminder"] [data-profile-row-open]');
+    await ctx.sleep(1200);
+    return null;
+  } });
+
 export const NOT_CAPTURED = [
   { id: "floating-mascot", why: "desktop-only: a bot floated onto the macOS desktop is its own frameless always-on-top Electron window (electron/floating-bot-window.mjs); nothing is drawn in the main window" },
   { id: "update-banner", why: "needs the Electron updater bridge (window.ogb.updater); the iPad updates through the App Store" },

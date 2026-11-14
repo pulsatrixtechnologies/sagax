@@ -1348,6 +1348,9 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var memoryEnabled: Bool? = nil
     /// Memory upkeep on; absent means on.
     public var memoryUpkeep: Bool? = nil
+    /// Learn from use (#2610): the bot revises its skills and proposes new
+    /// ones; absent means on.
+    public var skillLearning: Bool? = nil
     /// Who can see it on a served workspace; absent is everyone.
     public var visibility: BotVisibility? = nil
     /// Its grants on an organization server (slice 4), and the older

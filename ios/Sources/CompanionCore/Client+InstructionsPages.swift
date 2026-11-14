@@ -46,9 +46,10 @@ public enum SoulDriftChoice: String, Sendable {
 
 // MARK: - Skills listing
 
-/// Where the bot reads a skill from (`features.skillsLibrary`).
+/// Where the bot reads a skill from (`features.skillsLibrary`); `native`:
+/// the engine loads it from a folder of its own (read only here).
 public enum SkillOrigin: String, Decodable, Sendable {
-    case `private`, library, me
+    case `private`, library, me, native
 }
 
 /// The fields of a listed skill the iPad's `ManagedSkill` does not keep.

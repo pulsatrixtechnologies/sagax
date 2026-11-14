@@ -1269,14 +1269,17 @@ public struct BotAccessPatch: Encodable, Hashable, Sendable {
     public var mcpServers: [String]?
     public var memoryEnabled: Bool?
     public var memoryUpkeep: Bool?
+    /// Skills > Learn from use (`skillLearning`).
+    public var skillLearning: Bool?
 
     public init(browser: Bool? = nil, alwaysAllow: [String]? = nil, mcpServers: [String]? = nil,
-                memoryEnabled: Bool? = nil, memoryUpkeep: Bool? = nil) {
+                memoryEnabled: Bool? = nil, memoryUpkeep: Bool? = nil, skillLearning: Bool? = nil) {
         self.browser = browser
         self.alwaysAllow = alwaysAllow
         self.mcpServers = mcpServers
         self.memoryEnabled = memoryEnabled
         self.memoryUpkeep = memoryUpkeep
+        self.skillLearning = skillLearning
     }
 }
 

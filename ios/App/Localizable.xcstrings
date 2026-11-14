@@ -117828,6 +117828,72 @@
           }
         }
       }
+    },
+    "Needs review": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À relire"
+          }
+        }
+      }
+    },
+    "The bot's engine loads this from the folder under Source. Edit or remove it there.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le moteur du bot charge ceci depuis le dossier sous Source. Modifie-le ou retire-le là."
+          }
+        }
+      }
+    },
+    "After a failure or a correction while a skill is in use, the bot revises that skill. After a long task that went well, it offers a new skill you can keep in one click. Every change shows in the skill's history and can be undone.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Après un échec ou une correction pendant l'usage d'une compétence, le bot la révise. Après une longue tâche réussie, il propose une nouvelle compétence que tu gardes en un clic. Chaque changement figure dans l'historique de la compétence et peut être annulé."
+          }
+        }
+      }
+    },
+    "botPanel.skills.reviewChanges": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review changes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relire les changements"
+          }
+        }
+      }
+    },
+    "Learn from use": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apprendre à l'usage"
+          }
+        }
+      }
+    },
+    "Private to this bot": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privée à ce bot"
+          }
+        }
+      }
     }
   }
 }

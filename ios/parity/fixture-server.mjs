@@ -78,6 +78,8 @@ import { WIDGET_LAB, seedWidgetLabBot, seedWidgetLabTranscript } from "./widget-
 import { LINKS_LAB, seedLinksLab, seedLinksLabTranscript } from "./links-lab.mjs";
 // PARITY_EXCHANGE=1: a bot-to-bot conversation between Ara and Helios (exchange-lab.mjs).
 import { EXCHANGE_LAB, seedExchangeLab, seedExchangeLabStore } from "./exchange-lab.mjs";
+// PARITY_SKILLS=1: about fifteen skills on Ara for the Skills page (#4165).
+import { SKILLS_LAB, SKILLS_LAB_FEATURES, seedSkillsLabFiles, shareSkillsLab } from "./skills-lab.mjs";
 // PARITY_PLUGINS=1: connected apps, MCP sign-in and a bot without apps for the WP9 UI tests (plugin-lab.mjs).
 import {
   PLUGIN_LAB, closePluginLab, pluginLabHook, pluginLabServerEnv, seedPluginLab, startPluginLabBroker,
@@ -807,7 +809,7 @@ async function main() {
     budgets: { monthlyUsd: 100 },
     imageGen: { provider: "custom", customUrl: `http://127.0.0.1:${await startImageStub()}/v1`, customModel: "parity-stub" },
     mcpServers: teamMcpServers(),
-    ...(THREAD_TITLES ? { features: { llmThreadTitles: true } } : {}),
+    ...(THREAD_TITLES || SKILLS_LAB ? { features: { ...(THREAD_TITLES ? { llmThreadTitles: true } : {}), ...(SKILLS_LAB ? SKILLS_LAB_FEATURES : {}) } } : {}),
     instances: {
       claude: {
         driver: "claudeAgent",
@@ -858,6 +860,7 @@ async function main() {
   }
   if (PRESETS) seedPresets(dataDir);
   if (process.env.PARITY_OWNER === "1" && !org) seedOwnerSkill(seeded);
+  if (SKILLS_LAB) seedSkillsLabFiles(ROOT, home, seeded.ids.ara.id);
 
   child = startServer(port, webhook);
   await waitHealthy(base, child);
@@ -872,6 +875,7 @@ async function main() {
     : org ? { token: null, environmentId: null, scopes: ["admin", "client"] }
     : await pair(base);
   if (org) await seedOrg(org, seeded, api);
+  if (SKILLS_LAB) await shareSkillsLab(base, api, seeded.ids);
   // PARITY_ORG_PHONE=1: the phone signs in as the viewer (org-fixture.mjs).
   if (org && process.env.PARITY_ORG_PHONE === "1") Object.assign(session, await pairOrgPhone(org));
   // Settings > Vault (signed-in): one login so the page is not empty / signed out.

@@ -1695,5 +1695,11 @@
   "It runs in your own server environment when one of your turns uses it (npx, uvx and docker images must be available there).": "myConnections.add.commandHint",
   "After adding it, click Sign in: the provider's page opens and comes back to this server.": "myConnections.add.oauthHint",
   "Your MCP servers": "connectApps.section.mcp",
-  "Read it before turning it on: once on, bots it is assigned to follow it.": "connectApps.skill.reviewHint"
+  "Read it before turning it on: once on, bots it is assigned to follow it.": "connectApps.skill.reviewHint",
+  "Needs review": "botPanel.skills.needsReview",
+  "Private to this bot": "botPanel.skills.detailPrivate",
+  "Learn from use": "botPanel.skills.learning",
+  "After a failure or a correction while a skill is in use, the bot revises that skill. After a long task that went well, it offers a new skill you can keep in one click. Every change shows in the skill's history and can be undone.": "botPanel.skills.learningHelp",
+  "botPanel.skills.reviewChanges": "botPanel.skills.reviewChanges",
+  "The bot's engine loads this from the folder under Source. Edit or remove it there.": "skills.origin.nativeHint"
 }

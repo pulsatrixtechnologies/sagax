@@ -77,8 +77,14 @@ function setup() {
         pr_alice: JSON.stringify({ voice: "ara", speed: 1, language: "en", bots: { a: { tts: "openai", voices: { openai: "cedar" } } } }),
         pr_bob: JSON.stringify({ voice: "eve", speed: 1, language: "en" }),
         pr_mona: JSON.stringify({ voice: "rex", speed: 1, language: "es-MX", tts: "elevenlabs", voices: { elevenlabs: "abcdefghij0123456789" } }),
+        // #4231: Carl stays on Auto, at his own speed, with a voice picked for OpenAI
+        pr_carl: JSON.stringify({ voice: "ara", speed: 0.8, language: "fr", voices: { openai: "cedar" } }),
       } as Record<string, string>)[principalId],
       language: (id) => (id === "a" ? "fr" : undefined),
+      // #4231: a bot's own voice chat speed, its persona text, and the provider the owner's Auto speaks with
+      speed: (id) => (id === "fast" ? 1.25 : undefined),
+      persona: (id) => ({ talk: "You are a calm assistant.\nAnswer in one or two sentences.", long: `${"x".repeat(3999)}\u{1F600}tail` } as Record<string, string>)[id],
+      autoProvider: async (principalId) => (principalId === "pr_carl" ? "openai" : principalId === "pr_bob2" ? undefined : "xai"),
     },
     importZip: async (_request, input) => {
       if (input.preview) return { preview: { kind: "zip", name: "A", importName: input.name ?? "A 2", includes: {}, hasConversations: false, hasSharing: false, created: [], skipped: [], needsAction: [] } };
@@ -118,6 +124,26 @@ describe("bots", () => {
     const own = { role: "employee" as const, principalId: "pr_alice", reach: ["pr_alice"], ownOnly: true };
     expect((await console.call("GET", "bots/a", own)).body.bot.speech).toMatchObject({ provider: "openai", voice: "cedar" });
     expect((await console.call("GET", "bots/b", own)).status).toBe(404);
+  });
+
+  it("a bot's page gives the call its speed, the provider Auto really speaks with, and its persona (#4231)", async () => {
+    const { add, console } = setup();
+    // the bot's own voice chat speed wins over the owner's
+    add("fast", "pr_alice");
+    expect((await console.call("GET", "bots/fast")).body.bot.speech).toEqual({ xaiVoice: "ara", provider: "xai", voice: "ara", language: "en", speed: 1.25 });
+    // no speed of its own: the owner's; Auto resolved to OpenAI for this owner speaks OpenAI's voice
+    add("c", "pr_carl");
+    expect((await console.call("GET", "bots/c")).body.bot.speech).toEqual({ xaiVoice: "ara", provider: "openai", voice: "cedar", language: "fr", speed: 0.8 });
+    // the persona text, line breaks kept; none when empty
+    add("talk", "pr_bob");
+    expect((await console.call("GET", "bots/talk")).body.bot.speech).toEqual({ xaiVoice: "eve", provider: "xai", voice: "eve", language: "en", persona: "You are a calm assistant.\nAnswer in one or two sentences." });
+    expect((await console.call("GET", "bots/b")).body.bot.speech).not.toHaveProperty("persona");
+    // capped at 4000 characters, never half a character
+    add("long", "pr_bob");
+    const persona = (await console.call("GET", "bots/long")).body.bot.speech.persona as string;
+    expect(persona).toBe("x".repeat(3999));
+    // speed 1 is left out, like the other fields at their default
+    expect((await console.call("GET", "bots/b")).body.bot.speech).not.toHaveProperty("speed");
   });
 
   it("create: a blank bot of the caller by default, a model, another owner in reach; audited", async () => {

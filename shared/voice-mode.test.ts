@@ -25,4 +25,17 @@ describe("botSpeech", () => {
     expect(botSpeech(preference, "bot_a", undefined, { persona: "   " })).not.toHaveProperty("persona");
     expect(botSpeech(preference, "bot_a")).not.toHaveProperty("persona");
   });
+
+  it("#4231: under Auto, the provider the server resolves for the owner and its voice; xAI only when that is it", () => {
+    const auto = { voice: "ara", speed: 1, language: "fr", voices: { openai: "cedar" } };
+    expect(botSpeech(auto, "bot_a", undefined, undefined, "openai")).toEqual({ xaiVoice: "ara", provider: "openai", voice: "cedar", language: "fr" });
+    expect(botSpeech(auto, "bot_a", undefined, undefined, "xai")).toMatchObject({ provider: "xai", voice: "ara" });
+    expect(botSpeech(auto, "bot_a")).toMatchObject({ provider: "xai", voice: "ara" });
+    // a provider picked on the bot is never replaced by the owner's Auto
+    expect(botSpeech(preference, "bot_a", undefined, undefined, "openai")).toMatchObject({ provider: "xai", voice: "rex" });
+  });
+
+  it("#4231: a persona cut at 4000 characters never keeps half a character pair", () => {
+    expect(botSpeech(preference, "bot_a", undefined, { persona: `${"x".repeat(BOT_SPEECH_PERSONA_MAX - 1)}\u{1F600}tail` }).persona).toBe("x".repeat(BOT_SPEECH_PERSONA_MAX - 1));
+  });
 });

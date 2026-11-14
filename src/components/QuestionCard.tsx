@@ -12,7 +12,7 @@
 // answered the card stays, showing what was chosen.
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
-import { api, useStore, type Bot, type Message } from "@/state/store";
+import { api, useStore, type Bot, type Message, type OptionCardData } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { pageTargetKeys } from "@/lib/page-target-copy";
@@ -169,8 +169,13 @@ export function QuestionCard({
   /** drawn inside the pinned card over the composer (#3214): no frame of its own */
   embedded?: boolean;
 }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const card = message.card;
+  // #4219: a room card addressed to one person: the others see it, only
+  // that person's answer counts
+  const askTo = card?.askTo;
+  const viewerId = state.config?.viewer?.principalId?.toLowerCase() ?? "";
+  const forOther = Boolean(askTo && viewerId && askTo.id.toLowerCase() !== viewerId);
   const questions = useMemo(
     () => localizedPageTargetQuestions(card?.questionRequest?.questions ?? [], card ?? { title: "", subtitle: "", options: [] }),
     [card],
@@ -207,7 +212,7 @@ export function QuestionCard({
     const closed = skipped || (!answer && card.expired === true) || (!answer && Boolean(card.answered) && card.answered !== "answer");
     // #3471: skipped or expired, it says so in one quiet line
     const closedNote = skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : undefined;
-    return <SettledQuestion questions={questions} answer={answer} closed={closed} closedNote={closedNote} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
+    return <SettledQuestion questions={questions} answer={answer} closed={closed} closedNote={closedNote} answeredBy={closed ? undefined : answererName(card.answeredBy)} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
   }
 
   const currentIndex = Math.min(active, questions.length - 1);
@@ -352,12 +357,15 @@ export function QuestionCard({
       title={title}
       meta={meta}
       embedded={embedded}
-      onDismiss={skip}
+      onDismiss={forOther ? undefined : skip}
       dismissLabel={t("waitingCard.skipAria")}
-      onKeyDown={sheetKeyHandler(choices.length, (index) => choose(choices[index]!.id ?? choices[index]!.label))}
+      onKeyDown={forOther ? undefined : sheetKeyHandler(choices.length, (index) => choose(choices[index]!.id ?? choices[index]!.label))}
     >
       {card.questionRequest?.origin === "output" && (
         <div className="-mt-1.5 mb-2 text-[12px] text-ink-secondary">{t("question.origin.badge")}</div>
+      )}
+      {askTo && (
+        <div className="-mt-1.5 mb-2 text-[12px] text-ink-secondary" data-ask-to="">{t("question.addressedTo", { name: askTo.name })}</div>
       )}
 
       {!single && (
@@ -388,7 +396,14 @@ export function QuestionCard({
       )}
       {multi && <div className="-mt-1 mb-2 text-[12px] text-ink-tertiary">{t("question.multiHint")}</div>}
 
-      <SheetChoices choices={choices} picked={picked} multi={multi} ariaLabel={current.question} onPick={choose} />
+      {forOther ? (
+        <>
+          <SheetChoices choices={current.options} picked={[]} multi={multi} settled ariaLabel={current.question} onPick={() => {}} />
+          <div className="mt-2 px-1 text-[12.5px] leading-snug text-ink-secondary" data-ask-waiting-on="">{t("question.waitingOn", { name: askTo!.name })}</div>
+        </>
+      ) : (
+        <SheetChoices choices={choices} picked={picked} multi={multi} ariaLabel={current.question} onPick={choose} />
+      )}
 
       {card.pageTargetChoice && !settled && (
         <label className="mt-2 flex cursor-pointer items-center gap-2 px-1 text-[12.5px] text-ink-secondary">
@@ -403,7 +418,7 @@ export function QuestionCard({
         </label>
       )}
 
-      {freeText && fieldOpen && (
+      {!forOther && freeText && fieldOpen && (
         <SheetField
           value={draft.custom}
           maxLength={MAX_CUSTOM_ANSWER}
@@ -420,16 +435,22 @@ export function QuestionCard({
       {failed && (
         <div role="alert" className="mt-2 text-[12.5px] leading-snug text-danger">{t("question.answerFailed")}</div>
       )}
-      {showSend && (
+      {!forOther && showSend && (
         <SheetSend label={single ? t("question.submit") : t("question.submitAll")} disabled={!complete} onClick={submit} />
       )}
     </QuestionSheet>
   );
 }
 
+/** #4219: the name of who answered a keyed room card (its answeredBy
+ * names them with their stable id), else nothing. */
+function answererName(by: OptionCardData["answeredBy"]): string | undefined {
+  return by && by.kind !== "worker" && by.id && by.name ? by.name : undefined;
+}
+
 /** The answered card: the same card, each question with what was chosen
  * marked and the rest dimmed, and an answer in words under its rows. */
-function SettledQuestion({ questions, answer, closed, closedNote, title }: { questions: readonly AskQuestion[]; answer: string | null; closed: boolean; closedNote?: string; title: string }) {
+function SettledQuestion({ questions, answer, closed, closedNote, answeredBy, title }: { questions: readonly AskQuestion[]; answer: string | null; closed: boolean; closedNote?: string; answeredBy?: string; title: string }) {
   const byQuestion = answer ? questionAnswersByQuestion(answer, questions) : {};
   const single = questions.length === 1;
   const fallback = answer ? answerWithoutPreamble(answer) : "";
@@ -452,7 +473,9 @@ function SettledQuestion({ questions, answer, closed, closedNote, title }: { que
       {/* an answer the questions cannot be read back from is shown whole */}
       {fallback && parts.every((part) => !part.picked.length && !part.rest) && <SheetNote>{fallback}</SheetNote>}
       {closed && <SheetNote closed>{closedNote ?? t("question.status.closed")}</SheetNote>}
-      {!closed && !answer && <SheetNote>{t("question.status.answered")}</SheetNote>}
+      {/* #4219: a keyed card of a room says who answered it, in its one note */}
+      {answeredBy ? <SheetNote>{t("question.answeredBy", { name: answeredBy })}</SheetNote>
+        : !closed && !answer && <SheetNote>{t("question.status.answered")}</SheetNote>}
     </QuestionSheet>
   );
 }

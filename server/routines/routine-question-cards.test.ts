@@ -171,6 +171,22 @@ describe("one card per item a routine asks about (#4205, point 2)", () => {
     expect(closed).toEqual([[run.threadId, run.startedAt]]);
   });
 
+  it("#4219: a cancelled run closes exactly the cards it drew in its source room, never the room's other cards", async () => {
+    const closed: Array<[string, number, unknown]> = [];
+    let open = true;
+    const h = harness({ awaitsPerson: () => (open ? "Waiting for your answer: Approve?" : null), closeRunCards: (threadId, since, roomCards) => { closed.push([threadId, since, roomCards]); open = false; } });
+    const run = await startedRun(h);
+    h.manager.recordRoomCard(run.threadId!, { threadId: "room-thread", messageId: "card-1" });
+    h.manager.recordRoomCard(run.threadId!, { threadId: "room-thread", messageId: "card-1" });
+    h.manager.recordRoomCard(run.threadId!, { threadId: "room-thread", messageId: "card-2" });
+    // another thread's run draws nothing on this one
+    h.manager.recordRoomCard("some-other-thread", { threadId: "room-thread", messageId: "card-9" });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    expect(h.manager.listRuns()[0]!.status).toBe("waiting");
+    await h.manager.cancelRun(run.id, "Superseded");
+    expect(closed).toEqual([[run.threadId, run.startedAt, [{ threadId: "room-thread", messageId: "card-1" }, { threadId: "room-thread", messageId: "card-2" }]]]);
+  });
+
   it("completes a run whose cards hold nothing (wait false), so the next occurrence starts on time", async () => {
     const h = harness({ awaitsPerson: () => null, cardRaisedSince: () => true });
     const run = await startedRun(h);

@@ -64,17 +64,28 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     if (answered) {
       return { text: `Full access answered this for the person: ${answered}. The person already authorized this work; continue in this same turn without waiting for a click, and do not ask again.` };
     }
-    const body = (result && typeof result === "object" ? result : {}) as { waitsForPerson?: unknown; holds?: unknown; replaced?: unknown; retired?: unknown; turnEnds?: unknown };
+    const body = (result && typeof result === "object" ? result : {}) as { waitsForPerson?: unknown; holds?: unknown; replaced?: unknown; retired?: unknown; turnEnds?: unknown; addressedTo?: unknown; people?: unknown; inRoom?: unknown };
     const key = typeof args?.key === "string" ? args.key.trim() : "";
     // #4205: a retire closes the keyed card; nothing waits on it any more
     if (args?.retire === true) {
       return { text: body.retired ? `The card with key "${key}" is closed; an answer to it starts nothing.` : `No pending card has the key "${key}"; nothing to close.` };
     }
     const named = key ? ` (key "${key}"; the answer reaches you with this key and the chosen option)` : "";
-    const placed = body.replaced === true ? `Your pending card${named} now asks this, in its place.` : `The question card${named} is waiting for the person.`;
+    // #4219: a room card addressed to one person counts only their answer
+    const to = typeof body.addressedTo === "string" && body.addressedTo ? body.addressedTo : "";
+    const people = typeof body.people === "string" && body.people ? ` ${body.people}` : "";
+    // #4219: an unaddressed room card waits on the room's people, any of them
+    const waiting = to ? `${to} (the room's other people see it; only ${to}'s answer counts, and the answer names who answered)`
+      : people ? "the room's people (any of them may answer; the answer names who answered)" : "the person";
+    const placed = (body.replaced === true ? `Your pending card${named} now asks this, in its place${to ? `, addressed to ${waiting}` : ""}.` : `The question card${named} is waiting for ${waiting}.`) + people;
     // #4205: wait false holds nothing: the turn and the run go on
     if (body.holds === false) {
-      return { text: `${placed} It holds nothing: ask any other separate item with its own ask_choice call now, then finish your work and end normally; each answer arrives later as its own turn in this conversation.` };
+      // #4219: a routine run's card raised in its source room is answered
+      // there: the answer is a turn in that room, not in this run
+      const where = typeof body.inRoom === "string" && body.inRoom
+        ? `in the room ${JSON.stringify(body.inRoom)} (this card is in that room, not in this run's conversation)`
+        : "in this conversation";
+      return { text: `${placed} It holds nothing: ask any other separate item with its own ask_choice call now, then finish your work and end normally; each answer arrives later as its own turn ${where}.` };
     }
     // #4205: on an engine that cannot take the answer live, a card that holds
     // ends this turn at the end of this call (card-turn-handoff.ts): no

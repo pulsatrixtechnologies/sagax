@@ -2,7 +2,7 @@
   "tools": [
     {
       "name": "ask_choice",
-      "description": "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Put your recommended option first. The card has an Other field for a typed answer. A blocking decision MUST use this card or a native question tool, including in routine runs and MCP-started turns; never end with a plain-text confirmation request. Then end your turn. For writes already covered by the request or an exact quoted GO, call the write tool through its normal approval gate instead of re-asking. Not for may-I permission on in-scope work or teammate contact when Ask before contacting bots is off.",
+      "description": "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Put your recommended option first. The card has an Other field for a typed answer. A blocking decision MUST use this card or a native question tool, including in routine runs and MCP-started turns; never end with a plain-text confirmation request. Then end your turn. For writes already covered by the request or an exact quoted GO, call the write tool through its normal approval gate instead of re-asking. Not for may-I permission on in-scope work or teammate contact when Ask before contacting bots is off. Several separate items: one call per item in this same turn, each its own card (no maximum; the person pages through them), and key to replace or retire a card later. Raise them with wait false: on some engines a card that waits ends the turn with its call, so only wait false cards can follow one another in one turn everywhere.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -10,7 +10,7 @@
           "question": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 1000,
+            "maxLength": 8000,
             "description": "The question, with what happened and why you wait: enough context to answer from a notification at a glance."
           },
           "title": {
@@ -39,6 +39,30 @@
               "maxLength": 300
             },
             "description": "Optional, same order: what each answer does."
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Optional stable key you choose for this card (an item id such as ticket-1234). The same key again in this conversation replaces its pending card in place; the answer reaches you with this key verbatim and the chosen option. A keyed card is a decision: never answered for the person."
+          },
+          "wait": {
+            "type": "boolean",
+            "description": "Default true: the card holds your turn (and a routine run waits on it); on some engines the turn then ends with this call. false: the card stays pending for the person and holds nothing; the turn goes on (ask the next item now), end the run or turn normally, and each answer arrives later as its own turn in this conversation."
+          },
+          "decision": {
+            "type": "boolean",
+            "description": "true for a business decision only the person makes: never answered for them, at any approval level."
+          },
+          "retire": {
+            "type": "boolean",
+            "description": "true with key: close that pending card at once (question and options are then ignored); an answer to it starts nothing."
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed."
           }
         },
         "required": [
@@ -234,6 +258,33 @@
             "minLength": 1,
             "maxLength": 1000,
             "description": "Optional answer the harness applies if the person never replies to a question this work parks on them (R6). When used, the run resumes with a note that it was the requester's default. Leave out to expire the wait as status expired after the delay (and a mid-delay push reminder)."
+          },
+          "work": {
+            "type": "string",
+            "description": "Optional name of the piece of work this is a step of (one line, 80 characters). Give the same name to each of its steps: the person's panel groups them."
+          },
+          "step": {
+            "type": "string",
+            "description": "Optional name of this step (40 characters)."
+          },
+          "plan": {
+            "type": "array",
+            "description": "Optional, with work: all its steps in order (at most 12), each with the teammate that does it when known. The latest plan wins.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "step": {
+                  "type": "string"
+                },
+                "bot": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step"
+              ]
+            }
           }
         },
         "required": [
@@ -280,6 +331,33 @@
               "resume"
             ],
             "description": "Default none: read it with send_status. resume: wake this conversation with a short summary when the recipient finishes."
+          },
+          "work": {
+            "type": "string",
+            "description": "Optional name of the piece of work this is a step of (one line, 80 characters). Give the same name to each of its steps: the person's panel groups them."
+          },
+          "step": {
+            "type": "string",
+            "description": "Optional name of this step (40 characters)."
+          },
+          "plan": {
+            "type": "array",
+            "description": "Optional, with work: all its steps in order (at most 12), each with the teammate that does it when known. The latest plan wins.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "step": {
+                  "type": "string"
+                },
+                "bot": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step"
+              ]
+            }
           }
         },
         "required": [

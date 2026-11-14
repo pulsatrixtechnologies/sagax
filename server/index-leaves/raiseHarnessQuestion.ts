@@ -7,7 +7,9 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
   const host = getHost();
   const { newId } = host;
 
-  if (!host.store.botByThread(threadId)) return null;
+  // #4219: a keyed card of a room is raised in the room, by the bot that asks
+  const room = host.store.groupByThread(threadId);
+  if (!host.store.botByThread(threadId) && !(room && choice.askerBotId && room.memberIds.includes(choice.askerBotId))) return null;
   const requestId = `ask-choice-${newId()}`;
   const header = choice.title !== "Your bot has a question" ? choice.title.slice(0, 40) : undefined;
   const questionOptions = choice.questionOptions?.length
@@ -26,6 +28,10 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
       ...(choice.pageTargetChoice ? { custom: false as const } : {}),
     }],
     origin, harnessAsk: true,
+    ...(room && choice.askerBotId ? { askerBotId: choice.askerBotId } : {}),
+    // #4205, #4219: the card's key, hold and addressee from its first frame,
+    // so its notification reaches the right person
+    ...(choice.card ? { askCard: choice.card } : {}),
     ...(choice.pageTargetChoice ? { pageTargetChoice: choice.pageTargetChoice } : {}),
   });
   const messageId = host.askMessageByRequest.get(`${threadId}:${requestId}`);

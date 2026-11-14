@@ -155,7 +155,12 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
   const bot = ownerBot ? host.botForThread(ownerBot.id, event.threadId) ?? undefined : undefined;
   const group = bot ? undefined : host.store.groupByThread(event.threadId);
   if (!bot && !group) return;
-  const speaker = group ? host.groupSpeakers.get(event.threadId) : undefined;
+  // #4219: a keyed card a member bot raised in the room (from its room turn
+  // or a routine run whose source is the room) is that bot's own
+  const askerBot = group && event.harnessAsk && typeof event.askerBotId === "string" && group.memberIds.includes(event.askerBotId)
+    ? host.store.bot(event.askerBotId) : undefined;
+  const speaker = askerBot ? { botId: askerBot.id, name: askerBot.name, color: askerBot.color }
+    : group ? host.groupSpeakers.get(event.threadId) : undefined;
 
   const pushMessage = (m: Omit<Message, "id" | "at">) => {
     const owner = bot ? host.directRequestOwners.get(event.threadId) : undefined;

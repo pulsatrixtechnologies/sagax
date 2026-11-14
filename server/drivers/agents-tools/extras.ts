@@ -57,6 +57,7 @@ export const ASK_CHOICE_DEF = {
         wait: { type: "boolean", description: "Default true: the card holds your turn (and a routine run waits on it); on some engines the turn then ends with this call. false: the card stays pending for the person and holds nothing; the turn goes on (ask the next item now), end the run or turn normally, and each answer arrives later as its own turn in this conversation." },
         decision: { type: "boolean", description: "true for a business decision only the person makes: never answered for them, at any approval level." },
         retire: { type: "boolean", description: "true with key: close that pending card at once (question and options are then ignored); an answer to it starts nothing." },
+        to: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.to, description: "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed." },
       },
       required: ["question", "options"],
     },

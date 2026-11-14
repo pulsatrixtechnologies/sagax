@@ -36,6 +36,8 @@ import {
 import type { AskQuestionOption } from "../../shared/ask-question.ts";
 import type { Message } from "../store.ts";
 import { closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
+import { resolveAddressee, roomPeopleLine, type RoomPerson } from "../rooms/room-ask-cards.ts";
+import type { AskAddressee } from "../../shared/wire.ts";
 
 export type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
@@ -169,7 +171,17 @@ export function createAgentCard(args: {
     /** #2048: rich options (label + description + id) and durable payload. */
     questionOptions?: AskQuestionOption[];
     pageTargetChoice?: PageTargetChoiceCardData;
+    /** #4205, #4219: what the card carries from its first frame (its key,
+     * whether it holds, its addressee), so its notification reads them. */
+    card?: { askKey?: string; noHold?: true; askTo?: AskAddressee };
   }): { messageId: string } | null;
+  /** #4219: the conversation is a room: its people, whom a card can be
+   * addressed to. `fromRun`: the card comes from a routine run whose
+   * source is this room, and holds nothing. */
+  room?: { people: RoomPerson[]; name?: string; fromRun?: boolean };
+  /** #4219: a pending card was re-addressed to another person of the room:
+   * they get its notification. */
+  notifyAddressee?(threadId: string, messageId: string): void;
   /** #4205: ask_choice keys. `find`: the pending card raised with a key in
    * the bot's conversations with the same person (ask-choice-keys.ts
    * AskKeyIndex, which reads only the conversation holding it);
@@ -177,7 +189,7 @@ export function createAgentCard(args: {
    * question card is retired with its request). Absent: this conversation
    * only, closed by a store patch. */
   askKeys?: {
-    find(key: string): { threadId: string; message: Message } | null;
+    find(key: string, accepts: (message: Message) => boolean): { threadId: string; message: Message } | null;
     remember(key: string, threadId: string, messageId: string): void;
     retire(threadId: string, message: Message): void;
   };
@@ -239,8 +251,11 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
   // the key's card where the index puts it, else in this conversation (a
   // card drawn in the chat before a restart)
-  const findKeyed = (key: string) => args.askKeys?.find(key)
-    ?? pendingKeyedCard(args.threadId, args.store.messagesFor(args.threadId), key);
+  // #4219: in a room several bots ask: a key names the asking bot's own
+  // card, so the lookup itself skips another bot's card with the same key
+  const own = (message: Message) => !message.from || message.from.botId === args.bot.id;
+  const findKeyed = (key: string) => args.askKeys?.find(key, own)
+    ?? pendingKeyedCard(args.threadId, args.store.messagesFor(args.threadId), key, own);
   const closeCard = (threadId: string, message: Message) => {
     if (args.askKeys) args.askKeys.retire(threadId, message);
     else args.store.patchMessage(threadId, message.id, { card: closedAskCard(message.card!) });
@@ -252,16 +267,37 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     return { ok: true, messageId: "", retired: 1 };
   }
   const value = parsed.value;
-  const holds = value.wait !== false;
+  const inRoom = Boolean(args.store.groupByThread(args.threadId));
+  // #4219: the person of the room the card is addressed to (a room only,
+  // never a conversation between a bot and a person or two people)
+  let askTo: AskAddressee | undefined;
+  if (value.to) {
+    if (!args.room) return { ok: false, status: 400, error: "to: only a card in a room is addressed to one of its people. Leave to out here." };
+    const resolved = resolveAddressee(value.to, args.room.people);
+    if (!resolved.ok) return { ok: false, status: 400, error: resolved.error };
+    askTo = resolved.addressee;
+  }
+  // #4219: a keyed or addressed card of a room is a real question card in
+  // the room, answered by its people; from a routine run it holds nothing
+  const roomAsk = Boolean(args.room) && Boolean(value.key || askTo);
+  const holds = value.wait !== false && !(roomAsk && args.room?.fromRun);
   // #2901: Yes/No on "A, or B?" answers neither path; offer the two paths.
   const given = value.options;
   value.options = choiceOptionsFor(value.subtitle, given);
   // #2911: two paths are a real decision, never a may-I, so Full access
   // keeps the card instead of taking the first path for the person.
   // #4205: so is a question raised as a decision or with a key.
-  const decision = value.options !== given || value.decision === true || value.key !== undefined;
-  const from = args.store.groupByThread(args.threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
-  const keyed = { ...(value.key ? { askKey: value.key } : {}), ...(holds ? {} : { noHold: true as const }) };
+  // #4219: so is a card addressed to one person
+  const decision = value.options !== given || value.decision === true || value.key !== undefined || askTo !== undefined;
+  const from = inRoom ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
+  const keyed = { ...(value.key ? { askKey: value.key } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}) };
+  const addressed = askTo ? { addressedTo: askTo.name } : {};
+  // #4219: in a room the bot reads whom it can address
+  const roomPeopleResult = {
+    ...(roomAsk && args.room?.people.length ? { people: roomPeopleLine(args.room.people) } : {}),
+    // #4219: a routine run's card lives in its source room, answered there
+    ...(roomAsk && args.room?.fromRun ? { inRoom: args.room.name?.trim() || "this routine's room" } : {}),
+  };
   // #2909: an option's detail (ask_choice {label, detail}) rides as its
   // description, so the notification and the card say what each answer does
   const details = value.details;
@@ -269,15 +305,18 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     ? value.options.map((label, index) => (details[index] ? { label, description: details[index] } : { label }))
     : undefined;
   // #4205: the same key again replaces its pending card in place
-  if (value.key && !from.from) {
+  // #4219: in a room too, and a new `to` re-addresses it
+  if (value.key && (!from.from || roomAsk)) {
     const found = findKeyed(value.key);
     if (found) {
-      const card = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}) });
+      const card = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(askTo ? { askTo } : {}) });
       const patched = args.store.patchMessage(found.threadId, found.message.id, { card });
       if (patched) {
         args.authored?.(patched.id);
+        if (askTo && askTo.id !== found.message.card!.askTo?.id) args.notifyAddressee?.(found.threadId, patched.id);
         const waits = Boolean(card.requestId) && found.threadId === args.threadId;
-        return { ok: true, messageId: patched.id, replaced: true, ...(waits ? { waitsForPerson: true as const } : {}), ...(holds ? {} : { holds: false as const }) };
+        const to = card.askTo ? { addressedTo: card.askTo.name } : {};
+        return { ok: true, messageId: patched.id, replaced: true, ...to, ...roomPeopleResult, ...(waits ? { waitsForPerson: true as const } : {}), ...(holds ? {} : { holds: false as const }) };
       }
     }
   }
@@ -285,7 +324,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // its title as is, so the default one is worded in the conversation's
   // language, like a raised question card (#3158). The raised path keeps the
   // English default: raiseHarnessQuestion tells it apart from a given title.
-  const { key: _key, wait: _wait, decision: _decision, ...cardValue } = value;
+  const { key: _key, wait: _wait, decision: _decision, to: _to, ...cardValue } = value;
   const shownCard = input.title === undefined
     ? { ...cardValue, title: questionCardTitle(turnLanguage(lastPersonText(args.store.messagesFor(args.threadId)), args.personLanguage)) || cardValue.title }
     : cardValue;
@@ -299,23 +338,24 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     args.authored?.(settled.id);
     return { ok: true, messageId: settled.id, answered: { choice: answered.choice, question: value.subtitle } };
   }
-  if (args.raiseQuestion && !from.from) {
+  if (args.raiseQuestion && (!from.from || roomAsk)) {
     const raised = args.raiseQuestion({
       title: value.title,
       question: value.subtitle,
       options: value.options,
       ...(questionOptions ? { questionOptions } : {}),
+      ...(Object.keys(keyed).length ? { card: keyed } : {}),
     });
     // Never a passive card here: nobody would see it, and the bot would say it showed one.
     if (!raised) return { ok: false, status: 409, error: QUESTION_NOT_RAISED };
     // #4205: the card carries its key and whether it holds the run
-    if (keyed.askKey || keyed.noHold) {
+    if (keyed.askKey || keyed.noHold || keyed.askTo) {
       const row = args.store.messagesFor(args.threadId).find((message) => message.id === raised.messageId);
       if (row?.card) args.store.patchMessage(args.threadId, row.id, { card: { ...row.card, ...keyed } });
       if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, raised.messageId);
     }
     args.authored?.(raised.messageId);
-    return { ok: true, messageId: raised.messageId, waitsForPerson: true, ...(holds ? {} : { holds: false as const }) };
+    return { ok: true, messageId: raised.messageId, waitsForPerson: true, ...addressed, ...roomPeopleResult, ...(holds ? {} : { holds: false as const }) };
   }
   // a direct thread replays a bot row that carries `from` as another bot's line
   // full-access: ask-choice

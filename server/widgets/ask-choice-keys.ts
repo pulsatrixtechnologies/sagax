@@ -16,15 +16,17 @@ function pendingWithKey(message: Message | undefined, key: string): message is M
 }
 
 /** The pending card raised with `key` in one conversation's `messages`,
- * newest first. */
+ * newest first. `accepts`: the card is the asking bot's own (#4219: in a
+ * room several bots raise cards, each with its own keys). */
 export function pendingKeyedCard(
   threadId: string,
   messages: readonly Message[],
   key: string,
+  accepts: (message: Message) => boolean = () => true,
 ): { threadId: string; message: Message } | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
-    if (pendingWithKey(message, key)) return { threadId, message };
+    if (pendingWithKey(message, key) && accepts(message)) return { threadId, message };
   }
   return null;
 }
@@ -100,17 +102,21 @@ export class AskKeyIndex {
   }
 
   /** The newest pending card raised with `key` in a conversation `inScope`
-   * accepts (the bot's own with the same person). Only those
-   * conversations' rows are read. */
-  find(key: string, inScope: (threadId: string) => boolean): { threadId: string; message: Message } | null {
+   * accepts (the bot's own with the same person) whose card `accepts`
+   * takes (#4219: the asking bot's own, in a room several bots share).
+   * Only those conversations' rows are read. */
+  find(key: string, inScope: (threadId: string) => boolean, accepts: (message: Message) => boolean = () => true): { threadId: string; message: Message } | null {
     this.seedOnce();
     const spots = this.byKey.get(key);
     if (!spots) return null;
     for (const spot of [...spots].reverse()) {
       if (!inScope(spot.threadId)) continue;
       const message = this.deps.messagesFor(spot.threadId).find((row) => row.id === spot.messageId);
-      if (pendingWithKey(message, key)) return { threadId: spot.threadId, message };
-      this.forget(spot.threadId, spot.messageId);
+      if (!pendingWithKey(message, key)) {
+        this.forget(spot.threadId, spot.messageId);
+        continue;
+      }
+      if (accepts(message)) return { threadId: spot.threadId, message };
     }
     return null;
   }
@@ -128,7 +134,7 @@ export function closedAskCard(card: Card): Card {
 }
 
 /** The pending card's new words: same card, same request, same place. */
-export function replacedAskCard(card: Card, next: { question: string; options: string[]; noHold: boolean; questionOptions?: Array<{ label: string; description?: string }> }): Card {
+export function replacedAskCard(card: Card, next: { question: string; options: string[]; noHold: boolean; questionOptions?: Array<{ label: string; description?: string }>; askTo?: Card["askTo"] }): Card {
   const questionOptions = next.questionOptions ?? next.options.map((label) => ({ label }));
   const questions = card.questionRequest?.questions;
   const { noHold: _held, ...rest } = card;
@@ -137,6 +143,8 @@ export function replacedAskCard(card: Card, next: { question: string; options: s
     subtitle: next.question,
     options: next.options,
     ...(next.noHold ? { noHold: true as const } : {}),
+    // #4219: re-addressed to another person of the room
+    ...(next.askTo ? { askTo: next.askTo } : {}),
     ...(card.questionRequest && questions?.length
       ? { questionRequest: { ...card.questionRequest, questions: [{ ...questions[0]!, question: next.question, options: questionOptions }] } }
       : {}),

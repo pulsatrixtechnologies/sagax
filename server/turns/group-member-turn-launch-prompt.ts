@@ -5,6 +5,7 @@ import { IMAGE_PROMPT } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
+import { roomPeopleLine } from "../rooms/room-ask-cards.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 
 export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
@@ -73,6 +74,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     resolveComputerPromptKind,
     roomPeerRosterSystemPrompt,
     roomRosterLine,
+    roomPeopleOf,
     roomRoutineSpeaker,
     roomTurnApprovalMode,
     rulesSystemPrompt,
@@ -131,6 +133,8 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     bot.title && `Role: ${bot.title}.`,
     bot.description && `About: ${bot.description}`,
     `Room members: ${roster}, and ${userName} (the human).`,
+    // #4219: the room's people, whom a keyed ask_choice card can address
+    roomPeopleLine(roomPeopleOf(readyGroup)),
     readyGroup.bulletin.trim() && `Room bulletin (shared instructions for everyone):\n${readyGroup.bulletin.trim()}`,
     `Reply as yourself, briefly and conversationally. To bring a teammate in, mention them like @Name  -  they'll see the conversation and respond.`,
     outsideRoom.length > 0 && referenceText(roomPeerRosterSystemPrompt(outsideRoom)),

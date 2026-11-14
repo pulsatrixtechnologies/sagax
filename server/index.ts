@@ -192,6 +192,8 @@ import { groupTurnCwd } from "./rooms/room-cwd.ts";
 import { insideFolderRoots, MEMBER_FOLDER_REFUSED } from "./people/member-folders.ts";
 import { RoomTurnDeadline, RoomTurnStallRegistry, effectiveRoomTurnTimeoutMinutes, roomTurnTimeoutMessage } from "./rooms/room-turn-timeout.ts";
 import { roomTurnEnd } from "./rooms/room-turn-end.ts";
+import { ASK_CHOICE_TOOL } from "../shared/options-card.ts";
+import { answererIdentity, isRoom, isRoomAskCard, roomAskAnswer, roomMayPost, roomAskAudience, roomPeople, routineRoomThread, type AnswererIdentity, type RoomPerson } from "./rooms/room-ask-cards.ts";
 import * as boat from "./computer/boat.ts";
 import { cloudComputerRpc } from "./computer/cloud-computer-tools.ts";
 import { chartRenderer, compileChart, dataEngine, validateVegaLite } from "./data/deps.ts";
@@ -5998,6 +6000,9 @@ bindLeafHost({
   get BOTMAIL_ENGINE_REFUSAL() { return BOTMAIL_ENGINE_REFUSAL; },
   get BOTMAIL_CONFINED_WHY() { return BOTMAIL_CONFINED_WHY; },
   get cardAnswerRefusal() { return cardAnswerRefusal; },
+  get roomAskAnswerFor() { return roomAskAnswerFor; },
+  get roomAskAnswerer() { return roomAskAnswerer; },
+  get roomAskAudienceFor() { return roomAskAudienceFor; },
   get teamMemoryMemberMayAnswer() { return teamMemoryMemberMayAnswer; },
   get viewerMayAnswerOnThread() { return viewerMayAnswerOnThread; },
   get COMMAND_ALLOWLIST_ADD_REFUSAL() { return COMMAND_ALLOWLIST_ADD_REFUSAL; },
@@ -16357,6 +16362,10 @@ type HarnessChoice = {
   /** #2048: rich options for the question card (id + description + icon). */
   questionOptions?: import("../shared/ask-question.ts").AskQuestionOption[];
   pageTargetChoice?: import("../shared/page-targets.ts").PageTargetChoiceCardData;
+  /** #4205, #4219: the keyed card's key, hold and addressee. */
+  card?: { askKey?: string; noHold?: true; askTo?: import("../shared/wire.ts").AskAddressee };
+  /** #4219: in a room, the member bot that asks. */
+  askerBotId?: string;
 };
 
 /** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
@@ -16372,6 +16381,73 @@ function harnessQuestionThread(threadId: string): boolean {
   return routineRunThread(threadId) || notificationInHiddenThread(threadId)
     || Boolean(bot && isAgentConversation(store.taskByThread(bot.id, threadId)))
     || lastPersonMessage(threadId)?.aiClient === true;
+}
+
+/** #4219: whether a person reads and posts in a room (room-ask-cards.ts
+ * roomMayPost over viewerMayAnswerOnThread, the room's own verdict). */
+function roomViewerMayPost(group: { threadId: string }, viewerId: string | undefined): boolean {
+  return roomMayPost(viewerId, { solo: IDENTITY.kind !== "perspicax", operatorId: localPrincipalId(), verdict: (id) => viewerMayAnswerOnThread(group.threadId, id) });
+}
+
+/** #4219: the people of a room (everyone its verdict lets post there), with
+ * their display names. */
+function roomPeopleOf(group: { threadId: string; dm?: boolean; peopleDm?: boolean } | null | undefined): RoomPerson[] {
+  if (!group || !isRoom(group)) return [];
+  const candidates = principals.list()
+    .filter((person) => !person.disabledAt && !person.erasedAt)
+    .map((person) => ({ id: person.id, name: personDisplayName(person) || "" }));
+  return roomPeople(candidates, (id) => roomViewerMayPost(group, id));
+}
+
+/** #4219: the room a routine run's keyed card goes to (the room that is
+ * the routine's source), or null. */
+function routineRunRoom(threadId: string, botId: string): string | null {
+  if (!routineRunThread(threadId)) return null;
+  return routineRoomThread(routines?.runForThread(threadId), botId, (id) => store.groupByThread(id));
+}
+
+/** #4219: who may answer the room card `requestId` (server/rooms/room-ask-cards.ts):
+ * whoever the room's verdict lets post there, and an addressed card's
+ * addressee alone. */
+function roomAskAnswerFor(auth: RequestAuth, threadId: string, requestId: string): ReturnType<typeof roomAskAnswer> {
+  const card = store.messagesFor(threadId).find((message) => message.card?.requestId === requestId)?.card;
+  const group = store.groupByThread(threadId);
+  if (!group) return { kind: "other" };
+  return roomAskAnswer(card, group, { mayPost: roomViewerMayPost(group, channelViewerId(auth)), answererId: groupReaderId(auth) });
+}
+
+/** #4219: who hears the keyed room card: its addressee, else the room's people. */
+function roomAskAudienceFor(threadId: string, card: { askKey?: string; askTo?: import("../shared/wire.ts").AskAddressee } | null | undefined): string[] | undefined {
+  const group = store.groupByThread(threadId);
+  if (!group || !isRoomAskCard(card, group)) return undefined;
+  return roomAskAudience(card, group, card?.askTo ? [] : roomPeopleOf(group));
+}
+
+/** #4219: the person answering a keyed room card, as the bot hears them. */
+function roomAskAnswerer(auth: RequestAuth, threadId: string, requestId: string): AnswererIdentity | null {
+  if (roomAskAnswerFor(auth, threadId, requestId).kind !== "allowed") return null;
+  const id = groupReaderId(auth);
+  if (!id) return null;
+  const person = principals.byId(id);
+  return answererIdentity(id, personDisplayName(person) || messageSender(auth)?.name || "", person);
+}
+
+/** #4219: a pending room card re-addressed to another person: they get its
+ * notification, even with the room closed; nobody else does. */
+function notifyRoomAskAddressee(threadId: string, messageId: string): void {
+  const group = store.groupByThread(threadId);
+  const message = store.messagesFor(threadId).find((row) => row.id === messageId);
+  const card = message?.card;
+  const asker = message?.from ? store.bot(message.from.botId) : undefined;
+  if (!group || !card?.askTo || !asker || card.answered || card.dismissed || card.expired) return;
+  const note = deliverableNotification("question", asker, threadId, card.subtitle || card.title || "", {
+    ...(asker.avatarUrl ? { avatarUrl: asker.avatarUrl } : {}),
+    group: { id: group.id, name: group.name },
+    ...(card.requestId ? { requestId: card.requestId } : {}),
+    ...(card.options?.length ? { choices: card.options } : {}),
+    cardId: message.id,
+  });
+  if (note) notify({ ...note, audience: [card.askTo.id] });
 }
 
 /** #2608, #4205: retire a conversation's open question cards (or the one
@@ -19833,7 +19909,11 @@ routines = new RoutineManager({
   cardRaisedSince: (threadId, since) => store.messagesFor(threadId).some((message) => message.kind === "options" && message.at >= since && Boolean(message.card)),
   // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for real
   // #4205: a cancelled or superseded run's question cards are closed
-  closeRunCards: (threadId, since) => { retireThreadQuestions(threadId, { since }); },
+  closeRunCards: (threadId, since, roomCards) => {
+    retireThreadQuestions(threadId, { since });
+    // #4219: the cards the run drew in its source room, those exactly
+    for (const card of roomCards ?? []) retireThreadQuestions(card.threadId, { messageId: card.messageId });
+  },
   raiseClaimedCard: (threadId, claim) => {
     // #4205: one card per separate ask, each with its own choices (the pinned card pages them)
     const raised = routineClaimedCardChoices(redactSecretsInText(claim)).filter((choice) => raiseHarnessQuestion(threadId, choice, "output"));
@@ -23173,31 +23253,43 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const claude = person ? claudeAccountForPrincipal(person) : { unavailable: "no_engine" as const };
       const claudeOk = !("unavailable" in claude);
       const defaultId = typeof owning.pageTargetDefault === "string" ? owning.pageTargetDefault : null;
+      // #4219: a keyed or addressed ask_choice card of a room is a real
+      // question card there; a routine run whose source is a room raises
+      // it in that room
+      const ask = body && typeof body === "object" && (body as { tool?: unknown }).tool === ASK_CHOICE_TOOL ? body as Record<string, unknown> : null;
+      const keyedAsk = Boolean(ask && ((typeof ask.key === "string" && ask.key.trim()) || (typeof ask.to === "string" && ask.to.trim())));
+      const runRoom = keyedAsk ? routineRunRoom(threadId, bot.id) : null;
+      const cardThread = runRoom ?? threadId;
+      const cardRoom = store.groupByThread(cardThread);
+      const room = cardRoom && !cardRoom.dm && !cardRoom.peopleDm ? { people: roomPeopleOf(cardRoom), name: cardRoom.name, ...(runRoom ? { fromRun: true } : {}) } : undefined;
+      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk);
       const posted = createAgentCard({
         store,
         bot,
-        threadId,
+        threadId: cardThread,
         input: body,
-        authored,
+        // a card raised in the run's room is not the run's own line
+        ...(runRoom ? {} : { authored }),
+        ...(room ? { room, notifyAddressee: notifyRoomAskAddressee } : {}),
         proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
         // #1905: a may-I ask_choice under Full access is answered, not drawn
         approvalLevel: sourceApprovalMode(bot.id, threadId),
         personLanguage: languageOfPerson(person ?? undefined),
         // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
-        ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
+        ...(raises ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(cardThread, room ? { ...choice, askerBotId: bot.id } : choice) } : {}),
         // #4205: an ask_choice key spans this bot's conversations with the
         // same person (a routine's every run), never another person's
         askKeys: {
-          find: (key) => {
-            const group = Boolean(store.groupByThread(threadId));
+          find: (key, accepts) => {
+            const group = Boolean(cardRoom);
             const botOwner = effectiveBotOwner(owning);
             const whose = pageOwnerFor(store.taskByThread(owning.id, threadId), botOwner);
             return askKeyIndex.find(key, (cardThreadId) => {
-              if (cardThreadId === threadId) return true;
+              if (cardThreadId === cardThread) return true;
               if (group) return false;
               const task = store.taskByThread(owning.id, cardThreadId);
               return Boolean(task) && pageOwnerFor(task, botOwner) === whose;
-            });
+            }, accepts);
           },
           remember: (key, cardThreadId, messageId) => askKeyIndex.remember(key, cardThreadId, messageId),
           retire: (cardThreadId, message) => { retireThreadQuestions(cardThreadId, { messageId: message.id }); },
@@ -23217,6 +23309,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
           },
         },
       });
+      // #4219: a card the run drew in its source room dies with the run
+      if (runRoom && posted.ok && posted.messageId) routines?.recordRoomCard(threadId, { threadId: runRoom, messageId: posted.messageId });
       // #3514: the turn that posted a waiting card ends at its safe point
       // when its engine cannot take the answer live
       // #4205: the tool result then says this turn ends here (no other card
@@ -34418,6 +34512,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   forgetTurnReach,
   memberTurnSelection,
   roomRosterLine,
+  roomPeopleOf,
   roomPeerRosterSystemPrompt,
   roomTurnTimeoutMessage,
   effectiveRoomTurnTimeoutMinutes,

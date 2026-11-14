@@ -111,15 +111,25 @@ back (`place_phone_call` mode `conversation`). Spec: section 10 of
   file keeps metadata, never a word said. A callee who asks to stop goes on
   the person's own stop list for good.
 - Tests: `server/outbound-conversation.test.ts`.
+- Every placed call is a live conversation, never a spoken message (#4193):
+  the one-way call Sagax built (inline TwiML through `twilio_api_write`) and
+  the line's message mode are gone. `place_phone_call` takes `objective`,
+  `instructions`, `max_minutes`, `voicemail` and `language` (an older
+  `purpose` is the objective; `from`, `account` and `message` are not used),
+  always goes through `voice_call` in mode `conversation`, and the card
+  shows the goal, never a text to read. When the live voice cannot take the
+  call, Perspicax refuses `no_realtime_voice` before dialing with the reason
+  in words (`sidecar_state` off, not_live or out_of_credits, and what fixes
+  it), which the bot is given as it is said. Tests:
+  `server/outbound/outbound-calls.test.ts`.
 - Every call goes through `place_phone_call` (decision of 2026-10-28): a
   bot's own Perspicax `voice_call`, by its name, a server-prefixed name,
   `call_tool` or `use_tool`, is turned into the `place_phone_call` with its
   arguments on the Perspicax relay (`server/perspicax/perspicax-mcp.ts`,
   `voiceToolCall` in `server/telephony-guard.ts`, `placeArgsFromVoiceCall`
   in `shared/outbound-call.ts`): the same card, AI disclosure, pilot and
-  do-not-call list. A dry run and the harness's own call go as they are. A
-  one-way `place_phone_call` with no `from` leaves from the person's own
-  Perspicax Voice line. `voice_sms` is a text like a Twilio Messages create
+  do-not-call list. A dry run and the harness's own call go as they are.
+  `voice_sms` is a text like a Twilio Messages create
   (`shared/outbound.ts`): the same card and allowed recipients. Tests:
   `server/voice-call-redirect-parity.test.ts`.
 

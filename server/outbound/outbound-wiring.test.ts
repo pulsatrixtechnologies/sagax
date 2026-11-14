@@ -13,7 +13,9 @@ const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 const SID = `CA${"b".repeat(32)}`;
-const ARGS = { to: "+1 514 555 0142", from: "+1 438 555 0100", purpose: "Confirmer le rendez-vous", message: "Jean confirme mardi." };
+const ARGS = { to: "+1 514 555 0142", objective: "Confirmer le rendez-vous de mardi" };
+/** voice_call on the person's own line: every call goes through it (#4193). */
+const voiceMock = () => vi.fn(async (_turn: unknown, args: Record<string, unknown>) => (args.dry_run ? { ok: true as const, isError: false, value: { dry_run: true } } : { ok: true as const, isError: false, value: { sid: SID } }));
 
 function setup(opts: { seedConsent?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "outbound-wiring-"));
@@ -26,11 +28,12 @@ function setup(opts: { seedConsent?: boolean } = {}) {
     patchMessage: (_threadId: string, id: string, patch: Partial<Message>) => { const row = rows.find((r) => r.id === id); if (!row) return null; Object.assign(row, patch); return row; },
   };
   const twilio = vi.fn(async (_turn: unknown, args: Record<string, unknown>) => (args._dry_run ? { ok: true as const, isError: false, value: { dry_run: true } } : { ok: true as const, isError: false, value: { sid: SID } }));
+  const voice = voiceMock();
   const wake = vi.fn();
-  const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "Jean", language: () => "fr", twilio, wake });
+  const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "Jean", language: () => "fr", twilio, voice, wake });
   wiring.calls.updateSettings({ enabled: true, callbackNumber: "+14385550199" });
   if (opts.seedConsent !== false) wiring.consentStore.accept("jean", "bot-a");
-  return { wiring, rows, twilio, wake };
+  return { wiring, rows, twilio, voice, wake };
 }
 
 const listing: PurchaseListing = {
@@ -42,22 +45,25 @@ const listing: PurchaseListing = {
 
 describe("outbound wiring", () => {
   it("a call card appears, its answer updates it and wakes the bot, then the call is placed", async () => {
-    const { wiring, rows, twilio, wake } = setup();
+    const { wiring, rows, twilio, voice, wake } = setup();
     const first = await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g1", room: false }, ARGS);
     expect(first.isError).toBeUndefined();
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.outbound).toMatchObject({ kind: "call", status: "pending", destination: "+1 514 555 0142", botName: "Rocket", callback: "+1 438 555 0199" });
+    expect(rows[0]!.outbound).toMatchObject({ kind: "call", status: "pending", destination: "+1 514 555 0142", botName: "Rocket", mode: "conversation", objective: ARGS.objective });
+    expect(rows[0]!.outbound).not.toHaveProperty("callback");
     const pending = wiring.primaryPending("jean", false);
     // 2026-11-06 (the maintainer): the Primary Bot allows once, always or declines, like the person
-    expect(pending).toEqual([expect.objectContaining({ title: "Call +1 514 555 0142?", options: ["allow", "always_allow", "deny"], always: "rule", alwaysScope: "calls to +1 514 555 0142" })]);
+    expect(pending).toEqual([expect.objectContaining({ title: "Call +1 514 555 0142?", line: `Conversation, 5 min max. Objective: ${ARGS.objective}`, options: ["allow", "always_allow", "deny"], always: "rule", alwaysScope: "calls to +1 514 555 0142" })]);
     const id = pending[0]!.requestId;
     wiring.calls.answer("jean", id, "call", undefined, "+1 514 555 0142", true);
     // the route's answered hook
     const handler = wiring.routes({ principal: () => "jean" });
     expect(typeof handler).toBe("function");
     const second = await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g2", room: false }, ARGS);
-    expect(second.text).toContain("Call placed");
-    expect(twilio).toHaveBeenLastCalledWith({ threadId: "t-1", generation: "g2", botId: "bot-a" }, expect.objectContaining({ resource: "Calls", action: "create" }));
+    expect(second.text).toContain("Conversation call placed");
+    expect(voice).toHaveBeenLastCalledWith({ threadId: "t-1", generation: "g2", botId: "bot-a" }, expect.objectContaining({ mode: "conversation", ref: id }));
+    // the one-way call Sagax built through twilio_api_write is gone (#4193)
+    expect(twilio).not.toHaveBeenCalled();
     expect(rows).toHaveLength(1);
     expect(rows[0]!.outbound?.status).toBe("done");
     expect(wake).not.toHaveBeenCalled();
@@ -73,7 +79,7 @@ describe("outbound wiring", () => {
       patchMessage: () => null,
     };
     const twilio = vi.fn(async () => ({ ok: true as const, isError: false, value: { dry_run: true } }));
-    const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "", principalName: (id) => (id === "jean" ? "Jean Tremblay" : undefined), language: () => "fr", twilio, wake: vi.fn() });
+    const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "", principalName: (id) => (id === "jean" ? "Jean Tremblay" : undefined), language: () => "fr", twilio, voice: voiceMock(), wake: vi.fn() });
     wiring.calls.updateSettings({ enabled: true, callbackNumber: "+14385550199" });
     wiring.consentStore.accept("jean", "bot-a");
     const answer = await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g1", room: false }, ARGS);
@@ -98,10 +104,11 @@ describe("outbound wiring", () => {
   });
 
   it("refuses rooms and a conversation with no person", async () => {
-    const { wiring, twilio } = setup();
+    const { wiring, twilio, voice } = setup();
     expect((await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g", room: true }, ARGS)).isError).toBe(true);
     expect((await wiring.placeCall({ principalId: null, botId: "bot-a", threadId: "t-1", generation: "g", room: false }, ARGS)).isError).toBe(true);
     expect(twilio).not.toHaveBeenCalled();
+    expect(voice).not.toHaveBeenCalled();
   });
 
   it("a purchase card follows its purchase, and its answer wakes the bot", () => {

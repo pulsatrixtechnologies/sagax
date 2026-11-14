@@ -2,10 +2,9 @@
 // spec docs/specs/bot-telephony.md 4.4, 5.7 and 6.5; shared/outbound-call.ts).
 //
 // One approval places one call:
-//   1. the bot calls place_phone_call: Sagax builds the call (fixed AI
-//      disclosure, the bot's words, no Url or Twiml of the bot's), checks it
-//      with a dry run of twilio_api_write on the person's Perspicax account connection,
-//      and shows the card "Call +1 514 555 0142?" in the conversation;
+//   1. the bot calls place_phone_call: Sagax checks the call with a dry run
+//      of voice_call on the person's own Perspicax Voice line and shows the
+//      card "Call +1 514 555 0142?" in the conversation;
 //   2. the person (or their Primary Bot, when they ask) answers Call or Do
 //      not call. There is no Always allow;
 //   3. the bot calls place_phone_call again with the same arguments, in its
@@ -15,8 +14,9 @@
 // is good for 15 minutes. Records are kept 30 days (decision 5), with the
 // number; logs and audit rows only ever carry the masked number.
 //
-// Conversation mode (2026-10-28): the same card and the same one approval,
-// then Perspicax Voice places the call from the person's own line, with
+// Every call is a live conversation (2026-10-28; the only kind since #4193,
+// never a one-way spoken message): after the card's one approval,
+// Perspicax Voice places the call from the person's own line, with
 // their own Twilio key (voice_call as the person who speaks in the turn,
 // never another member's key), says the fixed AI disclosure first and
 // hands the call to the realtime voice, which talks with the callee. When
@@ -36,8 +36,8 @@ import { writeFileAtomic } from "../atomic.ts";
 import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { normalizePhone } from "../../shared/allowed-recipients.ts";
 import {
-  callDigestSource, callTwiml, canadianNumber, conversationDisclosure, createCallArgs, formatPhone, maskPhone, parseOutboundCall, voiceCallArgs,
-  type CallLanguage, type CallNames, type OutboundCallRequest,
+  callDigestSource, canadianNumber, conversationDisclosure, formatPhone, maskPhone, parseOutboundCall, voiceCallArgs,
+  type CallLanguage, type OutboundCallRequest,
 } from "../../shared/outbound-call.ts";
 import { wrapUntrusted } from "../../shared/safety-review.ts";
 import type { OutboundCallResult, OutboundCard } from "../../shared/wire.ts";
@@ -61,8 +61,9 @@ const DAY_MS = 24 * 60 * 60_000;
 export const MAX_DO_NOT_CALL = 2_000;
 
 /** The organization's pilot settings (Settings > Organization > Phone
- * calls): off until an admin turns them on; a callback number is required
- * before any call; numbers on the do-not-call list are never called. */
+ * calls): off until an admin turns them on; numbers on the do-not-call list
+ * are never called. The callback number was said by the one-way call
+ * (removed in #4193); it is kept as the admin saved it. */
 export interface OutboundCallSettings {
   enabled: boolean;
   callbackNumber?: string;
@@ -114,7 +115,7 @@ export class OutboundCallError extends Error {
   }
 }
 
-function digestOf(request: OutboundCallRequest, names?: { botName: string; personName: string; callback?: string }): string {
+function digestOf(request: OutboundCallRequest, names?: { botName: string; personName: string }): string {
   return createHash("sha256").update(callDigestSource(request, names)).digest("hex");
 }
 
@@ -246,7 +247,7 @@ export class OutboundCalls {
   }
 
   /** The approved, unused record that covers this exact call, if any. */
-  approvedFor(input: { principalId: string; botId: string; threadId: string; request: OutboundCallRequest; names?: { botName: string; personName: string; callback?: string } }): OutboundCallRecord | undefined {
+  approvedFor(input: { principalId: string; botId: string; threadId: string; request: OutboundCallRequest; names?: { botName: string; personName: string } }): OutboundCallRecord | undefined {
     const digest = digestOf(input.request, input.names);
     const now = this.now();
     return Object.values(this.load()).find((row) => row.status === "approved" && row.principalId === input.principalId
@@ -254,7 +255,7 @@ export class OutboundCalls {
   }
 
   /** A new pending call, or the one already waiting for these same words. */
-  open(input: { principalId: string; botId: string; threadId: string; request: OutboundCallRequest; names?: { botName: string; personName: string; callback?: string } }): { record: OutboundCallRecord; already: boolean; replaced: OutboundCallRecord[] } {
+  open(input: { principalId: string; botId: string; threadId: string; request: OutboundCallRequest; names?: { botName: string; personName: string } }): { record: OutboundCallRecord; already: boolean; replaced: OutboundCallRecord[] } {
     const records = this.load();
     const digest = digestOf(input.request, input.names);
     const waiting = Object.values(records).find((row) => this.live(row) && row.principalId === input.principalId
@@ -433,8 +434,10 @@ const OUTCOME_WORDS: Record<OutboundCallResult["outcome"], string> = {
   failed: "failed",
 };
 
-/** The card the conversation shows for a call: no id in its words. */
-export function callCard(row: OutboundCallRecord, botName: string, callback?: string, live?: Partial<OutboundCard>): OutboundCard {
+/** The card the conversation shows for a call: no id in its words. A call
+ * shows its goal (the objective and the guidance), never a text to read
+ * (#4193): a record of an older one-way call shows its purpose only. */
+export function callCard(row: OutboundCallRecord, botName: string, live?: Partial<OutboundCard>): OutboundCard {
   const placedLive = row.request.mode === "conversation" && row.status === "placed" && !row.result;
   return {
     kind: "call",
@@ -443,10 +446,7 @@ export function callCard(row: OutboundCallRecord, botName: string, callback?: st
     botName,
     destination: formatPhone(row.request.to),
     ...(row.request.from ? { from: formatPhone(row.request.from) } : {}),
-    // the callback number is said by the one-way call Sagax builds (with a `from`)
-    ...(callback && row.request.mode !== "conversation" && row.request.from ? { callback: formatPhone(callback) } : {}),
     purpose: row.request.purpose,
-    script: row.request.message,
     language: row.request.language,
     ...(row.via ? { via: row.via } : {}),
     ...(row.error && row.status === "failed" ? { error: row.error } : {}),
@@ -489,13 +489,8 @@ export function callCardText(row: OutboundCallRecord): string {
 /** What the bot is told after the person answered. */
 export function callAnswerNote(row: OutboundCallRecord): string {
   const to = maskPhone(row.request.to);
-  if (row.request.mode === "conversation") {
-    return row.status === "approved"
-      ? `Sagax phone call update: the person allowed the conversation call to ${to}. Place it now: call place_phone_call again with exactly the same to, mode, objective, instructions, max_minutes, voicemail and language. The approval is used once and ends in 15 minutes.`
-      : `Sagax phone call update: the person declined the call to ${to}. Do not call. Continue without it, or tell them what you could not do.`;
-  }
   return row.status === "approved"
-    ? `Sagax phone call update: the person allowed the call to ${to}. Place it now: call place_phone_call again with exactly the same to, from, purpose, message and language. The approval is used once and ends in 15 minutes.`
+    ? `Sagax phone call update: the person allowed the conversation call to ${to}. Place it now: call place_phone_call again with exactly the same to, objective, instructions, max_minutes, voicemail and language. The approval is used once and ends in 15 minutes.`
     : `Sagax phone call update: the person declined the call to ${to}. Do not call. Continue without it, or tell them what you could not do.`;
 }
 
@@ -503,10 +498,8 @@ type ToolAnswer = { ok: true; isError: boolean; value: unknown } | { ok: false; 
 
 export interface PlaceCallDeps {
   calls: OutboundCalls;
-  /** twilio_api_write as the person who speaks in this turn (perspicaxMcp.callTool). */
-  twilio(args: Record<string, unknown>): Promise<ToolAnswer>;
   /** voice_call as the person who speaks in this turn: their own Perspicax
-   * Voice line and Twilio key (a conversation call). */
+   * Voice line and Twilio key. Every call goes through it (#4193). */
   voice?(args: Record<string, unknown>): Promise<ToolAnswer>;
   /** The bot, and on whose behalf it calls (the person, else the organization). */
   names: { botName: string; personName: string };
@@ -571,46 +564,8 @@ export async function placePhoneCall(deps: PlaceCallDeps, context: { principalId
   // the pilot gate (ÉFVP 2026-10-22), checked again when the call leaves
   const settings = deps.calls.settings();
   if (!settings.enabled) return { text: "Phone calls are off for this organization: an admin turns the pilot on in Settings > Organization > Phone calls. Nothing was placed.", isError: true };
-  // a conversation, or a one-way message from the person's own line (no `from`)
-  if (request.mode === "conversation" || !request.from) return placeConversation(deps, context, request, settings);
-  if (!settings.callbackNumber) return { text: "No callback number is set: an admin adds it in Settings > Organization > Phone calls. Every call says it, so none is placed without it.", isError: true };
-  if (settings.doNotCall.includes(request.to)) return { text: `${maskPhone(request.to)} is on the organization's do-not-call list. Nothing was placed; do not call it another way.`, isError: true };
-  const names: CallNames = { botName: shortName(deps.names.botName), personName: shortName(deps.names.personName), callback: settings.callbackNumber };
-  if (!names.personName) return { text: "Sagax cannot say on whose behalf this call is made. Nothing was placed.", isError: true };
-  const twiml = callTwiml(request, names);
-  const approved = deps.calls.approvedFor({ ...context, request, names });
-  if (approved && deps.calls.overLimit(context.principalId, "calls")) return { text: deps.calls.overLimit(context.principalId, "calls")!, isError: true };
-  if (approved && deps.calls.claim(approved.id)) {
-    // used now, whatever Twilio answers: a retry asks again
-    const answer = await deps.twilio(createCallArgs(request, twiml, false));
-    // a write Twilio did not refuse is a placed call, even when its sid
-    // cannot be read: never "failed", or the person would approve it twice
-    const placed = answer.ok && !answer.isError;
-    const sid = placed ? sidOf(answer.value) : undefined;
-    const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: answer.ok ? shortError(answer.value, "Twilio refused the call") : answer.error })!;
-    deps.card(settled, settled.messageId);
-    deps.log?.(`outbound call ${settled.status} to ${maskPhone(request.to)}`);
-    if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Twilio"}. Tell the person; do not retry without a new approval.`, isError: true };
-    return { text: `Call placed to ${maskPhone(request.to)}: it says the AI disclosure, your purpose and your message, then hangs up. Tell the person it was placed. The outcome shows in Twilio's call log (twilio_api_query Calls).` };
-  }
-  const waiting = deps.calls.pending(context.principalId).some((row) => row.botId === context.botId && row.threadId === context.threadId && row.request.to === request.to && row.request.message === request.message && row.request.purpose === request.purpose);
-  const capped = waiting ? null : deps.calls.overLimit(context.principalId, "cards");
-  if (capped) return { text: capped, isError: true };
-  const dry = await deps.twilio(createCallArgs(request, twiml, true));
-  if (!dry.ok) return { text: `The call cannot be checked: ${dry.error}. It needs the person's Twilio profile on Perspicax. Nothing was placed.`, isError: true };
-  if (dry.isError) return { text: `Twilio's dry run refused this call: ${shortError(dry.value, "refused")}. Fix it, then call place_phone_call again. Nothing was placed.`, isError: true };
-  const opened = deps.calls.open({ ...context, request, names });
-  for (const old of opened.replaced) deps.card(old, old.messageId);
-  // #2091: the person's Always call approved it as it opened: the same
-  // path as an approved card places it now (approvedFor finds this record)
-  if (!opened.already && opened.record.status === "approved") return placePhoneCall(deps, context, args);
-  const messageId = deps.card(opened.record, opened.record.messageId);
-  if (messageId && !opened.record.messageId) deps.calls.attachMessage(opened.record.id, messageId);
-  return {
-    text: `${opened.already ? "The card is still waiting" : "Sagax showed the person a card"}: call ${formatPhone(request.to)}, "${request.purpose}". Nothing was placed. End your turn now; when they choose Call you are told, then call place_phone_call again with the same arguments.`,
-  };
+  return placeConversation(deps, context, request, settings);
 }
-
 
 /** Perspicax's voice_call answer, said for the bot (never a key, never an id). */
 function voiceRefusal(answer: ToolAnswer): string {
@@ -620,10 +575,34 @@ function voiceRefusal(answer: ToolAnswer): string {
       : `The call cannot be checked: ${answer.error}. A conversation call needs the person's own Perspicax Voice line. Nothing was placed.`;
   }
   const text = shortError(answer.value, "refused");
-  if (/no_realtime_voice/.test(text)) return "The person's Perspicax Voice line has no realtime voice connected, so it cannot hold a conversation. Nothing was placed.";
+  const noVoice = noLiveVoice(answer.value);
+  if (noVoice) return `No call was placed: ${noVoice}. Tell the person why, and who can fix it.`;
   if (/no_sagax_target/.test(text)) return "The person's Perspicax Voice line does not report to Sagax, so the call's result could not come back. Nothing was placed.";
   if (/no_line|no line|voice_number/i.test(text)) return "The person has no Perspicax Voice line yet (one number per person, set up with voice_number). Nothing was placed.";
   return `Perspicax refused this call: ${text}. Nothing was placed.`;
+}
+
+/** #4193: Perspicax refused `no_realtime_voice` (the live voice cannot take
+ * the call, so nothing was dialed): its reason in plain words, as it says
+ * it (off, not live or out of credits, and what fixes it), else a plain
+ * sentence. Undefined for any other answer. */
+function noLiveVoice(value: unknown): string | undefined {
+  let full = "";
+  try { full = typeof value === "string" ? value : JSON.stringify(value) ?? ""; } catch { full = ""; }
+  if (!/no_realtime_voice/.test(full)) return undefined;
+  let record: unknown = value;
+  if (typeof value === "string") {
+    try { record = JSON.parse(value); } catch { record = null; }
+  }
+  const message = record && typeof record === "object" ? (record as Record<string, unknown>).message : undefined;
+  const said = typeof message === "string" ? message.replace(/\s+/g, " ").trim().slice(0, 400).replace(/\.$/, "") : "";
+  return said || "the person's Perspicax Voice line has no live voice to hold the conversation now; whoever manages their Perspicax Voice connects it";
+}
+
+/** Why a placement failed, in words for the card and the bot. */
+function placementError(answer: ToolAnswer): string {
+  if (!answer.ok) return answer.error;
+  return noLiveVoice(answer.value) ?? shortError(answer.value, "Perspicax refused the call");
 }
 
 async function placeConversation(
@@ -634,7 +613,6 @@ async function placeConversation(
 ): Promise<{ text: string; isError?: boolean }> {
   if (settings.doNotCall.includes(request.to)) return { text: `${maskPhone(request.to)} is on the organization's do-not-call list. Nothing was placed; do not call it another way.`, isError: true };
   if (deps.calls.stoppedFor(context.principalId, request.to)) return { text: `The person at ${maskPhone(request.to)} asked not to be called again. Nothing was placed; do not call them another way. Tell the person.`, isError: true };
-  const conversation = request.mode === "conversation";
   if (!deps.voice) return { text: "Perspicax is not linked on this server: a call from the person's own line needs their Perspicax Voice line. Nothing was placed.", isError: true };
   const names = { botName: shortName(deps.names.botName), personName: shortName(deps.names.personName) };
   if (!names.personName) return { text: "Sagax cannot say on whose behalf this call is made. Nothing was placed.", isError: true };
@@ -645,12 +623,11 @@ async function placeConversation(
     const answer = await deps.voice(voiceCallArgs(request, { botName: names.botName, ref: approved.id, dryRun: false }));
     const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
     const sid = placed ? sidOf(answer.value) : undefined;
-    const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: answer.ok ? shortError(answer.value, "Perspicax refused the call") : answer.error })!;
-    const live = conversation && placed ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() } : undefined;
+    const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: placementError(answer) })!;
+    const live = placed ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() } : undefined;
     deps.card(settled, settled.messageId, live);
-    deps.log?.(`outbound ${conversation ? "conversation" : "line"} call ${settled.status} to ${maskPhone(request.to)}`);
+    deps.log?.(`outbound conversation call ${settled.status} to ${maskPhone(request.to)}`);
     if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };
-    if (!conversation) return { text: `Call placed to ${maskPhone(request.to)} from the person's own line: it says who calls, your purpose and your message twice, then hangs up. Tell the person it was placed.` };
     return {
       text: `Conversation call placed to ${maskPhone(request.to)} from the person's line: it opens with the AI disclosure, then you talk with them for at most ${request.maxMinutes ?? 5} minutes. End your turn now. The live card shows dialing, ringing and the transcript; when the call ends you get the result (status, duration, summary, commitments, transcript) in a new turn: then give the person the summary they asked for. Use send_dtmf, transfer or hang_up while it is live if you need to.`,
     };
@@ -680,13 +657,10 @@ async function placeConversation(
       const answer = await deps.voice(voiceCallArgs(request, { botName: names.botName, ref: approved.id, dryRun: false }));
       const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
       const sid = placed ? sidOf(answer.value) : undefined;
-      const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: answer.ok ? shortError(answer.value, "Perspicax refused the call") : answer.error })!;
-      const live = conversation && placed
-        ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() }
-        : undefined;
+      const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: placementError(answer) })!;
+      const live = placed ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() } : undefined;
       deps.card(settled, settled.messageId, live);
       if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };
-      if (!conversation) return { text: `Call placed to ${maskPhone(request.to)} from the person's own line (${how}). Tell the person it was placed.` };
       return {
         text: `Conversation call placed to ${maskPhone(request.to)} (${how}). End your turn now. Watch the live card; when it ends you get the result.`,
       };
@@ -695,9 +669,7 @@ async function placeConversation(
   const messageId = deps.card(opened.record, opened.record.messageId);
   if (messageId && !opened.record.messageId) deps.calls.attachMessage(opened.record.id, messageId);
   return {
-    text: !conversation
-      ? `${opened.already ? "The card is still waiting" : "Sagax showed the person a card"}: call ${formatPhone(request.to)} from their own line, "${request.purpose}". Nothing was placed. End your turn now; when they choose Call you are told, then call place_phone_call again with the same arguments.`
-      : `${opened.already ? "The card is still waiting" : "Sagax showed the person a card"}: Call ${formatPhone(request.to)}? Objective "${request.purpose}", ${request.maxMinutes ?? 5} minutes at most. Nothing was placed. End your turn now; when they choose Call you are told, then call place_phone_call again with the same arguments.`,
+    text: `${opened.already ? "The card is still waiting" : "Sagax showed the person a card"}: Call ${formatPhone(request.to)}? Objective "${request.purpose}", ${request.maxMinutes ?? 5} minutes at most. Nothing was placed. End your turn now; when they choose Call you are told, then call place_phone_call again with the same arguments.`,
   };
 }
 

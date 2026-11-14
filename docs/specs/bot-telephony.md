@@ -875,6 +875,10 @@ Toutes les questions R1 à R16 ont une réponse de the owner (section 0), sauf :
 Partie interne sûre, sans compte ni infrastructure nouvelle, en **pilote
 interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
 
+> Historique : l'appel à sens unique décrit ici (message dit puis
+> raccrochage) est retiré depuis #4193 ; tout appel placé est une
+> conversation en direct (section 10).
+
 - **Garde téléphonique** (`server/telephony-guard.ts`, branchée dans le relais
   `server/perspicax/perspicax-mcp.ts`) : liste blanche. Avec les outils Twilio, un bot
   lit, et envoie un texto (`Messages` create, qui garde sa carte
@@ -919,8 +923,9 @@ peux l'entendre, dialoguer avec lui et me revenir avec un résumé. »
 
 - **Outil** : `place_phone_call` avec `mode: "conversation"`, `objective`
   (200 caractères), `instructions` (1000), `max_minutes` (1 à 20, 5 par
-  défaut), `language`, `voicemail` (300, facultatif). Le mode `message`
-  (section 9) ne change pas.
+  défaut), `language`, `voicemail` (300, facultatif). Depuis #4193, tout
+  appel placé est une conversation en direct : le mode `message` (section 9)
+  est retiré, `mode` peut être omis et un `purpose` d'avant sert d'objectif.
 - **Carte** : la même carte d'approbation (numéro à cocher, Appeler ou Ne pas
   appeler), qui montre le numéro, l'objectif, la durée maximale et la phrase
   d'annonce telle qu'elle sera dite. Une approbation vaut pour un appel ; un

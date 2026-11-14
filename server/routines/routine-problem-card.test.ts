@@ -259,7 +259,7 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     expect(w.rings).toEqual([id]);
   });
 
-  it("still open after a day: one reminder, never a second (a restart included)", () => {
+  it("#4250 (S3): still open, told again after a day, then weekly, each step once (a restart in the middle included)", () => {
     const w = world();
     const r = routine();
     const cards = w.cardsWith();
@@ -277,6 +277,24 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     w.later(INPUT_REMIND_REPEAT_MS);
     w.cardsWith().remindDue([r]);
     expect(w.rings).toEqual([id, id]);
+    // a week after the day reminder: once more, then weekly
+    w.later(6 * INPUT_REMIND_REPEAT_MS);
+    w.cardsWith().remindDue([r]);
+    w.cardsWith().remindDue([r]);
+    expect(w.rings).toEqual([id, id, id]);
+    w.restart();
+    w.later(6 * INPUT_REMIND_REPEAT_MS);
+    w.cardsWith().remindDue([r]);
+    expect(w.rings).toEqual([id, id, id]);
+    w.later(INPUT_REMIND_REPEAT_MS);
+    w.cardsWith().remindDue([r]);
+    expect(w.rings).toEqual([id, id, id, id]);
+    // the first good run retires it: nothing more
+    w.run("completed");
+    w.cardsWith().sync(r);
+    w.later(30 * INPUT_REMIND_REPEAT_MS);
+    w.cardsWith().remindDue([r]);
+    expect(w.rings).toEqual([id, id, id, id]);
   });
 
   it("a routine reporting to a teammate's conversation: its card is found there, for that person only", () => {

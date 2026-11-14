@@ -9,7 +9,11 @@
 // ahead of due routines on an expired login engine (checkEngineReconnectAhead)
 // is the same state for the same person and engine: it is the same keyed
 // card, so whichever comes first is the only one (raiseAhead).
+// #4250 (S3): a fix item. Still open, it is told again after a day, then
+// weekly (the fix ladder, remindEngineFallbacks), each step once.
 import type { WireAccessCard } from "../../shared/wire.ts";
+import { FIX_LADDER, dueStep } from "../proactive/escalation-ladder.ts";
+import type { SignalEntry, SignalLedger } from "../proactive/signal-ledger.ts";
 import { keyedCardPerson } from "./sign-in-cards.ts";
 
 export const ENGINE_FALLBACK_KEY_PREFIX = "engine-sign-in:";
@@ -192,4 +196,52 @@ export function createEngineFallbackCards(deps: EngineFallbackCardsDeps): Engine
       return true;
     },
   };
+}
+
+/** #4250 (S3): the engine fix card still open, as the reminder rings it
+ * again: its conversation, the card and its words. */
+export interface OpenEngineFallback {
+  threadId: string;
+  access: WireAccessCard;
+  text: string;
+}
+
+export interface EngineFallbackReminderDeps {
+  ledger: SignalLedger;
+  /** The ledger kind the fix card is told under. */
+  kind: string;
+  /** The keyed card `key` still open for `person` (keyedCardPerson), in
+   * `threadId` when given (a server engine's card in one administrators'
+   * home), or null once it is closed. */
+  pending(key: string, person: string, threadId?: string): OpenEngineFallback | null;
+  /** Ring the card again as fix ladder step `step` (1: the day reminder,
+   * 2...: weekly), through tellPerson under the entry's own key. */
+  ring(person: string, entry: SignalEntry, card: OpenEngineFallback, step: number): void;
+  now(): number;
+}
+
+/** #4250 (S3): the engine fix cards still open at a step of the fix ladder
+ * (a day after they were told, then weekly): one ring per step. The clock
+ * and the steps told are the signal ledger's, so a restart repeats nothing
+ * and a step missed while the server was down rings once. A card closed
+ * (the engine works again, or the person took it out) is not reminded. */
+export function remindEngineFallbacks(deps: EngineFallbackReminderDeps): number {
+  const now = deps.now();
+  let rung = 0;
+  for (const { person, entry } of deps.ledger.entries({ kind: deps.kind })) {
+    if (entry.state !== "told" && entry.state !== "open") continue;
+    // a server engine's card (person "server") is told once per administrators' home (signalKeys.inHome:
+    // `<key>@<thread>`)
+    const at = person === keyedCardPerson({}) ? entry.key.lastIndexOf("@") : -1;
+    const key = at > 0 ? entry.key.slice(0, at) : entry.key;
+    const home = at > 0 ? entry.key.slice(at + 1) : undefined;
+    if (!key.startsWith(ENGINE_FALLBACK_KEY_PREFIX)) continue;
+    const step = dueStep(FIX_LADDER, entry.firstAt, entry.reminded ?? 0, now);
+    if (step === null) continue;
+    const card = deps.pending(key, person, home);
+    if (!card) continue;
+    deps.ring(person, entry, card, step);
+    rung += 1;
+  }
+  return rung;
 }

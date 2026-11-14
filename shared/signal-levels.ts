@@ -206,9 +206,10 @@ export class PersonSignalGate {
 
   /** #4250 (S2): the person's quiet hours and channels per level, for the
    * channels outside the app ("Me joindre"). */
-  attention(person: string): { quiet: QuietHours | null; channels: LevelChannels | undefined } {
+  attention(person: string): { quiet: QuietHours | null; channels: LevelChannels | undefined; timeZone?: string } {
     const prefs = this.prefs(person);
-    return { quiet: prefs.quiet, channels: prefs.channels };
+    // #4250 (S3): their time zone, for the morning line
+    return { quiet: prefs.quiet, channels: prefs.channels, ...(prefs.timeZone ? { timeZone: prefs.timeZone } : {}) };
   }
 
   /** #4233: what waits, oldest first, without clearing it: Today shows it

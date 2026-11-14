@@ -15,9 +15,11 @@
  *   for the same streak, a restart included (the newest card under the key,
  *   in storage, was raised at or after the streak began).
  * - A restart finds the pending card by its key and replaces it in place.
- * - Still open after a day: one reminder, the needs-you of the card itself
+ * - Still open after a day: told again, the needs-you of the card itself
  *   (the reminder step of a parked question, INPUT_REMIND_REPEAT_MS),
- *   marked on the card so a restart never rings it again.
+ *   marked on the card so a restart never rings it again. #4250 (S3): then
+ *   weekly while it stays open (the fix ladder of
+ *   server/proactive/escalation-ladder.ts), each step once.
  *
  * RoutineNeedsWatch calls `sync` on every pass with every routine; the
  * server's sweep calls `remindDue`.
@@ -29,8 +31,8 @@
 import type { ApprovalWords } from "../../shared/approval-describe.ts";
 import { ASK_CHOICE_TOOL } from "../../shared/options-card.ts";
 import type { RoutineNeedsPerson } from "../../shared/routines.ts";
-import { INPUT_REMIND_REPEAT_MS } from "../runtime/types.ts";
 import type { SignalLedger } from "../proactive/signal-ledger.ts";
+import { FIX_LADDER, dueStep, stepsToldBy } from "../proactive/escalation-ladder.ts";
 
 export const ROUTINE_PROBLEM_KEY_PREFIX = "routine-problem:";
 /** #4250: the ledger kind of a routine's fix card. */
@@ -121,8 +123,9 @@ export interface RoutineProblemCardsDeps<R extends { id: string; name: string; b
    * was raised, in any state (answered, put away, expired), or null: read
    * from storage, so a streak already told stays told after a restart. */
   latest(routine: R, key: string): { at: number } | null;
-  /** Ring the card's own needs-you again and mark it reminded. */
-  remind(routine: R, card: PendingProblemCard): void;
+  /** Ring the card's own needs-you again as ladder step `step` (1: the day
+   * reminder, 2...: weekly) and mark it reminded. */
+  remind(routine: R, card: PendingProblemCard, step: number): void;
   now(): number;
   /** #4250: the signal ledger, and whose store a routine's card is in. */
   signals?: SignalLedger;
@@ -190,14 +193,20 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
     else this.deps.signals?.told(this.person(routine), note);
   }
 
-  /** The cards still open a day after they were raised: one reminder each. */
+  /** #4250 (S3): the cards still open at a step of the fix ladder (a day
+   * after they were raised, then weekly): one ring per step. The steps told
+   * are the ledger's, or those the card's own mark (a previous version's,
+   * one reminder at most) covers, whichever is more. */
   remindDue(routines: readonly R[]): void {
     const now = this.deps.now();
     for (const routine of routines) {
       const found = this.deps.pending(routine, routineProblemKey(routine.id));
-      if (!found || found.message.card?.remindedAt || (this.signal(routine)?.reminded ?? 0) >= 1) continue;
-      if (now - found.message.at < INPUT_REMIND_REPEAT_MS) continue;
-      this.deps.remind(routine, found);
+      if (!found) continue;
+      const marked = found.message.card?.remindedAt;
+      const told = Math.max(this.signal(routine)?.reminded ?? 0, marked !== undefined ? stepsToldBy(FIX_LADDER, found.message.at, marked) : 0);
+      const step = dueStep(FIX_LADDER, found.message.at, told, now);
+      if (step === null) continue;
+      this.deps.remind(routine, found, step);
     }
   }
 

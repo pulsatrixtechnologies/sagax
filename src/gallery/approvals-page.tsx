@@ -4,10 +4,11 @@
 // /src/gallery/approvals-page.html; not part of the packaged app.
 // ?n=0|3|40&lang=fr|en&skin=<id>&scope=org (adds organization and team cards) &today=1 (a "needs you" card and a proactive proposal, #2689)
 // &routine=1 (2026-11-04: the oldest card is a routine run's, named by its routine)
+// &held=1 (#4233: what waited while the person was quiet, the "While you were quiet" group)
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
-import type { InboxApproval, InboxHistoryEntry, InboxPayload } from "../../shared/approvals-inbox";
+import type { InboxApproval, InboxHeldSignal, InboxHistoryEntry, InboxPayload } from "../../shared/approvals-inbox";
 import { DesktopCapabilitiesProvider } from "@/components/DesktopCapabilities";
 import { ApprovalsPage } from "@/components/approvals/ApprovalsPage";
 import { loadLocale } from "@/lib/i18n";
@@ -22,6 +23,7 @@ const COUNT = Number(params.get("n") ?? 3);
 const ORG = params.get("scope") === "org";
 const ROUTINE = params.get("routine") === "1";
 const TODAY = params.get("today") === "1";
+const HELD = params.get("held") === "1";
 const NOW = Date.now();
 const MIN = 60_000;
 
@@ -117,12 +119,18 @@ const history: InboxHistoryEntry[] = [
   { at: new Date(NOW - 50 * 60 * MIN).toISOString(), decision: "user-undone", who: "Ada", botName: "Nova", tool: "Write", summary: "docs/notes.md", threadId: "h5" },
 ];
 
+const FR = (params.get("lang") ?? "fr").startsWith("fr");
+let held: InboxHeldSignal[] = HELD ? [
+  { at: NOW - 9 * 60 * MIN, botId: "b-nova", botName: "Nova", threadId: "t-held-1", title: "Nova", body: FR ? "Sauvegarde de nuit terminée : 2 tâches en échec sur le serveur de fichiers." : "Nightly backup finished: 2 jobs failed on the file server." },
+  { at: NOW - 7 * 60 * MIN, botId: "b-pixel", botName: "Pixel", threadId: "t-held-2", title: FR ? "Rapport hebdomadaire" : "Weekly report", body: FR ? "Le rapport de la semaine est prêt dans ton dossier." : "This week's report is ready in your folder." },
+  { at: NOW - 6 * 60 * MIN, botId: "b-echo", botName: "Echo", threadId: "t-held-3", title: "Echo", body: FR ? "3 nouveaux billets assignés à ton équipe depuis 22 h." : "3 new tickets assigned to your team since 10 PM." },
+] : [];
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   if (url.pathname === "/api/approvals") {
-    const payload: InboxPayload = { pending, history: url.searchParams.get("history") === "1" ? history : [], scopes: { org: ORG, team: ORG } };
+    const payload: InboxPayload = { pending, history: url.searchParams.get("history") === "1" ? history : [], scopes: { org: ORG, team: ORG }, ...(held.length ? { held } : {}) };
     return reply(200, payload);
   }
   if (url.pathname === "/api/approvals/bulk") {
@@ -136,6 +144,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as { requestId: string };
     pending = pending.filter((entry) => !(entry.threadId === respond[1] && entry.requestId === body.requestId));
     return reply(200, { ok: true });
+  }
+  if (url.pathname === "/api/approvals/held/read") {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { upTo: number };
+    const before = held.length;
+    held = held.filter((item) => item.at > body.upTo);
+    return reply(200, { ok: true, cleared: before - held.length });
   }
   if (url.pathname === "/api/approvals/handled") {
     const body = JSON.parse(String(init?.body ?? "{}")) as { messageId: string };

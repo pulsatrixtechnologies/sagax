@@ -10,6 +10,7 @@ import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { createApprovalsInboxRoutes, inboxSpecialCard, type ApprovalsInboxDeps } from "./approvals-inbox.ts";
 import { PASS } from "./table.ts";
+import { PersonSignalGate } from "../../shared/signal-levels.ts";
 
 function entry(id: string, patch: Partial<InboxApproval> = {}): InboxApproval {
   return {
@@ -27,6 +28,8 @@ let historyCalls = 0;
 let journalDaysAsked: number[] = [];
 let testedDrafts: unknown[] = [];
 let settledCalls: Array<{ messageId: string; how: string }> = [];
+let gateNow = Date.UTC(2026, 10, 13, 3, 0);
+let gate: PersonSignalGate;
 
 beforeEach(async () => {
   pending = [entry("r1"), entry("r2"), entry("q1", { kind: "question", bulk: "question" }), entry("k1", { needsKey: true, bulk: "needs-key" })];
@@ -36,7 +39,11 @@ beforeEach(async () => {
   journalDaysAsked = [];
   testedDrafts = [];
   settledCalls = [];
+  gateNow = Date.UTC(2026, 10, 13, 3, 0);
+  gate = new PersonSignalGate(() => ({ budget: 0, quiet: null, timeZone: "UTC" }), () => gateNow);
   const deps: ApprovalsInboxDeps = {
+    held: (_auth, viewer) => gate.peekHeld(viewer.principalId).map((item) => ({ ...item, ...(item.botId ? { botName: "Nova" } : {}) })),
+    readHeld: (_auth, viewer, upTo) => gate.clearHeldUpTo(viewer.principalId, upTo),
     settle: (_auth, _viewer, item, how) => { settledCalls.push({ messageId: item.messageId, how }); return item.messageId !== "gone"; },
     viewer: () => (person ? { principalId: person } : null),
     pending: () => pending,
@@ -226,5 +233,36 @@ describe("POST /api/approvals/handled with skip", () => {
   it("settles as answered once the person's words went to the work", async () => {
     expect((await handled({ botId: "b1", threadId: "t1", messageId: "m3", answered: true })).body).toEqual({ ok: true, outcome: "answered" });
     expect(settledCalls).toEqual([{ messageId: "m3", how: "answered" }]);
+  });
+});
+
+// #4233 (Q5): what the signal gate held reaches Today even with no brief,
+// as one group, cleared once the person has read it.
+describe("held signals on Today (#4233)", () => {
+  const read = async (body: unknown) => {
+    const res = await fetch(`${base}/api/approvals/held/read`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return { status: res.status, body: await res.json() as any };
+  };
+  it("serves what waited with the Today list, the person's own only", async () => {
+    gate.decide({ personId: "pr_ada", kind: "routine", title: "Backup", body: "Two jobs failed", botId: "b1", threadId: "t1" });
+    gate.decide({ personId: "pr_bob", kind: "routine", title: "Not Ada's" });
+    const { body } = await get("/api/approvals");
+    expect(body.held).toEqual([expect.objectContaining({ title: "Backup", body: "Two jobs failed", botId: "b1", botName: "Nova", threadId: "t1" })]);
+    // reading the list again does not clear it: the person has not seen it yet
+    expect((await get("/api/approvals")).body.held).toHaveLength(1);
+  });
+  it("clears what was read, keeps what came after, and leaves nothing for the brief to repeat", async () => {
+    gate.decide({ personId: "pr_ada", kind: "routine", title: "First" });
+    const shown = (await get("/api/approvals")).body.held as Array<{ at: number }>;
+    gateNow += 10_000;
+    gate.decide({ personId: "pr_ada", kind: "routine", title: "Second" });
+    expect(await read({ upTo: shown[shown.length - 1]!.at })).toEqual({ status: 200, body: { ok: true, cleared: 1 } });
+    expect(((await get("/api/approvals")).body.held as Array<{ title: string }>).map((item) => item.title)).toEqual(["Second"]);
+    expect(gate.takeHeld("pr_ada").map((item) => item.title)).toEqual(["Second"]);
+  });
+  it("refuses a read without a time, and a caller that is no person", async () => {
+    expect((await read({})).status).toBe(400);
+    person = null;
+    expect((await read({ upTo: 1 })).status).toBe(403);
   });
 });

@@ -15,6 +15,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"exact","route":"/api/approvals","tier":"read","readOnly":true,"scope":"approvals:read","defaultEnabled":false},
   {"method":"POST","kind":"exact","route":"/api/approvals/bulk","tier":"write","readOnly":false,"scope":"approvals:write","defaultEnabled":false},
   {"method":"POST","kind":"exact","route":"/api/approvals/handled","tier":"write","readOnly":false,"scope":"approvals:write","defaultEnabled":true},
+  {"method":"POST","kind":"exact","route":"/api/approvals/held/read","tier":"write","readOnly":false,"scope":"approvals:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/approvals/journal","tier":"read","readOnly":true,"scope":"approvals:read","defaultEnabled":false},
   {"method":"POST","kind":"exact","route":"/api/approvals/journal/test","tier":"write","readOnly":false,"scope":"approvals:write","defaultEnabled":false},
   {"method":"GET","kind":"exact","route":"/api/artifacts","tier":"read","readOnly":true,"scope":"artifacts:read","defaultEnabled":true},

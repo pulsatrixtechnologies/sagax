@@ -4,7 +4,7 @@
 // and the plain words a row reads as. Never an id on screen.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { inboxKey, type InboxApproval, type InboxPayload } from "../../shared/approvals-inbox";
+import { inboxKey, type InboxApproval, type InboxHeldSignal, type InboxPayload } from "../../shared/approvals-inbox";
 import type { PersonAttentionCard } from "../../shared/person-attention";
 import { approvalAction } from "@/lib/approval-describe";
 import { t } from "@/lib/i18n";
@@ -49,6 +49,48 @@ export async function markHandled(entry: Pick<InboxApproval, "botId" | "threadId
 export async function answerProactive(entry: Pick<InboxApproval, "botId" | "proactiveId">, accept: boolean): Promise<void> {
   if (!entry.proactiveId) return;
   await api(`/api/bots/${encodeURIComponent(entry.botId)}/proactive/${encodeURIComponent(entry.proactiveId)}`, { method: "POST", body: JSON.stringify({ accept }) });
+}
+
+/** #4233: what the signal gate held, read on Today up to `upTo`: the server
+ * clears it, so neither Today nor the brief says it again. */
+export async function readHeld(upTo: number): Promise<void> {
+  await api("/api/approvals/held/read", { method: "POST", body: JSON.stringify({ upTo }) });
+}
+
+function heldKey(item: InboxHeldSignal): string {
+  return `${item.at}:${item.botId ?? ""}:${item.threadId ?? ""}:${item.title}`;
+}
+
+/** #4233: the held signals the screen shows, newest first: what the server
+ * serves is added to what this screen already showed (the server clears it
+ * once read, so it would vanish on the next poll otherwise). */
+export function mergeHeld(shown: readonly InboxHeldSignal[], served: readonly InboxHeldSignal[]): InboxHeldSignal[] {
+  const byKey = new Map(shown.map((item) => [heldKey(item), item]));
+  for (const item of served) byKey.set(heldKey(item), item);
+  return [...byKey.values()].sort((a, b) => b.at - a.at);
+}
+
+/** #4233: "While you were quiet" on Today. While `active` (the Waiting tab
+ * is on screen), what the server serves is shown and marked read up to the
+ * newest one; it stays on this screen until dismissed or the screen closes. */
+export function useHeldSignals(served: readonly InboxHeldSignal[] | undefined, active: boolean): { shown: InboxHeldSignal[]; dismiss: () => void } {
+  const [shown, setShown] = useState<InboxHeldSignal[]>([]);
+  const readUpTo = useRef(0);
+  useEffect(() => {
+    if (!active || !served?.length) return;
+    setShown((was) => {
+      const next = mergeHeld(was, served);
+      return next.length === was.length ? was : next;
+    });
+    const newest = Math.max(...served.map((item) => item.at));
+    if (newest <= readUpTo.current) return;
+    const before = readUpTo.current;
+    readUpTo.current = newest;
+    // not cleared: the next poll serves it again and the read is retried
+    readHeld(newest).catch(() => { readUpTo.current = before; });
+  }, [served, active]);
+  const dismiss = useCallback(() => setShown([]), []);
+  return { shown, dismiss };
 }
 
 const POLL_MS = 6_000;

@@ -22,7 +22,7 @@ import {
 } from "../../../shared/approvals-inbox";
 import { WindowDragStrip } from "../DesktopCapabilities";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { bulkAnswer, inboxChatTarget, inboxTitle, useInbox } from "@/lib/approvals-inbox";
+import { bulkAnswer, inboxChatTarget, inboxTitle, useHeldSignals, useInbox } from "@/lib/approvals-inbox";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableErrorMessage } from "@/lib/readable-error";
@@ -32,6 +32,7 @@ import { ApprovalDetail, OutcomePanel, type InboxOutcome } from "./ApprovalDetai
 import { ApprovalRow, InboxAvatar } from "./ApprovalRow";
 import { ApprovalsHistory } from "./ApprovalsHistory";
 import { ApprovalsJournal } from "./ApprovalsJournal";
+import { HeldSignalsGroup } from "./HeldSignalsGroup";
 import { useJournal } from "@/lib/action-journal";
 import { JOURNAL_DEFAULT_DAYS, type JournalEntry } from "../../../shared/action-journal";
 import { inboxKeyAction, moveSelection, selectionAfterRemoval } from "./inbox-keys";
@@ -208,6 +209,8 @@ export function ApprovalsPage() {
     .flatMap((bot) => (bot.tasks ?? []).filter((task) => task.activity === "waiting-on-you").map((task) => task.threadId))
     .sort().join(","), [state.bots]);
   const { data, error, refresh, arrived } = useInbox(filters.tab === "history", signal);
+  // #4233: what waited while the person was quiet, read here (brief or not)
+  const held = useHeldSignals(data?.held, filters.tab === "pending");
   // 2026-10-26: the Journal tab reads its own route, only while it is open
   const [journalDays, setJournalDays] = useState(JOURNAL_DEFAULT_DAYS);
   const journal = useJournal(filters.tab === "journal", journalDays);
@@ -454,6 +457,13 @@ export function ApprovalsPage() {
             )}
           </div>
 
+          <HeldSignalsGroup
+            items={held.shown}
+            bots={bots}
+            now={now}
+            onOpen={(item) => { if (item.botId && item.threadId) openNotificationTarget(dispatch, { botId: item.botId, threadId: item.threadId }, state, showThreads); }}
+            onDismiss={held.dismiss}
+          />
           {data && all.length === 0 ? (
             // nothing waits at all: one calm line across the screen, no empty panes
             <div className="min-h-0 flex-1 border-t border-hairline/40">

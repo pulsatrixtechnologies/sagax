@@ -104,6 +104,17 @@ export interface SignalPrefs {
   timeZone?: string;
 }
 
+/** #4233: the gate's preferences for one person, from their stored
+ * preferences and their own time zone (the budget day starts at their local
+ * midnight, not the quiet hours' zone or the server's). */
+export function readSignalPrefs(prefs: Record<string, string | undefined>, timeZone: string | undefined): SignalPrefs {
+  return {
+    budget: readSignalBudget(prefs[SIGNAL_BUDGET_KEY]),
+    quiet: readQuietHours(prefs[QUIET_HOURS_KEY]),
+    ...(timeZone && validTimeZone(timeZone) ? { timeZone } : {})
+  };
+}
+
 /** What a brief can carry, newest kept. */
 export const SIGNAL_HELD_MAX = 30;
 const HELD_TEXT_MAX = 280;
@@ -172,6 +183,19 @@ export class PersonSignalGate {
     row.sent += 1;
     this.persist();
     return true;
+  }
+
+  /** #4233: what waits, oldest first, without clearing it: Today shows it
+   * to a person who has no brief, and clears it once read (clearHeldUpTo). */
+  peekHeld(person: string): HeldSignal[] {
+    return [...(this.state.get(person)?.held ?? [])];
+  }
+
+  /** #4233: the person read what waited up to `upTo` (the newest one they
+   * were shown): it no longer waits for Today nor the brief. Anything held
+   * after it stays. How many were cleared. */
+  clearHeldUpTo(person: string, upTo: number): number {
+    return this.withdraw(person, (held) => held.at <= upTo);
   }
 
   /** What waited since the last brief, oldest first, and clears it. */

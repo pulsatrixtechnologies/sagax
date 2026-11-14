@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { heldSignalsSection, localDayKey, PersonSignalGate, readQuietHours, readSignalBudget, signalLevelOfPush, withinQuietHours, type PersonSignalState, type SignalGateStorage } from "./signal-levels.ts";
+import { heldSignalsSection, localDayKey, PersonSignalGate, QUIET_HOURS_KEY, readQuietHours, readSignalBudget, readSignalPrefs, SIGNAL_BUDGET_KEY, signalLevelOfPush, withinQuietHours, type PersonSignalState, type SignalGateStorage } from "./signal-levels.ts";
 
 const NIGHT = JSON.stringify({ start: "22:00", end: "07:00", timeZone: "UTC" });
 
@@ -62,6 +62,39 @@ describe("signal levels (#2695)", () => {
     expect(gate.withdraw("p1", (held) => held.threadId === "t1")).toBe(1);
     expect(gate.withdraw("p1", (held) => held.threadId === "t1")).toBe(0);
     expect(gate.takeHeld("p1").map((item) => item.threadId)).toEqual(["t2"]);
+  });
+
+  it("#4233: what waited is read without a brief and cleared only up to what was read", () => {
+    let now = Date.UTC(2026, 10, 8, 12, 0);
+    const gate = new PersonSignalGate(() => ({ budget: 0, timeZone: "UTC" }), () => now);
+    gate.decide({ personId: "p1", kind: "routine", title: "Backup", body: "Two jobs failed", botId: "b1", threadId: "t1" });
+    gate.decide({ personId: "p2", kind: "routine", title: "Other person" });
+    const seen = gate.peekHeld("p1");
+    expect(seen).toEqual([expect.objectContaining({ title: "Backup", body: "Two jobs failed", botId: "b1", threadId: "t1" })]);
+    // a read is not a take: the list stays until the person has seen it
+    expect(gate.peekHeld("p1")).toHaveLength(1);
+    // one more arrives after the read: clearing what was read keeps it
+    now += 5_000;
+    gate.decide({ personId: "p1", kind: "routine", title: "Later" });
+    expect(gate.clearHeldUpTo("p1", seen[0]!.at)).toBe(1);
+    expect(gate.peekHeld("p1").map((item) => item.title)).toEqual(["Later"]);
+    // the brief still takes what is left
+    expect(gate.takeHeld("p1").map((item) => item.title)).toEqual(["Later"]);
+    expect(gate.peekHeld("p2").map((item) => item.title)).toEqual(["Other person"]);
+  });
+
+  it("#4233: the budget day follows the person's time zone, not the quiet hours' or the server's", () => {
+    // 03:00 UTC on Nov 9 is still Nov 8 in Toronto
+    let now = Date.UTC(2026, 10, 9, 2, 0);
+    const prefs = readSignalPrefs({ [SIGNAL_BUDGET_KEY]: "5", [QUIET_HOURS_KEY]: NIGHT }, "America/Toronto");
+    expect(prefs).toEqual({ budget: 5, quiet: { start: "22:00", end: "07:00", timeZone: "UTC" }, timeZone: "America/Toronto" });
+    expect(readSignalPrefs({}, undefined)).toEqual({ budget: 20, quiet: null });
+    const gate = new PersonSignalGate(() => ({ ...readSignalPrefs({}, "America/Toronto"), budget: 1 }), () => now);
+    expect(gate.decide({ personId: "p1", kind: "routine" })).toBe("push");
+    now = Date.UTC(2026, 10, 9, 4, 0);
+    expect(gate.decide({ personId: "p1", kind: "routine" })).toBe("hold");
+    now = Date.UTC(2026, 10, 9, 5, 1);
+    expect(gate.decide({ personId: "p1", kind: "routine" })).toBe("push");
   });
 
   it("keeps the day's count and the held content across a restart", () => {

@@ -1,8 +1,9 @@
 // A person's preferences on an organization server (server/people/user-preferences.ts,
 // server/routes/user-preferences.ts): their own record, known keys only.
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createUserPreferenceStore, migrateToAdvancedOnce, preferencesFrameAllowed } from "./user-preferences.ts";
 import { createUserPreferenceRoutes, USER_PREFERENCES_PATH } from "../routes/user-preferences.ts";
@@ -34,6 +35,27 @@ describe("per-person preference store", () => {
     store.put(BOB, { "sagax.sidebarSections.v1": JSON.stringify({ sections: [{ name: "Mine", items: ["bot:b1"] }] }) });
     expect(JSON.parse(store.get(ADA).preferences["sagax.sidebarSections.v1"]!).sections[0].name).toBe("Ventes");
     expect(JSON.parse(store.get(BOB).preferences["sagax.sidebarSections.v1"]!).sections[0].name).toBe("Mine");
+  });
+
+  // #3539: the first turn after a start read and parsed the whole file inside
+  // its language lookup (languageOfPerson). The server loads it once at start.
+  it("loads the file once when asked, so a later read never touches the disk", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-prefs-"));
+    createUserPreferenceStore(dir, () => 1000).put(ADA, { "omb-language": "fr" });
+    const store = createUserPreferenceStore(dir, () => 2000);
+    store.load();
+    // the file is gone after the load: the record comes from memory
+    rmSync(join(dir, "user-preferences.json"));
+    expect(store.get(ADA).preferences["omb-language"]).toBe("fr");
+  });
+
+  it("is loaded at the server's start, before it listens, never on a turn's path (#3539)", () => {
+    const source = readFileSync(fileURLToPath(new URL("../index.ts", import.meta.url)), "utf8");
+    const created = source.indexOf("const userPreferenceStore = createUserPreferenceStore(DATA_DIR);");
+    expect(created).toBeGreaterThan(0);
+    const loaded = source.indexOf("userPreferenceStore.load();", created);
+    expect(loaded).toBeGreaterThan(created);
+    expect(loaded).toBeLessThan(source.indexOf("server.listen(PORT"));
   });
 });
 

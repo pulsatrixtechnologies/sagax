@@ -69,6 +69,16 @@ export interface PromptSplitReceipt {
    * only the sections that changed. Absent on receipts written before it
    * existed (the whole volatile half is then re-sent once, as before). */
   sections?: Record<string, string>;
+  /** Fingerprint of each stable section by id (the support's standing line
+   * included), so a change in the stable half re-sends only the sections
+   * that changed instead of the whole opening block (#4215). Absent when the
+   * sections did not describe the half (the whole block then rides again). */
+  stableSections?: Record<string, string>;
+  /** Bare turns since the session last reported its context size. A session
+   * that reports it has its compactions seen (a collapse against the peak),
+   * so only turns it did not measure count toward the re-anchor (#4215).
+   * Absent on older receipts: turnsSinceFull stands for it. */
+  unmeasuredTurns?: number;
 }
 
 /** One volatile section of a turn's system prompt (system-prompt.ts). */
@@ -176,7 +186,10 @@ export function readPromptSplitReceipt(scope: string, key: string): PromptSplitR
   try {
     const raw = JSON.parse(readFileSync(receiptPath(scope, key), "utf8")) as unknown;
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      const record = raw as { stable?: unknown; volatile?: unknown; turnsSinceFull?: unknown; lastUsed?: unknown; peakUsed?: unknown; sections?: unknown };
+      const record = raw as {
+        stable?: unknown; volatile?: unknown; turnsSinceFull?: unknown; lastUsed?: unknown; peakUsed?: unknown;
+        sections?: unknown; stableSections?: unknown; unmeasuredTurns?: unknown;
+      };
       if (typeof record.stable === "string" && typeof record.volatile === "string") {
         return {
           stable: record.stable,
@@ -185,6 +198,8 @@ export function readPromptSplitReceipt(scope: string, key: string): PromptSplitR
           ...(typeof record.lastUsed === "number" && record.lastUsed > 0 ? { lastUsed: record.lastUsed } : {}),
           ...(typeof record.peakUsed === "number" && record.peakUsed > 0 ? { peakUsed: record.peakUsed } : {}),
           ...(validSections(record.sections) ? { sections: record.sections } : {}),
+          ...(validSections(record.stableSections) ? { stableSections: record.stableSections } : {}),
+          ...(typeof record.unmeasuredTurns === "number" && record.unmeasuredTurns >= 0 ? { unmeasuredTurns: record.unmeasuredTurns } : {}),
         };
       }
     }
@@ -220,8 +235,13 @@ export function deletePromptSplitReceipt(scope: string, key: string): void {
  * of the prompt to the session nor re-prices its cached prefix.
  * perTurnVolatile marks a turn whose volatile half describes this very
  * turn (a mention): its note is delivered even when the text is unchanged.
+ * stableSections, when they rebuild the stable half (the support's standing
+ * line as one of them), let a changed stable half ride as the sections that
+ * changed (#4215): a skill or a rule edited mid-conversation no longer
+ * re-sends the whole opening block. Without them, or when the receipt has
+ * no prints of them, the full block rides as before.
  * reAnchorAfterTurns, when positive, re-sends the full prompt after that
- * many consecutive bare turns: a session that rewrites its own history
+ * many consecutive unmeasured bare turns (unmeasuredTurns): a session that rewrites its own history
  * without an observable event (an older pi, a missed compaction) still
  * gets its standing instructions back within a bounded number of turns.
  * volatileSections, when given, lets a later turn re-send only the volatile
@@ -236,16 +256,42 @@ export function splitSessionPrompt(
   perTurnVolatile = false,
   reAnchorAfterTurns = 0,
   volatileSections?: readonly VolatileSection[],
+  stableSections?: readonly VolatileSection[],
 ): { text: string; receipt: PromptSplitReceipt } {
   const fingerprints: PromptSplitReceipt = {
     ...promptSplitFingerprints(stable, volatile),
     ...(volatileSections ? { sections: sectionFingerprints(volatileSections) } : {}),
+    ...(stableSections ? { stableSections: sectionFingerprints(stableSections) } : {}),
   };
   // Legacy receipts predate the turn counter; count them from zero.
   const turnsSinceFull = typeof previous?.turnsSinceFull === "number" ? previous.turnsSinceFull : 0;
-  const reAnchor = reAnchorAfterTurns > 0 && previous !== null && turnsSinceFull >= reAnchorAfterTurns;
-  if (previous === null || previous.stable !== fingerprints.stable || reAnchor) {
-    return { text: fullSystem ? fullSystem + "\n\n" + text : text, receipt: { ...fingerprints, turnsSinceFull: 0 } };
+  const unmeasured = typeof previous?.unmeasuredTurns === "number" ? previous.unmeasuredTurns : turnsSinceFull;
+  const reAnchor = reAnchorAfterTurns > 0 && previous !== null && unmeasured >= reAnchorAfterTurns;
+  // A changed stable half rides as its changed sections when both copies
+  // are known section by section; otherwise the whole block rides again.
+  // A volatile change of the same turn joins that one note (its note says
+  // the sections it does not list are unchanged, so a second note would
+  // contradict it): a per-turn half rides whole, every earlier volatile
+  // section counted as changed. Without the volatile prints the whole
+  // block rides.
+  const volatileChanged = previous !== null && (previous.volatile !== fingerprints.volatile || perTurnVolatile);
+  const stableNote = previous !== null && previous.stable !== fingerprints.stable && stableSections && previous.stableSections
+    && (!volatileChanged || (volatileSections && previous.sections))
+    ? volatileChanged && volatileSections && previous.sections
+      ? changedSectionsNote([...stableSections, ...volatileSections], {
+        ...previous.stableSections,
+        ...(perTurnVolatile ? Object.fromEntries(Object.keys(previous.sections).map((id) => [id, ""])) : previous.sections),
+      })
+      : changedSectionsNote(stableSections, previous.stableSections)
+    : null;
+  if (previous === null || (previous.stable !== fingerprints.stable && !stableNote) || reAnchor) {
+    return { text: fullSystem ? fullSystem + "\n\n" + text : text, receipt: { ...fingerprints, turnsSinceFull: 0, unmeasuredTurns: 0 } };
+  }
+  if (stableNote) {
+    return {
+      text: withContextNote(stableNote, text),
+      receipt: { ...fingerprints, turnsSinceFull: turnsSinceFull + 1, unmeasuredTurns: unmeasured + 1 },
+    };
   }
   const sectionNote = previous.volatile !== fingerprints.volatile && !perTurnVolatile && volatileSections && previous.sections
     ? changedSectionsNote(volatileSections, previous.sections)
@@ -253,5 +299,8 @@ export function splitSessionPrompt(
   const note = previous.volatile === fingerprints.volatile && !perTurnVolatile
     ? ""
     : sectionNote ?? volatileContextNote(volatile, previous.volatile !== EMPTY_FINGERPRINT);
-  return { text: withContextNote(note, text), receipt: { ...fingerprints, turnsSinceFull: turnsSinceFull + 1 } };
+  return {
+    text: withContextNote(note, text),
+    receipt: { ...fingerprints, turnsSinceFull: turnsSinceFull + 1, unmeasuredTurns: unmeasured + 1 },
+  };
 }

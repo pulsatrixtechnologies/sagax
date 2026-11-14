@@ -100,6 +100,27 @@ describe("prompt-split receipts", () => {
 describe("splitSessionPrompt", () => {
   const fullSystem = "stable rules.\n\nmemory";
 
+  // #4215 review: a stable and a volatile change in one turn rode as two
+  // notes with the same prefix, each saying the sections it does not list
+  // are unchanged, so the first was contradicted by the second.
+  it("puts a stable and a volatile change of one turn into one note (#4215)", () => {
+    const stableOf = (skills: string) => [{ id: "soul", text: "Soul." }, { id: "skills", text: skills }];
+    const volatileOf = (memory: string) => [{ id: "memory", text: memory }, { id: "recent", text: "Recent." }];
+    const join = (sections: ReadonlyArray<{ text: string }>) => sections.map((section) => section.text).join("");
+    const send = (skills: string, memory: string, previous: PromptSplitReceipt | null, text: string, perTurn = false) =>
+      splitSessionPrompt(join(stableOf(skills)), join(volatileOf(memory)), previous, "full", text, perTurn, 0, volatileOf(memory), stableOf(skills));
+    const first = send("Skills A.", "Memory A.", null, "first");
+    const second = send("Skills B.", "Memory B.", first.receipt, "second");
+    expect(second.text).toBe(VOLATILE_SECTIONS_NOTE_PREFIX + "\n\nSkills B.\n\nMemory B.\n\nsecond");
+    expect(second.text.split(VOLATILE_SECTIONS_NOTE_PREFIX)).toHaveLength(2);
+    // A per-turn volatile half rides whole, in the same single note.
+    const third = send("Skills C.", "Memory B.", second.receipt, "third", true);
+    expect(third.text).toBe(VOLATILE_SECTIONS_NOTE_PREFIX + "\n\nSkills C.\n\nMemory B.\n\nRecent.\n\nthird");
+    // A stable change alone still rides alone.
+    const fourth = send("Skills D.", "Memory B.", third.receipt, "fourth");
+    expect(fourth.text).toBe(VOLATILE_SECTIONS_NOTE_PREFIX + "\n\nSkills D.\n\nfourth");
+  });
+
   it("delivers the full prompt to an untracked session, then sends later turns bare", () => {
     const first = splitSessionPrompt("stable rules.", "memory", null, fullSystem, "first");
     expect(first.text).toBe(fullSystem + "\n\nfirst");

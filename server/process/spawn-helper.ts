@@ -32,6 +32,8 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import type { Socket } from "node:net";
 import { setPriority } from "node:os";
+import { basename } from "node:path";
+import { performance } from "node:perf_hooks";
 import { Duplex, PassThrough, Writable, type Readable } from "node:stream";
 import { promisify } from "node:util";
 
@@ -566,12 +568,64 @@ function abortOnSignal(child: HelperChild, signal: AbortSignal | undefined, kill
   child.once("close", () => signal.removeEventListener("abort", abort));
 }
 
+/** #3598: a start whose synchronous part (on the server's main thread) takes
+ * this long is logged, with the program's name, the server's resident memory
+ * and the starts of the same stretch. */
+export const SLOW_START_MS = 100;
+/** #3598: the starts one synchronous stretch of the main thread may make
+ * (a turn's engine with its probe, a hook and a read): past it the stretch
+ * is logged with its programs, and a test fails when a turn's preparation
+ * goes past it. */
+export const STRETCH_STARTS_LIMIT = 4;
+
+/** The starts made since the main thread last gave the loop back. */
+let stretch: { starts: number; ms: number; programs: string[] } | null = null;
+
+/** The program's own name, never its folder (a person's path) nor its arguments. */
+function programName(command: string): string {
+  return basename(command) || "?";
+}
+
+function endStretch(): void {
+  const done = stretch;
+  stretch = null;
+  if (done && done.starts > STRETCH_STARTS_LIMIT) {
+    log(`[spawn-stretch] ${done.starts} process starts in one synchronous stretch (${Math.round(done.ms)} ms): ${done.programs.join(", ")}`);
+  }
+}
+
+/** Count one start in the current stretch, and log it when its synchronous
+ * part was slow (#3598). Names and numbers only. */
+export function noteProcessStart(command: string, ms: number): void {
+  const program = programName(command);
+  if (!stretch) {
+    stretch = { starts: 0, ms: 0, programs: [] };
+    setImmediate(endStretch);
+  }
+  stretch.starts += 1;
+  stretch.ms += ms;
+  stretch.programs.push(program);
+  if (ms >= SLOW_START_MS) {
+    const rssMb = Math.round(process.memoryUsage.rss() / (1024 * 1024));
+    log(`[spawn-slow] ${program} took ${Math.round(ms)} ms on the main thread to start; server rss ${rssMb} MB; start ${stretch.starts} of this stretch (${Math.round(stretch.ms)} ms)`);
+  }
+}
+
 /**
  * `spawn`, through the helper when it runs. Same arguments and the same kind
  * of result; with options the helper does not carry (a stream as stdio,
  * extra descriptors, a timeout), or while it is down, the server spawns itself.
  */
 function spawnChildImpl(command: string, argsOrOptions?: readonly string[] | SpawnOptions, maybeOptions?: SpawnOptions): ChildProcess {
+  const startedAt = performance.now();
+  try {
+    return startChild(command, argsOrOptions, maybeOptions);
+  } finally {
+    noteProcessStart(command, performance.now() - startedAt);
+  }
+}
+
+function startChild(command: string, argsOrOptions?: readonly string[] | SpawnOptions, maybeOptions?: SpawnOptions): ChildProcess {
   const args = Array.isArray(argsOrOptions) ? argsOrOptions as readonly string[] : [];
   const options: SpawnOptions = (Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as SpawnOptions | undefined) ?? {};
   const current = wanted && !helperDown ? helper : null;
@@ -620,7 +674,14 @@ export function execChild(
   callback: (error: ExecChildError | null, stdout: string, stderr: string) => void,
 ): ChildProcess {
   // No helper here (not Linux, or not started): this is Node's own execFile.
-  if (!wanted) return execFile(file, args, options as ExecFileOptions, callback as Parameters<typeof execFile>[3]);
+  if (!wanted) {
+    const startedAt = performance.now();
+    try {
+      return execFile(file, args, options as ExecFileOptions, callback as Parameters<typeof execFile>[3]);
+    } finally {
+      noteProcessStart(file, performance.now() - startedAt);
+    }
+  }
   const { timeout = 0, killSignal = "SIGTERM", maxBuffer = 1024 * 1024, encoding = "utf8", ...spawnOptions } = options;
   // An AbortSignal stays with the helper's child too: it is stopped with
   // killSignal and the callback gets the AbortError, as from execFile.

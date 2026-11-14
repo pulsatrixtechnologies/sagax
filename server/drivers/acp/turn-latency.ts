@@ -36,6 +36,10 @@
 // was busy between the turn's start and its send. Near the queue, the wait
 // was Sagax's own work (other turns, a save, the collector); near zero, the
 // turn waited on I/O (a read, a sign-in refresh, the person's environment).
+// #3598: starts=<count>:<ms>, the process starts the server made from the
+// turn's start until the engine took its prompt (every start of the server in
+// that window, as queueBusy counts its work) and their total synchronous time
+// on the main thread; absent when there was none.
 // #3623: toolsBy names the servers the tools part waited for: Sagax's own
 // mounts by product name, the person's own connections as one count
 // (own:<count>:<longest ms>), pending:<count> when the wait hit its limit.
@@ -83,6 +87,9 @@ export interface TurnLatency {
   toolWait?: TurnToolWait;
   /** #4215: the server's main thread busy during the queue, ms (queueBusy) */
   queueBusyMs?: number;
+  /** #3598: the process starts during queue and setup and their total
+   * synchronous ms (starts) */
+  starts?: { count: number; ms: number };
 }
 
 /** #3623: the wait for the engine's tool servers, server by server. */
@@ -281,6 +288,7 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
     if (setupBy) parts.push(`setupBy=${setupBy}`);
   }
   if (trace.queueBusyMs !== undefined && trace.queueBusyMs > TOOLS_SLOW_MS) parts.push(`queueBusy=${Math.round(trace.queueBusyMs)}ms`);
+  if (trace.starts && trace.starts.count > 0) parts.push(`starts=${trace.starts.count}:${Math.round(trace.starts.ms)}ms`);
   const toolsBy = turnToolsBy(trace.toolWait);
   if (toolsBy) parts.push(`toolsBy=${toolsBy}`);
   const toolsServed = turnToolsServed(trace.toolWait);

@@ -73,6 +73,18 @@ describe("turn latency line", () => {
     expect(turnLatencyLine("grok", "t", trace, 6_000, "ok")).toContain(" queueBusy=640ms ");
   });
 
+  // #3598: the line counts the process starts of the turn's wait and their
+  // total synchronous time; nothing when there was none
+  it("counts the process starts of the turn's queue and setup", () => {
+    const trace = newTurnLatency(10_000, 4_000);
+    trace.promptAt = 11_000;
+    expect(turnLatencyLine("grok", "t", trace, 12_000, "ok")).not.toContain("starts=");
+    trace.starts = { count: 0, ms: 0 };
+    expect(turnLatencyLine("grok", "t", trace, 12_000, "ok")).not.toContain("starts=");
+    trace.starts = { count: 3, ms: 212.6 };
+    expect(turnLatencyLine("grok", "t", trace, 12_000, "ok")).toContain(" starts=3:213ms ");
+  });
+
   // #3561: one production line tells which part of queue and setup is slow
   it("names the parts of queue and setup on the same line, existing fields unchanged", () => {
     const trace = newTurnLatency(10_000, 4_000);

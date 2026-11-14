@@ -581,6 +581,15 @@ export const STRETCH_STARTS_LIMIT = 4;
 /** The starts made since the main thread last gave the loop back. */
 let stretch: { starts: number; ms: number; programs: string[] } | null = null;
 
+/** Every start since the server's start and their synchronous ms: a turn
+ * counts its own wait's starts as the difference of two reads (#3598). */
+const totals = { count: 0, ms: 0 };
+
+/** The process starts made so far and their total synchronous time, ms. */
+export function processStartTotals(): { count: number; ms: number } {
+  return { ...totals };
+}
+
 /** The program's own name, never its folder (a person's path) nor its arguments. */
 function programName(command: string): string {
   return basename(command) || "?";
@@ -598,6 +607,8 @@ function endStretch(): void {
  * part was slow (#3598). Names and numbers only. */
 export function noteProcessStart(command: string, ms: number): void {
   const program = programName(command);
+  totals.count += 1;
+  totals.ms += ms;
   if (!stretch) {
     stretch = { starts: 0, ms: 0, programs: [] };
     setImmediate(endStretch);

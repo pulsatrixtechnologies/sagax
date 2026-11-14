@@ -32,20 +32,20 @@ export const DEF_CREATE_OPTIONS_CARD = {
 export const ASK_CHOICE_DEF = {
     name: ASK_CHOICE_TOOL,
     description:
-      "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Put your recommended option first. The card has an Other field for a typed answer. A blocking decision MUST use this card or a native question tool, including in routine runs and MCP-started turns; never end with a plain-text confirmation request. Then end your turn. For writes already covered by the request or an exact quoted GO, call the write tool through its normal approval gate instead of re-asking. Not for may-I permission on in-scope work or teammate contact when Ask before contacting bots is off. Several separate items: one call per item in this same turn, each its own card (no maximum; the person pages through them), and key to replace or retire a card later. Raise them with wait false: on some engines a card that waits ends the turn with its call, so only wait false cards can follow one another in one turn everywhere.",
+      "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool, routine runs and MCP-started turns included; never end with a plain-text confirmation request. Then end your turn. A write the request or an exact quoted GO covers: use its approval gate, never re-ask. Not for may-I permission on in-scope work, nor teammate contact when Ask before contacting bots is off. Several items: one call and card each (no maximum), a key to replace or retire one later; only wait false cards can follow one another in one turn.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "The question, with what happened and why you wait: enough context to answer from a notification at a glance." },
-        title: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.title, description: "Optional short heading for the card." },
+        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "The question, what happened and why you wait: enough to answer from a notification at a glance." },
+        title: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.title, description: "Optional short heading." },
         options: {
           type: "array",
           minItems: OPTIONS_CARD_LIMITS.minOptions,
           maxItems: OPTIONS_CARD_LIMITS.maxOptions,
           uniqueItems: true,
           items: { type: "string", minLength: 1, maxLength: OPTIONS_CARD_LIMITS.option },
-          description: "2-6 answers to the question, a few words each, the recommended one first. \"A or B?\" takes A and B, never Yes / No.",
+          description: "2-6 answers of a few words, the recommended one first. \"A or B?\" takes A and B, never Yes / No.",
         },
         details: {
           type: "array",
@@ -53,10 +53,10 @@ export const ASK_CHOICE_DEF = {
           items: { type: "string", maxLength: ASK_CHOICE_DETAIL_MAX },
           description: "Optional, same order: what each answer does.",
         },
-        key: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.key, description: "Optional stable key you choose for this card (an item id such as ticket-1234). The same key again in this conversation replaces its pending card in place; the answer reaches you with this key verbatim and the chosen option. A keyed card is a decision: never answered for the person." },
-        wait: { type: "boolean", description: "Default true: the card holds your turn (and a routine run waits on it); on some engines the turn then ends with this call. In a background run of a routine that can run several times a day (a trigger or a clock that repeats within a day) the default is false, so the run never waits on it. false: the card stays pending for the person and holds nothing; the turn goes on (ask the next item now), end the run or turn normally, and each answer arrives later as its own turn in this conversation." },
-        decision: { type: "boolean", description: "true for a business decision only the person makes: never answered for them, at any approval level." },
-        retire: { type: "boolean", description: "true with key: close that pending card at once (question and options are then ignored); an answer to it starts nothing." },
+        key: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.key, description: "Optional stable key (an item id such as ticket-1234): the same key here replaces its pending card; the answer brings it verbatim with the chosen option. A keyed card is a decision: never answered for the person." },
+        wait: { type: "boolean", description: "Default true: holds your turn and a routine run; on some engines the turn then ends with this call. Default false in a background run of a routine that runs several times a day. false: the card stays pending and holds nothing; go on (ask the next item) and end normally; each answer comes later as its own turn." },
+        decision: { type: "boolean", description: "true for a business decision only the person makes: never answered for them, at any level." },
+        retire: { type: "boolean", description: "true with key: close that pending card now (other fields ignored); a later answer starts nothing." },
         to: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.to, description: "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed." },
         tell: { type: "boolean", description: "A fact to know, no answer; options []." },
       },

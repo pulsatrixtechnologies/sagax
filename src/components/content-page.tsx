@@ -162,10 +162,11 @@ export function PageSegment<T extends string | number>({ label, value, options, 
   disabled?: boolean;
 } & DataAttributes) {
   return (
-    <div {...rest} role="group" aria-label={label}
+    <div {...rest} role="group"
       className={compact
         ? "flex h-6 shrink-0 items-center gap-0.5 rounded-full bg-ink/[0.06] p-0.5"
-        : "flex shrink-0 items-center rounded-lg border border-hairline/50 bg-panel p-0.5"}>
+        : "flex shrink-0 items-center rounded-lg border border-hairline/50 bg-panel p-0.5"}
+      aria-label={label}>
       {options.map((option) => {
         const Icon = option.icon;
         const on = value === option.value;

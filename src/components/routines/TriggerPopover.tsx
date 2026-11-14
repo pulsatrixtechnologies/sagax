@@ -24,10 +24,11 @@ import { RoutineWebhookPanel } from "./RoutineWebhookPanel";
 import { WatchFields, draftFromWatch, watchFromDraft } from "./WatchFields";
 import { PANEL_INPUT, PANEL_LABEL, PanelRow, PanelRows } from "./PanelRows";
 import { GithubTriggerFields, githubDraftFrom, githubScheduleFromDraft, type GithubDraft } from "./GithubTriggerFields";
+import { ProductTriggerFields, productDraftFrom, productScheduleFromDraft, useProductTriggerOffered, type ProductDraft } from "./ProductTriggerFields";
 
 /** once | a pattern's frequency | every N minutes | cron | webhook; mail
  * and limit-reset triggers are kept as they are (changed in Edit). */
-export type TriggerChoice = "once" | Exclude<ScheduleFrequency, "every"> | "interval" | "cron" | "webhook" | "github" | "email" | "limit_reset";
+export type TriggerChoice = "once" | Exclude<ScheduleFrequency, "every"> | "interval" | "cron" | "webhook" | "github" | "product" | "email" | "limit_reset";
 
 const INTERVALS = [5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720];
 
@@ -35,7 +36,7 @@ export function triggerChoiceOf(schedule: Routine["schedule"]): TriggerChoice {
   if (schedule.type === "once") return "once";
   if (schedule.type === "interval") return "interval";
   if (schedule.type === "webhook") return "webhook";
-  if (schedule.type === "event") return schedule.source === "github" ? "github" : "email";
+  if (schedule.type === "event") return schedule.source === "github" ? "github" : schedule.source === "perspicax" ? "product" : "email";
   if (schedule.type === "limit_reset") return "limit_reset";
   const { draft, fits } = scheduleDraftFor(schedule, Date.now());
   if (!fits || draft.model.frequency === "every") return "cron";
@@ -51,6 +52,7 @@ export function triggerPatch(input: {
   everyMinutes: number;
   cron: { expression: string; timeZone: string };
   github?: GithubDraft;
+  product?: ProductDraft;
   watch: Routine["precheck"] | null | undefined;
   now: number;
 }): { patch: { schedule?: RoutineScheduleInput; precheck?: Routine["precheck"] | null } } | { error: string } {
@@ -61,6 +63,11 @@ export function triggerPatch(input: {
   if (choice === "once") schedule = { type: "once", at: input.onceAt };
   else if (choice === "webhook") schedule = { type: "webhook" };
   else if (choice === "github") schedule = githubScheduleFromDraft(input.github ?? githubDraftFrom(routine.schedule));
+  else if (choice === "product") {
+    const built = productScheduleFromDraft(input.product ?? productDraftFrom(routine.schedule));
+    if ("error" in built) return { error: built.error };
+    schedule = built.schedule;
+  }
   else if (choice === "email" || choice === "limit_reset") schedule = undefined;
   else if (choice === "interval") {
     const current = routine.schedule.type === "interval" ? routine.schedule : undefined;
@@ -81,7 +88,7 @@ export function triggerPatch(input: {
     if (value.error || !value.schedule) return { error: value.error || t("routineCalendar.validSchedule") };
     schedule = timed(savedPatternSchedule(value.schedule, { ...draft, model: { ...draft.model, frequency: choice } }) as RoutineScheduleInput);
   }
-  const repeats = choice !== "once" && choice !== "webhook" && choice !== "github" && choice !== "email" && choice !== "limit_reset";
+  const repeats = choice !== "once" && choice !== "webhook" && choice !== "github" && choice !== "product" && choice !== "email" && choice !== "limit_reset";
   const hadWatch = routine.precheck?.kind === "watch";
   const watch = repeats && routine.target !== "room-goal" ? input.watch ?? null : null;
   const precheck = watch ? { precheck: watch } : hadWatch ? { precheck: null } : {};
@@ -109,6 +116,8 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
   const [everyMinutes, setEveryMinutes] = useState(routine.schedule.type === "interval" ? routine.schedule.everyMinutes : 30);
   const [cron, setCron] = useState(() => routine.schedule.type === "cron" ? { expression: routine.schedule.expression, timeZone: routine.schedule.timeZone } : { expression: "0 9 * * 1-5", timeZone: personTimeZone() });
   const [github, setGithub] = useState<GithubDraft>(() => githubDraftFrom(routine.schedule));
+  const [product, setProduct] = useState<ProductDraft>(() => productDraftFrom(routine.schedule));
+  const productOffered = useProductTriggerOffered(routine.schedule);
   const [watchDraft, setWatchDraft] = useState(() => draftFromWatch(routine.precheck?.kind === "watch" ? routine.precheck : undefined));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -137,14 +146,14 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
   const patternChoice = (PICKER_FREQUENCIES as string[]).includes(choice);
   const patternValue = patternChoice ? scheduleEditorValue({ ...draft, model: { ...draft.model, frequency: choice as ScheduleFrequency } }, opened) : null;
   const cronValue = choice === "cron" ? keptScheduleValue({ type: "cron", expression: cron.expression.trim(), timeZone: cron.timeZone }, opened) : null;
-  const repeats = choice !== "once" && choice !== "webhook" && choice !== "github" && choice !== "email" && choice !== "limit_reset";
+  const repeats = choice !== "once" && choice !== "webhook" && choice !== "github" && choice !== "product" && choice !== "email" && choice !== "limit_reset";
   const watchAllowed = repeats && routine.target !== "room-goal";
   const watchBuilt = watchFromDraft(watchDraft);
   const watchError = watchAllowed && "error" in watchBuilt ? watchBuilt.error : "";
 
   const apply = async () => {
     const built = triggerPatch({
-      routine, choice, draft, onceAt: fromLocalDateAndTime(date, time), everyMinutes, cron, github,
+      routine, choice, draft, onceAt: fromLocalDateAndTime(date, time), everyMinutes, cron, github, product,
       watch: watchAllowed && "watch" in watchBuilt ? watchBuilt.watch ?? null : null, now: Date.now(),
     });
     if ("error" in built) { setError(built.error); return; }
@@ -167,6 +176,7 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
     { value: "cron", label: t("routineTrigger.cron") },
     ...(routine.target !== "room-goal" ? [{ value: "webhook", label: t("routineEditor.whenWebhook") }] : []),
     ...(routine.target !== "room-goal" ? [{ value: "github", label: t("routineTrigger.github") }] : []),
+    ...(routine.target !== "room-goal" && productOffered ? [{ value: "product", label: t("routineTrigger.product") }] : []),
     ...(choice === "email" ? [{ value: "email", label: t("schedule.sentence.email") }] : []),
     ...(choice === "limit_reset" ? [{ value: "limit_reset", label: t("routines.limitReset.option") }] : []),
   ];
@@ -183,7 +193,7 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
   >
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3.5">
       <div className="flex items-center justify-between gap-2">
-        <span className={cn(PANEL_LABEL, "inline-flex items-center gap-1.5")}>{choice === "webhook" || choice === "github" ? <Globe size={13} aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}{t("routineTrigger.title")}</span>
+        <span className={cn(PANEL_LABEL, "inline-flex items-center gap-1.5")}>{choice === "webhook" || choice === "github" || choice === "product" ? <Globe size={13} aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}{t("routineTrigger.title")}</span>
         <span data-trigger-frequency={choice}><PillSelect<string> ariaLabel={t("routines.editor.repeat")} value={choice} options={options} onChange={(next) => { setChoice(next as TriggerChoice); setError(""); }} /></span>
       </div>
       {choice === "once" && <PanelRows><PanelRow label={t("routineCalendar.starts")}>
@@ -209,6 +219,7 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
         <RoutineWebhookPanel routine={routine.schedule.type === "webhook" ? routine : undefined} bot={bot} />
       </div>}
       {choice === "github" && <GithubTriggerFields draft={github} onChange={setGithub} />}
+      {choice === "product" && <ProductTriggerFields draft={product} onChange={setProduct} botId={routine.botId} />}
       {(choice === "email" || choice === "limit_reset") && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("routineTrigger.keptHere")}</p>}
       {watchAllowed && <PanelRows><WatchFields draft={watchDraft} onChange={setWatchDraft} botId={routine.botId} routineId={routine.id} runOn={routine.runOn} /></PanelRows>}
       {(error || watchError) && <p role="alert" className="text-[12px] text-danger">{error || (watchError ? t(watchError) : "")}</p>}

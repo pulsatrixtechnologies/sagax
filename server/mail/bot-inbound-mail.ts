@@ -35,7 +35,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
 import { planMailDelivery, plusTag, type MailTagRoutine } from "../../shared/routine-mail-alias.ts";
-import { isRelaySource, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../../shared/trigger-sources.ts";
+import { TRIGGER_SOURCES, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "../org/org-admin-routes.ts";
 import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "../context/cold-prompt-budget.ts";
@@ -176,9 +176,11 @@ export function botmailTaggedPrompt(
  * is that same authorization, checked by the caller against current owners
  * and live routine records; it never changes the email's data provenance.
  * A webhook run whose trigger is gone is
- * confined too: what woke it can no longer be told. Every relayed source is
- * confined the same way: bot email and, since 2026-10-26, bot phone
- * (server/bots/bot-inbound-telephony.ts). */
+ * confined too: what woke it can no longer be told. Every relayed source
+ * whose sender is not the owner is confined the same way: bot email and,
+ * since 2026-10-26, bot phone (server/bots/bot-inbound-telephony.ts). A
+ * product change (#4250, `perspicax`) comes from the person's own
+ * organization server and keeps the bot's usual tools. */
 export function botmailRunConfined(
   run: { triggerSource?: string; webhookId?: string } | null | undefined,
   triggerOf: (webhookId: string) => { source?: Pick<TriggerSourceConfig, "type" | "allowFullTools"> } | null | undefined,
@@ -189,7 +191,7 @@ export function botmailRunConfined(
   if (!trigger) return true;
   if (authorizedFull) return false;
   const type = trigger.source?.type;
-  return isTriggerSourceType(type) && isRelaySource(type) && trigger.source?.allowFullTools !== true;
+  return isTriggerSourceType(type) && TRIGGER_SOURCES[type].confinedRuns === true && trigger.source?.allowFullTools !== true;
 }
 
 /** Second review (S2 through delegation, 2026-10-22): the internal routes

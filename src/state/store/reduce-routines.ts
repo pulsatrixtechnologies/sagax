@@ -3,6 +3,7 @@
 import type {Action, AppState} from "./model";
 import {trimRoutineRuns} from "./model";
 import { olderRunsSince, withOlderRoutineRuns } from "../routine-runs";
+import { webhookFromServer } from "../../../shared/webhooks";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
 
@@ -44,14 +45,15 @@ export function reduceRoutines(state: AppState, action: Action, _reduce: ReduceF
       };
     }
     case "webhooksHydrated":
-      return { ...state, webhooks: action.webhooks, webhookAttempts: action.attempts, webhookIngress: action.ingress, webhookGraphConnectors: action.graphConnectors ?? [] };
+      return { ...state, webhooks: action.webhooks.map(webhookFromServer), webhookAttempts: action.attempts, webhookIngress: action.ingress, webhookGraphConnectors: action.graphConnectors ?? [] };
     case "webhookPatched": {
+      const patched = webhookFromServer(action.webhook);
       const exists = state.webhooks.some((webhook) => webhook.id === action.webhook.id);
       return {
         ...state,
         webhooks: exists
-          ? state.webhooks.map((webhook) => (webhook.id === action.webhook.id ? action.webhook : webhook))
-          : [action.webhook, ...state.webhooks],
+          ? state.webhooks.map((webhook) => (webhook.id === action.webhook.id ? patched : webhook))
+          : [patched, ...state.webhooks],
       };
     }
     case "webhookDeleted":

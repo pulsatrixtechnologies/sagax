@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import { AdvancedScheduleFields, HumanScheduleFields, scheduleTimeLabel, timeZoneLabel } from "@/components/routines/HumanScheduleFields";
 import { GithubTriggerFields } from "@/components/routines/GithubTriggerFields";
+import { ProductTriggerFields, useProductTriggerOffered } from "@/components/routines/ProductTriggerFields";
 import { CronRunDates } from "@/components/routines/CronScheduleFields";
 import { PANEL_INPUT, PANEL_LABEL, PANEL_TEXT_ACTION, PanelChip, PanelRow, PanelRows, PanelSelect, PanelToggle, PanelValue } from "@/components/routines/PanelRows";
 import { RunAsField } from "@/components/routines/RunAsField";
@@ -44,7 +45,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
     groupId, intervalDays, intervalDaysInvalid, intervalEnd, intervalEndDate, intervalEndInvalid,
     intervalEndMinimumAt, intervalInvalid, intervalMinutes, intervalWeekdays, intervalWindow,
     intervalWindowEnd, intervalWindowInvalid, intervalWindowStart, isRoomGoal, kind: _kind, lateMinutes,
-    limitReset, githubDraft, setGithubDraft, lockedBotId, mailAlias, moreOpen, name: _name, onlyWhenPresent, otherOwner, overlap, pattern,
+    limitReset, githubDraft, setGithubDraft, productDraft, setProductDraft, lockedBotId, mailAlias, moreOpen, name: _name, onlyWhenPresent, otherOwner, overlap, pattern,
     pickFiles, postResults, readOnly, recurrence, repeatsOnClock, requiredSkills, requiredMcp, requiresComputer,
     roleCoverage, roleReadiness, roomMembers, rooms, routineTarget: _routineTarget, routineModel, routineSubagentModel,
     routineEffort, goalDraft, setGoalDraft, actAs, runAs, runAsOptions, runOn, scheduleDraft, selectBots, selectFrequency, selectIntervalDays,
@@ -58,6 +59,8 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
     whenOpen, whenSentence, advancedSummary, bots, onDuplicate, onClose, seed: _seed, panel, whenIconName, selectedBots, triggered,
     page, dirty,
   } = m;
+  // #4250 (S4): "When something changes in a product" only where it can run.
+  const productOffered = useProductTriggerOffered(existingRoutine?.schedule);
   // 2026-11-06 (JC, one pane): on the side panel's routine page the
   // instruction reads folded and turns into its editor on a click (or
   // focused from the start when an old Edit entry opened the page).
@@ -179,6 +182,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                     ...(recurrence === "advanced" ? [{ value: "advanced", label: t("scheduleEditor.frequency.advanced") }] : []),
                     ...(!isRoomGoal ? [{ value: "webhook", label: t("routineEditor.whenWebhook") }] : []),
                     ...(!isRoomGoal ? [{ value: "github", label: t("routineTrigger.github") }] : []),
+                    ...(!isRoomGoal && productOffered ? [{ value: "product", label: t("routineTrigger.product") }] : []),
                     ...(recurrence === "email" ? [{ value: "email", label: t("schedule.sentence.email") }] : []),
                   ]}
                 />
@@ -198,6 +202,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                 />
               )}
               {recurrence === "github" && <GithubTriggerFields draft={githubDraft} onChange={setGithubDraft} />}
+              {recurrence === "product" && <ProductTriggerFields draft={productDraft} onChange={setProductDraft} botId={lockedBotId ?? botIds[0]} />}
               {recurrence === "pattern" && pattern && <HumanScheduleFields mode="essentials" draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
               {recurrence === "advanced" && pattern && <AdvancedScheduleFields value={pattern} preview={!onPage} onSimplify={simplifySchedule} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
               {recurrence === "interval" && (

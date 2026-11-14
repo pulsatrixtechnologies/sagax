@@ -586,8 +586,10 @@ export function parseGrantClaim(value: unknown): ConsoleGrant | null {
  * 2026-10-21) is accepted by `POST /api/org/inbound-mail` alone
  * (server/mail/bot-inbound-mail.ts); `perspicax-voice` (Perspicax Voice,
  * 2026-10-26) by `POST /api/org/telephony/inbound` alone
- * (server/bots/bot-inbound-telephony.ts). */
-export const CONSOLE_ASSERTION_ACTORS = ["console", "perspicax-mcp", "perspicax-mail", "perspicax-voice"] as const;
+ * (server/bots/bot-inbound-telephony.ts); `perspicax-events` (#4250, a
+ * product, phone line or watched resource change told about one person) by
+ * `POST /api/org/perspicax-events` alone (server/perspicax/perspicax-events.ts). */
+export const CONSOLE_ASSERTION_ACTORS = ["console", "perspicax-mcp", "perspicax-mail", "perspicax-voice", "perspicax-events"] as const;
 export type ConsoleAssertionActor = typeof CONSOLE_ASSERTION_ACTORS[number];
 
 export interface VerifyConsoleAssertionInput extends JwsCheck {

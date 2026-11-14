@@ -18,6 +18,7 @@ export const TRIGGER_SOURCE_TYPES = [
   "linear",
   "botmail",
   "telephony",
+  "perspicax",
 ] as const;
 
 export type TriggerSourceType = (typeof TRIGGER_SOURCE_TYPES)[number];
@@ -45,6 +46,7 @@ export const TRIGGER_FILTER_KEYS = [
   "level",
   "service",
   "urgency",
+  "resource",
   "keyword",
 ] as const;
 
@@ -89,6 +91,10 @@ export interface TriggerSourceDefinition {
   /** Word of the run's fence (`[UNTRUSTED <fence> EVENT DATA ...]`) when
    * the label is not one (two words, translated in the app). */
   fence?: string;
+  /** A relayed source whose sender is not the owner (an email from anyone,
+   * a caller): its runs are confined unless the owner turns on full tools
+   * for the trigger (botmailRunConfined). */
+  confinedRuns?: boolean;
   /** Window, in seconds, a signed timestamp may differ from now. Absent
    * when the provider signs none (replay is then stopped by the delivery id
    * the deduplication keeps). */
@@ -193,6 +199,7 @@ export const TRIGGER_SOURCES: Record<TriggerSourceType, TriggerSourceDefinition>
     filters: ["sender", "subject", "keyword"],
     containsFilters: ["subject"],
     fence: "BOTMAIL",
+    confinedRuns: true,
   },
   // 2026-10-26 (Perspicax Voice, phase 2): a text or a call on the owner's
   // phone line, answered by Perspicax (IVR, PIN) and relayed to this server
@@ -206,6 +213,22 @@ export const TRIGGER_SOURCES: Record<TriggerSourceType, TriggerSourceDefinition>
     // senderKind: owner_mobile | allowlisted | verified_caller (#2194)
     filters: ["sender", "senderKind", "keyword"],
     fence: "TELEPHONY",
+    confinedRuns: true,
+  },
+  // #4250 (S4): a resource the person watches changed, told by the
+  // organization server (contract `perspicax-events/1`,
+  // server/perspicax/perspicax-events.ts). The event carries the watched
+  // URI only; the run reads what changed with the person's own Perspicax
+  // tools. Its sender is the person's own organization server, so the run
+  // keeps the bot's usual tools. `resource` is the watched URI (exact or a
+  // `*` glob).
+  perspicax: {
+    type: "perspicax",
+    label: "Perspicax",
+    secretMode: "relay",
+    events: ["resource.changed"],
+    filters: ["resource", "keyword"],
+    fence: "PRODUCT",
   },
 };
 

@@ -606,6 +606,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/vault-cards\\/([\\w-]+)\\/(grant|dismiss|self-start|self-status|signed-in|onepassword)$","tier":"admin","readOnly":false,"scope":"bots:admin","defaultEnabled":false},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/voice\\/(status|voices|prepare|speak|transcribe|stream|listen|speech|call|realtime)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/warm$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":false},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/watchable-resources$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/workspace(?:\\/|$)","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/workspace\\/count$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/workspace\\/docs\\/rename$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},

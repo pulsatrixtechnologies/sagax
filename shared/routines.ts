@@ -12,6 +12,7 @@ import type { RoutineCronSchedule } from "./routine-schedule.ts";
 import type { RoutineWindowTiming } from "./routine-timing.ts";
 import type { RoutineAutoPause } from "./routine-auto-pause.ts";
 import type { RoutineGithubEventSchedule } from "./routine-github.ts";
+import type { RoutineProductEventSchedule } from "./routine-product-event.ts";
 
 export interface RoutineIntervalWindow {
   start: string;
@@ -39,12 +40,15 @@ export type RoutineSchedule =
   | { type: "event"; source: "email" }
   /** Runs on GitHub events (issue opened or labeled, PR opened, review
    * requested...), through the routine's own typed GitHub trigger. */
-  | RoutineGithubEventSchedule;
+  | RoutineGithubEventSchedule
+  /** #4250: runs when a watched resource changes in a product, through the
+   * routine's own typed Perspicax trigger. */
+  | RoutineProductEventSchedule;
 
 /** A routine that starts from a delivery, never from the clock. */
 export type RoutineTriggerSchedule = Extract<RoutineSchedule, { type: "webhook" | "event" }>;
 
-/** True for a webhook, email or GitHub trigger. Both shapes have no time, so every
+/** True for a webhook, email, GitHub or product change trigger. Both shapes have no time, so every
  * clock path (the tick, a resume, a label) must handle them before it reads
  * `.time`. */
 export function isTriggerSchedule(
@@ -52,7 +56,7 @@ export function isTriggerSchedule(
 ): schedule is RoutineTriggerSchedule {
   if (!schedule) return false;
   if (schedule.type === "webhook") return true;
-  return schedule.type === "event" && (schedule.source === "email" || schedule.source === "github");
+  return schedule.type === "event" && (schedule.source === "email" || schedule.source === "github" || schedule.source === "perspicax");
 }
 
 export type RoutineScheduleInput =

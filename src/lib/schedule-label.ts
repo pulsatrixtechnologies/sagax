@@ -119,6 +119,7 @@ export function scheduleLabel(schedule: RoutineSchedule | { type: "once"; at: nu
   }
   if (schedule.type === "webhook") return t("schedule.incomingWebhook");
   if (schedule.type === "event") {
+    if (schedule.source === "perspicax") return t("schedule.incomingProduct", { resources: schedule.resources.join(", ") });
     return schedule.source === "github" ? t("schedule.incomingGithub", { events: githubKinds(schedule.events) }) : t("schedule.incomingEmail");
   }
   if (schedule.type === "limit_reset") {
@@ -166,6 +167,7 @@ export function scheduleSentence(schedule: RoutineSchedule): string {
   }
   if (schedule.type === "webhook") return t("schedule.sentence.webhook");
   if (schedule.type === "event") {
+    if (schedule.source === "perspicax") return t("schedule.sentence.product", { resources: schedule.resources.join(", ") });
     return schedule.source === "github" ? t("schedule.sentence.github", { events: githubKinds(schedule.events) }) : t("schedule.sentence.email");
   }
   if (schedule.type === "limit_reset") {
@@ -203,6 +205,7 @@ export function scheduleLabelCompact(schedule: RoutineSchedule | { type: "once";
   const clock = (hour: number, minute: number) => new Date(2000, 0, 1, hour, minute).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
   if (schedule.type === "webhook") return t("schedule.compact.webhook");
   if (schedule.type === "event") {
+    if (schedule.source === "perspicax") return t("schedule.compact.product", { resources: schedule.resources.join(", ") });
     return schedule.source === "github" ? t("schedule.compact.github", { events: githubKinds(schedule.events) }) : t("schedule.compact.email");
   }
   if (schedule.type === "once") {

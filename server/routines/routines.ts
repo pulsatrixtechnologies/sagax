@@ -59,6 +59,7 @@ import {
   type RoutineWindowTiming,
 } from "../../shared/routine-timing.ts";
 import { cleanGithubEventSchedule, type RoutineGithubEventSchedule } from "../../shared/routine-github.ts";
+import { cleanProductEventSchedule, type RoutineProductEventSchedule } from "../../shared/routine-product-event.ts";
 import { isRoutineProblemRun, isTriggerSchedule, scheduleHasKnownEnd, type RoutineAccess, type RoutineRetryCause, type RoutineRunHandoff } from "../../shared/routines.ts";
 import type { LimitResetSchedule, LimitResetScheduleInput } from "../../shared/limit-reset.ts";
 import { cleanRoutineAutoPauseAfter, routineAutoPauseDue, type RoutineAutoPause } from "../../shared/routine-auto-pause.ts";
@@ -134,7 +135,8 @@ export type RoutineSchedule =
   | LimitResetSchedule
   | { type: "webhook" }
   | { type: "event"; source: "email" }
-  | RoutineGithubEventSchedule;
+  | RoutineGithubEventSchedule
+  | RoutineProductEventSchedule;
 
 export type RoutineScheduleInput =
   | Exclude<RoutineSchedule, RoutineIntervalSchedule | LimitResetSchedule>
@@ -1218,6 +1220,7 @@ function loadStoredRun(run: RoutineRun): RoutineRun {
 function cloneSchedule(schedule: RoutineSchedule): RoutineSchedule {
   if (schedule.type === "webhook") return { type: "webhook" };
   if (schedule.type === "event") {
+    if (schedule.source === "perspicax") return cleanProductEventSchedule(schedule);
     return schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" };
   }
   if (schedule.type === "once") return { type: "once", at: schedule.at };
@@ -1464,6 +1467,7 @@ function parseSchedule(schedule: RoutineScheduleInput, after: number): RoutineSc
     if (hasTimingInput(schedule)) throw new Error("A trigger routine has no clock");
     if (schedule.type === "webhook") return { type: "webhook" };
     if (schedule.source === "github") return cleanGithubEventSchedule(schedule);
+    if (schedule.source === "perspicax") return cleanProductEventSchedule(schedule);
     if (schedule.source !== "email") throw new Error("Choose a supported schedule");
     return { type: "event", source: "email" };
   }

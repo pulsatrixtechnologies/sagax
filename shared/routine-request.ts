@@ -12,6 +12,7 @@ import type { EffortLevel } from "./model-selection.ts";
 import type { LimitResetRepeat } from "./limit-reset.ts";
 import type { RoutineWatchPrecheck } from "./routine-watch.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
+import type { RoutineProductEventSchedule } from "./routine-product-event.ts";
 import type { RoutineWindowTiming } from "./routine-timing.ts";
 import type { RoutineGithubEventSchedule } from "./routine-github.ts";
 
@@ -47,7 +48,8 @@ export type RoutineRequestSchedule =
   } & RoutineWindowTiming)
   | { type: "webhook" }
   | { type: "event"; source: "email" }
-  | RoutineGithubEventSchedule;
+  | RoutineGithubEventSchedule
+  | RoutineProductEventSchedule;
 
 export type RoutineRequestScheduleChanges =
   | Exclude<RoutineRequestSchedule, { type: "interval" }>

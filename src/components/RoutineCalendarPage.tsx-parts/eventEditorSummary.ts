@@ -1,5 +1,6 @@
 import { durationLabel, intervalLabel, scheduleLabelCompact } from "@/lib/schedule-label";
 import { githubScheduleFromDraft, type GithubDraft } from "@/components/routines/GithubTriggerFields";
+import { productScheduleFromDraft, type ProductDraft } from "@/components/routines/ProductTriggerFields";
 import { limitResetWhen } from "@/lib/limit-resets";
 import { personTimeZone } from "@/components/routines/schedule-editor";
 import { timeZoneCity } from "../../../shared/schedule-model";
@@ -17,6 +18,7 @@ type WhenArgs = {
   pattern: { sentence?: string; error?: string } | null;
   limitReset: LimitResetChoice;
   githubDraft?: GithubDraft;
+  productDraft?: ProductDraft;
   bots: { id: string; modelSelection: { instanceId?: string } }[];
   lockedBotId?: string;
   botIds: string[];
@@ -26,14 +28,22 @@ type WhenArgs = {
   eventSchedule?: RoutineSchedule;
 };
 
+/** #4250: "When <resource> changes", or the plain choice while none is typed. */
+function productWhen(draft: ProductDraft | undefined): string {
+  const built = productScheduleFromDraft(draft ?? { resources: "" });
+  return "error" in built ? t("routineTrigger.product") : scheduleLabelCompact(built.schedule);
+}
+
 export function eventEditorWhenSentence(args: WhenArgs): string {
-  const { recurrence, pattern, limitReset, githubDraft, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule } = args;
+  const { recurrence, pattern, limitReset, githubDraft, productDraft, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule } = args;
   return recurrence === "pattern" || recurrence === "advanced"
     ? pattern?.sentence || t("routineCalendar.validSchedule")
     : recurrence === "webhook"
       ? t("schedule.compact.webhook")
       : recurrence === "github"
       ? scheduleLabelCompact(githubScheduleFromDraft(githubDraft ?? { events: [], repo: "" }))
+      : recurrence === "product"
+      ? productWhen(productDraft)
       : recurrence === "email"
         ? eventSchedule?.type === "event" && eventSchedule.source === "github" ? scheduleLabelCompact(eventSchedule) : t("schedule.compact.email")
         : recurrence === "limit_reset"

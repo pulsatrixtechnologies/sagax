@@ -21,6 +21,7 @@ import type { LocaleKey } from "@/locales";
 import { WEBHOOK_DEFAULT_MAX_PENDING_RUNS, webhookActivationDefaults, type WebhookTrigger, type WebhookTriggerInput } from "@/lib/webhooks";
 import { api, openBotThread, useStore, type Bot } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { TRIGGER_SOURCE_TYPES, isRelaySource, isTriggerSourceType, type TriggerSourceSetup } from "../../shared/trigger-sources";
 
 import { DANGER_PILL, GROUP_CARD, PILL, PillSelect, PRIMARY_PILL, Switch } from "./SettingsPrimitives";
@@ -101,6 +102,8 @@ export function TriggersPanel({
   const [typedDraft, setTypedDraft] = useState<TypedDraft>(EMPTY_TYPED_DRAFT);
   // Setup of a typed trigger (URL and, once, a generated secret): memory only.
   const [setups, setSetups] = useState<Record<string, TriggerSourceSetup>>({});
+  // #4250 (S4): a product change only reaches a server linked to Perspicax.
+  const productOffered = usePerspicaxOrg() !== null || source === "perspicax";
   const ingress = state.webhookIngress;
   const chosenBot = bots.some((bot) => bot.id === botId) ? botId : bots[0]?.id ?? "";
 
@@ -166,7 +169,7 @@ export function TriggersPanel({
               }}
               options={[
                 ...TRIGGER_SOURCES.map((entry) => ({ value: entry.id, label: triggerSourceLabel(entry.id), group: t("triggers.group.link") })),
-                ...TRIGGER_SOURCE_TYPES.map((type) => ({ value: type as string, label: typedSourceLabel(type), group: type === "telephony" ? t("triggers.group.telephony") : isRelaySource(type) ? t("triggers.group.botmail") : t("triggers.group.signed") })),
+                ...TRIGGER_SOURCE_TYPES.filter((type) => type !== "perspicax" || productOffered).map((type) => ({ value: type as string, label: typedSourceLabel(type), group: type === "telephony" ? t("triggers.group.telephony") : type === "perspicax" ? t("triggers.group.perspicax") : isRelaySource(type) ? t("triggers.group.botmail") : t("triggers.group.signed") })),
               ]}
             />
             {source === "custom" && (

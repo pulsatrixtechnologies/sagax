@@ -2,6 +2,7 @@
  * typed GitHub trigger (shared/trigger-sources.ts) whose events and filters
  * live on the schedule, so a routine runs on an issue opened or labeled, a
  * pull request opened or a review requested, in addition to the clock. */
+import { isProductEventSchedule } from "./routine-product-event.ts";
 import { TRIGGER_SOURCES, type TriggerFilterKey } from "./trigger-sources.ts";
 
 export type RoutineGithubFilters = Partial<Record<TriggerFilterKey, string[]>>;
@@ -57,16 +58,19 @@ export function githubEventScheduleLabel(schedule: RoutineGithubEventSchedule): 
   return `GitHub: ${kinds}${repos}${labels}`;
 }
 
-export type OwnedTriggerKind = "webhook" | "email" | "github";
+export type OwnedTriggerKind = "webhook" | "email" | "github" | "perspicax";
 
 /** What a trigger routine's own trigger is: its kind and, for GitHub, the
- * events and filters it hands to the typed source. */
-export function ownedTriggerOf(schedule: { type: string; source?: unknown; events?: unknown; filters?: unknown }): {
+ * events and filters it hands to the typed source; for a product change
+ * (#4250), the watched URIs. */
+export function ownedTriggerOf(schedule: { type: string; source?: unknown; events?: unknown; filters?: unknown; resources?: unknown }): {
   kind: OwnedTriggerKind;
   github?: { events: string[]; filters: RoutineGithubFilters };
+  perspicax?: { resources: string[] };
 } {
   if (isGithubEventSchedule(schedule)) {
     return { kind: "github", github: { events: [...schedule.events], filters: { ...schedule.filters } } };
   }
+  if (isProductEventSchedule(schedule)) return { kind: "perspicax", perspicax: { resources: [...schedule.resources] } };
   return { kind: schedule.type === "event" ? "email" : "webhook" };
 }

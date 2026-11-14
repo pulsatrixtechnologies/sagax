@@ -16,7 +16,8 @@ import { parsePageProposal, type PageKind } from "../../shared/published-pages.t
 import type { MausColor } from "../../shared/wire.ts";
 import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
-import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../../shared/options-card.ts";
+import { ASK_CHOICE_TOOL, OPTIONS_CARD_LIMITS, parseAskChoiceInput } from "../../shared/options-card.ts";
+import { alwaysOffer, cardKindOf, learnedOptions, type CardAnswerLearning, type KindAnswers, type LearningLanguage } from "../proactive/answer-learning.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
 import { questionCardTitle } from "../approvals/approval-words.ts";
@@ -198,6 +199,18 @@ export function createAgentCard(args: {
     remember(key: string, threadId: string, messageId: string): void;
     retire(threadId: string, message: Message): void;
   };
+  /** #4250 (S7): a keyed card of a routine's run: the person's answers on
+   * its kind put their usual answer first, and after three identical
+   * answers the card offers "Always do this for this routine"
+   * (server/proactive/answer-learning.ts). Never an answer for them. */
+  answerLearning?: {
+    routineId: string;
+    /** The person's answers on the kind of `key` in this routine, or null. */
+    answers(key: string): KindAnswers | null;
+    /** The routine's instructions now. */
+    instructions(): string;
+    language: LearningLanguage;
+  };
   /** #2048: availability and remembered default for choose_page_target. */
   pageTargetContext?: {
     defaultId?: string | null;
@@ -340,6 +353,9 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // is keyed by its text, so the next run's same ask replaces it in place
   const askKey = value.key ?? (!holds && args.repeatingRun && !inRoom ? askTextKey(value.subtitle) : undefined);
   const keyed = { ...(askKey ? { askKey } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}) };
+  // #4250 (S7): the person's usual answer first, and "Always do this for
+  // this routine" after three identical answers
+  const learned = askKey && !inRoom && args.answerLearning ? learnCard(args.answerLearning, askKey, value) : {};
   const addressed = askTo ? { addressedTo: askTo.name } : {};
   // #4219: in a room the bot reads whom it can address
   const roomPeopleResult = {
@@ -358,7 +374,8 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   if (askKey && (!from.from || roomAsk)) {
     const found = findKeyed(askKey);
     if (found) {
-      const card = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(askTo ? { askTo } : {}) });
+      const { answerLearning: _before, ...replaced } = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(askTo ? { askTo } : {}) });
+      const card = { ...replaced, ...learned };
       const patched = args.store.patchMessage(found.threadId, found.message.id, { card });
       if (patched) {
         args.authored?.(patched.id);
@@ -400,7 +417,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     // #4205: the card carries its key and whether it holds the run
     if (keyed.askKey || keyed.noHold || keyed.askTo) {
       const row = args.store.messagesFor(args.threadId).find((message) => message.id === raised.messageId);
-      if (row?.card) args.store.patchMessage(args.threadId, row.id, { card: { ...row.card, ...keyed } });
+      if (row?.card) args.store.patchMessage(args.threadId, row.id, { card: { ...row.card, ...keyed, ...learned } });
       if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, raised.messageId);
     }
     args.authored?.(raised.messageId);
@@ -409,12 +426,30 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // a direct thread replays a bot row that carries `from` as another bot's line
   // full-access: ask-choice
   const message = args.store.appendMessage(args.threadId, {
-    role: "bot", kind: "options", card: { ...shownCard, ...keyed },
+    role: "bot", kind: "options", card: { ...shownCard, ...keyed, ...learned },
     ...from,
   });
   if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, message.id);
   args.authored?.(message.id);
   return recordPeer({ ok: true, messageId: message.id, ...(holds ? {} : { holds: false as const }) });
+}
+
+/** #4250 (S7): a routine's keyed card learns from the person's answers on
+ * its kind: their usual answer moves first among the options, and after
+ * three identical answers in a row the card offers "Always do this for
+ * this routine" (written into the instructions only on their click).
+ * Reorders `value` in place; the card's `answerLearning` field. */
+function learnCard(
+  learning: NonNullable<Parameters<typeof createAgentCard>[0]["answerLearning"]>,
+  askKey: string,
+  value: { subtitle: string; options: string[]; details?: (string | undefined)[] },
+): { answerLearning?: CardAnswerLearning } {
+  const answers = learning.answers(askKey);
+  const always = alwaysOffer(answers, { question: value.subtitle, instructions: learning.instructions(), language: learning.language });
+  const next = learnedOptions(value.options, value.details, answers?.usual, always, OPTIONS_CARD_LIMITS.maxOptions);
+  value.options = next.options;
+  if (next.details) value.details = next.details;
+  return { answerLearning: { routineId: learning.routineId, kind: cardKindOf(askKey), ...(next.always && always ? { always } : {}) } };
 }
 
 /** #2048: choose which surface hosts a new page or artifact. One available

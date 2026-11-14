@@ -211,7 +211,7 @@ import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./com
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import { type BotVisibility, type RelayVia, type ResolvedSender, type WaitingOnCard, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
 import { backgroundCardHome as backgroundCardHomeOf, backgroundRelayAllowed, earlierThreadCardHome, mcpThreadAnswerer, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
-import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
+import { isPersistentQuestionCard, shouldSettleRequestCard, visibleQuestionAnswer } from "../shared/ask-question.ts";
 import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
 import { reapOrphanEngineGroups } from "./engines/engine-groups.ts";
@@ -787,6 +787,7 @@ import { routineReportOutcome, routineRunReportable } from "./routines/routine-r
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
 import { RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
 import { createTellPerson, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
+import { answeredCardText, answerHistory, answerLearningNote, answersOnKind, instructionsWithAlwaysLine, learnFromAnsweredCard, type AnswerScope } from "./proactive/answer-learning.ts";
 import { clipReadable } from "../shared/routine-result.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
@@ -16585,11 +16586,102 @@ function retireThreadQuestions(threadId: string, only: { messageId?: string; sin
 const askKeyIndex = new AskKeyIndex({
   seed: () => openRequestCardRows(),
   messagesFor: (threadId) => store.messagesFor(threadId),
+  // #4250 (S7): a keyed card the person answered teaches its kind
+  left: (threadId, messageId, key, message) => learnFromKeyedCard(threadId, messageId, key, message),
 });
 onMessageChange((threadId, messageId) => {
   // after the write's own caller has updated the cached transcript
-  if (askKeyIndex.size()) queueMicrotask(() => askKeyIndex.changed(threadId, messageId));
+  queueMicrotask(() => {
+    try {
+      askKeyIndex.changed(threadId, messageId);
+      // #4250 (S7): a question card settled before its words arrived
+      const waiting = messageId ? keyedCardsAwaitingWords.get(`${threadId}\u0000${messageId}`) : undefined;
+      if (waiting !== undefined) learnFromKeyedCard(threadId, messageId!, waiting, store.messagesFor(threadId).find((row) => row.id === messageId));
+    } catch (error) {
+      reportBackgroundError(error);
+    }
+  });
 });
+
+/** #4250 (S7): keyed question cards settled as "answer" whose words were
+ * not written yet (the request's verdict lands before them): read again on
+ * their next change. Bounded: the oldest go first. */
+const keyedCardsAwaitingWords = new Map<string, string>();
+
+/** #4250 (S7): whose answers a routine's keyed cards are: its person, its
+ * bot, the routine itself. */
+function routineAnswerScope(routine: Routine): AnswerScope {
+  return { person: routineProblemPerson(routine), bot: routine.botId, routineId: routine.id };
+}
+
+/** #4250 (S7): the routine a keyed card was raised for, from the card, else
+ * none (a keyed card outside any routine, kept under the routine ""). */
+function keyedCardScope(threadId: string, message: Message): AnswerScope | null {
+  const card = message.card;
+  const routineId = card?.answerLearning?.routineId;
+  const routine = routineId ? routines?.routineById(routineId) : null;
+  if (routine) return routineAnswerScope(routine);
+  const bot = (message.from?.botId ? store.bot(message.from.botId) : null) ?? store.botByThread(threadId);
+  if (!bot || store.groupByThread(threadId)) return null;
+  return { person: attentionPerson(bot, threadId) ?? effectiveBotOwner(bot) ?? "", bot: bot.id, routineId: "" };
+}
+
+/** #4250 (S7): a keyed card left the pending ones: when the person answered
+ * it, the ledger keeps the answer by kind, and a click on its "Always do
+ * this for this routine" option writes its line into the routine's
+ * instructions (answer-learning.ts). Never in a room: another person's
+ * answer never teaches someone's routine. */
+function learnFromKeyedCard(threadId: string, messageId: string, key: string, message: Message | undefined): void {
+  const row = `${threadId}\u0000${messageId}`;
+  keyedCardsAwaitingWords.delete(row);
+  const card = message?.kind === "options" ? message.card : undefined;
+  if (!message || !card || card.askKey !== key) return;
+  const answer = answeredCardText(card, (text) => visibleQuestionAnswer(text, card.questionRequest?.questions));
+  if (answer === null) {
+    if (card.answered === "answer" && !card.answeredText && !card.skipped && !card.expired && !card.dismissed) {
+      keyedCardsAwaitingWords.set(row, key);
+      if (keyedCardsAwaitingWords.size > 500) keyedCardsAwaitingWords.delete(keyedCardsAwaitingWords.keys().next().value!);
+    }
+    return;
+  }
+  const scope = keyedCardScope(threadId, message);
+  if (!scope) return;
+  learnFromAnsweredCard(signalLedger, scope, { askKey: key, threadId, messageId, answer, ...(card.answerLearning ? { learning: card.answerLearning } : {}) }, (routineId, kind, line) => {
+    const routine = routines?.routineById(routineId);
+    const prompt = routine ? instructionsWithAlwaysLine(routine.prompt, kind, line) : null;
+    if (!routine || prompt === null) return false;
+    try {
+      // the person's own click: the routine's line in the conversation says it
+      return Boolean(routines?.update(routine.id, { prompt }, undefined, { actorPrincipalId: scope.person || undefined, conversation: { threadId, messageId } }));
+    } catch (error) {
+      console.warn(`routine ${routine.id} always line: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  });
+}
+
+/** #4250 (S7): a routine run's keyed cards learn from the person's answers
+ * on their kind (chat-widgets.ts createAgentCard answerLearning). */
+function routineAnswerLearning(threadId: string): Parameters<typeof createAgentCard>[0]["answerLearning"] {
+  const run = routines?.runForThread(threadId);
+  if (!run?.routineId || run.target !== "bot") return undefined;
+  const routine = routines?.routineById(run.routineId);
+  if (!routine) return undefined;
+  const scope = routineAnswerScope(routine);
+  return {
+    routineId: routine.id,
+    answers: (key) => answersOnKind(signalLedger, scope, key),
+    instructions: () => routines?.routineById(routine.id)?.prompt ?? "",
+    language: personLanguageCode(languageOfPerson(scope.person || undefined)),
+  };
+}
+
+/** #4250 (S7): the run's prompt section of the person's last answers. */
+function routineAnswersNote(run: RoutineRun): string | undefined {
+  if (run.target !== "bot" || !run.routineId) return undefined;
+  const routine = routines?.routineById(run.routineId);
+  return routine ? answerLearningNote(answerHistory(signalLedger, routineAnswerScope(routine))) : undefined;
+}
 
 /** #4233: when a keyed ask made in a conversation last replaced its pending
  * card in place (that card may sit in an earlier run's conversation), so
@@ -20313,6 +20405,8 @@ routines = new RoutineManager({
     onSuspended: routineSuspended,
     onResumed: (routine: Routine) => routineAudit("routine.resumed", effectiveRunAs(routine), { routine })
   } : {}),
+  // #4250 (S7): the person's last answers to the routine's keyed cards
+  answersNote: (run) => routineAnswersNote(run),
   teammatesContinue: (threadId) => coordinator.awaitsTeammates(threadId),
   // 2026-11-01: a run ends as its teammates' work did (server/routines/routines.ts settleCompleted).
   handedOutOutcome: (threadId, since) => {
@@ -23754,6 +23848,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         ...(room ? { room, notifyAddressee: notifyRoomAskAddressee } : {}),
         // #4233: a repeating routine's run: ask_choice holds nothing by default
         ...(routines?.asksHoldNothing(threadId) ? { repeatingRun: true } : {}),
+        // #4250 (S7): a run's keyed card learns from the person's answers
+        ...(() => { const learning = room ? undefined : routineAnswerLearning(threadId); return learning ? { answerLearning: learning } : {}; })(),
         proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
         // #1905: a may-I ask_choice under Full access is answered, not drawn
         approvalLevel: sourceApprovalMode(bot.id, threadId),

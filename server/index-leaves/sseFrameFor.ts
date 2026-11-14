@@ -7,6 +7,7 @@ import { botActFrameAllowed } from "../../shared/bot-act.ts";
 import { teamWorkFrameAllowed } from "../../shared/team-work.ts";
 import { achievementFrameAllowed } from "../achievements/achievements.ts";
 import { encodeSseDataFrame } from "../streams/sse-fanout.ts";
+import { notifyHeldFor } from "../notify.ts";
 import { dataFrameAllowed } from "../data/scope.ts";
 import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";
 export type Host = Record<string, any>;
@@ -19,6 +20,14 @@ function sseFrameFor(   client: SseClient,   seq: number,   payload: Record<stri
   if (payload && !host.peopleDmFrameAllowed(payload, client.viewerId)) return null;
   if (payload && host.temporaryAgentFrame(payload)) return null;
   if (payload && host.viewerNotificationMuted(payload, client.viewerId)) return null;
+  // #4233: a frame this person's own quiet hours or day budget held reaches
+  // their streams as notify false; the others it is for still hear it
+  if (payload?.kind === "notify" && notifyHeldFor(payload, client.viewerId || host.localPrincipalId())) {
+    payload = { ...payload, notification: { ...(payload.notification as Record<string, unknown>), notify: false } };
+    const serialized = encodeSseDataFrame(host.STREAM_ID, seq, { ...payload, seq });
+    frame = serialized;
+    if (clientFrame !== null) clientFrame = serialized;
+  }
   // A conversation between two people carries each person's own unread
   // state, and never who else has read it (server/people/people-dms.ts).
   // Its threads too, per thread. A frame always carries the default

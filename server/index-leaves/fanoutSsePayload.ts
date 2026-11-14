@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** fanoutSsePayload (#1388). Pure move from server/index.ts. */
 import { ruleNotifyFrame } from "../notify.ts";
+import { decideNotifyPushes, type DecidedPushes } from "./observePushFrame.ts";
 import { deliverSseFrame, encodeSseDataFrame, sseKindSkipsMembershipRecheck } from "../streams/sse-fanout.ts";
 export type Host = Record<string, any>;
 
@@ -9,10 +10,28 @@ function fanoutSsePayload(payload: Record<string, unknown>, options: { adminOnly
   const host = getHost();
   const { configForAccess } = host;
   // #3719: the one rule on what interrupts, for every notify frame (logged)
-  payload = ruleNotifyFrame(payload, options);
+  // #4233: a frame that would interrupt asks the person's signal gate once
+  // (quiet hours, day budget; urgent always passes): the desktop, its shell
+  // and the phone follow that one verdict
+  let decided: DecidedPushes | undefined;
+  const raw = payload;
+  payload = ruleNotifyFrame(payload, {
+    ...options,
+    signal: () => {
+      try {
+        decided = decideNotifyPushes(host, raw, options);
+      } catch (error) {
+        console.warn(`push: a frame could not be read for its signal (${error instanceof Error ? error.message : String(error)})`);
+        decided = undefined;
+      }
+      // each verdict names its person: a frame for several people goes quiet
+      // only on the streams of those held (sseFrameFor)
+      return decided ? decided.messages.map((message, index) => ({ person: String(message.personId ?? ""), decision: decided.decisions[index] })) : [];
+    }
+  });
 
   host.observeAchievementFrame(payload);
-  host.observePushFrame(payload, options);
+  host.observePushFrame(payload, options, decided);
   host.observeLiveActivityFrame(payload);
   const kind = String(payload.kind ?? "");
   // Membership may change through fleet/CLI config writes. Recheck on durable

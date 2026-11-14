@@ -15,6 +15,7 @@ import {
   extractResults,
   failingSwiftTests,
   filesRunOn,
+  github,
   GROUP_ABOVE,
   GUARD_FOLDERS,
   greenEvidence,
@@ -949,6 +950,116 @@ describe("the command line", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("Open regression issues not listed");
     expect(Object.keys(JSON.parse(readFileSync(out, "utf8")).tests)).toEqual([identityKey(failure)]);
+  });
+
+  /** A fake GitHub API on a real socket: `drop(method, path, count)` says
+   * whether to close the socket of that request without answering (as GitHub
+   * did on run 43620631735, #4315); `count` is how many such requests came
+   * before it. Answers like GitHub otherwise. */
+  async function socketGitHub(open: { number: number; body: string }[], drop: (method: string, path: string, count: number) => boolean) {
+    const seen = new Map<string, number>();
+    const answered: { method: string; path: string; body: Record<string, unknown> }[] = [];
+    const server = createServer((request, response) => {
+      let text = "";
+      request.on("data", (chunk) => { text += chunk; });
+      request.on("end", () => {
+        const key = `${request.method} ${request.url}`;
+        const count = seen.get(key) ?? 0;
+        seen.set(key, count + 1);
+        if (drop(request.method!, request.url!, count)) { request.socket.destroy(); return; }
+        answered.push({ method: request.method!, path: request.url!, body: JSON.parse(text || "{}") });
+        if (request.method === "GET") { response.end(JSON.stringify(open)); return; }
+        response.statusCode = request.method === "PATCH" ? 200 : 201;
+        response.end(JSON.stringify({ number: 99 }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return { server, answered, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` };
+  }
+
+  /** open-issues as ci.yml runs it, for one failure of this run that the
+   * previous run on main saw too (so it is due), against `api`. */
+  async function openIssuesStep(api: string, { failing }: { failing: boolean }) {
+    const dir = tempDir();
+    // A file in parentheses is never bisected, so no git work runs here.
+    const failure = { file: "(vitest run)", test: "exited non-zero with no failing test", os: "ubuntu-latest" };
+    writeFileSync(join(dir, "results.json"), JSON.stringify([{ ...failure, state: failing ? "fail" : "pass" }]));
+    writeFileSync(join(dir, "new.json"), JSON.stringify(failing ? [failure] : []));
+    const key = identityKey(failure);
+    writeFileSync(join(dir, "previous.json"), JSON.stringify({ lastSha: "s1", tests: { [key]: { file: failure.file, test: failure.test, count: 1, firstSha: "s1", lastSha: "s1", good: null, issue: null, failedOn: ["ubuntu-latest"] } } }));
+    const summary = join(dir, "summary.md");
+    writeFileSync(summary, "");
+    const out = join(dir, "sightings.json");
+    const env = { ...process.env, GITHUB_STEP_SUMMARY: summary, GITHUB_REPOSITORY: "o/r", GH_TOKEN: "t", GITHUB_API_URL: api };
+    const args = [script, "open-issues", "--results", join(dir, "results.json"), "--new-failures", join(dir, "new.json"), "--sightings", join(dir, "previous.json"),
+      "--sha", "s2", "--run-url", "https://example.test/run/2", "--platforms", '["ubuntu-latest"]', "--out", out];
+    const { code, stdout } = await new Promise<{ code: number; stdout: string }>((resolve) => {
+      execFile(process.execPath, args, { env, encoding: "utf8", timeout: 30_000 }, (error, stdout, stderr) => resolve({ code: error ? Number(error.code ?? 1) : 0, stdout: `${stdout}${stderr}` }));
+    });
+    return { code, stdout, summary: readFileSync(summary, "utf8"), sightings: JSON.parse(readFileSync(out, "utf8")), key };
+  }
+
+  it("sends a GitHub call again when the API closes the socket once, and opens the issue (#4315)", async () => {
+    const api = await socketGitHub([], (method, path, count) => method === "POST" && path === "/repos/o/r/issues" && count === 0);
+    try {
+      const { code, stdout, summary, sightings, key } = await openIssuesStep(api.url, { failing: true });
+      expect(stdout).toContain(`Opened: #99 ${key}`);
+      expect(stdout).not.toContain("fetch failed");
+      expect(summary).not.toContain("WARNING");
+      expect(api.answered.filter((call) => call.method === "POST" && call.path === "/repos/o/r/issues")).toHaveLength(1);
+      expect(sightings.tests[key].issue).toBe(99);
+      // A new failure seen twice still fails the step.
+      expect(code, stdout).toBe(1);
+    } finally {
+      await new Promise((resolve) => api.server.close(resolve));
+    }
+  }, 30_000);
+
+  it("reports a GitHub call that keeps failing as a warning in the summary, red only for the failing test (#4315)", async () => {
+    const api = await socketGitHub([], (method) => method === "POST");
+    try {
+      const red = await openIssuesStep(api.url, { failing: true });
+      expect(red.stdout).toContain("::warning title=Regression issues::");
+      expect(red.summary).toContain("Regression issues: The regression issue of 1 failure(s) seen twice could not be opened; the next run on main opens it");
+      expect(red.summary).toContain("other side closed");
+      // Kept without an issue, so the next run opens it.
+      expect(red.sightings.tests[red.key]).toMatchObject({ count: 2, issue: null });
+      expect(red.code, red.stdout).toBe(1);
+    } finally {
+      await new Promise((resolve) => api.server.close(resolve));
+    }
+    // No test failed: the same broken API gives a warning and a green step.
+    const passing = { file: "(vitest run)", test: "exited non-zero with no failing test" };
+    const issue = { number: 7, body: regressionMarker(passing) };
+    const down = await socketGitHub([issue], (method) => method !== "GET");
+    try {
+      const green = await openIssuesStep(down.url, { failing: false });
+      expect(green.summary).toContain("Regression issues: The issues of tests that pass again were not all updated");
+      expect(green.code, green.stdout).toBe(0);
+    } finally {
+      await new Promise((resolve) => down.server.close(resolve));
+    }
+  }, 60_000);
+
+  it("tries a GitHub call three times in all, on a network error or a 5xx answer, and no more", async () => {
+    let calls = 0;
+    const flaky = async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("fetch failed", { cause: new Error("other side closed") });
+      if (calls === 2) return new Response("{}", { status: 502 });
+      return new Response(JSON.stringify({ number: 5 }), { status: 201 });
+    };
+    expect(await github(flaky, "https://api.example.test", "t", "POST", "/repos/o/r/issues", { title: "x" }, { retryMs: 0 })).toEqual({ status: 201, json: { number: 5 } });
+    expect(calls).toBe(3);
+    calls = 0;
+    const down = async () => { calls += 1; throw new TypeError("fetch failed"); };
+    await expect(github(down, "https://api.example.test", "t", "GET", "/x", undefined, { retryMs: 0 })).rejects.toThrow("fetch failed");
+    expect(calls).toBe(3);
+    // A 4xx is GitHub's answer, not a hiccup: sent once.
+    calls = 0;
+    const refused = async () => { calls += 1; return new Response("{}", { status: 422 }); };
+    expect((await github(refused, "https://api.example.test", "t", "POST", "/x", {}, { retryMs: 0 })).status).toBe(422);
+    expect(calls).toBe(1);
   });
 
   it("checks against a git revision that the list only shrank", () => {

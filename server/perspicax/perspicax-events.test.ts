@@ -34,7 +34,19 @@ import {
   type ProductHealthChange,
 } from "./perspicax-events.ts";
 import { SignalLedger } from "../proactive/signal-ledger.ts";
-import { PRODUCT_FIX_KIND, ProductFixCards, productFixCardInput, type ProductFixCardAsk, type ProductFixPlace } from "./product-fix-cards.ts";
+import {
+  PRODUCT_FIX_KIND,
+  PRODUCT_FIX_SETTLE_MS,
+  ProductFixCards,
+  fitWholeSentences,
+  productFixCardInput,
+  productFixStateFile,
+  type ProductFixCardAsk,
+  type ProductFixCardsDeps,
+  type ProductFixPlace,
+  type ProductFixState,
+  type ProductFixStateStorage,
+} from "./product-fix-cards.ts";
 
 const ORIGIN = "https://sagax.example";
 const ISS = "https://org.example";
@@ -127,14 +139,21 @@ describe("parsePerspicaxEvent", () => {
 });
 
 describe("the product fix card", () => {
-  const change = (failing: boolean, extra: Partial<ProductHealthChange> = {}): ProductHealthChange => ({
-    principalId: "pr_ana", key: "product:cw_psa", kind: "product_health", api: "cw_psa", failing, state: failing ? "failing" : "healthy", level: failing ? "card" : "fyi", reason: failing ? "The key was refused (401)." : "", ...extra,
-  });
+  let clock = Date.parse("2026-11-13T23:10:00Z");
+  let serial = 0;
+  /** Each change a new event, a second after the one before. */
+  const change = (failing: boolean, extra: Partial<ProductHealthChange> = {}): ProductHealthChange => {
+    clock += 1_000;
+    serial += 1;
+    return {
+      principalId: "pr_ana", key: "product:cw_psa", eventId: `ev-${serial}`, at: new Date(clock).toISOString(), kind: "product_health", api: "cw_psa", failing, state: failing ? "failing" : "healthy", level: failing ? "card" : "fyi", reason: failing ? "The key was refused (401)." : "", ...extra,
+    };
+  };
 
   it("words the product, the reason and the two actions; a phone line names its number", () => {
     const card = productFixCardInput(change(true), { product: "PSA" }, words);
     expect(card).toMatchObject({ key: "product:cw_psa", wait: false, decision: true, title: "PSA needs a fix", options: ["Check it now", "Explain the fix"] });
-    expect(card.question).toBe("PSA stopped working for you.\n\nThe key was refused (401).");
+    expect(card.question).toBe("PSA stopped working for you. The key was refused (401).");
     const line = productFixCardInput(change(true, { kind: "voice_line", key: "voice-line", api: undefined, number: "+15145550100", state: "out_of_credits", reason: "" }), {}, words);
     expect(line.title).toBe("Your phone line needs a fix");
     expect(line.question).toContain("+15145550100");
@@ -142,11 +161,13 @@ describe("the product fix card", () => {
     expect(line.options).toEqual(["Check the line", "Explain the fix"]);
   });
 
-  function cards(signals?: SignalLedger) {
+  function cards(signals?: SignalLedger, more: Partial<ProductFixCardsDeps> = {}) {
     const asked: Array<{ place: ProductFixPlace; input: ProductFixCardAsk }> = [];
     const open = new Set<string>();
     const places: Array<{ principalId: string; start: boolean }> = [];
     const fix = new ProductFixCards({
+      settleMs: 0,
+      ...more,
       place: (principalId, start) => {
         places.push({ principalId, start });
         return { botId: "bot_primary", threadId: "t_ana" };
@@ -169,7 +190,7 @@ describe("the product fix card", () => {
     const { fix, asked, open, places } = cards();
     expect(fix.apply(change(true))).toBe("raised");
     expect(open.has("product:cw_psa")).toBe(true);
-    expect(places[0]).toEqual({ principalId: "pr_ana", start: true });
+    expect(places).toContainEqual({ principalId: "pr_ana", start: true });
     // a later failing event: the same key, replaced in place (one card)
     expect(fix.apply(change(true, { reason: "The server did not answer." }))).toBe("raised");
     expect(asked.filter((entry) => !("retire" in entry.input)).every((entry) => entry.input.key === "product:cw_psa")).toBe(true);
@@ -189,6 +210,135 @@ describe("the product fix card", () => {
     expect(ledger.get("pr_ana", "bot_primary", "product:cw_psa")).toMatchObject({ state: "told", toldAt, count: 2 });
     fix.apply(change(false, { state: "gone" }));
     expect(ledger.get("pr_ana", "bot_primary", "product:cw_psa")?.state).toBe("retired");
+  });
+
+  // #4303: only what is still wrong is told, once.
+  /** A timer the test runs by hand, and a store kept in memory. */
+  function settled() {
+    let at = 1_000_000;
+    const due: Array<{ fn: () => void; when: number; handle: number }> = [];
+    let next = 0;
+    const timer = {
+      set: (fn: () => void, ms: number) => {
+        next += 1;
+        due.push({ fn, when: at + ms, handle: next });
+        return next;
+      },
+      clear: (handle: unknown) => {
+        const index = due.findIndex((entry) => entry.handle === handle);
+        if (index >= 0) due.splice(index, 1);
+      },
+    };
+    const advance = (ms: number) => {
+      at += ms;
+      for (const entry of due.filter((candidate) => candidate.when <= at)) {
+        due.splice(due.indexOf(entry), 1);
+        entry.fn();
+      }
+    };
+    let saved: ProductFixState[] | null = null;
+    const storage: ProductFixStateStorage = { load: () => (saved ? JSON.parse(JSON.stringify(saved)) as ProductFixState[] : null), save: (states) => { saved = JSON.parse(JSON.stringify(states)) as ProductFixState[]; } };
+    return { timer, advance, storage, now: () => at, pending: () => due.length };
+  }
+
+  it("a blip (failing, then working again within the settle time) is never told", () => {
+    const ledger = new SignalLedger({ schedule: () => {} });
+    const clockwork = settled();
+    const { fix, asked, places } = cards(ledger, { settleMs: PRODUCT_FIX_SETTLE_MS, timer: clockwork.timer, now: clockwork.now, storage: clockwork.storage });
+    expect(fix.apply(change(true, { kind: "voice_line", key: "voice-line", api: undefined, number: "+15145550100", state: "not_live" }))).toBe("held");
+    clockwork.advance(30_000);
+    expect(fix.apply(change(false, { kind: "voice_line", key: "voice-line", api: undefined, state: "live" }))).toBe("none");
+    clockwork.advance(PRODUCT_FIX_SETTLE_MS);
+    expect(asked).toHaveLength(0);
+    expect(clockwork.pending()).toBe(0);
+    expect(places.every((entry) => entry.start === false)).toBe(true);
+    expect(ledger.get("pr_ana", "bot_primary", "voice-line")).toBeUndefined();
+  });
+
+  it("a failing state still the latest after the settle time is told once", () => {
+    const clockwork = settled();
+    const { fix, asked, open } = cards(undefined, { settleMs: PRODUCT_FIX_SETTLE_MS, timer: clockwork.timer, now: clockwork.now, storage: clockwork.storage });
+    expect(fix.apply(change(true))).toBe("held");
+    // a second failing event within the wait: still one card, its latest words
+    expect(fix.apply(change(true, { reason: "The server did not answer." }))).toBe("held");
+    clockwork.advance(PRODUCT_FIX_SETTLE_MS);
+    expect(asked).toHaveLength(1);
+    expect((asked[0]!.input as { question: string }).question).toContain("did not answer");
+    expect(open.has("product:cw_psa")).toBe(true);
+    // an open card is shown: a new failing event replaces it at once
+    expect(fix.apply(change(true))).toBe("raised");
+    // working again retires it, and nothing more is said
+    expect(fix.apply(change(false))).toBe("retired");
+    expect(asked.at(-1)!.input).toEqual({ tool: "ask_choice", key: "product:cw_psa", retire: true });
+    expect(asked).toHaveLength(3);
+  });
+
+  it("a failing event delivered late, after its recovery, is never told", () => {
+    const { fix, asked } = cards();
+    const late = change(true);
+    expect(fix.apply(change(false))).toBe("none");
+    // the retry of the older failing event arrives after the recovery
+    expect(fix.apply(late)).toBe("none");
+    expect(asked).toHaveLength(0);
+  });
+
+  it("the same event is never shown twice, after a restart too", () => {
+    const clockwork = settled();
+    const first = cards(undefined, { storage: clockwork.storage });
+    const failing = change(true);
+    expect(first.fix.apply(failing)).toBe("raised");
+    // the person answers the card; the organization server delivers the
+    // same event again to a restarted server
+    first.open.clear();
+    const restarted = cards(undefined, { storage: clockwork.storage });
+    expect(restarted.fix.apply(failing)).toBe("none");
+    expect(restarted.asked).toHaveLength(0);
+  });
+
+  it("a failing state waiting when the server stopped is told after the restart, unless it recovered", () => {
+    const clockwork = settled();
+    const before = cards(undefined, { settleMs: PRODUCT_FIX_SETTLE_MS, timer: clockwork.timer, now: clockwork.now, storage: clockwork.storage });
+    expect(before.fix.apply(change(true))).toBe("held");
+    // the server stops: its timers are gone
+    clockwork.timer.clear(1);
+    const after = cards(undefined, { settleMs: PRODUCT_FIX_SETTLE_MS, timer: clockwork.timer, now: clockwork.now, storage: clockwork.storage });
+    after.fix.resume();
+    clockwork.advance(PRODUCT_FIX_SETTLE_MS);
+    expect(after.asked).toHaveLength(1);
+    // told: a second restart tells nothing more
+    const again = cards(undefined, { settleMs: PRODUCT_FIX_SETTLE_MS, timer: clockwork.timer, now: clockwork.now, storage: clockwork.storage });
+    again.fix.resume();
+    clockwork.advance(PRODUCT_FIX_SETTLE_MS);
+    expect(again.asked).toHaveLength(0);
+  });
+
+  it("keeps the states in a file, across instances", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-product-fix-"));
+    try {
+      const file = join(dir, "nested", "states.json");
+      const first = cards(undefined, { storage: productFixStateFile(file) });
+      const failing = change(true);
+      first.fix.apply(failing);
+      expect(JSON.parse(readFileSync(file, "utf8")).states[0]).toMatchObject({ eventId: failing.eventId, told: true });
+      expect(cards(undefined, { storage: productFixStateFile(file) }).fix.apply(failing)).toBe("none");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("the card's words fit the pinned card whole: whole sentences, never cut", () => {
+    const long = "The key was refused (401). Its owner turned it off on the vendor's side last week, after the yearly review. Ask them for a new one and paste it in the product's settings.";
+    const card = productFixCardInput(change(true, { reason: long }), { product: "PSA" }, words);
+    expect(card.question.length).toBeLessThanOrEqual(160);
+    expect(card.question).toBe("PSA stopped working for you. The key was refused (401). Its owner turned it off on the vendor's side last week, after the yearly review.");
+    expect(card.question).toMatch(/[.!?]$/);
+    expect(fitWholeSentences("Lead.", "")).toBe("Lead.");
+    expect(fitWholeSentences("Lead.", "x".repeat(400))).toBe("Lead.");
+    // a line out of credits, in French too, stays whole
+    const fr = { t: (key: string, vars: Record<string, string | number> = {}) => key.endsWith("voiceCredits") ? `Les appels à ta ligne ${vars.number} n'ont pas la voix : son compte de voix n'a plus de crédits.` : key, locale: "fr" };
+    const line = productFixCardInput(change(true, { kind: "voice_line", key: "voice-line", api: undefined, number: "+15145550100", state: "out_of_credits", reason: long }), {}, fr);
+    expect(line.question.length).toBeLessThanOrEqual(160);
+    expect(line.question).toMatch(/crédits\.( The key was refused \(401\)\.)?$/);
   });
 
   it("a good state with no card open does nothing and never starts a conversation", () => {

@@ -15,7 +15,8 @@
 //   - `product_health` (key `product:<api id>`, `to` healthy | failing) and
 //     `voice_line` (key `voice-line`, `to` live | not_live |
 //     out_of_credits, or `gone` for both): a state that is neither the good
-//     one nor `gone` raises the keyed
+//     one nor `gone`, still the key's latest after a short settle time
+//     (#4303: a blip is never told), raises the keyed
 //     fix card of that product for that person (the existing ask_choice
 //     form, keys of server/widgets/ask-choice-keys.ts), in the person's
 //     conversation with their Primary Bot. The card rings once as a
@@ -170,6 +171,10 @@ export function healthFailing(kind: "product_health" | "voice_line", state: stri
 export interface ProductHealthChange {
   principalId: string;
   key: string;
+  /** The event's id and its own time (ISO): the latest state of a key is
+   * the one with the newest time, and the same event is applied once. */
+  eventId: string;
+  at: string;
   kind: "product_health" | "voice_line";
   /** The product's api id (product_health). */
   api?: string;
@@ -187,6 +192,8 @@ export function healthChangeOf(event: PerspicaxEvent, principalId: string): Prod
   return {
     principalId,
     key: event.key,
+    eventId: event.eventId,
+    at: event.at,
     kind: event.kind,
     ...(subject.type === "product" ? { api: subject.api } : {}),
     ...(subject.type === "voice_line" && subject.number ? { number: subject.number } : {}),
@@ -223,9 +230,11 @@ export interface PerspicaxEventsRouteDeps {
    * principal id and whether they are active (listed, not turned off). */
   person(sub: string): { principalId: string; active: boolean } | null;
   /** Raise (failing) or retire (good again) the fix card of that key for
-   * that person. "none": nothing to do (no card open to retire, or no
+   * that person. "held": a failing state waits to be told, if it is still
+   * the latest then (#4303). "none": nothing to do (no card open to
+   * retire, an event already applied or older than the key's latest, or no
    * conversation to raise it in). */
-  health(change: ProductHealthChange): "raised" | "retired" | "none";
+  health(change: ProductHealthChange): "raised" | "retired" | "held" | "none";
   /** Ids of the ENABLED `perspicax` triggers that belong to the person:
    * their own bots' triggers and routines that run as them. */
   triggers(principalId: string): string[];

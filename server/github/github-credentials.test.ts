@@ -1,11 +1,18 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { BotCapabilityStore } from "../bots/bot-capability-store.ts";
+import { migrateCapabilitiesStores } from "../capabilities/capabilities-store-migration.ts";
+import { InstallationCapabilityStore } from "../capabilities/installation-capability-store.ts";
+import { resolveVaultKey } from "../mcp/mcp-oauth.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER, parseCredentialChange, WORKSPACE_SCOPE } from "./github-credentials.ts";
 import { MarketplaceTokens } from "../plugins/marketplace-tokens.ts";
 import { OrgGithubTokens } from "../org/org-github-tokens.ts";
+import { PersonConnections } from "../people/person-connections.ts";
+
+const RELEASE_PERSON = "pr_00000000-0000-4000-8000-000000000001";
 
 const ORG_A = "fake-org-alpha-token-1111";
 const ORG_B = "fake-org-bravo-token-2222";
@@ -106,6 +113,79 @@ describe("one list of GitHub credentials", () => {
     expect(() => store.migrate({ orgTokens: broken, workspaceOwner: ORG_OWNER, ownerOfBot: () => undefined, fallbackOwner: ORG_OWNER })).toThrow();
     expect(existsSync(join(dir, "org-github-tokens.enc"))).toBe(true);
     expect(migrate(dir, store).imported).toBe(4);
+  });
+
+  it("an account and a credential sealed by the last release read back at this version's start over the same data folder (#4155)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-gh-cred-"));
+    dirs.push(dir);
+    // server/fixtures/sealed-release-0.8.106: written by the pulsa-v0.8.106
+    // tag's own code (PersonConnections.setGithub, GithubCredentials.change)
+    // over a headless data folder whose key file held this test key.
+    cpSync(join(import.meta.dirname, "../fixtures/sealed-release-0.8.106"), dir, { recursive: true });
+    writeFileSync(join(dir, "mcp-oauth.key"), `${key.key.toString("hex")}\n`, { mode: 0o600 });
+    // This version's start: the store move runs first, then each store opens
+    // with the key it resolves again from the same folder.
+    migrateCapabilitiesStores({
+      dataDir: dir,
+      bots: new BotCapabilityStore(dir),
+      installation: new InstallationCapabilityStore(dir, () => resolveVaultKey(dir, {})),
+      botIds: () => [],
+      personIds: () => [RELEASE_PERSON],
+    });
+    expect(new PersonConnections(dir, () => resolveVaultKey(dir, {})).github(RELEASE_PERSON)).toMatchObject({ token: "github-fixture-person", login: "alice", via: "device" });
+    const released = new GithubCredentials(dir, () => resolveVaultKey(dir, {}));
+    expect(released.automatic(RELEASE_PERSON).map((entry) => entry.token)).toEqual(["github-fixture-credential"]);
+  });
+
+  it("a credential sealed on a start whose key arrives late reads back once it is there (#4155)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-gh-cred-"));
+    dirs.push(dir);
+    const before = new GithubCredentials(dir, () => resolveVaultKey(dir, {}));
+    before.change("p-alice", { op: "add", label: "Mine", token: MINE });
+    const orgBefore = new OrgGithubTokens(dir, () => resolveVaultKey(dir, {}));
+    orgBefore.change({ op: "add", label: "Other organization", token: ORG_A });
+    // A start whose key arrives late (a desktop key store busy at launch):
+    // nothing is lost and the move of the former file retries once it is there.
+    let source: ReturnType<typeof resolveVaultKey> = { kind: "unavailable", reason: "The encrypted credential store could not be read on this launch." };
+    const late = new GithubCredentials(dir, () => source);
+    const orgLate = new OrgGithubTokens(dir, () => source);
+    const input = { orgTokens: orgLate, workspaceOwner: ORG_OWNER, ownerOfBot: () => undefined, fallbackOwner: ORG_OWNER };
+    expect(() => late.migrate(input)).toThrow();
+    expect(() => orgLate.list()).toThrow();
+    source = resolveVaultKey(dir, {});
+    expect(late.migrate(input).imported).toBe(1);
+    expect(late.automatic("p-alice").map((entry) => entry.token)).toEqual([MINE]);
+    expect(late.automatic(ORG_OWNER).map((entry) => entry.token)).toEqual([ORG_A]);
+  });
+
+  it("a list sealed with a key that is gone is kept beside when a credential is added again (#4155)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-gh-cred-"));
+    dirs.push(dir);
+    new GithubCredentials(dir, () => ({ kind: "key", key: Buffer.alloc(32, 3) })).change("p-alice", { op: "add", label: "Lost", token: ORG_A });
+    const store = new GithubCredentials(dir, () => key);
+    expect(store.unreadable()).toBe("sealed");
+    expect(() => store.list("p-alice", { org: false })).toThrow(expect.objectContaining({ code: "store_sealed" }));
+    store.change("p-alice", { op: "add", label: "Mine", token: MINE });
+    expect(store.unreadable()).toBeNull();
+    expect(store.automatic("p-alice").map((entry) => entry.token)).toEqual([MINE]);
+    const kept = readdirSync(dir).filter((name) => name.startsWith("github-credentials.enc.unreadable-"));
+    expect(kept).toHaveLength(1);
+    // The file kept beside still opens with its own key.
+    renameSync(join(dir, kept[0]!), join(dir, "github-credentials.enc"));
+    expect(new GithubCredentials(dir, () => ({ kind: "key", key: Buffer.alloc(32, 3) })).automatic("p-alice").map((entry) => entry.token)).toEqual([ORG_A]);
+  });
+
+  it("a list this start could not read is asked again, never taken for sealed (#4155)", () => {
+    const { dir, store } = open();
+    store.change("p-alice", { op: "add", label: "Mine", token: MINE });
+    const file = join(dir, "github-credentials.enc");
+    chmodSync(file, 0o000);
+    const later = new GithubCredentials(dir, () => key);
+    expect(() => later.automatic("p-alice")).toThrow(expect.objectContaining({ code: "store_unavailable" }));
+    expect(() => later.change("p-alice", { op: "add", label: "Other", token: ORG_B })).toThrow(expect.objectContaining({ code: "store_unavailable" }));
+    chmodSync(file, 0o600);
+    expect(later.automatic("p-alice").map((entry) => entry.token)).toEqual([MINE]);
+    expect(readdirSync(dir).filter((name) => name.includes("unreadable"))).toEqual([]);
   });
 
   it("a marketplace picks a credential, or goes back to Automatic", () => {

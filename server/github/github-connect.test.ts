@@ -336,3 +336,76 @@ describe("Sagax's GitHub sync in the server environment", () => {
     expect(app.status("owner", { ...base, token: "ghp_x" } as GithubConnection)).not.toHaveProperty("orgAccessUrl");
   });
 });
+
+describe("GithubConnect expiring tokens (#4155)", () => {
+  const base = { login: "octo", via: "device" as const, connectedAt: 1, clientId: "Iv1.app" };
+  function refresher(answer: () => Response | Promise<Response>) {
+    const calls: string[] = [];
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "https://github.com/login/oauth/access_token") {
+        calls.push(String(init?.body));
+        return answer();
+      }
+      if (url === "https://api.github.com/user") {
+        const auth = new Headers(init?.headers).get("authorization");
+        return auth === "Bearer ghu_new" ? Response.json({ login: "octo" }) : new Response("{}", { status: 401 });
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    return { fetcher, calls };
+  }
+
+  it("renews a token GitHub already ended (401) once, then shows it connected", async () => {
+    let stored: GithubConnection | undefined = { ...base, token: "ghu_old", refreshToken: "ghr_old", expiresAt: 10_000_000 };
+    const connected: string[] = [];
+    const github = refresher(() => Response.json({ access_token: "ghu_new", expires_in: 28_800, refresh_token: "ghr_new", refresh_token_expires_in: 15_897_600 }));
+    const connect = new GithubConnect({
+      clientId: () => "Ov23li.other", fetch: github.fetcher, now: () => 1_000,
+      save: (_id, connection) => { stored = connection; }, current: () => stored,
+      onConnected: (_id, connection) => connected.push(connection.token),
+    });
+    await expect(connect.probeStatus("pr_a", stored)).resolves.toMatchObject({ state: "connected", login: "octo" });
+    expect(github.calls).toHaveLength(1);
+    expect(github.calls[0]).toContain("client_id=Iv1.app");
+    expect(github.calls[0]).not.toContain("client_secret");
+    expect(stored).toMatchObject({ token: "ghu_new", refreshToken: "ghr_new", expiresAt: 1_000 + 28_800_000, clientId: "Iv1.app" });
+    // put where the person's tools run, like a new sign-in
+    expect(connected).toEqual(["ghu_new"]);
+  });
+
+  it("renews before use when the token ends within the margin, and only once at a time", async () => {
+    let stored: GithubConnection | undefined = { ...base, token: "ghu_old", refreshToken: "ghr_old", expiresAt: 1_000 + 60_000 };
+    const github = refresher(async () => Response.json({ access_token: "ghu_new", expires_in: 28_800, refresh_token: "ghr_new" }));
+    const connect = new GithubConnect({ clientId: () => undefined, fetch: github.fetcher, now: () => 1_000, save: (_id, c) => { stored = c; }, current: () => stored });
+    expect(connect.needsRefresh(stored)).toBe(true);
+    const [a, b] = await Promise.all([connect.fresh("pr_a", stored), connect.fresh("pr_a", stored)]);
+    expect(a?.token).toBe("ghu_new");
+    expect(b?.token).toBe("ghu_new");
+    expect(github.calls).toHaveLength(1);
+    expect(connect.needsRefresh(stored)).toBe(false);
+    // a token that does not expire is never renewed
+    expect(connect.needsRefresh({ ...base, token: "gho_x" })).toBe(false);
+  });
+
+  it("says the token was refused when GitHub also refuses the refresh token", async () => {
+    let stored: GithubConnection | undefined = { ...base, token: "ghu_old", refreshToken: "ghr_old", expiresAt: 500 };
+    const github = refresher(() => Response.json({ error: "bad_refresh_token" }));
+    const connect = new GithubConnect({ clientId: () => undefined, fetch: github.fetcher, now: () => 1_000, save: (_id, c) => { stored = c; }, current: () => stored });
+    await expect(connect.probeStatus("pr_a", stored)).resolves.toMatchObject({ state: "error", login: "octo", error: expect.stringContaining("refused") });
+    expect(stored?.token).toBe("ghu_old");
+  });
+
+  it("never writes a renewed token over a disconnect made meanwhile", async () => {
+    let stored: GithubConnection | undefined = { ...base, token: "ghu_old", refreshToken: "ghr_old", expiresAt: 500 };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const github = refresher(async () => { await gate; return Response.json({ access_token: "ghu_new", expires_in: 28_800, refresh_token: "ghr_new" }); });
+    const connect = new GithubConnect({ clientId: () => undefined, fetch: github.fetcher, now: () => 1_000, save: (_id, c) => { stored = c; }, current: () => stored });
+    const pending = connect.refresh("pr_a", stored!);
+    connect.disconnect("pr_a");
+    release();
+    await expect(pending).resolves.toBeUndefined();
+    expect(stored).toBeUndefined();
+  });
+});

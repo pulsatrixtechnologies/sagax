@@ -82,6 +82,7 @@ function Bots({ inApps }: { inApps?: boolean }) {
 const admin = params.get("role") === "admin";
 // &app=none: no organization GitHub OAuth App (Connect GitHub still uses the built-in one)
 const deviceFlow = params.get("app") !== "none";
+const githubStore = params.get("github");
 const ORG: PerspicaxOrg = {
   org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://px.example.test" } },
   link: { state: "ok" }, viewerRole: admin ? "admin" : "member",
@@ -107,14 +108,19 @@ const MANAGE_API: Record<string, unknown> = {
     { id: "gt_0000000000000011", label: "Second GitHub organization", hint: "9c1d", owner: "mine", chosenBy: 1 },
     { id: "gt_0000000000000001", label: "Private repositories", hint: "4f2a", owner: "org", chosenBy: 0 },
   ] },
-  "/api/me/connections": { github: { state: "none", deviceFlow }, servers: [
+  // &github=store_sealed or store_unavailable: a saved account this launch cannot read (#4155)
+  "/api/me/connections": { github: githubStore === "store_sealed"
+    ? { state: "error", deviceFlow, code: githubStore, error: "Your saved GitHub account cannot be opened on this server anymore. Connect GitHub again." }
+    : githubStore === "store_unavailable"
+      ? { state: "error", deviceFlow, code: githubStore, error: "Your saved GitHub account is kept, but this server cannot read its key right now." }
+      : { state: "none", deviceFlow }, servers: [
     { name: "notes", kind: "remote", type: "http", url: "https://mcp.notion.com/mcp", domain: "mcp.notion.com", auth: "oauth", tokenConfigured: false, enabled: true, addedAt: 1, authState: "connected" },
   ], sandbox: true },
   "/api/mcp/servers": { servers: [
     { name: "twilio-docs", type: "http", url: "https://mcp.twilio.com/docs", enabled: true, source: "twilio", headerKeys: [], auth: "none" },
     { name: "github", type: "http", url: "https://api.githubcopilot.com/mcp/", enabled: true, headerKeys: ["Authorization"], auth: "none" },
-    // the GitHub plugin's server reads the person's GitHub account (not connected here)
-    { name: "github-github", type: "http", url: "https://api.githubcopilot.com/mcp/", enabled: true, source: "claude-plugins-official", headerKeys: ["Authorization"], auth: "none", github: "missing" },
+    // the GitHub plugin's server reads the person's GitHub account (not connected here; &github=store_*: saved, unreadable)
+    { name: "github-github", type: "http", url: "https://api.githubcopilot.com/mcp/", enabled: true, source: "claude-plugins-official", headerKeys: ["Authorization"], auth: "none", github: githubStore === "store_sealed" || githubStore === "store_unavailable" ? "unreadable" : "missing" },
   ], reserved: [] },
   "/api/marketplaces": { marketplaces: [
     { name: "claude-plugins-official", source: "anthropics/claude-plugins-official", visibility: "org", plugins: [

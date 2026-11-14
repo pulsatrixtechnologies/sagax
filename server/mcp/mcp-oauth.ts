@@ -17,7 +17,7 @@
 // verifier. Public errors are fixed sentences plus, at most, an OAuth error
 // code that is checked against a strict pattern.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, unlinkSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
@@ -165,11 +165,27 @@ export function resolveVaultKey(dataDir: string, env: NodeJS.ProcessEnv = proces
     return { kind: "unavailable", reason: "The encrypted credential store could not be read on this launch." };
   }
   const file = join(dataDir, KEY_FILE);
+  // #4155: a key file this start cannot read (a newer build started as
+  // another user, a passing I/O error) is never replaced by a new key: that
+  // would orphan every store sealed with it (the GitHub account, the vault,
+  // the sign-ins) for good, while the next start can still open them, and
+  // every read asks again (vaultKeySource keeps only a key). A file that
+  // holds no key (empty, or not a key) sealed nothing: it is kept beside as
+  // mcp-oauth.key.invalid-<ms> and a new key is made, as on a first run.
   try {
     const existing = readFileSync(file, "utf8").trim();
     if (HEX_KEY.test(existing)) return { kind: "key", key: Buffer.from(existing, "hex") };
-  } catch {
-    // first run
+    if (existing) {
+      try {
+        renameSync(file, `${file}.invalid-${Date.now()}`);
+      } catch {
+        return { kind: "unavailable", reason: "The key of the saved sign-ins could not be read on this launch." };
+      }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      return { kind: "unavailable", reason: "The key of the saved sign-ins could not be read on this launch." };
+    }
   }
   try {
     const key = randomBytes(32).toString("hex");
@@ -186,6 +202,8 @@ export class McpOAuthVault {
   private readonly keySource: () => VaultKeySource;
   private cached: VaultDocument | null = null;
   private unreadable: string | null = null;
+  /** The file is there and the key too, but it does not open with that key (#4155). */
+  private sealed = false;
 
   constructor(dataDir: string, keySource: () => VaultKeySource) {
     this.file = join(dataDir, VAULT_FILE);
@@ -197,6 +215,7 @@ export class McpOAuthVault {
   private load(): VaultDocument | null {
     if (this.cached) return this.cached;
     const source = this.keySource();
+    this.sealed = false;
     if (source.kind === "unavailable") {
       this.unreadable = source.reason;
       return null;
@@ -237,6 +256,7 @@ export class McpOAuthVault {
       return this.cached;
     } catch {
       this.unreadable = "Saved MCP sign-ins could not be decrypted on this launch.";
+      this.sealed = true;
       return null;
     }
   }
@@ -263,7 +283,20 @@ export class McpOAuthVault {
   }
 
   set(name: string, record: McpOAuthRecord | undefined, account: string = DEFAULT_MCP_ACCOUNT): void {
-    const document = this.load();
+    let document = this.load();
+    // #4155: signing in again over a vault that does not open with this key
+    // keeps that file beside as mcp-oauth.enc.unreadable-<ms> (it opens again
+    // if its key comes back) and starts a new vault. A removal never does.
+    if (!document && record && this.sealed) {
+      try {
+        renameSync(this.file, `${this.file}.unreadable-${Date.now()}`);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new McpOAuthError(this.unreadable ?? "The sign-in store is unavailable.");
+      }
+      this.sealed = false;
+      this.unreadable = null;
+      document = this.cached = { version: 2, servers: {} };
+    }
     if (!document) throw new McpOAuthError(this.unreadable ?? "The sign-in store is unavailable.");
     const accounts = { ...document.servers[name] };
     if (record) accounts[account] = structuredClone(record);

@@ -1,9 +1,13 @@
 import { createCipheriv } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { BotCapabilityStore } from "../bots/bot-capability-store.ts";
+import { migrateCapabilitiesStores } from "../capabilities/capabilities-store-migration.ts";
+import { InstallationCapabilityStore } from "../capabilities/installation-capability-store.ts";
+import { GithubConnect } from "../github/github-connect.ts";
 import { parsePersonalMcpInput, personalAuthHeaders, personalMcpInputFromAgent, PersonConnections, PersonConnectionsError, principalDir } from "./person-connections.ts";
 
 const dirs: string[] = [];
@@ -123,6 +127,57 @@ describe("PersonConnections", () => {
     expect(readFileSync(old, "utf8")).toBe(original);
   });
 
+  it("keeps a GitHub account sealed before the store move through the newer version's first start (#4155)", () => {
+    // The older version sealed connections.enc; the newer version's start
+    // (migrateCapabilitiesStores) runs over the same data folder before any read.
+    const { dir } = store();
+    legacyFile(dir, "pr_a", { version: 1, mcpServers: {}, github: { token: "github-fixture", login: "alice", via: "device", connectedAt: 1 } });
+    migrateCapabilitiesStores({
+      dataDir: dir,
+      bots: new BotCapabilityStore(dir),
+      installation: new InstallationCapabilityStore(dir, () => key),
+      botIds: () => [],
+      personIds: () => ["pr_a"],
+    });
+    const next = new PersonConnections(dir, () => key);
+    expect(next.github("pr_a")).toMatchObject({ login: "alice", via: "device" });
+    // Sealed again under the current format, and still there at the start after.
+    expect(new PersonConnections(dir, () => key).github("pr_a")?.login).toBe("alice");
+    next.setGithub("pr_a", { token: "github-fixture-2", login: "alice", via: "device", connectedAt: 2 });
+    expect(new PersonConnections(dir, () => key).github("pr_a")?.connectedAt).toBe(2);
+  });
+
+  it("says a saved GitHub account it cannot read on a launch, never a plain not connected, and offers only what works (#4155)", async () => {
+    const { dir, connections } = store();
+    connections.setGithub("pr_a", { token: "github-fixture", login: "alice", via: "device", connectedAt: 1 });
+    const connect = new GithubConnect({ clientId: () => "Iv1.test", save: () => undefined, fetch: (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch });
+    // No key on this launch: the account is kept, nothing can be saved, so the status says so with no reconnect.
+    const keyless = new PersonConnections(dir, () => ({ kind: "unavailable", reason: "The encrypted credential store could not be read on this launch." }));
+    const noKey = keyless.readGithub("pr_a");
+    expect(noKey).toEqual({ unreadable: "key" });
+    expect(connect.status("pr_a", noKey.connection, noKey.unreadable)).toMatchObject({ state: "error", code: "store_unavailable" });
+    expect(() => keyless.setGithub("pr_a", { token: "github-fixture-2", login: "alice", via: "device", connectedAt: 2 })).toThrow(PersonConnectionsError);
+    expect(new PersonConnections(dir, () => key).github("pr_a")?.login).toBe("alice");
+    // A person who never connected still reads as not connected.
+    const empty = keyless.readGithub("pr_b");
+    expect(connect.status("pr_b", empty.connection, empty.unreadable)).toEqual({ state: "none", deviceFlow: true });
+    // Sealed under another key: Connect GitHub again works. The old store is kept beside, the new account saved.
+    const other = new PersonConnections(dir, () => ({ kind: "key", key: Buffer.alloc(32, 9) }));
+    const sealed = other.readGithub("pr_a");
+    expect(sealed).toEqual({ unreadable: "sealed" });
+    expect(connect.status("pr_a", sealed.connection, sealed.unreadable)).toMatchObject({ state: "error", code: "store_sealed" });
+    // The action the status offers (here the pasted token; the device flow saves the same way).
+    const again = new GithubConnect({ clientId: () => "Iv1.test", now: () => 3, save: (id, value) => other.setGithub(id, value), fetch: (async () => Response.json({ login: "alice" })) as unknown as typeof fetch });
+    await again.connectWithToken("pr_a", "github-fixture-3");
+    expect(again.status("pr_a", other.readGithub("pr_a").connection)).toMatchObject({ state: "connected", login: "alice" });
+    expect(new PersonConnections(dir, () => ({ kind: "key", key: Buffer.alloc(32, 9) })).github("pr_a")?.connectedAt).toBe(3);
+    const kept = readdirSync(principalDir(dir, "pr_a")).filter((name) => name.startsWith("capabilities.enc.unreadable-"));
+    expect(kept).toHaveLength(1);
+    // The kept copy still opens with its own key.
+    writeFileSync(join(principalDir(dir, "pr_a"), "capabilities.enc"), readFileSync(join(principalDir(dir, "pr_a"), kept[0]!)));
+    expect(new PersonConnections(dir, () => key).github("pr_a")?.connectedAt).toBe(1);
+  });
+
   it("does not fall back to the legacy file when the new store is corrupt", () => {
     const { dir, connections } = store();
     const old = legacyFile(dir, "pr_a", { version: 1, mcpServers: {}, github: { token: "github-fixture", login: "alice", via: "token", connectedAt: 1 } });
@@ -193,5 +248,86 @@ describe("personalMcpInputFromAgent", () => {
     expect(personalMcpInputFromAgent({ name: "n", url: "https://a.example.com", command: "x" })).toMatch(/not both/);
     expect(personalMcpInputFromAgent({ name: "n", command: "x", args: [1] })).toMatch(/args/);
     expect(personalMcpInputFromAgent(null)).toMatch(/url or a command/);
+  });
+});
+
+/** A GitHub App with expiring user tokens (the default for a GitHub App):
+ * each access token ends 8 hours after it is issued, a refresh token
+ * (6 months, turned over at each use) renews it. */
+function githubAppWithExpiringTokens(clock: { now: number }) {
+  const live = new Map<string, number>();
+  const refresh = new Set<string>();
+  const refreshBodies: string[] = [];
+  let issued = 0;
+  const issue = () => {
+    issued += 1;
+    const token = `ghu_token_${issued}`;
+    const refreshToken = `ghr_refresh_${issued}`;
+    live.set(token, clock.now + 28_800_000);
+    refresh.add(refreshToken);
+    return { access_token: token, token_type: "bearer", scope: "", expires_in: 28_800, refresh_token: refreshToken, refresh_token_expires_in: 15_897_600 };
+  };
+  let polls = 0;
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    const body = new URLSearchParams(typeof init?.body === "string" ? init.body : "");
+    if (url === "https://github.com/login/device/code") {
+      return Response.json({ device_code: "dev-app", user_code: "APPS-0001", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 1 });
+    }
+    if (url === "https://github.com/login/oauth/access_token") {
+      if (body.get("grant_type") === "refresh_token") {
+        refreshBodies.push(body.toString());
+        const used = body.get("refresh_token") ?? "";
+        if (!refresh.delete(used)) return Response.json({ error: "bad_refresh_token" });
+        return Response.json(issue());
+      }
+      polls += 1;
+      return Response.json(polls === 1 ? { error: "authorization_pending" } : issue());
+    }
+    if (url === "https://api.github.com/user") {
+      const token = (new Headers(init?.headers).get("authorization") ?? "").replace(/^Bearer /, "");
+      const ends = live.get(token);
+      if (ends === undefined || ends <= clock.now) return new Response("{}", { status: 401 });
+      return Response.json({ login: "octo-app" });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+  return { fetcher, refreshBodies };
+}
+
+describe("#4155: a GitHub App's expiring token survives the start of a newer version", () => {
+  it("renews the token with the saved refresh token instead of showing the account as refused", async () => {
+    const { dir, connections } = store();
+    const clock = { now: Date.UTC(2026, 10, 13, 9) };
+    const github = githubAppWithExpiringTokens(clock);
+    const firstRun = new GithubConnect({
+      clientId: () => "Iv1.orgapp", fetch: github.fetcher, now: () => clock.now, minIntervalMs: 5,
+      save: (principalId, connection) => connections.setGithub(principalId, connection),
+      current: (principalId) => connections.github(principalId),
+    });
+    await firstRun.startDeviceFlow("pr_a");
+    await vi.waitFor(() => expect(connections.github("pr_a")).toBeTruthy(), { timeout: 5_000, interval: 10 });
+    expect(connections.github("pr_a")).toMatchObject({ token: "ghu_token_1", refreshToken: "ghr_refresh_1", clientId: "Iv1.orgapp", expiresAt: clock.now + 28_800_000 });
+
+    // The next version starts over the same data folder, 9 hours later.
+    clock.now += 9 * 3_600_000;
+    const restarted = new PersonConnections(dir, () => key);
+    const nextRun = new GithubConnect({
+      clientId: () => "Ov23li.builtin", fetch: github.fetcher, now: () => clock.now,
+      save: (principalId, connection) => restarted.setGithub(principalId, connection),
+      current: (principalId) => restarted.github(principalId),
+    });
+    const status = await nextRun.probeStatus("pr_a", restarted.github("pr_a"));
+    expect(status).toMatchObject({ state: "connected", login: "octo-app" });
+    // Renewed with the app the token belongs to, and no client secret.
+    expect(github.refreshBodies).toEqual(["client_id=Iv1.orgapp&grant_type=refresh_token&refresh_token=ghr_refresh_1"]);
+    // Saved: the start after this one reads the renewed token and refresh token.
+    expect(new PersonConnections(dir, () => key).github("pr_a")).toMatchObject({ token: "ghu_token_2", refreshToken: "ghr_refresh_2", login: "octo-app" });
+  });
+
+  it("keeps an OAuth App's token, which does not expire, as it was saved", () => {
+    const { dir, connections } = store();
+    connections.setGithub("pr_a", { token: "gho_plain", login: "alice", via: "device", connectedAt: 1 });
+    expect(new PersonConnections(dir, () => key).github("pr_a")).toEqual({ token: "gho_plain", login: "alice", via: "device", connectedAt: 1 });
   });
 });

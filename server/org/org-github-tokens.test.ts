@@ -129,6 +129,18 @@ describe("org github access tokens", () => {
     expect(readFileSync(file, "utf8")).toBe("not-a-vault");
   });
 
+  it("reads its tokens once the vault key arrives after a start without it, never staying locked for the launch (#4155)", () => {
+    const { dir } = open();
+    new OrgGithubTokens(dir, () => key).change({ op: "add", label: "Alpha org", token: ALPHA });
+    let source: { kind: "unavailable"; reason: string } | typeof key = { kind: "unavailable", reason: "The encrypted credential store could not be read on this launch." };
+    const later = new OrgGithubTokens(dir, () => source);
+    expect(() => later.list()).toThrow(OrgGithubTokensError);
+    source = key;
+    const listed = later.list();
+    expect(listed).toHaveLength(1);
+    expect(later.tokenFor(listed[0]!.id)).toBe(ALPHA);
+  });
+
   it("refuses a label that holds the secret and a change that mixes rename with a secret", () => {
     const { store, file } = open();
     store.change({ op: "add", label: "Alpha org", token: ALPHA });

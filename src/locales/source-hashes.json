@@ -18643,7 +18643,13 @@
       "routineTrigger.product.search": "dd81e8c9c4efc13e8eb7d30a6b3307c745eb7d40f645d69424180b1567e58d8b",
       "routineTrigger.product.templates": "59ef26ce613b5997dc2f3041c461c1f0cd4d40bfd4053057a6563c44fa81ef07",
       "routineTrigger.product.noMatch": "d80ec4c3b63db130482e34b84fa13656f45bb197d815d6651aeb50e4513784de",
-      "routineTrigger.product.invalid": "589e3e8c59df56d889e035d0543bec2b013f96f5fc9fcdf7055110aeba3dc4ba"
+      "routineTrigger.product.invalid": "589e3e8c59df56d889e035d0543bec2b013f96f5fc9fcdf7055110aeba3dc4ba",
+      "connectApps.detail.githubUnreadable": "cd7121221e317d8366eff853e2da8e33721a40711ed79e4595ee2b7d645f57a7",
+      "sources.github.credentialsSealed": "911ad8c87936bf6c947f295f8fd73ce0c64e10dc85d5228f0af54cc4c3521830",
+      "myConnections.github.storeSealed": "4df3faa388075c10a6479ae6eca5802cd53ab935934609c78091c52ab2716d6f",
+      "myConnections.github.storeUnavailable": "259a29b92307f6b29b379f3bc0b2f234c699d32d49f9420f3064d232ef3b1b5e",
+      "myConnections.github.savedKeysUnreadable": "fa56b20256cc2b201b288a2418a11ff410118908d0ffca03b5656cc7652ec530",
+      "myConnections.github.unreadableSummary": "ffa4aee26131c760e81c77116e2afe8554783c34be4dd940b8152247f684a289"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

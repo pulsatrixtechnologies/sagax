@@ -47,6 +47,17 @@ describe("the GitHub plugin's page", () => {
     expect(html).not.toContain("More credentials");
   });
 
+  // #4155: a list the server cannot open is said once, Advanced opens on it, and Add is the way back.
+  it("a saved list the server cannot open says so under an open Advanced, with Add", () => {
+    setGithubCredentialsForTest({ canManageOrg: false, deviceFlow: false, credentials: [], unreadable: "sealed" });
+    const html = renderToStaticMarkup(createElement(GithubAccountSection, { connection: createElement("div") }));
+    expect(html).toContain('aria-expanded="true"');
+    expect(html.match(/data-github-credentials-sealed/g)).toHaveLength(1);
+    expect(html).toContain("Your saved GitHub tokens can&#x27;t be opened on this server anymore. Add them again with Add a credential.");
+    expect(html).toContain("data-github-credential-add-open");
+    expect(html).not.toContain("data-github-credentials-empty");
+  });
+
   it("shows one list with the organization's marked, and no token", () => {
     setGithubCredentialsForTest(view(false));
     const html = renderToStaticMarkup(createElement(GithubAccountSection, {}));

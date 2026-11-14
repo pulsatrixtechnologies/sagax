@@ -13,7 +13,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { LookupAddress } from "node:dns";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -70,6 +70,15 @@ const githubSchema = z.object({
   scopes: z.array(z.string().max(100)).max(50).optional(),
   via: z.enum(["device", "token"]),
   connectedAt: z.number(),
+  /** #4155: a device-flow sign-in through a GitHub App whose user tokens
+   * expire (8 hours) comes with a refresh token (6 months). Without these the
+   * account died hours after each sign-in. The client id is the app the
+   * token belongs to (public), so a refresh still works after the server's
+   * client id changes. */
+  refreshToken: z.string().min(1).max(4_096).optional(),
+  expiresAt: z.number().optional(),
+  refreshTokenExpiresAt: z.number().optional(),
+  clientId: z.string().min(1).max(200).optional(),
 }).strict();
 
 const legacyDocumentSchema = z.object({
@@ -106,12 +115,23 @@ export type PersonalMcpListing =
 export class PersonConnectionsError extends Error {
   readonly code: string;
   readonly status: number;
-  constructor(message: string, code: string, status = 400) {
+  /** The store file is there and the key is too, but it does not open with
+   * that key (sealed under another one, or damaged): a reconnect sets it
+   * aside (#4155). False when no key could be read on this launch. */
+  readonly sealed: boolean;
+  constructor(message: string, code: string, status = 400, sealed = false) {
     super(message);
     this.code = code;
     this.status = status;
+    this.sealed = sealed;
   }
 }
+
+/** Why a saved GitHub account could not be read on this launch (#4155):
+ * `key`, no key this launch (the account is safe and comes back with the
+ * key); `sealed`, the store does not open with the key there is (Connect
+ * GitHub again sets it aside and saves the new account). */
+export type GithubUnreadable = "key" | "sealed";
 
 /** The folder of one person's own files (engine logins live there too). */
 export function principalDir(dataDir: string, principalId: string): string {
@@ -318,10 +338,28 @@ export class PersonConnections {
     try {
       const envelope = JSON.parse(raw) as { v?: unknown; iv?: unknown; tag?: unknown; data?: unknown };
       if (envelope.v !== 1 || typeof envelope.iv !== "string" || typeof envelope.tag !== "string" || typeof envelope.data !== "string") throw new Error("format");
-      const decipher = createDecipheriv("aes-256-gcm", this.key(), Buffer.from(envelope.iv, "base64"));
-      decipher.setAAD(legacy ? LEGACY_AAD : AAD);
-      decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
-      const plain = Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]).toString("utf8");
+      const key = this.key();
+      const open = (aad: Buffer): string => {
+        const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv as string, "base64"));
+        decipher.setAAD(aad);
+        decipher.setAuthTag(Buffer.from(envelope.tag as string, "base64"));
+        return Buffer.concat([decipher.update(Buffer.from(envelope.data as string, "base64")), decipher.final()]).toString("utf8");
+      };
+      let plain: string;
+      try {
+        plain = open(legacy ? LEGACY_AAD : AAD);
+      } catch (sealed) {
+        // #4155: the store move of a newer version's first start
+        // (capabilities-store-migration.ts) copied connections.enc's sealed
+        // bytes as capabilities.enc, which then never opened under this file's
+        // AAD: the person's GitHub account and servers looked gone. Those bytes
+        // are the legacy document; they open as one and are sealed again below.
+        // This also opens any capabilities.enc sealed with the legacy AAD by
+        // other means: same key, same person's folder, so the same document.
+        if (legacy) throw sealed;
+        plain = open(LEGACY_AAD);
+        legacy = true;
+      }
       const document = legacy
         ? (() => {
           const old = legacyDocumentSchema.parse(JSON.parse(plain));
@@ -335,7 +373,7 @@ export class PersonConnections {
       return structuredClone(document);
     } catch (error) {
       if (error instanceof PersonConnectionsError) throw error;
-      throw new PersonConnectionsError("Your saved connections could not be decrypted on this launch.", "store_unavailable", 503);
+      throw new PersonConnectionsError("Your saved connections could not be decrypted on this launch.", "store_unavailable", 503, true);
     }
   }
 
@@ -393,8 +431,36 @@ export class PersonConnections {
     return this.read(principalId).github;
   }
 
+  /** The connection, or why the saved one could not be read on this launch
+   * (#4155): the status says it, never a plain "not connected". */
+  readGithub(principalId: string): { connection?: GithubConnection; unreadable?: GithubUnreadable } {
+    try {
+      return { connection: this.github(principalId) };
+    } catch (error) {
+      return { unreadable: error instanceof PersonConnectionsError && error.sealed ? "sealed" : "key" };
+    }
+  }
+
+  /** Connecting GitHub over a store that does not open with this launch's
+   * key (#4155): that file is kept beside as capabilities.enc.unreadable-<ms>
+   * (it opens again if its key comes back) and the person starts a new store
+   * holding the new account. Without a key nothing is set aside or saved. */
   setGithub(principalId: string, connection: GithubConnection | undefined): void {
-    const document = this.read(principalId);
+    let document: PersonCapabilitiesDocument;
+    try {
+      document = this.read(principalId);
+    } catch (error) {
+      if (!connection || !(error instanceof PersonConnectionsError) || !error.sealed) throw error;
+      const file = this.file(principalId);
+      try {
+        renameSync(file, `${file}.unreadable-${Date.now()}`);
+      } catch (moved) {
+        // Only connections.enc was there: it stays, the new file wins over it.
+        if ((moved as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      this.cache.delete(principalId);
+      document = emptyDocument();
+    }
     if (connection) document.github = connection;
     else delete document.github;
     this.write(principalId, document);

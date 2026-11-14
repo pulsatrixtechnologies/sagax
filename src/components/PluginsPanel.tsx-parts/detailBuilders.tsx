@@ -21,6 +21,14 @@ import { grokConnectorDetail } from "./GrokConnectors";
 import { pluginSourceLabel, safeHost } from "./helpers";
 import type { DetailBase, DetailContext } from "./types";
 
+/** The GitHub account row of a server that reads it: one sentence per state (#4155: a saved account this launch cannot
+ * read says so and points to the GitHub plugin's page, where its reason and action are). */
+function githubAccountDetail(state: "connected" | "missing" | "unreadable" | undefined): string {
+  if (state === "connected") return t("connectApps.detail.githubConnected");
+  if (state === "unreadable") return t("connectApps.detail.githubUnreadable");
+  return t("connectApps.detail.githubMissing");
+}
+
 export function detailProps(item: PluginItem, context: DetailContext): DetailBase {
   if (isGrokConnector(item)) return grokConnectorDetail(item);
   if (item.kind === "plugin") {
@@ -70,7 +78,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
     // account is that one, connected on the GitHub plugin's page
     account = {
       id: "github", label: t("connectApps.detail.githubAccount"),
-      detail: server.github === "connected" ? t("connectApps.detail.githubConnected") : t("connectApps.detail.githubMissing"),
+      detail: githubAccountDetail(server.github),
       status: server.github === "connected" ? "connected" : "needs_auth",
     };
     accountAction = <button type="button" className="ui-button text-[12px]" data-mcp-open-github onClick={openGithub}>{t("connectApps.detail.openGithub")}</button>;
@@ -293,10 +301,13 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
       </button>
     ),
   }));
+  // the plugin's servers all read the one account: unreadable (#4155) or missing wins over connected
+  const childGithub = children.some((child) => child.githubAccount === "unreadable") ? "unreadable"
+    : children.some((child) => child.githubAccount === "missing") ? "missing" : "connected";
   const githubAccount = !github && children.some((child) => child.githubAccount) ? (
-    <div className="flex min-h-[38px] flex-wrap items-center gap-2 py-1.5" data-plugin-github-account={children.some((child) => child.githubAccount === "missing") ? "missing" : "connected"}>
+    <div className="flex min-h-[38px] flex-wrap items-center gap-2 py-1.5" data-plugin-github-account={childGithub}>
       <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink-secondary">
-        {children.some((child) => child.githubAccount === "missing") ? t("connectApps.detail.githubMissing") : t("connectApps.detail.githubConnected")}
+        {githubAccountDetail(childGithub)}
       </span>
       <button type="button" className="ui-button text-[12px]" onClick={openGithub}>{t("connectApps.detail.openGithub")}</button>
     </div>

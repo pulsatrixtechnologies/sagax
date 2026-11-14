@@ -16,15 +16,21 @@
 // Sagax itself makes for them (private skills, plugin marketplaces).
 import { createHash } from "node:crypto";
 
-import type { GithubConnection } from "../people/person-connections.ts";
+import type { GithubConnection, GithubUnreadable } from "../people/person-connections.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 export const GITHUB_SCOPES = "repo read:org gist workflow";
 /** How long a successful /user probe keeps the connection "Connected" without asking GitHub again. */
 export const GITHUB_PROBE_OK_TTL_MS = 5 * 60_000;
+/** #4155: an expiring token (a GitHub App's user token, 8 hours) is renewed this long before it ends. */
+export const GITHUB_REFRESH_MARGIN_MS = 10 * 60_000;
+const MAX_TIMER_MS = 2_147_000_000;
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 const TOKEN_REFUSED_MESSAGE = "GitHub refused this token. Connect again.";
+/** #4155: the app shows its own words for these (by `code`); these are for API readers. */
+const STORE_SEALED_MESSAGE = "Your saved GitHub account cannot be opened on this server anymore. Connect GitHub again.";
+const STORE_UNAVAILABLE_MESSAGE = "Your saved GitHub account is kept, but this server cannot read its key right now. It comes back once the server can read its key again.";
 
 /** Digest of a token for status memos. Never log or return the digest of a live secret beyond process memory. */
 export function githubTokenDigest(token: string): string {
@@ -67,8 +73,11 @@ export type GithubStatus =
   | { state: "none"; deviceFlow: boolean }
   | { state: "pending"; deviceFlow: true; userCode: string; verificationUri: string; expiresAt: number }
   | { state: "connected"; deviceFlow: boolean; login: string; name?: string; scopes?: string[]; via: "device" | "token"; connectedAt: number; fineGrained?: boolean; orgAccessUrl?: string }
-  /** Stored connection refused by GitHub (401): UI shows Reconnect, never a healthy Connected. */
-  | { state: "error"; deviceFlow: boolean; error: string; login?: string };
+  /** Stored connection refused by GitHub (401): UI shows Reconnect, never a healthy Connected.
+   * `code`: the saved account could not be read on this launch (#4155): `store_sealed`, Connect GitHub
+   * again works (the unreadable store is set aside); `store_unavailable`, no key this launch, nothing to do
+   * for the person and the account comes back with the key. */
+  | { state: "error"; deviceFlow: boolean; error: string; login?: string; code?: "store_sealed" | "store_unavailable" };
 
 interface PendingDevice {
   deviceCode: string;
@@ -84,7 +93,10 @@ export interface GithubConnectOptions {
   clientId: () => string | undefined;
   /** Save (or, with undefined, forget) a person's connection. */
   save: (principalId: string, connection: GithubConnection | undefined) => void;
-  /** After a connection is saved: put it where the person's tools run. */
+  /** The person's saved connection now: a refresh that ends after a
+   * disconnect or a new sign-in never writes over it. */
+  current?: (principalId: string) => GithubConnection | undefined;
+  /** After a connection is saved (a sign-in, or a token GitHub renewed): put it where the person's tools run. */
   onConnected?: (principalId: string, connection: GithubConnection) => void;
   /** A device flow ended without a connection: refused or expired on
    * GitHub (`failed`), or replaced by a newer code or a disconnect
@@ -108,6 +120,21 @@ async function readJson(response: Response): Promise<Record<string, unknown> | n
   }
 }
 
+/** #4155: what GitHub says about an expiring token (a GitHub App with
+ * expiring user tokens): its refresh token and both ends. Nothing for a
+ * token that does not expire (an OAuth App's). */
+function expiryOf(body: Record<string, unknown> | null, now: number): Pick<GithubConnection, "refreshToken" | "expiresAt" | "refreshTokenExpiresAt"> {
+  const refreshToken = typeof body?.refresh_token === "string" && body.refresh_token && body.refresh_token.length <= 4_096 ? body.refresh_token : undefined;
+  const expiresIn = Number(body?.expires_in);
+  const refreshIn = Number(body?.refresh_token_expires_in);
+  if (!refreshToken) return {};
+  return {
+    refreshToken,
+    ...(Number.isFinite(expiresIn) && expiresIn > 0 ? { expiresAt: now + expiresIn * 1000 } : {}),
+    ...(Number.isFinite(refreshIn) && refreshIn > 0 ? { refreshTokenExpiresAt: now + refreshIn * 1000 } : {}),
+  };
+}
+
 export class GithubConnect {
   private readonly options: GithubConnectOptions;
   private readonly fetcher: typeof fetch;
@@ -118,6 +145,9 @@ export class GithubConnect {
   private readonly authErrors = new Map<string, { digest: string; message: string }>();
   /** Last successful /user probe for a stored token. */
   private readonly okProbes = new Map<string, { digest: string; at: number }>();
+  /** #4155: one refresh at a time per person (GitHub turns each refresh token over once). */
+  private readonly refreshing = new Map<string, Promise<GithubConnection | undefined>>();
+  private readonly refreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(options: GithubConnectOptions) {
     this.options = options;
@@ -144,7 +174,10 @@ export class GithubConnect {
     this.okProbes.delete(principalId);
   }
 
-  status(principalId: string, connection: GithubConnection | undefined): GithubStatus {
+  /** `unreadable`: why the person's saved connection could not be read on
+   * this launch (#4155). Said as an error, never as a plain "not connected"
+   * the person would take for a sign-out. */
+  status(principalId: string, connection: GithubConnection | undefined, unreadable?: GithubUnreadable): GithubStatus {
     const deviceFlow = this.deviceFlowAvailable();
     const flow = this.pending.get(principalId);
     if (flow && !flow.cancelled && flow.expiresAt > this.now()) {
@@ -167,14 +200,25 @@ export class GithubConnect {
       };
     }
     const error = this.errors.get(principalId);
-    return error ? { state: "error", deviceFlow, error } : { state: "none", deviceFlow };
+    if (error) return { state: "error", deviceFlow, error };
+    if (unreadable === "sealed") return { state: "error", deviceFlow, error: STORE_SEALED_MESSAGE, code: "store_sealed" };
+    if (unreadable === "key") return { state: "error", deviceFlow, error: STORE_UNAVAILABLE_MESSAGE, code: "store_unavailable" };
+    return { state: "none", deviceFlow };
   }
 
   /** Probe GitHub /user when a connection is stored so a dead token is never shown as Connected.
    * A 401 sticks as error until reconnect. Network blips keep the previous Connected view. */
-  async probeStatus(principalId: string, connection: GithubConnection | undefined): Promise<GithubStatus> {
-    const current = this.status(principalId, connection);
+  async probeStatus(principalId: string, connection: GithubConnection | undefined, unreadable?: GithubUnreadable): Promise<GithubStatus> {
+    let current = this.status(principalId, connection, unreadable);
     if (current.state !== "connected" || !connection) return current;
+    // #4155: a token about to end is renewed first, never shown as refused.
+    if (this.needsRefresh(connection)) {
+      const renewed = await this.refresh(principalId, connection);
+      if (renewed) {
+        connection = renewed;
+        current = this.status(principalId, connection);
+      }
+    }
     const digest = githubTokenDigest(connection.token);
     const ok = this.okProbes.get(principalId);
     if (ok && ok.digest === digest && this.now() - ok.at < GITHUB_PROBE_OK_TTL_MS) return current;
@@ -185,6 +229,9 @@ export class GithubConnect {
       return this.status(principalId, connection);
     } catch (cause) {
       if (cause instanceof GithubConnectError && cause.code === "token_refused") {
+        // An expiring token GitHub already ended: renew it once before saying it was refused.
+        const renewed = connection.refreshToken ? await this.refresh(principalId, connection) : undefined;
+        if (renewed && renewed.token !== connection.token) return this.status(principalId, renewed);
         this.markAuthError(principalId, connection.token, TOKEN_REFUSED_MESSAGE);
         return this.status(principalId, connection);
       }
@@ -223,6 +270,7 @@ export class GithubConnect {
     this.cancel(principalId, false);
     const connection: GithubConnection = { token: trimmed, ...who, via: "token", connectedAt: this.now() };
     this.options.save(principalId, connection);
+    this.unwatch(principalId);
     this.errors.delete(principalId);
     this.clearAuthProbe(principalId);
     this.okProbes.set(principalId, { digest: githubTokenDigest(trimmed), at: this.now() });
@@ -300,10 +348,16 @@ export class GithubConnect {
       try {
         const who = await this.identify(token);
         const scopes = typeof body?.scope === "string" ? body.scope.split(/[ ,]+/).filter(Boolean) : who.scopes;
-        const connection: GithubConnection = { token, login: who.login, ...(who.name ? { name: who.name } : {}), ...(scopes?.length ? { scopes } : {}), via: "device", connectedAt: this.now() };
+        // #4155: a GitHub App's token ends after 8 hours; its refresh token and app are kept to renew it.
+        const expiry = expiryOf(body, this.now());
+        const connection: GithubConnection = {
+          token, login: who.login, ...(who.name ? { name: who.name } : {}), ...(scopes?.length ? { scopes } : {}), via: "device", connectedAt: this.now(),
+          ...expiry, ...(expiry.refreshToken ? { clientId } : {}),
+        };
         this.options.save(principalId, connection);
         this.clearAuthProbe(principalId);
         this.okProbes.set(principalId, { digest: githubTokenDigest(token), at: this.now() });
+        this.watch(principalId, connection);
         this.finish(principalId, flow, null, "connected");
         this.options.onConnected?.(principalId, connection);
       } catch (cause) {
@@ -333,8 +387,108 @@ export class GithubConnect {
     if (flow) this.finish(principalId, flow, null, "ended", notify);
   }
 
+  /** #4155: an expiring token within GITHUB_REFRESH_MARGIN_MS of its end,
+   * whose refresh token is still good. */
+  needsRefresh(connection: GithubConnection | undefined): boolean {
+    if (!connection?.refreshToken || connection.expiresAt === undefined) return false;
+    if (connection.refreshTokenExpiresAt !== undefined && connection.refreshTokenExpiresAt <= this.now()) return false;
+    return connection.expiresAt - this.now() <= GITHUB_REFRESH_MARGIN_MS;
+  }
+
+  /** The connection with a live token: an expiring one is renewed first. A
+   * refresh GitHub refuses or cannot answer leaves it as it is. */
+  async fresh(principalId: string, connection: GithubConnection | undefined): Promise<GithubConnection | undefined> {
+    if (!connection || !this.needsRefresh(connection)) return connection;
+    return (await this.refresh(principalId, connection)) ?? connection;
+  }
+
+  /** Renew an expiring token with its refresh token (device flow: no client
+   * secret). The new token and refresh token are saved and put where the
+   * person's tools run. Undefined: nothing renewed (no refresh token, GitHub
+   * refused or could not be reached). */
+  refresh(principalId: string, connection: GithubConnection): Promise<GithubConnection | undefined> {
+    const running = this.refreshing.get(principalId);
+    if (running) return running;
+    const job = this.runRefresh(principalId, connection).finally(() => this.refreshing.delete(principalId));
+    this.refreshing.set(principalId, job);
+    return job;
+  }
+
+  private async runRefresh(principalId: string, connection: GithubConnection): Promise<GithubConnection | undefined> {
+    const clientId = connection.clientId?.trim() || this.options.clientId()?.trim();
+    if (!connection.refreshToken || !clientId) return undefined;
+    let body: Record<string, unknown> | null = null;
+    try {
+      const response = await this.fetcher(`${this.origins().web}/login/oauth/access_token`, {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded", "user-agent": "Sagax" },
+        body: new URLSearchParams({ client_id: clientId, grant_type: "refresh_token", refresh_token: connection.refreshToken }).toString(),
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) return undefined;
+      body = await readJson(response);
+    } catch {
+      return undefined;
+    }
+    const token = typeof body?.access_token === "string" && body.access_token && body.access_token.length <= 4_096 && !/\s/.test(body.access_token) ? body.access_token : null;
+    if (!token) return undefined;
+    // The person disconnected or signed in again meanwhile: that wins.
+    const stored = this.options.current ? this.options.current(principalId) : connection;
+    if (!stored || stored.token !== connection.token) return undefined;
+    const { refreshToken: _refresh, expiresAt: _expires, refreshTokenExpiresAt: _refreshEnds, ...base } = stored;
+    const expiry = expiryOf(body, this.now());
+    const scopes = typeof body?.scope === "string" ? body.scope.split(/[ ,]+/).filter(Boolean).slice(0, 50) : undefined;
+    const renewed: GithubConnection = { ...base, token, ...(scopes?.length ? { scopes } : {}), ...expiry, ...(expiry.refreshToken ? { clientId } : {}) };
+    if (!expiry.refreshToken) delete renewed.clientId;
+    this.options.save(principalId, renewed);
+    this.clearAuthProbe(principalId);
+    this.okProbes.set(principalId, { digest: githubTokenDigest(token), at: this.now() });
+    this.watch(principalId, renewed);
+    this.options.onConnected?.(principalId, renewed);
+    return renewed;
+  }
+
+  /** Renew this person's expiring token shortly before it ends, while this
+   * server runs (a start calls it for each saved connection). */
+  watch(principalId: string, connection: GithubConnection | undefined): void {
+    this.unwatch(principalId);
+    if (!connection?.refreshToken || connection.expiresAt === undefined) return;
+    if (connection.refreshTokenExpiresAt !== undefined && connection.refreshTokenExpiresAt <= this.now()) return;
+    const delay = Math.min(Math.max(connection.expiresAt - GITHUB_REFRESH_MARGIN_MS - this.now(), 0), MAX_TIMER_MS);
+    const timer = setTimeout(() => {
+      this.refreshTimers.delete(principalId);
+      const latest = this.options.current ? this.options.current(principalId) : connection;
+      if (!latest || latest.token !== connection.token) return;
+      if (!this.needsRefresh(latest)) {
+        if (latest.expiresAt !== undefined && latest.expiresAt - GITHUB_REFRESH_MARGIN_MS > this.now()) this.watch(principalId, latest);
+        return;
+      }
+      void this.refresh(principalId, latest).then((renewed) => {
+        // GitHub could not be reached: try again in a minute while the token still works; any use also renews it.
+        if (renewed || this.refreshTimers.has(principalId) || latest.expiresAt === undefined || latest.expiresAt <= this.now()) return;
+        const retry = setTimeout(() => {
+          this.refreshTimers.delete(principalId);
+          const now = this.options.current ? this.options.current(principalId) : latest;
+          if (now && now.token === latest.token) void this.refresh(principalId, now).catch(reportBackgroundError);
+        }, 60_000);
+        retry.unref?.();
+        this.refreshTimers.set(principalId, retry);
+      }).catch(reportBackgroundError);
+    }, delay);
+    timer.unref?.();
+    this.refreshTimers.set(principalId, timer);
+  }
+
+  private unwatch(principalId: string): void {
+    const timer = this.refreshTimers.get(principalId);
+    if (timer) clearTimeout(timer);
+    this.refreshTimers.delete(principalId);
+  }
+
   disconnect(principalId: string): void {
     this.cancel(principalId);
+    this.unwatch(principalId);
     this.errors.delete(principalId);
     this.clearAuthProbe(principalId);
     this.options.save(principalId, undefined);

@@ -3,7 +3,7 @@
 //
 //   GET  /api/me/github/credentials
 //        { credentials: [{ id, label, hint, owner: "mine" | "org", onlyWhereChosen?, chosenBy }],
-//          canManageOrg, deviceFlow }
+//          canManageOrg, deviceFlow, unreadable?: "sealed" }
 //   POST /api/me/github/credentials
 //        { op: "add", label, token, scope?: "mine" | "org" } | { op: "remove", id }
 //        | { op: "rename", id, label } | { op: "replace", id, token }
@@ -23,6 +23,8 @@ export interface GithubCredentialRouteDeps {
     list(viewer: string, options: { org: boolean }): GithubCredentialPublic[];
     ownerOf(id: string): string | undefined;
     change(owner: string, change: CredentialChange): void;
+    /** #4155: `sealed`, the saved list does not open on this server. */
+    unreadable(): "sealed" | "key" | null;
   };
   /** Whose list the caller's own credentials are in (principal id, or `local`
    * solo); null: nobody signed in. */
@@ -52,11 +54,17 @@ export function createGithubCredentialRoutes(deps: GithubCredentialRouteDeps): R
     deps.ready?.();
     const org = deps.organization();
     const canManageOrg = org && deps.canManageOrg(auth);
-    const listing = () => ({
-      credentials: deps.store.list(owner, { org }),
-      canManageOrg,
-      deviceFlow: deps.deviceFlow(),
-    });
+    // #4155: a list this server cannot open is said (unreadable "sealed"),
+    // and Add stays there: adding a credential again keeps that file beside.
+    const listing = () => {
+      const sealed = deps.store.unreadable() === "sealed";
+      return {
+        credentials: sealed ? [] : deps.store.list(owner, { org }),
+        canManageOrg,
+        deviceFlow: deps.deviceFlow(),
+        ...(sealed ? { unreadable: "sealed" as const } : {}),
+      };
+    };
     try {
       if (method === "GET") return json(res, 200, listing());
       if (method !== "POST") return json(res, 405, { error: "GET or POST" });

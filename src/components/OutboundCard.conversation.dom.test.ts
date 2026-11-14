@@ -121,12 +121,10 @@ describe("OutboundCard, conversation call", () => {
       transcript: [{ speaker: "bot", text: "Hello" }, { speaker: "callee", text: "<b>Hi</b> **there**" }], truncated: true,
     } });
     const text = host.textContent ?? "";
-    expect(text).toContain("Call completed · objective reached");
-    expect(text).toContain("Duration 4:07");
-    expect(text).toContain("Call ended · +1 514 555 0142");
+    expect(host.querySelector("[data-outbound-phase-chip]")?.textContent).toBe("Call completed · objective reached");
+    expect(host.querySelector("[data-outbound-duration]")?.textContent).toBe("4:07");
     expect(text).toContain("Tuesday 9 am");
     expect(host.querySelector("[data-outbound-commitments]")).toBeNull();
-    expect(host.querySelector("[data-outbound-phase-chip]")?.textContent).toContain("Ended");
     expect(host.querySelector("[data-outbound-transcript]")).toBeNull();
     act(() => host.querySelector<HTMLButtonElement>("[data-outbound-transcript-toggle]")!.click());
     const transcript = host.querySelector("[data-outbound-transcript]")!;
@@ -146,6 +144,62 @@ describe("OutboundCard, conversation call", () => {
     });
     expect(host.querySelector("[data-recording-player]")).toBeTruthy();
     expect(host.querySelector("[data-outbound-speed]")?.textContent).toContain("1x");
+  });
+
+  describe("#4304", () => {
+    const ended = { ...base, status: "done" as const, phase: "ended" as const, result: {
+      outcome: "completed" as const, endedBy: "hang-up" as const, durationSec: 16, endedAt: 1,
+      points: ["The outcome is unclear"], commitments: [],
+      transcript: [{ speaker: "bot" as const, text: "Tuesday or Wednesday?" }, { speaker: "callee" as const, text: "Okay" }],
+    } };
+    const count = (text: string, part: string) => text.split(part).length - 1;
+
+    it("says the number once and the state once on an ended call", () => {
+      const host = mount(ended);
+      const text = host.textContent ?? "";
+      expect(count(text, "+1 514 555 0142")).toBe(1);
+      expect(text).not.toContain("Call ended");
+      expect(text).not.toMatch(/\bEnded\b/);
+      expect(host.querySelectorAll("[data-outbound-phase-chip]")).toHaveLength(1);
+      expect(count(text, "Call completed")).toBe(1);
+      expect(count(text, "0:16")).toBe(1);
+    });
+
+    it("shows no player at all when the call has no recording, and keeps Copy transcript", () => {
+      const host = mount(ended);
+      expect(host.querySelector("[data-recording-player]")).toBeNull();
+      expect(host.querySelector("audio")).toBeNull();
+      expect(host.querySelector("[data-outbound-copy-transcript]")).toBeTruthy();
+    });
+
+    it("hides a recording player whose audio cannot load", () => {
+      const host = mount({ ...ended, recordingUrl: "/api/me/phone-calls/call_0123456789abcdef/recording" });
+      const audio = host.querySelector("audio")!;
+      act(() => { audio.dispatchEvent(new Event("error")); });
+      expect(host.querySelector("[data-recording-player]")).toBeNull();
+    });
+
+    it("offers no End call and no running timer once the call ended, before its result", () => {
+      const host = mount({ ...base, status: "done", phase: "ended", liveStartedAt: Date.now() - 16_000 });
+      expect(host.querySelector("[data-outbound-hangup]")).toBeNull();
+      expect(host.querySelector("[data-outbound-live-timer]")).toBeNull();
+      expect(host.querySelector("[data-outbound-phase-chip]")?.textContent).toBe("Ended");
+    });
+
+    it("offers no End call while the allowed call is not placed yet (#4304)", () => {
+      expect(isLiveConversationCall({ ...base, status: "approved" })).toBe(true);
+      const host = mount({ ...base, status: "approved" });
+      expect(host.querySelector("[data-outbound-hangup]")).toBeNull();
+    });
+
+    it("a failed End call reads as one plain sentence, never the server's words", async () => {
+      vi.mocked(api).mockRejectedValueOnce(new Error("Could not hang up: the connection is not mounted in this turn."));
+      const host = mount({ ...base, status: "done", phase: "in_call", liveStartedAt: Date.now() - 5_000 });
+      await act(async () => { host.querySelector<HTMLButtonElement>("[data-outbound-hangup]")!.click(); });
+      const alert = host.querySelector("[role=alert]")?.textContent ?? "";
+      expect(alert).toBe("The call could not be ended. Try again in a moment.");
+      expect(alert).not.toMatch(/mounted|turn/);
+    });
   });
 
   it("says when the transcript expired and when the person asked not to be called again", () => {

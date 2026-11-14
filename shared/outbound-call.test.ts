@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   canadianNumber,
+  CHOICE_ANSWER_RULE,
+  CONVERSATION_LIMITS,
   formatPhone,
   maskPhone,
   ownerCallToPlaceArgs,
@@ -51,6 +53,24 @@ describe("outbound call", () => {
     expect(PLACE_CALL_TOOL_SPEC.inputSchema.required).toEqual(["to", "objective"]);
     expect(PLACE_CALL_TOOL_SPEC.description).toContain("live two-way conversation");
     expect(PLACE_CALL_TOOL_SPEC.description).not.toMatch(/message or conversation/);
+  });
+
+  it("#4304: every conversation call asks again when an answer picks no side of a choice", () => {
+    const request = parseOutboundCall({ ...good, instructions: "Rester bref." });
+    if (typeof request === "string") throw new Error(request);
+    const args = voiceCallArgs({ ...request, language: "fr" }, { botName: "Rocket", ref: "call_0000000000000001", dryRun: false });
+    expect(args.instructions).toBe(`Rester bref.\n${CHOICE_ANSWER_RULE.fr}`);
+    const bare = voiceCallArgs({ ...request, instructions: undefined, language: "en" }, { botName: "Rocket", ref: "call_0000000000000001", dryRun: false });
+    expect(bare.instructions).toBe(CHOICE_ANSWER_RULE.en);
+    // the bot's own guidance is never cut to make room
+    const full = "x".repeat(CONVERSATION_LIMITS.instructions);
+    expect(voiceCallArgs({ ...request, instructions: full }, { botName: "Rocket", ref: "call_0000000000000001", dryRun: false }).instructions).toBe(full);
+    // the person's own questions call carries it once, within its budget
+    const owner = ownerCallToPlaceArgs({ questions: ["Tu préfères mardi ou mercredi ?"], to: "+1 514 555 0142", language: "fr" });
+    if (typeof owner === "string") throw new Error(owner);
+    expect(owner.instructions).toContain(CHOICE_ANSWER_RULE.fr);
+    const placed = voiceCallArgs({ ...request, instructions: owner.instructions, language: "fr" }, { botName: "Rocket", ref: "call_0000000000000001", dryRun: false });
+    expect(String(placed.instructions).split(CHOICE_ANSWER_RULE.fr)).toHaveLength(2);
   });
 
   it("masks and formats", () => {

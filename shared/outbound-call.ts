@@ -171,12 +171,31 @@ export function conversationDisclosure(input: { botName: string; personName: str
  * Voice line and Twilio key; the card already had their yes, so `confirm`
  * answers the line's own third party card). Always a conversation, never a
  * message to read (#4193). */
+/** #4304: a two-way question answered with a word that picks neither side
+ * ("okay" to "A or B?") is asked again, never taken as the end of the call.
+ * Sagax adds it to the guidance of every conversation call it places. */
+export const CHOICE_ANSWER_RULE: Record<CallLanguage, string> = {
+  fr: "Quand ta question offre un choix et que la réponse n'en choisit aucun (comme « OK » ou « oui » à « A ou B? »), redemande lequel; ne termine jamais l'appel sur une réponse qui ne choisit pas.",
+  en: "When your question offers a choice and the answer picks none of it (such as \"okay\" or \"yes\" to \"A or B?\"), ask again which one; never end the call on an answer that does not choose.",
+};
+
+/** The guidance voice_call gets: the bot's own, then the choice rule when
+ * the two fit Perspicax's limit (the bot's words are never cut for it). */
+export function callGuidance(instructions: string | undefined, language: CallLanguage): string {
+  const own = instructions?.trim() ?? "";
+  const rule = CHOICE_ANSWER_RULE[language] ?? CHOICE_ANSWER_RULE.en;
+  if (own.includes(rule)) return own;
+  const both = own ? `${own}\n${rule}` : rule;
+  return both.length <= CONVERSATION_LIMITS.instructions ? both : own;
+}
+
 export function voiceCallArgs(request: OutboundCallRequest, input: { botName: string; ref: string; dryRun: boolean }): Record<string, unknown> {
+  const instructions = callGuidance(request.instructions, request.language);
   return {
     to: request.to,
     purpose: request.purpose,
     mode: "conversation",
-    ...(request.instructions ? { instructions: request.instructions } : {}),
+    ...(instructions ? { instructions } : {}),
     max_minutes: request.maxMinutes ?? CONVERSATION_LIMITS.defaultMinutes,
     language: request.language,
     bot_name: clean(input.botName, 80) || "Assistant",
@@ -266,6 +285,8 @@ export function ownerCallToPlaceArgs(
     language === "fr"
       ? "Tu appelles la personne elle-même. Une seule ouverture courte (\"petite question pour toi\"), puis une question à la fois, dans l'ordre. Après chaque réponse, redis ce que tu as noté, puis passe à la suivante. Quand toutes sont répondues, raccroche poliment. Jamais de ton centre d'appels."
       : "You are calling the person themself. Say one short opening once (\"quick question for you\"), then ask one question at a time, in order. After each answer, read back what you recorded, then move on. When every question is answered, hang up politely. Never help-desk phrasing.",
+    // #4304: counted in the guidance budget, so it always goes with the questions
+    CHOICE_ANSWER_RULE[language],
     language === "fr" ? "Questions :" : "Questions:",
     numbered,
     ...(context ? [language === "fr" ? `Contexte : ${context}` : `Context: ${context}`] : []),

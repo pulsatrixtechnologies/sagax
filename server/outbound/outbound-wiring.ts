@@ -41,6 +41,10 @@ export interface OutboundWiringDeps {
   personName(botId: string, threadId: string): string;
   language(): "fr" | "en";
   twilio(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): ReturnType<NonNullable<PlaceCallDeps["voice"]>>;
+  /** #4304: twilio_api_write as the person outside any running turn (a
+   * short-lived connection on their own access): the person's End call on
+   * the card, and a bot's hang up when its turn holds no connection. */
+  personTwilio?(principalId: string, botId: string, args: Record<string, unknown>): ReturnType<NonNullable<PlaceCallDeps["voice"]>>;
   /** Perspicax voice_call as the person who speaks in the turn (their own
    * line and key). Absent: no Perspicax on this server. */
   voice?(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): ReturnType<NonNullable<PlaceCallDeps["voice"]>>;
@@ -52,6 +56,8 @@ export interface OutboundWiringDeps {
   /** Start the bot's next turn with this note (index.ts dispatchSecretResume). */
   wake(botId: string, threadId: string, messageId: string, prompt: string): void;
   now?: () => number;
+  /** Server log line (never a number or a key). */
+  log?(line: string): void;
   /** Person's approval level for this turn: Auto may skip the per-call card. */
   approvalMode?(botId: string, threadId: string): string | undefined;
   /** phone_call_owner (#2194): the person's Reach me SMS number for this bot. */
@@ -136,14 +142,24 @@ function liveCallControls(
   deps: OutboundWiringDeps,
   calls: OutboundCalls,
   patchLive: (row: OutboundCallRecord, change: LiveCallPatch) => void,
+  phaseOf: (row: OutboundCallRecord) => OutboundCard["phase"],
 ) {
+  /** #4304: a live call is reached through the turn's connection when it
+   * holds one, else on the person's own access outside any turn (the call
+   * runs on after the turn that placed it ended). */
+  const twilioFor = (turn: { threadId: string; generation: string; botId: string }, principalId: string) =>
+    async (callArgs: Record<string, unknown>) => {
+      const answer = await deps.twilio(turn, callArgs);
+      if (answer.ok || answer.code !== "profile_not_mounted" || !deps.personTwilio) return answer;
+      return deps.personTwilio(principalId, turn.botId, callArgs);
+    };
   return {
     async sendDtmf(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
       if (!context.principalId) return { text: "No person on this conversation.", isError: true };
       const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
       return sendDtmfLiveCall({
         calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        twilio: twilioFor(turn, context.principalId),
         patchLive,
         now: deps.now,
       }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, digits: args.digits, callId: typeof args.call_id === "string" ? args.call_id : undefined });
@@ -154,7 +170,7 @@ function liveCallControls(
       const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
       return transferLiveCall({
         calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        twilio: twilioFor(turn, context.principalId),
         patchLive,
         now: deps.now,
       }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, to: args.to, callId: typeof args.call_id === "string" ? args.call_id : undefined });
@@ -165,26 +181,35 @@ function liveCallControls(
       const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
       return hangUpLiveCall({
         calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        twilio: twilioFor(turn, context.principalId),
         patchLive,
         now: deps.now,
       }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, callId: typeof args.call_id === "string" ? args.call_id : undefined });
     },
 
-    /** Person End call on the live card. */
+    /** Person End call on the live card. #4304: a call not placed yet is
+     * not live (the card offers no End call then); a call already over (its
+     * result in, or its card ended) is left alone, nothing is attempted;
+     * the person's own access reaches the call outside any turn; a failure
+     * reads as one plain sentence, never a connection's internal words. */
     async personHangUp(principalId: string, callId: string): Promise<{ ok: true } | { error: string; status: number; code: string }> {
       const row = calls.get(callId);
       if (!row || row.principalId !== principalId) return { error: "No such call", status: 404, code: "unknown_call" };
-      if (row.request.mode !== "conversation" || row.status !== "placed" || row.result) {
-        return { error: "This call is not live.", status: 409, code: "not_live" };
-      }
+      if (row.request.mode !== "conversation") return { error: "This call is not live.", status: 409, code: "not_live" };
+      if (row.status === "approved" || row.status === "placing") return { error: "This call is not live yet.", status: 409, code: "not_live" };
+      if (row.status !== "placed" || row.result || phaseOf(row) === "ended") return { ok: true };
+      const turn = { threadId: row.threadId, generation: "person-hangup", botId: row.botId };
       const outcome = await hangUpLiveCall({
         calls,
-        twilio: (callArgs) => deps.twilio({ threadId: row.threadId, generation: "person-hangup", botId: row.botId }, callArgs),
+        twilio: deps.personTwilio ? (callArgs) => deps.personTwilio!(principalId, row.botId, callArgs) : twilioFor(turn, principalId),
         patchLive,
         now: deps.now,
+        log: deps.log,
       }, { principalId, botId: row.botId, threadId: row.threadId, callId });
-      if (outcome.isError) return { error: outcome.text, status: 502, code: "hangup_failed" };
+      if (outcome.isError) {
+        deps.log?.(`outbound person hang_up ${row.id} failed: ${outcome.text}`);
+        return { error: "The call could not be ended. Try again in a moment.", status: 502, code: "hangup_failed" };
+      }
       return { ok: true };
     },
   };
@@ -349,7 +374,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       return api.placeCall(context, { ...parsed, to });
     },
 
-    ...liveCallControls(deps, calls, patchLive),
+    ...liveCallControls(deps, calls, patchLive, (row) => rowOf(row.threadId, row.id, row.messageId)?.outbound?.phase),
 
     /** Accept or decline the one-time phone-call consent card. */
     resolveConsent(input: { principalId: string; botId: string; threadId: string; requestId: string; allow: boolean }): void {
@@ -448,10 +473,10 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       });
       if (!outcome.applied) return outcome.reason;
       const botName = deps.botName(outcome.row.botId);
-      const recordingUrl = `/api/me/phone-calls/${outcome.row.id}/recording`;
+      // #4304: a conversation call is not recorded (Perspicax places it
+      // without Record) and call_result names no recording: no player
       const messageId = callRow(outcome.row, outcome.row.messageId, outcome.result, {
         phase: "ended",
-        recordingUrl,
         ...(outcome.result.transcript?.length
           ? { liveTranscript: outcome.result.transcript.map((line) => ({ speaker: line.speaker, text: line.text })) }
           : {}),

@@ -1113,14 +1113,17 @@ export class PerspicaxMcp {
    * proactive observe loop. `fn` gets the served tools, the tools Perspicax
    * marks read-only, and a call; the connection is closed and its token
    * revoked afterwards. Returns null when the person has no Perspicax access
-   * (no link, no subject, no delegation). No token is logged or returned. */
-  async withRoutineSession<T>(principalId: string, botId: string, signal: AbortSignal, fn: (session: PerspicaxRoutineSession) => Promise<T>): Promise<T | null> {
+   * (no link, no subject, no delegation). No token is logged or returned.
+   * #4304: `via` "session" backs it with the person's own sign-in instead
+   * (what they do themselves outside any turn, such as End call on a live
+   * call's card). */
+  async withRoutineSession<T>(principalId: string, botId: string, signal: AbortSignal, fn: (session: PerspicaxRoutineSession) => Promise<T>, via: Entry["source"] = "delegation"): Promise<T | null> {
     const principal = principalId.trim();
     const link = this.options.link();
     const subject = principal ? this.options.subjectOf(principal) : null;
     if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) return null;
     signal.throwIfAborted();
-    const source = await this.subjectFor("delegation", principal, subject);
+    const source = await this.subjectFor(via, principal, { iss: subject.iss, sub: subject.sub });
     if (!source.ok) return null;
     const exchanged = await link.exchangeToken(source.token);
     if (!exchanged.ok) return null;

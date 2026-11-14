@@ -14000,7 +14000,6 @@
       "outbound.call.endedBy.timeLimit": "26adb0bb0f42dc08e536ea25ee2627fe51fe9bc1a4ccea3fe2e5df72fd92886a",
       "outbound.call.endedBy.hangUp": "9f0c2edc5eadf7141c0b4fcceea6f55b21e7b609333220c2e0a0ed2eeb8afcef",
       "outbound.call.doNotCallAgain": "28c5b4bc73afed80087e78abbe3da4e4c49a1210d0e1f4ba9e313ef84c6216d0",
-      "outbound.call.duration": "b30e9335c2e31e6eff07c856cc0a9f4b983707d079d0604b798a160782902a97",
       "outbound.call.summary": "8e76a94ac8320d515375e625bef1829238b097ecbd33611b59eeefd4ffefebfb",
       "outbound.call.commitments": "937bc0903be225eb483aa112f6a34b34d06aa73496d176f13c52f7a263d531bf",
       "outbound.call.showTranscript": "4654dfe79c85afe8e21c109543e34e4bda9f112dcd73686d155297bfc2ff71aa",
@@ -16129,7 +16128,6 @@
       "outbound.call.phase.transferred": "950abf62a77396f0cdf93033792c37743eac2402b7d617f137d852eab90e8c1c",
       "outbound.call.phase.ended": "7cdc804e6996997d599232fbf8ce066a4f6c0696e7b586fc7b3ee499f35d4559",
       "outbound.call.waitingPickup": "d514ab34a97197e6ede473dfdc32bc19f575b93d5a5f924e696b119584436265",
-      "outbound.call.endedLine": "194bfebd51aec80ce890d716c5479be2c16c6468512433082017b2eeeb775088",
       "outbound.call.endCall": "2fe13d93a1f4b267698f54cbc4632977bde730eb3f5e9b7a43516fc9936b53e7",
       "outbound.call.liveTranscript": "20611c3780d1bae0b46d2ce3df95d79a3dcf8099c3a92e1595194d34634bf22c",
       "outbound.call.showLive": "96138cc5609c83c0ce8b3a4fe73081b00a6386c56a5d73482d6f7a5e5865fdb3",
@@ -18683,7 +18681,8 @@
       "review.reason.noPerson": "ea908dc4d4ca2731f3613be130694a6d47a6592af20a5e85ef6d281713743786",
       "settings.receive.group.reviews": "84cb7871b741c32eb14f0a65e5e7e4db53ffae1a952ea8e2f1c2c48b1d134a9b",
       "settings.receive.endOfDay.switch": "265c568912ab40799d0611fe2963cabb7efb0055192f7843a2f01d5c78f071f9",
-      "settings.receive.weekly.switch": "4e5ec7704616e5d861866b4f753bbf40fa04da27ef6c9c08e79e3b9ede435c44"
+      "settings.receive.weekly.switch": "4e5ec7704616e5d861866b4f753bbf40fa04da27ef6c9c08e79e3b9ede435c44",
+      "outbound.call.endCallFailed": "b517663397f0d4ac7a2f887e7392241157cc7e77ff498850d71e9ffb33a435e3"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

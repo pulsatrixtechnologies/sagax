@@ -94,6 +94,12 @@ describe("phone call routes", () => {
     expect(await keyed.call(`/api/me/phone-calls/${keyed.id}/answer`, { decision: "call", confirmed: true, confirmedTo: "+1 514 555 0142" })).toMatchObject({ status: 401 });
   });
 
+  it("#4304: a call with no recording to fetch answers no_recording, never an empty 0:00 body", async () => {
+    const { calls, call, id } = await serve();
+    calls.recordResult(id, { outcome: "completed", durationSec: 16, endedAt: 1, transcriptHeld: false });
+    expect(await call(`/api/me/phone-calls/${id}/recording`, undefined, "GET")).toMatchObject({ status: 404, body: { code: "no_recording" } });
+  });
+
   it("refuses Always while the organization turned Toujours permettre off", async () => {
     setOrgApprovalPolicySource(() => ({ alwaysAllow: false }));
     cleanups.push(() => setOrgApprovalPolicySource(null));

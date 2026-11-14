@@ -11,7 +11,8 @@ import { setLocale } from "@/lib/i18n";
 import { createAboutMeDraft } from "./about-me-draft";
 import { subPageKeyAction } from "./SettingsSubPage";
 import { aboutMeBotPreview, aboutMeCount, withOutline, ABOUT_ME_MAX } from "./AboutMeSettings";
-import { SUB_PAGES } from "./settings/settings-sub-pages";
+import { SUB_PAGES, resolveSubPage } from "./settings/settings-sub-pages";
+import { providerCardTarget } from "@/lib/settings-sections";
 
 const fixture = vi.hoisted(() => ({
   section: "account" as AppSettingsSection,
@@ -101,6 +102,28 @@ describe("sub-page navigation", () => {
     expect(html).toContain(">À propos de moi<");
     expect(html).toContain("Quoi écrire");
     expect(html).toContain("Enregistré au fil de la saisie");
+  });
+
+  // #4329 lot 1: one provider's page is a sub-page of Providers.
+  it("Providers > SpaceXAI: a provider's page opens on Providers with its name in the breadcrumb", async () => {
+    expect(resolveSubPage("providers.provider:xai")?.section).toBe("providers");
+    expect(resolveSubPage("providers.nope")).toBeNull();
+    fixture.section = "providers";
+    fixture.subPage = "providers.provider:xai";
+    const html = await render();
+    expect(html).toContain('data-settings-subpage="providers.provider:xai"');
+    expect(html).toContain('aria-label="Back to Providers"');
+    expect(html).toMatch(/aria-current="page"[^>]*>SpaceXAI</);
+  });
+
+  it("an old link to a provider row's card names the page that holds it now", () => {
+    expect(providerCardTarget("providers.advanced.codex")).toEqual({ kind: "row", id: "codex" });
+    expect(providerCardTarget("computer.localModels")).toEqual({ kind: "computer" });
+    expect(providerCardTarget("providers.localModels")).toEqual({ kind: "computer" });
+    // Providers' own Advanced and its claude.ai connectors stay on the list
+    expect(providerCardTarget("providers.advanced")).toBeNull();
+    expect(providerCardTarget("providers.advanced.connectors")).toBeNull();
+    expect(providerCardTarget(null)).toBeNull();
   });
 
   it("a page of another section is ignored", async () => {

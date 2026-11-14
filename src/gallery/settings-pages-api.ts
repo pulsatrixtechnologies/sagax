@@ -30,10 +30,10 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       vps: { configured: false, sshAlias: "" },
       rooms: { turnTimeoutMinutes: 5 },
       localVm: { mode: "shared", maxInstances: 2 },
-      tts: { configured: true, ready: true, voice: "", provider: "elevenlabs", keys: { elevenlabs: true, fish: false } },
+      tts: { configured: true, ready: true, voice: "", provider: "elevenlabs", keys: { elevenlabs: !params.get("empty"), fish: false } },
       live: { enabled: true, configured: false, voice: "", readTypedReplies: true, idleMinutes: 5 },
       imageGen: { configured: false },
-      anthropic: { configured: true },
+      anthropic: { configured: !params.get("empty") },
       ...(params.get("org") ? { personalSettings: true, viewer: { role: "admin", operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true }, allowedEngines: ["claude", "codex", "grok", "compat-azure"], disabledModels: ["compat-azure/gpt-4o"] } : {}),
       ...(params.get("providers") ? { myDisabledModels: ["compat-azure/o4-mini"] } : {}),
       ...(params.get("providers") ? {
@@ -49,7 +49,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       onboarding: { completedAt: NOW - 30 * DAY, launchMode: "solo" },
       newBotDefaults: { profile: { modelSelection: { instanceId: "claude", model: "sonnet", effort: "medium" }, approvalMode: "ask" } },
     },
-    "/api/instances": { instances: [
+    "/api/instances": { instances: params.get("empty") ? [] : [
       { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1" }, { id: "sonnet", label: "Claude Sonnet 4.5" }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       { instanceId: "grok", displayName: "Grok", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // ?providers=1 (#2080): several accounts per provider (emails stay inside
@@ -93,7 +93,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       ] },
       "/api/me/voice-keys": { elevenlabs: { configured: true, last4: "9f3a" }, fish: { configured: false, last4: null }, xai: { configured: false, last4: null }, openai: { configured: false, last4: null } },
     } : {}),
-    "/api/me/providers": { keys: [{ provider: "elevenlabs", last4: "demo" }, { provider: "openai", last4: "demo" }], servers: [] },
+    "/api/me/providers": { keys: params.get("empty") ? [] : [{ provider: "elevenlabs", last4: "demo" }, { provider: "openai", last4: "demo" }], servers: [] },
     "/api/voice/status": { provider: "xai", available: true, organization: params.has("org"), tts: "elevenlabs", stt: "openai", providers: { tts: ["openai", "elevenlabs", "system", "chatterbox"], stt: ["openai"] } },
     "/api/voice/voices": { voices: [{ id: "demo-voice", label: "Example voice", own: true }] },
     "/api/me/local-models": params.get("providers") ? { expose: true, share: false, connected: true, endpoints: [{ id: "omlx", baseUrl: "http://127.0.0.1:8000/v1", label: "Local server" }], published: [{ id: "omlx", label: "Local server", models: ["local-large", "local-fast"] }], probes: [] } : undefined,

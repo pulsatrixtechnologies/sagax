@@ -2983,3 +2983,40 @@ Read on the installed reference app's bundle (2026-11-13), values only.
   and Done and one column of cards: it moves to the wide dialog, the two
   columns and the borderless rows above. Settings and Window stay out (the
   iPad has neither chord).
+
+### 8.10 Settings > Providers: the list, Add and a provider's page (#4329 lot 1)
+
+The reference app has no provider list of its own; its pattern for "pick
+one, connect, done" is the Connect Apps row of 8.9, and Providers follows it.
+Values measured on Sagax's headless render (2026-11-14) against 8.9:
+
+- The list: one row per provider, in the order and under the names of
+  `shared/model-provider.ts` (signed-in accounts first, Claude, OpenAI, then
+  the xAI group under its one label, then keys, servers added by address,
+  This computer last). A row is 64px: 12px padding, 16px corners, a 5% ink
+  wash on hover, the logo in a 40px tile, the name 13px medium on an 18px
+  line, the grey line 13px on 18px (`PLUGINS.rowName`, `PLUGINS.rowSub`). At
+  the right one button, the 26px grey pill of Connect Apps
+  (`pluginActionClass`, 96px wide at least): Sign in, Sign in again, Sign
+  out, Add key, Remove, Turn on, Turn off. Nothing to do: no button.
+- A second account is a second line under the first, indented to the text,
+  with its own button; nothing folds. The grey line is the account's email,
+  a plan's own name, else the state ("Connected", "Session expired"); never a
+  tool's name, an address or an identifier.
+- Add a provider: in place of the list, the round search of Connect Apps and
+  its two-column grid (8px between columns, 2px between rows, one column
+  under 560px of list), in three groups with the 14px medium group title:
+  Sign in with your account, Paste a key, Something else. A provider already
+  connected is not in it; a vendor offered as a sign-in gets its key from
+  "Use a key instead" on the sign-in. Pick, then one step.
+- A provider's page is a settings sub-page (8.5): "Providers > OpenAI", the
+  back arrow, Escape returns. Accounts (one line each, the button opens the
+  sign-in, the sign-out or the key in place, kept mounted while another line
+  opens), Runs with (read only, hidden with one possible engine), Models
+  ("6 of 6 on", opens Models), Advanced folded each time the page opens:
+  who pays, the tool by its name (version, location, updates), a server's
+  address, the model list problem, Copy the identifier.
+
+Captures: `scripts/capture`-style headless Chrome of the gallery
+`src/gallery/settings-pages.html` (`&subPage=providers.provider:<id>`,
+`&empty=1`) beside `src/gallery/connect-apps.html`.

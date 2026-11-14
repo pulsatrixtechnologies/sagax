@@ -8,6 +8,8 @@
  * &org=1: an organization server, the viewer an admin (with providers=1)
  * &keys=unreadable (#3320): the desktop could not read its saved keys, so Vault and Providers offer Reset saved keys
  * &usage=one|three|error (#4095): Settings > Usage with one engine, three, or three with one in error
+ * &subPage=<id> (#4329): a sub-page of the section, e.g. providers.provider:anthropic
+ * &empty=1 (#4329): no engine and no key, Providers' empty list
  * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
@@ -94,7 +96,8 @@ function OpenSettings() {
     // Developer > Per bot draws the first bot's technical cards).
     const { bots } = API["/api/bots"] as { bots: unknown[] };
     dispatch({ type: "hydrate", bots, groups: [], sections: [], computerControl: {} } as never);
-    if (!params.has("picker")) dispatch({ type: "toggleAppSettings", open: true, section });
+    const subPage = params.get("subPage");
+    if (!params.has("picker")) dispatch({ type: "toggleAppSettings", open: true, section, ...(subPage ? { subPage } : {}) });
   }, [dispatch]);
   return null;
 }

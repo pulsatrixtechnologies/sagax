@@ -63,6 +63,11 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   // 2026-11-05 (option B): image generation and web search are Providers > Other services
   "connections.image": "providers",
   "connections.webSearch": "providers",
+  // #4329 lot 1: this computer's models and the servers for pi are providers
+  // of the list; their cards open on Providers, then on the provider's page.
+  "computer.localModels": "providers",
+  "providers.localModels": "providers",
+  "providers.modelServers": "providers",
   // what stays on Models: online computers, Decision model
   "connections.integrations": "engines",
   "engines.decisionModel": "engines",
@@ -157,4 +162,18 @@ export function currentSettingsSection(section: AppSettingsSection, cardId?: str
  * section. Undefined for a section that is still a page. */
 export function mergedSettingsCard(section: AppSettingsSection): string | undefined {
   return MERGED[section]?.cardId;
+}
+
+/** #4329 lot 1: an old card of a Providers row that lives on a provider's
+ * page now. `computer`: this computer's models; `row`: the Advanced of an
+ * engine, a key or a server (`providers.advanced.<id>`), opened on the page
+ * of the provider that holds that id. Null for any other card (Providers'
+ * own Advanced and its claude.ai connectors stay on the list). */
+export function providerCardTarget(cardId: string | null | undefined): { kind: "computer" } | { kind: "row"; id: string } | null {
+  if (!cardId) return null;
+  if (cardId === "computer.localModels" || cardId === "providers.localModels" || cardId === "computer.localModels.endpoints") return { kind: "computer" };
+  const prefix = "providers.advanced.";
+  if (!cardId.startsWith(prefix)) return null;
+  const id = cardId.slice(prefix.length);
+  return id && id !== "connectors" ? { kind: "row", id } : null;
 }

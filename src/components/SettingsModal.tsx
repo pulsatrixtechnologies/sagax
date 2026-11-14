@@ -356,7 +356,7 @@ export function SettingsModal() {
             <SettingsSubPage
               pageId={subPageId}
               sectionLabel={sectionLabelKey ? t(sectionLabelKey) : ""}
-              title={t(subPage.titleKey)}
+              title={subPage.title()}
               onBack={closeSubPage}
             >
               {subPage.render()}

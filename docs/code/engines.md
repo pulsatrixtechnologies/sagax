@@ -209,31 +209,56 @@ switch writes the stored key of every engine that runs it
 while one engine still offers it and greyed only when the organization turned
 it off on every engine (`modelOfferAcross`).
 
-## Settings > Providers (2026-10-30)
+## Settings > Providers (2026-10-30, redone 2026-11-14)
 
-Lot 1 of "Providers, models and voice". One page, section id `providers`
-(`src/components/settings/ProvidersSettings.tsx`), lists every account, key,
-server and model of this computer that pays for a turn or a voice, read
-from the stores as they are (`src/lib/provider-rows.ts`, pure, tested in
-`provider-rows.test.ts`): who pays (me, the organization, this computer),
-where the key lives (Perspicax, the Sagax server, a signed-in session,
-none), its state (Connected, Reconnect, Key missing, Turned off by the
-admin, Offline; not connected yet waits under "To connect") and what it
-brings. Each engine the page offers lands in exactly one row; a row opens
-in place on the engine's own controls (`EngineRow` `bare`), the key's
-dialog, the server's form. A visited detail stays mounted while folded,
-preserving sign-in polling and unsaved fields when another row opens.
-The claude.ai connectors moved from under Auto
-to the Claude row. "Add a provider" is one flow (an account, a key, a
-server). `GET /api/me/engines` says where a person's own key lives
-(`keyWhere`: `perspicax` or `server`), so "Pays with" no longer says
-Perspicax for a key sealed on the server. An organization admin has "View
-as a member" (`src/lib/view-as-member.ts`, a view only, no right changes;
-`useModelsVoiceAccess` reads it). Models keeps Auto, web search, image
-generation and the online computers. The former Engines and Keys groups
-were removed in lot 5; their old card ids redirect to Providers. Sign-in and key links (`engines.keys`, `connections`, "Add in
-Providers") open Providers (`CARD_HOME`, `MERGED` in
-`src/lib/settings-sections.ts`).
+One page, section id `providers` (`src/components/settings/ProvidersSettings.tsx`).
+Since #4329 lot 1 it is a short list a person with no IT knowledge can run:
+one row per provider, in the order and under the names of the shared
+providers (`shared/model-provider.ts`, the same as the model menu and Active
+models: OpenAI's two sign-ins are one "OpenAI", the xAI group shows under
+`XAI_GROUP_LABEL`, a server added by address under its own name, a server
+for pi as a provider of its own, "This computer" when its models are on).
+A row is a logo, the name, one grey line (the account's email, a plan's
+name, "Key", or "N models") and one button in plain words: Sign in, Sign
+out, Sign in again (the session expired), Add key, Remove, Turn on, Turn
+off. A second account is a second line with its own button; nothing
+unfolds. No tool name, address or identifier on the first level. What the
+organization pays for and a provider the admin turned off are hidden (they
+still apply). The rows come from the stores as they are
+(`src/lib/provider-rows.ts`, pure, tested in `provider-rows.test.ts`;
+`useProviderList.ts`). Empty: one sentence and the Add button.
+
+"Add a provider" is one list in two columns with a search: Sign in with
+your account, Paste a key, Something else (Another server, Another server
+for pi, This computer). A provider already connected is not in it. Pick,
+then one step: a sign-in opens the provider's page on that account (its
+sign-in card, with "Use a key instead"); a key is one field; Another server
+is Name, Address, Key (optional), and on a solo server its Advanced holds
+the server's own address and an Azure resource. That is the only way to
+add a server.
+
+A click on a row opens the provider's page, a settings sub-page
+("Providers > OpenAI", `ProviderPage.tsx`, page id `providers.provider:<id>`):
+Accounts (one line per account, key or server; the line's button opens the
+sign-in, the sign-out or the key in place and keeps it mounted, so sign-in
+polling survives; Add another account), Runs with (read only until the
+choice exists, hidden when only one engine can run that connection), the
+Models link ("N of M on", to Active models), and Advanced, folded each time
+the page opens. Advanced holds everything else: who pays and where the key
+lives, voice and images, the key in the organization console, a server's
+address and Edit, model list problems, the account part of a connected
+account whose line has no button (check, manage, Remove of a second Claude
+account), Copy the identifier, and once per tool its update notice, its
+connectors sentence and its "CLI path and updates" fold. This computer's
+page holds its models settings; a pi server's page its models, Test, Edit
+and Remove. Old card links (an engine's Advanced, this computer's models)
+open the page that holds them now (`providerCardTarget` in
+`src/lib/settings-sections.ts`). Other services (web search, memes, image
+generation) and the page's own Advanced (cloud agent keys, claude.ai
+connectors, the bots link) stay under the list. `GET /api/me/engines` says
+where a person's own key lives (`keyWhere`: `perspicax` or `server`). Sign-in
+and key links (`engines.keys`, `connections`, "Add in Providers") open
+Providers (`CARD_HOME`, `MERGED` in `src/lib/settings-sections.ts`).
 
 ## Providers the admin turns off are off for everyone (2026-10-30)
 

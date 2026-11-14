@@ -26,6 +26,7 @@ const RULES = Array.from({ length: 23 }, (_, index) => ({
 
 const fixture = vi.hoisted(() => ({
   section: "account" as AppSettingsSection,
+  subPage: null as string | null,
   dispatch: vi.fn(),
   config: undefined as Record<string, unknown> | undefined,
   rules: [] as unknown[],
@@ -46,7 +47,7 @@ const answers = (path: string): unknown => {
 
 vi.mock("@/state/store", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/state/store")>();
-  const state = () => ({ appSettingsSection: fixture.section, appSettingsSubPage: null, instances: fixture.instances, bots: [{ id: "bot-a", name: "Scout", modelSelection: { instanceId: "grok", model: "grok-4" } }], groups: [], config: fixture.config });
+  const state = () => ({ appSettingsSection: fixture.section, appSettingsSubPage: fixture.subPage, instances: fixture.instances, bots: [{ id: "bot-a", name: "Scout", modelSelection: { instanceId: "grok", model: "grok-4" } }], groups: [], config: fixture.config });
   return {
     ...actual,
     api: vi.fn(async (path: string) => answers(path)),
@@ -73,9 +74,10 @@ async function render(element: Parameters<Root["render"]>[0]) {
 
 async function settings(section: AppSettingsSection): Promise<HTMLElement> {
   fixture.section = section;
-  const { CredentialsSettings, EnginesSettings, ProvidersSettings, SecurityKeySettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  const { CredentialsSettings, EnginesSettings, ProviderPage, ProvidersSettings, SecurityKeySettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
   await Promise.all([
     CredentialsSettings.preload(),
+    ProviderPage.preload(),
     EnginesSettings.preload(),
     ProvidersSettings.preload(),
     SecurityKeySettings.preload(),
@@ -94,6 +96,7 @@ const group = (id: string) => pane().querySelector(`[data-settings-group="${id}"
 beforeEach(() => {
   setLocale("en");
   fixture.section = "account";
+  fixture.subPage = null;
   fixture.dispatch = vi.fn();
   fixture.config = { rooms: { turnTimeoutMinutes: 5 } };
   fixture.rules = RULES;
@@ -137,36 +140,31 @@ describe("Settings split: navigation", () => {
 });
 
 describe("Settings split: every moved setting at its new place", () => {
-  it("keeps an in-progress sign-in and its polling when another provider is opened", async () => {
+  it("keeps an in-progress sign-in and its polling when another account of the provider is opened", async () => {
     fixture.instances = ["codex", "other"].map((id) => ({
-      instanceId: id, driverKind: "codexAgent", displayName: id, access: "subscription",
+      instanceId: id, driverKind: "codex", displayName: id, access: "subscription",
       snapshot: { state: "available", authenticated: false }, models: { default: "", options: [] },
       authentication: { method: "device-code" }, install: { signInCommand: "codex login" },
     } as InstanceInfo));
+    // #4329 lot 1: Add a provider opens the provider's page, where each
+    // account is a line whose Sign in opens the sign-in card in place
+    fixture.subPage = "providers.provider:openai";
     await settings("providers");
-    // #2080 (L1): accounts to connect come from Add, then stay listed
-    const add = async (id: string) => {
-      await act(async () => host.querySelector<HTMLButtonElement>("[data-add-provider-open]")!.click());
-      await act(async () => host.querySelector<HTMLButtonElement>('[data-add-provider-way="account"]')!.click());
-      await act(async () => host.querySelector<HTMLButtonElement>(`[data-add-provider-account="account:${id}"]`)!.click());
-    };
-    await add("other");
-    await add("codex");
-    const row = (id: string) => host.querySelector<HTMLElement>(`[data-provider-row="account:${id}"]`)!;
-    // 2026-11-05: the row's toggle sits beside its one action
-    const toggle = (id: string) => row(id).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    expect(row("codex").getAttribute("data-open")).toBe("true");
+    const line = (id: string) => host.querySelector<HTMLElement>(`[data-provider-line="account:${id}"]`)!;
+    const signIn = (id: string) => line(id).querySelector<HTMLButtonElement>('[data-provider-action="signIn"]')!;
+    await act(async () => signIn("codex").click());
+    expect(line("codex").getAttribute("data-open")).toBe("true");
     vi.useFakeTimers();
-    const start = [...row("codex").querySelectorAll("button")].find((button) => button.textContent?.includes("Connect ChatGPT"))!;
+    const start = [...line("codex").querySelectorAll("button")].find((button) => button.textContent?.includes("Connect ChatGPT"))!;
     await act(async () => start.click());
-    const detail = row("codex").querySelector<HTMLElement>("[data-provider-detail]")!;
+    const detail = line("codex").querySelector<HTMLElement>("[data-provider-panel]")!;
     expect(detail.textContent).toContain("ABCD-EFGH");
-    await act(async () => toggle("other").click());
+    await act(async () => signIn("other").click());
     expect(detail.hidden).toBe(true);
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(api).toHaveBeenCalledWith("/api/instances/codex/auth/status?flowId=flow-a", expect.anything());
-    await act(async () => toggle("codex").click());
-    expect(row("codex").querySelector("[data-provider-detail]")).toBe(detail);
+    await act(async () => signIn("codex").click());
+    expect(line("codex").querySelector("[data-provider-panel]")).toBe(detail);
     expect(detail.hidden).toBe(false);
     expect(detail.textContent).toContain("ABCD-EFGH");
     expect(vi.mocked(api).mock.calls.filter(([path]) => path === "/api/instances/codex/auth/start")).toHaveLength(1);

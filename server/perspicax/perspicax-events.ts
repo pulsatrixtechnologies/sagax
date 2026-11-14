@@ -55,6 +55,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
+import { PRODUCT_KEY_PREFIX, VOICE_LINE_KEY } from "../../shared/fix-card-keys.ts";
 import type { SignalLevel } from "../../shared/signal-levels.ts";
 import type { NormalizedTriggerEvent } from "../../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
@@ -73,11 +74,11 @@ export const PERSPICAX_EVENTS_SEEN_MS = 24 * 60 * 60_000;
 const MAX_TOKEN_CHARS = 8_192;
 const REASON_MAX = 1_000;
 
-/** The key of a product's fix card: `product:<api id>`. */
-export const PRODUCT_KEY_PREFIX = "product:";
+/** The key of a product's fix card: `product:<api id>`; of the person's
+ * phone line fix card (one line per person): `voice-line`
+ * (shared/fix-card-keys.ts, the one list of the server's card keys). */
+export { PRODUCT_KEY_PREFIX, VOICE_LINE_KEY };
 export const productFixKey = (api: string): string => `${PRODUCT_KEY_PREFIX}${api}`;
-/** The key of the person's phone line fix card (one line per person). */
-export const VOICE_LINE_KEY = "voice-line";
 /** The key of a watched resource's change: `watch:<uri>`. */
 export const WATCH_KEY_PREFIX = "watch:";
 

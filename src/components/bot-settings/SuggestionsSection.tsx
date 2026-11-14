@@ -1,6 +1,8 @@
 // Activity > Suggested (reference design, #2125): next steps for this bot,
-// from its setup checklist (GET /api/bots/:id/overview) and the
-// conversations waiting on the person, then Add to Slack (the Admin link,
+// the server's open fix cards and what its routines need from the person
+// first (#4250 S6, from the one waiting list and `Routine.needsPerson`),
+// then the conversations waiting on the person, a saving the server
+// proposed and its setup checklist (GET /api/bots/:id/overview), then Add to Slack (the Admin link,
 // when the server has one) and Add to meeting (a new routine for the
 // calendar). Each row ends with a chevron. The title row has Hide on the
 // right (bot panel and group panel): it turns the one person-wide preference
@@ -10,19 +12,27 @@ import { CalendarPlus, ChevronRight, Sparkles } from "lucide-react";
 import type { ComponentType } from "react";
 import { SlackLogo } from "../SlackLogo";
 import { useEffect, useMemo, useState } from "react";
-import { api, openBotThread, type Bot } from "@/state/store";
+import { api, openBotThread, openRoutineRun, type Bot } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
 import type { BotOverview } from "@/lib/bot-overview-types";
-import { botSuggestions, type BotSuggestion } from "@/lib/bot-suggestions";
+import { botSuggestions, serverCards, type BotSuggestion } from "@/lib/bot-suggestions";
+import { useServerWaitingItems, waitingStamp } from "@/lib/pinned-waiting";
+import { needSentence } from "@/lib/routine-display";
+import type { Routine } from "@/lib/routines";
 import { GROUPED_CARD, GROUPED_ROW, PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
 import { cn } from "@/lib/cn";
 import { setShowSuggestions, useShowSuggestions } from "@/lib/panel-visibility";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 
-export function SuggestionsSection({ bot, routineCount, slackUrl = null, onAddToMeeting }: {
+const NO_ROUTINES: readonly Routine[] = [];
+const NO_THREADS: readonly string[] = [];
+
+export function SuggestionsSection({ bot, routineCount, routines = NO_ROUTINES, slackUrl = null, onAddToMeeting }: {
   bot: Bot;
   routineCount: number;
+  /** The bot's routines: what each needs from the person (`needsPerson`). */
+  routines?: readonly Routine[];
   /** The Admin link that adds this bot to Slack (useBotSectionAvailability). */
   slackUrl?: string | null;
   /** Add to meeting: a new routine in the panel's Upcoming card. */
@@ -44,9 +54,13 @@ export function SuggestionsSection({ bot, routineCount, slackUrl = null, onAddTo
     return () => { live = false; };
   }, [bot.id, bot.name, bot.title, soulFilled, routineCount]);
 
+  // the server's own cards waiting in the bot's conversations: the one list
+  // the pinned row and Today read
+  const waiting = useServerWaitingItems(shown ? bot.id : undefined, NO_THREADS, waitingStamp(bot));
+  const cards = useMemo(() => serverCards(waiting), [waiting]);
   const items = useMemo(
-    () => botSuggestions({ setup, tasks: bot.tasks, waitingApprovals: bot.waitingApprovals }),
-    [setup, bot.tasks, bot.waitingApprovals],
+    () => botSuggestions({ setup, tasks: bot.tasks, waitingApprovals: bot.waitingApprovals, routines, cards }),
+    [setup, bot.tasks, bot.waitingApprovals, routines, cards],
   );
   const extra: SuggestionRow[] = [
     // Add to Slack only where the server offers the Admin link (#3398: an
@@ -58,17 +72,29 @@ export function SuggestionsSection({ bot, routineCount, slackUrl = null, onAddTo
   if (!shown || (!items.length && !extra.length)) return null;
 
   const run = (item: BotSuggestion) => {
-    if (item.action.kind === "openThread") openBotThread(dispatch, bot, item.action.threadId, threadsShown);
-    else dispatch({ type: "openPersonaEditor", botId: bot.id, section: item.action.section });
+    const action = item.action;
+    if (action.kind === "openThread") openBotThread(dispatch, bot, action.threadId, threadsShown);
+    else if (action.kind === "openRun") openRoutineRun(dispatch, { runId: action.runId, botId: bot.id });
+    else if (action.kind === "openRoutine") dispatch({ type: "openRoutine", botId: bot.id, routineId: action.routineId });
+    else dispatch({ type: "openPersonaEditor", botId: bot.id, section: action.section });
   };
 
   return (
     <SuggestionsCard
       headingId={`bot-suggestions-${bot.id}`}
       panel
-      rows={[...items.map((item) => ({ id: item.id, title: t(item.titleKey, item.vars), subtitle: t(item.subtitleKey, item.vars), onRun: () => run(item) })), ...extra]}
+      rows={[...items.map((item) => ({ id: item.id, title: suggestionTitle(item), subtitle: suggestionSubtitle(item), onRun: () => run(item) })), ...extra]}
     />
   );
+}
+
+function suggestionTitle(item: BotSuggestion): string {
+  return item.title ?? (item.titleKey ? t(item.titleKey, item.vars) : "");
+}
+
+function suggestionSubtitle(item: BotSuggestion): string | undefined {
+  if (item.need) return needSentence(item.need);
+  return item.subtitleKey ? t(item.subtitleKey, item.vars) : undefined;
 }
 
 type SuggestionRow = { id: string; title: string; subtitle?: string; icon?: ComponentType<{ size?: number | string; className?: string }>; onRun?: () => void; href?: string };

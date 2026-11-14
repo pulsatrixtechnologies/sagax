@@ -130,8 +130,8 @@ import { createProactiveMetricsRoutes } from "./routes/proactive-metrics.ts";
 import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptions.ts";
 import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
 import { ProactiveMetricsLedger, usefulnessSources } from "./proactive/proactive-metrics.ts";
-import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
-import { domainLabel, FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
+import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
+import { domainLabel, FLOW_WATCH_CHECK, FlowWatches, WatchMemory } from "./proactive/flow-watches.ts";
 import { ProactiveChoices, watchMovedLine, watchPauseLine } from "./proactive/proactive-choices.ts";
 import { askTurnRefusal, BRIEF_ASK_DOMAIN, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, withinWait, type AskBot, type AskTurnFacts } from "./proactive/proactive-ask.ts";
 import { personLanguageCode } from "./people/person-words.ts";
@@ -684,6 +684,7 @@ import {
   flushAllMemoryJournals,
   journalMemoryWrite,
   journalTurnWrite,
+  onMemoryChange,
   type MemoryJournalEntry
 } from "./memory/memory-journal.ts";
 import {
@@ -777,7 +778,7 @@ import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
-import { HEARTBEAT_PATH, HeartbeatManager, heartbeatEmpty, parseHeartbeat } from "./heartbeat/heartbeat.ts";
+import { HEARTBEAT_CHECK, HEARTBEAT_PATH, HeartbeatManager } from "./heartbeat/heartbeat.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
 import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
@@ -6840,7 +6841,7 @@ bindLeafHost({
   get proactiveMetrics() { return proactiveMetrics; },
   get proactiveEngine() { return proactiveEngine; },
   get proactivePending() { return proactivePending; },
-  get flowWatchLoop() { return flowWatchLoop; },
+  get flowWatches() { return flowWatches; },
   get proactiveWaker() { return proactiveWaker; },
   get directChatOf() { return directChatOf; },
   get routineEngineForBot() { return routineEngineForBot; },
@@ -14755,7 +14756,7 @@ store.onChange((change) => {
         for (const moved of proactiveChoices.botGone(change.botId, personMainBot)) {
           const language = briefLanguage(moved.botId);
           // the loop may not exist yet during startup: the slug then
-          const label = (domain: string) => { try { return flowWatchLoop.label(domain, language); } catch { return domain; } };
+          const label = (domain: string) => { try { return flowWatches.label(domain, language); } catch { return domain; } };
           watchChatLine(moved.botId, watchMovedLine(moved.domains.map(label), language));
         }
       }
@@ -20239,8 +20240,6 @@ const proactiveWaker = new ProactiveWaker({
   dropped: (botId, events) => {
     for (const event of events) {
       if (event.peer) surfacePeerNotice(botId, event.peer);
-      // #3140: a dropped watch event is not marked as sent
-      if (event.watch) flowWatchLoop.released(botId, event.watch.id);
     }
   },
   // Cheap expired marker: do not start another wake that would fail the same way.
@@ -20424,8 +20423,12 @@ routines = new RoutineManager({
   // #2018: "Commentaires des artefacts" (server/claude-artifacts/comments-routine.ts)
   // #3456: the bot's daily brief (server/proactive/brief-routine.ts)
   // #4250 (S8): the end of day and weekly reviews (server/proactive/review-routines.ts)
+  // #4250 (S5): a Pulsatrix Flow watch the person turned on (server/proactive/flow-watches.ts)
   evaluateCode: (routine, precheck) => {
     if (precheck.check === "daily_brief") return briefRoutineCheck(routine);
+    if (precheck.check === FLOW_WATCH_CHECK) return flowWatches.check(routine);
+    // #4250 (S5): the bot's HEARTBEAT.md checklist (server/heartbeat/heartbeat.ts)
+    if (precheck.check === HEARTBEAT_CHECK) return heartbeat.check(routine);
     const review = reviewCheckKind(precheck.check);
     return review ? reviewRoutineCheck(routine, review) : claudeArtifactCommentsCheck(routine);
   },
@@ -20988,14 +20991,29 @@ const waitsBoot = createWaitsBootstrap({
 });
 const botWaits = waitsBoot.waits;
 // #2692: HEARTBEAT.md, probes first, the model only on a gap, in the bot's main chat.
+// #4250 (S5): the lines are the pre-check of the bot's « Checklist » routine
+// (code check `heartbeat`); the routine scheduler beats, no timer of its own.
 const heartbeat = new HeartbeatManager({
   bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
-  mainThread: (botId) => botMainThread(botId),
   read: (botId) => readMemoryDoc(botId, HEARTBEAT_PATH).text,
-  enqueue: (input) => routines!.enqueueWebhook(input),
+  routines: () => routines ? {
+    list: () => routines!.listRoutines(),
+    create: (input, runAs) => routines!.create(input, undefined, runAs ? { runAs } : undefined),
+    update: (id, patch) => routines!.update(id, patch)
+  } : null,
+  runAs: (botId) => {
+    const bot = store.bot(botId);
+    const owner = bot && IDENTITY.kind === "perspicax" ? (effectiveBotOwner(bot) || "").trim().toLowerCase() : "";
+    return owner || undefined;
+  },
+  language: (botId) => briefLanguage(botId),
   muted: (botId) => backgroundBriefs.wakeMuted(botId, "heartbeat"),
+  setMuted: (botId, muted) => { backgroundBriefs.setWakeMuted(botId, "heartbeat", muted); },
 });
-setInterval(() => { void heartbeat.tick().catch(reportBackgroundError); }, 60_000).unref?.();
+// an edit of HEARTBEAT.md makes or moves its routine at once
+onMemoryChange((botId, path) => {
+  if (path === HEARTBEAT_PATH) heartbeat.sync(botId);
+});
 store.onChange((change) => {
   if (change.type === "bot" && store.bot(change.botId)?.busy) botWaits.noteBotBusy(change.botId);
 });
@@ -21243,7 +21261,11 @@ function feedbackOnWake(botId: string, topic: string, choice: BriefFeedback, whe
   const person = (effectiveBotOwner(bot) || "").trim().toLowerCase();
   if (choice === "never" && watches.length && person) {
     for (const row of watches) proactiveChoices.stopWatch(person, row.domain, row.id, "alert");
-  } else backgroundBriefs.topicFeedback(bot.id, kind, choice);
+  } else {
+    backgroundBriefs.topicFeedback(bot.id, kind, choice);
+    // #4250: the checklist's mute is its routine's pause (one switch)
+    if (kind === "heartbeat") heartbeat.muteToPause(bot.id);
+  }
   const said = message?.routineRun?.summary ?? message?.attention?.items[0]?.text ?? message?.text ?? "";
   rememberBriefFeedback(bot.id, choice, said || kind, kind);
   if (message && where.threadId) {
@@ -25764,7 +25786,7 @@ ROUTES.push(createProactiveChoicesRoutes({
   person: (auth) => actorPrincipalId(auth),
   ownBot: (person, botId) => Boolean(watchCarrierOf(person, botId)),
   mainBot: personMainBot,
-  offered: (person, botId) => flowWatchLoop.offered(person, botId),
+  offered: (person, botId) => flowWatches.offered(person, botId),
   // #3432: the person's bots, main bot first, with the ambient rows each
   // can draw (screen context on the desktop app only, the checklist only
   // when HEARTBEAT.md has items)
@@ -25778,7 +25800,8 @@ ROUTES.push(createProactiveChoicesRoutes({
       const settings = backgroundBriefs.view(bot.id).settings;
       let checklist: boolean | undefined;
       try {
-        checklist = heartbeatEmpty(parseHeartbeat(readMemoryDoc(bot.id, HEARTBEAT_PATH).text)) ? undefined : !backgroundBriefs.wakeMuted(bot.id, "heartbeat");
+        // #4250: the checklist routine's own on and off (one switch)
+        checklist = heartbeat.on(bot.id);
       } catch {
         checklist = undefined;
       }
@@ -25792,15 +25815,16 @@ ROUTES.push(createProactiveChoicesRoutes({
       };
     });
   },
-  lastAlert: (person, watchId) => flowWatchLoop.lastAlert(person, watchId)
+  lastAlert: (person, watchId) => flowWatches.lastAlert(person, watchId)
 }));
 /** 2026-11-09, walked from the person's choices since #3423: the Pulsatrix
  * Flow watches of the domains a person turned on
- * (server/proactive/flow-watches.ts). Observe as a read with the person's
- * routine credentials, `when` true and new: one proactive wake in the
- * carrying bot's conversation; a write goes through the ordinary approval
- * path. No choice: no session, no helper call, no read. */
-const flowWatchLoop = new FlowWatchLoop({
+ * (server/proactive/flow-watches.ts). #4250 (S5): each is a routine of the
+ * carrying bot whose code check reads it as the person through the one
+ * probe engine (routineWatchEvaluator); `when` true and new starts the run.
+ * No timer of its own; the routines follow the person's choices. No
+ * choice: no routine, no session, no helper call, no read. */
+const flowWatches = new FlowWatches({
   choices: () => proactiveChoices.chosen(),
   carrier: (botId, person) => {
     if (!store.bot(botId)) return { ok: false, cause: "bot-gone" };
@@ -25851,21 +25875,13 @@ const flowWatchLoop = new FlowWatchLoop({
   },
   timeZone: (owner) => (owner && isPrincipalId(owner) ? botSettings.person(owner).timeZone ?? undefined : undefined),
   hostTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-  // its own budget: a watch is a scheduled read, not a wake loop (12 an hour)
-  engine: new ProactiveEngine({
-    // #3423: the person's choice passes the bot's switch, as a direct trigger
-    bot: (botId) => {
-      const bot = store.bot(botId);
-      return bot ? { ...bot, proactiveMode: "proactive" as const } : undefined;
-    },
-    coveredByRules: () => false,
-    approvalLevel: (botId) => {
-      const bot = store.bot(botId);
-      return bot ? approvalModeFor(bot) : undefined;
-    },
-    budget: new ProactiveBudget({ minIntervalMs: 0, maxPerWindow: 12, windowMs: 60 * 60_000 })
-  }),
-  offer: (event) => offerProactive(event),
+  routines: () => routines ? {
+    list: () => routines!.listRoutines(),
+    create: (input, runAs) => routines!.create(input, undefined, runAs ? { runAs } : undefined),
+    update: (id, patch) => routines!.update(id, patch)
+  } : null,
+  evaluate: (routine, precheck) => routineWatchEvaluator(routine, precheck),
+  forgetState: (routineId) => routineWatchStates.forget(routineId),
   log: (botId, line) => proactiveEventsLine(botId, line),
   pause: (botId, person, domain, cause, listing) => {
     // a gone carrier has no chat: the line goes to the person's main bot
@@ -25877,9 +25893,10 @@ const flowWatchLoop = new FlowWatchLoop({
   // per person; the per-bot file of before (proactive-watches.json) is not read
   memory: new WatchMemory(join(DATA_DIR, "proactive-watch-memory.json"))
 });
-if (!process.env.VITEST && IDENTITY.kind === "perspicax") {
-  setInterval(() => void flowWatchLoop.tick(), WATCH_TICK_MS).unref();
-}
+// #4250: a change of the person's choices moves their watch routines; the
+// start brings them in line once (and turns the watches of a server before
+// #4250 into routines)
+proactiveChoices.onChange = (person) => { void flowWatches.sync(person).catch(reportBackgroundError); };
 /** #3431 (lot 4 of #3408): the bot asks its person what they would like to
  * receive and proposes one watch domain with a choice card
  * (server/proactive/proactive-ask.ts). The watch loop's listing and the
@@ -25894,7 +25911,7 @@ function proactiveAskBots(person: string): AskBot[] {
 const proactiveAsk = new ProactiveAsk({
   choices: proactiveChoices,
   bots: proactiveAskBots,
-  offered: (person, botId) => flowWatchLoop.offered(person, botId),
+  offered: (person, botId) => flowWatches.offered(person, botId),
   aboutMe: (person) => {
     const owner = personAboutMe.ofBot(person);
     return owner ? personAboutMe.read(owner) : "";
@@ -26139,6 +26156,10 @@ if (!process.env.VITEST) {
   // the upgrade, once: saved settings that were on become the routine
   const upgraded = briefRoutines.upgrade(store.bots.filter((bot) => !bot.hidden && !bot.temporary).map((bot) => ({ id: bot.id, main: bot.chiefOfStaff === true })));
   if (upgraded.created.length || upgraded.owed.length) console.log(`background brief: ${upgraded.created.length} routine(s) from saved settings, ${upgraded.owed.length} card(s) owed`);
+  // #4250 (S5): the Flow watches the people turned on run as routines (a server before #4250 ran its own loop)
+  if (IDENTITY.kind === "perspicax") void flowWatches.syncAll().catch(reportBackgroundError);
+  // #4250 (S5): a checklist of a server before #4250 becomes its bot's routine
+  try { heartbeat.syncAll(); } catch (error) { reportBackgroundError(error); }
   try {
     briefCardsPass();
   } catch (error) {
@@ -26150,6 +26171,10 @@ if (!process.env.VITEST) {
     } catch (error) {
       reportBackgroundError(error);
     }
+    // #4250: the watch routines follow a Flow that changed, within the hour (no timer of their own)
+    if (IDENTITY.kind === "perspicax") void flowWatches.syncStale().catch(reportBackgroundError);
+    // #4250: a checklist edited outside the journal (a shell in the bot's folder) within the hour
+    try { heartbeat.syncDue(); } catch (error) { reportBackgroundError(error); }
   }, 60_000).unref();
 }
 ROUTES.push(createBackgroundBriefRoutes({
@@ -26181,6 +26206,7 @@ ROUTES.push(createBackgroundBriefRoutes({
   connected: backgroundBriefConnected,
   reads: backgroundBriefReads,
   screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE,
+  checklist: (botId, on) => heartbeat.setOn(botId, on),
   routine: {
     view: (botId) => briefRoutines.view(botId),
     sync: (botId, patch, settings) => { briefRoutines.sync(botId, patch, settings); }
@@ -36540,7 +36566,8 @@ const onListening = async () => {
     }
   }
   // States of watches whose routine is gone (deleted while stopped).
-  try { routineWatchStates.prune(routines!.listRoutines().filter((routine) => routine.precheck?.kind === "watch").map((routine) => routine.id)); } catch { /* best effort */ }
+  // #4250: a Flow watch routine keeps its reading in the same states
+  try { routineWatchStates.prune(routines!.listRoutines().filter((routine) => routine.precheck?.kind === "watch" || (routine.precheck?.kind === "code" && routine.precheck.check === FLOW_WATCH_CHECK)).map((routine) => routine.id)); } catch { /* best effort */ }
   routines!.start();
   botWaits.start();
   headlessTasks.start();

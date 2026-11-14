@@ -56,9 +56,11 @@ both write `proactive`).
   I receive), on each bot's page (Permissions, Proactive), or in words by
   asking any of their bots: the bot reads `available` and writes through
   `sagax_settings` `notifications.proactiveChoices`. On those pages each
-  switch acts at once; the checklist switch sets or clears the checklist
-  mute (`PUT /api/bots/:id/background-brief` `{checklist}`), with no
-  memory line. A domain stored on with a bot that can no longer carry it
+  switch acts at once; the checklist switch is the checklist routine's
+  own on and off (`PUT /api/bots/:id/background-brief` `{checklist}`):
+  off pauses the routine, on turns it on, with no memory line. Pausing the
+  routine in the routines list shows it off there too, and a « never » or
+  votes on a checklist run pause the same routine (#4250). A domain stored on with a bot that can no longer carry it
   runs nowhere: those pages draw it off with its pause stated, and turning
   it on there moves it to a bot that can.
 - One bot per person and domain, by construction. A carrying bot that is
@@ -192,44 +194,63 @@ helper, `px_flow.py proactive [--product p ...]`, which prints
 Without `domains` a domain's label is its slug; without `tools` the observe
 tool stands for the reads the yes covers.
 
-Every minute, on an organization server, the loop walks the people's
-choices, not the bots. No choice: no session, no helper call, no read, no
-offer. For each chosen domain:
+Since #4250 (S5 `one-probe-engine`, step a) each watch a person turned on
+is a **routine of the carrying bot**: listed, paused, edited and deleted in
+its routines like any other, with the watch's summary as its name and its
+consigne as its instructions. There is no watch loop and no timer of its own:
+the routine scheduler runs the checks. The person's choices stay the one store
+of what is on; `FlowWatches.sync` makes the routines follow them, after each
+change of a person's choices (`ProactiveChoices.onChange`), once at start (a
+server before #4250 ran its own loop: its chosen watches become routines then)
+and within the hour on the brief cards pass (a watch the organization added or
+removed, a domain that can run again). No choice: no routine, no session, no
+helper call, no read. For each chosen domain:
 
 1. **Eligibility** (no model): the carrying bot is the person's own,
    visible, not temporary, and its turns mount the person's account
    connection; the connection serves **every** product a watch names; the
    bot holds the watch's skill (the resolution of a turn's Skills index).
-   What is not eligible is not run.
+   What is not eligible has no routine.
 2. **Products**: the APIs the person's Pulsatrix connection serves
    (`api_list`) are matched to the Flow products, once a day per person.
 3. **Watches** of those products, cached one hour, kept when their domain is
    chosen and the watch is not switched off. A new watch the organization
    adds to a chosen domain is on.
-4. **Cadence**: `15m`, `1h`, `daily@HH:MM`, `weekly:sun..sat@HH:MM`, in the
-   tenant's local time (the person's time zone, else the server's). A
-   calendar cadence never catches up on the first sight or after a restart.
-5. **Tokens** of `args`, `params` and `when` are resolved first:
+4. **Routine**: one per person and watch, on the carrying bot, run as the
+   person, `overlap: skip`, with the code check `flow_watch`. Its schedule is
+   the cadence: `15m`, `1h` as an interval (5 minutes to a day, the routine
+   bounds), `daily@HH:MM` and `weekly:sun..sat@HH:MM` as a cron in the
+   tenant's time zone (the person's, else the server's). A watch switched off,
+   its domain turned off or never, or a watch the organization removed,
+   pauses its routine; the yes again turns it back on. A routine the person
+   paused or deleted after their yes stays so. The domain moved to another bot
+   pauses the old routine and gives the new bot its own. A domain that cannot
+   be read now (no Flow, no access, Flow failed) keeps its routines as they
+   are: their check says why.
+5. **Tokens** of `args`, `params` and `when` are resolved at each check:
    `{{fact:<topic>.<key>}}` from `px_flow.py reference <topic>` (first two
    columns of its tables), `{{today_date_only}}`, `{{days_ago:N}}`,
    `{{days_ahead:N}}`, `{{months_ago:N}}`, `{{hours_ago:N}}`,
    `{{hours_ahead:N}}` (local, no offset). A token the organization does not
-   set skips the watch, logged in Events; no call ever carries a raw template.
-6. **Observe** runs as a read on a short-lived connection with the person's
-   routine credentials: a tool Perspicax marks read-only, or `flow_action`
-   without `confirm` (no write is sent). An observe that is not a read is
-   skipped and logged.
-7. **When** (JMESPath) on the observed value. True and new (watch id plus a
-   key of the result, per person) goes through `ProactiveEngine.consider`
-   (12 watch steps per bot per hour) and `decideProactiveStep`. A condition
-   that stays true with the same key never fires twice; it fires again once
-   it turned false or its result changed.
-8. **Wake**: one proactive turn of the carrying bot (source `watch`, run
-   name "Proactive: Pulsatrix watch"), with the watch's consigne, in the
-   bot's one conversation. The person's choice passes the bot's switch, as a
-   direct trigger does. A read step runs. A write is planned as a dry run
-   and goes through the ordinary approval path. The proactive layer never
-   runs a write on its own and adds no card of its own.
+   set skips the check, logged in Events; no call ever carries a raw template.
+6. **Observe** runs as a read through the one probe engine
+   (`server/routines/routine-watch.ts`, the routine tool pre-check), with the
+   person's routine credentials: a tool Perspicax marks read-only, `flow_run`
+   (or `flow`) `read`, or `flow_action` without `confirm` (no write is sent;
+   `routine-watch-tools.ts` reads those as reads for every routine). An
+   observe that is not a read is skipped and logged. A read that fails fails
+   the routine's check, as any routine's.
+7. **When** (JMESPath) on the observed value: a built pre-check of the engine
+   (`BuiltWatchPrecheck`, never stored). Its result is the key: the routine's
+   run starts the first time it holds, never twice for the same key, again
+   once it turned false or its result changed. The state is the engine's, per
+   routine (`DATA_DIR/routine-watch/<routine>.json`), keyed on the watch's
+   template, so a date that moves with the day keeps the condition.
+8. **Run**: the routine's run, as the person, with the watch's consigne and
+   what the watch read as fenced data (`watchNoteBlock`). Its results are
+   posted like any routine's. The person's choice passes the bot's switch, as
+   a direct trigger does. A write goes through the ordinary approval path of a
+   routine run.
 
 A chosen domain that cannot run (the bot is gone or no longer eligible, no
 Flow plugin or one that does not answer, no Pulsatrix access, no watch of
@@ -237,18 +258,17 @@ the domain eligible, a domain the organization's Flow does not have) pauses
 and says so once in the carrying bot's chat (the person's main bot, else
 another bot of theirs, when the carrier is gone), with its cause; it resumes
 by itself once the cause is gone. Every watch switched off on purpose is no
-pause. A skipped watch (a token not set, an observe that is not a read or
-that failed) posts its line in Events once per cause.
+pause. A skipped watch (a token not set, an observe that is not a read)
+posts its line in Events once per cause.
 
-A fired watch waiting for its wake is kept in
-`DATA_DIR/proactive-pending.json` (replay ref `{kind: "watch", watchId}`,
-no observed data). After a restart the watch is observed again at the next
-tick and fires again if its condition still holds. A gathered watch event
-no wake runs for (dropped) is released and fires again at its cadence.
+A watch wake of a server before #4250 still pending in
+`DATA_DIR/proactive-pending.json` (replay ref `{kind: "watch", watchId}`)
+makes the watch's routine read its condition as new at its next check.
 
-Memory of runs, fired conditions, posted skip causes and told pauses, per
-person: `DATA_DIR/proactive-watch-memory.json`. The per-bot file of before
-(`proactive-watches.json`) is not read: memory restarts per person.
+Per person: `DATA_DIR/proactive-watch-memory.json` (version 2, the shape a
+server before #4250 reads) keeps, per watch, its routine, bot, domain and
+cadence, whether the person's yes was applied, its last alert (`alertAt`,
+« Ce que je reçois ») and the skip cause already told; and the pauses told.
 The helper runs only from an organization plugin folder on a Perspicax
 server, isolated (`python3 -I`, minimal environment, 20 s timeout), with the
 organization's tenant plugins in `PX_FLOW_TENANTS`.
@@ -257,6 +277,8 @@ The turn prompt no longer names the watches: they are the person's choice,
 not a property of the mode.
 
 Tests: `server/proactive/flow-watches.test.ts`,
+`server/proactive/flow-watches-wiring.test.ts` (with the count of the
+server's intervals), `server/routines/routine-watch.test.ts`,
 `server/proactive/proactive-choices.test.ts`,
 `server/routes/proactive-choices.test.ts`,
 `server/proactive/watch-tokens.test.ts`, `server/proactive/proactive-wake.test.ts`,

@@ -327,6 +327,14 @@ function advanceBaseline(botId: string, path: string, after: string | null): voi
   else baseline.set(path, after);
 }
 
+/** #4250: told after a bot's memory file changed through the journal (the
+ * checklist routine follows HEARTBEAT.md, server/heartbeat/heartbeat.ts). */
+const changeListeners = new Set<(botId: string, path: string) => void>();
+export function onMemoryChange(listener: (botId: string, path: string) => void): () => void {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+
 /** Builds and queues one row. Never throws: hashing and diffing are pure,
  * and the append is queued behind a catch. Returns the row so a route can
  * answer with it. */
@@ -334,6 +342,13 @@ export function recordMemoryChange(botId: string, change: MemoryChangeInput): Me
   const { before, after } = change;
   if (before === after) return null;
   advanceBaseline(botId, change.path, after);
+  for (const listener of changeListeners) {
+    try {
+      listener(botId, change.path);
+    } catch {
+      // a listener never breaks the journal
+    }
+  }
   const kind: MemoryChangeKind = before === null ? "created" : after === null ? "deleted" : "edited";
   const diff = unifiedDiff(before ?? "", after ?? "", change.path);
   let keptBefore: string | null = null;

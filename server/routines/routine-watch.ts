@@ -15,12 +15,21 @@
 // routine (RoutineWatchStates, bounded). Every check is bounded in time,
 // output, files walked and frequency (ROUTINE_WATCH_LIMITS).
 //
+// #4250 (S5 `one-probe-engine`): this is the one probe engine. A routine
+// the server keeps for the person (a Pulsatrix Flow watch they turned on,
+// server/proactive/flow-watches.ts) reads through it too, with a pre-check
+// it builds at each check (BuiltWatchPrecheck): a tool read, and `when`, a
+// JMESPath condition whose result is the key (the Flow contract): it wakes
+// the first time it holds, never twice for the same key, again once it
+// turned false or its result changed.
+//
 // A cloud computer that is asleep is not woken by surprise: `whenAsleep`
 // `skip` (default) checks only while it is awake; `wake` starts it in the
 // background and the next check reads it. A tool watch never touches the
 // computer at all.
 import { spawnChild, whenStarted } from "../process/spawn-helper.ts";
 import { createHash, randomBytes } from "node:crypto";
+import jmespath from "jmespath";
 import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -39,6 +48,37 @@ import { watchToolRefusal } from "./routine-watch-tools.ts";
 import { defang } from "../../shared/defang.ts";
 
 export { canonicalJson };
+
+/** A pre-check the server builds for a routine it keeps (a Flow watch):
+ * never stored, never edited, never sent. `when` is a JMESPath condition on
+ * the JSON result; `stateKey` names what is compared from one check to the
+ * next when the arguments move with the clock (`{{days_ago:1}}`). `seed`
+ * is the `when` key a server before #4250 already told, and when: the first
+ * check of the routine compares with it, so an upgrade tells nothing again. */
+export type BuiltWatchPrecheck = RoutineWatchPrecheck & { when?: string; stateKey?: string; seed?: { key: string; at: number } };
+
+/** JMESPath truth: false, null, "", [] and {} are false. */
+export function jmesTruthy(value: unknown): boolean {
+  if (value === null || value === undefined || value === false || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+/** Evaluate `when` on the observed value. The key of the condition is the
+ * expression's own result when it says more than true (a list of tickets,
+ * a count), else the observed value. A bad expression is false. */
+export function evaluateWhen(expression: string, observed: unknown): { holds: boolean; key: string } {
+  let result: unknown;
+  try {
+    result = jmespath.search(observed as never, expression);
+  } catch {
+    return { holds: false, key: "" };
+  }
+  const holds = jmesTruthy(result);
+  const basis = result === true ? observed : result;
+  return { holds, key: holds ? createHash("sha256").update(canonicalJson(basis ?? null)).digest("hex").slice(0, 16) : "" };
+}
 
 const L = ROUTINE_WATCH_LIMITS;
 
@@ -433,7 +473,8 @@ export interface WatchState {
 
 /** What a watch compares: the source and its track, nothing else (the
  * schedule, the condition or the instructions can change freely). */
-export function watchConfigKey(watch: RoutineWatchPrecheck): string {
+export function watchConfigKey(watch: BuiltWatchPrecheck): string {
+  if (watch.stateKey) return sha(`built\u0000${watch.stateKey}`);
   return sha(canonicalJson({ source: watch.source, track: watch.track ?? null }));
 }
 
@@ -536,7 +577,7 @@ function sourceLine(watch: RoutineWatchPrecheck): string {
 
 /** The bounded note the woken run reads (data, fenced by watchNoteBlock). */
 export function watchNote(
-  watch: RoutineWatchPrecheck,
+  watch: BuiltWatchPrecheck,
   snapshot: WatchSnapshot,
   previous: WatchState | null,
   condition: { holds: boolean; seen: string } | null,
@@ -561,7 +602,8 @@ export function watchNote(
   } else {
     lines.push(`The result changed since the last check${previous ? ` (${new Date(previous.checkedAt).toISOString()})` : ""}.`);
   }
-  if (condition && watch.condition) lines.push(`Condition: ${describeCondition(watch.condition)}, ${condition.holds ? "holds" : "does not hold"} (${condition.seen}).`);
+  const described = describeWatchCondition(watch);
+  if (condition && described) lines.push(`Condition: ${described}, ${condition.holds ? "holds" : "does not hold"} (${condition.seen}).`);
   if (snapshot.exitCode !== undefined) lines.push(`Exit code: ${snapshot.exitCode}`);
   if (snapshot.truncated) lines.push("The reading was cut at its limit; what follows is partial.");
   const head = lines.join("\n");
@@ -592,25 +634,48 @@ export interface WatchDecision {
 }
 
 /** Pure: compare the reading with the last one and decide. */
+/** The condition in words: a stored one, or a built pre-check's `when`. */
+function describeWatchCondition(watch: BuiltWatchPrecheck): string | null {
+  if (watch.when !== undefined) return `when ${clip(watch.when, 120)}`;
+  return watch.condition ? describeCondition(watch.condition) : null;
+}
+
+/** A built pre-check's `when` on this reading: whether it holds, and the
+ * reading's fingerprint becomes its key (one wake per key while it holds). */
+function whenOn(watch: BuiltWatchPrecheck, snapshot: WatchSnapshot): { snapshot: WatchSnapshot; condition: { holds: boolean; seen: string } } | null {
+  if (watch.when === undefined) return null;
+  const { holds, key } = evaluateWhen(watch.when, snapshot.facts !== undefined ? snapshot.facts : snapshot.text);
+  // a reading cut at its limit is no JSON: `when` cannot hold on it, and says why
+  const seen = holds ? `its result ${key}` : snapshot.truncated ? "the result was cut at its limit, so the condition could not be read" : "its result is empty";
+  return {
+    snapshot: { ...snapshot, fingerprint: holds ? `when:${key}` : "@@false" },
+    condition: { holds, seen },
+  };
+}
+
 export function decideWatch(
-  watch: RoutineWatchPrecheck,
+  watch: BuiltWatchPrecheck,
   previous: WatchState | null,
-  snapshot: WatchSnapshot,
+  read: WatchSnapshot,
   now: number,
 ): WatchDecision {
+  const built = whenOn(watch, read);
+  const snapshot = built?.snapshot ?? read;
   const configKey = watchConfigKey(watch);
-  const prior = previous && previous.configKey === configKey ? previous : null;
+  const prior = previous && previous.configKey === configKey ? previous
+    : watch.seed && watch.when !== undefined ? { v: 1 as const, configKey, fingerprint: `when:${watch.seed.key}`, checkedAt: watch.seed.at }
+    : null;
   const state: WatchState = {
     v: 1, configKey, fingerprint: snapshot.fingerprint,
     ...(snapshot.items ? { items: snapshot.items } : {}),
     ...(snapshot.excerpts ? { excerpts: snapshot.excerpts } : {}),
     checkedAt: now,
   };
-  const condition = watch.condition ? conditionHolds(watch.condition, snapshot) : null;
+  const condition = built?.condition ?? (watch.condition ? conditionHolds(watch.condition, snapshot) : null);
   const wakeOn = watch.wakeOn ?? "change";
   if (wakeOn === "match") {
     if (condition?.holds) return { verdict: { wake: true, note: watchNote(watch, snapshot, prior, condition, !prior) }, state };
-    return { verdict: { wake: false, reason: `Condition not met: ${describeCondition(watch.condition!)} (${condition?.seen ?? ""})` }, state };
+    return { verdict: { wake: false, reason: `Condition not met: ${describeWatchCondition(watch) ?? ""} (${condition?.seen ?? ""})` }, state };
   }
   if (!prior) {
     if (watch.firstRun === "wake" && (!condition || condition.holds)) {
@@ -624,7 +689,7 @@ export function decideWatch(
     return { verdict: { wake: false, reason: "No change since the last check" }, state };
   }
   if (condition && !condition.holds) {
-    return { verdict: { wake: false, reason: `Changed, but ${describeCondition(watch.condition!)} does not hold (${condition.seen})` }, state };
+    return { verdict: { wake: false, reason: `Changed, but ${describeWatchCondition(watch) ?? ""} does not hold (${condition.seen})` }, state };
   }
   return { verdict: { wake: true, note: watchNote(watch, snapshot, prior, condition, false) }, state };
 }
@@ -664,11 +729,11 @@ export interface RoutineWatchDeps {
 }
 
 /** One reading, no state change: shared by the scheduler and "Check now". */
-export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, watch: RoutineWatchPrecheck, signal: AbortSignal): Promise<{ probe: WatchProbe } | { skipped: string }> {
+export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, watch: BuiltWatchPrecheck, signal: AbortSignal): Promise<{ probe: WatchProbe } | { skipped: string }> {
   const source = watch.source;
   const budget = { timeoutMs: L.timeoutMs - 1_000, maxOutputBytes: L.maxOutputBytes, signal };
   if (source.type === "tool") {
-    const refusal = watchToolRefusal(source.tool);
+    const refusal = watchToolRefusal(source.tool, source.args);
     if (refusal) throw new RoutineWatchError(refusal);
     const answer = await deps.callTool(routine, source.tool, source.args ?? {}, signal);
     if ("error" in answer) throw new RoutineWatchError(answer.error);
@@ -704,7 +769,7 @@ export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, w
 
 /** The scheduler's evaluator: read, compare, keep the new state, decide.
  * A check closer than minIntervalMinutes to the previous one reads nothing. */
-export function createRoutineWatchEvaluator(deps: RoutineWatchDeps): (routine: WatchRoutine, watch: RoutineWatchPrecheck) => Promise<RoutinePrecheckVerdict> {
+export function createRoutineWatchEvaluator(deps: RoutineWatchDeps): (routine: WatchRoutine, watch: BuiltWatchPrecheck) => Promise<RoutinePrecheckVerdict> {
   return async (routine, watch) => {
     const previous = deps.states.get(routine.id);
     const now = deps.now();

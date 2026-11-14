@@ -228,9 +228,9 @@ with a problem for a routine that can run several times a day
 day; a proactive wake or a webhook's own run, without a routine of its own,
 counts as one), at the first run with a problem for a routine that runs at
 most once a day and for any other run without a routine (#4050: a
-wait_until follow-up, a heartbeat, the last run of a routine deleted once
-finished). A run in the person's own chat (a wait_until follow-up, a
-heartbeat: `eventSource` "wait") never reads the background rule nor the
+wait_until follow-up, the last run of a routine deleted once finished; the
+heartbeat is a routine since #4250). A run in the person's own chat (a
+wait_until follow-up: `eventSource` "wait") never reads the background rule nor the
 earlier problems: its prompt is saved there as the person's line. In both cases later runs count on that card in place and the first good
 run turns it to works again in place. A pre-flight block is one more run of
 the streak; only a run the person started gets its own notice line.
@@ -500,22 +500,67 @@ store is `server/proactive/proactive-choices.ts` (`DATA_DIR/proactive-choices.js
 0600, one row per person; shape in `shared/proactive-choices.ts`), read and
 changed with `GET`/`PUT /api/me/proactive` (client scope, the person only)
 and `sagax_settings` `notifications.proactiveChoices`. `GET` also lists the
-domains the person can choose (`available`, from `FlowWatchLoop.offered`);
+domains the person can choose (`available`, from `FlowWatches.offered`);
 `PUT` answers an unknown domain (404) or one that cannot run on the bot (409)
 instead of storing it, and a chosen domain Flow does not have pauses with a
 line (`unknown-domain`). No screen yet: the person asks a bot. Absent is off; a stored
 `proactiveMode` is never read as consent (`createBot` and the startup both
 write `proactive`); the switch now records who set it (`proactiveModeSet`).
-The loop (`server/proactive/flow-watches.ts`, `docs/proactive.md`) walks the
-choices, not the bots: no choice, no session, no helper call, no read.
+Since #4250 (S5, step a) each chosen watch is a routine of the carrying
+bot (`server/proactive/flow-watches.ts` `FlowWatches.sync`, `docs/proactive.md`)
+with the code check `flow_watch`, which reads it through the one probe
+engine (`routine-watch.ts`, a built tool pre-check with a JMESPath `when`);
+the watch loop and its timer are gone. The routines follow the choices, not
+the bots: no choice, no routine, no session, no helper call, no read.
 Eligibility: the carrying bot is the person's own, visible, not temporary,
 on a Perspicax server; the connection serves every product a watch names
 and its observe tool as a read (#3408, read with the products); the bot
 holds its skill. Products are read once a day per person; watch
-memory is per person (`DATA_DIR/proactive-watch-memory.json`). A chosen watch
+memory is per person (`DATA_DIR/proactive-watch-memory.json`, with the
+routine of each watch). A chosen watch
 passes the bot's switch, as a direct trigger. A paused domain says so once
 in the carrying bot's chat. A watch alert's "never" stops those watches in
 the person's choices. One domain, one bot, by construction (#3394).
+
+## The HEARTBEAT.md checklist is a routine (#4250, S5 step b)
+
+A bot whose HEARTBEAT.md has a line to check (`page`, `file`, `process`,
+`at`) has one routine « Checklist » (« Liste de contrôle »), run as its
+person, with the code check `heartbeat` (`server/heartbeat/heartbeat.ts`) and
+the `every:` line as its interval (5 minutes to a day). Listed, paused and
+edited like any routine; the routine scheduler beats it, there is no
+heartbeat timer any more. The check runs the probes (the same as
+`wait_until`, `server/waits/wait-probes.ts`) and starts the run only on a new
+gap, with the gaps and the notes as the run's data; notes alone never wake
+the model and make no routine. The routine follows the file at start, on
+each journaled edit (`onMemoryChange`), and within the hour on the brief
+cards pass (an edit by a shell in the bot's folder); it is never deleted or
+turned back on from there. The per bot state stays in
+`DATA_DIR/heartbeat.json` (version 1, readable by the previous version). The
+person's « never » on heartbeat wakes (#2694), or votes past the mute line,
+pause the routine at once and leave no mute behind (`muteToPause`): one
+switch, the routine's own on and off; a checklist switched off before the
+upgrade becomes a paused routine.
+
+A code check that stands for a proactive kind gives its run that kind's
+wake identity (`RoutinePrecheckVerdict.proactive`, copied onto
+`run.proactive` by the scheduler): a Flow watch alert carries source
+`watch`, its watch, domain and the read-only tools the person's yes covers
+(#3431 reads without a card, #3457 exits on its card, #3423 no old mute
+applies); a checklist run carries the topic `heartbeat`, so its thumbs and
+« never » reach the checklist. Both post their report.
+
+The previous release does not know the code checks `flow_watch` and
+`heartbeat`: `routines.json` stores them as a file watch on
+`.sagax-code-check/<check>`, a file nothing creates, that every release
+reads and that never wakes (`storedRoutinePrecheck`); this release reads it
+back as its code check (`loadRoutinePrecheck`). Kept for one release.
+
+Since S5 step c, `wait_until` and this checklist read a page, a file or a
+program through one reader, `readProbe` (`server/waits/wait-probes.ts`);
+each decides what the reading means for it. The reader never throws: a page
+reader that fails reads as a page that did not answer (the wait backs off),
+a program list that cannot be read says so. `waits.json` is unchanged.
 
 ## Edit routine, Grok-simple (2026-11-01)
 

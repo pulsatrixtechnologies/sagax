@@ -18,6 +18,7 @@ import {
   journalMemoryDelete,
   journalMemoryWrite,
   journalTurnWrite,
+  onMemoryChange,
   readMemoryJournal,
   recordMemoryChange,
   resetMemoryJournalState,
@@ -248,6 +249,20 @@ describe("revertMemoryChange", () => {
     await flushMemoryJournal(bot);
     expect(revertMemoryChange(bot, deleted!.id).ok).toBe(true);
     expect(readMemoryDoc(bot, "memory/keep.md").text).toBe("keep me\n");
+  });
+
+  it("#4250: tells its listeners which file of which bot changed, never for a write that changed nothing", () => {
+    const bot = freshBot();
+    const seen: string[] = [];
+    const stop = onMemoryChange((botId, path) => seen.push(`${botId}:${path}`));
+    try {
+      recordMemoryChange(bot, { path: "HEARTBEAT.md", actor: "person", via: "editor", before: null, after: "- process Backup running" });
+      recordMemoryChange(bot, { path: "HEARTBEAT.md", actor: "person", via: "editor", before: "same", after: "same" });
+    } finally {
+      stop();
+    }
+    recordMemoryChange(bot, { path: "HEARTBEAT.md", actor: "person", via: "editor", before: "a", after: "b" });
+    expect(seen).toEqual([`${bot}:HEARTBEAT.md`]);
   });
 
   it("empties MEMORY.md rather than deleting it when reverting its creation", async () => {

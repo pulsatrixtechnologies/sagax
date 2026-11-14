@@ -8,9 +8,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { pluginTurnInventory } from "../turns/plugin-turn.ts";
-import { FlowWatchLoop, WatchMemory, type FlowHelper, type FlowWatchLoopDeps } from "./flow-watches.ts";
+import { FlowWatches, WatchMemory, type FlowHelper, type FlowWatchesDeps } from "./flow-watches.ts";
 import { heldSkillNames, librarySkillNames } from "./held-skills.ts";
-import { ProactiveBudget, ProactiveEngine } from "./proactive.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -46,31 +45,32 @@ const WATCH = {
   propose: { skill: "dispatching-tickets" }, kind: "write", prompt: "Use dispatching-tickets on the new tickets.", tools: [],
 };
 
-function loop(skills: (botId: string, person: string) => ReadonlySet<string>): FlowWatchLoop {
+function loop(skills: (botId: string, person: string) => ReadonlySet<string>): FlowWatches {
   const helper: FlowHelper = {
     root: "/plugins/flow-plugin",
     proactive: async () => JSON.stringify({ watches: [WATCH], domains: { dispatch: { label: { fr: "Répartition", en: "Dispatch" } } } }),
     reference: async () => JSON.stringify({ topic: "team", body: "" }),
   };
-  const deps: FlowWatchLoopDeps = {
+  const deps: FlowWatchesDeps = {
     choices: () => [],
     carrier: () => ({ ok: true }),
     skills,
     owner: () => "person-1",
     helper: () => helper,
     session: async (_person, _bot, fn) => fn({
-      tools: new Set(), readOnly: new Set(), call: async () => ({ ok: false, error: "unused" }),
+      // #3408: the connection serves the watch's observe tool as a read
+      tools: new Set(["cw_psa_service_query"]), readOnly: new Set(["cw_psa_service_query"]), call: async () => ({ ok: false, error: "unused" }),
       apis: async () => [{ id: "connectwise-psa", name: "ConnectWise PSA" }],
       holdsProfile: async () => true,
     }),
     timeZone: () => "America/New_York",
-    engine: new ProactiveEngine({ bot: () => undefined, coveredByRules: () => false, budget: new ProactiveBudget({ minIntervalMs: 0, maxPerWindow: 1, windowMs: 1 }) }),
-    offer: () => undefined,
+    routines: () => null,
+    evaluate: async () => ({ wake: false, reason: "unused" }),
     log: () => undefined,
     pause: () => undefined,
     memory: new WatchMemory(),
   };
-  return new FlowWatchLoop(deps);
+  return new FlowWatches(deps);
 }
 
 describe("#3513: the skills a bot holds, as a watch names them", () => {

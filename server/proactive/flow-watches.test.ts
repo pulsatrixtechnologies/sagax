@@ -1,22 +1,40 @@
-// Pulsatrix Flow watches (2026-11-09): the observe loop of a bot that holds a
-// Pulsatrix profile. Fixture: rows of `px_flow.py proactive` (Flow #186).
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+// Pulsatrix Flow watches (2026-11-09): what a person turned on, run for a
+// bot that holds a Pulsatrix profile. #4250 (S5): each chosen watch is a
+// routine of the carrying bot; its code check reads it through the one probe
+// engine (server/routines/routine-watch.ts). Fixture: rows of `px_flow.py
+// proactive` (Flow #186).
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { proactiveWriteCanExecuteUnprompted } from "../../shared/proactive-mode.ts";
+import { createRoutineWatchEvaluator, RoutineWatchStates } from "../routines/routine-watch.ts";
+import type { RoutinePrecheckVerdict } from "../routines/routine-precheck.ts";
+import type { Routine, RoutineInput } from "../routines/routines.ts";
 import {
-  FlowWatchLoop, WatchMemory, cadenceDue, evaluateWhen, observeCall, parseCadence, parseWatchListing, productsForApis,
-  proposeTool, readableName, watchesForBot, watchMissing, watchReadTools, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchLoopDeps, type ObserveConnection,
+  FLOW_WATCH_CHECK, FlowWatches, WatchMemory, cadenceSchedule, evaluateWhen, observeCall, parseCadence, parseWatchListing, productsForApis,
+  WATCH_RELOAD_MS, readableName, watchesForBot, watchMissing, watchRoutineInput, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchesDeps, type ObserveConnection,
 } from "./flow-watches.ts";
-import { ProactiveBudget, ProactiveEngine, classifyProactiveActionKind } from "./proactive.ts";
-import { ProactivePendingFile, proactiveWakePrompt, type ProactiveEvent } from "./proactive-wake.ts";
+import { ProactivePendingFile } from "./proactive-wake.ts";
+import { watchReadCovered } from "./proactive-ask.ts";
+import { routineRunCard } from "../routines/routine-run-card.ts";
+import type { RoutineRun } from "../routines/routines.ts";
+import { routineAttentionLevel } from "../index-leaves/syncRoutineRunToSource.ts";
 
 const FIXTURE = readFileSync(join(import.meta.dirname, "fixtures", "flow-proactive.json"), "utf8");
 const ZONE = "America/New_York";
 // Monday 2026-11-09 15:00 local (20:00 UTC)
 const MONDAY_15H = Date.UTC(2026, 10, 9, 20, 0);
+
+const dirs: string[] = [];
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  dirs.push(dir);
+  return dir;
+}
 
 function watch(overrides: Partial<FlowWatch> = {}): FlowWatch {
   return {
@@ -29,19 +47,24 @@ function watch(overrides: Partial<FlowWatch> = {}): FlowWatch {
 
 type HarnessBot = { id: string; owner: string; primary?: boolean; mode?: unknown; hidden?: boolean };
 type HarnessChoice = { person: string; domains: Array<{ domain: string; botId: string; watchesOff?: string[] }> };
+type Woken = { routineId: string; botId: string; runAs?: string; name: string; prompt: string; note: string; proactive?: RoutineRun["proactive"] };
 
 /** `choices`: the people's chosen domains (default: person-1 chose the
- * service domain on b1). The bots are stored as the real store makes them:
- * a stored "proactive" unless a mode is given. */
-function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: unknown; readOnly?: string[]; watches?: unknown[]; budget?: number; now?: () => number; facts?: string; memory?: WatchMemory; bots?: HarnessBot[]; skills?: string[]; apis?: Array<{ id: string; name: string }> } = {}) {
+ * service domain on b1). The routines live in a small routine manager; a
+ * pass is what the scheduler does: the sync the choices ask for, then each
+ * enabled watch routine's code check, as the scheduler runs it. */
+function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: unknown; readOnly?: string[]; watches?: unknown[]; now?: () => number; facts?: string; memory?: WatchMemory; states?: string; bots?: HarnessBot[]; skills?: string[]; apis?: Array<{ id: string; name: string }> } = {}) {
   let access = true;
   let sessions = 0;
   let apiReads = 0;
   let inventories = 0;
-  const offered: ProactiveEvent[] = [];
+  let nextId = 0;
+  const woken: Woken[] = [];
+  const failures: string[] = [];
   const logs: string[] = [];
   const pauses: Array<{ botId: string; domain: string; cause: string }> = [];
   const calls: Array<{ name: string; args: unknown }> = [];
+  const routines: Routine[] = [];
   let clock = MONDAY_15H;
   const helperCalls: string[][] = [];
   const helper: FlowHelper = {
@@ -55,10 +78,6 @@ function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: u
   const roster: HarnessBot[] = opts.bots ?? [{ id: "b1", owner: "person-1", mode: opts.mode ?? "proactive" }];
   const choices = (opts.choices ?? [{ person: "person-1", domains: [{ domain: "service", botId: "b1" }] }])
     .map((row) => ({ person: row.person, domains: row.domains.map((domain) => ({ ...domain, watchesOff: domain.watchesOff ?? [] })) }));
-  const record = (id: string) => {
-    const row = roster.find((candidate) => candidate.id === id);
-    return row ? { proactiveMode: row.mode ?? "proactive" } : undefined;
-  };
   const session: ObserveConnection = {
     tools: new Set(["api_list", "cw_psa_service_query", "cw_psa_service_write", "flow_run", "flow_action"]),
     readOnly: new Set(opts.readOnly ?? ["cw_psa_service_query", "api_list"]),
@@ -72,7 +91,33 @@ function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: u
     },
     holdsProfile: async () => true,
   };
-  const deps: FlowWatchLoopDeps = {
+  const states = new RoutineWatchStates(opts.states ?? join(tempDir("flow-watch-states-"), "states"));
+  // the one probe engine, as server/index.ts wires it: the read goes out as the person
+  const evaluate = createRoutineWatchEvaluator({
+    place: () => ({ kind: "refuse", reason: "a tool read never touches a computer" }),
+    callTool: async (_routine, tool, args) => {
+      if (!access) return { error: "Perspicax is not available to this person." };
+      const answer = await session.call(tool, args);
+      return answer.ok ? { isError: answer.isError, value: answer.value } : { error: answer.error };
+    },
+    states,
+    now: () => clock,
+  });
+  const manager = {
+    list: () => routines,
+    create: (input: RoutineInput, runAs?: string): Routine => {
+      const routine = { ...input, id: `r${++nextId}`, enabled: input.enabled !== false, ...(runAs ? { runAs } : {}) } as unknown as Routine;
+      routines.push(routine);
+      return routine;
+    },
+    update: (id: string, patch: Partial<RoutineInput>): Routine | null => {
+      const routine = routines.find((row) => row.id === id);
+      if (!routine) return null;
+      Object.assign(routine, patch);
+      return routine;
+    },
+  };
+  const deps: FlowWatchesDeps = {
     choices: () => choices,
     carrier: (botId, person) => {
       const row = roster.find((candidate) => candidate.id === botId);
@@ -87,24 +132,36 @@ function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: u
       return access ? fn(session) : null;
     },
     timeZone: () => ZONE,
-    // as server/index.ts wires it: the person's choice passes the switch
-    engine: new ProactiveEngine({
-      bot: (id) => (record(id) ? { ...record(id), proactiveMode: "proactive" } : undefined),
-      coveredByRules: () => false,
-      budget: new ProactiveBudget({ minIntervalMs: 0, maxPerWindow: opts.budget ?? 12, windowMs: 3_600_000, now: () => clock }),
-    }),
-    offer: (event) => {
-      offered.push(event);
-      return "gathered";
-    },
+    routines: () => manager,
+    evaluate: (routine, precheck) => evaluate(routine, precheck),
+    forgetState: (routineId) => states.forget(routineId),
     log: (_bot, line) => logs.push(line),
     pause: (botId, _person, domain, cause) => pauses.push({ botId, domain, cause }),
     memory: opts.memory ?? new WatchMemory(),
     now: opts.now ?? (() => clock),
   };
-  const loop = new FlowWatchLoop(deps);
+  const watches = new FlowWatches(deps);
+  /** The routines' code checks, as the scheduler runs them. */
+  const check = async (): Promise<void> => {
+    for (const routine of routines.filter((row) => row.enabled && (row.precheck as { check?: string } | undefined)?.check === FLOW_WATCH_CHECK)) {
+      let verdict: RoutinePrecheckVerdict;
+      try {
+        verdict = await watches.check(routine);
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+        continue;
+      }
+      if (verdict.wake) woken.push({ routineId: routine.id, botId: routine.botId, runAs: routine.runAs, name: routine.name, prompt: routine.prompt, note: verdict.note ?? "", ...(verdict.proactive ? { proactive: verdict.proactive } : {}) });
+    }
+  };
   return {
-    loop, offered, logs, calls, helperCalls, pauses, choices,
+    watches, woken, failures, logs, calls, helperCalls, pauses, choices, routines,
+    /** One pass: every person's routines follow their choices, then the checks run. */
+    pass: async () => {
+      for (const row of new Set([...choices.map((choice) => choice.person), ...deps.memory.people()])) await watches.sync(row);
+      await check();
+    },
+    check,
     advance: (ms: number) => { clock += ms; },
     setAccess: (value: boolean) => { access = value; },
     sessions: () => sessions,
@@ -143,32 +200,20 @@ describe("Flow watch listing", () => {
 });
 
 describe("cadence", () => {
-  it("an interval runs on first sight, then after its period", () => {
-    const every = parseCadence("15m")!;
-    expect(cadenceDue(every, undefined, MONDAY_15H, ZONE)).toBe(true);
-    expect(cadenceDue(every, MONDAY_15H, MONDAY_15H + 14 * 60_000, ZONE)).toBe(false);
-    expect(cadenceDue(every, MONDAY_15H, MONDAY_15H + 15 * 60_000, ZONE)).toBe(true);
+  it("reads the cadences of the Flow contract", () => {
+    expect(parseCadence("15m")).toEqual({ kind: "every", ms: 900_000 });
     expect(parseCadence("1h")).toEqual({ kind: "every", ms: 3_600_000 });
+    expect(parseCadence("daily@16:00")).toEqual({ kind: "daily", minutes: 960 });
+    expect(parseCadence("weekly:fri@10:00")).toEqual({ kind: "weekly", day: 5, minutes: 600 });
   });
 
-  it("daily runs once the local time passed, in the tenant's zone", () => {
-    const daily = parseCadence("daily@16:00")!;
-    // never catches up on a first sight
-    expect(cadenceDue(daily, undefined, MONDAY_15H, ZONE)).toBe(false);
-    expect(cadenceDue(daily, MONDAY_15H, MONDAY_15H + 59 * 60_000, ZONE)).toBe(false);
-    expect(cadenceDue(daily, MONDAY_15H, MONDAY_15H + 60 * 60_000, ZONE)).toBe(true);
-    // already ran after 16:00: not again until tomorrow 16:00
-    const after = MONDAY_15H + 61 * 60_000;
-    expect(cadenceDue(daily, after, after + 20 * 3_600_000, ZONE)).toBe(false);
-    expect(cadenceDue(daily, after, after + 24 * 3_600_000, ZONE)).toBe(true);
-  });
-
-  it("weekly runs on its day only", () => {
-    const friday = parseCadence("weekly:fri@10:00")!;
-    expect(cadenceDue(friday, MONDAY_15H, MONDAY_15H + 2 * 86_400_000, ZONE)).toBe(false);
-    // Friday 2026-11-13 10:00 local is 15:00 UTC
-    expect(cadenceDue(friday, MONDAY_15H, Date.UTC(2026, 10, 13, 15, 0), ZONE)).toBe(true);
-    expect(cadenceDue(friday, MONDAY_15H, Date.UTC(2026, 10, 13, 14, 59), ZONE)).toBe(false);
+  it("#4250: is the schedule of the watch's routine: an interval, else a daily or weekly time in the tenant's zone", () => {
+    expect(cadenceSchedule(parseCadence("15m")!, ZONE, MONDAY_15H)).toEqual({ type: "interval", everyMinutes: 15, anchorAt: MONDAY_15H });
+    // the routine bounds: 5 minutes to a day
+    expect(cadenceSchedule(parseCadence("1m")!, ZONE, MONDAY_15H)).toMatchObject({ everyMinutes: 5 });
+    expect(cadenceSchedule(parseCadence("48h")!, ZONE, MONDAY_15H)).toMatchObject({ everyMinutes: 1_440 });
+    expect(cadenceSchedule(parseCadence("daily@16:05")!, ZONE, MONDAY_15H)).toEqual({ type: "cron", expression: "5 16 * * *", timeZone: ZONE });
+    expect(cadenceSchedule(parseCadence("weekly:fri@10:00")!, ZONE, MONDAY_15H)).toEqual({ type: "cron", expression: "0 10 * * 5", timeZone: ZONE });
   });
 
   it("rejects what is out of format", () => {
@@ -214,35 +259,96 @@ describe("observe is a read", () => {
   });
 });
 
-describe("the loop walks the person's choices (#3423)", () => {
-  it("a bot as the real store makes it (a stored proactive) and no choice: no session, no helper call, no read, no offer", async () => {
+describe("the watches walk the person's choices (#3423)", () => {
+  it("a bot as the real store makes it (a stored proactive) and no choice: no routine, no session, no helper call, no read", async () => {
     const h = harness({ mode: "proactive", choices: [] });
-    await h.loop.tick();
+    await h.pass();
     h.advance(60 * 60_000);
-    await h.loop.tick();
+    await h.pass();
+    expect(h.routines).toEqual([]);
     expect(h.sessions()).toBe(0);
     expect(h.helperCalls).toEqual([]);
     expect(h.calls).toEqual([]);
-    expect(h.offered).toEqual([]);
+    expect(h.woken).toEqual([]);
   });
 });
 
-describe("the loop", () => {
-  it("a chosen domain fires its watch into the carrying bot's conversation, as the person", async () => {
+describe("#4250: a chosen watch is a routine of the carrying bot", () => {
+  it("the routine: the watch's summary and consigne, its cadence, the code check, as the person; listed like any routine", async () => {
     const h = harness();
-    await h.loop.tick();
-    expect(h.helperCalls).toContainEqual(["connectwise"]);
-    expect(h.calls.map((call) => call.name)).toEqual(["cw_psa_service_query"]);
-    expect(h.offered).toHaveLength(1);
-    const event = h.offered[0]!;
-    expect(event.source).toBe("watch");
-    expect(event.botId).toBe("b1");
-    expect(event.runAs).toBe("person-1");
-    expect(event.label).toBe("Pulsatrix watch: Open tickets.");
-    expect(event.watch).toMatchObject({ disposition: "auto", domain: "service", chosen: true });
+    await h.watches.sync("person-1");
+    expect(h.routines).toHaveLength(1);
+    expect(h.routines[0]).toMatchObject({
+      name: "Open tickets.", botId: "b1", runAs: "person-1", enabled: true, overlap: "skip",
+      schedule: { type: "interval", everyMinutes: 15 },
+      precheck: { kind: "code", check: "flow_watch" },
+    });
+    expect(h.routines[0]!.prompt).toContain("Use reporting-x on the open tickets.");
+    expect(h.routines[0]!.prompt).toContain("Proposed step: skill reporting-x.");
+    expect(watchRoutineInput("b1", watch({ cadence: "daily@07:30" }), ZONE, MONDAY_15H).schedule).toEqual({ type: "cron", expression: "30 7 * * *", timeZone: ZONE });
   });
 
-  it("one domain is carried by the one bot the person named: one event, one wake, once (#3394)", async () => {
+  it("a second sync makes no second routine", async () => {
+    const h = harness();
+    await h.watches.sync("person-1");
+    await h.watches.sync("person-1");
+    await h.watches.syncAll();
+    expect(h.routines).toHaveLength(1);
+  });
+
+  it("a watch switched off, or its domain turned off, pauses its routine; the yes again turns it back on", async () => {
+    const h = harness();
+    await h.pass();
+    h.choices[0]!.domains[0]!.watchesOff = ["w-open"];
+    await h.pass();
+    expect(h.routines[0]!.enabled).toBe(false);
+    h.choices[0]!.domains[0]!.watchesOff = [];
+    await h.pass();
+    expect(h.routines).toHaveLength(1);
+    expect(h.routines[0]!.enabled).toBe(true);
+    h.choices.splice(0);
+    await h.pass();
+    expect(h.routines[0]!.enabled).toBe(false);
+  });
+
+  it("a routine the person paused or deleted after their yes stays so", async () => {
+    const h = harness();
+    await h.pass();
+    h.routines[0]!.enabled = false;
+    await h.pass();
+    expect(h.routines[0]!.enabled).toBe(false);
+    h.routines.splice(0);
+    await h.pass();
+    expect(h.routines).toEqual([]);
+  });
+
+  it("a domain that cannot be read now keeps its routines as they are", async () => {
+    const h = harness({ observed: { items: [] } });
+    await h.pass();
+    h.setAccess(false);
+    h.advance(25 * 60 * 60_000);
+    await h.pass();
+    expect(h.routines[0]!.enabled).toBe(true);
+  });
+
+  it("there is no watch loop and no timer of its own", () => {
+    expect(Object.getOwnPropertyNames(FlowWatches.prototype)).not.toContain("tick");
+  });
+});
+
+describe("the watch routines", () => {
+  it("a chosen domain fires its watch into the carrying bot's routine run, as the person", async () => {
+    const h = harness();
+    await h.pass();
+    expect(h.helperCalls).toContainEqual(["connectwise"]);
+    expect(h.calls.map((call) => call.name)).toEqual(["cw_psa_service_query"]);
+    expect(h.woken).toHaveLength(1);
+    expect(h.woken[0]).toMatchObject({ botId: "b1", runAs: "person-1", name: "Open tickets." });
+    // what the watch read reaches the run as data
+    expect(h.woken[0]!.note).toContain("Watched: the result of the tool cw_psa_service_query");
+  });
+
+  it("one domain is carried by the one bot the person named: one routine, one run, once (#3394)", async () => {
     const h = harness({
       bots: [
         { id: "primary", owner: "person-1", primary: true },
@@ -254,32 +360,33 @@ describe("the loop", () => {
         { person: "person-2", domains: [{ domain: "service", botId: "other" }] },
       ],
     });
-    await h.loop.tick();
-    const woken = (owner: string) => h.offered.filter((event) => event.runAs === owner).map((event) => event.botId);
+    await h.pass();
+    const woken = (owner: string) => h.woken.filter((row) => row.runAs === owner).map((row) => row.botId);
     expect(woken("person-1")).toEqual(["coder-1"]);
     // another person's choice is theirs (person isolation)
     expect(woken("person-2")).toEqual(["other"]);
     h.advance(15 * 60_000);
-    await h.loop.tick();
+    await h.pass();
     expect(woken("person-1")).toEqual(["coder-1"]);
   });
 
   it("a chosen watch passes the switch: a carrying bot whose switch is off still observes", async () => {
     const h = harness({ mode: "off" });
-    await h.loop.tick();
+    await h.pass();
     expect(h.calls.map((call) => call.name)).toEqual(["cw_psa_service_query"]);
-    expect(h.offered).toHaveLength(1);
+    expect(h.woken).toHaveLength(1);
   });
 
   it("a domain not chosen, or a watch switched off inside it, is never observed", async () => {
     const other = harness({ watches: [watch({ domain: "finance" })] });
-    await other.loop.tick();
+    await other.pass();
     expect(other.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
-    expect(other.offered).toEqual([]);
+    expect(other.woken).toEqual([]);
+    expect(other.routines).toEqual([]);
     const off = harness({ choices: [{ person: "person-1", domains: [{ domain: "service", botId: "b1", watchesOff: ["w-open"] }] }] });
-    await off.loop.tick();
+    await off.pass();
     expect(off.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
-    expect(off.offered).toEqual([]);
+    expect(off.woken).toEqual([]);
     // switched off on purpose is no pause
     expect(off.pauses).toEqual([]);
   });
@@ -289,61 +396,62 @@ describe("the loop", () => {
     expect(watchesForBot([watch({ products: ["connectwise", "sentinelone"] })], { products: ["connectwise"], skills })).toEqual([]);
     expect(watchesForBot([watch({ products: ["connectwise", "sentinelone"] })], { products: ["connectwise", "sentinelone"], skills })).toHaveLength(1);
     const h = harness({ watches: [watch({ products: ["connectwise", "sentinelone"] })] });
-    await h.loop.tick();
+    await h.pass();
     expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
     expect(h.pauses).toEqual([{ botId: "b1", domain: "service", cause: "no-watch" }]);
   });
 
   it("a watch whose skill the bot lacks never runs; the domain pauses once, in the bot's chat", async () => {
     const h = harness({ skills: [] });
-    await h.loop.tick();
+    await h.pass();
     h.advance(15 * 60_000);
-    await h.loop.tick();
+    await h.pass();
     expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
-    expect(h.offered).toEqual([]);
+    expect(h.woken).toEqual([]);
     expect(h.pauses).toEqual([{ botId: "b1", domain: "service", cause: "no-watch" }]);
   });
 
   it("a carrying bot that is gone or no longer the person's pauses, with its cause, once", async () => {
     const gone = harness({ choices: [{ person: "person-1", domains: [{ domain: "service", botId: "deleted" }] }] });
-    await gone.loop.tick();
-    await gone.loop.tick();
+    await gone.pass();
+    await gone.pass();
     expect(gone.pauses).toEqual([{ botId: "deleted", domain: "service", cause: "bot-gone" }]);
     expect(gone.sessions()).toBe(0);
     const foreign = harness({ choices: [{ person: "person-2", domains: [{ domain: "service", botId: "b1" }] }] });
-    await foreign.loop.tick();
+    await foreign.pass();
     expect(foreign.pauses).toEqual([{ botId: "b1", domain: "service", cause: "bot-not-eligible" }]);
     expect(foreign.sessions()).toBe(0);
-    expect(foreign.offered).toEqual([]);
+    expect(foreign.woken).toEqual([]);
+    expect(foreign.routines).toEqual([]);
   });
 
   it("a paused domain resumes by itself, and a later pause is told again", async () => {
     const skills: string[] = [];
     const h = harness({ skills });
-    await h.loop.tick();
+    await h.pass();
     expect(h.pauses).toHaveLength(1);
     skills.push("reporting-x");
     h.advance(15 * 60_000);
-    await h.loop.tick();
-    expect(h.offered).toHaveLength(1);
+    await h.pass();
+    expect(h.woken).toHaveLength(1);
     skills.length = 0;
     h.advance(15 * 60_000);
-    await h.loop.tick();
+    await h.pass();
     expect(h.pauses).toHaveLength(2);
   });
 
   it("a chosen domain the organization's Flow does not have pauses with a line, never in silence", async () => {
     // "backups" chosen where Flow has "service" (and a product is served)
     const h = harness({ choices: [{ person: "person-1", domains: [{ domain: "backups", botId: "b1" }] }] });
-    await h.loop.tick();
-    await h.loop.tick();
+    await h.pass();
+    await h.pass();
     expect(h.pauses).toEqual([{ botId: "b1", domain: "backups", cause: "unknown-domain" }]);
-    expect(h.offered).toEqual([]);
+    expect(h.woken).toEqual([]);
   });
 
   it("a chosen domain whose watches all need a product the person lacks pauses, even when the helper filters by product", async () => {
     const h = harness({ watches: [watch({ products: ["sentinelone"] }), watch({ id: "w-other", domain: "finance" })] });
-    await h.loop.tick();
+    await h.pass();
     expect(h.pauses).toEqual([{ botId: "b1", domain: "service", cause: "no-watch" }]);
   });
 
@@ -352,7 +460,7 @@ describe("the loop", () => {
       skills: ["reporting-x"],
       watches: [watch(), watch({ id: "w-s1", domain: "security", products: ["sentinelone"] }), watch({ id: "w-sk", domain: "dispatch", skill: "absent-skill" })],
     });
-    const listing = await h.loop.offered("person-1", "b1");
+    const listing = await h.watches.offered("person-1", "b1");
     expect(listing).toMatchObject({ ok: true, botId: "b1" });
     if (!listing.ok) throw new Error("not listed");
     expect(listing.domains.map((row) => [row.domain, row.eligible])).toEqual([["dispatch", false], ["security", false], ["service", true]]);
@@ -362,7 +470,7 @@ describe("the loop", () => {
     ]);
     expect(listing.domains.find((row) => row.domain === "security")?.watches[0]).toMatchObject({ runs: false, missing: "product", lacking: ["sentinelone"] });
     expect(listing.domains.find((row) => row.domain === "dispatch")?.watches[0]).toMatchObject({ runs: false, missing: "skill", lacking: ["absent-skill"] });
-    expect(await h.loop.offered("person-2", "b1")).toEqual({ ok: false, botId: "b1", cause: "bot-not-eligible" });
+    expect(await h.watches.offered("person-2", "b1")).toEqual({ ok: false, botId: "b1", cause: "bot-not-eligible" });
     // asked, not ambient: no observe call
     expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
   });
@@ -370,12 +478,13 @@ describe("the loop", () => {
   it("#3408: a team member's bot without the dispatch skill is never offered a dispatch watch, nor woken by one", async () => {
     const dispatch = watch({ id: "w-dispatch", domain: "dispatch", skill: "dispatch-x" });
     const h = harness({ skills: ["reporting-x"], watches: [watch(), dispatch], choices: [{ person: "person-1", domains: [{ domain: "dispatch", botId: "b1" }] }] });
-    const listing = await h.loop.offered("person-1", "b1");
+    const listing = await h.watches.offered("person-1", "b1");
     if (!listing.ok) throw new Error("not listed");
     expect(listing.domains.find((row) => row.domain === "dispatch")).toMatchObject({ eligible: false });
-    await h.loop.tick();
-    expect(h.offered).toEqual([]);
+    await h.pass();
+    expect(h.woken).toEqual([]);
     expect(h.calls).toEqual([]);
+    expect(h.routines).toEqual([]);
   });
 
   it("#3408: a watch whose read the person's connection cannot run is never offered", async () => {
@@ -386,7 +495,7 @@ describe("the loop", () => {
         watch({ id: "w-writer", domain: "changes", observe: { tool: "cw_psa_service_write", args: {} } }),
       ],
     });
-    const listing = await h.loop.offered("person-1", "b1");
+    const listing = await h.watches.offered("person-1", "b1");
     if (!listing.ok) throw new Error("not listed");
     expect(listing.domains.map((row) => [row.domain, row.eligible])).toEqual([["billing", false], ["changes", false], ["service", true]]);
     expect(listing.domains.find((row) => row.domain === "billing")?.watches[0]).toMatchObject({ runs: false, missing: "read", lacking: ["cw_psa_finance_query"] });
@@ -395,13 +504,14 @@ describe("the loop", () => {
     expect(h.sessions()).toBe(1);
   });
 
-  it("#3408: a chosen watch whose read the connection cannot run never reaches the bot: no call, no skip line, the domain pauses once", async () => {
+  it("#3408: a chosen watch whose read the connection cannot run never reaches the bot: no routine, no call, no skip line, the domain pauses once", async () => {
     const h = harness({ watches: [watch({ observe: { tool: "cw_psa_finance_query", args: {} } })] });
-    await h.loop.tick();
-    h.advance(15 * 60_000);
-    await h.loop.tick();
+    await h.pass();
+    h.advance(WATCH_RELOAD_MS);
+    await h.pass();
+    expect(h.routines).toEqual([]);
     expect(h.calls).toEqual([]);
-    expect(h.offered).toEqual([]);
+    expect(h.woken).toEqual([]);
     expect(h.logs.filter((line) => line.includes("skipped"))).toEqual([]);
     expect(h.pauses).toEqual([{ botId: "b1", domain: "service", cause: "no-watch" }]);
   });
@@ -422,37 +532,32 @@ describe("the loop", () => {
       bots: [{ id: "b1", owner: "person-1" }, { id: "b2", owner: "person-1" }],
       choices: [{ person: "person-1", domains: [{ domain: "service", botId: "b2" }] }],
     });
-    await h.loop.tick();
-    expect(h.offered.map((event) => event.botId)).toEqual(["b2"]);
+    await h.pass();
+    expect(h.routines.map((row) => row.botId)).toEqual(["b2"]);
+    expect(h.woken.map((event) => event.botId)).toEqual(["b2"]);
   });
 
   it("the person's products are read once a day, not every hour", async () => {
     const h = harness({ observed: { items: [] } });
-    await h.loop.tick();
+    await h.pass();
     for (let hour = 0; hour < 5; hour += 1) {
       h.advance(60 * 60_000);
-      await h.loop.tick();
+      await h.pass();
     }
     expect(h.apiReads()).toBe(1);
     h.advance(24 * 60 * 60_000);
-    await h.loop.tick();
+    await h.pass();
     expect(h.apiReads()).toBe(2);
   });
 
-  it("watch memory is the person's: the domain moved to another bot does not fire the same condition again", async () => {
+  it("the domain moved to another bot: the routine moves with it, the old one pauses", async () => {
     const h = harness({ bots: [{ id: "b1", owner: "person-1" }, { id: "b2", owner: "person-1" }] });
-    await h.loop.tick();
-    expect(h.offered.map((event) => event.botId)).toEqual(["b1"]);
+    await h.pass();
+    expect(h.woken.map((row) => row.botId)).toEqual(["b1"]);
     h.choices[0]!.domains[0]!.botId = "b2";
     h.advance(15 * 60_000);
-    await h.loop.tick();
-    expect(h.offered.map((event) => event.botId)).toEqual(["b1"]);
-  });
-
-  it("reads covered by the yes: the declared tools kept only when read-only, else the observe tool", () => {
-    const readOnly = new Set(["cw_psa_service_query", "cw_psa_time_query"]);
-    expect(watchReadTools([watch()], readOnly)).toEqual(["cw_psa_service_query"]);
-    expect(watchReadTools([watch({ tools: ["cw_psa_time_query", "cw_psa_service_write"] })], readOnly)).toEqual(["cw_psa_time_query"]);
+    await h.pass();
+    expect(h.routines.map((row) => [row.botId, row.enabled])).toEqual([["b1", false], ["b2", true]]);
   });
 
   it("the domain's label falls back to a readable name from its slug, never the raw slug (#3513)", async () => {
@@ -462,97 +567,62 @@ describe("the loop", () => {
     expect(domainLabel(undefined, "backup-health", "en")).toBe("Backup health");
     expect(readableName("tailscale_audit.devices")).toBe("Tailscale audit devices");
     const h = harness({ watches: [watch({ domain: "backup-health" })] });
-    const offered = await h.loop.offered("person-1", "b1");
+    const offered = await h.watches.offered("person-1", "b1");
     expect(offered.ok && offered.domains[0]?.label).toEqual({ en: "Backup health" });
   });
 
-  it("a false condition offers nothing", async () => {
+  it("a false condition starts nothing", async () => {
     const h = harness({ observed: { items: [] } });
-    await h.loop.tick();
+    await h.pass();
     expect(h.calls.map((call) => call.name)).toContain("cw_psa_service_query");
-    expect(h.offered).toEqual([]);
+    expect(h.woken).toEqual([]);
   });
 
   it("dedup: a condition still true with the same key does not fire again; false then true does", async () => {
-    let observed: unknown = { items: [{ id: 1 }] };
-    const h = harness();
-    const loop = h.loop;
-    const fire = (value: unknown) => loop.consider("b1", "person-1", watch(), value);
-    expect(fire(observed)).toBe("fired");
-    expect(fire(observed)).toBe("duplicate");
-    observed = { items: [] };
-    expect(fire(observed)).toBe("false");
-    expect(fire({ items: [{ id: 1 }] })).toBe("fired");
-    expect(h.offered).toHaveLength(2);
+    const observed: { items: unknown[] } = { items: [{ id: 1 }] };
+    const h = harness({ observed });
+    await h.pass();
+    expect(h.woken).toHaveLength(1);
+    h.advance(15 * 60_000);
+    await h.check();
+    expect(h.woken).toHaveLength(1);
+    observed.items = [];
+    h.advance(15 * 60_000);
+    await h.check();
+    expect(h.woken).toHaveLength(1);
+    observed.items = [{ id: 1 }];
+    h.advance(15 * 60_000);
+    await h.check();
+    expect(h.woken).toHaveLength(2);
   });
 
-  it("#3432: a watch that wakes the carrying bot is the person's last alert, kept on disk; a refused one is not", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "watch-alert-"));
+  it("#3432: a watch that starts its routine's run is the person's last alert, kept on disk; a quiet one is not", async () => {
+    const dir = tempDir("watch-alert-");
     const memory = new WatchMemory(join(dir, "memory.json"));
     const h = harness({ memory });
-    expect(h.loop.lastAlert("person-1", "w-open")).toBeUndefined();
-    expect(h.loop.consider("b1", "person-1", watch({ id: "w-open" }), { items: [1] })).toBe("fired");
-    const first = h.loop.lastAlert("Person-1 ", "w-open");
-    expect(first).toBeGreaterThanOrEqual(0);
-    memory.save();
+    expect(h.watches.lastAlert("person-1", "w-open")).toBeUndefined();
+    await h.pass();
+    const first = h.watches.lastAlert("Person-1 ", "w-open");
+    expect(first).toBe(MONDAY_15H);
     expect(new WatchMemory(join(dir, "memory.json")).get("person-1", "w-open").alertAt).toBe(first);
-    const blocked = harness({ budget: 0 });
-    expect(blocked.loop.consider("b1", "person-1", watch({ id: "w-open" }), { items: [1] })).toBe("budget");
-    expect(blocked.loop.lastAlert("person-1", "w-open")).toBeUndefined();
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("budget: past the hour's limit a watch waits and may fire later", async () => {
-    const h = harness({ budget: 1 });
-    expect(h.loop.consider("b1", "person-1", watch({ id: "a" }), { items: [1] })).toBe("fired");
-    expect(h.loop.consider("b1", "person-1", watch({ id: "b" }), { items: [1] })).toBe("budget");
-    expect(h.offered).toHaveLength(1);
-    h.advance(3_600_001);
-    // the waiting condition was not marked as fired
-    expect(h.loop.consider("b1", "person-1", watch({ id: "b" }), { items: [1] })).toBe("fired");
-  });
-
-  it("a write is never executed unprompted: it goes to the ordinary approval path", () => {
-    const h = harness();
-    const write = watch({ id: "w-write", kind: "write", propose: { action: "assign-ticket", params: {} } });
-    expect(classifyProactiveActionKind({ tool: proposeTool(write) })).toBe("write");
-    expect(h.loop.consider("b1", "person-1", write, { items: [1] })).toBe("fired");
-    const event = h.offered[0]!;
-    expect(event.watch?.disposition).toBe("defer");
-    expect(proactiveWriteCanExecuteUnprompted("defer")).toBe(false);
-    const prompt = proactiveWakePrompt({ mode: "proactive", events: [event], more: 0 });
-    expect(prompt).toContain("ordinary approval");
-    expect(prompt).toContain(write.prompt);
-  });
-
-  it("a declared read whose propose runs a routine is still a write", () => {
-    expect(classifyProactiveActionKind({ tool: proposeTool(watch({ propose: { routine: "nightly" } })) })).toBe("write");
-    expect(classifyProactiveActionKind({ tool: proposeTool(watch()) })).toBe("read");
+    const quiet = harness({ observed: { items: [] } });
+    await quiet.pass();
+    expect(quiet.watches.lastAlert("person-1", "w-open")).toBeUndefined();
   });
 
   // #3408 changed it on purpose: a watch whose observe is not a read never
   // reaches the bot (it was a skip line each cadence); its domain pauses once
   it("an observe that is not a read never runs: the domain pauses", async () => {
     const h = harness({ watches: [watch({ observe: { tool: "cw_psa_service_write", args: {} } })] });
-    await h.loop.tick();
+    await h.pass();
     expect(h.calls.map((call) => call.name)).not.toContain("cw_psa_service_write");
     expect(h.pauses).toEqual([{ botId: "b1", domain: "service", cause: "no-watch" }]);
-    expect(h.offered).toEqual([]);
-  });
-
-  it("the cadence holds between ticks", async () => {
-    const h = harness({ observed: { items: [] } });
-    await h.loop.tick();
-    await h.loop.tick();
-    expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toHaveLength(1);
-    h.advance(15 * 60_000);
-    await h.loop.tick();
-    expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toHaveLength(2);
+    expect(h.woken).toEqual([]);
   });
 
   it("a token the tenant does not set skips the watch: no call with a raw template", async () => {
     const h = harness({ watches: [watch({ observe: { tool: "cw_psa_service_query", args: { owner: "{{fact:team.operator_login}}" } } })] });
-    await h.loop.tick();
+    await h.pass();
     expect(h.calls.map((call) => call.name)).not.toContain("cw_psa_service_query");
     expect(h.logs.join("\n")).toContain("{{fact:team.operator_login}}");
   });
@@ -560,95 +630,139 @@ describe("the loop", () => {
   it("facts and dates are resolved before the observe call", async () => {
     const facts = "| Field | Value |\n| --- | --- |\n| operator_login | `pat` |\n";
     const h = harness({ facts, watches: [watch({ observe: { tool: "cw_psa_service_query", args: { owner: "{{fact:team.operator_login}}", since: "{{days_ago:1}}" } } })] });
-    await h.loop.tick();
+    await h.pass();
     const call = h.calls.find((row) => row.name === "cw_psa_service_query");
     expect(call?.args).toEqual({ owner: "pat", since: "2026-11-08T00:00:00" });
   });
 
-  it("no Pulsatrix access: the ready watches wait for their next cadence, not every tick (#3140)", async () => {
+  it("a date that moves with the day keeps the condition: the same tickets do not fire again tomorrow", async () => {
+    const h = harness({ watches: [watch({ observe: { tool: "cw_psa_service_query", args: { since: "{{days_ago:1}}" } } })] });
+    await h.pass();
+    h.advance(24 * 60 * 60_000);
+    await h.check();
+    expect(h.calls).toHaveLength(2);
+    expect(h.woken).toHaveLength(1);
+  });
+
+  it("a read that fails fails the routine's check, as any routine's, and starts no run", async () => {
     const h = harness({ observed: { items: [] } });
-    await h.loop.tick();
+    await h.pass();
     h.setAccess(false);
     h.advance(15 * 60_000);
-    await h.loop.tick();
-    const tried = h.sessions();
-    h.advance(60_000);
-    await h.loop.tick();
-    h.advance(60_000);
-    await h.loop.tick();
-    expect(h.sessions()).toBe(tried);
-    h.advance(15 * 60_000);
-    await h.loop.tick();
-    expect(h.sessions()).toBe(tried + 1);
-    expect(h.logs.filter((line) => line.includes("no Pulsatrix access"))).toHaveLength(1);
+    await h.check();
+    expect(h.failures.join("\n")).toContain("Perspicax is not available");
+    expect(h.woken).toEqual([]);
   });
 
   it("a skipped watch posts its line once per cause, then stays silent until the cause changes (#3140)", async () => {
     const unresolved = watch({ observe: { tool: "cw_psa_service_query", args: { owner: "{{fact:team.operator_login}}" } } });
     const h = harness({ watches: [unresolved] });
-    await h.loop.tick();
+    await h.pass();
     h.advance(15 * 60_000);
-    await h.loop.tick();
+    await h.check();
     h.advance(15 * 60_000);
-    await h.loop.tick();
+    await h.check();
     expect(h.logs.filter((line) => line.includes("w-open skipped"))).toHaveLength(1);
   });
 
-  it("a cause that changes posts again; an observe that succeeds resets it (#3140)", async () => {
-    const h = harness({ observed: { items: [] } });
-    await h.loop.tick();
-    h.setAccess(false);
-    h.advance(15 * 60_000);
-    await h.loop.tick();
-    h.setAccess(true);
-    h.advance(15 * 60_000);
-    await h.loop.tick();
-    h.setAccess(false);
-    h.advance(15 * 60_000);
-    await h.loop.tick();
-    expect(h.logs.filter((line) => line.includes("no Pulsatrix access"))).toHaveLength(2);
+  it("a pending watch wake of a server before #4250 still reads from disk (#3140)", () => {
+    const dir = tempDir("watch-pending-");
+    new ProactivePendingFile(join(dir, "pending.json")).set("b1", [{ botId: "b1", source: "watch", key: "watch:w-open:k", label: "x", summary: "x", detail: "x", hops: 0, replay: { kind: "watch", watchId: "w-open" } }]);
+    expect(new ProactivePendingFile(join(dir, "pending.json")).take()).toEqual([{ botId: "b1", key: "watch:w-open:k", ref: { kind: "watch", watchId: "w-open" } }]);
   });
 
-  it("a pending watch event carries a replay ref that survives a restart (#3140)", async () => {
-    const h = harness();
-    await h.loop.tick();
-    const event = h.offered[0]!;
-    expect(event.replay).toEqual({ kind: "watch", watchId: "w-open" });
-    const dir = mkdtempSync(join(tmpdir(), "watch-pending-"));
-    try {
-      new ProactivePendingFile(join(dir, "pending.json")).set("b1", [event]);
-      expect(new ProactivePendingFile(join(dir, "pending.json")).take()).toEqual([{ botId: "b1", key: event.key, ref: { kind: "watch", watchId: "w-open" } }]);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it("a replayed watch reads its condition as new at its routine's next check and fires again, even across a restart (#3140)", async () => {
+    const dir = tempDir("watch-memory-");
+    const file = join(dir, "watches.json");
+    const states = join(dir, "states");
+    const first = harness({ memory: new WatchMemory(file), states });
+    await first.pass();
+    expect(first.woken).toHaveLength(1);
+    // the server restarts: the same routines, the memory and states on disk
+    const second = harness({ memory: new WatchMemory(file), states });
+    second.routines.push(...first.routines);
+    second.advance(15 * 60_000);
+    await second.check();
+    expect(second.woken).toHaveLength(0);
+    second.watches.replay("b1", "w-open");
+    second.advance(15 * 60_000);
+    await second.check();
+    expect(second.woken).toHaveLength(1);
   });
 
-  it("a replayed watch is observed again at the next tick and fires again, even across a restart (#3140)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "watch-memory-"));
-    try {
-      const file = join(dir, "watches.json");
-      const first = harness({ memory: new WatchMemory(file) });
-      await first.loop.tick();
-      expect(first.offered).toHaveLength(1);
-      // the server restarts before the wake: the pending file replays the watch
-      const second = harness({ memory: new WatchMemory(file) });
-      second.loop.replay("b1", "w-open");
-      await second.loop.tick();
-      expect(second.offered).toHaveLength(1);
-      expect(new WatchMemory(file).get("person-1", "w-open").due).toBeUndefined();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it("#4250: a condition the loop before the upgrade already told stays told: the routine's first check wakes nothing; a new key wakes", async () => {
+    const ids = watch({ when: "items[].id" });
+    const told = evaluateWhen(ids.when, { items: [{ id: 1 }] }).key;
+    const upgraded = (observed: unknown) => {
+      const file = join(tempDir("watch-upgrade-"), "watches.json");
+      writeFileSync(file, JSON.stringify({ version: 2, people: { "person-1": { "w-open": { last: MONDAY_15H - 60 * 60_000, fired: told } } }, pauses: {} }));
+      return harness({ watches: [ids], observed, memory: new WatchMemory(file) });
+    };
+    const same = upgraded({ items: [{ id: 1 }] });
+    await same.pass();
+    expect(same.calls.map((call) => call.name)).toEqual(["cw_psa_service_query"]);
+    expect(same.woken).toEqual([]);
+    same.advance(15 * 60_000);
+    await same.check();
+    expect(same.woken).toEqual([]);
+    const moved = upgraded({ items: [{ id: 1 }, { id: 2 }] });
+    await moved.pass();
+    expect(moved.woken).toHaveLength(1);
   });
 
-  it("a dropped watch event is released: the condition may fire again (#3140)", async () => {
-    const h = harness();
-    await h.loop.tick();
-    expect(h.offered).toHaveLength(1);
-    h.loop.released("b1", "w-open");
-    h.advance(15 * 60_000);
-    await h.loop.tick();
-    expect(h.offered).toHaveLength(2);
+  it("the watch memory stays readable by a server before #4250: version 2, its fields where they were", () => {
+    const dir = tempDir("watch-file-");
+    const file = join(dir, "watches.json");
+    const memory = new WatchMemory(file);
+    memory.alerted("person-1", "w-open", 5);
+    memory.link("person-1", "w-open", { routine: "r1", botId: "b1", domain: "service", cadence: "15m" });
+    memory.save();
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { version: number; people: Record<string, Record<string, { alertAt?: number }>> };
+    expect(raw.version).toBe(2);
+    expect(raw.people["person-1"]!["w-open"]!.alertAt).toBe(5);
+    expect(new WatchMemory(file).byRoutine("r1")).toMatchObject({ person: "person-1", watchId: "w-open" });
+  });
+});
+
+describe("#4250: a watch alert keeps its identity as a wake", () => {
+  /** The run the scheduler starts from the check (routines.ts copies the
+   * verdict's identity onto the run). */
+  async function alert(): Promise<RoutineRun> {
+    const h = harness({ readOnly: ["cw_psa_service_query"], watches: [watch({ tools: ["cw_psa_service_query", "cw_psa_service_write"] })] });
+    await h.pass();
+    expect(h.woken).toHaveLength(1);
+    return {
+      id: "run-1", routineId: h.woken[0]!.routineId, routineName: "Open tickets.", botId: "b1", runAs: "person-1",
+      status: "completed", output: "Two tickets are late.", scheduledFor: MONDAY_15H, createdAt: MONDAY_15H, proactive: h.woken[0]!.proactive,
+    } as unknown as RoutineRun;
+  }
+
+  it("the check gives the run the watch, its domain and the read-only tools it declares, source watch", async () => {
+    const run = await alert();
+    expect(run.proactive).toEqual({
+      mode: "proactive", hops: 0, sources: ["watch"], alwaysReport: true,
+      watches: [{ id: "w-open", domain: "service", reads: ["cw_psa_service_query"] }],
+    });
+  });
+
+  it("#3431 (decision 3): the person's yes covers the reads the watch declares inside its alert", async () => {
+    const run = await alert();
+    const choices = { domains: { service: { state: "on" as const, botId: "b1", coversReads: true, at: 1, via: "settings" as never, by: "person-1" } } };
+    expect(watchReadCovered({ tool: "mcp__pulsatrix__cw_psa_service_query", botId: "b1", watches: run.proactive?.watches, choices })).toBe(true);
+    // a write it declares is never covered
+    expect(watchReadCovered({ tool: "cw_psa_service_write", botId: "b1", watches: run.proactive?.watches, choices })).toBe(false);
+  });
+
+  it("#3457: the alert's card is a watch wake with its watches (the exits « Arrêter cette veille », « Arrêter ce domaine »)", async () => {
+    const card = routineRunCard(await alert());
+    expect(card.wakeTopic).toBe("watch");
+    expect(card.watches).toEqual([{ id: "w-open", domain: "service" }]);
+    expect(card.forPerson).toBe(true);
+  });
+
+  it("#3423: an old mute of the bot's wakes never quiets a chosen watch's alert", async () => {
+    const host = { backgroundBriefs: { wakeLevel: () => "muted" } };
+    expect(routineAttentionLevel(host, await alert())).toBe("normal");
   });
 });
 
@@ -661,16 +775,32 @@ describe("#3470: one skill inventory per bot", () => {
   it("the listing of every bot of a person builds at most one inventory per bot, whatever the number of watches", async () => {
     const h = harness({ bots: roster(), watches: many(), choices: [] });
     for (let index = 1; index <= BOTS; index += 1) {
-      const listing = await h.loop.offered("person-1", `b${index}`);
+      const listing = await h.watches.offered("person-1", `b${index}`);
       expect(listing.ok).toBe(true);
       if (listing.ok) expect(listing.domains[0]!.watches.filter((row) => row.missing === "skill")).toHaveLength(WATCHES / 2);
     }
     expect(h.inventories()).toBeLessThanOrEqual(BOTS);
   });
 
-  it("the loop's walk of a chosen domain reads the bot's skills once, not once per watch", async () => {
+  it("the sync of a chosen domain reads the bot's skills once, not once per watch", async () => {
     const h = harness({ watches: many() });
-    await h.loop.tick();
+    await h.watches.sync("person-1");
     expect(h.inventories()).toBe(1);
+  });
+});
+
+describe("#4250: the watch routines follow Flow within the hour", () => {
+  it("a watch the organization adds to a chosen domain becomes a routine at the next hourly pass, not before", async () => {
+    const watches: unknown[] = [watch()];
+    const h = harness({ watches });
+    await h.watches.syncAll();
+    expect(h.routines).toHaveLength(1);
+    watches.push(watch({ id: "w-late", summary: "Late tickets." }));
+    h.advance(61 * 60_000);
+    await h.watches.syncStale();
+    // the listing is cached an hour: read again now
+    expect(h.routines.map((row) => row.name)).toEqual(["Open tickets.", "Late tickets."]);
+    await h.watches.syncStale();
+    expect(h.routines).toHaveLength(2);
   });
 });

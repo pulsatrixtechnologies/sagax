@@ -130,6 +130,24 @@ describe("feedback on brief items and cards (#2694)", () => {
     expect(store.settings("bot-1")).toEqual(before);
   });
 
+  it("#4250: the checklist switch is the checklist routine's own on and off, never a second mute", async () => {
+    const store = storeAt();
+    const switched: Array<[string, boolean]> = [];
+    const routes = createBackgroundBriefRoutes({
+      store, owns: () => true, fastModel: () => "fast", keep: () => {}, connected: () => [],
+      reads: async () => { throw new Error("no read"); },
+      checklist: (botId, on) => { switched.push([botId, on]); return on; },
+    });
+    let sent: Record<string, unknown> = {};
+    await routes({
+      req: {} as never, res: { setHeader() {} } as never, path: "/api/bots/bot-1/background-brief", method: "PUT", auth: {} as never,
+      readBody: async () => ({ checklist: false }), json: (_res: unknown, _code: number, payload: Record<string, unknown>) => { sent = payload; }
+    } as never);
+    expect(switched).toEqual([["bot-1", false]]);
+    expect(sent).toMatchObject({ checklist: false });
+    expect(store.wakeMuted("bot-1", "heartbeat")).toBe(false);
+  });
+
   it("routes: brief item feedback remembers, card feedback reaches its handler", async () => {
     const store = storeAt();
     const [added] = store.recordPass("bot-1", pass([piece("Outlook", "Répondre à Carla 2026-11-08")]));

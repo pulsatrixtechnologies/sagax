@@ -4827,6 +4827,39 @@ describe("routine code pre-check: a named check run as code (#2018)", () => {
     expect(h.started[0].prompt).toMatch(/\[UNTRUSTED ROUTINE WATCH DATA [0-9a-f]{32}\][\s\S]*make it blue/);
   });
 
+  it("#4250: a check that stands for a proactive kind gives the run its wake identity (a Flow watch alert keeps its watches)", async () => {
+    const h = harness(start);
+    const identity = { mode: "proactive" as const, hops: 0, sources: ["watch"], alwaysReport: true as const, watches: [{ id: "w-open", domain: "service", reads: ["cw_psa_service_query"] }] };
+    h.options.evaluateCode = async () => ({ wake: true, note: "late tickets", proactive: identity });
+    const routine = h.manager.create({ ...input(), precheck: { kind: "code", check: "flow_watch" } });
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    await settle(); await settle();
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRuns()[0]!.proactive).toEqual(identity);
+    // a check without one leaves the run an ordinary routine run
+    const plain = harness(start);
+    plain.options.evaluateCode = async () => ({ wake: true, note: "x" });
+    const other = plain.manager.create(input());
+    plain.setNow(other.nextRunAt!);
+    await plain.manager.tick();
+    await settle(); await settle();
+    await plain.manager.tick();
+    expect(plain.manager.listRuns()[0]!.proactive).toBeUndefined();
+  });
+
+  it("#4250: on disk, a code check the previous release does not know is a never-waking file watch; this release reads its check back", () => {
+    const h = harness(start);
+    const routine = h.manager.create({ ...input(), precheck: { kind: "code", check: "heartbeat" } });
+    const brief = h.manager.create({ ...input(), name: "Brief", precheck: { kind: "code", check: "daily_brief" } });
+    const disk = JSON.parse(readFileSync(h.options.file!, "utf8")) as { routines: Array<{ id: string; precheck: unknown }> };
+    expect(disk.routines.find((row) => row.id === routine.id)!.precheck).toMatchObject({ kind: "watch", source: { type: "files" }, wakeOn: "match" });
+    expect(disk.routines.find((row) => row.id === brief.id)!.precheck).toEqual({ kind: "code", check: "daily_brief" });
+    const reread = new RoutineManager({ ...h.options });
+    expect(reread.getRoutine(routine.id)!.precheck).toEqual({ kind: "code", check: "heartbeat" });
+  });
+
   it("fails the run when the server has no such check", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

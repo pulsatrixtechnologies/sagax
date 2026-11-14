@@ -1,6 +1,8 @@
-// #3423: the watch loop walks the person's choices (the stopgap constant of
-// #3416 is gone). Reads the source of server/index.ts as text: importing it
-// would start the whole server.
+// #3423: the watches walk the person's choices (the stopgap constant of
+// #3416 is gone). #4250 (S5 `one-probe-engine`): a chosen watch is a routine
+// of the carrying bot, read through the one probe engine; the watch loop and
+// its timer are gone. Reads the source of server/index.ts as text: importing
+// it would start the whole server.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,28 +10,30 @@ import { describe, expect, it } from "vitest";
 
 const INDEX = join(dirname(fileURLToPath(import.meta.url)), "..", "index.ts");
 
-describe("Pulsatrix watch loop wiring", () => {
+describe("Pulsatrix watch wiring", () => {
   const source = readFileSync(INDEX, "utf8");
+  const block = source.slice(source.indexOf("const flowWatches = new FlowWatches({"), source.indexOf("const flowWatches = new FlowWatches({") + 4_000);
 
   it("has no switch of its own any more: the person's choice is the switch", () => {
     expect(source).not.toMatch(/PULSATRIX_WATCHES_ENABLED/);
   });
 
   it("walks the people's choices, never the stored mode of every bot", () => {
-    const block = source.slice(source.indexOf("const flowWatchLoop = new FlowWatchLoop({"), source.indexOf("const flowWatchLoop = new FlowWatchLoop({") + 600);
     expect(block).toMatch(/choices: \(\) => proactiveChoices\.chosen\(\)/);
-    expect(block).not.toMatch(/store\.bots/);
+    expect(block.slice(0, 600)).not.toMatch(/store\.bots/);
   });
 
-  it("schedules the watch tick once, on an organization server", () => {
-    const ticks = [...source.matchAll(/setInterval\(\(\) => void flowWatchLoop\.tick\(\)/g)];
-    expect(ticks).toHaveLength(1);
-    const before = source.slice(0, ticks[0]!.index).split("\n").slice(-2).join("\n");
-    expect(before).toMatch(/^if \(!process\.env\.VITEST && IDENTITY\.kind === "perspicax"\) \{$/m);
+  it("#4250: has no watch loop and no timer of its own; its routines' code check reads through the one probe engine", () => {
+    expect(source).not.toMatch(/flowWatchLoop|FlowWatchLoop|WATCH_TICK_MS/);
+    expect(block).toMatch(/evaluate: \(routine, precheck\) => routineWatchEvaluator\(routine, precheck\)/);
+    expect(source).toMatch(/if \(precheck\.check === FLOW_WATCH_CHECK\) return flowWatches\.check\(routine\);/);
+    // its readings are kept with the other watches' (never pruned as orphans)
+    expect(source).toMatch(/routineWatchStates\.prune\([^\n]*FLOW_WATCH_CHECK/);
   });
 
-  it("the person's choice passes the bot's switch in the watch engine", () => {
-    const block = source.slice(source.indexOf("const flowWatchLoop = new FlowWatchLoop({"));
-    expect(block.slice(0, block.indexOf("offer: (event) => offerProactive(event)"))).toMatch(/proactiveMode: "proactive" as const/);
+  it("#4250: the routines follow the person's choices, at start and within the hour on a pass the server already makes", () => {
+    expect(source).toMatch(/proactiveChoices\.onChange = \(person\) => \{ void flowWatches\.sync\(person\)/);
+    expect(source).toMatch(/void flowWatches\.syncAll\(\)/);
+    expect(source).toMatch(/briefCardsPass\(\);[\s\S]{0,300}void flowWatches\.syncStale\(\)/);
   });
 });

@@ -148,31 +148,33 @@ describe("moving saved bots off the engine", () => {
     // Custom belongs to one provider's tool semantics: it never crosses engines.
     const custom = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
     store.patchBot(custom.id, { approvalMode: "custom", alwaysAllow: ["Bash(ls:*)"] });
-    store.patchTask(custom.id, custom.threadId, { approvalMode: "custom", alwaysAllow: ["Bash(ls:*)"] });
+    // #4200 (one approval level per bot, #4226): a conversation holds no
+    // level of its own, only the Always allow rules saved in it.
+    store.patchTask(custom.id, custom.threadId, { alwaysAllow: ["Bash(ls:*)"] });
     // Full carries to any engine that runs it (2026-10-26, no admin gating).
     const full = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
     store.patchBot(full.id, { approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
-    store.patchTask(full.id, full.threadId, { approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
+    store.patchTask(full.id, full.threadId, { alwaysAllow: ["Bash(ls:*)"] });
     const auto = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
     store.patchBot(auto.id, { approvalMode: "auto" });
-    store.patchTask(auto.id, auto.threadId, { approvalMode: "auto" });
 
     const moves = store.retireInstances(removed, replacement, noBoat);
 
     const reloaded = new Store(newBotDefault);
     expect(reloaded.bot(custom.id)).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
-    expect(reloaded.taskByThread(custom.id, custom.threadId)).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
+    expect(reloaded.taskByThread(custom.id, custom.threadId)?.alwaysAllow).toEqual([]);
+    expect(reloaded.projectBotForTask(custom.id, custom.threadId)).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
     expect(moves.find(move => move.botId === custom.id)?.askNow).toBe(true);
     // A level the new engine has as well carries across, as on any switch (Full included, #2697).
     expect(reloaded.bot(full.id)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
-    expect(reloaded.taskByThread(full.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
+    expect(reloaded.projectBotForTask(full.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
     expect(moves.find(move => move.botId === full.id)?.askNow).toBe(false);
     expect(reloaded.bot(auto.id)?.approvalMode).toBe("auto");
-    expect(reloaded.taskByThread(auto.id, auto.threadId)?.approvalMode).toBe("auto");
+    expect(reloaded.projectBotForTask(auto.id, auto.threadId)?.approvalMode).toBe("auto");
     expect(moves.find(move => move.botId === auto.id)?.askNow).toBe(false);
   });
 
-  it("keeps the level of a conversation on another engine when the bot's own level goes back to Ask", () => {
+  it("keeps a conversation on another engine on its engine, at its bot's level, when the bot's own level goes back to Ask", () => {
     const store = new Store(newBotDefault);
     // The first conversation has no level of its own: it follows the bot's.
     const bot = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
@@ -189,10 +191,13 @@ describe("moving saved bots off the engine", () => {
     const reloaded = new Store(newBotDefault);
     // The bot moved and its Custom access goes back to Ask, as on any switch.
     expect(reloaded.bot(bot.id)).toMatchObject({ modelSelection: replacement, approvalMode: "ask", alwaysAllow: [] });
-    // The conversation stays on Codex, so nothing about its level changes.
+    // The conversation stays on Codex. #4200 (one approval level per bot,
+    // #4226): it holds no level of its own, so it runs at its bot's level,
+    // Ask now; the engine move no longer writes a copy of the old one.
     expect(reloaded.projectBotForTask(bot.id, elsewhere)).toMatchObject({
-      modelSelection: { instanceId: "codex", model: "codex-model" }, approvalMode: "custom", alwaysAllow: ["Bash(ls:*)"],
+      modelSelection: { instanceId: "codex", model: "codex-model" }, approvalMode: "ask", alwaysAllow: [],
     });
+    expect(reloaded.taskByThread(bot.id, elsewhere)?.approvalOwn).toBeUndefined();
     // It is the bot's open conversation, so it still hears what moved: the
     // bot's own engine and level, not its own.
     expect(moves).toEqual([

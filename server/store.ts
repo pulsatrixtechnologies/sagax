@@ -3271,6 +3271,10 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
           // #4200: the conversation follows its bot's level; the turn
           // judges what its engine runs (engine-unsupported).
           const ask = needsAsk(before);
+          // A rule the conversation saved belongs to the engine it was saved
+          // on (Custom never crosses engines): it goes with a level the new
+          // engine would have to confirm, as the bot's own list does.
+          if (ask && task.alwaysAllow?.length) taskPatch.alwaysAllow = [];
           if (task.modelSelection) taskPatch.modelSelection = structuredClone(replacement);
           const scope = botMoved && task.threadId === bot.threadId ? "bot" : "conversation";
           moves.push({ botId: bot.id, threadId: task.threadId, scope, ...cloudAfterMove(task.surface, task.surfaceSource),

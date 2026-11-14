@@ -28,7 +28,7 @@ export function createWaitingCardSkip(getHost: () => Host): any {
         host.cardTurnSettledByRequest?.(id, request);
         host.askMessageByRequest.delete(`${id}:${request}`);
         host.pendingCommandRules.delete(`${id}:${request}`);
-        host.withdrawApprovalNotice(id, request);
+        host.withdrawApprovalNotice(id, request, "answered");
         host.settleWaitingActivity(id);
       },
       localeFor,

@@ -14,7 +14,7 @@ export function handleRequestResolved(event: any, ctx: any, host: any): void {
       if (event.requestId) safetySettleRequest(event.requestId, event.behavior, event.source);
       if (event.requestId) takeSafetyNote(event.requestId);
       if (event.requestId) host.agentCardGuard.resolved(event.requestId, event.behavior, event.source);
-      if (event.requestId) host.withdrawApprovalNotice(event.threadId, event.requestId);
+      if (event.requestId) host.withdrawApprovalNotice(event.threadId, event.requestId, requestOutcome(event.source));
       if (event.requestId) host.settleWaitingOnPersonChips(event.threadId, event.requestId, { behavior: event.behavior, source: event.source });
       // answered (by whoever): the turn is working again, unless it settled
       const waiting = bot ?? (speaker ? host.store.bot(speaker.botId) : undefined);
@@ -78,4 +78,15 @@ export function handleRequestResolved(event: any, ctx: any, host: any): void {
       break;
     }
   }
+}
+
+/** #4250 (S9): how a resolved request's card ended, for the signal ledger:
+ * answered only when a person answered it (their own card, from the chat,
+ * or a teammate's answer), expired on its timeout, retired otherwise (the
+ * driver cancelled it, a rule or Full access settled it, a cap or an
+ * unknown tool closed it). */
+const PERSON_SOURCES: ReadonlySet<string> = new Set(["user", "chat", "own", "peer"]);
+export function requestOutcome(source: unknown): "answered" | "expired" | "retired" {
+  if (source === "timeout") return "expired";
+  return typeof source === "string" && PERSON_SOURCES.has(source) ? "answered" : "retired";
 }

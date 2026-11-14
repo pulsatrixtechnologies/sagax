@@ -13,6 +13,7 @@ import type { QuietHours } from "../../shared/signal-levels.ts";
 import type { PushMessage } from "../push/payload.ts";
 import type { ReachChannel, ReachOutbound } from "./channel.ts";
 import { composeReachText } from "./channel.ts";
+import { SignalLedger } from "../proactive/signal-ledger.ts";
 import { CARD_REMINDER_AFTER_MS, ReachMe, type ReachAuditRow, type ReachCard, type ReachRespondBody } from "./service.ts";
 import { createReachCodeStore, createReachMeStore } from "./store.ts";
 
@@ -22,7 +23,7 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Nimbus", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
 const PUSH: PushMessage = { kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 };
 
-function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number; quiet?: QuietHours | null; channels?: LevelChannels } = {}) {
+function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number; quiet?: QuietHours | null; channels?: LevelChannels; signals?: SignalLedger } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-reach-"));
   dirs.push(dir);
   let now = options.now ?? Date.parse("2026-10-26T13:00:00Z");
@@ -57,6 +58,7 @@ function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | n
     log: () => {},
     // #4250 (S2): the person's one quiet-hours setting and channels per level
     attention: () => ({ quiet: options.quiet ?? null, ...(options.channels ? { channels: options.channels } : {}) }),
+    ...(options.signals ? { signals: options.signals } : {}),
   });
   return { reach, store, codes, sent, responses, pushed, audit, setCard: (next: ReachCard | null) => { card = next; }, setNow: (next: number) => { now = next; } };
 }
@@ -81,6 +83,22 @@ describe("Reach me: a card left open is recalled (#2645)", () => {
     setCard(null);
     setNow(1_000 + 10 * CARD_REMINDER_AFTER_MS[1]); reach.tick();
     expect([pushed.length, reach.openCardCount()]).toEqual([2, 0]);
+  });
+
+  it("#4250 (S9): a card answered after its last reminder ends answered in the ledger, one that expired ends expired", () => {
+    let clock = 1_000;
+    const signals = new SignalLedger({ now: () => clock });
+    const { reach, setNow } = setup(null, { now: 1_000, signals });
+    reach.cardRaised(PUSH);
+    reach.cardRaised({ ...PUSH, requestId: "r2" });
+    for (const step of CARD_REMINDER_AFTER_MS) { clock = 1_000 + step; setNow(clock); reach.tick(); }
+    expect(reach.openCardCount()).toBe(0);
+    clock += 60_000;
+    reach.cardSettled("t1", "r1", "answered");
+    reach.cardSettled("t1", "r2", "expired");
+    const [answered, expired] = ["r1", "r2"].map((request) => signals.entries({ kind: "reach-card" }).find(({ entry }) => entry.ref?.requestId === request)?.entry);
+    expect(answered).toMatchObject({ state: "answered", answeredAt: clock });
+    expect(expired?.state).toBe("expired");
   });
 
   it("an answered card is forgotten; push off for that bot sends nothing; per-bot hours no longer hold it (#4250 S2)", () => {

@@ -6,6 +6,11 @@ import { replyAuthor, replySnippet } from "@/lib/replies";
 import { t } from "@/lib/i18n";
 import type { Message } from "@/state/store";
 
+/** The soft quote strip, shared by a reply and a page's selected passage on
+ * a sent message (#4099). */
+export const QUOTE_STRIP = "flex min-w-0 items-center gap-2 rounded-2xl bg-ink/[0.06] text-ink-secondary";
+export const QUOTE_STRIP_COMPACT = "py-1 ps-2.5 pe-2 text-[12.5px] leading-5";
+
 /** The message a sent message answers, in the same soft strip family as the
  * composer's reply strip: a speech-bubble quote, who, a one-line excerpt. A
  * click jumps to it. */
@@ -32,10 +37,7 @@ export function ReplyQuote({
     </>
   );
   return (
-    <div className={cn(
-      "flex min-w-0 items-center gap-2 rounded-2xl bg-ink/[0.06] text-ink-secondary",
-      compact ? "py-1 ps-2.5 pe-2 text-[12.5px] leading-5" : "py-1.5 ps-3 pe-1.5 text-[13px] leading-5",
-    )}>
+    <div className={cn(QUOTE_STRIP, compact ? QUOTE_STRIP_COMPACT : "py-1.5 ps-3 pe-1.5 text-[13px] leading-5")}>
       {onJump ? (
         <button type="button" onClick={onJump} className="flex min-w-0 flex-1 items-center gap-2 rounded-xl text-start hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" title={t("chat.reply.jump")}>
           {body}

@@ -58,6 +58,8 @@ import { useWidgetTheme } from "./WidgetFrame";
 import { encodeSkinTokens } from "@/lib/page-theme";
 import { MenuItem, PopoverMenu } from "./bot-settings/FilesSection";
 import { PageCapabilityStrip, useCapabilityStripVisible, usePageCapabilityBroker } from "./PageCapabilityStrip";
+import { PageSelectionAsk } from "./PageSelectionAsk";
+import type { PageContextRef } from "../../shared/data-context";
 
 export { needsLinkConfirm, pageErrorText };
 
@@ -294,6 +296,10 @@ export interface PageSurfaceProps {
   chat?: PageChatToggle;
   /** Drawn over the page, at the bottom (the conversation's composer). */
   footer?: ReactNode;
+  /** Ask the bot about a selected passage, in place (#4099): the person's
+   * own page over their conversation with its bot. Absent elsewhere (a
+   * window of its own, a reading link). */
+  ask?: PageAsk;
   /** A window of its own, with no conversation beside it: the page is asked
    * again now and then, so a new version from the bot is drawn in place. */
   follow?: boolean;
@@ -309,6 +315,16 @@ export interface PageChatToggle {
   onToggle(): void;
 }
 
+export interface PageAsk {
+  avatar: ReactNode;
+  botName: string;
+  /** The bot's conversation is working. */
+  working: boolean;
+  /** Send the words as the person's message in the bot's conversation, about
+   * this page and its selected passage. */
+  onSend(text: string, page: PageContextRef): void;
+}
+
 export const PAGE_FOLLOW_MS = 5_000;
 
 /** The top bar is under its narrow container query (@max-[34rem]/pagehead):
@@ -320,7 +336,7 @@ export function narrowBar(header: HTMLElement | null): boolean {
   return width > 0 && width < 34 * rem;
 }
 
-export function PageSurface({ pageId, version: initialVersion, initialTitle = "", latestVersion, onClose, onChange, moreItems, chat, footer, follow = false, className }: PageSurfaceProps) {
+export function PageSurface({ pageId, version: initialVersion, initialTitle = "", latestVersion, onClose, onChange, moreItems, chat, footer, ask, follow = false, className }: PageSurfaceProps) {
   const { dispatch } = useStore();
   const policy = usePagesPolicy();
   const [page, setPage] = useState<PublishedPageSummary | null>(null);
@@ -440,14 +456,14 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   // browser tab the browser's own chrome stays and so does the header.
   const hideChrome = follow && Boolean(windowSelf);
   const chrome = useHoverChrome(hideChrome, sharing || panel !== null, windowSelf?.onPointer);
-  const innerFrame = () => {
+  const innerFrame = useCallback(() => {
     // the page's own frame, inside this viewer's wrapper, and nothing else
     try {
       return frameRef.current?.contentWindow?.frames[0] ?? null;
     } catch {
       return null;
     }
-  };
+  }, []);
   // what the page may ask of Sagax (#3413): the same broker as the reading link's
   const broker = usePageCapabilityBroker({ pageId, drawn: `${version ?? ""}:${reloads}`, ...(version !== null ? { version } : {}), preview: () => frameRef.current, frame: innerFrame });
   const capsShown = useCapabilityStripVisible(broker);
@@ -661,6 +677,19 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
             <PageFrame src={src} frameRef={frameRef} title={t("pages.previewTitle", { title })} theme={theme} className="min-h-0 w-full flex-1" />
           ) : (
             <div className="flex flex-1 items-center justify-center"><Loader2 size={16} className="animate-spin text-ink-secondary" /></div>
+          )}
+          {/* the in-place ask about a selected passage (#4099); annotation
+              mode keeps the selection for its own notes */}
+          {ask && src && !annotating && !gone && (
+            <PageSelectionAsk
+              frame={innerFrame}
+              frameElement={frameRef}
+              drawn={src}
+              avatar={ask.avatar}
+              botName={ask.botName}
+              working={ask.working}
+              onSend={(text, selection) => ask.onSend(text, { pageId, title, ...(version !== null ? { version } : {}), selection })}
+            />
           )}
           {footer}
         </div>

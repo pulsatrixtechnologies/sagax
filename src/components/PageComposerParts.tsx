@@ -1,13 +1,20 @@
 // The conversation around an open page (2026-10-28; lot 5 side pane 2026-10-31):
 //   - PageRefChip: a message sent while the page was open carries the page as
 //     a chip over its words (icon and title); a click opens that page;
+//   - PageSelectionQuote: under the chip, the passage the person selected and
+//     asked about (#4099), in the reply's quote strip;
 //   - PageBotStatus: above the composer in the desktop side pane, the bot's
 //     state or its latest answer in one line, with its avatar ("On it", then
 //     its reply), so the person can follow the bot while reading the page.
+import { MessageSquareQuote } from "lucide-react";
+
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { openPage } from "@/lib/open-page";
 import type { Message } from "@/state/store";
 import { PageGlyph } from "./PageViewer";
+import { QUOTE_STRIP, QUOTE_STRIP_COMPACT } from "./ReplyQuote";
+import type { PageQuote } from "../../shared/page-threads";
 
 export function PageRefChip({ page, botId, threadId }: { page: { pageId: string; title: string; version?: number }; botId: string; threadId: string }) {
   return (
@@ -17,6 +24,19 @@ export function PageRefChip({ page, botId, threadId }: { page: { pageId: string;
       <PageGlyph size={16} className="rounded-[4px]" />
       <span className="min-w-0 truncate">{page.title || t("pages.untitled")}</span>
     </button>
+  );
+}
+
+/** The passage of the page a message is about (#4099): the words, in the
+ * quote strip a reply uses; a part of the page without words, its tag. */
+export function PageSelectionQuote({ selection }: { selection: PageQuote }) {
+  const words = selection.quote.replace(/\s+/g, " ").trim() || `<${selection.tag}>`;
+  return (
+    <div data-page-ref-quote="" className={cn(QUOTE_STRIP, QUOTE_STRIP_COMPACT, "mb-1.5 max-w-full")}>
+      <MessageSquareQuote size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+      <span className="sr-only">{t("pages.selection.tag")}: </span>
+      <span dir="auto" className="min-w-0 flex-1 truncate">{words}</span>
+    </div>
   );
 }
 

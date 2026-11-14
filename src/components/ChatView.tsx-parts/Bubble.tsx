@@ -28,7 +28,7 @@ import { TerminalChatEmbed } from "@/components/terminal/TerminalChatEmbed";
 import { RemoteSessionCard } from "@/components/remote-session/RemoteSessionCard";
 import { ResourceUsageCard } from "@/components/resource-usage/ResourceUsageCard";
 import { ConnectorSetupCard } from "@/components/connector-setup/ConnectorSetupCard";
-import { PageRefChip } from "../PageComposerParts";
+import { PageRefChip, PageSelectionQuote } from "../PageComposerParts";
 import { ReplyQuote } from "../ReplyQuote";
 import { AttachmentGallery, collectMessageFiles, imagePathOf, replyAttachmentGroup, splitMessageAttachments } from "../AttachmentGallery";
 import { prefersWideBubble } from "@/lib/rich-blocks";
@@ -331,7 +331,10 @@ export const Bubble = memo(function Bubble({
           )}
           {/* sent from an open page: the page it is about (src/components/PageComposerParts.tsx) */}
           {user && message.dataContext?.page && (
-            <div><PageRefChip page={message.dataContext.page} botId={botId} threadId={threadId} /></div>
+            <div>
+              <PageRefChip page={message.dataContext.page} botId={botId} threadId={threadId} />
+              {message.dataContext.page.selection && <PageSelectionQuote selection={message.dataContext.page.selection} />}
+            </div>
           )}
           {user && webhookView ? (
             <div className="min-w-[300px] max-w-[520px]">

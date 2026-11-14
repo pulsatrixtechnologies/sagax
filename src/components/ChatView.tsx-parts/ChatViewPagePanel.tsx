@@ -6,6 +6,8 @@ import { PageBotStatus, pageBotStatusLine } from "../PageComposerParts";
 import { PageSurface } from "../PageViewer";
 import { MenuItem } from "../bot-settings/FilesSection";
 import { closePagePanel, openPage as openPageAt, renameOpenPage } from "@/lib/open-page";
+import { withPageContext } from "@/lib/composer-attachments";
+import type { PageContextRef } from "../../../shared/data-context";
 import { PAGE_CHAT_SURFACE_DEFAULT, type PageChatSurface } from "@/lib/page-chat-layout";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
@@ -14,6 +16,15 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { Action, Bot, ConfigStatus, Message } from "@/state/store";
 import { NewConversationInstead } from "./NewConversationInstead";
+
+/** The in-place ask about a selected passage (#4099), as the person's
+ * ordinary message in the bot's conversation: the page and the passage go in
+ * its dataContext, and a sendId as the composer's own, so the message, its
+ * page chip and the passage show in the chat at once (a busy bot queues it). */
+export function pageAskSend(botId: string, text: string, page: PageContextRef): Action {
+  const dataContext = withPageContext(undefined, text, { ...page, botId }, { botId });
+  return { type: "send", botId, text, sendId: crypto.randomUUID(), ...(dataContext ? { dataContext } : {}) };
+}
 
 /** Open page surface (stage cover or beside) with its optional docked composer. */
 export function ChatViewPagePanel({
@@ -109,6 +120,18 @@ export function ChatViewPagePanel({
           disabled: !pageChatWide,
           onToggle: () => setPageChatSurface(pageChatSurface === "stage" ? "beside" : "stage"),
         }}
+        // #4099: select text on the page and ask its bot about it, in place.
+        // Only over this bot's own conversation, where the person can write;
+        // the words go as their ordinary message there, with the page and the
+        // passage, and the bot's new version is drawn in place.
+        {...(canWrite !== false && (!openPage.botId || openPage.botId === bot.id) ? {
+          ask: {
+            avatar: <BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={28} />,
+            botName: bot.name,
+            working: bot.busy === true,
+            onSend: (text: string, page: PageContextRef) => dispatch(pageAskSend(bot.id, text, page)),
+          },
+        } : {})}
         footer={pageStage ? (
           <div
             ref={composerDockRef}

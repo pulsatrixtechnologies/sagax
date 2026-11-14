@@ -83,12 +83,9 @@ export function createOutboundCallRoutes(deps: OutboundCallRouteDeps): RouteHand
       const row = deps.calls.get(recording[1]!);
       if (!row || row.principalId !== principalId) return json(res, 404, { error: "No such recording.", code: "unknown_call" });
       if (!row.result) return json(res, 409, { error: "The call has no recording yet.", code: "not_ready" });
-      if (!deps.recording) {
-        // Synthetic empty body keeps the player mountable in gallery / tests
-        res.writeHead(204, { "cache-control": "private, no-store" });
-        res.end();
-        return;
-      }
+      // #4304: an empty 204 drew a 0:00 player with nothing in it; with no
+      // recording to fetch, the answer says so and the card hides its player
+      if (!deps.recording) return json(res, 404, { error: "This call has no recording.", code: "no_recording" });
       const file = await deps.recording(principalId, recording[1]!);
       if ("error" in file) return json(res, file.status, { error: file.error, code: file.code });
       res.writeHead(200, {

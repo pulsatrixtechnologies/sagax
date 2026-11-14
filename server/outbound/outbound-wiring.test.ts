@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PurchaseListing } from "../vault/credential-vault.ts";
-import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard, purchaseCardFallback, purchaseOutboundCard } from "./outbound-wiring.ts";
+import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard, purchaseCardFallback, purchaseOutboundCard, type OutboundWiringDeps } from "./outbound-wiring.ts";
 import type { Message } from "../store.ts";
 import { autoVerdict } from "../approvals/auto-approve.ts";
 import { setOrgApprovalPolicySource } from "../rules/custom-rules-org.ts";
@@ -17,7 +17,7 @@ const ARGS = { to: "+1 514 555 0142", objective: "Confirmer le rendez-vous de ma
 /** voice_call on the person's own line: every call goes through it (#4193). */
 const voiceMock = () => vi.fn(async (_turn: unknown, args: Record<string, unknown>) => (args.dry_run ? { ok: true as const, isError: false, value: { dry_run: true } } : { ok: true as const, isError: false, value: { sid: SID } }));
 
-function setup(opts: { seedConsent?: boolean } = {}) {
+function setup(opts: { seedConsent?: boolean; extra?: Partial<OutboundWiringDeps> } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "outbound-wiring-"));
   dirs.push(dir);
   const rows: Message[] = [];
@@ -30,7 +30,7 @@ function setup(opts: { seedConsent?: boolean } = {}) {
   const twilio = vi.fn(async (_turn: unknown, args: Record<string, unknown>) => (args._dry_run ? { ok: true as const, isError: false, value: { dry_run: true } } : { ok: true as const, isError: false, value: { sid: SID } }));
   const voice = voiceMock();
   const wake = vi.fn();
-  const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "Jean", language: () => "fr", twilio, voice, wake });
+  const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "Jean", language: () => "fr", twilio, voice, wake, ...opts.extra });
   wiring.calls.updateSettings({ enabled: true, callbackNumber: "+14385550199" });
   if (opts.seedConsent !== false) wiring.consentStore.accept("jean", "bot-a");
   return { wiring, rows, twilio, voice, wake };
@@ -175,5 +175,86 @@ describe("the Primary Bot's call answers keep the organization's rules (the main
     const pending = wiring.primaryPending("jean", false);
     expect(pending).toEqual([expect.objectContaining({ threadId: "t-2", options: ["allow", "deny"] })]);
     expect(pending[0]).not.toHaveProperty("always");
+  });
+});
+
+describe("#4304: the live call card's End call and its ended card", () => {
+  const notMounted = { ok: false as const, code: "profile_not_mounted" as const, error: "the Perspicax connection is not mounted in this turn" };
+
+  async function placedLive(extra: Partial<OutboundWiringDeps> = {}) {
+    const made = setup({ extra: { principalSub: () => "sub-jean", ...extra } });
+    const context = { principalId: "jean", botId: "bot-a", threadId: "t-1", room: false };
+    await made.wiring.placeCall({ ...context, generation: "g1" }, ARGS);
+    const id = made.wiring.primaryPending("jean", false)[0]!.requestId;
+    made.wiring.calls.answer("jean", id, "call", undefined, "+1 514 555 0142", true);
+    await made.wiring.placeCall({ ...context, generation: "g2" }, ARGS);
+    expect(made.wiring.calls.get(id)?.status).toBe("placed");
+    made.twilio.mockClear();
+    return { ...made, id };
+  }
+
+  it("ends the call outside any turn on the person's own access", async () => {
+    const personTwilio = vi.fn(async (_principalId: string, _botId: string, _args: Record<string, unknown>) => ({ ok: true as const, isError: false, value: { status: "completed" } }));
+    const { wiring, rows, twilio, id } = await placedLive({ personTwilio });
+    twilio.mockResolvedValue(notMounted as never);
+    expect(await wiring.personHangUp("jean", id)).toEqual({ ok: true });
+    expect(personTwilio).toHaveBeenCalledWith("jean", "bot-a", expect.objectContaining({ resource: "Calls", action: "update", id: SID, set: { Status: "completed" } }));
+    expect(rows[0]!.outbound?.phase).toBe("ended");
+  });
+
+  it("a bot's hang up whose turn holds no connection reaches the call on the person's access", async () => {
+    const personTwilio = vi.fn(async () => ({ ok: true as const, isError: false, value: { status: "completed" } }));
+    const { wiring, twilio } = await placedLive({ personTwilio });
+    twilio.mockResolvedValue(notMounted as never);
+    const answer = await wiring.hangUp({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g9" });
+    expect(answer.isError).toBeUndefined();
+    expect(personTwilio).toHaveBeenCalledTimes(1);
+  });
+
+  it("attempts nothing and shows nothing once the call has ended", async () => {
+    const personTwilio = vi.fn(async () => ({ ok: true as const, isError: false, value: {} }));
+    const { wiring, twilio, id } = await placedLive({ personTwilio });
+    expect(wiring.callProgress({ sub: "sub-jean", ref: id, phase: "ended" })).toBe("applied");
+    expect(await wiring.personHangUp("jean", id)).toEqual({ ok: true });
+    wiring.callResult({ sub: "sub-jean", result: { ref: id, callSid: SID, outcome: "completed", endedBy: "hang-up", durationSec: 16, points: [], commitments: [] } });
+    expect(await wiring.personHangUp("jean", id)).toEqual({ ok: true });
+    expect(personTwilio).not.toHaveBeenCalled();
+    expect(twilio).not.toHaveBeenCalled();
+  });
+
+  it("End call before the call is placed is not a success: approved and placing answer not_live, nothing is reached", async () => {
+    const personTwilio = vi.fn(async () => ({ ok: true as const, isError: false, value: {} }));
+    const made = setup({ extra: { principalSub: () => "sub-jean", personTwilio } });
+    const context = { principalId: "jean", botId: "bot-a", threadId: "t-1", room: false };
+    await made.wiring.placeCall({ ...context, generation: "g1" }, ARGS);
+    const id = made.wiring.primaryPending("jean", false)[0]!.requestId;
+    made.wiring.calls.answer("jean", id, "call", undefined, "+1 514 555 0142", true);
+    expect(made.wiring.calls.get(id)?.status).toBe("approved");
+    expect(await made.wiring.personHangUp("jean", id)).toMatchObject({ status: 409, code: "not_live" });
+    made.wiring.calls.get(id)!.status = "placing";
+    expect(await made.wiring.personHangUp("jean", id)).toMatchObject({ status: 409, code: "not_live" });
+    expect(personTwilio).not.toHaveBeenCalled();
+  });
+
+  it("a call Twilio says is already over ends the card without an error", async () => {
+    const personTwilio = vi.fn(async () => ({ ok: true as const, isError: true, value: { code: 21220, message: "Call is not in-progress. Cannot redirect." } }));
+    const { wiring, rows, id } = await placedLive({ personTwilio });
+    expect(await wiring.personHangUp("jean", id)).toEqual({ ok: true });
+    expect(rows[0]!.outbound?.phase).toBe("ended");
+  });
+
+  it("a failure reads as one plain sentence, never the connection's internal words", async () => {
+    const { wiring, twilio, id } = await placedLive();
+    twilio.mockResolvedValue(notMounted as never);
+    const outcome = await wiring.personHangUp("jean", id);
+    expect(outcome).toMatchObject({ status: 502, code: "hangup_failed" });
+    expect(JSON.stringify(outcome)).not.toMatch(/mounted|turn|Perspicax/i);
+  });
+
+  it("an ended call's card carries no recording player: no recording is made", async () => {
+    const { wiring, rows, id } = await placedLive();
+    expect(wiring.callResult({ sub: "sub-jean", result: { ref: id, callSid: SID, outcome: "completed", durationSec: 16, points: ["Okay"], commitments: [] } })).toBe("applied");
+    expect(rows[0]!.outbound?.result).toMatchObject({ durationSec: 16 });
+    expect(rows[0]!.outbound).not.toHaveProperty("recordingUrl");
   });
 });

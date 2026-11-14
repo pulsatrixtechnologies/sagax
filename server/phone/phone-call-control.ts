@@ -57,6 +57,13 @@ function eventOf(kind: PhoneCallEventKind, detail: string, at: number): PhoneCal
   return { kind, detail, at };
 }
 
+/** #4304: Twilio's answer when the call it is asked to end is already over
+ * (error 21220, "Call is not in-progress"): the call ended, nothing failed. */
+export function callAlreadyOver(value: unknown): boolean {
+  const text = typeof value === "string" ? value : value && typeof value === "object" ? JSON.stringify(value) : "";
+  return /\b21220\b|not in-progress|not in progress/i.test(text);
+}
+
 export async function hangUpLiveCall(deps: CallControlDeps, input: {
   principalId: string;
   botId: string;
@@ -66,8 +73,14 @@ export async function hangUpLiveCall(deps: CallControlDeps, input: {
   const row = findLiveCall(deps.calls, input);
   if (!row?.callSid) return { text: "No live conversation call to hang up in this conversation.", isError: true };
   const answer = await deps.twilio(updateCallArgs(row.callSid, { Status: "completed" }));
-  if (!answer.ok || answer.isError) {
+  const over = answer.ok && answer.isError && callAlreadyOver(answer.value);
+  if ((!answer.ok || answer.isError) && !over) {
     return { text: `Could not hang up: ${answer.ok ? shortError(answer.value, "refused") : answer.error}.`, isError: true };
+  }
+  if (over) {
+    // the call was already over: the card says so, no error and no event
+    deps.patchLive(row, { phase: "ended" });
+    return { text: `The call to ${maskPhone(row.request.to)} had already ended. The result card arrives when Perspicax reports the end.` };
   }
   const at = (deps.now ?? Date.now)();
   deps.patchLive(row, { phase: "ended", liveEvents: [...(row as { liveEvents?: PhoneCallLiveEvent[] }).liveEvents ?? [], eventOf("resume", "ended by you", at)] });

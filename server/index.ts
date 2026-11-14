@@ -12000,6 +12000,19 @@ const outbound = outboundWiring({
     // the `__` spelling only for a Perspicax before 1.9.19
     ? perspicaxMcp.callTool({ ...turn, name: "twilio_api_write", legacyName: "twilio_api__write", args })
     : Promise.resolve({ ok: false as const, code: "profile_not_mounted" as const, error: "Perspicax is not linked on this server" }),
+  // #4304: a live call outlives the turn that placed it: End call and a
+  // later hang up reach it on the person's own access (their sign-in, else
+  // their routine delegation) on a short-lived connection
+  personTwilio: async (principalId, botId, args) => {
+    const mcp = perspicaxMcp;
+    if (!mcp) return { ok: false as const, code: "profile_not_mounted" as const, error: "Perspicax is not linked on this server" };
+    for (const via of ["session", "delegation"] as const) {
+      const answer = await mcp.withRoutineSession(principalId, botId, AbortSignal.timeout(20_000), (session) => session.call("twilio_api_write", args), via).catch(() => null);
+      if (answer) return answer;
+    }
+    return { ok: false as const, code: "unreachable" as const, error: "the person's Perspicax access could not be reached" };
+  },
+  log: (line) => console.log(line),
   // 2026-10-28: a conversation call, from the person's own Perspicax Voice
   // line and Twilio key (the turn's speaker, never another member's key)
   voice: (turn, args) => perspicaxMcp

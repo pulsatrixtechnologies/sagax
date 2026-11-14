@@ -13,7 +13,7 @@
 // disclosure; once placed, the live card (phase chip, timer, transcript,
 // End call); once ended, the result with the recording player when present.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Download, Ellipsis, ExternalLink, Loader2, Phone, PhoneCall, PhoneOff, Plane, ShoppingBag, TriangleAlert, Truck } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Download, Ellipsis, ExternalLink, Loader2, Phone, PhoneCall, PhoneOff, Plane, ShoppingBag, TriangleAlert, Truck } from "lucide-react";
 
 import { answerPurchase } from "@/lib/credential-vault";
 import { activeLocale, t } from "@/lib/i18n";
@@ -240,13 +240,14 @@ export function OutboundCard({ message, transcriptOpen = false }: { message: Mes
             {phaseLabel(card.phase)}
           </span>
         )}
-        {live && <LiveTimer startedAt={card.liveStartedAt} />}
+        {live && card.phase !== "ended" && <LiveTimer startedAt={card.liveStartedAt} />}
         {ended && card.result && (
           <>
-            <span data-outbound-phase-chip className="shrink-0 rounded-full bg-inset px-2 py-0.5 text-[11.5px] font-medium text-ink-secondary">
-              {t("outbound.call.phase.ended")}
+            {/* #4304: the call's one state, said once: its outcome */}
+            <span data-outbound-phase-chip data-outbound-outcome className={`min-w-0 truncate rounded-full px-2 py-0.5 text-[11.5px] font-medium ${OUTCOME_TONE[card.result.outcome] ?? OUTCOME_TONE.voicemail}`}>
+              {outcomeLabel(card.result)}
             </span>
-            <span className="shrink-0 tabular-nums text-[11.5px] text-ink-tertiary">{formatCallDuration(card.result.durationSec)}</span>
+            <span data-outbound-duration className="shrink-0 tabular-nums text-[11.5px] text-ink-tertiary">{formatCallDuration(card.result.durationSec)}</span>
           </>
         )}
         <span className="truncate">{card.botName}</span>
@@ -319,7 +320,8 @@ export function OutboundCard({ message, transcriptOpen = false }: { message: Mes
         )}
         {state && <p role="status" className="text-[12px] text-ink-secondary">{state}</p>}
         {card.via && status !== "pending" && !live && <p className="text-[12px] text-ink-secondary">{t("outbound.via", { name: card.via })}</p>}
-        {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+        {/* #4304: a call that is over shows no leftover control error */}
+        {error && !ended && card.phase !== "ended" && <p role="alert" className="text-[12px] text-danger">{error}</p>}
         {status === "pending" && (
           <div className="flex flex-wrap gap-2 pt-1">
             <button type="button" data-outbound-yes disabled={busy !== null || (card.kind === "call" && !confirmed)} onClick={() => void answer("yes")}
@@ -371,8 +373,9 @@ function LiveConversationBody({ card, onError }: { card: OutboundCardData; onErr
     onError("");
     try {
       await api(`/api/me/phone-calls/${encodeURIComponent(card.id)}/hangup`, { method: "POST", body: "{}" });
-    } catch (cause) {
-      onError(readableError(cause));
+    } catch {
+      // #4304: one plain sentence, never a server's internal words
+      onError(t("outbound.call.endCallFailed"));
       setHanging(false);
     }
   };
@@ -406,13 +409,16 @@ function LiveConversationBody({ card, onError }: { card: OutboundCardData; onErr
           )}
         </div>
       )}
-      <div className="flex flex-wrap gap-2 pt-1">
-        <button type="button" data-outbound-hangup disabled={hanging} onClick={() => void hangUp()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-danger/40 px-3 py-1.5 text-[12.5px] font-medium text-danger disabled:opacity-40">
-          {hanging ? <Loader2 size={13} className="animate-spin" /> : <PhoneOff size={13} aria-hidden="true" />}
-          {t("outbound.call.endCall")}
-        </button>
-      </div>
+      {/* #4304: End call only while the call can still be ended: placed, not over */}
+      {card.status === "done" && phase !== "ended" && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button type="button" data-outbound-hangup disabled={hanging} onClick={() => void hangUp()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-danger/40 px-3 py-1.5 text-[12.5px] font-medium text-danger disabled:opacity-40">
+            {hanging ? <Loader2 size={13} className="animate-spin" /> : <PhoneOff size={13} aria-hidden="true" />}
+            {t("outbound.call.endCall")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -422,93 +428,72 @@ function EndedConversationBody({ card, result, transcriptOpen }: {
   result: OutboundCallResult;
   transcriptOpen: boolean;
 }) {
+  // #4304: the number is the title and the state the header chip: neither
+  // is said again here; a recording that cannot load hides its player
+  const [recordingFailed, setRecordingFailed] = useState(false);
   return (
     <div data-outbound-ended className="space-y-2">
-      <p className="text-[12px] text-ink-secondary">{t("outbound.call.endedLine", { destination: card.destination ?? "" })}</p>
-      <RecordingPlayer card={card} result={result} />
-      <CallResult result={result} botName={card.botName} initialOpen={transcriptOpen} liveTranscript={card.liveTranscript} />
+      {card.recordingUrl && !recordingFailed && <RecordingPlayer url={card.recordingUrl} onUnavailable={() => setRecordingFailed(true)} />}
+      <CallResult result={result} botName={card.botName} calleeName={card.calleeName} initialOpen={transcriptOpen} liveTranscript={card.liveTranscript} />
     </div>
   );
 }
 
-function RecordingPlayer({ card, result }: { card: OutboundCardData; result: OutboundCallResult }) {
+function RecordingPlayer({ url, onUnavailable }: { url: string; onUnavailable: () => void }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [speed, setSpeed] = useState(1);
   const [menuOpen, setMenuOpen] = useState(false);
-  const hasRecording = Boolean(card.recordingUrl);
-  if (!hasRecording && !(result.transcript?.length || card.liveTranscript?.length)) return null;
 
   const setRate = (next: number) => {
     setSpeed(next);
     if (audioRef.current) audioRef.current.playbackRate = next;
   };
 
-  const transcriptText = () => {
-    const lines = result.transcript?.length
-      ? result.transcript.map((line) => `${line.speaker === "bot" ? card.botName : t("outbound.call.otherParty")}: ${line.text}`)
-      : (card.liveTranscript ?? [])
-        .filter((line) => line.speaker !== "system")
-        .map((line) => `${line.speaker === "bot" ? card.botName : (card.calleeName?.trim() || t("outbound.call.otherParty"))}: ${line.text}`);
-    return lines.join("\n");
-  };
-
-  const copyTranscript = async () => {
-    const text = transcriptText();
-    if (!text) return;
-    await copyText(text);
-    setMenuOpen(false);
-  };
-
   return (
-    <div data-recording-player className="space-y-1.5 rounded-lg bg-inset/60 px-2.5 py-2">
-      {hasRecording && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[12px] font-medium text-ink-secondary">{t("outbound.call.recording")}</span>
-          <audio
-            ref={audioRef}
-            controls
-            preload="metadata"
-            src={card.recordingUrl || undefined}
-            className="min-w-0 flex-1"
-            onLoadedMetadata={(event) => { event.currentTarget.playbackRate = speed; }}
-          />
-          <label className="flex items-center gap-1 text-[11.5px] text-ink-secondary">
-            <span className="sr-only">{t("outbound.call.speed")}</span>
-            <select
-              data-outbound-speed
-              aria-label={t("outbound.call.speed")}
-              value={String(speed)}
-              onChange={(event) => setRate(Number(event.currentTarget.value))}
-              className="rounded-md border border-hairline/60 bg-panel px-1.5 py-0.5 text-[11.5px] text-ink"
-            >
-              <option value="1">1x</option>
-              <option value="1.25">1.25x</option>
-              <option value="1.5">1.5x</option>
-              <option value="2">2x</option>
-            </select>
-          </label>
-        </div>
-      )}
-      <div className="relative flex justify-end">
-        <button type="button" data-outbound-more aria-haspopup="menu" aria-expanded={menuOpen} aria-label={t("outbound.call.copyTranscript")}
+    <div data-recording-player className="flex flex-wrap items-center gap-2 rounded-lg bg-inset/60 px-2.5 py-2">
+      <span className="text-[12px] font-medium text-ink-secondary">{t("outbound.call.recording")}</span>
+      <audio
+        ref={audioRef}
+        controls
+        preload="metadata"
+        src={url}
+        className="min-w-0 flex-1"
+        onLoadedMetadata={(event) => {
+          // an empty body plays 0:00 / 0:00: no recording to offer
+          if (!(event.currentTarget.duration > 0)) { onUnavailable(); return; }
+          event.currentTarget.playbackRate = speed;
+        }}
+        onError={onUnavailable}
+      />
+      <label className="flex items-center gap-1 text-[11.5px] text-ink-secondary">
+        <span className="sr-only">{t("outbound.call.speed")}</span>
+        <select
+          data-outbound-speed
+          aria-label={t("outbound.call.speed")}
+          value={String(speed)}
+          onChange={(event) => setRate(Number(event.currentTarget.value))}
+          className="rounded-md border border-hairline/60 bg-panel px-1.5 py-0.5 text-[11.5px] text-ink"
+        >
+          <option value="1">1x</option>
+          <option value="1.25">1.25x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+      <div className="relative">
+        <button type="button" data-outbound-more aria-haspopup="menu" aria-expanded={menuOpen} aria-label={t("outbound.call.downloadRecording")}
           onClick={() => setMenuOpen((open) => !open)}
           className="inline-flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink">
           <Ellipsis size={14} aria-hidden="true" />
         </button>
         {menuOpen && (
           <div role="menu" className="absolute end-0 top-8 z-10 flex min-w-[200px] flex-col gap-0.5 rounded-xl border border-hairline/60 bg-elevated p-1.5 shadow-lg">
-            {hasRecording && card.recordingUrl && (
-              <a role="menuitem" data-outbound-download href={card.recordingUrl} download
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] text-ink hover:bg-hover"
-                onClick={() => setMenuOpen(false)}>
-                <Download size={13} aria-hidden="true" className="text-ink-secondary" />
-                {t("outbound.call.downloadRecording")}
-              </a>
-            )}
-            <button type="button" role="menuitem" data-outbound-copy-transcript onClick={() => void copyTranscript()}
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink hover:bg-hover">
-              {t("outbound.call.copyTranscript")}
-            </button>
+            <a role="menuitem" data-outbound-download href={url} download
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] text-ink hover:bg-hover"
+              onClick={() => setMenuOpen(false)}>
+              <Download size={13} aria-hidden="true" className="text-ink-secondary" />
+              {t("outbound.call.downloadRecording")}
+            </a>
           </div>
         )}
       </div>
@@ -563,25 +548,24 @@ function ConversationCallBody({ card, status }: { card: OutboundCardData; status
   );
 }
 
-function CallResult({ result, botName, initialOpen, liveTranscript }: {
+function CallResult({ result, botName, calleeName, initialOpen, liveTranscript }: {
   result: OutboundCallResult;
   botName: string;
+  calleeName?: string;
   initialOpen: boolean;
   liveTranscript?: PhoneCallLiveLine[];
 }) {
   const [open, setOpen] = useState(initialOpen);
-  const outcome = OUTCOME_LABEL[result.outcome] ? result.outcome : "voicemail";
-  const transcript = result.transcript?.length
-    ? result.transcript
+  const fromResult = Boolean(result.transcript?.length);
+  const transcript = fromResult
+    ? result.transcript!
     : (liveTranscript ?? []).filter((line) => line.speaker !== "system").map((line) => ({ speaker: line.speaker === "bot" ? "bot" as const : "callee" as const, text: line.text }));
+  const other = (!fromResult && calleeName?.trim()) || t("outbound.call.otherParty");
   const points = result.points.filter((point) => point.trim());
   const commitments = result.commitments.filter((item) => item.trim());
+  const copyTranscript = () => copyText(transcript.map((line) => `${line.speaker === "bot" ? botName : other}: ${line.text}`).join("\n"));
   return (
     <div data-outbound-result={result.outcome} className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span data-outbound-outcome className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${OUTCOME_TONE[outcome]}`}>{outcomeLabel(result)}</span>
-        <span className="text-[12px] text-ink-secondary">{t("outbound.call.duration", { duration: formatCallDuration(result.durationSec) })}</span>
-      </div>
       {result.doNotCallAgain && (
         <p role="note" data-outbound-dnc className="rounded-lg bg-warning/10 px-2 py-1.5 text-[12px] text-warning">{t("outbound.call.doNotCallAgain", { bot: botName })}</p>
       )}
@@ -605,11 +589,18 @@ function CallResult({ result, botName, initialOpen, liveTranscript }: {
         <p data-outbound-transcript-expired className="text-[12px] text-ink-tertiary">{t("outbound.call.transcriptExpired")}</p>
       ) : transcript.length > 0 && (
         <div>
-          <button type="button" data-outbound-transcript-toggle aria-expanded={open} onClick={() => setOpen((value) => !value)}
-            className="inline-flex items-center gap-1 rounded-md text-[12px] text-ink-secondary hover:text-ink">
-            {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
-            {open ? t("outbound.call.hideTranscript") : t("outbound.call.showTranscript")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" data-outbound-transcript-toggle aria-expanded={open} onClick={() => setOpen((value) => !value)}
+              className="inline-flex items-center gap-1 rounded-md text-[12px] text-ink-secondary hover:text-ink">
+              {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
+              {open ? t("outbound.call.hideTranscript") : t("outbound.call.showTranscript")}
+            </button>
+            <button type="button" data-outbound-copy-transcript aria-label={t("outbound.call.copyTranscript")} title={t("outbound.call.copyTranscript")}
+              onClick={() => void copyTranscript()}
+              className="ms-auto inline-flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink">
+              <Copy size={13} aria-hidden="true" />
+            </button>
+          </div>
           {open && (
             <div data-outbound-transcript className="mt-1.5 max-h-72 space-y-1.5 overflow-auto rounded-lg bg-inset px-3 py-2 text-[12.5px]">
               {transcript.map((line, index) => (

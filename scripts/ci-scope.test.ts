@@ -82,14 +82,14 @@ describe("Swift package scope after a merge (#3678)", () => {
   it.each([
     ["shared/wire.ts"], ["shared/background-threads.vectors.json"], ["ios/Package.swift"], ["ios/Sources/CompanionCore/Wire.swift"],
     ["ios/Tests/CompanionCoreTests/Fixtures/turn.json"], ["ios/App/StorePreview.json"], ["src/locales/fr.json"], ["src/styles.css"],
-    ["src/assets/mascots/maus/body.svg"], ["electron/os-permissions.vectors.json"], ["server/auth/client-allow.ts"],
+    ["src/assets/mascots/maus/body.svg"], ["src/components/shape-stills/bean.json"], ["electron/os-permissions.vectors.json"], ["server/auth/client-allow.ts"],
     [".github/workflows/ci.yml"], ["docs/guide.md", "shared/wire.ts"], [], [""], ["shared/../server/x.ts"],
   ])("runs the Swift package tests for %j", (...files) => {
     expect(touchesSwiftPackage(files)).toBe(true);
   });
 
   it.each([
-    ["server/index.ts"], ["src/App.tsx"], ["src/lib/page-theme-ios.ts"], ["android/app/build.gradle.kts"], ["package.json"],
+    ["server/index.ts"], ["src/App.tsx"], ["src/components/shape-stills.ts"], ["src/lib/page-theme-ios.ts"], ["android/app/build.gradle.kts"], ["package.json"],
     ["docs/releases/0.9.0.md"], ["ios/README.md"], ["shared/README.md"], ["scripts/ci-scope.mjs"], ["sharedx/file.ts"], ["src/styles.css.map"],
   ])("leaves them to the nightly for %j", (...files) => {
     expect(touchesSwiftPackage(files)).toBe(false);

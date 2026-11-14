@@ -2034,7 +2034,8 @@ export interface OutboundCard {
    * from, why, the exact words, the language. */
   destination?: string;
   from?: string;
-  /** The callback number the call says (the organization's). */
+  /** Older records only: the callback number a one-way call used to say.
+   * Calls are a live conversation now (#4193) and never set it. */
   callback?: string;
   purpose?: string;
   script?: string;

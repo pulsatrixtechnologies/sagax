@@ -196,6 +196,19 @@ rows. Auto's fast choices use the same switches: disabled choices are refused
 on save and removed from stored bot/thread selections when switches change.
 Covered by `ModelMenuTests` and `model-switches.e2e.test.ts` too.
 
+#4329 lot 4: Active models folds by provider, never by engine. Its folds are
+the providers of `shared/provider-catalog.ts` (`activeModelProviders` in
+`ModelSwitchesSettings.tsx`), with the names and the order of the Providers
+list and the model menu: OpenAI's two sign-ins and pi's or OpenCode's
+`openai/...` rows are one "OpenAI", the xAI group is `XAI_GROUP_LABEL`, a
+server added by address (pi's model servers included) is a fold of its own
+name, OpenCode keeps only its own subscription models, and this computer's
+models stay on Providers. A model sits once, under its canonical id; its one
+switch writes the stored key of every engine that runs it
+(`modelKeys`, `switchedModelKeys`), the storage format unchanged. It reads on
+while one engine still offers it and greyed only when the organization turned
+it off on every engine (`modelOfferAcross`).
+
 ## Settings > Providers (2026-10-30)
 
 Lot 1 of "Providers, models and voice". One page, section id `providers`

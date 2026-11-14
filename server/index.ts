@@ -784,6 +784,8 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
+import { RoutineProblemCards } from "./routines/routine-problem-card.ts";
+import { clipReadable } from "../shared/routine-result.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
 import { runAsRefusal } from "./routines/routine-run-as.ts";
@@ -7870,6 +7872,8 @@ const routineNeedsWatch = new RoutineNeedsWatch({
     broadcast({ kind: "routine", routine: wire });
   },
   later: (pass) => { setTimeout(pass, 250).unref?.(); },
+  // #4233: each lasting problem's keyed fix card in step with its need
+  each: (all) => routineProblemCards.syncAll(all),
 });
 const principalMayRunRoutine = createPrincipalMayRunRoutine(getLeafHost);
 const routineAdmission = createRoutineAdmission(getLeafHost);
@@ -16447,19 +16451,29 @@ function roomAskAnswerer(auth: RequestAuth, threadId: string, requestId: string)
 /** #4219: a pending room card re-addressed to another person: they get its
  * notification, even with the room closed; nobody else does. */
 function notifyRoomAskAddressee(threadId: string, messageId: string): void {
+  const card = store.messagesFor(threadId).find((row) => row.id === messageId)?.card;
+  if (!store.groupByThread(threadId) || !card?.askTo) return;
+  const note = pendingQuestionNotice(threadId, messageId);
+  if (note) notify({ ...note, audience: [card.askTo.id] });
+}
+
+/** #4219, #4233: the question notification of a pending question card,
+ * from the card itself (its asker, words, choices and place): a room card
+ * re-addressed, a routine's fix card still open a day later. Null when the
+ * card is no longer pending or its bot is gone. */
+function pendingQuestionNotice(threadId: string, messageId: string): ReturnType<typeof deliverableNotification> | null {
   const group = store.groupByThread(threadId);
   const message = store.messagesFor(threadId).find((row) => row.id === messageId);
   const card = message?.card;
-  const asker = message?.from ? store.bot(message.from.botId) : undefined;
-  if (!group || !card?.askTo || !asker || card.answered || card.dismissed || card.expired) return;
-  const note = deliverableNotification("question", asker, threadId, card.subtitle || card.title || "", {
+  const asker = message?.from ? store.bot(message.from.botId) : group ? undefined : store.botByThread(threadId);
+  if (!message || !card || !asker || card.answered || card.dismissed || card.expired) return null;
+  return deliverableNotification("question", asker, threadId, card.subtitle || card.title || "", {
     ...(asker.avatarUrl ? { avatarUrl: asker.avatarUrl } : {}),
-    group: { id: group.id, name: group.name },
+    ...(group ? { group: { id: group.id, name: group.name } } : {}),
     ...(card.requestId ? { requestId: card.requestId } : {}),
     ...(card.options?.length ? { choices: card.options } : {}),
     cardId: message.id,
   });
-  if (note) notify({ ...note, audience: [card.askTo.id] });
 }
 
 /** #2608, #4205: retire a conversation's open question cards (or the one
@@ -16570,6 +16584,83 @@ function personItemCards(run: Pick<RoutineRun, "id" | "routineId" | "routineName
     }).ok,
   }, personLanguageCode(personLanguage), options).left;
 }
+
+/** #4233: where a routine's fix card goes: the conversation its runs report
+ * to (routineSourceOwner), else the bot's own conversation with its person. */
+function routineProblemPlace(routine: Routine, start: boolean): { bot: BotRecord; threadId: string; group?: GroupRecord } | null {
+  const known = routineSourceOwner(routine);
+  if (known) return known;
+  const bot = routine.target === "bot" ? store.bot(routine.botId) : undefined;
+  if (!bot || bot.hidden) return null;
+  const personId = privateThreads() ? routine.runAs?.principalId : undefined;
+  // a read or a retire never starts a conversation
+  const threadId = start ? conversationOrStart(bot, personId) : conversationThreadFor(bot, personId);
+  return threadId ? { bot, threadId } : null;
+}
+
+/** #4233: the routine's fix card under its key, looked up the way any keyed
+ * card is (askKeyScope), from the place its card goes: the bot there may
+ * be a teammate's (a routine requested for a teammate reports to the
+ * requesting bot's conversation). */
+function routineProblemCardIn(place: { bot: BotRecord; threadId: string } | null): (threadId: string) => boolean {
+  return place ? askKeyScope(place.bot, place.threadId, place.threadId) : () => false;
+}
+
+/** #4233 (Q2): a lasting problem told as one keyed fix card
+ * (routines/routine-problem-card.ts), raised by the needs watch's pass. */
+const routineProblemCards = new RoutineProblemCards<Routine>({
+  need: (routine) => routines ? routineNeedsPerson({ ...routine, needsPerson: undefined }, {
+    runsOf: (routineId) => routines!.runsOfRoutineAsStored(routineId),
+    cardOpen: () => false,
+    problemToldAt: (target) => routines!.problemToldAt({ routineId: target.id }),
+    now: () => Date.now(),
+  }, new Map()) : null,
+  facts: (routine, need) => {
+    const run = need.runId ? routines?.runsOfRoutineAsStored(routine.id).find((entry) => entry.id === need.runId) : undefined;
+    const said = run && !run.redacted ? routines?.problemStreakTexts(run) ?? [] : [];
+    const summary = said.length ? said.join("\n") : need.text;
+    const readiness = run?.readiness?.find((check) => !check.ok)?.line;
+    return {
+      summary: clipReadable(redactSecretsInText(summary), 500),
+      ...(readiness ? { readiness: redactSecretsInText(readiness) } : {}),
+      count: need.failures ?? run?.problemRepeat?.count ?? 1,
+    };
+  },
+  words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
+  ask: (routine, input) => {
+    const place = routineProblemPlace(routine, !("retire" in input));
+    if (!place) return;
+    const { bot, threadId, group } = place;
+    const posted = createAgentCard({
+      store,
+      bot,
+      threadId,
+      input: input as unknown as Record<string, unknown>,
+      ...(group ? { room: { people: roomPeopleOf(group), name: group.name, fromRun: true }, notifyAddressee: notifyRoomAskAddressee } : {}),
+      personLanguage: languageOfPerson(routine.runAs?.principalId),
+      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, group ? { ...choice, askerBotId: bot.id } : choice),
+      askKeys: askKeysFor(bot, threadId, threadId),
+    });
+    if (!posted.ok) console.warn(`routine ${routine.id} fix card: ${posted.error}`);
+  },
+  pending: (routine, key) => askKeyIndex.find(key, routineProblemCardIn(routineProblemPlace(routine, false))),
+  latest: (routine, key) => {
+    const place = routineProblemPlace(routine, false);
+    const rows = place ? store.messagesFor(place.threadId) : [];
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const row = rows[index]!;
+      if (row.kind === "options" && row.card?.askKey === key) return { at: row.at };
+    }
+    return null;
+  },
+  remind: (_routine, found) => {
+    const note = pendingQuestionNotice(found.threadId, found.message.id);
+    const row = store.messagesFor(found.threadId).find((message) => message.id === found.message.id);
+    if (row?.card) store.patchMessage(found.threadId, row.id, { card: { ...row.card, remindedAt: Date.now() } });
+    if (note) notify(note);
+  },
+  now: () => Date.now(),
+});
 
 /** The bot's ask_choice as a question request: the same path as an engine's
  * own question tool (request.opened), so the card carries a requestId and
@@ -35550,6 +35641,10 @@ const remindLearnedSkills = () => {
   try { remindWaitingLearnedSkills(store, (botId) => listStagedSkillWrites(botId).map((staged) => staged.id)); } catch (error) { reportBackgroundError(error); }
 };
 setInterval(remindLearnedSkills, 30 * 60_000).unref();
+// #4233: a routine's fix card still open a day later rings once more
+setInterval(() => {
+  try { routineProblemCards.remindDue(routines?.listRoutines() ?? []); } catch (error) { reportBackgroundError(error); }
+}, 30 * 60_000).unref();
 workspaceAccess = createWorkspaceAccess({ sessions, cookieName: SESSION_COOKIE, closeSessionStreams });
 // Ten-second cadence plus the bridge's five-second backchannel deadline bounds
 // stale portal access on quiet event/browser streams to fifteen seconds.

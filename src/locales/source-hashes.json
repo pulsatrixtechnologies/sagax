@@ -18764,7 +18764,14 @@
       "personProducts.mode.hybrid": "780874ecb64d92015e6894e659712e206335236ced9cd1b4ea5c4a41937e287b",
       "personProducts.access.direct": "c99d1301898a983308e0b7d31b27f150ca02e934db931c2494ed5ea2fe0826e0",
       "personProducts.key.expired": "424a2551d356754c882d04ac16c63e6b50b80b159549d23231001f629455756e",
-      "personProducts.test.since": "b5a2c0ce7a14e01e79c792278e68647d7752ac48d3e8ee69c4373ce9884b8d9d"
+      "personProducts.test.since": "b5a2c0ce7a14e01e79c792278e68647d7752ac48d3e8ee69c4373ce9884b8d9d",
+      "hostComputer.env.title": "8d72b14962912c5a9d413a631c8719fc731c9323d7e04ff875aee0eaf543e54d",
+      "hostComputer.env.label": "e99772f899db06a4c6c9a20c3ada6829270e8cc159d54584f1f15d805ea78b6d",
+      "hostComputer.env.isolated": "1d183f3f10e963cae3a2e0a10a693f7895b03602715a121d984f3406e37ba2e2",
+      "hostComputer.env.asIs": "d423e4819f37b33beff1f1d4ae46c6ae3ba7ad4cc2bc6a03badc03ecb4a3c5db",
+      "hostComputer.env.hint": "16d9fcb1ef9dc1b15b9e36b42fdf45769728c44ffb92f56d96a9bee34d96df60",
+      "hostComputer.env.sharedTitle": "651ca10be24b897df0a29f6c1eda4072b9ee313829a4877787de2f4ef639c23e",
+      "hostComputer.env.sharedSubtitle": "a4eaf84f440c34d8207767d47a5dadc6eb27c0659ac77c8d8216300f9c8b58c6"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -149,22 +149,34 @@ export function PageToggle({ pressed, onClick, children, ...rest }: { pressed: b
   );
 }
 
-/** A segmented switch of the header (List or Calendar; All, Unlocked or Locked). */
-export function PageSegment<T extends string | number>({ label, value, options, onChange }: {
+/** A segmented switch of the header (List or Calendar; All, Unlocked or Locked).
+ * `compact` is the reference's small segmented control for a row (#4327,
+ * measured in the reference app: 24 px tall, a grey track at 6 % of the
+ * ink, 2 px of padding, round, the chosen segment a shade lighter). */
+export function PageSegment<T extends string | number>({ label, value, options, onChange, compact = false, disabled = false, ...rest }: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string; icon?: LucideIcon; title?: string }>;
+  options: ReadonlyArray<{ value: T; label: string; icon?: LucideIcon; title?: string; data?: DataAttributes }>;
   onChange: (next: T) => void;
-}) {
+  compact?: boolean;
+  disabled?: boolean;
+} & DataAttributes) {
   return (
-    <div role="group" className="flex shrink-0 items-center rounded-lg border border-hairline/50 bg-panel p-0.5" aria-label={label}>
+    <div {...rest} role="group" aria-label={label}
+      className={compact
+        ? "flex h-6 shrink-0 items-center gap-0.5 rounded-full bg-ink/[0.06] p-0.5"
+        : "flex shrink-0 items-center rounded-lg border border-hairline/50 bg-panel p-0.5"}>
       {options.map((option) => {
         const Icon = option.icon;
+        const on = value === option.value;
         return (
-          <button key={String(option.value)} type="button" aria-pressed={value === option.value} title={option.title ?? option.label} onClick={() => onChange(option.value)}
-            className={cn("flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px]", value === option.value ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink")}>
-            {Icon && <Icon size={14} aria-hidden="true" />}
-            <span className={cn(Icon && "@max-[60rem]/page-header:sr-only")}>{option.label}</span>
+          <button key={String(option.value)} {...option.data} type="button" aria-pressed={on} title={option.title ?? option.label} disabled={disabled}
+            onClick={() => onChange(option.value)}
+            className={compact
+              ? cn("flex h-5 items-center gap-1 rounded-full px-2 text-[12px] leading-4 transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none", on ? "bg-ink/[0.1] font-medium text-ink" : "text-ink-secondary hover:text-ink")
+              : cn("flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px]", on ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink")}>
+            {Icon && <Icon size={compact ? 12 : 14} aria-hidden="true" />}
+            <span className={cn(Icon && !compact && "@max-[60rem]/page-header:sr-only")}>{option.label}</span>
           </button>
         );
       })}

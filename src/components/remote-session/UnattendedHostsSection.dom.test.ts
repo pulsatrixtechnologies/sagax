@@ -42,6 +42,17 @@ vi.mock("@/components/GroupPeoplePicker", async (importOriginal) => ({
     teams: [{ id: "team-support", name: "Support", managers: [], members: ["marie@acme"] }],
   }),
 }));
+// #4327: the bot-computer settings of each host (the per-bot environment) and their saves.
+const computers = vi.hoisted(() => ({ hosts: [] as unknown[], patches: [] as unknown[] }));
+vi.mock("@/lib/host-computers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/host-computers")>()),
+  useHostComputers: () => ({ hosts: computers.hosts, reload: () => {} }),
+  patchHostComputer: async (hostId: string, patch: unknown) => { computers.patches.push([hostId, patch]); return null; },
+}));
+vi.mock("@/components/Avatar", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/Avatar")>()),
+  BotAvatar: ({ bot }: { bot: { id: string } }) => createElement("span", { "data-test-avatar": bot.id }),
+}));
 const { hostLine, sortDeviceEntries, UnattendedHostsSection } = await import("./UnattendedHostsSection");
 
 const NOW = Date.now();
@@ -62,7 +73,7 @@ const ipad: MyDevice = { key: "k3", name: "iPad", kind: "phone", platform: "ios"
 
 let root: Root;
 let el: HTMLDivElement;
-beforeEach(() => { setLocale("en"); saved.calls.length = 0; saved.bots.length = 0; saved.shares.length = 0; saved.fail = false; el = document.createElement("div"); document.body.append(el); root = createRoot(el); });
+beforeEach(() => { setLocale("en"); computers.hosts = []; computers.patches.length = 0; saved.calls.length = 0; saved.bots.length = 0; saved.shares.length = 0; saved.fail = false; el = document.createElement("div"); document.body.append(el); root = createRoot(el); });
 afterEach(() => { act(() => root.unmount()); el.remove(); });
 const mount = async (hosts: UnattendedHostRow[], devices: MyDevice[] = []) => {
   await act(async () => {
@@ -206,5 +217,72 @@ describe("bot scope and sharing on a host row (#2957)", () => {
     expect(dialog.querySelector('[data-host-share="person:marie@acme"]')?.textContent).toContain("Marie Tremblay");
     await click(dialog.querySelector("[data-host-share-done]"));
     expect(el.querySelector("[data-unattended-host-shares]")?.textContent).toContain("1");
+  });
+});
+
+describe("the per-bot environment lives in Bots…, not in the row menu (#4327)", () => {
+  const SHARED = `h_${"ef".repeat(16)}`;
+  const view = (hostId: string, modes: Record<string, "isolated" | "as_is">) => ({
+    hostId, name: "srv", os: "linux", online: true, botComputer: true, tags: [], shellOnly: false, access: "always", modes, vm: null,
+  });
+  const rowOf = (hostname: string) => [...el.querySelectorAll("[data-unattended-host]")].find((row) => row.textContent?.includes(hostname)) ?? null;
+  const menuOf = async (hostname: string) => { await click(rowOf(hostname)?.querySelector("[data-unattended-host-more]")); };
+  const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim());
+
+  it("keeps only the computer's own actions in the menu, whatever the number of bots", async () => {
+    computers.hosts = [view(LINUX, { "bot-atlas": "isolated", "bot-nova": "as_is" })];
+    await mount([linux]);
+    await menuOf("srv-linux");
+    expect(menuItems()).toEqual([
+      "Unattended access", "Revoke", "Bots…", "Team...", "Share…", "Use as a bot computer", "Edit tags", "Copy the host identifier",
+    ]);
+    expect(document.querySelector("[data-host-bot-computer-mode]")).toBeNull();
+    expect(document.querySelector('[role="menu"] [role="group"]')).toBeNull();
+  });
+
+  it("shows one row per bot with its mascot, name and a two-way control, and saves the change", async () => {
+    computers.hosts = [view(LINUX, { "bot-atlas": "isolated", "bot-nova": "as_is" })];
+    await mount([linux]);
+    await menuOf("srv-linux");
+    await click(document.querySelector("[data-unattended-host-bots-edit]"));
+    const dialog = document.querySelector("[data-host-bots-dialog]")!;
+    const rows = [...dialog.querySelectorAll<HTMLElement>("[data-host-bot-environment]")];
+    expect(rows.map((row) => row.dataset.hostBotEnvironment)).toEqual(["bot-atlas", "bot-nova"]);
+    expect(rows[0]!.querySelector('[data-test-avatar="bot-atlas"]')).not.toBeNull();
+    expect(rows[0]!.textContent).toContain("Atlas");
+    const pressed = (row: Element) => [...row.querySelectorAll<HTMLElement>("[data-host-bot-mode]")].filter((button) => button.getAttribute("aria-pressed") === "true").map((button) => button.dataset.hostBotMode);
+    expect(rows.map(pressed)).toEqual([["isolated"], ["as_is"]]);
+    // every choice of the old menu stays reachable, with its full wording on hover
+    expect(rows[0]!.querySelector('[data-host-bot-mode="isolated"]')?.getAttribute("title")).toBe("Isolated environment (VM on this host)");
+    expect(rows[0]!.querySelector('[data-host-bot-mode="as_is"]')?.getAttribute("title")).toBe("Use the host as-is");
+    await click(rows[0]!.querySelector('[data-host-bot-mode="as_is"]'));
+    expect(pressed(rows[0]!)).toEqual(["as_is"]);
+    expect(computers.patches).toEqual([]);
+    await click(dialog.querySelector("[data-host-bots-save]"));
+    expect(computers.patches).toEqual([[LINUX, { mode: { botId: "bot-atlas", value: "as_is" } }]]);
+    expect(saved.bots).toEqual([[LINUX, null]]);
+    expect(document.querySelector("[data-host-bots-dialog]")).toBeNull();
+  });
+
+  it("has no environment part when no bot works on the computer", async () => {
+    computers.hosts = [view(LINUX, {})];
+    await mount([linux]);
+    await menuOf("srv-linux");
+    await click(document.querySelector("[data-unattended-host-bots-edit]"));
+    expect(document.querySelector("[data-host-bot-environments]")).toBeNull();
+    expect(document.querySelector("[data-host-bots-picker]")).not.toBeNull();
+  });
+
+  it("keeps the environment reachable on a computer shared with the person, without the bot scope", async () => {
+    computers.hosts = [view(SHARED, { "bot-nova": "isolated" })];
+    await mount([host({ hostId: SHARED, hostname: "srv-marie", sharedBy: "Marie Tremblay" })]);
+    await menuOf("srv-marie");
+    await click(document.querySelector("[data-unattended-host-bots-edit]"));
+    const dialog = document.querySelector("[data-host-bots-dialog]")!;
+    expect(dialog.querySelector("[data-host-bots-picker]")).toBeNull();
+    await click(dialog.querySelector('[data-host-bot-environment="bot-nova"] [data-host-bot-mode="as_is"]'));
+    await click(dialog.querySelector("[data-host-bots-save]"));
+    expect(computers.patches).toEqual([[SHARED, { mode: { botId: "bot-nova", value: "as_is" } }]]);
+    expect(saved.bots).toEqual([]);
   });
 });

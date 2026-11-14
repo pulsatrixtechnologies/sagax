@@ -1,16 +1,17 @@
-// The host row's bot computer parts (#2726, #2727): the ⋯ menu with "Use as
-// a bot computer", "Edit tags" and each bot's isolated / as-is answer, and
-// the tags shown (and edited inline) under the row's details. Saved on the
-// server (PATCH /api/host-computers/:hostId). Same row menu as the bot
-// panel's rows (ComputerCard). Items live in the row's shared ⋯ menu. No host id on screen.
+// The host row's bot computer parts (#2726, #2727): the ⋯ menu's "Use as
+// a bot computer" and "Edit tags", and the tags shown (and edited inline)
+// under the row's details. Saved on the server (PATCH
+// /api/host-computers/:hostId). Same row menu as the bot panel's rows
+// (ComputerCard). No host id on screen. #4327: each bot's isolated / as-is
+// answer left this menu for the "Bots…" window (HostBotEnvironments), the
+// one place for which bots use this computer and how.
 import { useState } from "react";
-import { Bot as BotIcon, Box, Check, Monitor, Tag } from "lucide-react";
+import { Bot as BotIcon, Check, Tag } from "lucide-react";
 
-import { cleanHostTags, type BotComputerHostMode, type BotComputerHostView } from "../../../shared/bot-computer-host";
+import { cleanHostTags, type BotComputerHostView } from "../../../shared/bot-computer-host";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { patchHostComputer } from "@/lib/host-computers";
-import { useStoreOptional } from "@/state/store";
 import { PageMenuItem } from "@/components/content-page";
 import { DEVICE_CHIP } from "./DeviceCardRow";
 
@@ -22,10 +23,7 @@ export function HostBotComputerMenuItems({ hostId, host, close, onEditTags, onCh
   onEditTags: () => void;
   onChanged: (next: BotComputerHostView | null) => void;
 }) {
-  const store = useStoreOptional();
-  const botName = (botId: string) => store?.state.bots.find((bot) => bot.id === botId)?.name ?? t("hostComputer.aBot");
   const marked = host?.botComputer === true;
-  const modes = Object.entries(host?.modes ?? {});
   const save = async (patch: Parameters<typeof patchHostComputer>[1]) => {
     close();
     onChanged(await patchHostComputer(hostId, patch).catch(() => null));
@@ -35,19 +33,6 @@ export function HostBotComputerMenuItems({ hostId, host, close, onEditTags, onCh
     <PageMenuItem icon={BotIcon} data-host-bot-computer-toggle="" data-checked={marked ? "" : undefined}
       trailing={marked ? check : undefined} onClick={() => void save({ botComputer: !marked })}>{t("hostComputer.use")}</PageMenuItem>
     <PageMenuItem icon={Tag} data-host-bot-computer-tags="" onClick={() => { close(); onEditTags(); }}>{t("hostComputer.editTags")}</PageMenuItem>
-    {modes.length > 0 && <div role="separator" className="my-1 h-px bg-hairline/50" />}
-    {modes.map(([botId, mode]) => (
-      <div key={botId} role="group" aria-label={botName(botId)} className="flex flex-col">
-        <span className="truncate px-2 pt-1 text-[11.5px] leading-4 text-ink-tertiary">{botName(botId)}</span>
-        {(["isolated", "as_is"] as const).map((value: BotComputerHostMode) => (
-          <PageMenuItem key={value} icon={value === "isolated" ? Box : Monitor} data-host-bot-computer-mode={value}
-            trailing={mode === value ? check : undefined}
-            onClick={() => { if (mode !== value) void save({ mode: { botId, value } }); else close(); }}>
-            {t(value === "isolated" ? "hostComputer.mode.isolated" : "hostComputer.mode.asIs")}
-          </PageMenuItem>
-        ))}
-      </div>
-    ))}
   </>;
 }
 

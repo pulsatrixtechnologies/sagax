@@ -5,8 +5,16 @@
 // bots limits it to them, and the server refuses the others. Sharing gives
 // a person or a group of the organization the same computer in their own
 // list (marked "Shared by <me>"); their bots use it with the host's access.
+// #4327: "Bots…" is also the one place for how each bot uses the computer
+// (an isolated environment, a VM on this host, or the host as-is): one row
+// per bot that works there, its mascot, its name and a two-way control.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot as BotIcon, Loader2, Users, X } from "lucide-react";
+import { Bot as BotIcon, Box, Loader2, Monitor, Users, X } from "lucide-react";
+
+import type { BotComputerHostMode, BotComputerHostView } from "../../../shared/bot-computer-host";
+import { BotAvatar } from "@/components/Avatar";
+import { PageSegment } from "@/components/content-page";
+import { patchHostComputer } from "@/lib/host-computers";
 
 import { DialogFrame, DialogLayer, PILL, PRIMARY_PILL } from "@/components/SettingsPrimitives";
 import { useOrgDirectory } from "@/components/GroupPeoplePicker";
@@ -109,25 +117,82 @@ function SmallDialog({ titleId, title, subtitle, hooks, busy, onClose, footer, c
   );
 }
 
-/** "Bots…" from a host row: which of the person's bots may use it. */
-export function HostBotsDialog({ hostId, host, value, onSaved, onClose }: {
+/** #4327: how each bot that works on this computer uses it, one row per bot:
+ * its mascot and name, then Isolated | As-is (the full wording on hover).
+ * Was a heading and two items per bot in the row's ⋯ menu. */
+export function HostBotEnvironments({ modes, value, onChange, disabled }: {
+  /** The bots that work on the computer, with their saved answer, in order. */
+  modes: Readonly<Record<string, BotComputerHostMode>>;
+  /** The draft answers (saved with the window's Save). */
+  value: Readonly<Record<string, BotComputerHostMode>>;
+  onChange: (botId: string, mode: BotComputerHostMode) => void;
+  disabled?: boolean;
+}) {
+  const store = useStoreOptional();
+  const ids = Object.keys(modes);
+  if (ids.length === 0) return null;
+  return (
+    <section aria-labelledby="host-bot-environments-title" data-host-bot-environments="" className="flex flex-col gap-1.5">
+      <h3 id="host-bot-environments-title" className="text-[12px] font-medium leading-4 text-ink-secondary">{t("hostComputer.env.title")}</h3>
+      <div className="flex flex-col divide-y divide-hairline/40 overflow-clip rounded-xl border-[0.5px] border-border bg-elevated">
+        {ids.map((botId) => {
+          const bot = store?.state.bots.find((each) => each.id === botId);
+          const name = bot?.name?.trim() || t("hostComputer.aBot");
+          return (
+            <div key={botId} data-host-bot-environment={botId} className="flex min-h-[44px] items-center gap-3 px-3.5 py-2 md:min-h-0">
+              {bot
+                ? <BotAvatar bot={bot} state="idle" size={24} animated={false} />
+                : <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-raised text-ink-secondary"><BotIcon size={13} aria-hidden="true" /></span>}
+              <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink">{name}</span>
+              <PageSegment<BotComputerHostMode> compact label={t("hostComputer.env.label", { name })} value={value[botId] ?? modes[botId]!} disabled={disabled}
+                onChange={(next) => onChange(botId, next)}
+                options={[
+                  { value: "isolated", label: t("hostComputer.env.isolated"), icon: Box, title: t("hostComputer.mode.isolated"), data: { "data-host-bot-mode": "isolated" } },
+                  { value: "as_is", label: t("hostComputer.env.asIs"), icon: Monitor, title: t("hostComputer.mode.asIs"), data: { "data-host-bot-mode": "as_is" } },
+                ]} />
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[12px] leading-4 text-ink-secondary">{t("hostComputer.env.hint")}</p>
+    </section>
+  );
+}
+
+/** "Bots…" from a host row: which of the person's bots may use it (on
+ * their own computer) and how each bot that works there uses it. */
+export function HostBotsDialog({ hostId, host, value, scoped = true, computer = null, onSaved, onComputerChanged, onClose }: {
   hostId: string;
   /** The readable host name. */
   host: string;
   value: readonly string[] | null | undefined;
+  /** The person's own computer: the bot scope is theirs to set. A computer
+   * shared with them keeps only the environment of their bots. */
+  scoped?: boolean;
+  /** The computer's bot settings (#4327: each bot's environment). */
+  computer?: BotComputerHostView | null;
   onSaved: (next: string[] | null) => void;
+  onComputerChanged?: (next: BotComputerHostView | null) => void;
   onClose: () => void;
 }) {
   const bots = useHostBotChoices();
   const [draft, setDraft] = useState<string[] | null>(value && value.length ? [...value] : null);
+  const modes = computer?.modes ?? {};
+  const [modeDraft, setModeDraft] = useState<Record<string, BotComputerHostMode>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const save = async () => {
     setBusy(true);
     setError("");
     try {
-      const out = await setRemoteHostBots(hostId, draft);
-      onSaved(out.bots);
+      if (scoped) {
+        const out = await setRemoteHostBots(hostId, draft);
+        onSaved(out.bots);
+      }
+      const changes = Object.entries(modeDraft).filter(([botId, mode]) => modes[botId] !== mode);
+      let next: BotComputerHostView | null = null;
+      for (const [botId, mode] of changes) next = await patchHostComputer(hostId, { mode: { botId, value: mode } });
+      if (changes.length > 0) onComputerChanged?.(next);
       onClose();
     } catch (cause) {
       setError(readableError(cause));
@@ -136,7 +201,8 @@ export function HostBotsDialog({ hostId, host, value, onSaved, onClose }: {
     }
   };
   return (
-    <SmallDialog titleId="host-bots-title" title={t("remoteSessionsAdmin.hosts.bots.title")} subtitle={t("remoteSessionsAdmin.hosts.bots.subtitle", { host })}
+    <SmallDialog titleId="host-bots-title" title={scoped ? t("remoteSessionsAdmin.hosts.bots.title") : t("hostComputer.env.sharedTitle")}
+      subtitle={scoped ? t("remoteSessionsAdmin.hosts.bots.subtitle", { host }) : t("hostComputer.env.sharedSubtitle", { host })}
       hooks={{ "data-host-bots-dialog": hostId }} busy={busy} onClose={onClose}
       footer={<>
         <button type="button" className={PILL} disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
@@ -144,9 +210,11 @@ export function HostBotsDialog({ hostId, host, value, onSaved, onClose }: {
           {busy && <Loader2 size={13} aria-hidden="true" className="animate-spin" />}{t("common.save")}
         </button>
       </>}>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {error && <p role="alert" className="rounded-lg bg-danger/10 p-2 text-[12px] text-danger">{error}</p>}
-        <HostBotsPicker bots={bots} value={draft} onChange={setDraft} disabled={busy} />
+        {scoped && <HostBotsPicker bots={bots} value={draft} onChange={setDraft} disabled={busy} />}
+        <HostBotEnvironments modes={modes} value={modeDraft} disabled={busy}
+          onChange={(botId, mode) => setModeDraft((current) => ({ ...current, [botId]: mode }))} />
       </div>
     </SmallDialog>
   );

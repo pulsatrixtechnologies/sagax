@@ -204,7 +204,7 @@ describe("fleet-agent-settings (#1944)", () => {
       const result = await applySkillAndPluginSwitches(server.perform, "b1", { plugins: { "docs@market": true } });
       expect(result).toEqual({ changed: [], refused: [{ field: "plugins.docs@market", reason: "Only the bot's owner, or someone who manages it, can change its plugins." }] });
     });
-    it("a library skill not yet on the bot: true adds it the way the page's Add to bot does, false says it is already off", async () => {
+    it("a library skill not yet on the bot: true adds it the way the page's Add to bot does, false is already true, so it answers changed with nothing sent", async () => {
       const server = fakeServer();
       const result = await applySkillAndPluginSwitches(server.perform, "b1", { skills: { "brand-voice": true } });
       expect(result).toEqual({ changed: ["skills.brand-voice"], refused: [] });
@@ -213,8 +213,11 @@ describe("fleet-agent-settings (#1944)", () => {
       ]);
       expect(server.assigned()).toEqual(["house-style", "brand-voice"]);
 
-      const off = await applySkillAndPluginSwitches(fakeServer().perform, "b1", { skills: { "brand-voice": false } });
-      expect(off).toEqual({ changed: [], refused: [{ field: "skills.brand-voice", reason: expect.stringMatching(/^the library skill "brand-voice" is already off for this bot .*nothing to do$/) }] });
+      const offServer = fakeServer();
+      const off = await applySkillAndPluginSwitches(offServer.perform, "b1", { skills: { "brand-voice": false } });
+      expect(off).toEqual({ changed: ["skills.brand-voice"], refused: [] });
+      expect(offServer.sent.filter((request) => request.method !== "GET")).toEqual([]);
+      expect(offServer.assigned()).toEqual(["house-style"]);
     });
 
     it("a library skill on the bot: false removes it from this bot only, the way the page's Remove from bot does", async () => {

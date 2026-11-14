@@ -1067,6 +1067,7 @@ import { createHostedSlackRoutes } from "./routes/hosted-slack.ts";
 import { createBotInboundMailReadRoutes } from "./routes/bot-inbound-mail.ts";
 import { BOT_MAIL_ASSERTION_ACTORS, botmailEvent, botmailTaggedPrompt, createBotInboundMailRoute, senderDomain } from "./mail/bot-inbound-mail.ts";
 import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bots/bot-inbound-telephony.ts";
+import { PublicReceptionTurns, receptionAskOutcome } from "./bots/public-reception.ts";
 import { createPhoneLineContactInternalRoute, PhoneLineContactsStore } from "./phone/phone-line-contacts.ts";
 import { SmsConversation } from "./sms-conversation.ts";
 import { BotMailAddresses } from "./mail/bot-mail-addresses.ts";
@@ -23679,10 +23680,20 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const peerHome = ask && !runRoom && !store.groupByThread(threadId) && relayViaOf(owning.id, threadId) === "teammate"
         ? personAttentionDeps.conversation(owning, threadId) : undefined;
       const personThread = peerHome && peerHome !== threadId ? peerHome : null;
+      // #4241: the turn of a message left at the line's public reception:
+      // its card takes the same keyed form, under the message's key
+      const reception = ask && !runRoom && !personThread ? publicReception.active(threadId) : null;
+      if (reception && ask && !(typeof ask.key === "string" && ask.key.trim())) body = { ...ask, key: reception.key };
+      // its tell is said in the bot's reply, like anywhere else; its card
+      // is recorded so the turn's end knows the person was asked
+      const receptionOutcome = reception && ask ? receptionAskOutcome(ask, {
+        record: (item: Parameters<PeerOutcomeLedger["record"]>[1]) => peerOutcomeLedger.record(threadId, item),
+        answered: (key: string) => answeredItemCard(owning, threadId, key),
+      }) : undefined;
       const cardThread = runRoom ?? personThread ?? threadId;
       const cardRoom = store.groupByThread(cardThread);
       const room = cardRoom && !cardRoom.dm && !cardRoom.peopleDm ? { people: roomPeopleOf(cardRoom), name: cardRoom.name, ...(runRoom ? { fromRun: true } : {}) } : undefined;
-      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk) || Boolean(personThread);
+      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk) || Boolean(personThread) || Boolean(reception);
       const posted = createAgentCard({
         store,
         bot,
@@ -23695,7 +23706,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
           record: (item: Parameters<PeerOutcomeLedger["record"]>[1]) => peerOutcomeLedger.record(threadId, item),
           // #4233's answered handling: an item the person answered stands
           answered: (key: string) => answeredItemCard(owning, personThread, key),
-        } } : {}),
+        } } : receptionOutcome ? { peerOutcome: receptionOutcome } : {}),
         ...(room ? { room, notifyAddressee: notifyRoomAskAddressee } : {}),
         // #4233: a repeating routine's run: ask_choice holds nothing by default
         ...(routines?.asksHoldNothing(threadId) ? { repeatingRun: true } : {}),
@@ -24570,6 +24581,48 @@ const smsConversation = new SmsConversation({
   },
   language: (person) => reachMeLanguage(person)
 });
+/** #4241: the person's own conversation with a bot a phone event writes
+ * in (started when they have none); null when it is confidential. */
+function phoneLineConversation(botId: string, person: string): string | null {
+  const bot = store.bot(botId);
+  if (!bot) return null;
+  const threadId = conversationOrStart(bot, person);
+  return threadId && !store.isConfidentialThread(threadId) ? threadId : null;
+}
+/** #4241: a message left at the line's public reception, one turn of the
+ * line's bot in its owner's conversation (server/bots/public-reception.ts).
+ * Its card takes the keyed form of a turn the person did not start (#4238,
+ * the ask_choice route below), recorded in the same ledger. */
+const publicReception = new PublicReceptionTurns({
+  conversation: phoneLineConversation,
+  append: (threadId, row) => store.appendMessage(threadId, { role: "bot", kind: "text", text: row.text, via: "call", ...(row.callerData ? { callerData: true } : {}) })?.id ?? null,
+  remove: (threadId, messageId) => { store.removeMessage(threadId, messageId); },
+  busy: threadBusy,
+  start: async ({ botId, threadId, person, prompt, settled }) => {
+    let refused = false;
+    await startTurn(botId, prompt, {
+      threadId, cardContinuation: true, speaker: { origin: "person", principalId: person },
+      onDispatchError: () => { refused = true; },
+      onTurnSettled: settled,
+    });
+    return !refused;
+  },
+  taken: (threadId) => peerOutcomeLedger.take(threadId),
+  raise: ({ botId, threadId, person, card }) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    return createAgentCard({
+      store, bot, threadId, input: card,
+      approvalLevel: sourceApprovalMode(bot.id, threadId),
+      personLanguage: languageOfPerson(person),
+      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice, "output"),
+      askKeys: askKeysFor(bot, threadId, threadId),
+      peerOutcome: { record: () => {}, answered: (key: string) => answeredItemCard(bot, threadId, key) },
+    }).ok;
+  },
+  language: (person) => personLanguageCode(languageOfPerson(person)),
+  log: (line) => console.info(line),
+});
 const inboundTelephony = createBotInboundTelephonyRoute({
   identity: () => IDENTITY.kind,
   publicOrigin: () => (IDENTITY.kind === "perspicax" ? IDENTITY.publicOrigin.replace(/\/+$/, "") : null),
@@ -24620,12 +24673,12 @@ const inboundTelephony = createBotInboundTelephonyRoute({
       label, summary: text.slice(0, 140), detail: text, hops: 0
     });
   },
+  // #4241: a message left at the line's public reception
+  publicReception: ({ ownerPrincipalId, botId, message }) => publicReception.deliver({ botId, person: ownerPrincipalId, message }),
   ownerNotice: ({ ownerPrincipalId, botId, text, via, callerData }) => {
     try {
-      const bot = store.bot(botId);
-      if (!bot) return false;
-      const threadId = conversationOrStart(bot, ownerPrincipalId);
-      if (!threadId || store.isConfidentialThread(threadId)) return false;
+      const threadId = phoneLineConversation(botId, ownerPrincipalId);
+      if (!threadId) return false;
       store.appendMessage(threadId, { role: "bot", kind: "text", text, ...(via ? { via } : {}), ...(callerData ? { callerData: true } : {}) });
       return true;
     } catch (error) {

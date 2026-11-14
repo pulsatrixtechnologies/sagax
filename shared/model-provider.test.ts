@@ -45,11 +45,11 @@ describe("one provider per instance (#4329)", () => {
   });
 
   it("groups the xAI tool, the xAI key and pi's xAI rows under the one xAI group label", () => {
-    expect(XAI_GROUP_LABEL).toBe("SpaceXAI");
+    expect(XAI_GROUP_LABEL).toBe("SpaceXSI");
     const tool = providerOfInstance({ instanceId: "grok", driverKind: "grokAgent", displayName: "Grok" });
     const key = providerOfInstance({ instanceId: "xaiApi", driverKind: "grok", displayName: "xAI" });
     const pi = providerOfModel({ instanceId: "pi", driverKind: "piAgent", displayName: "pi" }, { id: "xai/grok-5" });
-    expect(tool).toEqual({ id: "xai", label: "SpaceXAI", kind: "vendor" });
+    expect(tool).toEqual({ id: "xai", label: "SpaceXSI", kind: "vendor" });
     expect(key).toEqual(tool);
     expect(pi).toEqual(tool);
   });

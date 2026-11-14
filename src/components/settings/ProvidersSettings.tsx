@@ -5,7 +5,7 @@
 // provider's page (ProviderPage.tsx), where everything else lives. "Add a
 // provider" is one list in two columns (the reference's Connect Apps grid),
 // then one step. Other services and Advanced stay as they were.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, KeyRound, Plus, Search } from "lucide-react";
 
 import { useStore } from "@/state/store";
@@ -27,16 +27,16 @@ import { SavedKeysResetNotice } from "../SavedKeysReset";
 import { DescribedRow, HelpTip, InlineFold, PILL, PRIMARY_PILL, SettingsFoldSection, SettingsGroup, Switch, peekRequestedSettingsCard } from "../SettingsPrimitives";
 import { SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { PLUGINS } from "../plugins/plugins-style";
-import { LinkedGrokBotSettings } from "./LinkedGrokBotSettings";
+import { BOTS_LINK_SEARCH_WORDS, BotsLinkButton, BotsLinkLine, BotsLinkWords, botsLinkOnPage, useBotsLink, type BotsLink } from "./LinkedGrokBotSettings";
 import { PiServerForm } from "./PiModelServers";
 import { useProviderList, type ProviderList } from "./useProviderList";
-import { LineButton, ProviderLogo, groupName, lineWords, openProviderPage } from "./ProviderPage";
+import { LineButton, ProviderLogo, XAI_PROVIDER_ID, groupName, lineWords, openProviderPage } from "./ProviderPage";
 import { providerCardTarget } from "@/lib/settings-sections";
 
 /** One row of the list (#4329 B1): logo, name, one grey line (the account,
  * or what it brings), one button; a second account is a second line with
  * its own button. The row opens the provider's page. */
-function ProviderListRow({ group, list, onOpen }: { group: ProviderGroup; list: ProviderList; onOpen: (row?: ProviderRow) => void }) {
+function ProviderListRow({ group, list, onOpen, extra }: { group: ProviderGroup; list: ProviderList; onOpen: (row?: ProviderRow) => void; extra?: ReactNode }) {
   const [first, ...rest] = group.rows;
   if (!first) return null;
   const line = (row: ProviderRow) => {
@@ -65,6 +65,28 @@ function ProviderListRow({ group, list, onOpen }: { group: ProviderGroup; list: 
           <LineButton row={row} group={group} list={list} onOpen={onOpen} />
         </div>
       ))}
+      {extra}
+    </li>
+  );
+}
+
+/** The xAI provider's row when none of its accounts is listed but the bots
+ * link is there: its name, the link's words and its one button. */
+function BotsLinkProviderRow({ link, list, onOpen }: { link: BotsLink; list: ProviderList; onOpen: () => void }) {
+  const group: ProviderGroup = { id: XAI_PROVIDER_ID, name: vendorLabel(XAI_PROVIDER_ID), kind: "account", rows: [], state: "available" };
+  return (
+    <li data-provider={group.id} data-provider-kind={group.kind} className="min-w-0">
+      <div data-bots-link-row="" data-settings-row="providers.botsLink" data-settings-keywords={BOTS_LINK_SEARCH_WORDS} className="flex min-h-16 min-w-0 items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-ink/[0.05] motion-reduce:transition-none">
+        <button type="button" data-provider-open={group.id} data-bots-link-open="" onClick={onOpen}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
+          <ProviderLogo group={group} instances={list.instances} />
+          <span className="min-w-0 flex-1">
+            <span className="block break-words text-[13px] font-medium leading-[18px] text-ink [overflow-wrap:anywhere]">{group.name}</span>
+            <span className={cn(PLUGINS.rowSub, "[overflow-wrap:anywhere]")}><BotsLinkWords link={link} /></span>
+          </span>
+        </button>
+        <BotsLinkButton link={link} onOpen={onOpen} />
+      </div>
     </li>
   );
 }
@@ -255,6 +277,7 @@ export function ProvidersSettings() {
   const [adding, setAdding] = useState(false);
   const editingKey = useOpenProviderKey();
   const rowRequest = useProviderRowRequest();
+  const botsLink = useBotsLink();
   const open = (group: ProviderGroup, row?: ProviderRow) => openProviderPage(dispatch, group.id, row?.id);
   const openRow = (row: ProviderRow) => openProviderPage(dispatch, row.kind === "local" ? COMPUTER_PROVIDER_ID : providerGroupKey(row, list.instances), row.id);
 
@@ -285,6 +308,19 @@ export function ProvidersSettings() {
     if (match) openRow(match);
   }, [target, list.rows, list.local]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // #4329 lot 2: the link to the person's bots in the xAI provider's bot
+  // app is a line of that provider's row (alone, the provider's own row when
+  // none of its accounts is listed); its block is on that provider's page.
+  const xaiListed = list.groups.some((group) => group.id === XAI_PROVIDER_ID);
+  // Shown once linked, or wherever the organization allows it: with no xAI
+  // account here, the provider's own row carries it, so Connect is reachable.
+  const showBotsLink = botsLinkOnPage(botsLink);
+  const openBotsLink = () => openProviderPage(dispatch, XAI_PROVIDER_ID);
+  // An old link to the bots link (it was under Advanced) opens that page.
+  useEffect(() => {
+    if (target?.kind === "botsLink" && showBotsLink) openBotsLink();
+  }, [target, showBotsLink]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const imageGen = state.config?.imageGen;
 
   return (
@@ -303,9 +339,13 @@ export function ProvidersSettings() {
             ? <AddProvider list={list} onClose={() => setAdding(false)} />
             : (
               <>
-                {list.groups.length > 0
+                {list.groups.length > 0 || showBotsLink
                   ? <ul className="flex flex-col gap-0.5 px-1.5 py-1" data-providers-active="">
-                      {list.groups.map((group) => <ProviderListRow key={group.id} group={group} list={list} onOpen={(row) => open(group, row)} />)}
+                      {list.groups.map((group) => (
+                        <ProviderListRow key={group.id} group={group} list={list} onOpen={(row) => open(group, row)}
+                          extra={group.id === XAI_PROVIDER_ID && showBotsLink ? <BotsLinkLine link={botsLink} onOpen={openBotsLink} /> : undefined} />
+                      ))}
+                      {showBotsLink && !xaiListed && <BotsLinkProviderRow link={botsLink} list={list} onOpen={openBotsLink} />}
                     </ul>
                   : <div data-providers-empty=""><SettingsEmpty icon={KeyRound}>{t("providers.empty")}</SettingsEmpty></div>}
                 {/* the card's one primary action, last row (#2080) */}
@@ -331,8 +371,9 @@ export function ProvidersSettings() {
             )}
         </SettingsGroup>
       </div>
-      {/* Advanced (#2295): the person's cloud agent keys, their claude.ai
-          connectors and the link with the bots of the other app. Never a card in a card. */}
+      {/* Advanced (#2295): the person's cloud agent keys and their claude.ai
+          connectors. Never a card in a card. The link to the person's bots in
+          the xAI provider's bot app is a line of that provider (#4329). */}
       <SettingsFoldSection cardId="providers.advanced" groupId="providers-advanced" title={t("providers.advanced.title")} description={t("providers.advanced.help")}>
         <div className="flex flex-col gap-6" data-providers-advanced="">
           {list.manageKeys && (
@@ -341,7 +382,6 @@ export function ProvidersSettings() {
             </SettingsGroup>
           )}
           <HarnessConnectorsSection placement="settings" />
-          <LinkedGrokBotSettings />
         </div>
       </SettingsFoldSection>
       {/* a key asked for from another page with no line here yet */}

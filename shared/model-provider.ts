@@ -17,7 +17,7 @@ import { PERSONAL_PROVIDER_NAMES } from "./provider-accounts.ts";
 
 /** The label of the xAI group (its models, its tool, its key and the link
  * to the person's bots in its bot app). One constant: the owner's word. */
-export const XAI_GROUP_LABEL = "SpaceXAI";
+export const XAI_GROUP_LABEL = "SpaceXSI";
 
 /** The provider of this computer's models. */
 export const COMPUTER_PROVIDER_ID = "computer";

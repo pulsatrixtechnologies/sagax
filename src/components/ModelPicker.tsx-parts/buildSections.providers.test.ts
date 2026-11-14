@@ -86,7 +86,7 @@ describe("the chat bar menu by provider (#4329)", () => {
   it("names OpenAI once for its two sign-ins, never Codex, and the xAI group by its label", () => {
     const { menuSections } = buildModelPickerSections(input([grok, chatgpt, codex], { instanceId: "grok", model: "grok-4.7" }));
     expect(keys(menuSections)).toEqual(["top", "openai", "xai"]);
-    expect(menuSections.map((candidate) => candidate.label)).toEqual([undefined, "OpenAI", "SpaceXAI"]);
+    expect(menuSections.map((candidate) => candidate.label)).toEqual([undefined, "OpenAI", "SpaceXSI"]);
     expect(section(menuSections, "openai").rows.map((row) => row.modelId)).toEqual(["gpt-5.6", "gpt-6"]);
     const words = JSON.stringify(menuSections.map(({ label, note, rows }) => ({ label, note, rows: rows.map((row) => [row.label, row.detail]) })));
     expect(words).not.toMatch(/Codex|Claude Code|ChatGPT plan|Harness|API key/);

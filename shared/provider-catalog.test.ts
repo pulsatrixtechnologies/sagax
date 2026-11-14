@@ -25,7 +25,7 @@ describe("the provider catalog (#4329)", () => {
 
   it("lists one row per provider in the agreed order, OpenAI once with its two accounts", () => {
     const { providers } = providerCatalog({ instances: withLocal, place: "solo" });
-    expect(providers.map((provider) => provider.label)).toEqual(["Claude", "OpenAI", "SpaceXAI", "Mistral", "OpenCode", "Home server", "This computer"]);
+    expect(providers.map((provider) => provider.label)).toEqual(["Claude", "OpenAI", "SpaceXSI", "Mistral", "OpenCode", "Home server", "This computer"]);
     const openai = providers.find((provider) => provider.id === "openai")!;
     expect(openai.kind).toBe("account");
     expect(openai.connections.map((connection) => [connection.instanceId, connection.label, connection.state])).toEqual([
@@ -77,7 +77,10 @@ describe("the provider catalog (#4329)", () => {
       .providers.find((provider) => provider.id === "xai")!.connections.some((connection) => connection.kind === "botsLink")).toBe(false);
     // a link with no xAI engine still shows the group
     expect(providerCatalog({ instances: [], place: "solo", botsLink: { linked: true, enabled: false, orgAllowed: true } }).providers)
-      .toEqual([expect.objectContaining({ id: "xai", label: "SpaceXAI", connections: [expect.objectContaining({ kind: "botsLink", state: "off" })] })]);
+      .toEqual([expect.objectContaining({ id: "xai", label: "SpaceXSI", connections: [expect.objectContaining({ kind: "botsLink", state: "off" })] })]);
+    // no xAI account, not linked, the organization allows it: its Connect step is still offered
+    expect(providerCatalog({ instances: [], place: "solo", botsLink: { linked: false, enabled: false, orgAllowed: true } }).providers)
+      .toEqual([expect.objectContaining({ id: "xai", label: "SpaceXSI", connections: [expect.objectContaining({ kind: "botsLink", state: "signedOut" })] })]);
   });
 
   it("offers only the built in runtime for an Azure resource, behind the default address row or a person's server", () => {

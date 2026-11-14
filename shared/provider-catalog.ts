@@ -119,6 +119,21 @@ export interface ProviderCatalog {
 /** The bots link's line under the xAI group. */
 export const BOTS_LINK_LABEL = "Your bots there";
 
+/** The bots link's state: not linked yet, turned off by the organization
+ * (the link is kept), paused by the person, or connected. */
+export function botsLinkState(link: CatalogBotsLink): Exclude<CatalogConnectionState, "unavailable"> {
+  return !link.linked ? "signedOut" : !link.orgAllowed ? "adminOff" : link.enabled ? "connected" : "off";
+}
+
+/** Whether the bots link shows under the xAI group: always once linked (an
+ * organization that turned it off keeps it, said so), else wherever the
+ * organization allows it, with or without an xAI account here (the group is
+ * drawn for it alone): a person who uses the other bot app always finds its
+ * Connect step. */
+export function botsLinkShown(link: CatalogBotsLink): boolean {
+  return link.linked || link.orgAllowed;
+}
+
 const RANK: Record<CatalogProviderKind, number> = { account: 0, key: 1, server: 2, other: 3, computer: 4 };
 
 function connectionState(instance: CatalogInstance): CatalogConnectionState {
@@ -218,9 +233,8 @@ export function providerCatalog(input: CatalogInput): ProviderCatalog {
   }
 
   const link = input.botsLink;
-  if (link && (link.linked || link.orgAllowed) && (link.linked || drafts.has("xai"))) {
-    const state: CatalogConnectionState = !link.linked ? "signedOut" : !link.orgAllowed ? "adminOff" : link.enabled ? "connected" : "off";
-    draft(vendorProvider("xai")).connections.push({ kind: "botsLink", label: BOTS_LINK_LABEL, state, harnesses: [], recommended: null });
+  if (link && botsLinkShown(link)) {
+    draft(vendorProvider("xai")).connections.push({ kind: "botsLink", label: BOTS_LINK_LABEL, state: botsLinkState(link), harnesses: [], recommended: null });
   }
 
   const providers = [...drafts.values()].map((entry): CatalogProvider & { rank: number } => {

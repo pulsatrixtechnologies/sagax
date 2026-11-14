@@ -23,6 +23,7 @@ import type { KnowledgeBase, KnowledgeSection, PerspicaxSnapshot } from "../../s
 import { clip, CUSTOMER_TAG_LEFT, docSections, plainText, scrub, slug } from "./markdown.ts";
 import { CARD_HOME } from "../../src/lib/settings-sections.ts";
 import { TEAM_CHAT_CHANNELS_OFFERED } from "../../shared/team-chat-channels.ts";
+import { XAI_GROUP_LABEL } from "../../shared/model-provider.ts";
 import { GUIDES, SETTING_NOTES } from "./guides.ts";
 
 export const KNOWLEDGE_FILE = join("server", "self-knowledge", "knowledge.generated.json");
@@ -198,6 +199,14 @@ const CARD_PAGE: Record<string, string> = {
 };
 const HIDDEN_PAGES = new Set(["companion", "activity", "mail", "people", "workspaces"]);
 
+/** A card that sits inside a row of its page, by the steps between the page
+ * and the card: a fixed label, or a locale key. The bots link (#4329 lot 2)
+ * is a line of the xAI provider in Providers; its technical fields are its
+ * own part of that provider page's one Advanced, not the Providers page's. */
+const CARD_TRAIL: Readonly<Record<string, readonly ({ text: string } | { key: string })[]>> = {
+  "providers.linkedGrokBot.advanced": [{ text: XAI_GROUP_LABEL }, { key: "providers.advanced.title" }],
+};
+
 function settingsSections(root: string): KnowledgeSection[] {
   const { en, fr } = locales(root);
   const rows = settingsSectionRows(root);
@@ -235,7 +244,12 @@ function settingsSections(root: string): KnowledgeSection[] {
       const prefix = id.split(".")[0];
       const page = id.startsWith("bot.") ? null : HIDDEN_PAGES.has(prefix) ? null : (Object.hasOwn(CARD_HOME, id) ? CARD_HOME[id] : undefined) ?? CARD_PAGE[prefix] ?? (pageName.has(prefix) ? prefix : null);
       if (!page && !id.startsWith("bot.")) continue;
-      const title = titleKey ? label(titleKey, en, fr) : { english: titleText!, french: "" };
+      const own = titleKey ? label(titleKey, en, fr) : { english: titleText!, french: "" };
+      const trail = (CARD_TRAIL[id] ?? []).map((step) => "key" in step ? label(step.key, en, fr) : { english: step.text, french: "" });
+      const title = trail.length === 0 ? own : {
+        english: [...trail.map((step) => step.english), own.english].join(" > "),
+        french: [...trail.map((step) => step.french || step.english), own.french || own.english].join(" > "),
+      };
       const subtitleKey = /subtitle=\{t\("([\w.]+)"/.exec(window)?.[1] ?? /summary=\{t\("([\w.]+)"/.exec(window)?.[1];
       const subtitle = subtitleKey ? label(subtitleKey, en, fr) : null;
       const pageLabel = page ? pageName.get(page)! : null;

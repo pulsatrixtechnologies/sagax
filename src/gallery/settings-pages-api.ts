@@ -3,7 +3,9 @@
  * src/components/SettingsModal.oneCardLevel.dom.test.ts) so a page is checked
  * on the same data it is shot with. Fictional data only, neutral names.
  * `params`: the gallery's query (`providers=1`, `org=1`, `auto=1`, `keys=unreadable`,
- * `many=1` with providers=1: a realistic Providers list, eleven rows and more). */
+ * `many=1` with providers=1: a realistic Providers list, eleven rows and more,
+ * `botslink=none|off|org|paused-delivery`: the bots link's states, `noxai=1`:
+ * no xAI account). */
 export function settingsPagesApi(params: URLSearchParams): Record<string, unknown> {
   const DAY = 86_400_000;
   const NOW = Date.UTC(2026, 9, 28, 14);
@@ -53,6 +55,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
     },
     "/api/instances": { instances: params.get("empty") ? [] : [
       { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1" }, { id: "sonnet", label: "Claude Sonnet 4.5" }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
+      // &noxai=1 (#4329 lot 2): no xAI account here, for the bots link alone under its provider
       { instanceId: "grok", displayName: "Grok", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // ?providers=1 (#2080): several accounts per provider (emails stay inside
       // the Claude group), a personal openai-compat server (Skye), Azure Foundry.
@@ -79,17 +82,23 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
           { id: "px-own-sx-0a1b2c3d4e/qwen-3.8-27b", label: "qwen-3.8-27b", custom: true, provider: "px-own-sx-0a1b2c3d4e", server: "oMLX on this Mac" },
         ] } },
       ] : []),
-    ] },
+    ].filter((instance) => !(params.get("noxai") && instance.instanceId === "grok")) },
     ...(params.get("pi") ? { "/api/me/pi-model-servers": { servers: [
       { id: "sx-0a1b2c3d4e", name: "oMLX on this Mac", url: "http://127.0.0.1:8000/v1", configured: true, models: [{ id: "qwen-3.8-27b", contextWindow: 131072 }, { id: "qwen-3.8-7b" }], checkedAt: new Date(NOW - DAY).toISOString(), provider: "px-own-sx-0a1b2c3d4e" },
       { id: "sx-5f6a7b8c9d", name: "Ollama", url: "http://localhost:11434/v1", configured: false, models: [], provider: "px-own-sx-5f6a7b8c9d" },
     ] } } : {}),
     "/api/me/cloud-agent-providers": { providers: [] },
-    // Providers > Advanced: the claude.ai connectors, the Grok Bot link (Advanced) and Memes (Other services)
+    // Providers > Advanced: the claude.ai connectors; Memes (Other services); the bots link (the xAI provider)
     "/api/me/harness-connectors": { manageUrl: "https://claude.ai/customize/connectors", canManage: true, enabled: true, claude: { available: true, connectors: [
       { name: "Gmail", status: "connected" }, { name: "Google Calendar", status: "connected" }, { name: "Notion", status: "needs_auth" }, { name: "Example Docs", status: "unknown" },
     ] }, codex: { available: false } },
-    "/api/me/grok-bridge": { linked: true, enabled: true, orgAllowed: true, webhookUrl: "https://bots.example.com/hook", keySet: true, bots: ["Scout"], mayCallOwner: false, mayTextOwner: true, linkId: "demo-link", stats: { sentToday: 3, deadLetters: 0, circuitOpen: false } },
+    // &botslink=none|off|org|paused-delivery (#4329): the bots link line of the xAI group not linked, paused, turned off by the organization, delivery paused
+    "/api/me/grok-bridge": params.get("botslink") === "none"
+      ? { linked: false, enabled: false, orgAllowed: true, keySet: false, bots: [], mayCallOwner: false, mayTextOwner: false }
+      : {
+        linked: true, enabled: params.get("botslink") !== "off", orgAllowed: params.get("botslink") !== "org", webhookUrl: "https://bots.example.com/hook", keySet: true, bots: ["Scout"], mayCallOwner: false, mayTextOwner: true, linkId: "demo-link",
+        stats: params.get("botslink") === "paused-delivery" ? { sentToday: 3, deadLetters: 2, circuitOpen: true } : { sentToday: 3, deadLetters: 0, circuitOpen: false },
+      },
     "/api/me/memes": { provider: "giphy", keyConfigured: true, last4: "AB12", ready: true },
     // &org=1: an organization server, the viewer an admin with their own sign-ins
     ...(params.get("org") ? {

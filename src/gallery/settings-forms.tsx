@@ -14,7 +14,7 @@ import { PhoneCallsCard } from "../components/settings/PhoneCallsCard";
 import { OrgTeamSecrets } from "../components/settings/OrgTeamSecrets";
 import { OrgVaultExportPolicy } from "../components/settings/OrgVaultExportPolicy";
 import { OrgGrokBridgePolicy } from "../components/settings/OrgGrokBridgePolicy";
-import { LinkedGrokBotSettings } from "../components/settings/LinkedGrokBotSettings";
+import { BotsLinkAdvanced, BotsLinkBlock, useBotsLink } from "../components/settings/LinkedGrokBotSettings";
 import { CredentialsSettings } from "../components/settings/CredentialsSettings";
 import { ComputerCareSettings } from "../components/settings/ComputerCareSettings";
 import { PublishedPagesSettings } from "../components/PublishedPages";
@@ -154,6 +154,23 @@ const store = {
   refreshModels: async () => {},
 };
 
+/** The bots link block and its part of the page's Advanced, as the xAI provider's page draws them (#4329). */
+function GalleryBotsLink() {
+  const link = useBotsLink({
+    linked: true,
+    enabled: true,
+    webhookUrl: "https://bots.example/hook",
+    keySet: true,
+    linkId: "link_gallery",
+    bots: ["nimbus"],
+    mayCallOwner: false,
+    mayTextOwner: true,
+    orgAllowed: true,
+    stats: { sentToday: 1, receivedToday: 0, deadLetters: 0, circuitOpen: false },
+  });
+  return <><div className="px-3.5 py-2.5"><BotsLinkBlock link={link} /></div><BotsLinkAdvanced link={link} /></>;
+}
+
 function Gallery() {
   return (
     <main className="flex min-h-screen flex-col bg-app text-ink" data-gallery-settings="">
@@ -165,18 +182,9 @@ function Gallery() {
         </SettingsGroup>
       </Sample>
       <Sample id="linked-grok-bot">
-        <LinkedGrokBotSettings initial={{
-            linked: true,
-            enabled: true,
-            webhookUrl: "https://grok.example/hook",
-            keySet: true,
-            linkId: "link_gallery",
-            bots: ["cryptic"],
-            mayCallOwner: false,
-            mayTextOwner: true,
-            orgAllowed: true,
-            stats: { sentToday: 1, receivedToday: 0, deadLetters: 0, circuitOpen: false },
-          }} />
+        <SettingsGroup title={t("grokBridge.title")} groupId="provider-bots-link">
+          <GalleryBotsLink />
+        </SettingsGroup>
       </Sample>
       <Sample id="experimental-phone-calls-off">
         <SettingsGroup title={t("settings.experimental.title")} groupId="experimental">

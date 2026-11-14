@@ -260,7 +260,9 @@ describe("RoutineDetailHeader", () => {
     expect(markup).toContain("content-topbar");
     expect(markup).toContain(CIRCLE_BUTTON);
     expect(markup).toContain("Osprey inbox");
-    expect(markup.match(new RegExp(CIRCLE_BUTTON, "g"))).toHaveLength(2);
+    // counted as a literal: the class list carries brackets since #4174
+    // (duration-[120ms]), which a RegExp would read as a character class
+    expect(markup.split(CIRCLE_BUTTON).length - 1).toBe(2);
   });
 
   it("is the header the detail page renders", () => {

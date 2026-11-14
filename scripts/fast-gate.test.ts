@@ -373,6 +373,63 @@ describe("fast-gate.sh", () => {
     for (const file of UI_GUARD_TESTS) expect(existsSync(resolve(__dirname, "..", file)), file).toBe(true);
   });
 
+  // #4186: eight tests that read the app's sources or its catalogs as text
+  // went red on the 0.8.100 release commit, since the import graph links no
+  // file read as text. A lot that touches a file they read (src/, the
+  // phone's catalog, the providers docs page, two scripts/testing files) runs
+  // them all, two files at a time; a lot elsewhere does not, and the
+  // guard-tests line leaves them to this one.
+  it("runs the source-text tests on a lot that touches a file they read as text, and only there", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));
+    for (const file of ["src/locales/words.test.ts", "src/components/bot-settings/RoutinesSection.test.ts", "src/locales/unused-keys.test.ts"]) write(file, "// guard\n");
+    git("add", "-A");
+    git("commit", "-qm", "guards");
+    git("branch", "-f", "main");
+    const runs = (touched: string) => {
+      write(touched, "export const touched = 1;\n");
+      try { rmSync(join(fakeBin, "calls")); } catch { /* first run */ }
+      const { code, out } = gate("--base", "main", "--only", "extra-source-text,extra-guard-tests");
+      expect(code, out).toBe(0);
+      rmSync(join(repo, touched));
+      return readFileSync(join(fakeBin, "calls"), "utf8");
+    };
+    const ui = runs("src/b.ts");
+    expect(ui).toContain("vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 src/components/bot-settings/RoutinesSection.test.ts src/locales/words.test.ts");
+    // the guard-tests line leaves the source-text tests to their own line
+    expect(ui).toContain("vitest run --reporter=dot --testTimeout=60000 src/locales/unused-keys.test.ts\n");
+    expect(runs("ios/App/Localizable.xcstrings")).toContain("--fileParallelism --maxWorkers=2");
+    // the other files a listed test reads as text
+    expect(runs("apps/docs/content/docs/providers/model-providers.mdx")).toContain("--fileParallelism --maxWorkers=2");
+    expect(runs("scripts/testing/compose-flow.ts")).toContain("--fileParallelism --maxWorkers=2");
+    expect(runs("server/x.ts")).not.toContain("--fileParallelism");
+  });
+
+  it("lists every test the rail found red for reading sources as text, and none with a known failure", async () => {
+    const { GUARD_TESTS, SOURCE_TEXT_TESTS } = await import("./verify/release/guard-tests.mjs");
+    expect(SOURCE_TEXT_TESTS).toEqual(expect.arrayContaining([
+      "src/locales/words.test.ts",
+      "src/components/bot-settings/RoutinesSection.test.ts",
+      "src/components/settings/toggle-consumers.test.ts",
+      "electron/skin-overlay.test.mjs",
+      "shared/approval-describe.test.ts",
+      "src/components/bot-settings/ActivitySection.test.ts",
+      "src/components/bot-settings/CodeBranchList.test.ts",
+      "src/components/widget/WidgetMessage.test.ts",
+      // read src/styles.css, ChatViewBanners.tsx and today-box.{tsx,html} as text
+      "src/components/SidebarPopoverMenu.measures.test.ts",
+      "src/components/TurnTimingLine.test.ts",
+      "src/gallery/today-box.test.ts",
+    ]));
+    expect(GUARD_TESTS).toEqual(expect.arrayContaining([...SOURCE_TEXT_TESTS, "scripts/stability/portable-paths.test.ts"]));
+    expect(new Set(GUARD_TESTS).size).toBe(GUARD_TESTS.length);
+    const known = new Set((JSON.parse(readFileSync(resolve(__dirname, "testing/known-failures.json"), "utf8")) as { tests: { file: string }[] }).tests.map((entry) => entry.file));
+    for (const file of SOURCE_TEXT_TESTS) {
+      expect(existsSync(resolve(__dirname, "..", file)), file).toBe(true);
+      expect(known.has(file), file).toBe(false);
+    }
+  });
+
   it("has nothing to check on a clean branch", () => {
     const { code, out } = gate("--base", "main");
     expect(code).toBe(0);

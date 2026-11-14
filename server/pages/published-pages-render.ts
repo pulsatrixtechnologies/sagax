@@ -162,19 +162,21 @@ export const WRAPPER_OPEN_SOURCE = String.raw`(function(){"use strict";
 addEventListener("message",function(e){var f=document.querySelector("iframe");if(!f||e.source!==f.contentWindow)return;var d=e.data;if(!d||d.type!=="${PAGE_OPEN_MESSAGE}"||typeof d.url!=="string")return;try{var u=new URL(d.url);if(u.username||u.password)return;if(u.protocol!=="https:"&&u.protocol!=="http:"&&u.protocol!=="mailto:")return;if((u.protocol==="https:"||u.protocol==="http:")&&!u.hostname)return;window.open(u.href,"_blank","noopener,noreferrer")}catch(x){}});
 })();`;
 
-/** The anchor of a selection, shared by the frame's bridges (#4099): a
- * CSS-like path, the page's text, the selection as an anchor (selected),
- * and an anchor found again in this version (find), the right occurrence by
- * what comes before and after. Needs D (document) and W (window) in scope. */
-const ANCHOR_SOURCE = String.raw`function path(el){var p=[],e=el;while(e&&e.nodeType===1&&p.length<8){var t=e.localName,i=1,s=e;if(t==="body"){p.unshift("body");break}while((s=s.previousElementSibling))if(s.localName===t)i++;p.unshift(i>1?t+":nth-of-type("+i+")":t);e=e.parentElement}return p.join(" > ")}
+/** The anchor of a selection, shared by the frame's bridges (#4099), in two
+ * parts so the reading frame's Annotate script keeps its exact bytes (its
+ * own `element` sits between them, #4186): a CSS-like path, the page's
+ * text and the selection as an anchor (selected), then an anchor found
+ * again in this version (find), the right occurrence by what comes before
+ * and after. Needs D (document) and W (window) in scope. */
+const ANCHOR_SELECT_SOURCE = String.raw`function path(el){var p=[],e=el;while(e&&e.nodeType===1&&p.length<8){var t=e.localName,i=1,s=e;if(t==="body"){p.unshift("body");break}while((s=s.previousElementSibling))if(s.localName===t)i++;p.unshift(i>1?t+":nth-of-type("+i+")":t);e=e.parentElement}return p.join(" > ")}
 function texts(){var b=D.body,out=[],pos=0;if(!b)return{list:out,text:""};var w=D.createTreeWalker(b,4,null),n;while((n=w.nextNode())){out.push({n:n,s:pos});pos+=n.data.length}return{list:out,text:out.map(function(x){return x.n.data}).join("")}}
 function at(node,off){var r=D.createRange();r.setStart(D.body,0);try{r.setEnd(node,off)}catch(e){return -1}return r.toString().length}
 function locate(t,pos,end){var l=t.list;for(var i=0;i<l.length;i++){var e=l[i],n=e.n.data.length;if(pos>=e.s&&(pos<e.s+n||(end&&pos===e.s+n)))return{n:e.n,o:pos-e.s}}var last=l[l.length-1];return last?{n:last.n,o:last.n.data.length}:null}
 function selected(){var sel=W.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount||!D.body)return null;var r=sel.getRangeAt(0);if(!D.body.contains(r.commonAncestorContainer))return null;
 var t=texts(),a=at(r.startContainer,r.startOffset),b=at(r.endContainer,r.endOffset);if(a<0||b<=a)return null;b=Math.min(b,a+${THREAD_LIMITS.quoteChars});var q=t.text.slice(a,b);if(!q.trim())return null;
 var el=r.commonAncestorContainer;if(el.nodeType!==1)el=el.parentElement;if(!el)return null;
-return{kind:"text",quote:q,prefix:t.text.slice(Math.max(0,a-${THREAD_LIMITS.contextChars}),a),suffix:t.text.slice(b,b+${THREAD_LIMITS.contextChars}),path:path(el),tag:el.localName}}
-function tail(a,b){var n=Math.min(a.length,b.length,24);return n>0&&a.slice(a.length-n)===b.slice(b.length-n)}
+return{kind:"text",quote:q,prefix:t.text.slice(Math.max(0,a-${THREAD_LIMITS.contextChars}),a),suffix:t.text.slice(b,b+${THREAD_LIMITS.contextChars}),path:path(el),tag:el.localName}}`;
+const ANCHOR_FIND_SOURCE = String.raw`function tail(a,b){var n=Math.min(a.length,b.length,24);return n>0&&a.slice(a.length-n)===b.slice(b.length-n)}
 function head(a,b){var n=Math.min(a.length,b.length,24);return n>0&&a.slice(0,n)===b.slice(0,n)}
 function find(a,t){if(!a)return null;if(a.kind==="element"){var el=null;try{el=D.querySelector(a.path)}catch(e){}return el&&el.localName===a.tag?{el:el}:null}
 var q=a.quote,txt=t.text,best=-1,score=-1,i=txt.indexOf(q);while(i>=0){var s=0;if(a.prefix&&tail(txt.slice(Math.max(0,i-a.prefix.length),i),a.prefix))s+=1;if(a.suffix&&head(txt.slice(i+q.length,i+q.length+a.suffix.length),a.suffix))s+=1;if(s>score){score=s;best=i}if(score>=2)break;i=txt.indexOf(q,i+1)}
@@ -198,8 +200,9 @@ st.textContent="::highlight(sagax-note){background-color:rgba(255,196,0,.38)}::h
 +"html.sagax-annotating [data-sagax-hover]{outline:2px dashed #2f6feb!important;outline-offset:2px!important;cursor:crosshair!important}";
 (D.head||D.documentElement).appendChild(st);
 function post(m){try{W.parent.postMessage(m,"*")}catch(e){}}
-${ANCHOR_SOURCE}
+${ANCHOR_SELECT_SOURCE}
 function element(el){var s=String(el.innerText||el.textContent||"").replace(/\s+/g," ").trim();return{kind:"element",quote:s.slice(0,160),prefix:"",suffix:"",path:path(el),tag:el.localName}}
+${ANCHOR_FIND_SOURCE}
 function clear(){if(H){H.delete("sagax-note");H.delete("sagax-note-active");H.delete("sagax-note-done")}var l=D.querySelectorAll("[data-sagax-mark]");for(var i=0;i<l.length;i++)l[i].removeAttribute("data-sagax-mark")}
 function draw(scroll){clear();hits=[];var t=texts(),open=[],act=[],done=[],found=[];
 marks.forEach(function(m){var f=find(m.anchor,t);if(!f)return;var box;if(f.range){(m.active?act:m.resolved?done:open).push(f.range);box=f.range.getBoundingClientRect()}else{f.el.setAttribute("data-sagax-mark",m.active?"active":m.resolved?"done":"open");box=f.el.getBoundingClientRect()}
@@ -233,7 +236,8 @@ var redraw=0;W.addEventListener("resize",function(){clearTimeout(redraw);redraw=
 export const SELECTION_BRIDGE_SOURCE = String.raw`(function(){"use strict";
 var D=document,W=window,A=W.top,cur=null,raf=0;
 function post(m){try{A.postMessage(m,"*")}catch(e){}}
-${ANCHOR_SOURCE}
+${ANCHOR_SELECT_SOURCE}
+${ANCHOR_FIND_SOURCE}
 function box(r){var b;try{b=r.getBoundingClientRect()}catch(e){return null}if(!b||(!b.width&&!b.height))return null;return{x:Math.round(b.left),y:Math.round(b.top),w:Math.round(b.width),h:Math.round(b.height)}}
 function send(){if(!cur)return;var b=box(cur.r);if(!b){cur=null;post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:null});return}post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:cur.a,rect:b})}
 function drop(){if(!cur)return;cur=null;post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:null})}

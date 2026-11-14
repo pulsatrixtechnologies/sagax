@@ -122,9 +122,10 @@
    38% in dark), the + and mic circles a secondary fill (6% / 4%) with a
    0.5 px inner hairline in its tertiary translucent border (8% / 6%) and the
    glyph in tertiary text (56% / 54%), the fill 10% / 8% on hover. Mixed from
-   each skin's own ink, so every skin keeps its hue. */
-:root,
-[data-skin] {
+   each skin's own ink, so every skin keeps its hue. :is() so the line
+   never reads as the [data-skin] block (native controls, popover tokens)
+   to the tools that look one up (#4198). */
+:is(:root, [data-skin]) {
   --composer-placeholder: color-mix(in srgb, var(--color-ink) 38%, transparent);
   --composer-control-fill: color-mix(in srgb, var(--color-ink) 4%, transparent);
   --composer-control-fill-hover: color-mix(in srgb, var(--color-ink) 8%, transparent);

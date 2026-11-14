@@ -50,7 +50,10 @@ const CONTROLS = ["checkbox", "radio", "range", "color", "file"];
 
 describe("keyboard focus on form controls", () => {
   it("keeps the global focus ring", () => {
-    expect(withoutComments).toMatch(/(?:^|\})\s*:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--color-focus\)/);
+    // #4190 (owner request #4156) draws the ring for keyboard focus only: a
+    // focus that follows a mouse click carries data-pointer-focus
+    // (src/lib/input-modality.ts). Every other focus keeps the ring.
+    expect(withoutComments).toMatch(/(?:^|\})\s*:focus-visible:not\(\[data-pointer-focus\]\)\s*\{[^}]*outline:\s*2px solid var\(--color-focus\)/);
   });
 
   it("still takes the outline off text fields, so the composer pill stays clean", () => {

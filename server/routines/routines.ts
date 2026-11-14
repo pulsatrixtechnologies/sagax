@@ -1074,8 +1074,26 @@ export function routineEndsOnAnnouncement(output: string | undefined): boolean {
   // alone counts, closed by ":", ".", "!" or the end: "I'll let them know",
   // "I'll let it run" or "je vais laisser un commentaire" still announce work.
   if (/^(?:\S+[,.!]?\s+)?(?:i'll|i will|i'm going to|i am going to)\s+(?:leave (?:it|this|that|them)(?: (?:alone|as is|there|for now))?|let (?:it|this|that|them) be(?: for now)?)\s*(?:[:.!]|$)|^(?:\S+[,.!]?\s+)?je vais (?:(?:le|la|les) laisser|laisser ça)(?: (?:là|tel quel|telle quelle|comme ça|pour l'instant))?\s*(?:[:.!]|$)/i.test(text)) return false;
+  if (ROUTINE_NO_WORK_DECISION.test(text) || ROUTINE_ASKS_PERSON_TO_SAY.test(text)) return false;
   return !/\b(?:done|completed|finished|found|sent|created|updated|no (?:issues|problems|items)|nothing to|fait|terminé|complété|envoyé|créé|trouvé|aucun|aucune|rien à)\b/i.test(text);
 }
+
+/** #3990: a run whose bot decided there is nothing to do this run (skip,
+ * ignore or pass on an item, keep watching, look again at the next run,
+ * wait for the next event, do nothing more), closed by ":", ".", "!", ";"
+ * or the end. That is the run's outcome, never an announcement of work left
+ * undone: "I'll skip the duplicates and send the rest", "je vais attendre la
+ * fin de la copie puis…" or "I'll check the inbox again: nothing urgent so
+ * far" (work, whatever words follow it) still announce. */
+const ROUTINE_NO_WORK_DECISION = new RegExp([
+  String.raw`^(?:\S+[,.!]?\s+)?(?:i'll|i will|i'm going to|i am going to)\s+(?:skip|ignore|pass on|not (?:act|reply|answer|respond)|do nothing|stand by|keep (?:watching|monitoring|an eye on it)|check again (?:at|on|in) the next (?:run|pass)|wait for the next (?:message|email|mail|event|run|pass))(?:\s+(?:it|this|that|them|this one|that one|for now|more|further|on it|on this|it for now|this one for now))?\s*(?:[:.!;]|$)`,
+  String.raw`^(?:\S+[,.!]?\s+)?je vais\s+(?:m'abstenir|l'ignorer|les ignorer|ignorer (?:ça|ce message|ce courriel|celui-ci|celle-ci)|passer (?:mon tour|mon chemin)|ne (?:rien faire|pas (?:répondre|agir|intervenir))|continuer à surveiller|garder (?:un|l')œil|revérifier à la prochaine (?:passe|exécution)|attendre (?:la suite|le prochain (?:message|courriel)|la prochaine (?:passe|exécution)))(?:\s+(?:de plus|pour l'instant|pour le moment|là-dessus))?\s*(?:[:.!;]|$)`,
+].join("|"), "i");
+
+/** #3990: "let me know if…", "laisse-moi savoir si…": the bot asks the
+ * person to say something, it announces no work of its own. */
+const ROUTINE_ASKS_PERSON_TO_SAY = /^(?:ok(?:ay)?[,.!]?\s+|d'accord[,.!]?\s+|parfait[,.!]?\s+)?(?:let me know|laisse-moi savoir|laissez-moi savoir)\b/i;
+
 export const routineAnnouncementProblem = (output: string) =>
   `The run ended on an announcement of what it would do (“${output.replace(/\s+/g, " ").trim().slice(0, 200)}”), with no report of what was done`;
 

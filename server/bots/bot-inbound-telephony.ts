@@ -83,6 +83,14 @@
 //     and `call_summary`, the summary of that bot's part of the call, a row
 //     of the same conversation: neither ever wakes the owner's phone
 //     triggers, which would hand one person's call to another.
+//
+// A message left at the line's public reception (#4241): a `call_summary`
+// with `source: "public_reception"` (and `reception`, the same message
+// structured). The phone triggers keep receiving it; when none of their
+// runs started, it is one turn of the bot in its owner's conversation, with
+// no trigger to set up (server/bots/public-reception.ts). `delivered` is 1
+// only when a trigger run or that turn started (or waits for the running
+// one); otherwise 0 with a `reason`.
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
@@ -101,6 +109,7 @@ import {
   type PhoneLineContact,
 } from "../../shared/phone-line-contacts.ts";
 import { isOwnText, ownLineVia } from "../sms-conversation.ts";
+import { publicReceptionMessage, type PublicReceptionMessage, type PublicReceptionTaken } from "./public-reception.ts";
 import { maskedCaller, type WebhookReceiveResult } from "../triggers/webhooks.ts";
 
 export const TELEPHONY_PATH = "/api/org/telephony/inbound";
@@ -190,6 +199,49 @@ const handoverSchema = z.object({
   toName: oneLine(1, 200),
 });
 
+/** #4241: text from the public reception, cleaned rather than refused: a
+ * control character becomes a space and a long text is cut, so a message
+ * the organization server sends is never lost to its form. */
+const cleanText = (max: number, line = false) => z.string().max(TELEPHONY_BODY_MAX).transform((value) => {
+  const clean = value.replace(line ? /\p{Cc}/gu : /[^\P{Cc}\t\n\r]/gu, " ").trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+});
+
+/** #4241: a message left at the line's public reception (perspicax#1984),
+ * structured. All of it is the caller's words: data, never instructions. A
+ * part that is not of this form is dropped, never the event (`content.text`
+ * carries the whole message too). */
+export const RECEPTION_TRANSCRIPT_MAX = CALL_RESULT_TRANSCRIPT_MAX;
+const receptionSchema = z.object({
+  source: z.literal("public_reception"),
+  trust: z.literal("caller"),
+  caller: z.object({
+    name: cleanText(200, true).nullish().catch(undefined),
+    number: cleanText(40, true).nullish().catch(undefined),
+    callerId: cleanText(40, true).nullish().catch(undefined),
+  }).optional().catch(undefined),
+  reason: cleanText(1_000).nullish().catch(undefined),
+  transcript: z.array(z.object({ speaker: cleanText(40, true), text: cleanText(TELEPHONY_TEXT_MAX) }))
+    .max(2_000)
+    .transform((lines) => {
+      const kept: Array<{ speaker: string; text: string }> = [];
+      let total = 0;
+      for (const line of lines) {
+        if (!line.text) continue;
+        total += line.text.length;
+        if (total > RECEPTION_TRANSCRIPT_MAX) break;
+        kept.push(line);
+      }
+      return kept;
+    })
+    .optional().catch(undefined),
+  handling: cleanText(1_000).nullish().catch(undefined),
+});
+
+export type PublicReceptionBody = z.output<typeof receptionSchema>;
+
 const telephonySchema = z.object({
   contract: z.literal(TELEPHONY_CONTRACT),
   event: z.enum(TELEPHONY_EVENTS),
@@ -229,6 +281,11 @@ const telephonySchema = z.object({
   result: callResultSchema.optional(),
   progress: callProgressSchema.optional(),
   handover: handoverSchema.optional(),
+  /** #4241: where a call_summary comes from; `public_reception` is a
+   * message left at the line's public reception. Any other value is
+   * dropped. */
+  source: z.enum(["public_reception"]).optional().catch(undefined),
+  reception: receptionSchema.optional().catch(undefined),
 }).superRefine((value, ctx) => {
   // a call_result, and only a call_result, carries its result
   if ((value.event === "call_result") !== (value.result !== undefined)) ctx.addIssue({ code: "custom", path: ["result"], message: "result goes with call_result only" });
@@ -343,6 +400,8 @@ export function telephonyTriggerEvent(event: TelephonyEvent): NormalizedTriggerE
     `From: ${event.from}`,
     `Line: ${event.line.number}`,
     `Caller authenticated: ${event.authenticated ? "yes" : "no"}`,
+    // #4241: a message left at the line's public reception
+    ...(publicReceptionMessage(event) ? ["Source: public reception (the caller is not on the line's list)"] : []),
     ...(senderKind ? [`Sender: ${senderKind}`] : []),
     ...(personName && personName !== label
       ? [`Person (as Perspicax identified the caller): ${personName}`]
@@ -419,6 +478,11 @@ export interface TelephonyRouteDeps {
    * reach rule (own or shared), with their principal id and whether they
    * are active (in the directory, not turned off); null when they do not. */
   reaches?(sub: string, botId: string): Promise<{ principalId: string; active: boolean } | null> | { principalId: string; active: boolean } | null;
+  /** #4241: a message left at the line's public reception that no phone
+   * trigger run took: one turn of the bot in its owner's conversation
+   * (server/bots/public-reception.ts). Absent: the triggers alone, as
+   * before. */
+  publicReception?(input: { ownerPrincipalId: string; botId: string; message: PublicReceptionMessage }): Promise<PublicReceptionTaken>;
   /** Whether the owner wants a chat notice for SMS that are not their own
    * and have no allowlisted contact persona. */
   noticeUnknown?(ownerPrincipalId: string): boolean;
@@ -479,6 +543,9 @@ class SeenEvents {
       return false;
     }
     return true;
+  }
+  delete(key: string): void {
+    this.seen.delete(key);
   }
   add(key: string, now: number): void {
     this.seen.delete(key);
@@ -660,6 +727,9 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
     let ignored = 0;
     let rateLimited = 0;
     let normalized = telephonyTriggerEvent(event);
+    // #4241: a message left at the public reception reaches the bot even
+    // when no phone trigger takes it
+    const reception = deps.publicReception ? publicReceptionMessage(event) : null;
     // #2194: allowlisted SMS contact persona lives in Sagax; numbers stay on
     // Perspicax's allowlist. Merge the persona into the trigger event and
     // optionally post a one-line notice in the owner's unified chat.
@@ -691,7 +761,27 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
         }
       }
       // Not remembered: Perspicax may try again once the rate allows it.
-      if (triggers.length && rateLimited === triggers.length) return send(res, 429, { error: "rate_limited" });
+      if (triggers.length && rateLimited === triggers.length && !reception) return send(res, 429, { error: "rate_limited" });
+    }
+    // #4241: no trigger run took the reception message (none, or none
+    // started): one turn of the bot in its owner's conversation. A trigger
+    // run that started is the delivery: the person is not told twice.
+    let taken: PublicReceptionTaken | null = null;
+    if (reception && delivered === 0 && duplicate === 0) {
+      // held while the turn starts, so the same message never starts twice
+      seen.add(seenKey, now());
+      try {
+        taken = await deps.publicReception!({ ownerPrincipalId: owner.principalId, botId: bot.id, message: reception });
+      } catch {
+        taken = { started: false, reason: "not_started" };
+      }
+      if (taken.started) delivered = 1;
+      else {
+        // Not remembered: the gateway may try again.
+        seen.delete(seenKey);
+        if (triggers.length && rateLimited === triggers.length) return send(res, 429, { error: "rate_limited" });
+        return send(res, 202, { event: event.event, notice, triggers: triggers.length, delivered: 0, duplicate, ignored: ignored + rateLimited, reason: taken.reason });
+      }
     }
     if (event.event === "sms" && !triggers.length && event.sender !== "owner_mobile" && deps.unhandled) {
       const smsText = event.content?.text?.trim() ?? "";
@@ -751,7 +841,8 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
       delivered,
       duplicate,
       ignored: ignored + rateLimited,
-      ...(notice ? { reason: "notice" } : triggers.length ? {} : { reason: "no_trigger" }),
+      ...(taken?.started ? { conversation: true, ...(taken.queued ? { queued: true } : {}) } : {}),
+      ...(notice ? { reason: "notice" } : triggers.length || taken?.started ? {} : { reason: "no_trigger" }),
     });
   };
   return async (req, res, url) => {

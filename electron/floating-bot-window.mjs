@@ -281,6 +281,8 @@ export const SHAPES = new Set([
   // desktop drew a plain circle for a sprout, a cup... (#desktop-pet-mascot); the test keeps
   // this list equal to MASCOT_SHAPES
   "pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship",
+  // the open-bot-avatar engine's gallery (shared/mascot-look.ts GALLERY_SHAPES, #4145)
+  "brain", "bull", "bunny", "camera", "magnifier", "paint-brush", "palette", "witch-hat", "barbell", "watering-can",
 ]);
 /** A person's own shape (shared/shape-avatar-def.ts): passed on as plain JSON, bounded; the page validates it with the app's schema. */
 const AVATAR_DEF_MAX = 64_000;

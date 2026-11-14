@@ -2,6 +2,8 @@
 // shapes. Every mood is a few slow, smooth loops on the body's 3D pose (yaw,
 // pitch, roll around the resting pose of shape-volume.ts), a breath and a
 // small lift; the face, the blinks and the gaze stay in shape-engine.ts.
+// Since #4145 the app's shapes move with the open-bot-avatar engine; this
+// library stays the reference the phone's ShapeMotion.swift follows.
 //
 // - At rest (settle 1) a shape sits on its base: it holds a pose still, then
 //   turns to a new one over GLANCE.move s and holds it, and breathes from the

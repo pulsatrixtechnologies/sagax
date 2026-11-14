@@ -3,13 +3,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { NOTHING_LOCKED } from "../../../shared/achievements";
 import { resetAchievementsForTests } from "@/lib/achievements";
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
 import { BotAvatar } from "@/components/Avatar";
 import { ShapeMascot } from "@/components/ShapeMascot";
+import { loadBakedStill } from "@/components/shape-stills";
 import { botMascotLook, completeMascotLook, LEGACY_SHAPE_SKINS, LEGACY_TROMBI_SKINS, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS } from "../../../shared/mascot-look";
 import MascotLookEditor, { SKIN_TIER_LABEL } from "../floating-bots/MascotLookEditor";
 import { SkinnedTrombi } from "./SkinnedTrombi";
@@ -19,13 +20,20 @@ import { fxPalette } from "./skin-fx";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const css = readFileSync(join(here, "skin-fx.css"), "utf8").replace(/\r\n/g, "\n");
-/** The eyes a shape's fill cuts out: its outline's closed subpaths after the body's own. */
+/**
+ * A shape's eyes as the engine draws them on its body (#4145): each mark's
+ * place and size, from the shared still image or the body of the SVG (a
+ * skin draws the same eyes again over its face).
+ */
 const eyeCuts = (html: string) => {
-  // the eyes: their own opaque path on a turned body (2026-10-18), or cut out of a flat skin's fill
-  const own = /<path d="([^"]+)"[^>]*data-shape-eyes=""/.exec(html)?.[1];
-  if (own) return own.split("M").filter(Boolean);
-  return (/class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "").split("M").filter(Boolean).slice(1);
+  const url = /<img src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/.exec(html)?.[1];
+  const body = url ? decodeURIComponent(url) : html.slice(html.indexOf('data-shape-body=""'), html.includes("data-shape-skin-face") ? html.indexOf("data-shape-skin-face") : undefined);
+  return [...body.matchAll(/<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/g)].map((m) => m.slice(1).join(" "));
 };
+// the shapes' baked stills, as a page loads them the first time a shape shows
+beforeAll(async () => {
+  await Promise.all((["hexagon", "circle"] as const).map(loadBakedStill));
+});
 const shape = (skin: string, size: number, extra: Record<string, unknown> = {}) =>
   renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "blue", mascotLook: { character: "shape", shape: "hexagon", skins: { shape: skin } } } as never, size, ...extra }));
 const trombi = (skin: string, size: number, extra: Record<string, unknown> = {}) =>
@@ -55,13 +63,10 @@ describe("premium skins render at every size", () => {
     const eyes = (skin: string) => eyeCuts(shape(skin, 60, { animated: false }));
     const plain = eyes("plain");
     expect(plain).toHaveLength(2);
-    // every skin with a body in volume shares the same eyes; the flat Outline skin keeps its own (cut out of a flat body)
-    // every skin shows two eyes; the skins drawn on the resting outline share them exactly
-    // (only the plain body bends into its turn, and the flat Outline skin cuts them out)
-    const pastel = eyes("pastel");
+    // a skin paints the body and its face, never the eyes' shape or place; the flat Outline skin keeps its own (no turn)
     for (const skin of SHAPE_SKINS) {
       expect(eyes(skin), skin).toHaveLength(2);
-      if (skin !== "plain" && skin !== "outline") expect(eyes(skin), skin).toEqual(pastel);
+      if (skin !== "outline") expect(eyes(skin), skin).toEqual(plain);
     }
   });
 
@@ -177,10 +182,10 @@ describe("the holographic foil glides without a seam", () => {
   it("keeps the drawing mounted through a move, so the idle loops never restart", () => {
     const shapeSource = readFileSync(join(here, "../ShapeMascot.tsx"), "utf8");
     const trombiSource = readFileSync(join(here, "SkinnedTrombi.tsx"), "utf8");
-    for (const source of [shapeSource, trombiSource]) {
-      expect(source).not.toMatch(/key=\{burst && moveBody/);
-      expect(source).toContain("useReplayMove(body");
-    }
+    for (const source of [shapeSource, trombiSource]) expect(source).not.toMatch(/key=\{burst && moveBody/);
+    expect(trombiSource).toContain("useReplayMove(body");
+    // the shape replays a skin move on its box, its drawing mounted through it (#4145)
+    expect(shapeSource).toContain("useReplayMove(root");
   });
 
   it("renders the same markup twice (stable ids and classes, nothing that remounts the foil)", () => {

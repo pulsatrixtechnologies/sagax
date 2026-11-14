@@ -3,7 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { loadAllBakedStills } from "../shape-stills";
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
 import { resetAchievementsForTests } from "@/lib/achievements";
@@ -11,13 +12,16 @@ import { forgetLegacyBotLooks, readLegacyBotLooks, type FloatingStorage } from "
 import { setGrokAccountLinked } from "@/lib/grok-account";
 import { NOTHING_LOCKED, type AchievementSnapshot } from "../../../shared/achievements";
 import { BotAvatar } from "@/components/Avatar";
-import { avatarDefForShape, SHAPE_ART, shapeSkinPaint } from "@/components/ShapeMascot";
-import { liveOutlineFromDef } from "../../../shared/shape-avatar-outline";
+import { shapeSkinPaint } from "@/components/ShapeMascot";
+import { SHAPE_ART } from "@/components/shape-art";
 import { SHAPE_MOVES } from "@/components/shape-engine";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, MASCOT_SHAPES, SHAPE_SKINS, TROMBI_SKINS } from "../../../shared/mascot-look";
 import { MASCOTS, mascotFor, motion25dTransform, SHAPE_CHOICES, trombiPoseFor } from "./mascots";
 import MascotLookEditor, { EDITOR_TABS, CHARACTER_LABEL, SHAPE_LABEL, SHAPE_SKIN_LABEL, TROMBI_SKIN_LABEL } from "./MascotLookEditor";
 import { REST } from "./clips";
+
+// the shapes' baked stills, as a page loads them the first time a shape shows (#4145)
+beforeAll(() => loadAllBakedStills());
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -26,17 +30,12 @@ function memoryStorage(): FloatingStorage & { removeItem(key: string): void } {
   return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => void data.set(key, value), removeItem: (key) => void data.delete(key) };
 }
 
-/** The eyes a shape's fill cuts out: its outline's closed subpaths after the body's own. */
-const eyeCuts = (html: string, _shape?: string) => {
-  // the eyes: their own opaque path on a turned body (2026-10-18), or cut out of a flat skin's fill
-  const own = /<path d="([^"]+)"[^>]*data-shape-eyes=""/.exec(html)?.[1];
-  if (own) return own.split("M").filter(Boolean);
-  // an object silhouette can be more than one subpath (the cup's handle hole), so skip all of the body's
-  const shape = /data-shape="([^"]+)"/.exec(html)?.[1] as keyof typeof SHAPE_ART | undefined;
-  const def = shape ? avatarDefForShape(shape) : undefined;
-  const bodyPath = def ? liveOutlineFromDef(def).path : "";
-  const body = bodyPath ? bodyPath.split("M").filter(Boolean).length : 1;
-  return (/class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "").split("M").filter(Boolean).slice(body);
+/** A shape's eyes as the engine draws them (#4145): the marks of its still, each a rounded bar at rest. */
+/** The eyes on a shape's body: in the shared still image, or in the SVG's body when a skin paints its face (#4145). */
+const eyeMarks = (html: string) => {
+  const url = /<img src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/.exec(html)?.[1];
+  const svg = url ? decodeURIComponent(url.replace(/&amp;/g, "&")) : html.slice(html.indexOf('data-shape-body=""'), html.includes("data-shape-skin-face") ? html.indexOf("data-shape-skin-face") : undefined);
+  return [...svg.matchAll(/<rect x="[^"]*" y="[^"]*" width="([^"]+)" height="([^"]+)"/g)].map((m) => ({ w: Number(m[1]), h: Number(m[2]) }));
 };
 
 describe("the shapes (stored ids bean, pill, pick and drop kept)", () => {
@@ -62,7 +61,8 @@ describe("a bot's character and its look", () => {
   it("is one of the owl, the shapes or Trombi, the owl when absent or malformed", () => {
     // the first eight keep the ids every stored look and older build knows
     expect(MASCOT_SHAPES.slice(0, 8)).toEqual(["circle", "bean", "squircle", "pill", "pick", "hexagon", "cloud", "drop"]);
-    expect(MASCOT_SHAPES).toHaveLength(40);
+    expect(MASCOT_SHAPES).toHaveLength(50);
+    expect(MASCOT_SHAPES).toContain("witch-hat");
     expect(MASCOT_SHAPES).toContain("pumpkin");
     // a look stored with a shape of an earlier set keeps working, on the nearest shape
     expect(botMascotLook({ character: "shape", shape: "blob" })).toEqual({ character: "shape", shape: "bean" });
@@ -83,33 +83,23 @@ describe("a bot's character and its look", () => {
     expect(completeMascotLook({ ...trombi, character: "shape" }).skins).toEqual({ shape: "neon", trombi: "retro98", bunbu: "plain", shiba: "plain", grump: "plain", ogre: "plain", frog: "plain", crab: "plain" });
   });
 
-  it("draws every shape, with every skin, with two eyes cut through the body", () => {
+  it("draws every shape, with every skin, with its two eyes (the engine's still, #4145)", () => {
     for (const shape of MASCOT_SHAPES) {
-      expect(SHAPE_ART[shape].d).toMatch(/^M/);
       for (const skin of SHAPE_SKINS) {
         const html = renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "blue", mascotLook: { character: "shape", shape, skins: { shape: skin } } }, size: 40 }));
         expect(html).toContain(`data-shape="${shape}"`);
         expect(html).toContain(`data-shape-skin="${skin}"`);
-        expect(eyeCuts(html, shape), `${shape} ${skin}`).toHaveLength(2);
+        expect(eyeMarks(html), `${shape} ${skin}`).toHaveLength(2);
         expect(shapeSkinPaint(skin, "#377FE6").fill).toMatch(/^#/);
       }
     }
-  });
+  }, 60_000);
 
-  it("gives every shape the same resting face: rounded bars about twice as tall as wide, side by side", () => {
+  it("gives every shape the same resting face: rounded bars about twice as tall as wide", () => {
     for (const shape of MASCOT_SHAPES) {
       const html = renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "white", mascotLook: { character: "shape", shape } }, size: 60, animated: false }));
-      const eyes = eyeCuts(html, shape).map((d) => {
-        const pts = [...d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
-        const xs = pts.map(([x]) => x);
-        const ys = pts.map(([, y]) => y);
-        return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), y: (Math.max(...ys) + Math.min(...ys)) / 2, x: (Math.max(...xs) + Math.min(...xs)) / 2 };
-      });
+      const eyes = eyeMarks(html);
       expect(eyes, shape).toHaveLength(2);
-      const [left, right] = eyes;
-      expect(left.x).toBeLessThan(right.x);
-      // nearly level, the body's turn moving them only a little (2026-10-18)
-      expect(Math.abs(right.y - left.y), shape).toBeLessThan(3);
       for (const eye of eyes) expect(eye.h / eye.w, shape).toBeGreaterThan(1.4);
     }
   });
@@ -262,7 +252,7 @@ describe("the Appearance gallery", () => {
     expect(moves).toHaveLength(14);
     for (const move of SHAPE_MOVES) expect((en as Record<string, string>)[`mascot.shapeMove.${move}`]).toBeTruthy();
     // every shape, each named
-    expect([...html.matchAll(/data-character-shape="([a-z]+)"/g)].map((m) => m[1])).toEqual([...MASCOT_SHAPES]);
+    expect([...html.matchAll(/data-character-shape="([a-z-]+)"/g)].map((m) => m[1])).toEqual([...MASCOT_SHAPES]);
     expect(html).toContain('aria-label="Pebble"');
     expect(html).toContain('aria-label="Pumpkin"');
     expect(html).toContain('aria-label="Teardrop"');

@@ -13,7 +13,8 @@
  * draws nothing for them (Settings > Appearance lists them).
  * #3624: ?scene=idle|background|open is the idle cost measure's window
  * (app-shell-scene.ts, scripts/capture/idle-cost.mjs).
- * #4157: &engines=2|5 (with ?parity=1) fills the usage side card. */
+ * #4157: &engines=2|5 (with ?parity=1) fills the usage side card.
+ * #4145: ?shapes=N is a sidebar of N bots wearing shapes (one in five in a premium skin). */
 import { memo, StrictMode, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -28,6 +29,7 @@ import { useStoreSelector } from "../state/store-selector";
 import { publishLiveFrame } from "../lib/live-events";
 import { longConversation, moreBots, readScene, sceneTeamWork, startWorking } from "./app-shell-scene";
 import type { ServerFrame } from "../../shared/wire";
+import { MASCOT_SHAPES } from "../../shared/mascot-look";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -183,14 +185,29 @@ if (hiddenTeam.length) {
     // a private window: nothing hidden
   }
 }
+// #4145 ?shapes=N: a sidebar of N bots, every one wearing a shape (each
+// shape id in turn, the bots' colours in turn, a few at work), the scene the
+// shape mascots' cost is measured on (scripts/capture/shape-mascots.mjs).
+const shapeCount = Math.min(Number(params.get("shapes")) || 0, 80);
+const SHAPE_COLORS = ["blue", "green", "orange", "pink", "teal", "purple", "red", "yellow"];
+// one bot in five wears a premium shape skin
+const SHAPE_SKIN_CYCLE = ["galaxy", "holo", "molten", "neon", "crystal", "circuit", "gold", "chrome"];
+const shaped = (entry: Bot, i: number): Bot => ({ ...entry, color: SHAPE_COLORS[i % SHAPE_COLORS.length]!, mascotLook: { character: "shape", shape: MASCOT_SHAPES[i % MASCOT_SHAPES.length], ...(i % 5 === 2 ? { skins: { shape: SHAPE_SKIN_CYCLE[Math.floor(i / 5) % SHAPE_SKIN_CYCLE.length] } } : {}) } } as Bot);
+const shapeTeam: Bot[] = shapeCount
+  ? [
+    ...team.map(shaped),
+    ...Array.from({ length: Math.max(0, shapeCount - team.length) }, (_, i) =>
+      shaped(bot(`shape-${i + 1}`, `Bot ${i + 1}`, { section: "Ops", busy: i % 7 === 3, title: fr ? "Opérations" : "Operations" }, fr ? "Rien de neuf." : "Nothing new.", 500 + i), team.length + i)),
+  ]
+  : [];
 const start: AppState = {
   ...initialState,
   connected: true,
   hydrated: true,
   selectedId: selectParam ?? "atlas",
   config: { profile: { name: "Alex Gagnon" } } as AppState["config"],
-  bots: [...team, ...(scene ? moreBots(fr, at) : []), ...hiddenTeam],
-  sections: scene ? ["My team", "Ops"] : ["My team"],
+  bots: shapeCount ? shapeTeam : [...team, ...(scene ? moreBots(fr, at) : []), ...hiddenTeam],
+  sections: scene || shapeCount ? ["My team", "Ops"] : ["My team"],
   // ?panel=1 opens the bot panel beside the chat, as App.tsx docks it (#2141).
   settingsOpen: params.get("panel") === "1" || Boolean(scene),
   // #3552: with ?limit= or ?blocked=, the bot's engine is the one the limit

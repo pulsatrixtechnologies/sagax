@@ -1,10 +1,10 @@
 // The clean-room Shapes engine (shape-art.ts, shape-engine.ts): geometry,
 // timings, the gaze solver's bounds, the moves and reduced motion.
-import { REST_POSE, warpPath } from "./shape-volume";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
-import { MASCOT_SHAPES } from "../../shared/mascot-look";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { loadAllBakedStills } from "./shape-stills";
+import { BODY_SHAPES } from "../../shared/mascot-look";
 import { paletteSwatches, MASCOT_COLOR_HEX } from "../../shared/mascot-colors";
 import { BODY, MOVE_RADII, outlinePath, RADII_COUNT, radiusToward, SHAPE_RADII } from "./shape-art";
 import {
@@ -33,6 +33,9 @@ import {
 } from "./shape-engine";
 import { ShapeMascot, shapeIsLive } from "./ShapeMascot";
 
+// the shapes' baked stills, as a page loads them the first time a shape shows (#4145)
+beforeAll(() => loadAllBakedStills());
+
 const BLUE = "#3b93f0";
 
 describe("geometry", () => {
@@ -53,8 +56,8 @@ describe("geometry", () => {
   });
 
   it("has 40 different shapes: a circle of radius 1, a wide capsule, a triangle, a teardrop pointing up, a pumpkin wider than tall, and eight object silhouettes", () => {
-    expect(MASCOT_SHAPES).toHaveLength(40);
-    expect(new Set(MASCOT_SHAPES.map((shape) => SHAPE_RADII[shape].join())).size).toBe(40);
+    expect(BODY_SHAPES).toHaveLength(40);
+    expect(new Set(BODY_SHAPES.map((shape) => SHAPE_RADII[shape].join())).size).toBe(40);
     expect(SHAPE_RADII.circle.every((r) => r === 1)).toBe(true);
     const at = (shape: keyof typeof SHAPE_RADII, x: number, y: number) => radiusToward(SHAPE_RADII[shape], x, y);
     expect(at("pill", 1, 0)).toBeGreaterThan(at("pill", 0, -1) * 1.5);
@@ -135,7 +138,7 @@ describe("timing", () => {
 describe("the gaze solver", () => {
   it("keeps both eyes inside every outline, for every face, wherever the pointer is", () => {
     const pointers = [[0, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]];
-    for (const shape of MASCOT_SHAPES) {
+    for (const shape of BODY_SHAPES) {
       for (const name of SHAPE_EXPRESSIONS) {
         for (const [x, y] of pointers) {
           const gaze = hoverGaze(x, y);
@@ -261,16 +264,14 @@ describe("reduced motion", () => {
     (globalThis as { window?: unknown }).window = original;
   });
 
-  it("keeps every shape still: no live loop, the resting frame, no move", () => {
+  it("keeps every shape still: no live canvas, the engine's still, no move (#4145)", () => {
     expect(shapeIsLive(112, true, undefined, true)).toBe(false);
     expect(shapeIsLive(112, true, undefined, false)).toBe(true);
     expect(shapeIsLive(24, true, undefined, false)).toBe(false);
     (globalThis as { window?: unknown }).window = { matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) };
     const html = renderToStaticMarkup(createElement(ShapeMascot, { shape: "cloud", color: BLUE, size: 120, move: { clip: "orbit", key: 1 } }));
     expect(html).not.toContain("skin-fx-live");
-    const still = stillFrame({ shape: "cloud", expression: "neutral", color: BLUE });
-    // the resting outline, in the resting pose (a plain body bends a little into its turn)
-    expect(html).toContain(`d="${warpPath(still.body, REST_POSE)}"`);
-    expect(html).not.toContain("-ring0");
+    expect(html).not.toContain("data-shape-live");
+    expect(html).toContain('<img src="data:image/svg+xml');
   });
 });

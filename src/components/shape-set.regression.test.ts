@@ -1,4 +1,7 @@
 // Every shape holds together and keeps its face (2026-10-28, one drawing).
+// Since #4145 the app draws the shapes with the open-bot-avatar engine
+// (shape-avatar.test.ts); this drawing stays the phone's reference
+// (ShapeVolume.swift), checked here on every body of mascot-geometry.json.
 // Measured on the drawing itself (shape-volume.ts drawShape: what React and
 // the live loop both put on screen), in the drawing's own space, for every
 // shape of the set, every skin, every face, a blink, the gaze's four corners,
@@ -18,16 +21,12 @@
 // (the "disassembled" mascot), an eye faded away as the face turned, a sway
 // keystoned the outline and spread its slices beside it, and the eyes were
 // drawn through a second pipeline that could disagree with the outline.
-import { createElement as h } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MASCOT_SHAPES, SHAPE_SKINS, type MascotShape, type ShapeSkin } from "../../shared/mascot-look";
+import { BODY_SHAPES, type BodyShape as MascotShape } from "../../shared/mascot-look";
 import { flattenPath, resampleClosed } from "../../shared/shape-avatar-outline";
-import { avatarDefForShape, ShapeFrameSvg, shapeSkinPaint } from "./ShapeMascot";
-import { SHAPE_ART } from "./shape-art";
+import { isObjectShapeId, OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
 import { blinkOpen, blinkSchedule, gazeFrame, MORPH_S, SHAPE_EXPRESSIONS, ShapeEngine, stillFrame, type ShapeFrame } from "./shape-engine";
 import { MOVE_TIMING, SHAPE_MOVES } from "./shape-moves";
-import { shapeSkinLayers } from "./skin-fx/shape-skins";
 import { applyAffine, composeAffine, drawShape, eyeStyleFor, faceNumbers, grounded, motionNumbers, REST_POSE, type Affine, type Pose, type VolumeDetail } from "./shape-volume";
 
 const COLOR = "#3b82f6";
@@ -37,7 +36,7 @@ const ROLLED = (shape: MascotShape): Pose => grounded({ ...REST_POSE, yaw: 40, p
 const SQUASHED = { x: 3, y: -2, rot: 18, sx: 1.08, sy: 0.9 };
 const DETAILS: VolumeDetail[] = ["tiny", "small", "full"];
 /** A shape's state as the app holds it: object shapes carry their path body. */
-const stateOf = (shape: MascotShape, expression: (typeof SHAPE_EXPRESSIONS)[number] = "neutral") => ({ shape, expression, color: COLOR, avatarDef: avatarDefForShape(shape) });
+const stateOf = (shape: MascotShape, expression: (typeof SHAPE_EXPRESSIONS)[number] = "neutral") => ({ shape, expression, color: COLOR, avatarDef: isObjectShapeId(shape) ? OBJECT_SHAPE_BY_ID[shape] : undefined });
 /** The body's outer outline, sampled along its length (lines and curves alike). */
 const outerOutline = (d: string): Point[] => resampleClosed(flattenPath(d)[0] ?? [], 96).map(([x, y]) => [x, y] as Point);
 
@@ -162,16 +161,6 @@ function overlapShare(outline: Point[], S: Affine, face: Point[]): number {
   }).length;
   return area.length ? shared / area.length : 0;
 }
-/** Where the <g> that opens at `start` closes (balanced). */
-function groupEnd(html: string, start: number): number {
-  let depth = 0;
-  for (const m of html.slice(start).matchAll(/<g[\s>]|<\/g>/g)) {
-    depth += m[0] === "</g>" ? -1 : 1;
-    if (depth === 0) return start + (m.index ?? 0);
-  }
-  return -1;
-}
-
 function inside(poly: Point[], x: number, y: number): boolean {
   let hit = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
@@ -257,15 +246,9 @@ function openMoment(seed: number, from: number): number {
   throw new Error("no open moment");
 }
 
-const svgFor = (frame: ShapeFrame, pose: Pose, skin: ShapeSkin = "plain", size = 96) => {
-  const paint = shapeSkinPaint(skin, COLOR);
-  const layers = shapeSkinLayers(skin, SHAPE_ART.circle.d, COLOR, "t", false);
-  return renderToStaticMarkup(h(ShapeFrameSvg, { frame, uid: "t", skin, paint, layers, size, pose }));
-};
-
 describe("every shape holds together and keeps its face", () => {
   it("at rest, in every face, blinking and looking around, on a resting and on a rolled, squashed body, at every detail", () => {
-    for (const shape of MASCOT_SHAPES) {
+    for (const shape of BODY_SHAPES) {
       const frames: [string, ShapeFrame][] = [
         ...SHAPE_EXPRESSIONS.map((expression) => [expression, stillFrame(stateOf(shape, expression))] as [string, ShapeFrame]),
         ["blink", gazeFrame(stateOf(shape), 0, 0, {}, { left: 0.06, right: 0.06 })],
@@ -287,7 +270,7 @@ describe("every shape holds together and keeps its face", () => {
   }, 60_000);
 
   it("through every move, at five moments, the body stays one whole outline with its two eyes, and comes back to rest", () => {
-    for (const shape of MASCOT_SHAPES) {
+    for (const shape of BODY_SHAPES) {
       for (const move of SHAPE_MOVES) {
         const seed = 7;
         const state = stateOf(shape);
@@ -325,53 +308,9 @@ describe("every shape holds together and keeps its face", () => {
     }
   }, 60_000);
 
-  it("in every skin: the face and the eyes under one matrix, the eyes inside the outline the skin draws", () => {
-    for (const shape of MASCOT_SHAPES) {
-      const frame = stillFrame(stateOf(shape));
-      for (const skin of SHAPE_SKINS) {
-        const html = svgFor(frame, grounded(REST_POSE, shape), skin);
-        if (skin === "outline") {
-          // a flat skin cuts the eyes through its body: one path, the body's subpaths (a cup keeps its handle hole) then the two eyes, inside the body
-          const cut = /class="shape-fill" d="([^"]+)"/.exec(html)?.[1] ?? "";
-          const body = outerOutline(cut);
-          const eyes = subpaths(cut).slice(frame.body.split("M").filter(Boolean).length);
-          expect(eyes, `${shape} ${skin}`).toHaveLength(2);
-          for (const eye of eyes) for (const [x, y] of eye) expect(inside(body, x, y), `${shape} ${skin} eye inside`).toBe(true);
-          continue;
-        }
-        const face = html.indexOf("data-shape-face");
-        const eyes = html.indexOf("data-shape-eyes");
-        expect(face, `${shape} ${skin} face`).toBeGreaterThan(0);
-        expect(eyes, `${shape} ${skin} eyes after the face`).toBeGreaterThan(face);
-        // the same group: the eyes close inside the face's <g data-pose-face>, under its matrix
-        const view = html.lastIndexOf("<g ", html.indexOf("data-shape-view"));
-        expect(groupEnd(html, view), `${shape} ${skin} eyes in the face's group`).toBeGreaterThan(eyes);
-        expect(html, `${shape} ${skin}`).not.toContain("eyes-clip");
-        expectHolds(frame, grounded(REST_POSE, shape), `${shape} ${skin}`, "full", skin === "plain");
-      }
-    }
-  });
-
-  it("draws the eyes and the outline from one drawing on the page: the markup carries exactly what writeShape writes", () => {
-    const frame = stillFrame({ shape: "drop", expression: "neutral", color: COLOR });
-    const pose = grounded(REST_POSE, "drop");
-    const drawing = drawShape(frame, pose, "full");
-    const html = svgFor(frame, pose);
-    expect(html).toContain(`d="${drawing.outline}" data-shape-outline=""`);
-    expect(html).toContain(`d="${drawing.outline}" fill-rule="evenodd" data-shape-face=""`);
-    expect(html).toContain(`d="${drawing.eyes}"`);
-    expect(html).toContain(`transform="${drawing.face}" data-pose-face`);
-    for (const [i, t] of drawing.slices.entries()) expect(html).toContain(`transform="${t}" data-pose-slice="${i}"`);
-    expect(html).toContain(`transform="${drawing.motion}" data-shape-motion`);
-  });
-
-  it("stands the pumpkin's stem in its body, under the face's matrix, and nothing else wears one", () => {
+  it("gives the pumpkin a stem, and nothing else wears one", () => {
     const frame = stillFrame({ shape: "pumpkin", expression: "neutral", color: COLOR });
     expect(frame.stem).not.toBeNull();
-    const html = svgFor(frame, grounded(REST_POSE, "pumpkin"));
-    expect(html).toContain("data-shape-stem");
-    expect(html.indexOf("data-pose-face")).toBeLessThan(html.indexOf("data-shape-stem"));
-    expect(html.indexOf("data-shape-stem")).toBeLessThan(html.indexOf('class="shape-fill"'));
-    for (const shape of MASCOT_SHAPES) if (shape !== "pumpkin") expect(stillFrame(stateOf(shape)).stem, shape).toBeNull();
+    for (const shape of BODY_SHAPES) if (shape !== "pumpkin") expect(stillFrame(stateOf(shape)).stem, shape).toBeNull();
   });
 });

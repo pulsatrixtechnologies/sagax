@@ -387,15 +387,46 @@ wave, the rig, the desktop mapping), `MascotLookFixtureTests` on the phone
 
 ## Shapes
 
-The clay Shape character (`character: "shape"`): one soft body with two pill
-eyes, thirteen skins, fourteen moves, volume extrusion (`shape-volume.ts`) and
-pointer gaze (`shape-engine.ts`). Geometry lives in
-`shared/mascot-geometry.json` (64 radii per body). Portable avatar definitions
-(`shared/shape-avatar-def.ts`, schema v1) add object silhouettes (pad, cup,
-bulb, say, sprout, tin, tome, ship), import/export/share JSON in code, and
-a generator kept for developers (no UI, no bot tool). Colour stays on the bot. Custom definitions
-store on `mascotLook.avatarDef`. Bodies never render disassembled
-(`shape-set.regression.test.ts`, `scripts/capture/shapes.mjs`).
+The Shape character (`character: "shape"`): one body with two eyes, drawn by
+the open-bot-avatar engine (MIT, npm `open-bot-avatar` pinned in
+package.json, see NOTICE; #4145). Each shape id is one engine definition
+(`src/components/shape-avatar.ts`): the engine's own example or gallery
+avatar where it is the same object (star, cloud, ghost, cat, shield, and the
+objects pad, cup, bulb, say, sprout, tome, ship), our own body baked from
+`shared/mascot-geometry.json` into `shared/shape-avatars.json`
+(`scripts/bake-engine-shapes.mjs`) for the rest, and the gallery's other
+avatars (`GALLERY_SHAPES`) as shapes of their own in the picker. Every
+shape's still (the engine's three moods at rest) is baked by the same script
+into `src/components/shape-stills/<id>.json` and loaded the first time the
+shape shows (`shape-stills.ts`): the page never runs the engine's volume
+inference for a list, and every small avatar is one image shared by every
+avatar of the same shape, colour and mood, with no animation loop. The large
+mascot (88 px and up, or asked in full) is live: the engine's frames
+(`avatarFrame`) on its one shared clock, written onto one SVG (volume,
+breath, blinks, pointer gaze, the bot's mood: thinking at work, happy when
+done), resting off screen. Reduced motion draws the still. A skin paints the
+body's colour and eyes and, for the premium skins, its own layers (texture,
+edge, glow, particles; `shapeSkinLayers`) on the body's face, the largest
+cross-section under its projection, with the eyes over it. The fourteen moves
+(`SHAPE_MOVES`) play over the engine at any size from their own timelines
+(`shape-moves.ts`): the body's motion, the eyes closing or opening, the turn
+into the egg, the hexagon or the triangle, and the dots, mark, badge, rings,
+ribbons and specks beside it; a tap on a shape in the sidebar plays one.
+Colour stays on the bot. Custom definitions on
+`mascotLook.avatarDef` are fitted into the engine's box. That field also
+takes an open-bot-avatar definition as is (#4160): Appearance > Shape >
+Paste a definition takes the JSON the engine's editor or its prompt gives,
+checks it with `validateAvatar` (`shared/engine-avatar-def.ts`, again on the
+server through `mascotLookSchema`) and stores it on the look; the Shape grid
+shows it first, by its name, as the chosen shape, and picking a catalog
+shape drops it. The bot's catalog shape stays on the look, so a build or a
+platform that cannot draw the pasted one shows that shape (a stored
+definition that no longer validates drops alone, never the whole look). The former desktop
+engine (`shape-engine.ts`, `shape-volume.ts`, `shape-motion.ts`) stays as the
+reference the phone's Swift engine is generated from until the phone follows
+(#4159). Every definition is checked with `validateAvatar`
+(`shape-avatar.test.ts`); captures and the forty-bot cost measure:
+`scripts/capture/shape-mascots.mjs`.
 
 ### Files
 
@@ -403,12 +434,15 @@ store on `mascotLook.avatarDef`. Bodies never render disassembled
 |---|---|
 | Geometry (radii, faces, skins) | `shared/mascot-geometry.json` |
 | Portable definition schema | `shared/shape-avatar-def.ts` |
+| A pasted open-bot-avatar definition (#4160) | `shared/engine-avatar-def.ts`, `MascotLookEditor.tsx` `PasteShape` |
 | Object presets (bodies and eyes read from `mascot-geometry.json`) | `shared/shape-avatar-presets.ts` |
 | Generate from a description | `shared/shape-avatar-generate.ts`, `server/media/shape-avatar.ts` |
-| Engine, volume, motion, moves | `src/components/shape-*.ts`, `ShapeMascot.tsx` |
+| Drawing (the engine's definitions, still and live) | `src/components/shape-avatar.ts`, `ShapeMascot.tsx`, `shared/shape-avatars.json`, `third_party/open-bot-avatar/` |
+| Reference engine for the phone (volume, motion, moves) | `src/components/shape-engine.ts`, `shape-volume.ts`, `shape-motion.ts`, `shape-moves.ts` |
 | Generate a new shape (dev only, not in the UX) | `scripts/generate-shape.mjs`, `docs/design/shape-generator.md` |
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |
-| Screenshots | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
+| Captures and cost measure | `scripts/capture/shape-mascots.mjs` |
+| Screenshots (before #4145) | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
 | Say and sprout fix (#2981): before/after, rest and orbit move | `docs/screenshots/shapes-say-sprout` |
 | Sprout restored and say mascot look (#3104): before main and after, rest and move | `docs/screenshots/shapes-regression-2026-11-09` |
 

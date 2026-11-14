@@ -7,7 +7,9 @@
  * - owl: the Sagax owl; its color is the bot's color and its skin the bot's
  *   mascotSkin (shared/mascot-skins.ts). A stored `style` of `3d` still
  *   validates. The desktop always draws the flat owl.
- * - shape: one of the shapes (a clay body with two eyes on it), in the bot's color, with a shape skin (plain is clay).
+ * - shape: one of the shapes (a body with two eyes on it, drawn by the
+ *   open-bot-avatar engine, src/components/shape-avatar.ts), in the bot's
+ *   color, with a shape skin.
  * - trombi: the Hibou 98 paperclip, with a Trombi skin.
  * - bunbu: Bunbu, our own collectible-vinyl little monster (long upright
  *   ears, plush body, a toothy grin), in the bot's color, with a Bunbu skin.
@@ -33,13 +35,17 @@
  * the choice made before. Absent means the owl, as every bot had before.
  */
 import { z } from "zod";
+import { engineAvatarDefSchema, type EngineAvatarDef } from "./engine-avatar-def.ts";
 import { shapeAvatarDefSchema, type ShapeAvatarDef } from "./shape-avatar-def.ts";
+
+/** A person's own shape: the older portable format, or a pasted open-bot-avatar definition (#4160). */
+export type MascotAvatarDef = ShapeAvatarDef | EngineAvatarDef;
 
 export const MASCOT_CHARACTERS = ["owl", "crab", "shape", "trombi", "bunbu", "shiba", "grump", "ogre", "frog"] as const;
 export type MascotCharacter = (typeof MASCOT_CHARACTERS)[number];
 
 /**
- * The shapes, in the picker's order (2026-10-28, objects 2026-11-01): the
+ * Our shapes, in the picker's order (2026-10-28, objects 2026-11-01): the
  * bloub network's bodies (shared/mascot-geometry.json, MIT, see NOTICE), our
  * pumpkin, and eight object silhouettes (pad, cup, bulb, say, sprout, tin,
  * tome, ship) with portable JSON definitions (shared/shape-avatar-def.ts).
@@ -47,7 +53,7 @@ export type MascotCharacter = (typeof MASCOT_CHARACTERS)[number];
  * (bean is the pebble, pill the capsule, pick the triangle, drop the
  * teardrop), so a stored look keeps its place; the others are new ids.
  */
-export const MASCOT_SHAPES = [
+export const BODY_SHAPES = [
   "circle",
   "bean",
   "squircle",
@@ -90,7 +96,25 @@ export const MASCOT_SHAPES = [
   "tome",
   "ship",
 ] as const;
+/** The shapes with a body in shared/mascot-geometry.json (the phone's set too). */
+export type BodyShape = (typeof BODY_SHAPES)[number];
+
+/**
+ * The open-bot-avatar engine's own avatars (#4145, MIT, see NOTICE), offered
+ * after ours under the engine's ids: its gallery and examples that none of
+ * our shapes already stands for. Drawn by the engine only
+ * (src/components/shape-avatar.ts); they have no body in mascot-geometry.json.
+ */
+export const GALLERY_SHAPES = ["brain", "bull", "bunny", "camera", "magnifier", "paint-brush", "palette", "witch-hat", "barbell", "watering-can"] as const;
+
+/** Every shape, in the picker's order: ours, then the engine's gallery. */
+export const MASCOT_SHAPES = [...BODY_SHAPES, ...GALLERY_SHAPES] as const;
 export type MascotShape = (typeof MASCOT_SHAPES)[number];
+
+/** Whether a shape has a body in mascot-geometry.json (the radii the older drawings and the phone read). */
+export function isBodyShape(shape: string): shape is BodyShape {
+  return (BODY_SHAPES as readonly string[]).includes(shape);
+}
 
 /** Object-shaped bodies that also ship a portable JSON definition. */
 export const OBJECT_MASCOT_SHAPES = ["pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship"] as const;
@@ -480,11 +504,13 @@ export const mascotLookSchema = z
     style: z.enum(["2d", "3d"]).optional(),
     shape: z.preprocess((value) => (typeof value === "string" && Object.hasOwn(LEGACY_SHAPES, value) ? LEGACY_SHAPES[value] : value), z.enum(MASCOT_SHAPES)).optional(),
     /**
-     * A person's own Shape avatar definition (imported or generated). Geometry
-     * only; validated by shapeAvatarDefSchema. When set on character "shape",
-     * the renderer prefers it over the catalog body for that bot.
+     * A person's own Shape avatar definition (imported, generated or pasted).
+     * Geometry only: the older portable format (shapeAvatarDefSchema) or an
+     * open-bot-avatar definition (engineAvatarDefSchema, checked by the
+     * engine's validateAvatar, #4160). When set on character "shape", the
+     * renderer prefers it over the catalog body for that bot.
      */
-    avatarDef: shapeAvatarDefSchema.optional(),
+    avatarDef: z.union([shapeAvatarDefSchema, engineAvatarDefSchema]).optional(),
     skins: z
       .object({
         shape: z.preprocess(legacy(LEGACY_SHAPE_SKINS), z.enum(SHAPE_SKINS)).optional(),
@@ -502,7 +528,7 @@ export const mascotLookSchema = z
   .strict();
 
 export type MascotLook = z.infer<typeof mascotLookSchema>;
-export type { ShapeAvatarDef };
+export type { EngineAvatarDef, ShapeAvatarDef };
 
 export const DEFAULT_MASCOT_LOOK: MascotLook = Object.freeze({ character: "owl" }) as MascotLook;
 
@@ -514,6 +540,11 @@ export const DEFAULT_MASCOT_LOOK: MascotLook = Object.freeze({ character: "owl" 
 export function botMascotLook(value: unknown): MascotLook {
   const parsed = mascotLookSchema.safeParse(value);
   if (parsed.success) return parsed.data;
+  // a person's own shape this build cannot draw drops alone: the bot keeps its character, shape and skins (#4160)
+  if (value && typeof value === "object" && "avatarDef" in value) {
+    const { avatarDef: _dropped, ...kept } = value as { avatarDef?: unknown };
+    return botMascotLook(kept);
+  }
   if (!value || typeof value !== "object" || !("skins" in value)) return DEFAULT_MASCOT_LOOK;
   const { skins, ...rest } = value as { skins?: unknown };
   const known: Record<string, string> = {};
@@ -542,7 +573,7 @@ export function botMascotLook(value: unknown): MascotLook {
 /** The look with every choice filled in. */
 export function completeMascotLook(value: unknown): Required<Omit<MascotLook, "skins" | "avatarDef">> & {
   skins: { shape: ShapeSkin; trombi: TrombiSkin; bunbu: BunbuSkin; shiba: ShibaSkin; grump: GrumpSkin; ogre: OgreSkin; frog: FrogSkin; crab: CrabSkin };
-  avatarDef?: ShapeAvatarDef;
+  avatarDef?: MascotAvatarDef;
 } {
   const look = botMascotLook(value);
   return {

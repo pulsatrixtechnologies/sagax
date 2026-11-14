@@ -14,12 +14,13 @@
 //   as the outline, so nothing can ever put them beside it.
 // - Every shape stands on the same ground (groundLift) at a size of its own
 //   (SHAPE_FIT), so a list of bots rests on one line.
-// drawShape turns a frame and a pose into the one drawing both React
-// (ShapeMascot.tsx ShapeFrameSvg) and the live loop (writeShape) put on
-// screen; shape-motion.ts moves the pose.
+// drawShape turns a frame and a pose into one drawing (writeShape puts it on
+// an SVG); shape-motion.ts moves the pose. Since #4145 the app draws the
+// shapes with the open-bot-avatar engine (shape-avatar.ts): this drawing is
+// the reference the phone's ShapeVolume.swift follows.
 import { eyeOutline, mixHex, type ShapeFrame } from "./shape-engine";
 import { radiusAt, SHAPE_RADII, smoothClosed } from "./shape-art";
-import { MASCOT_SHAPES, type MascotShape } from "../../shared/mascot-look";
+import { BODY_SHAPES, type BodyShape } from "../../shared/mascot-look";
 
 /**
  * The resting pose: `yaw` degrees to the right, `pitch` degrees up, `roll`
@@ -65,8 +66,8 @@ export interface Pose {
  * pebble's does (stored id bean, the shape the rest pose was measured on), so a sidebar of bots
  * rests on one line instead of each floating at its own height. Box units.
  */
-export function groundLift(shape: MascotShape): number {
-  const down = (s: MascotShape) => radiusAt(SHAPE_RADII[s], Math.PI) * SHAPE_FIT[s];
+export function groundLift(shape: BodyShape): number {
+  const down = (s: BodyShape) => radiusAt(SHAPE_RADII[s], Math.PI) * SHAPE_FIT[s];
   return POSE.scale * 40 * (down("bean") - down(shape));
 }
 
@@ -79,7 +80,7 @@ export const FIT = { circle: 0.9, min: 0.78, max: 1.04, reach: 1.08 } as const;
  * narrow tube and a wide cloud look alike in a list, never reaching past
  * FIT.reach R from the middle.
  */
-export function shapeFit(shape: MascotShape): number {
+export function shapeFit(shape: BodyShape): number {
   const radii = SHAPE_RADII[shape];
   const area = radii.reduce((sum, r) => sum + r * r, 0) * (Math.PI / radii.length);
   const reach = radii.reduce((most, r) => Math.max(most, r), 0);
@@ -87,13 +88,13 @@ export function shapeFit(shape: MascotShape): number {
   return Math.round(Math.min(FIT.max, FIT.reach / reach, Math.max(FIT.min, fit)) * 1000) / 1000;
 }
 
-export const SHAPE_FIT: Readonly<Record<MascotShape, number>> = Object.fromEntries(MASCOT_SHAPES.map((shape) => [shape, shapeFit(shape)])) as Record<MascotShape, number>;
+export const SHAPE_FIT: Readonly<Record<BodyShape, number>> = Object.fromEntries(BODY_SHAPES.map((shape) => [shape, shapeFit(shape)])) as Record<BodyShape, number>;
 
 /** The resting pose. */
 export const REST_POSE: Pose = { yaw: POSE.yaw, pitch: POSE.pitch, roll: POSE.roll, scale: POSE.scale, lift: POSE.lift };
 
 /** A pose standing on the shared ground, at the shape's own size. */
-export const grounded = (pose: Pose, shape: MascotShape): Pose => ({ ...pose, scale: pose.scale * SHAPE_FIT[shape], lift: pose.lift + groundLift(shape) });
+export const grounded = (pose: Pose, shape: BodyShape): Pose => ({ ...pose, scale: pose.scale * SHAPE_FIT[shape], lift: pose.lift + groundLift(shape) });
 
 /**
  * The pose the body is drawn in: the resting turn out of the picture plane,

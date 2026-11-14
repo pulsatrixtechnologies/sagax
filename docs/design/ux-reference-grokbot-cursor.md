@@ -2168,11 +2168,10 @@ One source, one drawing (the "disassembled shape" fix, 2026-10-28):
 - Tests: `src/components/shape-set.regression.test.ts` (every shape, skin,
   face, blink, gaze and move at five moments, resting and rolled: eyes inside
   the face, slices touching it, the pair equal and level, back to rest);
-  `scripts/capture/shapes.mjs` (headless gallery of every scene into
-  `docs/screenshots/shapes`, the same checks on the browser's own layout, and
-  a pixel comparison to the references: run it on any PR that touches the
-  mascots, the sidebar or the headers, and `--update` the references when a
-  change is wanted); iOS `ShapeSetRegressionTests`, `ShapeEngineTests`,
+  `scripts/capture/shape-mascots.mjs` (headless captures of every surface
+  and mood, light and dark, English and French, 1280 and 390, and the
+  forty-bot sidebar's cost: run it on any PR that touches the shape
+  mascots; since #4145 the engine draws them); iOS `ShapeSetRegressionTests`, `ShapeEngineTests`,
   `ShapeVolumeTests`. Gallery: `src/gallery/shape-set.html`.
 - The shape generator is out of the UX but kept: how to generate and add a shape is in `docs/design/shape-generator.md` (`scripts/generate-shape.mjs`).
 

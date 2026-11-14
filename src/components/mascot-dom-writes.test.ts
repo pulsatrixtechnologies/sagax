@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { sameOgreShapes, writeOgreTransforms } from "./OgreMascot";
-import { shapeFrameWritable } from "./ShapeMascot";
 import { drawShape, REST_POSE, writeShape } from "./shape-volume";
 import { ogreFrameLayers, restFrame } from "./ogre-rig";
 import { stillFrame } from "./shape-engine";
@@ -39,12 +38,12 @@ describe("Ogre's rig writes a frame that only moves parts straight onto the draw
   });
 });
 
+// the phone's reference drawing (shape-volume.ts, ShapeVolume.swift); the app draws the shapes with the engine since #4145
 describe("a shape's idle frame goes straight onto its drawing", () => {
   const still = stillFrame({ shape: "circle", expression: "neutral", color: "#3fb950" });
 
   it("writes the outline, the eyes, the transform and the light: one drawing, every part", () => {
     const moved = { ...still, transform: "translate(1 2)", light: { x: 30, y: 20, r: 70 } };
-    expect(shapeFrameWritable(still, moved)).toBe(true);
     const cuts = [{}, {}] as Array<Record<string, string>>;
     const faces = [{}] as Array<Record<string, string>>;
     const eyes = [{}] as Array<Record<string, string>>;
@@ -57,11 +56,5 @@ describe("a shape's idle frame goes straight onto its drawing", () => {
     expect(eyes[0].d).toBe(drawing.eyes);
     expect(motion[0].transform).toBe("translate(1 2)");
     expect(light[0]).toEqual({ cx: "30", cy: "20", r: "70" });
-  });
-
-  it("a move's extras or a new colour draw through React", () => {
-    expect(shapeFrameWritable(still, { ...still, dots: [{ x: 1, y: 1, r: 1, opacity: 1 }] })).toBe(false);
-    expect(shapeFrameWritable(still, { ...still, color: "#000000" })).toBe(false);
-    expect(shapeFrameWritable(still, { ...still, morphed: 0.9 })).toBe(false);
   });
 });

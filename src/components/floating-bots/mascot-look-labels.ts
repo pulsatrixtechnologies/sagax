@@ -58,6 +58,16 @@ export const SHAPE_LABEL = {
   tin: "mascot.shape.tin",
   tome: "mascot.shape.tome",
   ship: "mascot.shape.ship",
+  brain: "mascot.shape.brain",
+  bull: "mascot.shape.bull",
+  bunny: "mascot.shape.bunny",
+  camera: "mascot.shape.camera",
+  magnifier: "mascot.shape.magnifier",
+  "paint-brush": "mascot.shape.paint-brush",
+  palette: "mascot.shape.palette",
+  "witch-hat": "mascot.shape.witch-hat",
+  barbell: "mascot.shape.barbell",
+  "watering-can": "mascot.shape.watering-can",
 } satisfies Record<MascotShape, LocaleKey>;
 
 export { SHAPE_MOVE_LABEL } from "./moves";

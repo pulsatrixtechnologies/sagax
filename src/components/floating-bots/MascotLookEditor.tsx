@@ -33,9 +33,9 @@
 // its tooltip naming the achievement that unlocks it. Each character keeps
 // its own skin, so switching and back finds it again. Loaded lazily with
 // the pane.
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, Lock, Shuffle } from "lucide-react";
+import { Check, ClipboardPaste, Lock, Shuffle } from "lucide-react";
 import { characterLock, lockHint, reportAchievement, skinLock, useUnlocks, type LockInfo } from "@/lib/achievements";
 import "@/components/achievements/achievements.css";
 import { cn } from "@/lib/cn";
@@ -47,6 +47,8 @@ import { MASCOT_SKIN_IDS, OWL_SKIN_TIER, botMascotSkin, type MascotSkinId } from
 import type { MascotColorGroup } from "../../../shared/mascot-colors";
 import { BUNBU_SKIN_TIER, BUNBU_SKINS, completeMascotLook, CRAB_SKIN_TIER, CRAB_SKINS, FROG_SKIN_TIER, FROG_SKINS, GRUMP_SKIN_TIER, GRUMP_SKINS, OGRE_SKIN_TIER, OGRE_SKINS, SHIBA_SKIN_TIER, SHIBA_SKINS, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS, PUMPKIN_COLOR, SHAPE_SKINS_IN_BOT_COLOR, type MascotCharacter, type MascotLook, type MascotShape, type ShapeSkin, type SkinTier } from "../../../shared/mascot-look";
 import { ShapeMascot } from "@/components/ShapeMascot";
+import { bakedShapeFor } from "@/components/shape-avatar";
+import { parseEngineAvatar, type EngineAvatarReason } from "../../../shared/engine-avatar-def";
 import { SkinnedTrombi } from "@/components/skin-fx/SkinnedTrombi";
 import { BunbuMascot } from "@/components/BunbuMascot";
 import { ShibaMascot } from "@/components/ShibaMascot";
@@ -457,6 +459,27 @@ export function randomLook({ listed, look, color, owlSkin, characterLocked, skin
   return patch;
 }
 
+/**
+ * A pasted open-bot-avatar definition as the bot's shape (#4160): checked by
+ * the engine (validateAvatar) and stored on the look as its avatarDef; the
+ * catalog shape stays as it was for a platform that cannot draw it yet.
+ */
+export function pastedShapeLook(look: CompleteLook, text: string): { ok: true; mascotLook: MascotLook } | { ok: false; reasons: EngineAvatarReason[] } {
+  const parsed = parseEngineAvatar(text);
+  return parsed.ok ? { ok: true, mascotLook: { ...look, avatarDef: parsed.def } } : { ok: false, reasons: parsed.reasons };
+}
+
+/** Each reason a pasted definition is refused, said in the person's language. */
+export const PASTE_REASON_LABEL = {
+  json: "appearance.shape.pasteReason.json",
+  fields: "appearance.shape.pasteReason.fields",
+  path: "appearance.shape.pasteReason.path",
+  outside: "appearance.shape.pasteReason.outside",
+  small: "appearance.shape.pasteReason.small",
+  eyesOutside: "appearance.shape.pasteReason.eyesOutside",
+  eyesSize: "appearance.shape.pasteReason.eyesSize",
+} as const satisfies Record<EngineAvatarReason, LocaleKey>;
+
 export default function MascotLookEditor({
   bot,
   disabled,
@@ -590,7 +613,10 @@ export default function MascotLookEditor({
   const shownSkin = previewSkin ?? (shown === "owl" ? owlSkin : look.skins[shown]);
   const skinName = shown === "owl" ? t(OWL_SKIN_LABEL[shownSkin as MascotSkinId] ?? OWL_SKIN_LABEL.none) : t(CHARACTER_SKINS[shown].label[shownSkin] ?? CHARACTER_SKINS[shown].label[CHARACTER_SKINS[shown].skins[0]]);
   const paletteName = t(COLOR_GROUP_LABEL[colorTabFor(bot.color)]);
-  const shapeName = t(SHAPE_LABEL[look.shape]);
+  // a person's own shape (a pasted definition, or an earlier drawing that is no catalog preset) is the chosen one, by its name
+  const ownShape = look.avatarDef && !bakedShapeFor(look.shape, look.avatarDef) ? look.avatarDef : null;
+  const ownShapeName = ownShape ? (ownShape.name ?? t("appearance.shape.own")) : "";
+  const shapeName = ownShape ? ownShapeName : t(SHAPE_LABEL[look.shape]);
   const tabValue: Record<EditorTab, ReactNode> = {
     mascot: shownName,
     shape: shapeName,
@@ -769,25 +795,47 @@ export default function MascotLookEditor({
           </div>
         )}
         {tab === "shape" && (
-          // every shape, with its name; each previews the current color and skin, still and cheap
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-2" role="radiogroup" aria-label={t("floatingBots.mascot.shape")}>
-            {SHAPE_CHOICES.map((shape) => (
-              <button
-                key={shape}
-                type="button"
-                role="radio"
-                disabled={optionsOff}
-                aria-checked={look.shape === shape}
-                data-character-shape={shape}
-                aria-label={t(SHAPE_LABEL[shape])}
-                title={t(SHAPE_LABEL[shape])}
-                onClick={() => pickShape(shape)}
-                className={cn(card, "h-[78px] gap-1 rounded-xl p-1.5", focusRing, look.shape === shape && on)}
-              >
-                <ShapeThumbnail shape={shape} skin={look.skins.shape} color={bot.color} size={40} />
-                <span className="w-full truncate text-center text-[11px] leading-4 text-ink-secondary" aria-hidden="true">{t(SHAPE_LABEL[shape])}</span>
-              </button>
-            ))}
+          <div className="flex min-w-0 flex-col gap-3">
+            {/* every shape, with its name; each previews the current color and skin, still and cheap; a person's own shape first */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-2" role="radiogroup" aria-label={t("floatingBots.mascot.shape")}>
+              {ownShape && (
+                <button
+                  type="button"
+                  role="radio"
+                  disabled={optionsOff}
+                  aria-checked={true}
+                  data-own-shape=""
+                  aria-label={t("appearance.shape.ownNamed", { name: ownShapeName })}
+                  title={ownShapeName}
+                  className={cn(card, "h-[78px] gap-1 rounded-xl p-1.5", focusRing, on)}
+                >
+                  <ShapeMascot shape={look.shape} skin={look.skins.shape} color={bot.color} size={40} animated={false} detail="static" avatarDef={ownShape} label={null} />
+                  <span className="w-full truncate text-center text-[11px] leading-4 text-ink-secondary" aria-hidden="true">{ownShapeName}</span>
+                </button>
+              )}
+              {SHAPE_CHOICES.map((shape) => (
+                <button
+                  key={shape}
+                  type="button"
+                  role="radio"
+                  disabled={optionsOff}
+                  aria-checked={!ownShape && look.shape === shape}
+                  data-character-shape={shape}
+                  aria-label={t(SHAPE_LABEL[shape])}
+                  title={t(SHAPE_LABEL[shape])}
+                  onClick={() => pickShape(shape)}
+                  className={cn(card, "h-[78px] gap-1 rounded-xl p-1.5", focusRing, !ownShape && look.shape === shape && on)}
+                >
+                  <ShapeThumbnail shape={shape} skin={look.skins.shape} color={bot.color} size={40} />
+                  <span className="w-full truncate text-center text-[11px] leading-4 text-ink-secondary" aria-hidden="true">{t(SHAPE_LABEL[shape])}</span>
+                </button>
+              ))}
+            </div>
+            <PasteShape disabled={optionsOff} onUse={(text) => {
+              const result = pastedShapeLook(look, text);
+              if (result.ok) onPatch({ mascotLook: result.mascotLook });
+              return result;
+            }} />
           </div>
         )}
         {tab === "color" && (
@@ -796,6 +844,73 @@ export default function MascotLookEditor({
         {tab === "skin" && skinPicker}
       </div>
     </div>
+  );
+}
+
+/**
+ * Paste an open-bot-avatar definition (the JSON its editor or its prompt
+ * gives) as the bot's shape (#4160): a button under the Shape grid opens the
+ * field; the engine checks the text and its reason shows under the field.
+ */
+function PasteShape({ disabled, onUse }: { disabled?: boolean; onUse: (text: string) => { ok: true } | { ok: false; reasons: EngineAvatarReason[] } }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<EngineAvatarReason[] | null>(null);
+  const id = useId();
+  const close = () => {
+    setOpen(false);
+    setText("");
+    setError(null);
+  };
+  if (!open) {
+    return (
+      <div className="flex">
+        <button type="button" data-shape-paste="" disabled={disabled} aria-expanded={false} onClick={() => setOpen(true)} className={MASCOT_HERO_BUTTON}>
+          <ClipboardPaste size={13} aria-hidden="true" />
+          {t("appearance.shape.paste")}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form
+      data-shape-paste-form=""
+      className="flex flex-col gap-2 rounded-xl border border-hairline-weak bg-inset p-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const result = onUse(text);
+        if (result.ok) close();
+        else setError(result.reasons);
+      }}
+    >
+      <label htmlFor={`${id}-text`} className="text-[13px] font-medium leading-5 text-ink">{t("appearance.shape.paste")}</label>
+      <p id={`${id}-hint`} className="text-[12px] leading-4 text-ink-secondary">{t("appearance.shape.pasteHint")}</p>
+      <textarea
+        id={`${id}-text`}
+        value={text}
+        rows={6}
+        spellCheck={false}
+        autoFocus
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-hint ${id}-error` : `${id}-hint`}
+        onChange={(event) => {
+          setText(event.target.value);
+          setError(null);
+        }}
+        placeholder='{ "version": 1, "id": "…", "name": "…", "body": { "path": "M…Z" }, "eyes": { "x": 50, "y": 45, "spacing": 16, "scale": 1 } }'
+        className="w-full resize-y rounded-lg border border-hairline/60 bg-raised px-3 py-2.5 font-mono text-[12px] text-ink outline-none focus:border-accent"
+      />
+      {error && (
+        <p id={`${id}-error`} role="alert" data-shape-paste-error="" className="break-words text-[12px] leading-4 text-danger">
+          {t("appearance.shape.pasteInvalid", { reason: error.map((reason) => t(PASTE_REASON_LABEL[reason])).join(" ") })}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={close} className={MASCOT_HERO_BUTTON}>{t("common.cancel")}</button>
+        <button type="submit" disabled={disabled || !text.trim()} className={MASCOT_HERO_BUTTON}>{t("appearance.shape.use")}</button>
+      </div>
+    </form>
   );
 }
 

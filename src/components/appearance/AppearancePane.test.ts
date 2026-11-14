@@ -11,7 +11,7 @@ import { setLocale } from "@/lib/i18n";
 import { resetAchievementsForTests } from "@/lib/achievements";
 import { StoreProvider, type Bot } from "@/state/store";
 import { NOTHING_LOCKED, type AchievementSnapshot } from "../../../shared/achievements";
-import { botMascotLook, completeMascotLook, CRAB_SKINS } from "../../../shared/mascot-look";
+import { botMascotLook, completeMascotLook, CRAB_SKINS, MASCOT_SHAPES } from "../../../shared/mascot-look";
 import { MASCOT_SKIN_IDS } from "../../../shared/mascot-skins";
 import MascotLookEditor, { editorTabsFor, randomLook, type EditorTab, type MascotLookPatch } from "../floating-bots/MascotLookEditor";
 import { MASCOTS } from "../floating-bots/mascots";
@@ -209,7 +209,7 @@ describe("the Mascot gallery", () => {
     expect(html).not.toContain("data-character-shape");
     expect(html).not.toContain("data-mascot-color=");
     const shapes = renderEditor(makeBot({ mascotLook: botMascotLook({ character: "shape" }) }), "shape");
-    expect(shapes.match(/data-character-shape=/g)).toHaveLength(40);
+    expect(shapes.match(/data-character-shape=/g)).toHaveLength(MASCOT_SHAPES.length);
     expect(shapes).not.toContain("data-character-option=");
   });
 

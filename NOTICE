@@ -149,6 +149,15 @@ their radial version only (a jaw and four legs are left out). The pumpkin, the
 eyes, the moves and the rest of the Shapes engine are Pulsatrix Technologies
 inc.'s own.
 
+The shape mascots are drawn by open-bot-avatar 0.2.1 (npm open-bot-avatar,
+the version pinned in package.json), https://github.com/DominikScholz/open-bot-avatar,
+Copyright (c) 2026 Dominik Scholz, used under the MIT License
+(third_party/open-bot-avatar/LICENSE). The desktop and the web bundle the
+unmodified package; nothing is fetched at run time. Its gallery definitions
+are copied unmodified in third_party/open-bot-avatar/gallery, and the app
+draws some shapes with them and with the package's examples; our own shapes
+(shared/shape-avatars.json) are written in its definition format.
+
 The built-in REA plugin (shared/builtin-plugins.ts) starts REA, reverse
 engineering for agents, https://github.com/morluto/rea (npm rea-agents, version
 pinned in REA_VERSION), Copyright (c) 2026 morluto, used under the MIT License

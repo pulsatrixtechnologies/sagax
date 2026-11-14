@@ -297,6 +297,37 @@ export interface LiveShapeOutline {
   pathBody: boolean;
 }
 
+/** A body fitted into a box: its bounds scaled so the longer side spans `span` units, centred on 50 (the open-bot-avatar engine's safe area is 8..92). */
+export interface BoxFit {
+  scale: number;
+  at: (point: OutlinePoint) => OutlinePoint;
+}
+
+export function boxFit(points: readonly OutlinePoint[], span = 76): BoxFit {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const scale = span / Math.max(x1 - x0, y1 - y0, 1e-6);
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  return { scale, at: ([x, y]) => [50 + (x - cx) * scale, 50 + (y - cy) * scale] };
+}
+
+/** A path (M/L/C/Q/Z, absolute or relative) moved by a fit: absolute points mapped, relative steps scaled. */
+export function fitPath(d: string, fit: BoxFit): string {
+  return tokenizeCommands(d)
+    .map(({ command, args }) => {
+      const relative = command !== command.toUpperCase();
+      const out: number[] = [];
+      for (let i = 0; i + 1 < args.length; i += 2) {
+        const [x, y] = relative ? [args[i]! * fit.scale, args[i + 1]! * fit.scale] : fit.at([args[i]!, args[i + 1]!]);
+        out.push(round2(x), round2(y));
+      }
+      return `${command}${out.join(" ")}`;
+    })
+    .join("");
+}
+
 /** Primary silhouette path for a definition (union of parts into one path string). */
 export function silhouettePathFromDef(def: ShapeAvatarDef): { path: string; extras: string[] } {
   if (def.body.kind === "path") return { path: def.body.d, extras: [] };

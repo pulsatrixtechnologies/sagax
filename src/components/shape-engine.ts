@@ -1,6 +1,9 @@
-// The Shapes engine (clean room, 2026-10-08): everything that moves a shape,
-// as pure functions of time, so tests and the static render share it with
-// the live avatar (ShapeMascot.tsx).
+// The Shapes engine (clean room, 2026-10-08): everything that moved a shape,
+// as pure functions of time. Since #4145 the app draws the shapes with the
+// open-bot-avatar engine (shape-avatar.ts, ShapeMascot.tsx); this engine
+// stays the reference the phone's ShapeEngine.swift is generated from and
+// checked against (ios-mascot-export.test.ts), and the other characters'
+// rigs share its easing and gaze helpers.
 //
 // - The face: two rounded bars on the body, always the same two capsules
 //   (2026-10-28: no eye ever fades, shrinks or tilts on its own). Their
@@ -19,7 +22,8 @@
 //
 // All lengths are in R (the circle's radius) until frame() turns them into
 // the 0..100 box (shape-art.ts BODY).
-import type { MascotShape } from "../../shared/mascot-look";
+import type { BodyShape } from "../../shared/mascot-look";
+import type { ShapeMood } from "./shape-avatar";
 import type { ShapeAvatarDef } from "../../shared/shape-avatar-def";
 import {
   blendOutlines,
@@ -81,6 +85,29 @@ const both = (yaw: number, pitch: number, roll: number, split: number, shape: Ey
 /** The sixteen faces, in the order the tests and the editor list them. */
 export const SHAPE_EXPRESSIONS = ["neutral", "attentive", "surprised", "excited", "happy", "laughing", "angry", "sad", "scared", "suspicious", "confused", "curious", "proud", "shy", "bored", "sleepy"] as const;
 export type ShapeExpression = (typeof SHAPE_EXPRESSIONS)[number];
+
+/** The face a mood wears (the phone's moodExpression, ios-mascot-export.test.ts). */
+export function expressionForMood(mood: ShapeMood): ShapeExpression {
+  switch (mood) {
+    case "thinking":
+      return "curious";
+    case "working":
+    case "streaming":
+      return "attentive";
+    case "blocked":
+      return "curious";
+    case "happy":
+      // open, bright eyes: the flat "happy" bars read as dashes on a turned body
+      return "excited";
+    case "sleeping":
+      return "sleepy";
+    default:
+      return "neutral";
+  }
+}
+
+/** The live loop's pace at rest, s per frame (the phone's idleFrame). */
+export const IDLE_FRAME_S = 1 / 30 - 0.002;
 
 /** The faces, from the geometry file (shared/mascot-geometry.json expressions). */
 export const EXPRESSIONS: Readonly<Record<ShapeExpression, Expression>> = Object.fromEntries(
@@ -469,7 +496,7 @@ export interface EyeBox {
 }
 
 export interface ShapeState {
-  shape: MascotShape;
+  shape: BodyShape;
   expression: ShapeExpression;
   color: string;
   /** Path-based body from a portable avatarDef (v2.1). */
@@ -539,7 +566,7 @@ export function gazeFrame(
 
 interface FrameInputs {
   /** The body the face anchor is read for. */
-  shape: MascotShape;
+  shape: BodyShape;
   radii: Radii;
   rest: Radii;
   face: Expression;
@@ -557,7 +584,7 @@ interface FrameInputs {
 }
 
 /** Whether a body wears the pumpkin's stem (1) or not (0). */
-const stemOf = (shape: MascotShape) => (shape === "pumpkin" ? 1 : 0);
+const stemOf = (shape: BodyShape) => (shape === "pumpkin" ? 1 : 0);
 
 /**
  * How thick a body must be (its thinnest half-width, R) to carry the volume's

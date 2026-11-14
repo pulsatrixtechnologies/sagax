@@ -7834,7 +7834,9 @@ describe("harness HTTP API", () => {
       // Claude's engine implements acceptEdits, so the same PATCH applies.
       const applied = await api("PATCH", `/api/bots/${claude.id}/tasks/${claude.threadId}`, { approvalMode: "edits" });
       expect(applied.status).toBe(200);
-      expect(applied.body.task).toMatchObject({ approvalMode: "edits", autoApprove: false });
+      // #4200: the level is the bot's, not the conversation's.
+      const after = ((await api("GET", "/api/bots")).body.bots as Array<{ id: string }>).find((b) => b.id === claude.id);
+      expect(after).toMatchObject({ approvalMode: "edits", autoApprove: false });
     } finally {
       await api("DELETE", `/api/bots/${claude.id}`);
     }
@@ -8099,36 +8101,20 @@ describe("harness HTTP API", () => {
     expect(stillOpen.answered).toBeUndefined();
     expect(stillOpen.dismissed).toBeUndefined();
 
-    try {
-      const answered = await api("POST", "/api/threads/test-cancel-room-thread/respond", {
-        requestId: "cancel-question-request",
-        behavior: "answer",
-        message: "README",
-      });
-      expect(answered.status, JSON.stringify(answered.body)).toBe(200);
-      expect(answered.body).toMatchObject({ ok: true, outcome: "answered", late: true });
-      await expect.poll(async () => {
-        const groups = (await api("GET", "/api/bots")).body.groups;
-        return groups.find((group: { id: string }) => group.id === "test-cancel-room")?.working;
-      }, { timeout: 5_000 }).toBe(true);
-      const afterAnswer = (await api("GET", "/api/bots")).body.groups.find(
-        (group: { id: string }) => group.id === "test-cancel-room",
-      );
-      const settled = afterAnswer.messages.find((message: { id: string }) => message.id === "cancel-question-card");
-      expect(settled.card).toMatchObject({ answered: "answer", answeredText: "README", dismissed: false });
-      expect(afterAnswer.messages).toContainEqual(expect.objectContaining({
-        role: "user",
-        kind: "text",
-        text: "@Test bot A: README",
-        replyToId: "cancel-question-card",
-      }));
-    } finally {
-      expect((await api("POST", "/api/groups/test-cancel-room/interrupt")).status).toBe(200);
-      await expect.poll(async () => {
-        const groups = (await api("GET", "/api/bots")).body.groups;
-        return groups.find((group: { id: string }) => group.id === "test-cancel-room")?.working;
-      }, { timeout: 5_000 }).toBe(false);
-    }
+    // #4205: the cancelled run closed its question card: a late answer
+    // starts nothing and the card stays unanswered.
+    const answered = await api("POST", "/api/threads/test-cancel-room-thread/respond", {
+      requestId: "cancel-question-request",
+      behavior: "answer",
+      message: "README",
+    });
+    expect(answered.status, JSON.stringify(answered.body)).toBe(409);
+    expect(answered.body).toMatchObject({ error: "this question is closed" });
+    const afterAnswer = (await api("GET", "/api/bots")).body.groups.find(
+      (group: { id: string }) => group.id === "test-cancel-room",
+    );
+    expect(afterAnswer.working).toBe(false);
+    expect(afterAnswer.messages.find((message: { id: string }) => message.id === "cancel-question-card").card.answered).toBeUndefined();
   });
 
   it("rejects an empty message and explains an unavailable provider", async () => {
@@ -9364,7 +9350,7 @@ describe("harness HTTP API", () => {
   it("keeps skill authoring on by default and persists an explicit opt-out", async () => {
     const before = await api("GET", "/api/config");
     expect(before.status).toBe(200);
-    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false, claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
+    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false, claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin", teachTask: false });
     // the default is the absence of the key: nothing is written until the toggle is used
     const untouched = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
     expect(untouched.features?.skillAuthoring).toBeUndefined();
@@ -9379,7 +9365,7 @@ describe("harness HTTP API", () => {
       showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false,
       decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false,
       claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false,
-      savedSteps: true, savedStepsHere: process.platform === "darwin",
+      savedSteps: true, savedStepsHere: process.platform === "darwin", teachTask: false,
     };
     const saved = await api("PATCH", "/api/config", {
       features: { skillAuthoring: false },

@@ -220,7 +220,8 @@ export function cleanVoiceModeSettings(input: unknown): VoiceModeSettings {
 export interface BotSpeech {
   /** the xAI realtime voice of the bot's effective choice (`voices.xai`) */
   xaiVoice?: string;
-  /** the provider the bot speaks with ("auto" reads as xAI) */
+  /** the provider the bot speaks with: under "auto", the one the server
+   * resolves for the owner (#4231), xAI when none is known */
   provider?: VoiceTtsProvider;
   /** that provider's voice id */
   voice?: string;
@@ -239,24 +240,44 @@ export const BOT_SPEECH_PERSONA_MAX = 4_000;
 const validSpeed = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= VOICE_MODE_MIN_SPEED && value <= VOICE_MODE_MAX_SPEED;
 
+/** A persona text, line breaks kept, cut at `max` characters, never inside a character pair. */
+function cappedPersona(text: unknown, max: number): string {
+  if (typeof text !== "string") return "";
+  const trimmed = text.replace(/\r\n?/g, "\n").trim();
+  if (trimmed.length <= max) return trimmed;
+  const last = trimmed.charCodeAt(max - 1);
+  return trimmed.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max).trimEnd();
+}
+
 /** `preference` is the owner's saved preference (VOICE_MODE_STORAGE_KEY, raw
  * or parsed), `botLanguage` the bot's own voice language (bot-profile.ts
  * `voiceLanguage`), which wins over the person's. The same rules as the
  * desktop (effectiveVoiceChoice, spokenVoice). #4236: with `bot`, its own
  * voice speed (`voiceSpeed`, which wins over the person's `speed`) and its
- * persona and instructions text (`soul`). */
-export function botSpeech(preference: unknown, botId: string, botLanguage?: string, bot?: { voiceSpeed?: unknown; persona?: unknown }): BotSpeech {
+ * persona and instructions text (`soul`). #4231: `autoProvider` is the
+ * provider the server resolves for the owner under "auto" (what the voice
+ * providers route answers as `tts`), the one the app speaks with. */
+export function botSpeech(
+  preference: unknown,
+  botId: string,
+  botLanguage?: string,
+  bot?: { voiceSpeed?: unknown; persona?: unknown },
+  autoProvider?: VoiceTtsProvider,
+): BotSpeech {
   let parsed = preference;
   if (typeof preference === "string") {
     try { parsed = JSON.parse(preference); } catch { parsed = null; }
   }
   const settings = cleanVoiceModeSettings(parsed);
   const choice = effectiveVoiceChoice(settings, botId);
-  const { provider, voice } = spokenVoice(choice);
+  // under "auto" the app speaks with the provider the server resolves for
+  // its person (useVoicePicker), and saves the bot's voice under it
+  const auto = choice.tts === "auto" && isVoiceTtsProvider(autoProvider) ? autoProvider : undefined;
+  const { provider, voice } = auto ? { provider: auto, voice: choice.voices[auto] ?? "" } : spokenVoice(choice);
   const xaiVoice = choice.voices.xai;
   const language = botLanguage !== undefined && isVoiceModeLanguage(botLanguage) ? botLanguage : settings.language;
   const speed = bot ? (validSpeed(bot.voiceSpeed) ? bot.voiceSpeed : settings.speed) : 1;
-  const persona = bot && typeof bot.persona === "string" ? bot.persona.replace(/\r\n?/g, "\n").trim().slice(0, BOT_SPEECH_PERSONA_MAX).trimEnd() : "";
+  const persona = bot ? cappedPersona(bot.persona, BOT_SPEECH_PERSONA_MAX) : "";
   return {
     ...(xaiVoice ? { xaiVoice } : {}),
     provider,

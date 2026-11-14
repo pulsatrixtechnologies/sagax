@@ -467,7 +467,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Plugin marketplaces | Capabilities > Sources > Organization sources and access | `sagax_settings` get, set `org.pluginMarketplaces` | organisation |
 | Public links for published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
 | Reader comments on published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |
-| Phone calls ({enabled, callbackNumber, addDoNotCall, removeDoNotCall}) | Settings > Voice > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
+| Phone calls ({enabled, addDoNotCall, removeDoNotCall}) | Settings > Voice > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
 | Organization bot secrets ({op: add, kind, label, value, injection, botIds} / {op: replace, id, value} / {op: assign, id, botIds} / {op: remove, id}; value a {$secret} reference; get lists names and ids, never a value) | Settings > Organization > Bots > Team secrets | `sagax_settings` get, set `org.botSecrets` | secret + organisation |
 | People's tool access (get lists it; set with a grant's id revokes it) | Settings > Account > Advanced > People's tool access | `sagax_settings` get, set `org.toolGrants` | autrui + suppression |
 | Reports (get lists them; set with a report's id resolves it) | Settings > Notifications > Privacy > Reports | `sagax_settings` get, set `org.reports` | autrui |

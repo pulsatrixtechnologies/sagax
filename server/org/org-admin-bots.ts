@@ -8,6 +8,7 @@ import type { IncomingMessage } from "node:http";
 import { BOT_ZIP_MAX_BYTES, type BotZipPreview } from "../../shared/bot-zip.ts";
 import type { BotCapabilities } from "../../shared/capabilities.ts";
 import { botSpeech } from "../../shared/voice-mode.ts";
+import type { VoiceTtsProvider } from "../../shared/voice-providers.ts";
 import type { AdminBot, AdminBotReach, AdminPerson } from "./org-admin-routes.ts";
 import {
   badRequest,
@@ -45,6 +46,13 @@ export interface BotsDeps {
   voice?: {
     preference(principalId: string): unknown;
     language(botId: string): string | undefined;
+    /** #4231: the bot's own voice chat speed (`voiceSpeed`), if set */
+    speed?(botId: string): number | undefined;
+    /** #4231: the bot's persona and instructions text (`bot.persona`) */
+    persona?(botId: string): string | undefined;
+    /** #4231: the provider the owner's Auto speaks with, as the voice
+     * providers route resolves it; undefined when no key serves them */
+    autoProvider?(principalId: string): Promise<VoiceTtsProvider | undefined> | VoiceTtsProvider | undefined;
   };
   /** A person of the organization who may own a bot (known, not disabled). */
   owner(principalId: string): AdminPerson | null;
@@ -263,12 +271,17 @@ export function botsRoutes(deps: BotsDeps): ConsoleRoute[] {
       path: "bots/{id}",
       min: "manager",
       ownerGrant: "own-bot",
-      handle(ctx) {
+      async handle(ctx) {
         const entry = find(ctx, deps, ctx.params.id!);
         const detail = entry ? deps.detail(entry.bot.id) : null;
         if (!entry || !detail) return notFound("No such bot.");
         const owner = entry.reach.ownerPrincipalId;
-        const speech = deps.voice ? botSpeech(deps.voice.preference(owner), entry.bot.id, deps.voice.language(entry.bot.id)) : null;
+        const voice = deps.voice;
+        let autoProvider: VoiceTtsProvider | undefined;
+        try { autoProvider = await voice?.autoProvider?.(owner); } catch { autoProvider = undefined; }
+        const speech = voice ? botSpeech(voice.preference(owner), entry.bot.id, voice.language(entry.bot.id), {
+          voiceSpeed: voice.speed?.(entry.bot.id), persona: voice.persona?.(entry.bot.id),
+        }, autoProvider) : null;
         return ok({ bot: { ...entry.bot, ...detail, ...(speech ? { speech } : {}) } });
       },
     },

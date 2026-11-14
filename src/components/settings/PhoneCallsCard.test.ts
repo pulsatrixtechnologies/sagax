@@ -40,6 +40,15 @@ describe("PhoneCallsCard (#2080)", () => {
     expect(html).not.toContain("On · callback");
   });
 
+  it("never shows a callback number row nor its warning: calls no longer say one (#4193)", async () => {
+    const { PhoneCallsCard } = await import("./PhoneCallsCard");
+    const html = renderToStaticMarkup(createElement(PhoneCallsCard));
+    expect(html).not.toContain("Callback number");
+    expect(html).not.toContain("No callback number yet");
+    expect(html).not.toContain('data-settings-row="phoneCalls.callback"');
+    expect(html).toContain('data-settings-keywords="Do not call"');
+  });
+
   it("draws nothing outside an organization", async () => {
     fixture.org = null as never;
     const { PhoneCallsCard } = await import("./PhoneCallsCard");

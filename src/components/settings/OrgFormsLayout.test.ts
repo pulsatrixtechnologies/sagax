@@ -34,20 +34,33 @@ describe("organization forms layout", () => {
     expect(html).not.toContain('type="checkbox"');
   });
 
-  it("hides Callback number and Do not call while Phone calls is off, keeps the values, shows them when on", () => {
+  it("hides Do not call while Phone calls is off, keeps the values, shows them when on", () => {
     const saved = { callbackNumber: "+15145550100", doNotCall: ["+15145550142"] };
     const off = renderToStaticMarkup(createElement(OrgPhoneCalls, { initial: { enabled: false, ...saved } }));
     expect(off).toContain('data-settings-row="phoneCalls"');
     expect(off).toContain("data-org-calls-enabled");
-    expect(off).not.toContain('data-settings-row="phoneCallsCallback"');
     expect(off).not.toContain('data-settings-row="phoneCallsDoNotCall"');
-    // search still leads to the switch: the row carries the hidden rows' words
-    expect(off).toMatch(/data-settings-keywords="Callback number[^"]*Do not call"/);
+    // search still leads to the switch: the row carries the hidden row's words
+    expect(off).toContain('data-settings-keywords="Do not call"');
     const on = renderToStaticMarkup(createElement(OrgPhoneCalls, { initial: { enabled: true, ...saved } }));
-    expect(on).toContain('data-settings-row="phoneCallsCallback"');
     expect(on).toContain('data-settings-row="phoneCallsDoNotCall"');
-    expect(on).toContain("+1 514 555 0100");
     expect(on).toContain("+1 514 555 0142");
+  });
+
+  it("never shows a callback number row nor its warning: calls no longer say one (#4193)", () => {
+    for (const settings of [{ enabled: true, callbackNumber: "+15145550100", doNotCall: [] }, { enabled: true, doNotCall: [] }]) {
+      const html = renderToStaticMarkup(createElement(OrgPhoneCalls, { initial: settings }));
+      expect(html).not.toContain('data-settings-row="phoneCallsCallback"');
+      expect(html).not.toContain("data-org-calls-no-callback");
+      expect(html).not.toContain("Callback number");
+      expect(html).not.toContain("+1 514 555 0100");
+    }
+  });
+
+  it("says only what a call does: who calls, and that someone who asks to stop is not called again", () => {
+    const html = renderToStaticMarkup(createElement(OrgPhoneCalls, { initial: { enabled: false, doNotCall: [] } }));
+    expect(html).not.toContain("how to opt out");
+    expect(html).toContain("Each call says it is an AI calling on your behalf.");
   });
 
   it("lays an editor's fields out as label and control rows, with its actions under them", () => {

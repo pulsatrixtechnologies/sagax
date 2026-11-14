@@ -783,6 +783,54 @@ return async function listen(req: IncomingMessage, res: import("node:http").Serv
 }
 }
 
+/** Every provider's keys for this person (xAI's in the order of
+ * resolveVoiceKeys, then OpenAI's, ElevenLabs' and the others, 2026-10-29;
+ * none for a person turned off), and each role's keys in the order `choice`
+ * asks for: the chosen provider first, then every other serving one. */
+async function voiceKeysFor(env: any, speaker: VoiceSpeaker, choice: { tts: "auto" | VoiceTtsProvider; stt: "auto" | VoiceSttProvider }): Promise<{ resolved: VoiceKeys; byProvider: Map<VoiceProviderId, VoiceKeyCandidate[]>; ttsKeys: VoiceKeyCandidate[]; sttKeys: VoiceKeyCandidate[] }> {
+  const { adapterOf, deps } = env;
+  const resolved = await resolveVoiceKeys(deps, speaker);
+  const byProvider = new Map<VoiceProviderId, VoiceKeyCandidate[]>();
+  if (resolved.ok) byProvider.set("xai", resolved.keys);
+  if (resolved.ok || resolved.cause !== "payer_disabled") {
+    for (const provider of VOICE_TTS_PROVIDERS.filter((id): id is Exclude<VoiceTtsProvider, "xai"> => id !== "xai")) {
+      if (!adapterOf(provider) || !deps.providerKeys) continue;
+      let found: VoiceKeyCandidate[] = [];
+      try { found = await deps.providerKeys(provider, speaker); } catch { found = []; }
+      const tagged = found.filter((candidate) => candidate.key).map((candidate) => ({ ...candidate, provider }));
+      if (tagged.length) byProvider.set(provider, tagged);
+    }
+  }
+  /** a role's keys, the chosen provider first, then the other providers */
+  const roleKeys = <P extends VoiceProviderId>(role: "tts" | "stt", picked: "auto" | P, all: readonly P[]): VoiceKeyCandidate[] => {
+    const serving = all.filter((provider) => {
+      const adapter = adapterOf(provider);
+      return (byProvider.get(provider)?.length ?? 0) > 0 && Boolean(role === "tts" ? adapter?.synthesize || adapter?.synthesizeStream : adapter?.transcribe || adapter?.openTranscription);
+    });
+    return providerOrder(picked, serving, all).flatMap((provider) => byProvider.get(provider) ?? []);
+  };
+  const ttsKeys = roleKeys("tts", choice.tts, VOICE_TTS_PROVIDERS);
+  const sttKeys = roleKeys("stt", choice.stt, VOICE_STT_PROVIDERS);
+  return { resolved, byProvider, ttsKeys, sttKeys };
+}
+
+/** Why voice mode cannot run for this person with these keys, or null. */
+function refusedCauseOf(resolved: VoiceKeys, ttsKeys: VoiceKeyCandidate[], sttKeys: VoiceKeyCandidate[]): VoiceModeRefusalCause | null {
+  return ttsKeys.length && sttKeys.length
+    ? null
+    : resolved.ok ? "no_credentials" : resolved.cause === "payer_disabled" || (!ttsKeys.length && !sttKeys.length) ? resolved.cause : "no_credentials";
+}
+
+/** The provider a person's voice speaks with (#4231): what the voice
+ * providers route answers as `tts` (the first key not refused lately),
+ * else, when the person cannot speak with every role, the first provider
+ * one of their keys serves; undefined when none does. */
+function speakingProvider(refusals: VoiceKeyRefusals, who: string, ttsKeys: VoiceKeyCandidate[], available: boolean): VoiceTtsProvider | undefined {
+  if (!ttsKeys.length) return undefined;
+  if (available) return candidateProvider(refusals.order(who, ttsKeys)[0]!.candidate) as VoiceTtsProvider;
+  return VOICE_TTS_PROVIDERS.find((provider) => ttsKeys.some((candidate) => candidateProvider(candidate) === provider));
+}
+
 async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]): Promise<typeof PASS | void> {
   const { adapterOf, deps, sayFallback, now, refusals, speech, realtime, listen, limited } = env;
   const { req, res, url, path, method, auth, json, readBody } = ctx;
@@ -855,36 +903,11 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
 
   const keysUrl = deps.keysUrl?.();
   const admin = deps.isAdmin?.(auth) === true;
-  const resolved = await resolveVoiceKeys(deps, speaker);
   const who = speaker.principalId || "operator";
-  // every provider's keys for this person: xAI's in the order above, then
-  // OpenAI's and ElevenLabs' (2026-10-29), none for a person turned off
-  const byProvider = new Map<VoiceProviderId, VoiceKeyCandidate[]>();
-  if (resolved.ok) byProvider.set("xai", resolved.keys);
-  if (resolved.ok || resolved.cause !== "payer_disabled") {
-    for (const provider of VOICE_TTS_PROVIDERS.filter((id): id is Exclude<VoiceTtsProvider, "xai"> => id !== "xai")) {
-      if (!adapterOf(provider) || !deps.providerKeys) continue;
-      let found: VoiceKeyCandidate[] = [];
-      try { found = await deps.providerKeys(provider, speaker); } catch { found = []; }
-      const tagged = found.filter((candidate) => candidate.key).map((candidate) => ({ ...candidate, provider }));
-      if (tagged.length) byProvider.set(provider, tagged);
-    }
-  }
   const choice = requestedChoice(action, url, body as Record<string, unknown> | null, preference, target.botId);
-  /** a role's keys, the chosen provider first, then the other providers */
-  const roleKeys = <P extends VoiceProviderId>(role: "tts" | "stt", picked: "auto" | P, all: readonly P[]): VoiceKeyCandidate[] => {
-    const serving = all.filter((provider) => {
-      const adapter = adapterOf(provider);
-      return (byProvider.get(provider)?.length ?? 0) > 0 && Boolean(role === "tts" ? adapter?.synthesize || adapter?.synthesizeStream : adapter?.transcribe || adapter?.openTranscription);
-    });
-    return providerOrder(picked, serving, all).flatMap((provider) => byProvider.get(provider) ?? []);
-  };
-  const ttsKeys = roleKeys("tts", choice.tts, VOICE_TTS_PROVIDERS);
-  const sttKeys = roleKeys("stt", choice.stt, VOICE_STT_PROVIDERS);
+  const { resolved, byProvider, ttsKeys, sttKeys } = await voiceKeysFor(env, speaker, choice);
   const voiceFor = (provider: VoiceProviderId): string | undefined => choice.voices[provider as VoiceTtsProvider] || undefined;
-  const refusedCause: VoiceModeRefusalCause | null = ttsKeys.length && sttKeys.length
-    ? null
-    : resolved.ok ? "no_credentials" : resolved.cause === "payer_disabled" || (!ttsKeys.length && !sttKeys.length) ? resolved.cause : "no_credentials";
+  const refusedCause = refusedCauseOf(resolved, ttsKeys, sttKeys);
   if (action === "status") {
     const org = deps.organization ? { organization: true } : {};
     let status: VoiceModeStatus;
@@ -905,7 +928,7 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
           tts: VOICE_TTS_PROVIDERS.filter((provider) => offered<VoiceTtsProvider>(ttsKeys).includes(provider)),
           stt: VOICE_STT_PROVIDERS.filter((provider) => offered<VoiceSttProvider>(sttKeys).includes(provider)),
         },
-        tts: candidateProvider(first) as VoiceTtsProvider,
+        tts: speakingProvider(refusals, who, ttsKeys, true)!,
         stt: candidateProvider(firstStt) as VoiceSttProvider,
       };
     } else {
@@ -1114,7 +1137,16 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
   }
 }
 
-export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
+/** The voice mode routes, and the provider a person's Auto speaks with
+ * (#4231: a bot's console page answers it as `speech.provider`). */
+export type VoiceModeRoutes = RouteHandler & {
+  /** What the voice providers route answers this person as `tts` under
+   * Auto (else the first provider one of their keys serves); undefined
+   * when no key serves them. */
+  autoSpeakingProvider(speaker: VoiceSpeaker): Promise<VoiceTtsProvider | undefined>;
+};
+
+export function createVoiceModeRoutes(deps: VoiceModeDeps): VoiceModeRoutes {
   const now = deps.now ?? Date.now;
   /** keys xAI refused lately, per person (server/voice/voice-keys.ts) */
   const refusals = new VoiceKeyRefusals({ now });
@@ -1170,7 +1202,13 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
   env.speech = createSpeechAction(env);
   env.realtime = createRealtimeAction(env);
   env.listen = createListenAction(env);
-  return (ctx) => handleVoiceModeRequest(env, ctx);
+  const handler: RouteHandler = (ctx) => handleVoiceModeRequest(env, ctx);
+  return Object.assign(handler, {
+    async autoSpeakingProvider(speaker: VoiceSpeaker): Promise<VoiceTtsProvider | undefined> {
+      const { resolved, ttsKeys, sttKeys } = await voiceKeysFor(env, speaker, { tts: "auto", stt: "auto" });
+      return speakingProvider(refusals, speaker.principalId || "operator", ttsKeys, !refusedCauseOf(resolved, ttsKeys, sttKeys));
+    },
+  });
 }
 
 /** What one request asks for: the providers and the voices. A client that

@@ -28,6 +28,7 @@ const PERSON = "pr_alex";
 const NUMBER = "+15145550142";
 const THREAD = "t-call";
 const CONVERSATION = { to: "+1 514 555 0142", purpose: "Savoir s'il entend bien la ligne", mode: "conversation", instructions: "Rester bref.", max_minutes: 3, language: "fr" };
+// #4193: voice_call's live mode (no mode); a message it carries is not used
 const MESSAGE = { to: "+1 514 555 0142", purpose: "Rappel de rendez-vous", message: "Le rendez-vous de mardi est confirmé." };
 
 /** Every way a bot's frame can name voice_call on the relay. */
@@ -170,12 +171,14 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
     expect(voiceToolCall(grok.id, grok.args)).toEqual({ tool: "voice_call", args: CONVERSATION });
   });
 
-  it("the arguments map to place_phone_call: a conversation, or a one-way message from the person's line", () => {
-    expect(placeArgsFromVoiceCall(CONVERSATION)).toEqual({ to: CONVERSATION.to, mode: "conversation", objective: CONVERSATION.purpose, instructions: "Rester bref.", max_minutes: 3, language: "fr" });
-    expect(placeArgsFromVoiceCall({ ...MESSAGE, confirm: true, bot: "sagax:bot-rocket" })).toEqual(MESSAGE);
+  it("the arguments map to place_phone_call: always a live conversation, a message is never kept to be read (#4193)", () => {
+    expect(placeArgsFromVoiceCall(CONVERSATION)).toEqual({ to: CONVERSATION.to, objective: CONVERSATION.purpose, instructions: "Rester bref.", max_minutes: 3, language: "fr" });
+    expect(placeArgsFromVoiceCall({ ...MESSAGE, mode: "live", confirm: true, bot: "sagax:bot-rocket" })).toEqual({ to: MESSAGE.to, objective: MESSAGE.purpose });
+    // a mode voice_call does not know goes on, so place_phone_call refuses it
+    expect(placeArgsFromVoiceCall({ ...MESSAGE, mode: "message" })).toMatchObject({ mode: "message" });
   });
 
-  describe.each([["conversation", CONVERSATION], ["one-way message", MESSAGE]] as const)("%s", (_kind, args) => {
+  describe.each([["conversation", CONVERSATION], ["live mode, message left unused", MESSAGE]] as const)("%s", (_kind, args) => {
     it.each(Object.keys(ENTRIES))("%s: the same card, the same one approval, the same call as a direct place_phone_call", async (entry) => {
       const direct = await directly(placeArgsFromVoiceCall(args));
       // a fresh store: the redirected call starts from nothing, like the direct one

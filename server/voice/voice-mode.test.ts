@@ -83,7 +83,7 @@ function harness(options: Options = {}) {
     const result = await route(ctx);
     return { ...out, passed: result === PASS };
   };
-  return { call, usage, xai, advance: (ms: number) => { clock += ms; } };
+  return { call, usage, xai, route, advance: (ms: number) => { clock += ms; } };
 }
 
 function leaks(value: unknown): boolean {
@@ -716,5 +716,35 @@ describe("voice mode with OpenAI and ElevenLabs (2026-10-29)", () => {
     const fallback = await call({ method: "POST", path: "/api/bots/b-quasar/voice/transcribe?language=fr", raw: WAV, contentType: "audio/wav" });
     expect(fallback.body.text).toBe("hello bot");
     expect(notices).toContain("Voice: speech to text went on with xAI after OpenAI (not reachable)");
+  });
+});
+
+describe("the provider a person's Auto speaks with (#4231)", () => {
+  const openai = { listVoices: async () => [], synthesize: vi.fn(), transcribe: vi.fn() };
+  const openaiKey = (provider: string) => (provider === "openai" ? [{ key: OWN_KEY, via: "speaker-key" as const, source: "perspicax-key" as const, last4: "c0Je", provider, payerPrincipalId: "p-ada" }] : []);
+  const person = { principalId: "p-ada", sub: "sub-ada" };
+
+  it("is what the voice providers route answers as tts: OpenAI when no xAI key serves the person", async () => {
+    const { call, route } = harness({ serverKey: () => undefined, openai, providerKeys: openaiKey } as Options);
+    const status = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });
+    expect(status.body.tts).toBe("openai");
+    expect(await route.autoSpeakingProvider(person)).toBe("openai");
+  });
+
+  it("is xAI when an xAI key serves the person first", async () => {
+    const { call, route } = harness({ openai, providerKeys: openaiKey } as Options);
+    expect((await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" })).body.tts).toBe("xai");
+    expect(await route.autoSpeakingProvider(person)).toBe("xai");
+  });
+
+  it("is the first provider a key serves when the person cannot use every role, and nothing without a key", async () => {
+    const voiceOnly = { listVoices: async () => [], synthesize: vi.fn() };
+    const { call, route } = harness({ serverKey: () => undefined, openai: voiceOnly, providerKeys: openaiKey } as Options);
+    const status = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });
+    expect(status.body.available).toBe(false);
+    expect(status.body.providers.tts[0]).toBe("openai");
+    expect(await route.autoSpeakingProvider(person)).toBe("openai");
+    const none = harness({ serverKey: () => undefined });
+    expect(await none.route.autoSpeakingProvider(person)).toBeUndefined();
   });
 });

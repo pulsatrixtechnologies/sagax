@@ -40,13 +40,12 @@ export interface OutboundWiringDeps {
   botName(botId: string): string;
   personName(botId: string, threadId: string): string;
   language(): "fr" | "en";
-  twilio(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): ReturnType<PlaceCallDeps["twilio"]>;
+  twilio(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): ReturnType<NonNullable<PlaceCallDeps["voice"]>>;
   /** Perspicax voice_call as the person who speaks in the turn (their own
    * line and key). Absent: no Perspicax on this server. */
-  voice?(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): ReturnType<PlaceCallDeps["twilio"]>;
-  /** A conversation call is said to be made on behalf of the person who
-   * asked for it: their name. Also a one-way message's when personName has
-   * none. */
+  voice?(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): ReturnType<NonNullable<PlaceCallDeps["voice"]>>;
+  /** A call is said to be made on behalf of the person who asked for it:
+   * their name (else personName). */
   principalName?(principalId: string): string | undefined;
   /** The person's Perspicax id (the `sub` Perspicax signs), or null. */
   principalSub?(principalId: string): string | null;
@@ -228,7 +227,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       ...(prior?.recordingUrl ? { recordingUrl: prior.recordingUrl } : {}),
       ...live,
     };
-    const card = callCard(row, deps.botName(row.botId), calls.settings().callbackNumber, mergedLive);
+    const card = callCard(row, deps.botName(row.botId), mergedLive);
     const withResult = result ? { ...card, result, phase: "ended" as const } : card;
     return upsert(row.threadId, withResult, callCardText(row), messageId);
   }
@@ -295,21 +294,17 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       if (context.room) return { text: "A phone call is placed from a direct conversation, not a room. Nothing was placed.", isError: true };
       if (!context.principalId) return { text: "This conversation has no person to approve a call. Nothing was placed.", isError: true };
       const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
-      const conversation = Boolean(args && typeof args === "object" && (args as { mode?: unknown }).mode === "conversation");
       const voice = deps.voice;
       const allows = consent.allows(context.principalId);
       const mode = deps.approvalMode?.(context.botId, context.threadId);
       return placePhoneCall({
         calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
         ...(voice ? { voice: (callArgs: Record<string, unknown>) => voice(turn, callArgs) } : {}),
         names: {
           botName: deps.botName(context.botId),
-          // a conversation is made on behalf of the person who asked for it
-          // (their own line); a one-way message keeps its earlier wording,
-          // else the person who speaks (a direct chat on a server with no
-          // organization name and no bot that opened the thread, #1487)
-          personName: (conversation ? deps.principalName?.(context.principalId) : undefined) || deps.personName(context.botId, context.threadId) || deps.principalName?.(context.principalId) || "",
+          // every call is a conversation made on behalf of the person who
+          // asked for it (their own line, #4193), else the thread's person
+          personName: deps.principalName?.(context.principalId) || deps.personName(context.botId, context.threadId) || "",
         },
         language: deps.language(),
         card: (row, messageId, live) => callRow(row, messageId, undefined, live),
@@ -514,9 +509,10 @@ export function outboundWiring(deps: OutboundWiringDeps) {
         botName: deps.botName(row.botId),
         at: row.createdAt,
         title: `Call ${formatPhone(row.request.to)}?`,
+        // the call's goal, never a text to read (#4193)
         line: (row.request.mode === "conversation"
           ? `Conversation, ${row.request.maxMinutes ?? 5} min max. Objective: ${row.request.purpose}`
-          : `${row.request.purpose} It says: "${row.request.message}"`).slice(0, 240),
+          : `Objective: ${row.request.purpose}`).slice(0, 240),
         kind: "permission" as const,
         needsKey,
         options: always ? ["allow", "always_allow", "deny"] as PrimaryDecision[] : ["allow", "deny"] as PrimaryDecision[],

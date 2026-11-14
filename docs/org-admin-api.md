@@ -385,14 +385,15 @@ disabled person's routines stop anyway). Listed in `GET capabilities` as
     "skills": [{ "id": "digest", "name": "digest", "source": "https://github.com/acme/skills" }],
     "permissions": { "approvalMode": "ask", "fullAccess": false },
     "routineList": [{ "id": "r_1", "name": "Daily digest", "enabled": true, "schedule": "Every weekday at 09:00" }],
-    "speech": { "xaiVoice": "ara", "provider": "openai", "voice": "cedar", "language": "fr" }
+    "speech": { "xaiVoice": "ara", "provider": "openai", "voice": "cedar", "language": "fr", "speed": 1.25, "persona": "You are a calm assistant.\nAnswer in one or two sentences." }
   }
 }
 ```
 
 The AdminBot fields of `GET bots`, plus the facts above. `soul.summary` is
-the first line of the instructions (at most 140 characters), never the
-instructions themselves; no message, memory or routine prompt is answered.
+the first line of the instructions (at most 140 characters); the whole
+persona and instructions text is answered only as `speech.persona`, for the
+phone side (below). No message, memory or routine prompt is answered.
 
 `speech` is the bot's effective voice for its owner, so a phone line speaks
 with the voice set on the bot: the bot's own voice (Edit bot > Voice) when
@@ -401,10 +402,18 @@ app (`effectiveVoiceChoice`, `spokenVoice` in shared/voice-providers.ts,
 `botSpeech` in shared/voice-mode.ts). It is always the owner's preference,
 whoever reads. `xaiVoice` is the xAI realtime voice of that choice;
 `provider` is one of `xai`, `openai`, `elevenlabs`, `fish`, `system`,
-`chatterbox` (Auto reads as `xai`) and `voice` that provider's voice id;
-`language` is the bot's voice language, else the owner's, a short code.
-A field is left out when empty: no xAI voice chosen, the provider's default
-voice, or a language set to detect. An older server leaves `speech` out.
+`chatterbox` and `voice` that provider's voice id. Under Auto (#4231) they
+are the provider the server resolves for the owner, as the voice providers
+route answers it as `tts` (else the first provider one of the owner's keys
+serves; `xai` when none does), and that provider's voice: what the app
+speaks with. `language` is the bot's voice language, else the owner's, a
+short code. `speed` (#4231) is the bot's voice chat speed, else the
+owner's, from 0.7 to 1.5. `persona` (#4231) is the bot's persona and
+instructions text (Bot editor > Persona), line breaks kept, at most 4000
+characters. A field is left out when empty: no xAI voice chosen, the
+provider's default voice, a language set to detect, a speed of 1, or no
+persona text. An older server leaves `speech` out, and one before #4231
+leaves `speed` and `persona` out.
 
 ### A bot's look and persona
 

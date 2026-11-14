@@ -10,6 +10,7 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { OrgPhoneCalls } from "../components/settings/OrgPhoneCalls";
+import { PhoneCallsCard } from "../components/settings/PhoneCallsCard";
 import { OrgTeamSecrets } from "../components/settings/OrgTeamSecrets";
 import { OrgVaultExportPolicy } from "../components/settings/OrgVaultExportPolicy";
 import { OrgGrokBridgePolicy } from "../components/settings/OrgGrokBridgePolicy";
@@ -51,6 +52,10 @@ window.fetch = async (input, init) => {
       { id: "bs_0000000000000001", kind: "secret", label: "Boutique en ligne", injection: { via: "env", name: "SHOP_TOKEN" }, botIds: ["bot-atlas"] },
       { id: "bs_0000000000000002", kind: "serviceAccount", label: "Portail fournisseur", injection: { via: "env", name: "SUPPLIER_PASSWORD" }, login: "compte.service", botIds: ["bot-boreas"] },
     ] });
+  }
+  // a member of an organization signed in with Perspicax (Settings > Voice > Phone calls)
+  if (path === "/api/org") {
+    return json({ org: { name: "Demo", identity: { kind: "perspicax", issuer: "https://id.example" } }, link: { state: "ok" }, viewerRole: "member", settings: {} });
   }
   if (path === "/api/org/phone-calls") {
     return json({ settings: { enabled: false, doNotCall: ["+15145550142", "+14385550199"] } });
@@ -183,6 +188,7 @@ function Gallery() {
           <OrgPhoneCalls initial={{ enabled: true, callbackNumber: "+15145550100", doNotCall: ["+15145550142", "+14385550199"] }} />
         </SettingsGroup>
       </Sample>
+      <Sample id="voice-phone-calls"><PhoneCallsCard /></Sample>
       <Sample id="telemetry">
         <SettingsGroup title={t("settings.loopGuard.title")} groupId="loopGuard"><LoopGuardRow /></SettingsGroup>
         <SettingsGroup title={t("telemetry.title")} groupId="telemetry"><TelemetrySettings /></SettingsGroup>

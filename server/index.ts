@@ -29850,17 +29850,22 @@ function botVoiceChat(bot: { voiceSpeed?: number; voiceLanguage?: string }): { s
     ...(bot.voiceLanguage !== undefined ? { language: bot.voiceLanguage } : {}),
   };
 }
+/** The person voice mode serves as `principalId` (#4231: also a bot's owner,
+ * whose Auto a bot's console page resolves). */
+function voiceSpeakerOf(principalId: string): VoiceSpeaker {
+  if (IDENTITY.kind !== "perspicax") return { principalId };
+  const person = principalId && isPrincipalId(principalId) ? principals.byId(principalId) : null;
+  if (!person) return { principalId: "" };
+  const sub = person.subject?.iss === IDENTITY.issuer ? person.subject.sub : undefined;
+  return { principalId, ...(sub ? { sub } : {}), ...(person.disabledAt !== undefined && person.disabledAt !== null ? { disabled: true } : {}) };
+}
+
 const voiceModeDeps: VoiceModeDeps = {
   organization: IDENTITY.kind === "perspicax",
   notice: (threadId, message) => publishVoiceNotice(threadId, message),
   speaker: (auth) => {
     if (auth.kind === "loopback" && auth.trust === "service") return null;
-    const principalId = actorPrincipalId(auth);
-    if (IDENTITY.kind !== "perspicax") return { principalId };
-    const person = principalId && isPrincipalId(principalId) ? principals.byId(principalId) : null;
-    if (!person) return { principalId: "" };
-    const sub = person.subject?.iss === IDENTITY.issuer ? person.subject.sub : undefined;
-    return { principalId, ...(sub ? { sub } : {}), ...(person.disabledAt !== undefined && person.disabledAt !== null ? { disabled: true } : {}) };
+    return voiceSpeakerOf(actorPrincipalId(auth));
   },
   target: (auth, botId, threadId) => {
     const bot = store.bot(botId);
@@ -30037,7 +30042,8 @@ const voiceModeDeps: VoiceModeDeps = {
     noteSpend(DATA_DIR, row, appendUsage(DATA_DIR, row));
   }
 };
-ROUTES.push(createVoiceModeRoutes(voiceModeDeps));
+const voiceModeRoutes = createVoiceModeRoutes(voiceModeDeps);
+ROUTES.push(voiceModeRoutes);
 
 // The caller's own claude.ai connectors, read through their own Claude
 // account (server/harness-connectors.ts); always on, no server switch.
@@ -31123,6 +31129,10 @@ const orgBotsDeps: BotsDeps = {
   voice: {
     preference: (principalId) => voiceModeDeps.preference?.({ principalId }),
     language: (botId) => store.bot(botId)?.voiceLanguage,
+    // #4231: the bot's speed and persona, and the provider its owner's Auto speaks with
+    speed: (botId) => store.bot(botId)?.voiceSpeed,
+    persona: (botId) => store.bot(botId)?.soul,
+    autoProvider: (principalId) => voiceModeRoutes.autoSpeakingProvider(voiceSpeakerOf(principalId)),
   },
   owner: consoleOwner,
   ownerBySub: (sub) => {

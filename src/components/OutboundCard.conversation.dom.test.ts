@@ -178,7 +178,10 @@ describe("OutboundCard, conversation call", () => {
     const text = host.textContent ?? "";
     expect(text).toContain("Phone call");
     expect(text).toContain("What Rocket will say");
-    expect(text).toContain("says the message twice");
+    // #4193 changed it on purpose: an older card still waiting says the call
+    // is a conversation, never "says the message twice"
+    expect(text).toContain("then talks with the person");
+    expect(text).not.toContain("says the message twice");
     expect(text).toContain("Don't call");
     expect(text).not.toContain("Conversation call");
     act(() => root?.unmount());

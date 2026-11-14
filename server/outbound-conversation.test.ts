@@ -256,7 +256,7 @@ describe("place_phone_call, mode conversation", () => {
     expect(parseOutboundCall({ ...ARGS, max_minutes: 21 })).toMatch(/max_minutes/);
     expect(parseOutboundCall({ ...ARGS, max_minutes: 2.5 })).toMatch(/max_minutes/);
     expect(parseOutboundCall({ to: NUMBER, mode: "conversation" })).toMatch(/objective/);
-    expect(parseOutboundCall({ ...ARGS, mode: "chat" })).toMatch(/mode is message/);
+    expect(parseOutboundCall({ ...ARGS, mode: "chat" })).toMatch(/live conversation/);
   });
 
   it("approval: a dry run on the person's own line, then one card with the number, the objective, the length and the AI disclosure; nothing placed", async () => {

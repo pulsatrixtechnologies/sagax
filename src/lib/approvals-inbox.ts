@@ -210,6 +210,11 @@ export function inboxTitle(entry: InboxApproval): string {
     const first = attention?.items[0]?.text.replace(/\*\*|__|`/g, "") ?? "";
     return first.trim() ? withoutIds(first).slice(0, 240) : t("approvals.kind.attention");
   }
+  if (entry.kind === "form") {
+    // #4234: a routine run's form: its words, else its routine's name
+    const words = ((entry.message as Message | undefined)?.text ?? "").split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+    return withoutIds(words || entry.routineName || t("approvals.kind.form")).slice(0, 240);
+  }
   const card = cardOf(entry);
   if (entry.kind === "question") {
     const question = card?.questionRequest?.questions?.[0]?.question ?? (card ? questionCardTitle(card) : undefined);
@@ -237,6 +242,8 @@ export function inboxPreview(entry: InboxApproval): InboxPreview {
     const rest = attentionOf(entry)?.items.slice(1).map((item) => item.text.replace(/\*\*|__|`/g, "")) ?? [];
     return prose(withoutIds(rest.join(" · ")).slice(0, 240));
   }
+  // #4234: a form is answered in its conversation, at the run's row
+  if (entry.kind === "form") return prose("");
   const card = cardOf(entry);
   if (!card) return prose("");
   if (entry.kind === "question") {

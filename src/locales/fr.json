@@ -9447,6 +9447,7 @@
   "approvals.kind.question": "Question",
   "approvals.kind.proposal": "Proposition",
   "approvals.kind.attention": "T'attend",
+  "approvals.kind.form": "Formulaire",
   "approvals.todayTitle": "Aujourd'hui",
   "approvals.attention.handled": "Marquer comme traité",
   "approvals.proactive.accept": "Oui, vas-y",

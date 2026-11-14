@@ -27,6 +27,11 @@ describe("waitingChangeFrame (#3542)", () => {
     expect(waitingChangeFrame({ kind: "message.removed", threadId: "conv", messageId: "m" } as Parameters<typeof waitingChangeFrame>[0], own, waiting)).toBe(false);
   });
 
+  // #4234: a routine run's form leaves what waits once it is answered
+  it("asks again when a form changes where something waits", () => {
+    expect(waitingChangeFrame({ kind: "message.patch", threadId: "topic", message: { role: "bot", kind: "widget", widget: { settled: { ref: "confirm" } } } }, own, waiting)).toBe(true);
+  });
+
   it("ignores the bot's words, other bots' conversations and other frames", () => {
     expect(waitingChangeFrame({ kind: "message", threadId: "conv", message: { role: "bot", text: "hello" } }, own, waiting)).toBe(false);
     expect(waitingChangeFrame({ kind: "message", threadId: "elsewhere", message: { role: "bot", card: { requestId: "r1" } } }, own, waiting)).toBe(false);

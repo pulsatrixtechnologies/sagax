@@ -29,14 +29,20 @@ public enum ReportBrief {
         let prose = proseOf(source)
         guard !prose.isEmpty else { return "" }
         // each entry's sentences without its courtesies; an entry left empty goes
-        let kept = prose
-            .map { Entry(text: sentences($0.text).filter { !isCourtesy($0) }.joined(separator: " "), item: $0.item) }
-            .filter { !$0.text.isEmpty }
+        func without(_ drop: (String) -> Bool) -> [Entry] {
+            prose
+                .map { Entry(text: sentences($0.text).filter { !drop($0) }.joined(separator: " "), item: $0.item) }
+                .filter { !$0.text.isEmpty }
+        }
+        let kept = without { isCourtesy($0) || isPointer($0) }
+        // #4234: words that only point at a form never stand alone
+        let standing = without { isPointer($0) }
+        guard !standing.isEmpty else { return "" }
         func pick(_ entries: [Entry]) -> [Entry] {
             entries.contains { !$0.item } ? entries.filter { !$0.item } : entries
         }
         // nothing but courtesies: the bot's own first sentence, the only words there are
-        let paragraphs = pick(kept.isEmpty ? prose : kept)
+        let paragraphs = pick(kept.isEmpty ? standing : kept)
         let first = { fit(sentences(paragraphs[0].text).first ?? paragraphs[0].text) }
         if from == .start { return first() }
         let closing = paragraphs[paragraphs.count - 1].text
@@ -75,6 +81,29 @@ public enum ReportBrief {
     public static func isCourtesy(_ sentence: String) -> Bool {
         let text = sentence.replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "‘", with: "'")
         return courtesy.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    // MARK: Pointer
+
+    /// #4234: a sentence that tells the person to act on a control of a form
+    /// the bot drew, matched at the sentence's start: never a brief.
+    private static let pointerOpenings = [
+        // English
+        #"(?:just |simply |then )?(?:un(?:check|tick)|tick)\b"#,
+        #"(?:just |simply |then )?(?:hit|click|press|tap)\b"#,
+        #"(?:use|see) (?:the|this) (?:form|button|checkbox(?:es)?|check ?box(?:es)?|card|widget)\b"#,
+        // French
+        #"(?:d[ée])?coche(?:z|s)?\b"#,
+        #"(?:clique|cliquez|appuie|appuyez|touche|touchez)\b"#,
+        #"(?:utilise|utilisez|vois|voyez) (?:le formulaire|le bouton|la case|les cases|la carte)\b"#,
+    ]
+    private static let pointer = try! NSRegularExpression(
+        pattern: "^[\\s\"'«“*_(]*(?:\(pointerOpenings.joined(separator: "|")))", options: [.caseInsensitive]
+    )
+
+    public static func isPointer(_ sentence: String) -> Bool {
+        let text = sentence.replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "‘", with: "'")
+        return pointer.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
     // MARK: Prose

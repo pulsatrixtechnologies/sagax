@@ -18,8 +18,9 @@ export type InboxScope = "mine" | "org" | "team";
  * team setup, a model, a proactive offer) is answered on its own card,
  * never in bulk. 2026-11-08 (#2689, the Today box): "attention" is a bot's
  * "needs you" card (shared/person-attention.ts), answered by a reply in the
- * conversation or marked handled. */
-export type InboxKind = "permission" | "question" | "proposal" | "attention";
+ * conversation or marked handled. #4234: "form" is a routine run's form
+ * (a widget) moved into the conversation it reports to, answered there. */
+export type InboxKind = "permission" | "question" | "proposal" | "attention" | "form";
 /** Where the action would run, in plain words on the client. */
 export type InboxDestination = "computer" | "vm" | "sandbox" | "server" | "cloud" | "browser";
 /** Why a card is left out of a bulk answer. */
@@ -155,9 +156,11 @@ export function filterInbox(entries: readonly InboxApproval[], filters: InboxFil
   return entries.filter((entry) => {
     if (filters.scope !== "all" && entry.scope !== filters.scope) return false;
     if (filters.bot && entry.botId !== filters.bot) return false;
-    // a bot's "needs you" card is something it asks the person (#2689)
-    if (filters.kind === "question" && entry.kind !== "question" && entry.kind !== "attention") return false;
-    if (filters.kind === "permission" && (entry.kind === "question" || entry.kind === "attention")) return false;
+    // a bot's "needs you" card is something it asks the person (#2689), and
+    // so is a routine run's form (#4234)
+    const asks = entry.kind === "question" || entry.kind === "attention" || entry.kind === "form";
+    if (filters.kind === "question" && !asks) return false;
+    if (filters.kind === "permission" && asks) return false;
     if (filters.risky && !inboxRisky(entry)) return false;
     return true;
   });

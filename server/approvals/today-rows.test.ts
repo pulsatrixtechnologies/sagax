@@ -4,6 +4,7 @@ import type { PersonAttentionCard } from "../../shared/person-attention.ts";
 import { closePersonRequest } from "./waiting-card-skip.ts";
 import type { Message } from "../store.ts";
 import { filterInbox, DEFAULT_INBOX_FILTERS } from "../../shared/approvals-inbox.ts";
+import { waitingItemOf } from "../../shared/waiting-items.ts";
 
 const card = (over: Partial<PersonAttentionCard> = {}): PersonAttentionCard => ({
   kind: "needs", items: [{ text: "Approve the invoice" }], botId: "b1", botName: "Ember", threadId: "work", sourceMessageId: "src", ...over,
@@ -140,5 +141,33 @@ describe("#3512: an input request row is a question in words of Today too", () =
     expect(second.patched.map((row) => row.id)).toEqual(["c1", "r1"]);
     expect(second.patched[1]!.patch.inputRequest).toMatchObject({ answered: true });
     expect(second.told).toHaveLength(1);
+  });
+});
+
+// #4234: a routine run's form, moved into the conversation the run reports
+// to, waits on the person until it is answered: one item, read from the run
+// that moved it, in Today, the pinned row and the connector's list.
+describe("a routine run's form (#4234)", () => {
+  const FORM = { root: { type: "Card", id: "n0" } };
+  const forms = [{ botId: "b1", threadId: "conv", widgetId: "w1", routineName: "Evening drafts" }];
+
+  it("lists an open form once, as a form row named by its routine", () => {
+    const messages = { conv: [{ id: "w1", at: 500, role: "bot", kind: "widget", text: "Tonight's drafts", widget: FORM }] };
+    const rows = todayRows(deps(messages, { forms: () => [...forms, ...forms] }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "form", requestId: "form:w1", messageId: "w1", routineName: "Evening drafts", at: 500, decidable: true, scope: "mine", bulk: "special" });
+    const item = waitingItemOf(rows[0]!, 600)!;
+    expect(item).toMatchObject({ id: "form:w1", kind: "form", title: "Tonight's drafts", text: "Tonight's drafts", options: [], answerWith: "text", freeText: true, ageMs: 100 });
+  });
+
+  it("leaves it once it is answered or gone, and never shows another person's", () => {
+    const settled = { conv: [{ id: "w1", at: 500, role: "bot", kind: "widget", widget: { ...FORM, settled: { ref: "confirm", label: "Send", tone: "confirm", at: 550 } } }] };
+    expect(todayRows(deps(settled, { forms: () => forms }))).toHaveLength(0);
+    expect(todayRows(deps({ conv: [] }, { forms: () => forms }))).toHaveLength(0);
+    const open = { conv: [{ id: "w1", at: 500, role: "bot", kind: "widget", widget: FORM }] };
+    expect(todayRows(deps(open, { forms: () => forms, isViewers: () => false }))).toHaveLength(0);
+    expect(todayRows(deps(open, { forms: () => forms, threads: () => [{ threadId: "conv", archivedAt: 1 }] }))).toHaveLength(0);
+    // a form without words is named by its routine
+    expect(waitingItemOf(todayRows(deps(open, { forms: () => forms }))[0]!, 600)!.title).toBe("Evening drafts");
   });
 });

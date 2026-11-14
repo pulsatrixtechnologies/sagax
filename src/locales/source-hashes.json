@@ -18594,7 +18594,8 @@
       "routine.problemCard.pauseDetail": "b430ebb255f8fd81338d782b419d5c4a8beb8ca06c5eca9c0bc32f793abbdac7",
       "routine.problemCard.open": "55daf9697996255930ea294239b126726db20912c4836dde866deb0e99292578",
       "routine.problemCard.openDetail": "ec266d7db94f5d991067d6b0713f85b108456a88823c6908905ceb8c75c344b6",
-      "routine.problemCard.problemOnce": "40f15670bc9cb799ea72d3ba892359eb7354c3dba23159c4726a3334e9896c93"
+      "routine.problemCard.problemOnce": "40f15670bc9cb799ea72d3ba892359eb7354c3dba23159c4726a3334e9896c93",
+      "approvals.kind.form": "2e0e960ab3204127b1dce399c9984c81f52a79f4d85cb0c3afddcfcfe8a2b48c"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

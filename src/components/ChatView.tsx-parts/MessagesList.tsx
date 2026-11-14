@@ -17,6 +17,7 @@ import { foldCollapsedEntry, voiceCallPlan } from "@/lib/voice-call-transcript";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
 import { isTransientChatNotice } from "../../../shared/transient-notices";
 import { routineRunRowOutOfChat, routineRunsCounted } from "../../../shared/routine-repeat";
+import { routineRunWidgetRow, routineWidgetsAtRuns } from "@/lib/routine-result-stack";
 import { BotConversationLine, conversationAnchors, splitLeadingConversations, visibleConversationRows } from "../BotConversations";
 import { GotoGroupChip } from "../GotoGroupChip";
 import { collapseGotoLines, gotoGroupFromConversations, gotoTargetOf, silentChatItem, unifiedGotoTargetOf } from "@/lib/goto-lines";
@@ -136,7 +137,7 @@ export const MessagesList = memo(function MessagesList({
     const drawnElsewhere = inputRequestsDrawnElsewhere(transcript);
     // #4201: the first run a stored count names leaves with the count
     const counted = routineRunsCounted(transcript);
-    const shown = withoutDeadThreadChips(messages, owners).filter((message) =>
+    const kept = withoutDeadThreadChips(messages, owners).filter((message) =>
       !repeats.has(message.id) && !drawnElsewhere.has(message.id) && !held.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
       // a failed routine run and a routine's access card pass as a banner
       // (TransientNotice), never a row (shared/transient-notices.ts)
@@ -145,6 +146,10 @@ export const MessagesList = memo(function MessagesList({
       // problems, works again, nothing to report), stored ones included,
       // stays in the routine's run log, never the chat
       && !routineRunRowOutOfChat(message, counted));
+    // #4234: a routine run's widget is drawn at the run's row, never twice:
+    // only when that row is shown and finds it in this same transcript
+    const atRuns = routineWidgetsAtRuns(kept, transcript);
+    const shown = atRuns.size ? kept.filter((message) => !atRuns.has(message.id)) : kept;
     const collapsed = collapseBotExchanges(shown, {
       selfBotId: botId,
       self: { id: botId, name: botName, color: selfColor },
@@ -211,6 +216,13 @@ export const MessagesList = memo(function MessagesList({
     const target = pinnedJumpTarget(transcript, focusedId, held);
     if (target !== focusedId) dispatch({ type: "focusMessage", threadId, messageId: target });
   }, [focusedId, held, transcript, threadId, dispatch]);
+  // #4234: "See in the conversation" on a routine run's form lands on the
+  // run's row, where the form is drawn
+  useEffect(() => {
+    if (!focusedId) return;
+    const run = transcript.find((message) => message.kind === "routine.run" && message.routineRun?.widgetId === focusedId);
+    if (run && routineRunWidgetRow(transcript, run)) dispatch({ type: "focusMessage", threadId, messageId: run.id });
+  }, [focusedId, transcript, threadId, dispatch]);
   const unreadIds = useMemo(() => unreadMessageIds(messages, unreadDividerId), [messages, unreadDividerId]);
   // The New divider goes above the first item holding an unread message.
   const dividerIndex = useMemo(() => unreadIds

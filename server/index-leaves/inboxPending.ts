@@ -25,6 +25,8 @@ export function todayDepsFor(host: Host, auth: RequestAuth, viewer: InboxViewer)
       return host.approvalOwnerId(bot, threadId) === viewer.principalId || host.threadStarters.get(threadId) === viewer.principalId;
     },
     proposals: () => host.proactiveProposals.open(),
+    // #4234: a routine run's form waits on the person until it is answered
+    forms: () => host.routines?.runForms?.() ?? [],
     project: (threadId, message) => host.projectMessages(threadId, [message], approvalViewer)[0],
     // #3542: what is open, found by the store's indexes: no transcript is
     // read, whatever the length of the person's history

@@ -30,6 +30,7 @@ import type { WireMessage } from "../../shared/wire.ts";
 
 export const ATTENTION_PREFIX = "attention:";
 export const PROACTIVE_PREFIX = "proactive:";
+export const FORM_PREFIX = "form:";
 
 export interface TodayBot { id: string; name: string; hidden?: boolean }
 
@@ -41,9 +42,15 @@ export interface TodayMessage {
   attention?: PersonAttentionCard;
   inputRequest?: WireMessage["inputRequest"];
   card?: { answered?: unknown; dismissed?: unknown; expired?: unknown; proactiveProposal?: { id: string } };
+  text?: string;
+  widget?: { root?: unknown; settled?: unknown };
 }
 
 export interface TodayProposal { id: string; botId: string; threadId: string; messageId: string; createdAt: number; answered?: string }
+
+/** #4234: a routine run's form moved into the conversation it reports to
+ * (server/routines/routine-run-widget.ts), as its run keeps it. */
+export interface TodayForm { botId: string; threadId: string; widgetId: string; routineName?: string }
 
 export interface TodayDeps {
   bots(): readonly TodayBot[];
@@ -54,6 +61,9 @@ export interface TodayDeps {
   isViewers(bot: TodayBot, threadId: string): boolean;
   /** The open proactive proposals (not answered, not expired). */
   proposals(): readonly TodayProposal[];
+  /** #4234: the forms routine runs moved into a conversation; each waits
+   * on the person until it is answered. */
+  forms?(): readonly TodayForm[];
   /** The message exactly as the viewer's conversation shows it. */
   project(threadId: string, message: TodayMessage): unknown;
   /** #3542: the store's own reads of what is open. When given, Today reads
@@ -221,6 +231,37 @@ export function todayRows(deps: TodayDeps): InboxApproval[] {
       decidable: true,
       bulk: "proposal",
       message: deps.project(proposal.threadId, message),
+    });
+  }
+  // #4234: a routine run's form waits on the person until it is answered,
+  // one item each, read from the run that moved it (no transcript is read)
+  const listed = new Set<string>();
+  for (const form of deps.forms?.() ?? []) {
+    const key = inboxKey(form.threadId, `${FORM_PREFIX}${form.widgetId}`);
+    if (listed.has(key)) continue;
+    const bot = deps.bot(form.botId);
+    if (!bot || bot.hidden) continue;
+    const task = deps.threads(bot.id).find((candidate) => candidate.threadId === form.threadId);
+    if (!task || task.archivedAt || task.confidential === true) continue;
+    const message = read.message(form.threadId, form.widgetId);
+    if (message?.kind !== "widget" || !message.widget?.root || message.widget.settled) continue;
+    if (!deps.isViewers(bot, form.threadId)) continue;
+    listed.add(key);
+    out.push({
+      key,
+      threadId: form.threadId,
+      requestId: `${FORM_PREFIX}${form.widgetId}`,
+      messageId: message.id,
+      botId: bot.id,
+      botName: bot.name,
+      ...(task.title && task.title !== bot.name ? { threadTitle: task.title.slice(0, 200) } : {}),
+      ...(form.routineName ? { routineName: form.routineName.slice(0, 200) } : {}),
+      scope: "mine",
+      kind: "form",
+      at: message.at,
+      decidable: true,
+      bulk: "special",
+      message: deps.project(form.threadId, message),
     });
   }
   return out;

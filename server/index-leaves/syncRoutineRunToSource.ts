@@ -8,6 +8,7 @@ import { clipReadable, withoutRoutineMarkers } from "../../shared/routine-result
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
 import { routineReportsByStreak, routineRunRowInEveryChat, routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 import { redactSecretsInText } from "../redact.ts";
+import { routineRunWidget } from "../routines/routine-run-widget.ts";
 export type Host = Record<string, any>;
 
 /** #3990: one log line per routine run row written, updated or taken back. */
@@ -43,6 +44,8 @@ function routineRunCardRow(host: Host, run: RoutineRun, sourceThreadId: string, 
     ...fresh,
     ...(kept?.feedback ? { feedback: kept.feedback } : {}),
     ...(kept?.repeat && !fresh.repeat ? { repeat: kept.repeat } : {}),
+    // #4234: the widget the run drew here stays named across updates
+    ...(kept?.widgetId ? { widgetId: kept.widgetId } : {}),
   };
   const language = textLanguage(`${languageText ?? ""}\n${run.routineName ?? ""}`)
     ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
@@ -334,6 +337,17 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   if (!mayWrite(existing, tells) || !drawn(card, attentionFound)) {
     if (existing && !LIVE.has(run.status) && host.store.removeMessage?.(sourceThreadId, existing.id)) rowLog("run", "remove", { ...existing.routineRun, status: run.status }, false);
     return sourceThreadId;
+  }
+  // #4234: a finished run's widget for the person is drawn at its row, in
+  // this conversation, usable there (rooms draw no widget)
+  if (run.status === "completed" && !source.group) {
+    const widgetId = routineRunWidget(host.store, { runThreadId: run.threadId, conversationId: sourceThreadId, keptId: existing?.routineRun?.widgetId });
+    if (widgetId) {
+      card.widgetId = widgetId;
+      // it waits on the person until answered: Today, the pinned row and the
+      // connector's list read it from the run (server/approvals/today-rows.ts)
+      host.routines?.noteRunForm?.(run.id, { threadId: sourceThreadId, widgetId });
+    }
   }
   const text = card === row.routineRun ? row.text : host.routineRunFallbackText(card, textLanguage(`${run.output ?? ""}\n${run.routineName ?? ""}`)
     ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined), zone);

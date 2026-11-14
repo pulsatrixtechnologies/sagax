@@ -363,6 +363,27 @@ export function isCourtesyLine(sentence: string): boolean {
   return COURTESY.test(sentence.replace(/[’‘]/g, "'"));
 }
 
+/** #4234: sentences that tell the person to act on a control of a form the
+ * bot drew ("Uncheck it or hit Skip tonight and ..."), matched at the
+ * sentence's start. They point at the form, so they never stand alone: the
+ * form is drawn at the run's row, and the brief is the words around it. */
+const POINTER_OPENINGS = [
+  // English
+  "(?:just |simply |then )?(?:un(?:check|tick)|tick)\\b",
+  "(?:just |simply |then )?(?:hit|click|press|tap)\\b",
+  "(?:use|see) (?:the|this) (?:form|button|checkbox(?:es)?|check ?box(?:es)?|card|widget)\\b",
+  // French
+  "(?:d[ée])?coche(?:z|s)?\\b",
+  "(?:clique|cliquez|appuie|appuyez|touche|touchez)\\b",
+  "(?:utilise|utilisez|vois|voyez) (?:le formulaire|le bouton|la case|les cases|la carte)\\b",
+];
+const POINTER = new RegExp(`^[\\s"'«“*_(]*(?:${POINTER_OPENINGS.join("|")})`, "iu");
+
+/** #4234: the sentence points at a control of a drawn form, never a brief. */
+export function isPointerLine(sentence: string): boolean {
+  return POINTER.test(sentence.replace(/[’‘]/g, "'"));
+}
+
 /** #3581: a result's one or two lines, from the bot's own words (never a
  * model call). `end`: a routine's report, read from the closing line the run
  * contract asks for (its last prose paragraph; run markers, code blocks,
@@ -371,7 +392,9 @@ export function isCourtesyLine(sentence: string): boolean {
  * `start`: the first sentence (a reply to another bot, the answer of a task
  * a bot opened; verdict first). A courtesy (isCourtesyLine: an offer of more
  * help, a sign-off) is never the brief: the last prose before it is, and
- * the first prose sentence when nothing comes before it. At most
+ * the first prose sentence when nothing comes before it. #4234: nor is a
+ * sentence that points at a control of a form (isPointerLine), and a text
+ * that is only such sentences has no brief. At most
  * REPORT_BRIEF_MAX characters, whole sentences, never cut inside a word, no
  * Markdown. Empty when the text holds no prose. The server writes it on a
  * run's card; the apps read the same function for a card stored without one
@@ -385,12 +408,16 @@ export function reportBrief(text: string | undefined, from: "end" | "start"): st
   const prose = proseOf(source);
   if (!prose.length) return "";
   // each entry's sentences without its courtesies; an entry left empty goes
-  const kept = prose
-    .map((entry) => ({ item: entry.item, text: sentencesOf(entry.text).filter((sentence) => !isCourtesyLine(sentence)).join(" ") }))
+  const without = (drop: (sentence: string) => boolean) => prose
+    .map((entry) => ({ item: entry.item, text: sentencesOf(entry.text).filter((sentence) => !drop(sentence)).join(" ") }))
     .filter((entry) => entry.text);
+  const kept = without((sentence) => isCourtesyLine(sentence) || isPointerLine(sentence));
+  // #4234: words that only point at a form never stand alone
+  const standing = without(isPointerLine);
+  if (!standing.length) return "";
   const pick = (entries: Array<{ text: string; item: boolean }>) => (entries.some((entry) => !entry.item) ? entries.filter((entry) => !entry.item) : entries);
   // nothing but courtesies: the bot's own first sentence, the only words there are
-  const paragraphs = pick(kept.length ? kept : prose);
+  const paragraphs = pick(kept.length ? kept : standing);
   const firstSentence = () => fitBrief(sentencesOf(paragraphs[0]!.text)[0] ?? paragraphs[0]!.text);
   if (from === "start") return firstSentence();
   const closing = paragraphs[paragraphs.length - 1]!.text;

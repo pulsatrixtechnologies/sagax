@@ -494,6 +494,7 @@ import { createEmailSendPasses, sendWithMailer } from "./mail/email-draft-send.t
 import { mailConnectorsOf, type EmailConnector, type EmailSendRequestCard } from "../shared/email-draft-send.ts";
 import { builtinAgentToolName, memberOwnScopeTool, unknownAgentToolRefusal } from "./people/member-tool-scope.ts";
 import { serverApprovalWords } from "./approvals/approval-words.ts";
+import { settleRoutineForm } from "./routines/routine-run-widget.ts";
 import { finalAlternative, finalConfirmation, finalConfirmationOptions } from "./approvals/final-confirmation.ts";
 import { personLanguageOf } from "./people/person-language.ts";
 import {
@@ -26163,10 +26164,17 @@ ROUTES.push(createApprovalsInboxRoutes({
 /** #2689, #3471, #3512, #3543: one of the viewer's questions in words (a
  * "needs you" card or an input request row) skipped, marked handled or
  * answered: closed the one way, the waiting work told how. */
-function inboxRequestSettled(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }, how: PersonRequestSettle): boolean {
+function inboxRequestSettled(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string; answer?: string }, how: PersonRequestSettle): boolean {
   return settlePersonRequestCard({
     ...todayDepsFor(getLeafHost(), auth, viewer),
-    close: (threadId, message, quiet) => waitingCardSkip.closeRequest(threadId, message as Message, { kind: how }, quiet)
+    close: (threadId, message, quiet) => (message as Message).kind === "widget"
+      // #4234: a routine run's form, answered with the person's words or skipped
+      ? settleRoutineForm((messageId, widget) => { store.patchMessage(threadId, messageId, { widget }); }, message as Message, {
+        label: how === "answered" && item.answer ? item.answer.slice(0, 200) : serverApprovalWords(languageOfPerson(viewer.principalId)).t("waitingCard.skipped"),
+        skipped: how !== "answered",
+        at: Date.now(),
+      })
+      : waitingCardSkip.closeRequest(threadId, message as Message, { kind: how }, quiet)
   }, item.botId, item.threadId, item.messageId);
 }
 /** #3512: `work` with the person's own request auth, for a short session of

@@ -101,6 +101,10 @@ describe("the settings registry", () => {
     expect(settingSpec("routine.thread")).toBeUndefined();
   });
 
+  it("org.phoneCalls no longer lists a callback number: calls do not say one (#4193)", () => {
+    expect(settingSpec("org.phoneCalls")!.label).not.toContain("callbackNumber");
+    expect(settingSpec("org.phoneCalls")!.label).toContain("addDoNotCall");
+  });
   it("checks a value's kind", () => {
     expect(valueFits("enum:ask|auto", "auto")).toBe(true);
     expect(valueFits("enum:ask|auto", "full")).toBe(false);

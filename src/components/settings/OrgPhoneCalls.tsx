@@ -2,8 +2,10 @@
 // server/outbound/outbound-calls.ts). Settings > Voice shows a read-only
 // status card for every org member (#2080); this editable form stays for the
 // gallery and layout tests until Perspicax owns the admin editor. Off until
-// turned on; every call says the callback number; numbers on the do-not-call
-// list are never called. Callback and do-not-call rows show only while on.
+// turned on; numbers on the do-not-call list are never called; the
+// do-not-call row shows only while on. Every call is a live conversation
+// that opens with the AI disclosure (#4193): no callback number is said nor
+// needed, so none is shown or asked (a saved one stays on disk).
 import { useCallback, useEffect, useState } from "react";
 
 import { t } from "@/lib/i18n";
@@ -27,7 +29,6 @@ function shown(e164: string): string {
 export function OrgPhoneCalls({ initial = null }: { initial?: PhoneCallSettings | null }) {
   const [settings, setSettings] = useState<PhoneCallSettings | null>(initial);
   const [error, setError] = useState<string | null>(null);
-  const [callback, setCallback] = useState(initial?.callbackNumber ? shown(initial.callbackNumber) : "");
   const [blocked, setBlocked] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -35,7 +36,6 @@ export function OrgPhoneCalls({ initial = null }: { initial?: PhoneCallSettings 
     try {
       const body = await api<{ settings: PhoneCallSettings }>("/api/org/phone-calls");
       setSettings(body.settings);
-      setCallback(body.settings.callbackNumber ? shown(body.settings.callbackNumber) : "");
       setError(null);
     } catch (failure) {
       setError(readableError(failure));
@@ -59,15 +59,14 @@ export function OrgPhoneCalls({ initial = null }: { initial?: PhoneCallSettings 
   };
 
   // Rows of the Organization's bots card (2026-10-26): the pilot and
-  // its switch, the callback number with a compact field, the do-not-call
-  // list. A missing callback number is a warning line in its row.
+  // its switch, then the do-not-call list.
   const field = cn(FIELD, "w-[170px] tabular-nums sm:w-[190px]");
   return (
     <div data-settings-card="organization.phoneCalls">
       <DescribedRow
         label={t("orgCalls.title")}
         rowId="phoneCalls"
-        keywords={`${t("orgCalls.callback")} ${t("orgCalls.doNotCall")}`}
+        keywords={t("orgCalls.doNotCall")}
         description={(
           <>
             {t("orgCalls.intro")}
@@ -81,19 +80,6 @@ export function OrgPhoneCalls({ initial = null }: { initial?: PhoneCallSettings 
       </DescribedRow>
       {settings?.enabled && (
         <>
-          <DescribedRow
-            label={t("orgCalls.callback")}
-            rowId="phoneCallsCallback"
-            description={(
-              <>
-                {t("orgCalls.callbackHelp")}
-                {!settings.callbackNumber && <span role="status" className="mt-0.5 block text-warning" data-org-calls-no-callback="">{t("orgCalls.noCallback")}</span>}
-              </>
-            )}
-          >
-            <input className={field} dir="ltr" value={callback} onChange={(event) => setCallback(event.target.value)} placeholder="+1 514 555 0100" aria-label={t("orgCalls.callback")} autoComplete="off" />
-            <button type="button" className={PILL} disabled={busy || !callback.trim()} onClick={() => void save({ callbackNumber: callback })}>{t("orgCalls.save")}</button>
-          </DescribedRow>
           <DescribedRow
             label={t("orgCalls.doNotCall")}
             rowId="phoneCallsDoNotCall"

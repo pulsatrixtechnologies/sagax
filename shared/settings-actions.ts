@@ -1421,7 +1421,7 @@ add({
 });
 // organization
 add({
-  key: "org.phoneCalls", family: "organization", target: "none", value: "object", label: "Phone calls ({enabled, callbackNumber, addDoNotCall, removeDoNotCall})", where: "Settings > Voice > Phone calls",
+  key: "org.phoneCalls", family: "organization", target: "none", value: "object", label: "Phone calls ({enabled, addDoNotCall, removeDoNotCall})", where: "Settings > Voice > Phone calls",
   read: () => ({ path: "/api/org/phone-calls", field: "settings" }),
   write: (_ids, v) => ({ method: "PUT", path: "/api/org/phone-calls", body: v }),
   classes: always("org"),

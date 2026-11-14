@@ -11,8 +11,9 @@
 //        or resumes it, `enabled: false` pauses it, a time or subjects change
 //        moves it. GET reads `enabled` and the time from that routine (the
 //        person may pause or move it in the routines list). `checklist` (#3432):
-//        a plain switch of the checklist wakes (heartbeat): false blocks
-//        them, true clears the block and its votes; no memory line.
+//        a plain switch of the checklist wakes (heartbeat), no memory line.
+//        #4250: it is the checklist routine's on and off (false pauses it,
+//        true turns it on).
 //        `reviews` (#4250 S8): `{ endOfDay?, weekly? }`, the person's switch
 //        of each review routine (server/proactive/review-routines.ts): true is
 //        their yes and creates or resumes it, in `timeZone`; false pauses it.
@@ -68,6 +69,9 @@ export interface BackgroundBriefRouteDeps {
   reads(botId: string): Promise<BriefAppCall>;
   /** #2699: screen context works here (desktop app, macOS or Windows). */
   screenContextAvailable?: () => boolean;
+  /** #4250: the checklist's one switch (server/heartbeat/heartbeat.ts
+   * setOn): its routine on or paused. Absent: the heartbeat mute. */
+  checklist?: (botId: string, on: boolean) => boolean | undefined;
   /** #3456: the bot's brief routine (server/proactive/brief-routine.ts). */
   routine?: {
     view(botId: string): BriefSettings;
@@ -130,8 +134,12 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
         ...(typeof body.timeZone === "string" ? { timeZone: body.timeZone } : {}),
         ...(typeof body.screenContext === "boolean" && deps.screenContextAvailable?.() === true ? { screenContext: body.screenContext } : {}),
       };
-      // #3432: the checklist switch sets or clears the heartbeat mute, with no vote and no memory line
-      const checklist = typeof body.checklist === "boolean" ? !deps.store.setWakeMuted(botId, "heartbeat", !body.checklist) : undefined;
+      // #3432: the checklist switch, with no vote and no memory line; #4250:
+      // it is the checklist routine's own on and off
+      const asked = typeof body.checklist === "boolean" ? body.checklist : undefined;
+      const checklist = asked === undefined ? undefined
+        : deps.checklist ? deps.checklist(botId, asked) ?? asked
+        : !deps.store.setWakeMuted(botId, "heartbeat", !asked);
       const settings = checklist !== undefined && !Object.keys(patch).length ? deps.store.settings(botId) : deps.store.saveSettings(botId, patch);
       if (!deps.routine) return json(res, 200, { settings, ...(checklist !== undefined ? { checklist } : {}) });
       try {

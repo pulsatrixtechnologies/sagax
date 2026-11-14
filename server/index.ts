@@ -778,7 +778,7 @@ import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
-import { HEARTBEAT_CHECK, HEARTBEAT_PATH, HeartbeatManager, heartbeatEmpty, parseHeartbeat } from "./heartbeat/heartbeat.ts";
+import { HEARTBEAT_CHECK, HEARTBEAT_PATH, HeartbeatManager } from "./heartbeat/heartbeat.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
 import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
@@ -21008,6 +21008,7 @@ const heartbeat = new HeartbeatManager({
   },
   language: (botId) => briefLanguage(botId),
   muted: (botId) => backgroundBriefs.wakeMuted(botId, "heartbeat"),
+  setMuted: (botId, muted) => { backgroundBriefs.setWakeMuted(botId, "heartbeat", muted); },
 });
 // an edit of HEARTBEAT.md makes or moves its routine at once
 onMemoryChange((botId, path) => {
@@ -25795,7 +25796,8 @@ ROUTES.push(createProactiveChoicesRoutes({
       const settings = backgroundBriefs.view(bot.id).settings;
       let checklist: boolean | undefined;
       try {
-        checklist = heartbeatEmpty(parseHeartbeat(readMemoryDoc(bot.id, HEARTBEAT_PATH).text)) ? undefined : !backgroundBriefs.wakeMuted(bot.id, "heartbeat");
+        // #4250: the checklist routine's own on and off (one switch)
+        checklist = heartbeat.on(bot.id);
       } catch {
         checklist = undefined;
       }
@@ -26200,6 +26202,7 @@ ROUTES.push(createBackgroundBriefRoutes({
   connected: backgroundBriefConnected,
   reads: backgroundBriefReads,
   screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE,
+  checklist: (botId, on) => heartbeat.setOn(botId, on),
   routine: {
     view: (botId) => briefRoutines.view(botId),
     sync: (botId, patch, settings) => { briefRoutines.sync(botId, patch, settings); }

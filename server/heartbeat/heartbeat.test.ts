@@ -59,7 +59,7 @@ describe("HeartbeatManager", () => {
   /** #4250: the checklist is a routine's pre-check. A tick is what the
    * scheduler does: the routine made from the checklist, then its code
    * check on each due time; a wake is the routine's run with the gaps. */
-  function harness(text: string, probes: Partial<HeartbeatProbes>, start = new Date(2026, 10, 8, 9, 0).getTime(), muted?: (botId: string) => boolean) {
+  function harness(text: string, probes: Partial<HeartbeatProbes>, start = new Date(2026, 10, 8, 9, 0).getTime(), muted?: (botId: string) => boolean, setMuted?: (botId: string, muted: boolean) => void) {
     dir = mkdtempSync(join(tmpdir(), "heartbeat-"));
     let now = start;
     let checklist = text;
@@ -88,6 +88,7 @@ describe("HeartbeatManager", () => {
       file: join(dir, "heartbeat.json"),
       now: () => now,
       ...(muted ? { muted } : {}),
+      ...(setMuted ? { setMuted } : {}),
     });
     /** The routine's next due time (its interval). */
     let dueAt = Number.NEGATIVE_INFINITY;
@@ -199,6 +200,43 @@ describe("HeartbeatManager", () => {
     mute = false;
     h.advance(31 * 60_000);
     expect(await h.manager.tick()).toEqual(["osprey"]);
+  });
+
+  it("#4250: Settings' switch and the routines list are one switch: the checklist routine's own on and off", async () => {
+    let mute = false;
+    let probes = 0;
+    const h = harness("- process Backup running", { processes: async () => { probes += 1; return []; } }, undefined, () => mute, (_bot, value) => { mute = value; });
+    expect(await h.manager.tick()).toEqual(["osprey"]);
+    expect(h.checks.on("osprey")).toBe(true);
+    // off in Settings pauses the routine: no probe, no run, nothing left muted
+    expect(h.checks.setOn("osprey", false)).toBe(false);
+    expect(h.routines[0]!.enabled).toBe(false);
+    expect(mute).toBe(false);
+    h.advance(31 * 60_000);
+    await h.manager.tick();
+    expect(probes).toBe(1);
+    // the routine turned back on in the routines list: Settings says on
+    h.routines[0]!.enabled = true;
+    expect(h.checks.on("osprey")).toBe(true);
+    h.routines[0]!.enabled = false;
+    expect(h.checks.on("osprey")).toBe(false);
+    // muted by the person's votes: Settings says off; on clears the mute and turns the routine on
+    mute = true;
+    expect(h.checks.setOn("osprey", true)).toBe(true);
+    expect(mute).toBe(false);
+    expect(h.routines[0]!.enabled).toBe(true);
+    expect(h.routines).toHaveLength(1);
+    h.advance(31 * 60_000);
+    await h.manager.tick();
+    expect(probes).toBe(2);
+  });
+
+  it("#4250: on with no routine yet makes it; an empty checklist has no switch", async () => {
+    const h = harness("- process Backup running", { processes: async () => [] });
+    expect(h.routines).toEqual([]);
+    expect(h.checks.setOn("osprey", true)).toBe(true);
+    expect(h.routines).toHaveLength(1);
+    expect(harness("", {}).checks.on("osprey")).toBeUndefined();
   });
 
   it("waits for the interval before probing again", async () => {

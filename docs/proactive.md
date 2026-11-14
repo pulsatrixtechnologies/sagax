@@ -56,9 +56,11 @@ both write `proactive`).
   I receive), on each bot's page (Permissions, Proactive), or in words by
   asking any of their bots: the bot reads `available` and writes through
   `sagax_settings` `notifications.proactiveChoices`. On those pages each
-  switch acts at once; the checklist switch sets or clears the checklist
-  mute (`PUT /api/bots/:id/background-brief` `{checklist}`), with no
-  memory line. A domain stored on with a bot that can no longer carry it
+  switch acts at once; the checklist switch is the checklist routine's
+  own on and off (`PUT /api/bots/:id/background-brief` `{checklist}`):
+  off pauses the routine, on turns it on and clears a mute left by the
+  person's votes, with no memory line. Pausing the routine in the
+  routines list shows it off there too (#4250). A domain stored on with a bot that can no longer carry it
   runs nowhere: those pages draw it off with its pause stated, and turning
   it on there moves it to a bot that can.
 - One bot per person and domain, by construction. A carrying bot that is

@@ -270,6 +270,8 @@ export interface HeartbeatDeps {
   /** #2694: the person said "never" to heartbeat wakes, or voted them down
    * past the mute line (votes fade): the bot is not woken. */
   muted?(botId: string): boolean;
+  /** Set or clear that mute (Settings' switch clears it when turned on). */
+  setMuted?(botId: string, muted: boolean): void;
   probes?: Partial<HeartbeatProbes>;
   file?: string;
   now?: () => number;
@@ -351,6 +353,28 @@ export class HeartbeatManager {
       precheck: { kind: "code", check: HEARTBEAT_CHECK },
       overlap: "skip",
     }, this.deps.runAs?.(botId));
+  }
+
+  /** #4250: the checklist's one switch, the one Settings shows: its
+   * routine on (the routines list pauses the same routine) and no mute
+   * left by the person's votes. undefined: HEARTBEAT.md is empty. */
+  on(botId: string): boolean | undefined {
+    const list = this.list(botId);
+    if (heartbeatEmpty(list)) return undefined;
+    const routine = this.routineOf(botId);
+    return (routine ? routine.enabled !== false : true) && !this.deps.muted?.(botId);
+  }
+
+  /** Settings' switch: on clears the mute and turns the routine on (made
+   * when the checklist has a line to check); off pauses the routine. With
+   * no routine (notes only, or no routine manager) the mute is the switch. */
+  setOn(botId: string, on: boolean): boolean | undefined {
+    if (on) this.deps.setMuted?.(botId, false);
+    const routine = on ? this.sync(botId) ?? undefined : this.routineOf(botId);
+    if (routine) {
+      if (routine.enabled !== on) this.deps.routines()?.update(routine.id, { enabled: on });
+    } else if (!on) this.deps.setMuted?.(botId, true);
+    return this.on(botId);
   }
 
   /** Every bot (at start, and within the hour on a pass the server already

@@ -4,7 +4,7 @@
 // keeps the tools listed with a clear error (2026-11-06). Mocks only: no real
 // Calendar, Contacts, Messages or TCC prompt is touched.
 import { randomUUID } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,7 @@ import { DesktopBridges, DESKTOP_BRIDGE_MESSAGES, type DesktopBridgeOperation, t
 import { MAC_OFFLINE_MESSAGE, relayMacAppCall } from "./desktop-bridge-tools.ts";
 import { handleMessagesMcp, type MessagesMcpDeps } from "../imessage/imessage-mcp.ts";
 import { createMountUserSandbox } from "../index-leaves/mountUserSandbox.ts";
+import { macAppRelayFiles } from "../imessage/mac-app-files.ts";
 
 const ADA = "ada@example.com";
 const secret = "a".repeat(64);
@@ -70,7 +71,6 @@ describe("the messages MCP on an organization server (relay)", () => {
     host: { platform: "linux", identityKind: "perspicax" },
     useMessages: false,
     dbDir: null,
-    sender: { send: async () => { throw new Error("no local send on an organization server"); } },
     botId: "bot",
     threadId: "thread",
     openCard: (pending) => { cards.push(pending); },
@@ -142,5 +142,65 @@ describe("mounting the messages MCP for an organization turn", () => {
     const soloIntegrations: Record<string, unknown> = {};
     createMountUserSandbox(() => solo.host)(soloIntegrations, input(ADA));
     expect(soloIntegrations.messages).toBeUndefined();
+  });
+});
+
+describe("#4158: what a Mac runs, as its desktop app reports it", () => {
+  it("keeps the tools a current desktop reports, across a restart, and null while only older desktop apps reported", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "sagax-mac-apps-")), "desktop-mac-apps.json");
+    const sessions = new Map([["ada-session", ADA]]);
+    const bridges = new DesktopBridges((session) => sessions.get(session) ?? null, Date.now, undefined, file);
+    const old = registration("Old Mac");
+    bridges.register(old, "ada-session", secret);
+    bridges.setMacApps(old.id, "ada-session", secret, ["mail"]);
+    expect(bridges.macAppTools(ADA)).toBeNull();
+    const current = registration("New Mac");
+    bridges.register(current, "ada-session", secret);
+    bridges.setMacApps(current.id, "ada-session", secret, ["mail"], ["mac_mail_delete", "mac_mail_search", "not_a_tool"]);
+    // The older Mac still runs its 12 tools; the newer one, what it reported.
+    const tools = bridges.macAppTools(ADA)!;
+    expect(tools).toEqual(expect.arrayContaining(["mac_mail_delete", "mac_mail_search", "mac_notes_create"]));
+    expect(tools).not.toContain("not_a_tool");
+    expect(tools).not.toContain("mac_mail_move");
+    const restarted = new DesktopBridges((session) => sessions.get(session) ?? null, Date.now, undefined, file);
+    expect(restarted.macAppTools(ADA)).toEqual(tools);
+    expect(restarted.macAppsOn(ADA)).toEqual(["mail"]);
+    expect(restarted.macAppTools("bob@example.com")).toBeNull();
+  });
+
+  it("stages files to send in the desktop's folder first, and copies a saved attachment back into the conversation's folder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-bot-"));
+    const file = join(dir, "plan.pdf");
+    writeFileSync(file, "x".repeat(700_000));
+    const seen: DesktopBridgeOperation[] = [];
+    const request = async (operation: DesktopBridgeOperation) => {
+      seen.push(operation);
+      if (operation.action === "stage_file") return { content: [{ type: "text", text: operation.final ? "saved" : "ok" }] };
+      if (operation.action === "read_file") {
+        const data = Buffer.from("attachment-bytes");
+        const start = operation.offset ?? 0;
+        const part = data.subarray(start, start + 9);
+        const more = start + part.length < data.length ? `\n[${data.length - start - part.length} more bytes; read again with offset ${start + part.length}]` : "";
+        return { content: [{ type: "text", text: part.toString("base64") + more }] };
+      }
+      if (operation.tool_name === "mac_mail_read_attachment") return { content: [{ type: "text", text: JSON.stringify({ path: "/tmp/Sagax/attachments/abc-report.pdf", name: "report.pdf", mime: "application/pdf", bytes: 16 }) }] };
+      return { content: [{ type: "text", text: "sent" }] };
+    };
+    const saveDir = mkdtempSync(join(tmpdir(), "sagax-conversation-"));
+    const sent = await relayMacAppCall(request, "mac_mail_send", { to: ["a@example.com"], subject: "s", body: "b", files: [file] }, macAppRelayFiles(saveDir));
+    expect(sent).toEqual({ content: [{ type: "text", text: "sent" }] });
+    const staged = seen.filter((operation) => operation.action === "stage_file");
+    expect(staged.map((operation) => operation.offset)).toEqual([0, 512 * 1024]);
+    expect(staged.at(-1)!.final).toBe(true);
+    const call = seen.find((operation) => operation.action === "mac_app")!;
+    expect(call.arguments!.files).toEqual([staged[0]!.name]);
+    expect(String(staged[0]!.name)).toMatch(/^[0-9a-f]{8}-plan\.pdf$/);
+    seen.length = 0;
+    const saved = await relayMacAppCall(request, "mac_mail_read_attachment", { id: 12, index: 0 }, macAppRelayFiles(saveDir));
+    const out = JSON.parse((saved.content[0] as { text: string }).text);
+    expect(out.path.startsWith(saveDir)).toBe(true);
+    expect(readFileSync(out.path, "utf8")).toBe("attachment-bytes");
+    expect(out.onMac).toBe("/tmp/Sagax/attachments/abc-report.pdf");
+    expect(seen.filter((operation) => operation.action === "read_file")).toHaveLength(2);
   });
 });

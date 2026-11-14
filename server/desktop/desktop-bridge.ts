@@ -26,6 +26,10 @@ import { z } from "zod";
 
 import type { BotWorkplace } from "../../shared/bot-workplace.ts";
 import { MAC_APP_SETUP_IDS, isMacAppSetupId, type MacAppSetupId } from "../../shared/mac-apps-setup.ts";
+import { MAC_APP_LEGACY_TOOLS, isMacAppTool } from "../../electron/mac-apps.mjs";
+
+/** A desktop's reported tool list, kept to the known mac_* names. */
+const macAppToolNames = (tools: readonly unknown[]): string[] => [...new Set(tools.filter((name): name is string => isMacAppTool(name)))];
 
 const ABSOLUTE_PATH = /^(?:\/|[a-zA-Z]:[\\/]|\\\\)/;
 // oxlint-disable-next-line no-control-regex
@@ -200,6 +204,9 @@ export class DesktopBridges {
    * mac_* tools and a call says the Mac is offline instead of the tool
    * vanishing (2026-11-06). */
   private macApps = new Map<string, MacAppSetupId[]>();
+  /** The mac_* tools each of those Macs said it runs (its desktop app's own
+   * table). Absent for a desktop app from before it reported them. */
+  private macAppToolNames = new Map<string, string[]>();
   private macAppsFile: string | undefined;
   /** Every computer the person signed in from, by person and computer name
    * (lower case): its last presence and its access level, kept after the
@@ -226,7 +233,12 @@ export class DesktopBridges {
       try {
         const stored = JSON.parse(readFileSync(macAppsFile, "utf8")) as Record<string, unknown>;
         for (const [key, value] of Object.entries(stored)) {
-          if (Array.isArray(value)) this.macApps.set(key, MAC_APP_SETUP_IDS.filter(app => value.includes(app)));
+          // An array (the On apps), or { on, tools } once the desktop reports its tools.
+          const row = Array.isArray(value) ? { on: value, tools: undefined } : value && typeof value === "object" ? value as { on?: unknown; tools?: unknown } : null;
+          if (!row || !Array.isArray(row.on)) continue;
+          const on = row.on;
+          this.macApps.set(key, MAC_APP_SETUP_IDS.filter(app => on.includes(app)));
+          if (Array.isArray(row.tools)) this.macAppToolNames.set(key, macAppToolNames(row.tools));
         }
       } catch { /* none yet, or unreadable: no apps remembered */ }
     }
@@ -242,22 +254,42 @@ export class DesktopBridges {
     const temporary = `${this.macAppsFile}.${process.pid}.tmp`;
     try {
       mkdirSync(dirname(this.macAppsFile), { recursive: true });
-      writeFileSync(temporary, `${JSON.stringify(Object.fromEntries(this.macApps))}\n`, { mode: 0o600 });
+      const rows = [...this.macApps].map(([key, on]) => [key, this.macAppToolNames.has(key) ? { on, tools: this.macAppToolNames.get(key) } : on]);
+      writeFileSync(temporary, `${JSON.stringify(Object.fromEntries(rows))}\n`, { mode: 0o600 });
       renameSync(temporary, this.macAppsFile);
     } catch { /* the list still holds in memory */ }
   }
 
-  /** The desktop reports which Apple apps are On in its Plugins > This Mac. */
-  setMacApps(id: string, session: string, secret: string, apps: readonly unknown[]): MacAppSetupId[] {
+  /** The desktop reports which Apple apps are On in its Plugins > This Mac,
+   * and (a current desktop app) the mac_* tools it runs for them. */
+  setMacApps(id: string, session: string, secret: string, apps: readonly unknown[], tools?: readonly unknown[]): MacAppSetupId[] {
     const entry = this.authorize(id, session, secret);
     const on = MAC_APP_SETUP_IDS.filter(app => apps.some(value => isMacAppSetupId(value) && value === app));
     // By computer name, not by registration id: the desktop takes a new id on
     // every reconnect, and the list must outlive the connection.
     const key = `${entry.person}\n${entry.registration.name}`;
-    const before = this.macApps.get(key);
+    const before = JSON.stringify([this.macApps.get(key) ?? [], this.macAppToolNames.get(key) ?? null]);
     if (on.length) this.macApps.set(key, on); else this.macApps.delete(key);
-    if (JSON.stringify(before ?? []) !== JSON.stringify(on)) this.saveMacApps();
+    if (on.length && tools) this.macAppToolNames.set(key, macAppToolNames(tools)); else this.macAppToolNames.delete(key);
+    if (JSON.stringify([on, this.macAppToolNames.get(key) ?? null]) !== before) this.saveMacApps();
     return on;
+  }
+
+  /** The mac_* tools the person's Macs run: every Mac's reported tools, and
+   * the older 12 for a Mac whose desktop app reports none. Null when no Mac
+   * of the person reported its tools (only older desktop apps, or none). */
+  macAppTools(person: string | null): string[] | null {
+    const key = normalize(person);
+    if (!key) return null;
+    const names = new Set<string>();
+    let reported = false;
+    for (const stored of this.macApps.keys()) {
+      if (stored.slice(0, stored.indexOf("\n")) !== key) continue;
+      const tools = this.macAppToolNames.get(stored);
+      if (tools) reported = true;
+      for (const name of tools ?? MAC_APP_LEGACY_TOOLS.map(tool => tool.name)) names.add(name);
+    }
+    return reported ? [...names] : null;
   }
 
   /** The Apple apps On on any of the person's Macs, online or not. */
@@ -512,6 +544,7 @@ export class DesktopBridges {
     const removedHost = hostKey(found[0]!.registration.name);
     if ([this.labels.delete(`${key}\n${id}`), this.labels.delete(`${key}\nhost:${removedHost}`)].some(Boolean)) this.saveLabels();
     if (this.known.delete(`${key}\n${removedHost}`)) this.saveDevices();
+    this.macAppToolNames.delete(`${key}\n${found[0]!.registration.name}`);
     if (this.macApps.delete(`${key}\n${found[0]!.registration.name}`)) this.saveMacApps();
     return { id };
   }

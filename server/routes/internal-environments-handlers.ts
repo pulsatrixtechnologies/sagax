@@ -264,12 +264,14 @@ export interface InternalEnvironmentsDeps {
   /** Solo Mac: an Apple app's On/Off switch (Plugins > This Mac). */
   macAppEnabled?(app: MacAppId): boolean;
   /** Solo Mac: run one Apple app tool here (electron/mac-apps.mjs). */
-  runMacApp?(tool: string, args: Record<string, unknown>): Promise<MacAppToolResult>;
+  runMacApp?(tool: string, args: Record<string, unknown>, context?: { saveDir?: string }): Promise<MacAppToolResult>;
   /** The person's signed-in desktop is a Mac that offers its Apple apps. */
   desktopBridgeMacApps?(person: string): boolean;
   /** The Apple apps On in the person's Plugins > This Mac, as their Mac last
    * reported them (kept while it is offline). */
   desktopBridgeMacAppsOn?(person: string): readonly string[];
+  /** The mac_* tools the person's Macs run; null: only older desktop apps (their 12 tools). */
+  desktopBridgeMacAppTools?(person: string): readonly string[] | null;
   desktopBridgesRequest(
     person: string,
     operation: DesktopBridgeOperation,
@@ -304,7 +306,6 @@ export interface InternalEnvironmentsDeps {
   messagesUseMessages(): boolean;
   standingGrantsAllowed(): boolean;
   autoAnswerStepUp(bot: InternalEnvironmentsBot, threadId: string, input: { tool: string; input: string; summary: string }): unknown[];
-  imessageSender: unknown;
   handleMessagesMcp: typeof handleMessagesMcp;
   appendMessage(threadId: string, message: unknown): { id: string };
   bindImessageMessage(requestId: string, messageId: string): void;

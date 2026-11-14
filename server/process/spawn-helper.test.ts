@@ -101,7 +101,6 @@ const TURN_PATH_FILES = [
   "server/tts/system-voices.ts",
   "server/usage/plan-usage.ts",
   "server/wallet-issuer.ts",
-  "server/imessage/imessage-send.ts",
   "server/auth/web-bot-auth-apply.ts",
   "server/index.ts",
 ];

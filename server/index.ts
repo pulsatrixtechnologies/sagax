@@ -1133,7 +1133,6 @@ import { createMacAppsRoutes } from "./routes/mac-apps.ts";
 import { macAppEnabled as macAppSettingEnabled, MAC_APP_IDS, runMacAppCall } from "../electron/mac-apps.mjs";
 import { handleMessagesMcp } from "./imessage/imessage-mcp.ts";
 import { bindImessageMessage, takeImessageSend } from "./imessage/imessage-cards.ts";
-import { createOsascriptSender } from "./imessage/imessage-send.ts";
 import { readMessagesSettings } from "./imessage/imessage-settings.ts";
 import { messagesOnBotMac } from "../shared/imessage.ts";
 import { fileInsideRoots } from "./imessage/imessage-db.ts";
@@ -6209,7 +6208,7 @@ bindLeafHost({
   get stagePendingAttachments() { return stagePendingAttachments; },
   get phoneIntegration() { return phoneIntegration; },
   get messagesIntegration() { return messagesIntegration; },
-  get imessageSender() { return imessageSender; },
+  get soloMacAppEnabled() { return soloMacAppEnabled; },
   get recordPerspicaxWork() { return recordPerspicaxWork; },
   get routineMemoryHint() { return routineMemoryHint; },
   get perspicaxTurnPrepare() { return perspicaxTurnPrepare; },
@@ -11279,8 +11278,6 @@ function soloMacAppEnabled(app: string): boolean {
   return app === "messages" ? readMessagesSettings(DATA_DIR).useMessages : macAppSettingEnabled(DATA_DIR, app);
 }
 
-
-const imessageSender = createOsascriptSender();
 
 // ── Perspicax MCP for the person who speaks (slice 5) ─────────────────
 /** The Perspicax user id of a principal of this organization, or null (the
@@ -24281,6 +24278,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     desktopBridgesRequest: (person, operation, active, onProgress, context) => desktopBridges.request(person, operation, active, onProgress, undefined, context),
     desktopBridgeMacApps: (person) => desktopBridges.current(person)?.capabilities.macApps === true,
     desktopBridgeMacAppsOn: (person) => desktopBridges.macAppsOn(person),
+    desktopBridgeMacAppTools: (person) => desktopBridges.macAppTools(person),
     bridgeAuditRecord: (row) => bridgeAudit.record(row as never),
     broadcast,
     turnWorkplace: (threadId) => turnWorkplaces.get(threadId) as never,
@@ -24296,10 +24294,9 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     cloudComputerCfg: () => cfg,
     messagesUseMessages: () => readMessagesSettings(DATA_DIR).useMessages,
     macAppEnabled: (app) => soloMacAppEnabled(app),
-    runMacApp: (tool, args) => runMacAppCall(tool, args),
+    runMacApp: (tool, args, context) => runMacAppCall(tool, args, context ?? {}),
     standingGrantsAllowed,
     autoAnswerStepUp: (bot, threadId, input) => autoAnswerStepUp(bot as BotRecord, threadId, input),
-    imessageSender,
     handleMessagesMcp,
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     bindImessageMessage,

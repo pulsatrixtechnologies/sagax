@@ -103,7 +103,6 @@ function baseDeps(over: Partial<InternalEnvironmentsDeps> = {}): InternalEnviron
     messagesUseMessages: () => false,
     standingGrantsAllowed: () => true,
     autoAnswerStepUp: () => [],
-    imessageSender: {},
     handleMessagesMcp: async () => ({ result: "ok" }),
     appendMessage: () => ({ id: "msg-1" }),
     bindImessageMessage: () => undefined,

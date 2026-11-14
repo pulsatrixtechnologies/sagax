@@ -6,7 +6,7 @@
 //   GET  /api/desktop-bridge/<id>/tunnel   (WebSocket) network egress
 //   GET  /api/me/desktop-bridge            the person's own status + activity
 //   POST /api/desktop-bridge/<id>/system   coarse OS, CPU, memory, disk facts
-//   POST /api/desktop-bridge/<id>/mac-apps { on: [...] }: the Apple apps On in
+//   POST /api/desktop-bridge/<id>/mac-apps { on: [...], tools?: [...] }: the Apple apps On in
 //                                          the desktop's Plugins > This Mac
 //   POST /api/me/desktop-bridge/computers/rename|remove
 //                                          { computer: id or name, name? }: the person's
@@ -238,7 +238,10 @@ export function createDesktopBridgeRoutes(deps: {
       if (action === "mac-apps") {
         const on = body && typeof body === "object" && Array.isArray((body as { on?: unknown }).on) ? (body as { on: unknown[] }).on : null;
         if (!on || on.length > 20) return json(res, 400, { error: "Invalid Apple apps list" });
-        return json(res, 200, { ok: true, on: deps.bridges.setMacApps(id!, auth.session.id, secret, on) });
+        // A current desktop app also says which mac_* tools it runs; an older one sends none.
+        const tools = (body as { tools?: unknown }).tools;
+        if (tools !== undefined && (!Array.isArray(tools) || tools.length > 500)) return json(res, 400, { error: "Invalid Apple apps list" });
+        return json(res, 200, { ok: true, on: deps.bridges.setMacApps(id!, auth.session.id, secret, on, tools as unknown[] | undefined) });
       }
       return json(res, 200, { ok: true });
     } catch (error) {

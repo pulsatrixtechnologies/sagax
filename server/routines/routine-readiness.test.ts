@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkRoutineReadiness, routineFlowSkills, ROUTINE_READINESS_PROBE_TIMEOUT_MS, loadRoutineReadiness, routineNeededSkills, type RoutineReadinessDeps } from "./routine-readiness.ts";
 import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
-import { clearEngineRefusal, noteEngineRefusal, SIGNED_OUT_RECHECK_MS } from "../engines/engine-refusals.ts";
+import { clearEngineRefusal, clearSignedOut, noteEngineRefusal, onEngineWorksAgain, SIGNED_OUT_RECHECK_MS } from "../engines/engine-refusals.ts";
+import { adminCardHomes, createEngineFallbackCards } from "../engines/engine-fallback-card.ts";
+import { accessCardAudience, accessCardVisibleTo, routineAccessNotifications } from "../engines/engine-access.ts";
+import { createSignInCards } from "../engines/sign-in-cards.ts";
+import type { WireAccessCard, WireMessage } from "../../shared/wire.ts";
 
 const routine = { botId: "osprey", prompt: "Check the inbox." };
 const run = { botId: routine.botId };
@@ -290,5 +294,190 @@ describe("routine readiness", () => {
     const broken = deps({ cacheKey: () => { throw new Error("bad configuration"); } });
     expect((await checkRoutineReadiness(routine, run, broken)).ok).toBe(true);
     expect((await checkRoutineReadiness(routine, run, broken, "check")).ok).toBe(false);
+  });
+});
+
+describe("engine fallback told once (#4233)", () => {
+  // The bot's conversations as stored, and what rang.
+  function fixWorld(threads: Record<string, WireMessage[]> = {}) {
+    const rang: Array<{ access: WireAccessCard; title: string; routineRunId?: string }> = [];
+    let seq = 0;
+    const open = () => {
+      const signIn = createSignInCards({
+        accessCards: () => Object.entries(threads).flatMap(([threadId, messages]) => messages.filter((m) => m.kind === "access").map((message) => ({ threadId, message }))),
+        messagesFor: (threadId) => threads[threadId] ?? [],
+        mainThreadOf: () => null,
+        accountOf: () => null,
+        remove: (threadId, messageId) => {
+          const list = threads[threadId] ?? [];
+          const index = list.findIndex((m) => m.id === messageId);
+          if (index === -1) return false;
+          list.splice(index, 1);
+          return true;
+        },
+        withdrawNotice: () => {},
+        signInWorks: () => true,
+      });
+      const cards = createEngineFallbackCards({
+        pendingKeyed: (key, person) => signIn.pendingKeyed(key, person),
+        append: (threadId, access, text) => {
+          const message = { id: `m${++seq}`, at: seq, role: "bot", kind: "access", access, text } as WireMessage;
+          (threads[threadId] ??= []).push(message);
+          signIn.noted(threadId, message);
+        },
+        notify: (access, _threadId, _text, title, routineRunId) => { rang.push({ access, title, ...(routineRunId ? { routineRunId } : {}) }); },
+      });
+      return { signIn, cards };
+    };
+    return { threads, rang, open };
+  }
+  const account = JSON.stringify(["subscription", "pr_alice", "primary"]);
+  const cardsIn = (threads: Record<string, WireMessage[]>) => Object.values(threads).flat().filter((m) => m.kind === "access");
+
+  it.each(["signed_out", "credits"] as const)("a backup chosen for a %s primary raises one fix card across ten runs, and a restart raises none", async (cause) => {
+    const now = Date.UTC(2026, 10, 13);
+    const engine = `fallback-primary-${cause}`;
+    noteEngineRefusal({ engine, account, cause, at: now });
+    const world = fixWorld();
+    let { cards } = world.open();
+    const check = deps({ now: () => now,
+      engine: () => ({ engine, name: "Primary", account, accessVia: "subscription" }),
+      backup: () => ({ engine: "fallback-backup", name: "Backup", signedIn: true }),
+      fallback: (_routine, ranRun, primary, backup, why) => {
+        cards.raise({ botId: ranRun.botId, ownerPrincipalId: "pr_alice", threadId: "main", engine: primary, backupName: backup.name, cause: why });
+      } });
+    // a check by hand never raises it
+    expect((await checkRoutineReadiness(routine, run, check, "check")).ok).toBe(true);
+    expect(world.rang).toHaveLength(0);
+    for (let i = 0; i < 10; i += 1) expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(true);
+    expect(cardsIn(world.threads)).toHaveLength(1);
+    expect(cardsIn(world.threads)[0]!.access).toMatchObject({
+      key: `engine-sign-in:${engine}`, instanceId: engine, engine: "Primary", meanwhile: "Backup", payerPrincipalId: "pr_alice",
+      cause: cause === "credits" ? "out_of_credit" : "sign_in_expired",
+    });
+    expect(world.rang).toHaveLength(1);
+    // a restart reads the open card back: the key finds it
+    ({ cards } = world.open());
+    expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(true);
+    expect(cardsIn(world.threads)).toHaveLength(1);
+    expect(world.rang).toHaveLength(1);
+    clearEngineRefusal(engine, account, now + 1);
+  });
+
+  it("closes the card when the engine works again, and a new refusal raises a new one", async () => {
+    const now = Date.UTC(2026, 10, 13);
+    const engine = "fallback-primary-retire";
+    noteEngineRefusal({ engine, account, cause: "signed_out", at: now });
+    const world = fixWorld();
+    const { cards, signIn } = world.open();
+    const stop = onEngineWorksAgain((worked, on, signedInOnly) => { signIn.retireKeyed(worked, on, signedInOnly); });
+    try {
+      const raise = { botId: "osprey", ownerPrincipalId: "pr_alice", threadId: "main", engine: { engine, name: "Primary", account }, backupName: "Backup", cause: "signed_out" as const };
+      expect(cards.raise(raise)).toBe(true);
+      expect(cards.raise(raise)).toBe(false);
+      // another person's sign-in on the same engine leaves it
+      clearEngineRefusal(engine, JSON.stringify(["subscription", "pr_bob", "primary"]), now + 1);
+      expect(cardsIn(world.threads)).toHaveLength(1);
+      clearSignedOut(engine);
+      expect(cardsIn(world.threads)).toHaveLength(0);
+      expect(cards.raise(raise)).toBe(true);
+      // a credit card stays through a sign-in, closes on a turn that works
+      const credit = { ...raise, engine: { ...raise.engine, engine: `${engine}-credit` }, cause: "credits" as const };
+      expect(cards.raise(credit)).toBe(true);
+      clearEngineRefusal(`${engine}-credit`, account, now + 2, true);
+      expect(cardsIn(world.threads).filter((m) => m.access?.cause === "out_of_credit")).toHaveLength(1);
+      clearEngineRefusal(`${engine}-credit`, account, now + 3);
+      expect(cardsIn(world.threads).filter((m) => m.access?.cause === "out_of_credit")).toHaveLength(0);
+    } finally { stop(); }
+  });
+
+  it("an expired login engine with due routines and a backup: one card and one ring, whichever comes first", async () => {
+    const now = Date.UTC(2026, 10, 13);
+    const engine = "fallback-primary-ahead";
+    noteEngineRefusal({ engine, account, cause: "signed_out", at: now });
+    try {
+      for (const aheadFirst of [true, false]) {
+        const world = fixWorld();
+        const { cards } = world.open();
+        // the notice ahead of due routines (checkEngineReconnectAhead -> onAheadNotify)
+        const ahead = () => cards.raiseAhead({ botId: "osprey", ownerPrincipalId: "pr_alice", payerPrincipalId: "pr_alice", threadId: "main",
+          engine: { engine, name: "Primary" }, detail: "Primary needs reconnecting.", text: "Primary needs reconnecting. Due soon: Brief.", title: "Reconnect Primary before routines run" });
+        const check = deps({ now: () => now,
+          engine: () => ({ engine, name: "Primary", account, accessVia: "subscription" }),
+          backup: () => ({ engine: "fallback-backup", name: "Backup", signedIn: true }),
+          fallback: (_routine, ranRun, primary, backup, why) => {
+            cards.raise({ botId: ranRun.botId, ownerPrincipalId: "pr_alice", threadId: "main", engine: primary, backupName: backup.name, cause: why });
+          } });
+        if (aheadFirst) expect(ahead()).toBe(true);
+        for (let i = 0; i < 3; i += 1) expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(true);
+        if (!aheadFirst) expect(ahead()).toBe(false);
+        expect(cardsIn(world.threads)).toHaveLength(1);
+        expect(world.rang).toHaveLength(1);
+        expect(cardsIn(world.threads)[0]!.access).toMatchObject({ key: `engine-sign-in:${engine}`, instanceId: engine, payerPrincipalId: "pr_alice", cause: "sign_in_expired" });
+      }
+    } finally { clearEngineRefusal(engine, account, now + 1); }
+  });
+
+  it("sends a server engine's card to the administrators, where an administrator who does not own the bot reads it", () => {
+    // a member's bot ran on the backup in the member's private conversation:
+    // the administrator cannot read it, so the card and its ring go to the
+    // administrator's own conversation; an administrator who can read the
+    // member's conversation gets it there
+    const ran = { threadId: "alice-private", botId: "osprey", botName: "Osprey", ownerPrincipalId: "pr_alice" };
+    const own: Record<string, { threadId: string; botId: string; botName: string; ownerPrincipalId: string }> = {
+      pr_admin: { threadId: "admin-main", botId: "kestrel", botName: "Kestrel", ownerPrincipalId: "pr_admin" },
+      pr_shared: { threadId: "shared-main", botId: "heron", botName: "Heron", ownerPrincipalId: "pr_shared" },
+    };
+    // the conversations each person can read (canOnThread: its owner only)
+    const readers: Record<string, string[]> = { "alice-private": ["pr_alice", "pr_shared"], "admin-main": ["pr_admin"], "shared-main": ["pr_shared"] };
+    const readable = (person: string, threadId: string) => (readers[threadId] ?? []).includes(person);
+    const adminHomes = adminCardHomes(["pr_admin", "pr_shared", "pr_nobot"], ran, {
+      readable: (admin, place) => readable(admin, place.threadId),
+      ownPlace: (admin) => own[admin],
+    });
+    expect(adminHomes).toEqual([
+      { ...own.pr_admin, audience: ["pr_admin"] },
+      { ...ran, audience: ["pr_shared"] },
+    ]);
+    const world = fixWorld();
+    const { cards, signIn } = world.open();
+    const rangAt: string[] = [];
+    const raise = { botId: "osprey", botName: "Osprey", ownerPrincipalId: "pr_alice", threadId: "alice-private",
+      engine: { engine: "server-engine", name: "Primary", account: JSON.stringify(["server", "organization", "primary"]) },
+      backupName: "Backup", cause: "signed_out" as const, adminHomes, routineRunId: "run-1" };
+    const counted = createEngineFallbackCards({
+      pendingKeyed: (key, person) => signIn.pendingKeyed(key, person),
+      append: (threadId, access, text) => {
+        const message = { id: `s${rangAt.length}`, at: 1, role: "bot", kind: "access", access, text } as WireMessage;
+        (world.threads[threadId] ??= []).push(message);
+        signIn.noted(threadId, message);
+      },
+      notify: (access, threadId, _text, title) => { rangAt.push(threadId); world.rang.push({ access, title }); },
+    });
+    expect(counted.raise(raise)).toBe(true);
+    // every administrator sees the card where it is, and the ring opens a conversation they read
+    for (const admin of ["pr_admin", "pr_shared"]) {
+      const shown = Object.entries(world.threads).filter(([threadId, messages]) => readable(admin, threadId) && messages.some((m) => accessCardVisibleTo(m, admin)));
+      expect(shown).toHaveLength(1);
+      const card = shown[0]![1].find((m) => m.kind === "access")!;
+      expect(card.access).toMatchObject({ audiencePrincipalIds: [admin], key: "engine-sign-in:server-engine", meanwhile: "Backup" });
+      expect(card.access!.payerPrincipalId).toBeUndefined();
+      const rings = world.rang.filter((r) => accessCardAudience(r.access)?.includes(admin));
+      expect(rings).toHaveLength(1);
+      const at = rangAt[world.rang.indexOf(rings[0]!)]!;
+      expect(readable(admin, at)).toBe(true);
+      // the ring reaches them with the conversation, never a run they cannot act on
+      expect(routineAccessNotifications({ threadId: at }, accessCardAudience(rings[0]!.access), { readable: (id) => readable(id, at) }))
+        .toEqual([{ threadId: at, audience: [admin] }]);
+    }
+    // the member who owns the bot sees no card of the organization's
+    expect(world.threads["alice-private"]!.filter((m) => m.kind === "access" && accessCardVisibleTo(m, "pr_alice"))).toHaveLength(0);
+    // told once: a second fallback, from another bot, raises nothing while a card is open
+    expect(counted.raise({ ...raise, botId: "wren", threadId: "bob-private" })).toBe(false);
+    expect(cards.raise({ ...raise, botId: "wren", threadId: "bob-private" })).toBe(false);
+    expect(world.rang).toHaveLength(2);
+    // the engine works again: every administrator's card closes
+    expect(signIn.retireKeyed("server-engine", undefined, true)).toBe(2);
+    expect(cardsIn(world.threads)).toHaveLength(0);
   });
 });

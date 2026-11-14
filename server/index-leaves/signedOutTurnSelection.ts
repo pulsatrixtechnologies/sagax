@@ -1,11 +1,10 @@
 // @ts-nocheck
 /** #3315: a turn whose engine is known to be signed out for its payer starts
  * on a backup the person chose, for this turn only (server/engines/signed-out-carry-on.ts).
- * Each such turn writes one quiet row (the Events lens); the person hears the
- * sign-out once a stretch, in this bot's chat and as a notification. */
-import { activeEngineRefusal, firstSignedOut, noteEngineRefusal, signedOutHeld } from "../engines/engine-refusals.ts";
+ * Each such turn writes one quiet row (the Events lens); the person who can
+ * fix it gets one keyed fix card per engine until it signs in again (#4233). */
+import { activeEngineRefusal, noteEngineRefusal, signedOutHeld } from "../engines/engine-refusals.ts";
 import { signedOutCarryOn } from "../engines/signed-out-carry-on.ts";
-import { buildNoticeNotification } from "../notify.ts";
 
 export type Host = Record<string, any>;
 
@@ -49,12 +48,10 @@ function signedOutTurnSelection(bot: BotRecord, threadId: string, speaker: TurnS
   const to = host.registry.get(selection.instanceId);
   const words = { from: host.engineDisplayName(from), to: to ? host.engineDisplayName(to) : selection.instanceId };
   host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: host.limitFailoverRow(threadId, { kind: "signedOut", ...words }) });
+  // #4233: told once to the person who can fix it, as the keyed fix card
+  // with the reconnect action (server/engines/engine-fallback-card.ts).
   const engine = engineOf(from.instanceId);
-  if (engine && firstSignedOut(engine.engine, engine.account, `notice:${bot.id}`)) {
-    const line = { kind: "signedOutNotice" as const, ...words };
-    host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: host.limitFailoverRow(threadId, line) });
-    host.notify(buildNoticeNotification(bot, threadId, host.limitLineWords(threadId, line)));
-  }
+  if (engine) host.raiseEngineFallback(bot, threadId, engine, words.to, "signed_out");
   return selection;
 }
   return signedOutTurnSelection;

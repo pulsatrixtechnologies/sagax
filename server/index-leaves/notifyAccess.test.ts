@@ -27,4 +27,24 @@ describe("notifyAccess routes an access card as a needs-you (#3719)", () => {
     expect(notificationInterrupts(sent)).toBe(true);
     expect(notificationInterrupts(failed as never)).toBe(false);
   });
+
+  it("#4233: a fix card with a backup answering meanwhile rings but writes no refused turn", () => {
+    const notify = vi.fn();
+    const appendProblem = vi.fn(() => Promise.resolve());
+    const host = {
+      DATA_DIR: "/nowhere",
+      IDENTITY: { kind: "solo" },
+      store: { bot: () => ({ id: "b1", name: "Nova" }), isConfidentialThread: () => false, taskByThread: () => null },
+      appendProblem,
+      reportBackgroundError: vi.fn(),
+      redactSecretsInText: (text: string) => text,
+      notify,
+    };
+    const note = { kind: "routine-deferred", botId: "b1", botName: "Nova", threadId: "t1", title: "Reconnect Claude", body: "Codex runs meanwhile" };
+    createNotifyAccess(() => host)(note, { botId: "b1", ownerPrincipalId: "p1", reason: "no_access", cause: "sign_in_expired", meanwhile: "Codex" });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(appendProblem).not.toHaveBeenCalled();
+    createNotifyAccess(() => host)(note, { botId: "b1", ownerPrincipalId: "p1", reason: "no_access", cause: "sign_in_expired" });
+    expect(appendProblem).toHaveBeenCalledTimes(1);
+  });
 });

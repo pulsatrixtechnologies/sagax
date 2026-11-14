@@ -7,7 +7,7 @@ import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer, type ReadinessEngine } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
-import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, clearSignedOut, persistSignedOutHolds, signedOutHeld } from "./engines/engine-refusals.ts";
+import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, clearSignedOut, onEngineWorksAgain, persistSignedOutHolds, signedOutHeld } from "./engines/engine-refusals.ts";
 import { PreSendRefusals } from "./engines/presend-refusals.ts";
 import { PerspicaxReachability, gatewayProbe, observedFetch } from "./perspicax/perspicax-reachability.ts";
 import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
@@ -209,7 +209,7 @@ import { DataFailure } from "./data/types.ts";
 import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
 import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
-import { type BotVisibility, type RelayVia, type ResolvedSender, type WaitingOnCard, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
+import { type BotVisibility, type RelayVia, type ResolvedSender, type WaitingOnCard, type WireBot, type WireTask } from "../shared/wire.ts";
 import { backgroundCardHome as backgroundCardHomeOf, backgroundRelayAllowed, earlierThreadCardHome, mcpThreadAnswerer, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
 import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
@@ -1638,6 +1638,7 @@ import { createPerformAsMember } from "./index-leaves/performAsMember.ts";
 import { createBotOneShotAccess, createOrgTurnAccess } from "./index-leaves/orgTurnAccess.ts";
 import { createOneShotSignIn } from "./engines/one-shot-sign-in.ts";
 import { createSignInCards } from "./engines/sign-in-cards.ts";
+import { adminCardHomes, createEngineFallbackCards, type EngineFallbackHome } from "./engines/engine-fallback-card.ts";
 import { createMountBotVps } from "./index-leaves/mountBotVps.ts";
 import { createApplyOrgEngineAllowList } from "./index-leaves/applyOrgEngineAllowList.ts";
 import { createScheduleApprovalExpiry } from "./index-leaves/scheduleApprovalExpiry.ts";
@@ -6536,6 +6537,7 @@ bindLeafHost({
   get appPiecesByThread() { return appPiecesByThread; },
   get limitFailoverStore() { return limitFailoverStore; },
   get limitFailoverRow() { return limitFailoverRow; },
+  get raiseEngineFallback() { return raiseEngineFallback; },
   get limitResumeText() { return limitResumeText; },
   get notePlanLimits() { return notePlanLimits; },
   get limitCandidatesNow() { return limitCandidatesNow; },
@@ -16008,6 +16010,13 @@ const limitFailover = createLimitFailoverHost({
   replaceFailure: (threadId, turnId, line, since) => writeLimitLine(store, threadId, turnId, line, since, {
     row: (written) => limitFailoverRow(threadId, written),
   }),
+  // #4233: out of credit with a backup in its place: one fix card per person and engine
+  onCreditFallback: (dispatch, threadId, backup) => {
+    const bot = store.bot(dispatch.botId);
+    const engine = bot ? routineEngineForBot(bot, dispatch.speaker as TurnSpeaker, dispatch.engine.instanceId) : undefined;
+    const to = registry.get(backup.instanceId);
+    if (bot && engine) raiseEngineFallback(bot, threadId, engine, to ? engineDisplayName(to) : backup.instanceId, "credits");
+  },
   request: (threadId) => directRequestOwners.get(threadId),
   autoRefuse: (threadId, payer, until) => {
     const ran = autoTurnsByThread.get(threadId)?.entry;
@@ -17157,6 +17166,53 @@ const signInCards = createSignInCards({
 store.onChange((change) => {
   if (change.type === "message") signInCards.noted(change.threadId, change.message);
 });
+// #4233: an engine signed out or out of credit with a backup running in its
+// place is told once, as a fix card for the person who can fix it, and the
+// card closes when the engine works again (server/engines/engine-fallback-card.ts).
+const engineFallbackCards = createEngineFallbackCards({
+  pendingKeyed: (key, person) => signInCards.pendingKeyed(key, person),
+  append: (threadId, access, text) => {
+    const bot = store.bot(access.botId);
+    store.appendMessage(threadId, { role: "bot", kind: "access", ...(bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}), access, text: text.slice(0, 500) });
+  },
+  notify: (access, threadId, text, title, routineRunId) => {
+    const bot = store.bot(access.botId);
+    if (bot) notifyAccess(deliverableNotification("routine-deferred", bot, threadId, text, { title }), access, routineRunId);
+  },
+});
+onEngineWorksAgain((engine, account, signedInOnly) => { signInCards.retireKeyed(engine, account, signedInOnly); });
+/** #4233: a server engine on an organization server is reconnected by the
+ * administrators: its fix card is theirs, in a conversation each of them can
+ * read (adminCardHomes): the one the backup ran in when they can read it,
+ * else their own Primary Bot's. Undefined: not a server engine. */
+function engineFallbackAdminHomes(bot: BotRecord, threadId: string, engine: { accessVia?: string }): EngineFallbackHome[] | undefined {
+  if (IDENTITY.kind !== "perspicax" || engine.accessVia !== "server") return undefined;
+  const admins = principals.list()
+    .filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined && !person.mergedInto)
+    .map((person) => person.id)
+    .slice(0, 10);
+  const place = (candidate: BotRecord, at: string) => ({ threadId: at, botId: candidate.id, ...(candidate.name ? { botName: candidate.name } : {}), ownerPrincipalId: effectiveBotOwner(candidate) });
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  return adminCardHomes(admins, place(bot, threadId), {
+    readable: (admin, at) => {
+      const home = store.bot(at.botId);
+      return Boolean(home) && botThreadReadable(home!, at.threadId, admin, "thread.read");
+    },
+    ownPlace: (admin) => {
+      const mine = store.bots.filter((candidate) => !candidate.temporary && !candidate.hidden && same(effectiveBotOwner(candidate), admin));
+      const own = mine.find((candidate) => candidate.chiefOfStaff === true) ?? mine[0];
+      const at = own ? botMainThread(own.id) : undefined;
+      return own && at ? place(own, at) : undefined;
+    },
+  });
+}
+function raiseEngineFallback(bot: BotRecord, threadId: string, engine: { engine: string; name: string; account?: string; accessVia?: string }, backupName: string, cause: "signed_out" | "credits", routineRunId?: string): boolean {
+  const adminHomes = engineFallbackAdminHomes(bot, threadId, engine);
+  return engineFallbackCards.raise({
+    botId: bot.id, ...(bot.name ? { botName: bot.name } : {}), ownerPrincipalId: effectiveBotOwner(bot), threadId,
+    engine, backupName, cause, ...(adminHomes ? { adminHomes } : {}), ...(routineRunId ? { routineRunId } : {}),
+  });
+}
 const oneShotSignIn = createOneShotSignIn<BotRecord, ProviderInstance>({
   account: (bot, instance) => botOneShotAccess(bot, instance),
   verdict: (message) => readinessFailureClass(message),
@@ -19828,6 +19884,10 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     const snapshot = await registry.get(engine.engine)?.snapshot();
     return snapshot ? { ...engine, signedIn: snapshot.state === "available" && snapshot.authenticated !== false, signedInAt: Date.now() } : engine;
   },
+  fallback: (_routine, run, primary, backup, cause) => {
+    const bot = store.bot(run.botId);
+    if (bot) raiseEngineFallback(bot, botMainThread(bot.id) ?? bot.threadId, primary, backup.name, cause, run.id);
+  },
   backup: async (routine, run, primary) => {
     const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
     const backup = await limitFailover.backupFor(run.botId, run.threadId ?? "", speaker, primary.engine);
@@ -20396,46 +20456,31 @@ routines = new RoutineManager({
       if (bot && namesEngine(bot.modelSelection)) return engineLogins.expired(principalId, driver, "primary", bot.modelSelection.instanceId);
       return engineLogins.expiredAny(principalId, driver);
     },
-    onAheadNotify: (principalId, detail, routineNames, engineName) => {
-      const bot = store.bots.find((candidate) => effectiveBotOwner(candidate) === principalId)
-        ?? store.bots.find((candidate) => {
-          if (!namesEngine(candidate.modelSelection)) return false;
-          const driver = registry.cliTarget(candidate.modelSelection.instanceId)?.driverKind;
-          return driver && LOGIN_ENGINE_LABEL[driver as keyof typeof LOGIN_ENGINE_LABEL] === engineName;
-        });
-      if (!bot) return;
+    onAheadNotify: (principalId, detail, routineNames, engineName, botIds) => {
+      // #4233: the bot whose routine is due first, on the engine that expired
+      const onEngine = (candidate: BotRecord) => {
+        if (!namesEngine(candidate.modelSelection)) return false;
+        const driver = registry.cliTarget(candidate.modelSelection.instanceId)?.driverKind;
+        return Boolean(driver && LOGIN_ENGINE_LABEL[driver as keyof typeof LOGIN_ENGINE_LABEL] === engineName);
+      };
+      const bot = botIds.map((id) => store.bot(id)).find((candidate): candidate is BotRecord => Boolean(candidate && onEngine(candidate)))
+        ?? store.bots.find((candidate) => effectiveBotOwner(candidate) === principalId && onEngine(candidate))
+        ?? store.bots.find(onEngine);
+      if (!bot || !namesEngine(bot.modelSelection)) return;
       const names = routineNames.slice(0, 3).map((name) => redactSecretsInText(name)).join(", ");
       const more = routineNames.length > 3 ? ` (+${routineNames.length - 3} more)` : "";
-      const threadId = botMainThread(bot.id) ?? bot.threadId;
-      const card: WireAccessCard = {
-        reason: "no_access",
-        cause: "sign_in_expired",
-        engine: engineName,
-        botId: bot.id,
-        ...(bot.name?.trim() ? { botName: bot.name.trim().slice(0, 200) } : {}),
-        ownerPrincipalId: effectiveBotOwner(bot),
-        payerPrincipalId: principalId,
-        subscriptionSignIn: true,
-        routine: true
-      };
+      // #4233: the same keyed card as a backup taking the engine's place:
+      // one card and one ring for this person and engine, whichever comes first
       try {
-        store.appendMessage(threadId, {
-          role: "bot",
-          kind: "access",
-          from: { botId: bot.id, name: bot.name, color: bot.color },
-          access: card,
-          text: detail.slice(0, 500)
+        engineFallbackCards.raiseAhead({
+          botId: bot.id, ...(bot.name ? { botName: bot.name } : {}), ownerPrincipalId: effectiveBotOwner(bot), payerPrincipalId: principalId,
+          threadId: botMainThread(bot.id) ?? bot.threadId,
+          engine: { engine: bot.modelSelection.instanceId, name: engineName },
+          detail, text: `${detail}${names ? ` Due soon: ${names}${more}.` : ""}`, title: `Reconnect ${engineName} before routines run`,
         });
       } catch (error) {
         console.error(`routine: reconnect card could not be written: ${error instanceof Error ? error.message : String(error)}`);
       }
-      notifyAccess(deliverableNotification(
-        "routine-deferred",
-        bot,
-        threadId,
-        `${detail}${names ? ` Due soon: ${names}${more}.` : ""}`,
-        { title: `Reconnect ${engineName} before routines run` },
-      ), card);
     }
   },
   // 2026-10-16: "Only when I'm here" (server/routines/routine-away.ts): the routine's

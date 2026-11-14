@@ -13,10 +13,11 @@ function notifyAccess(notification: Notification | null, access: WireAccessCard,
   // started the turn (server/notify.ts notificationInterrupts)
   notification = { ...notification, kind: "needs-you" };
   // A refused turn, for the console's Overview (server/org/org-problem-log.ts).
+  // #4233: a fix card with a backup running meanwhile is no refused turn.
   const refusedBot = host.store.bot(access.botId);
   // a confidential thread's row names nothing of it (server/threads/confidential-threads.ts)
   const refusedConfidential = host.store.isConfidentialThread(notification.threadId);
-  void host.appendProblem(DATA_DIR, {
+  if (!access.meanwhile) void host.appendProblem(DATA_DIR, {
     kind: "refused", botId: access.botId, botName: refusedBot?.name ?? access.botId, ownerPrincipalId: access.ownerPrincipalId || null,
     threadId: notification.threadId, title: refusedBot && !refusedConfidential ? host.store.taskByThread(refusedBot.id, notification.threadId)?.title ?? null : null,
     engine: refusedBot?.modelSelection?.instanceId ?? null,

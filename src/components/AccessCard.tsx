@@ -94,7 +94,16 @@ export function accessCardLines(access: WireAccessCard, viewer: AccessViewer): A
   // whose credentials the turn needed: the speaker, or the owner for a
   // routine; a card from before payerPrincipalId is the owner's (as on the server)
   const payer = access.payerPrincipalId || access.ownerPrincipalId;
-  const mine = same(viewer.principalId, payer);
+  // #4233: a server engine's fix card is for the administrators who reconnect it
+  const server = Boolean(access.audiencePrincipalIds?.length);
+  const mine = server ? access.audiencePrincipalIds!.some((id) => same(viewer.principalId, id)) : same(viewer.principalId, payer);
+  // #4233: a backup runs meanwhile; the card says which, and what brings the engine back
+  if (access.meanwhile && (access.cause === "sign_in_expired" || access.cause === "out_of_credit")) {
+    if (!mine) return { text: t("access.noAccess.other", { engine }) };
+    const words = { engine, backup: access.meanwhile };
+    if (access.cause === "out_of_credit") return { text: t(server ? "access.serverOutOfCredit.meanwhile" : "access.outOfCredit.meanwhile", words) };
+    return { text: t(server ? "access.serverSignInExpired.meanwhile" : "access.signInExpired.meanwhile", words), signIn: true, signInLabel: t("engineConnect.reconnect", { name: engine }) };
+  }
   // #1533: the person's own subscription sign-in expired: they reconnect it
   if (access.cause === "sign_in_expired") {
     if (!mine) return { text: t("access.noAccess.other", { engine }) };

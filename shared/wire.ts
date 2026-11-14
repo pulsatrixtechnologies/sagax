@@ -826,8 +826,10 @@ export interface WireAccessCard {
   /** `owner_model_offline` (#1137): the owner pays and the bot runs on the
    * local model of the owner's computer, which is not connected now.
    * `sign_in_expired` (#1533): the payer's own subscription sign-in was
-   * refused and could not be refreshed: they reconnect it. */
-  cause?: "payer_disabled" | "no_credentials" | "server_engine_not_allowed" | "owner_model_offline" | "sign_in_expired";
+   * refused and could not be refreshed: they reconnect it.
+   * `out_of_credit` (#4233): the engine's account is out of credit and a
+   * backup runs meanwhile (`meanwhile`): credit is added with the provider. */
+  cause?: "payer_disabled" | "no_credentials" | "server_engine_not_allowed" | "owner_model_offline" | "sign_in_expired" | "out_of_credit";
   /** The bot's routine: it runs on its owner's credentials only. */
   routine?: true;
   /** #1137: the bot's name, when the card was written. */
@@ -856,6 +858,15 @@ export interface WireAccessCard {
   routineId?: string;
   routineName?: string;
   suspendReason?: "delegation_missing" | "delegation_ended" | "delegation_revoked" | "person_out" | "no_right";
+  /** #4233: a keyed fix card (`engine-sign-in:<instance id>`, the engine in
+   * `instanceId`): one per person and engine, raised when a backup runs in
+   * the engine's place, closed when the engine works again. */
+  key?: string;
+  /** #4233: the backup engine's display name that runs meanwhile. */
+  meanwhile?: string;
+  /** #4233: a server engine's card goes to the organization's
+   * administrators, who reconnect it: they are its audience. */
+  audiencePrincipalIds?: string[];
 }
 
 /** One transcript line. Serialized as stored — the durable delivery

@@ -549,6 +549,9 @@ interface RoutineFile {
   /** 2026-10-28: each bot's routine folders in the person's order (bot id
    * -> names). Absent on an older file: folders come from the routines. */
   folders?: Record<string, string[]>;
+  /** #4233: the people already told their login engine expired
+   * (`person\0Engine`), so a restart does not ring again. */
+  engineReconnectNotified?: string[];
 }
 
 const webhookRunReceiptSchema = z.object({
@@ -691,7 +694,7 @@ export interface RoutineManagerOptions {
      * the person's accounts on this driver. */
     expired: (principalId: string, driver: string, botId?: string) => boolean;
     /** Person to notify before due routines fire (once per person+engine). */
-    onAheadNotify?: (principalId: string, detail: string, routineNames: string[], engineName: string) => void;
+    onAheadNotify?: (principalId: string, detail: string, routineNames: string[], engineName: string, botIds: string[]) => void;
   };
   /** @deprecated Prefer engineReconnect. Kept for existing tests. */
   claudeReconnect?: {
@@ -1908,7 +1911,8 @@ export class RoutineManager {
   private passAgain = false;
   /** routine id -> the occurrence (nextRunAt) already pre-woken. */
   private readonly prewoken = new Map<string, number>();
-  /** People+engine already told for the current expired spell (`person\0Engine`). */
+  /** People+engine already told for the current expired spell (`person\0Engine`),
+   * kept on disk (#4233: a restart does not ring again). */
   private readonly engineReconnectNotified = new Set<string>();
   /** Bots whose login engine is expired: their next starts wait for reconnect. */
   private readonly engineReconnectPauseBots = new Map<string, string>();
@@ -2082,6 +2086,9 @@ export class RoutineManager {
         : [];
       this.ownerNotices = loadOwnerNotices(disk.ownerNotices);
       this.folderOrder = loadFolderOrder(disk.folders);
+      if (Array.isArray(disk.engineReconnectNotified)) {
+        for (const key of disk.engineReconnectNotified.slice(0, 2_000)) if (typeof key === "string" && key.length <= 400) this.engineReconnectNotified.add(key);
+      }
       this.frozenPending = disk.frozenResultsCleared !== true;
       if (typeof disk.startupLaunchId === "string") this.startupLaunchId = disk.startupLaunchId;
       // Upgrade old run logs before history pruning can discard their IDs:
@@ -3632,6 +3639,8 @@ export class RoutineManager {
     for (const [botId, engineName] of result.pauseEngineByBot) {
       this.engineReconnectPauseBots.set(botId, engineName);
     }
+    const toldBefore = this.engineReconnectNotified.size;
+    let toldChanged = false;
     for (const entry of result.notify) {
       this.engineReconnectNotified.add(`${entry.principalId}\0${entry.engineName}`);
       try {
@@ -3640,6 +3649,7 @@ export class RoutineManager {
           engineReconnectAheadDetail(entry.engineName),
           entry.routineNames,
           entry.engineName,
+          entry.botIds,
         );
       } catch { /* best effort */ }
     }
@@ -3647,13 +3657,14 @@ export class RoutineManager {
     for (const key of Array.from(this.engineReconnectNotified)) {
       const [person, engineName] = key.split("\0");
       if (!person || !engineName) {
-        this.engineReconnectNotified.delete(key);
+        toldChanged = this.engineReconnectNotified.delete(key) || toldChanged;
         continue;
       }
       const driver = (Object.entries(LOGIN_ENGINE_LABEL) as Array<[LoginDriver, string]>)
         .find(([, label]) => label === engineName)?.[0];
-      if (!driver || !gate.expired(person, driver)) this.engineReconnectNotified.delete(key);
+      if (!driver || !gate.expired(person, driver)) toldChanged = this.engineReconnectNotified.delete(key) || toldChanged;
     }
+    if (toldChanged || this.engineReconnectNotified.size !== toldBefore) this.saveLater();
   }
 
   /** Cheap live check: is this bot's login engine marked expired right now? */
@@ -5042,6 +5053,7 @@ export class RoutineManager {
       this.engineReconnectPauseBots.clear();
     }
     // Allow a fresh ahead notification if that engine expires again later.
+    const toldBefore = this.engineReconnectNotified.size;
     if (engineName) {
       for (const key of Array.from(this.engineReconnectNotified)) {
         if (key.endsWith(`\0${engineName}`)) this.engineReconnectNotified.delete(key);
@@ -5049,6 +5061,7 @@ export class RoutineManager {
     } else {
       this.engineReconnectNotified.clear();
     }
+    if (this.engineReconnectNotified.size !== toldBefore) this.saveLater();
     if (!resumed.length) return [];
     this.saveLater();
     for (const run of resumed) {
@@ -6027,6 +6040,7 @@ export class RoutineManager {
       ...(this.startupLaunchId === undefined ? {} : { startupLaunchId: this.startupLaunchId }),
       ...(this.ownerNotices.length ? { ownerNotices: this.ownerNotices } : {}),
       ...(this.folderOrder.size ? { folders: Object.fromEntries(this.folderOrder) } : {}),
+      ...(this.engineReconnectNotified.size ? { engineReconnectNotified: [...this.engineReconnectNotified] } : {}),
     } satisfies RoutineFile));
   }
 }

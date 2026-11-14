@@ -97,4 +97,27 @@ describe("the access card: a bot's sign-in request (#1545)", () => {
     const html = renderToStaticMarkup(createElement(AccessCard, { access: signIn, viewer: { principalId: OWNER, admin: false }, onSignIn: () => {} }));
     expect(html).toContain("data-access-sign-in");
   });
+
+  it("#4233: a backup running meanwhile is named, with the way back", () => {
+    const fix = { ...card, engine: "Claude", payerPrincipalId: BOB, cause: "sign_in_expired" as const, subscriptionSignIn: true as const, key: "engine-sign-in:claude", instanceId: "claude", meanwhile: "Codex" };
+    expect(accessCardLines(fix, { principalId: BOB, admin: false })).toEqual({
+      text: "Your Claude sign-in has expired: Codex answers in its place meanwhile. Reconnect Claude to go back to it.",
+      signIn: true,
+      signInLabel: "Reconnect Claude",
+    });
+    expect(accessCardLines({ ...fix, cause: "out_of_credit" as const }, { principalId: BOB, admin: false })).toEqual({
+      text: "Your Claude account is out of credit: Codex answers in its place meanwhile. Add credit with the provider to go back to Claude.",
+    });
+    // a server engine's card: the administrators reconnect it, nobody else gets the button
+    const server = { ...fix, payerPrincipalId: undefined, audiencePrincipalIds: ["pr_admin"] };
+    expect(accessCardLines(server, { principalId: "pr_admin", admin: true })).toMatchObject({ signIn: true, text: expect.stringContaining("The server's Claude sign-in has expired") });
+    expect(accessCardLines(server, { principalId: OWNER, admin: false })).not.toHaveProperty("signIn");
+    // a server engine out of credit: the organization's account, not the administrator's own
+    expect(accessCardLines({ ...server, cause: "out_of_credit" as const }, { principalId: "pr_admin", admin: true })).toEqual({
+      text: "The server's Claude account is out of credit: Codex answers in its place meanwhile. Add credit with the provider for the organization to go back to Claude.",
+    });
+    setLocale("fr");
+    expect(accessCardLines({ ...server, cause: "out_of_credit" as const }, { principalId: "pr_admin", admin: true })?.text).toBe("Le compte Claude du serveur n'a plus de crédit : Codex répond à sa place en attendant. Ajoute du crédit chez le fournisseur pour l'organisation afin de revenir à Claude.");
+    expect(accessCardLines(fix, { principalId: BOB, admin: false })).toMatchObject({ text: "Ta connexion Claude a expiré : Codex répond à sa place en attendant. Reconnecte Claude pour y revenir." });
+  });
 });

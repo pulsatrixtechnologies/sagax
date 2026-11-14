@@ -118,6 +118,9 @@ export interface LimitFailoverHostDeps {
   /** Turns this turn's failure row (its own, or the last written since the
    * turn was dispatched) into the line; appends it when there is none. */
   replaceFailure: (threadId: string, turnId: string | undefined, line: LimitFailoverLine, since: number) => void;
+  /** #4233: the turn's engine is out of credit and `backup` runs in its
+   * place: the person who can add credit is told once (engine-fallback-card.ts). */
+  onCreditFallback?: (dispatch: LimitDispatch, threadId: string, backup: ModelSelection) => void;
   request: (threadId: string) => LimitRequest | undefined;
   /** Sends the person's message again on the thread's engine now; false
    * when it is no longer the latest, or the thread is busy or gone. */
@@ -524,6 +527,11 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     const backLine: LimitFailoverLine | null = backHome
       ? { kind: "back", engine: deps.engineName(backHome.instanceId), refused: deps.engineName(dispatch.engine.instanceId) }
       : null;
+    /** #4233: an engine out of credit that a backup now stands in for. */
+    const toldCredit = (target: ModelSelection) => {
+      if (!credits || target === backHome) return;
+      try { deps.onCreditFallback?.(dispatch, threadId, target); } catch (error) { reportBackgroundError(error); }
+    };
     if (run) {
       if (backup && store.takeResend(`routine:${run.id}`)) {
         if (backHome && backLine) {
@@ -544,6 +552,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
               kind: "switched", from: deps.engineName(dispatch.engine.instanceId), to: deps.engineName(backup.instanceId),
               resetsAt: deps.now(), reason: "model",
             }, dispatch.at);
+            toldCredit(backup);
             return;
           }
           if (refused) console.warn(`[limit-failover] ${threadId}: could not move to ${backup.instanceId}: ${refused}`);
@@ -556,7 +565,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           if (!refused) {
             const kept = store.record({ botId: dispatch.botId, threadId, from: dispatch.selection, to: backup, ...moved, at: deps.now() });
             deps.replaceFailure(threadId, turnId, switchedTo(backup, kept), dispatch.at);
-            if (deps.rerunRoutine(run.routineId, run.id)) return;
+            if (deps.rerunRoutine(run.routineId, run.id)) { toldCredit(backup); return; }
           } else {
             console.warn(`[limit-failover] ${threadId}: could not move to ${backup.instanceId}: ${refused}`);
           }
@@ -591,7 +600,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       deps.replaceFailure(threadId, turnId, {
         kind: "switched", from, to: "Auto", resetsAt, ...(exhausted ? { reason: "model" as const } : estimated ? { estimated: true as const } : {}),
       }, dispatch.at);
-      await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
+      const resent = await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
+      if (resent && backup) toldCredit(backup);
       return;
     }
     if (!auto && backup && store.takeResend(own.messageId)) {
@@ -619,6 +629,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           deps.replaceFailure(threadId, turnId, { ...line, ...(dispatch.owner ? { owner: true as const } : {}) }, dispatch.at);
         }
         const resent = await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
+        if (resent) toldCredit(target);
         // #1942: a silent switch with a failed resend must never end the turn
         // as done with an empty reply.
         if (!resent) {

@@ -31,6 +31,7 @@ import { defang } from "../triggers/webhooks.ts";
 import type { ReachChannel, ReachInbound, ReachOutbound } from "./channel.ts";
 import type { ReachCode, ReachCodeStore, ReachMeStore } from "./store.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { SignalLedger } from "../proactive/signal-ledger.ts";
 
 /** An open card, as the reach-me message names it. */
 export interface ReachCard {
@@ -92,7 +93,17 @@ export interface ReachMeDeps {
   audit(row: ReachAuditRow): void;
   now?(): number;
   log?(line: string): void;
+  /** #4250: the signal ledger that keeps the open cards' reminder clocks and
+   * the notices sent, so a restart neither rings twice nor starts a clock
+   * over. Absent: one in memory. */
+  signals?: SignalLedger;
 }
+
+/** #4250: the ledger kinds of a card followed for its reminders and of a
+ * notice sent. */
+export const REACH_CARD_KIND = "reach-card";
+export const REACH_NOTICE_KIND = "reach-notice";
+const reachCardSignalKey = (threadId: string, requestId: string) => `reach-card:${threadId}:${requestId}`;
 
 export type ReachReplyOutcome = "allowed" | "denied" | "answered" | "needs_key" | "unclear" | "settled" | "unknown_code" | "refused" | "rate_limited" | "no_code";
 
@@ -141,15 +152,18 @@ export class ReachMe {
   private readonly sending = new Set<string>();
   /** Notices that came outside the person's hours: sent when the next range starts. */
   private readonly deferredNotices = new Map<string, ReachNotice>();
-  /** Notices already sent (one send per id). */
-  private readonly noticed = new Set<string>();
-  /** Open cards and how many reminders each got (#2645). In memory: a restart starts their clocks again. */
-  private readonly open = new Map<string, { message: PushMessage; raisedAt: number; reminded: number }>();
+  /** #4250: notices sent (one send per id) and open cards with their
+   * reminder clocks (#2645), in the person's signal ledger on disk. */
+  private readonly signals: SignalLedger;
+  /** The push each open card was raised with, this process (after a restart
+   * the reminder is rebuilt from the card). */
+  private readonly raised = new Map<string, PushMessage>();
 
   constructor(deps: ReachMeDeps) {
     this.deps = deps;
     this.now = deps.now ?? Date.now;
     this.log = deps.log ?? ((line) => console.log(line));
+    this.signals = deps.signals ?? new SignalLedger({ now: this.now });
   }
 
   /** The person's saved choice for that bot, or null (push only, any hour). */
@@ -177,11 +191,15 @@ export class ReachMe {
   cardRaised(message: PushMessage): void {
     try {
       if (message.kind !== "approval" || !message.botId || !message.threadId || !message.requestId) return;
-      const openKey = `${message.personId}\u0000${cardKey(message.threadId, message.requestId)}`;
-      if (!this.open.has(openKey)) {
-        if (this.open.size > 2_000) this.open.delete(this.open.keys().next().value!);
-        this.open.set(openKey, { message, raisedAt: this.now(), reminded: 0 });
+      const signalKey = reachCardSignalKey(message.threadId, message.requestId);
+      const followed = this.signals.get(message.personId, message.botId, signalKey);
+      // the same card heard twice keeps its first clock
+      if (!followed || (followed.state !== "open" && followed.state !== "told")) {
+        if (followed) this.signals.forget(message.personId, message.botId, signalKey);
+        this.signals.note(message.personId, { key: signalKey, kind: REACH_CARD_KIND, level: "urgent", bot: message.botId, label: message.title, ref: { threadId: message.threadId, requestId: message.requestId } });
       }
+      if (this.raised.size > 2_000) this.raised.delete(this.raised.keys().next().value!);
+      this.raised.set(`${message.personId}\u0000${signalKey}`, message);
       const settings = this.deps.settings.get(message.personId, message.botId);
       if (!settings) return;
       if (!withinReachHours(settings.hours, this.now())) {
@@ -204,7 +222,7 @@ export class ReachMe {
    * their hours it waits for the next range. Never throws. */
   notice(notice: ReachNotice): void {
     try {
-      if (this.noticed.has(notice.id)) return;
+      if (this.signals.get(notice.person, notice.botId, notice.id)) return;
       const settings = this.deps.settings.get(notice.person, notice.botId) ?? DEFAULT_REACH_ME;
       if (!withinReachHours(settings.hours, this.now())) {
         if (this.deferredNotices.size > 2_000) this.deferredNotices.delete(this.deferredNotices.keys().next().value!);
@@ -223,8 +241,8 @@ export class ReachMe {
   }
 
   private sendNotice(notice: ReachNotice, settings: ReachMeSettings): void {
-    this.noticed.add(notice.id);
-    if (this.noticed.size > 4_000) this.noticed.delete(this.noticed.values().next().value!);
+    this.signals.told(notice.person, { key: notice.id, kind: REACH_NOTICE_KIND, level: "card", bot: notice.botId, label: notice.title, ref: { threadId: notice.threadId } },
+      settings.channels.filter((channel) => channel === "push" || (REACH_WIRED as readonly string[]).includes(channel)));
     if (reachesBy(settings, "push")) {
       this.deps.push({
         kind: "message", personId: notice.person, title: notice.botName || notice.title,
@@ -285,41 +303,56 @@ export class ReachMe {
    * hours and only where a push is their choice for that bot. The tap opens the card's own conversation. */
   private remind(): void {
     const now = this.now();
-    for (const [key, entry] of this.open) {
-      const { message } = entry;
-      if (!this.deps.card(message.threadId!, message.requestId!)) {
-        this.open.delete(key);
+    for (const { person, entry } of this.followedCards()) {
+      const { threadId, requestId } = entry.ref as { threadId: string; requestId: string };
+      const card = this.deps.card(threadId, requestId);
+      if (!card) {
+        this.signals.settle(person, entry.bot, entry.key, "retired");
         continue;
       }
-      const due = CARD_REMINDER_AFTER_MS[entry.reminded];
-      if (due === undefined) {
-        this.open.delete(key);
-        continue;
-      }
-      if (now - entry.raisedAt < due) continue;
-      const settings = this.deps.settings.get(message.personId, message.botId ?? "") ?? DEFAULT_REACH_ME;
+      const reminded = entry.reminded ?? 0;
+      const due = CARD_REMINDER_AFTER_MS[reminded];
+      if (due === undefined || now - entry.firstAt < due) continue;
+      const settings = this.deps.settings.get(person, entry.bot) ?? DEFAULT_REACH_ME;
       if (!withinReachHours(settings.hours, now)) continue;
-      entry.reminded += 1;
-      if (!reachesBy(settings, "push")) continue;
-      const hours = Math.floor((now - entry.raisedAt) / 3_600_000);
-      const prefix = REMINDER_PREFIX[this.deps.language(message.personId)];
+      const step = reminded + 1;
+      const pushes = reachesBy(settings, "push");
+      // the step is on disk before it rings: a restart never rings it again
+      this.signals.reminded(person, entry.bot, entry.key, step, pushes ? ["push"] : []);
+      if (!pushes) continue;
+      const message: PushMessage = this.raised.get(`${person}\u0000${entry.key}`) ?? {
+        kind: "approval", personId: person, title: entry.label ?? card.botName, body: card.title,
+        threadId, botId: entry.bot, requestId, prompt: card.kind, ...(card.needsKey ? { needsKey: true } : {}), at: entry.firstAt,
+      };
+      const hours = Math.floor((now - entry.firstAt) / 3_600_000);
+      const prefix = REMINDER_PREFIX[this.deps.language(person)];
       this.deps.push({
         ...message,
         title: `${prefix} (${hours} h) · ${message.title}`.slice(0, 120),
-        id: `${message.id ?? key}:reminder${entry.reminded}`,
+        id: `${message.id ?? `${person}\u0000${cardKey(threadId, requestId)}`}:reminder${step}`,
         at: now,
       });
     }
   }
 
+  /** Cards still followed for a reminder: open, with a step left. */
+  private followedCards() {
+    return this.signals.entries({ kind: REACH_CARD_KIND }).filter(({ entry }) =>
+      (entry.state === "open" || entry.state === "told") && entry.ref?.requestId && (entry.reminded ?? 0) < CARD_REMINDER_AFTER_MS.length);
+  }
+
   /** Open cards being followed for a reminder (tests). */
   openCardCount(): number {
-    return this.open.size;
+    return this.followedCards().length;
   }
 
   /** A card was answered (anywhere), dismissed or expired: its code goes. */
   cardSettled(threadId: string, requestId?: string): void {
-    for (const key of this.open.keys()) if (key.includes(`\u0000${threadId}\u0000`) && (!requestId || key.endsWith(`\u0000${requestId}`))) this.open.delete(key);
+    for (const { person, entry } of this.followedCards()) {
+      if (entry.ref?.threadId !== threadId || (requestId && entry.ref.requestId !== requestId)) continue;
+      this.signals.settle(person, entry.bot, entry.key, "retired");
+      this.raised.delete(`${person}\u0000${entry.key}`);
+    }
     if (requestId) {
       this.deferred.delete(cardKey(threadId, requestId));
       this.deps.codes.dropCard(threadId, requestId);

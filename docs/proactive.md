@@ -261,3 +261,41 @@ Tests: `server/proactive/flow-watches.test.ts`,
 `server/routes/proactive-choices.test.ts`,
 `server/proactive/watch-tokens.test.ts`, `server/proactive/proactive-wake.test.ts`,
 `server/proactive/proactive-default.test.ts`.
+
+## Signal ledger (`server/proactive/signal-ledger.ts`, #4250)
+
+One store per person, on disk under `DATA_DIR/signal-ledger/` (one file per
+person, named by a hash of the person, mode 0600), of what was noticed and
+told: `{key, kind, level, bot, firstAt, lastAt, count, toldAt, channels,
+state, answer}` with `state` one of `open`, `told`, `answered`, `retired`,
+`expired`, plus the reminder steps already told. The key is the one the
+writer already used. It holds what were separate memories, so a restart
+neither wakes twice, rings twice nor starts a reminder clock over:
+
+- the waker's event keys (kind `event`): a second offer of a key is a
+  duplicate, a restart included; a dropped watch event is forgotten so its
+  cadence offers it again;
+- the engine sign-in notices (kind `engine-sign-in`, key
+  `engine-sign-in:<engine>`), retired when the engine works again;
+- a bot's owner notices (kind `owner-notice`, key `owner-notice:<cause>`),
+  once per bot and cause until a run of that bot completes;
+- the reach-me open cards and their reminder steps (kind `reach-card`) and
+  the notices sent (kind `reach-notice`);
+- the routine fix card's told state and its day reminder (kind
+  `routine-problem`, key `routine-problem:<routineId>`).
+
+`tellPerson` (`createTellPerson`) is the one way a proactive item reaches
+`notify`: a run's failure, wait or away skips, a wake item's needs-you
+and a run's own needs-you card (key `needs-you:run:<runId>:<cardId>`), a
+routine paused (key `routine-suspended:<routineId>:<reason>:<at>`, once per
+pause), a daily suggestion (key `proposal:<proposalId>`), an engine's fix
+card, the fix card's reminder. The fix card's first ring still goes through
+the question card path (lot S2 folds it in). It rings once per key and step,
+records the item as told, and ends in one `[signal]` log line.
+
+The routines file still carries `ownerNotices` and `engineReconnectNotified`,
+written from the ledger, so the previous version reads them for one release;
+a file of the previous version moves into the ledger at load.
+
+Tests: `server/proactive/signal-ledger.test.ts` (one restart test per moved
+memory).

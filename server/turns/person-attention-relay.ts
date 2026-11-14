@@ -52,7 +52,10 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
   routineRun(threadId: string): { id: string; routineName: string; status: string } | null;
   /** A deep link to a ConnectWise ticket, when the site is known. */
   ticketUrl?(threadId: string, ticketId: number): string | undefined;
-  notify(bot: B, threadId: string, title: string, body: string): void;
+  /** #4250: `source` is the bot's message the ring is about, in the
+   * conversation it was said in: the ring is keyed on it, and the person is
+   * the one of that conversation. */
+  notify(bot: B, threadId: string, title: string, body: string, source: { threadId: string; messageId: string }): void;
   /** #2694: the person's feedback on this kind of card ("attention", or the
    * run card's wake kind): "muted" posts nothing, "quiet" posts the card
    * without ringing or marking unread. Absent: "normal". */
@@ -288,7 +291,7 @@ export function relayPersonAttention<B extends AttentionBot>(
     if (!ring) return { posted: true, threadId: target, card, onRunCard: true };
     deps.markUnread(bot.id, target);
     deps.notify(bot, target, card.kind === "question" ? `${bot.name} has a question for you` : `${bot.name} needs you`,
-      card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"));
+      card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"), { threadId, messageId: last.id });
     return { posted: true, threadId: target, card, onRunCard: true };
   }
   const row = deps.append(target, {
@@ -298,7 +301,7 @@ export function relayPersonAttention<B extends AttentionBot>(
   if (!ring) return { posted: true, threadId: target, card, ...carried(row) };
   deps.markUnread(bot.id, target);
   deps.notify(bot, target, card.kind === "question" ? `${bot.name} has a question for you` : `${bot.name} needs you`,
-    card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"));
+    card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"), { threadId, messageId: last.id });
   return { posted: true, threadId: target, card, ...carried(row) };
 }
 
@@ -367,7 +370,7 @@ export function mirrorLateRunReply<B extends AttentionBot>(
   else deps.append(target, { role: "bot", kind: "routine.run", ...row });
   if (!rings) return true;
   deps.markUnread(bot.id, target);
-  deps.notify(bot, target, `${bot.name}: ${run.routineName}`, words.slice(0, 300));
+  deps.notify(bot, target, `${bot.name}: ${run.routineName}`, words.slice(0, 300), { threadId, messageId: last.id });
   return true;
 }
 

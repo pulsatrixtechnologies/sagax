@@ -9,6 +9,7 @@ import { needsYouNotificationWords } from "../runtime-events/question-notificati
 import { routineReportsByStreak, routineRunRowInEveryChat, routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { routineRunWidget } from "../routines/routine-run-widget.ts";
+import { signalKeys } from "../proactive/signal-ledger.ts";
 export type Host = Record<string, any>;
 
 /** #3990: one log line per routine run row written, updated or taken back. */
@@ -385,12 +386,17 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     // #2909: the person reads what happened and what each answer does
     // before choosing; the tap opens the chat on this card.
     const words = needsYouNotificationWords(attention);
-    host.notify(host.deliverableNotification("needs-you", runBotRecord, sourceThreadId, words.line, {
-      avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName,
-      ...(words.question ? { question: words.question } : {}), context: words.context,
-      ...(words.choices.length ? { choices: words.choices } : {}),
-      ...(cardId ? { cardId } : {}),
-    }));
+    // #4250: told through tellPerson, once per run and card (a restart included)
+    host.tellPerson(host.routineRunPerson(run, runBotRecord), {
+      key: signalKeys.runNeedsYou(run.id, cardId ?? sourceThreadId), kind: "needs-you", bot: runBotRecord.id,
+      label: run.routineName, ref: { threadId: sourceThreadId },
+      notification: { notification: host.deliverableNotification("needs-you", runBotRecord, sourceThreadId, words.line, {
+        avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName,
+        ...(words.question ? { question: words.question } : {}), context: words.context,
+        ...(words.choices.length ? { choices: words.choices } : {}),
+        ...(cardId ? { cardId } : {}),
+      }) },
+    });
   }
   return sourceThreadId;
 

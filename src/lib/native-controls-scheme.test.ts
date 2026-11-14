@@ -19,6 +19,12 @@ describe("native controls on a skin (#1507)", () => {
     expect(rule("[data-skin]")).toMatch(/color-scheme:\s*var\(--code-color-scheme\)/);
   });
 
+  it("keeps one [data-skin] block, so the scheme is found where it is set (#4198)", () => {
+    // #4182 opened a second `[data-skin] {` block for the message bar's
+    // inks; the lookup above then read that one and lost the scheme.
+    expect(css.split("[data-skin] {").length - 1).toBe(1);
+  });
+
   it("names a scheme in every skin", () => {
     const skins = [...css.matchAll(/^\[data-skin="([a-z0-9-]+)"\] \{([\s\S]*?)\n\}/gm)];
     expect(skins.length).toBeGreaterThan(5);

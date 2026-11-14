@@ -32,7 +32,8 @@ describe("the message bar's look (#4152)", () => {
   });
 
   it("mixes the reference's alphas from the skin's ink, light skins at the light values", () => {
-    const dark = rule(/:root,\s*\[data-skin\]/);
+    // one selector list since #4198, so no line reads as the [data-skin] block
+    const dark = rule(/:is\(:root, \[data-skin\]\)/);
     expect(dark).toMatch(/--composer-placeholder:\s*color-mix\(in srgb, var\(--color-ink\) 38%, transparent\)/);
     expect(dark).toMatch(/--composer-control-fill:\s*color-mix\(in srgb, var\(--color-ink\) 4%, transparent\)/);
     expect(dark).toMatch(/--composer-control-ring:\s*color-mix\(in srgb, var\(--color-ink\) 6%, transparent\)/);

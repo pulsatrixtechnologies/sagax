@@ -95,7 +95,9 @@ export type TeamBoardWaitingCode = TeamBoardWaitingCause["code"];
  * or failed (5xx, network); `unknown`: another refusal. */
 export type TeamBoardGithubReason = "not_connected" | "bad_token" | "sso" | "token_scope" | "no_access" | "rate_limited" | "outage" | "unknown";
 export type TeamBoardStatus = "free" | "taken" | "running" | "waiting_you" | "waiting_review" | "waiting_release" | "released" | "blocked";
-export interface TeamBoardSummary { inProgress: number; waitingYou: number; blocked: number; mergedThisWeek: number; oldestInProgress?: { key: string; days: number } }
+/** `oldestInProgress.hours`: the same age in whole hours, since aging is
+ * counted in hours (TEAM_BOARD_NO_MOVEMENT_MS); `days` kept for older pages. */
+export interface TeamBoardSummary { inProgress: number; waitingYou: number; blocked: number; mergedThisWeek: number; oldestInProgress?: { key: string; days: number; hours?: number } }
 export interface TeamBoardLane { sectionId: string; name: string; lead?: { botId: string; name: string }; repos: string[]; cards: TeamBoardCard[];
   /** (#3449) Open issues of the repositories whose untouched issues this
    * lane draws (its To do) that the read did not load: GitHub's count of
@@ -270,6 +272,6 @@ export function boardSummary(cards: readonly TeamBoardCard[], now: number): Team
     waitingYou: cards.filter((card) => card.status === "waiting_you").length,
     blocked: cards.filter((card) => card.column === "blocked").length,
     mergedThisWeek: cards.filter((card) => card.column === "merged").length,
-    ...(oldest ? { oldestInProgress: { key: oldest.key, days: Math.floor((now - oldest.at) / 86_400_000) } } : {}),
+    ...(oldest ? { oldestInProgress: { key: oldest.key, days: Math.floor((now - oldest.at) / 86_400_000), hours: Math.floor((now - oldest.at) / 3_600_000) } } : {}),
   };
 }

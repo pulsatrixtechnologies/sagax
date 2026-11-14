@@ -530,7 +530,14 @@ export class WatchMemory {
   /** The watch is no longer chosen: its routine was paused; a later yes
    * turns it on again. */
   unapply(person: string, watchId: string): void {
-    const { applied: _applied, ...state } = this.get(person, watchId);
+    const { applied: _applied, fired: _fired, ...state } = this.get(person, watchId);
+    this.set(person, watchId, state);
+  }
+
+  /** The key told before #4250 no longer holds back the next check (a
+   * wake lost to a restart fires again). */
+  unfire(person: string, watchId: string): void {
+    const { fired: _fired, ...state } = this.get(person, watchId);
     this.set(person, watchId, state);
   }
 
@@ -1033,6 +1040,9 @@ export class FlowWatches {
       // the template, not its resolved dates: one condition from day to day
       stateKey: `flow-watch:${watch.id}:${JSON.stringify([watch.observe, watch.when])}`,
       firstRun: "wake",
+      // the key the loop of a server before #4250 already told: the first
+      // check after the upgrade compares with it, so a roll repeats nothing
+      ...(state.fired !== undefined ? { seed: { key: state.fired, at: state.last ?? state.alertAt ?? 0 } } : {}),
     };
     const verdict = await this.deps.evaluate(routine, precheck);
     this.deps.memory.observed(person, watch.id);
@@ -1053,6 +1063,9 @@ export class FlowWatches {
   replay(botId: string, watchId: string): void {
     const person = this.deps.owner(botId);
     const routine = person ? this.deps.memory.get(person, watchId).routine : undefined;
-    if (routine) this.deps.forgetState?.(routine);
+    if (!person || !routine) return;
+    this.deps.memory.unfire(person, watchId);
+    this.deps.memory.save();
+    this.deps.forgetState?.(routine);
   }
 }

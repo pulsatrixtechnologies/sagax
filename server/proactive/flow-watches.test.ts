@@ -3,7 +3,7 @@
 // routine of the carrying bot; its code check reads it through the one probe
 // engine (server/routines/routine-watch.ts). Fixture: rows of `px_flow.py
 // proactive` (Flow #186).
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -684,6 +684,26 @@ describe("the watch routines", () => {
     second.advance(15 * 60_000);
     await second.check();
     expect(second.woken).toHaveLength(1);
+  });
+
+  it("#4250: a condition the loop before the upgrade already told stays told: the routine's first check wakes nothing; a new key wakes", async () => {
+    const ids = watch({ when: "items[].id" });
+    const told = evaluateWhen(ids.when, { items: [{ id: 1 }] }).key;
+    const upgraded = (observed: unknown) => {
+      const file = join(tempDir("watch-upgrade-"), "watches.json");
+      writeFileSync(file, JSON.stringify({ version: 2, people: { "person-1": { "w-open": { last: MONDAY_15H - 60 * 60_000, fired: told } } }, pauses: {} }));
+      return harness({ watches: [ids], observed, memory: new WatchMemory(file) });
+    };
+    const same = upgraded({ items: [{ id: 1 }] });
+    await same.pass();
+    expect(same.calls.map((call) => call.name)).toEqual(["cw_psa_service_query"]);
+    expect(same.woken).toEqual([]);
+    same.advance(15 * 60_000);
+    await same.check();
+    expect(same.woken).toEqual([]);
+    const moved = upgraded({ items: [{ id: 1 }, { id: 2 }] });
+    await moved.pass();
+    expect(moved.woken).toHaveLength(1);
   });
 
   it("the watch memory stays readable by a server before #4250: version 2, its fields where they were", () => {

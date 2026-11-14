@@ -52,8 +52,10 @@ export { canonicalJson };
 /** A pre-check the server builds for a routine it keeps (a Flow watch):
  * never stored, never edited, never sent. `when` is a JMESPath condition on
  * the JSON result; `stateKey` names what is compared from one check to the
- * next when the arguments move with the clock (`{{days_ago:1}}`). */
-export type BuiltWatchPrecheck = RoutineWatchPrecheck & { when?: string; stateKey?: string };
+ * next when the arguments move with the clock (`{{days_ago:1}}`). `seed`
+ * is the `when` key a server before #4250 already told, and when: the first
+ * check of the routine compares with it, so an upgrade tells nothing again. */
+export type BuiltWatchPrecheck = RoutineWatchPrecheck & { when?: string; stateKey?: string; seed?: { key: string; at: number } };
 
 /** JMESPath truth: false, null, "", [] and {} are false. */
 export function jmesTruthy(value: unknown): boolean {
@@ -658,7 +660,9 @@ export function decideWatch(
   const built = whenOn(watch, read);
   const snapshot = built?.snapshot ?? read;
   const configKey = watchConfigKey(watch);
-  const prior = previous && previous.configKey === configKey ? previous : null;
+  const prior = previous && previous.configKey === configKey ? previous
+    : watch.seed && watch.when !== undefined ? { v: 1 as const, configKey, fingerprint: `when:${watch.seed.key}`, checkedAt: watch.seed.at }
+    : null;
   const state: WatchState = {
     v: 1, configKey, fingerprint: snapshot.fingerprint,
     ...(snapshot.items ? { items: snapshot.items } : {}),

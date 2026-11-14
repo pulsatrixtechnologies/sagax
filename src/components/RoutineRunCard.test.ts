@@ -72,7 +72,11 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(markup).not.toContain("data-routine-run-status");
     // #4234: the routine's chip (glyph and name) is the run's Details
     expect(markup).toMatch(/<button[^>]*data-routine-run-open[^>]*title="Details"[^>]*>.*data-routine-run-name[^>]*>Morning brief</);
+    // the chip keeps its name; the glyph's state word is its description
     expect(markup).toContain('aria-label="View run for Morning brief"');
+    const describedBy = /<button[^>]*data-routine-run-open[^>]*aria-describedby="([^"]+)"/.exec(markup)?.[1];
+    expect(describedBy).toBeTruthy();
+    expect(markup).toContain(`id="${describedBy}" role="img" aria-label="Done"`);
     expect(markup).toContain('aria-label="Morning brief routine run: Done"');
   });
 
@@ -354,21 +358,20 @@ describe("RoutineRunCard (#4234): the reference's line, the result under it, the
     expect(markup).toContain("data-routine-run-widget");
   });
 
-  it("a run with plain text: the reference's line (chip with the glyph and the name, then the time), its words under the name, no band, Details at the line's end", () => {
+  it("a run with plain text: the reference's line (the glyph, the name and the time, opening the run), its words under the name, no band", () => {
     const markup = draw({ message: message("completed", { summary: "All 12 backups completed tonight." }), onOpen: vi.fn() });
     // the reference's system event: 24px tall, 12px type on a 16px line
     expect(markup).toMatch(/data-routine-run-line[^>]*class="[^"]*min-h-6[^"]*text-\[12px\] leading-4/);
-    // its chip: 24px, pill corners, 4px before the glyph, 6px after the name, 2px between
-    expect(markup).toMatch(/<button[^>]*data-routine-run-open[^>]*class="inline-flex h-6 min-w-0 shrink-0 items-center gap-0\.5 rounded-full ps-1 pe-1\.5 text-ink-secondary max-w-\[calc\(100%-7\.5rem\)\]/);
+    // its chip: 24px (4px above and below a 16px line), 4px before the
+    // glyph, 6px after, 2px between
+    expect(markup).toMatch(/<button[^>]*data-routine-run-open[^>]*class="[^"]*py-1 ps-1 pe-1\.5[^"]*"/);
+    expect(markup).toMatch(/data-routine-run-first-line[^>]*class="flex h-4 min-w-0 max-w-full items-center gap-0\.5"/);
     expect(markup).toContain("lucide-clock");
-    // the dot after the chip: its 6px end padding before, as much after
-    expect(markup).toContain('<span aria-hidden="true" class="shrink-0 text-ink-tertiary pe-1.5">·</span>');
     // the words start where the name does (4px + 12px glyph + 2px)
     expect(markup).toMatch(/data-routine-run-brief[^>]*class="ps-\[18px\] line-clamp-2 text-\[13px\] leading-\[18px\]/);
-    // the chip opens the run, and the old row's Details entry stays on the
-    // line (a touch screen has no hover): both open the same window
+    // #4275: one way to the details, the chip with its chevron; no second entry
     expect(markup.match(/data-routine-run-open/g)).toHaveLength(1);
-    expect(markup).toMatch(/<button[^>]*data-routine-run-details[^>]*aria-label="[^"]+"[^>]*><span class="max-sm:hidden">Details<\/span>/);
+    expect(markup).not.toContain("data-routine-run-details");
     expect(markup).not.toContain("data-ask-card");
     // the time sits on the line, right after the name
     const line = markup.slice(markup.indexOf("data-routine-run-line"), markup.indexOf("data-routine-run-brief"));
@@ -401,15 +404,15 @@ describe("RoutineRunCard (#4234): the reference's line, the result under it, the
   });
 
   it("a narrow line cuts the status words before the routine's name (review: \"Backup che...\")", () => {
-    const markup = draw({ message: message("running", { routineName: "Nightly backup verification for every site", startedAt: 1 }), onOpen: vi.fn(), onStop: vi.fn() });
-    const chip = markup.match(/<button[^>]*data-routine-run-open[^>]*class="([^"]*)"/)?.[1] ?? "";
-    // the name's chip never shrinks (the status words are cut first, and
-    // keep a few letters); only a name longer than the line less its other
-    // parts at their smallest is cut
-    expect(chip.split(" ")).toContain("shrink-0");
-    expect(chip.split(" ")).not.toContain("shrink");
-    // a live run keeps room for Stop as well
-    expect(chip).toContain("max-w-[calc(100%-10.5rem)]");
+    const markup = draw({ message: message("waiting", { routineName: "Nightly backup verification for every site", attention: "Waits for your answer" }), onOpen: vi.fn(), onStop: vi.fn() });
+    const name = markup.match(/<span[^>]*data-routine-run-name[^>]*class="([^"]*)"/)?.[1] ?? "";
+    // the name never shrinks (the status words are cut first); only a name
+    // longer than the line less its other parts at their smallest is cut,
+    // and a live run keeps room for Stop as well
+    expect(name.split(" ")).toContain("shrink-0");
+    expect(name.split(" ")).not.toContain("shrink");
+    expect(name).toContain("max-w-[calc(100cqw-12rem)]");
+    expect(markup).toMatch(/data-routine-run-line[^>]*class="[^"]*@container\/run-line/);
     expect(markup).toMatch(/data-routine-run-status="true"[^>]*class="min-w-8 truncate/);
   });
 });
@@ -495,5 +498,127 @@ describe("RoutineRunCard problem row (#4161)", () => {
     expect(markup).toContain("data-routine-problem-row");
     expect(markup).not.toContain("<button");
     expect(markup).not.toContain("lucide-chevron-right");
+  });
+});
+
+// #4275: the way to open a run's details was a chevron right after the time
+// on a problem row and a "Details" word with a chevron at the line's far end
+// on the other rows; a running row cut its state to "En ..." at a narrow
+// width. One form on every row, and a state word whole or absent.
+describe("RoutineRunCard: one way to a run's details on every row (#4275)", () => {
+  const kinds: Array<[string, Parameters<typeof RoutineRunCard>[0]]> = [
+    ["a failure (problem row)", { message: message("failed", { error: "The engine is signed out." }) }],
+    ["a result that waits on the person (problem row)", { message: { ...message("completed", { brief: "Two invoices wait for you." }), attention: { kind: "human", items: [{ text: "Approve invoice 1042" }], botId: "b", botName: "Bot B", threadId: "t", sourceMessageId: "m" } } as Message }],
+    ["a result (card)", { message: message("completed", { summary: "All 12 backups completed tonight." }) }],
+    ["a folded result (row)", { message: message("completed", { summary: "All 12 backups completed tonight." }), folded: true }],
+    ["a run waiting on someone (row)", { message: message("waiting", { attention: "Waits for your answer" }), onStop: vi.fn() }],
+    ["a queued run (row)", { message: message("queued"), onStop: vi.fn() }],
+    ["a running run (row)", { message: message("running", { startedAt: 1 }), onStop: vi.fn() }],
+    ["a pass with nothing to report (row)", { message: message("nothing_to_report") }],
+  ];
+  /** The run's opener, from its tag to its closing tag. */
+  const opener = (markup: string) => {
+    const start = markup.search(/<button[^>]*data-routine-run-open/);
+    return start < 0 ? "" : markup.slice(start, markup.indexOf("</button>", start));
+  };
+  /** The opener's first line: the glyph, the name, the words, the time, the chevron. */
+  const firstLine = (markup: string) => {
+    const open = opener(markup);
+    const start = open.indexOf("data-routine-run-first-line");
+    const brief = open.indexOf("data-routine-run-brief");
+    return start < 0 ? "" : open.slice(start, brief < 0 ? undefined : brief);
+  };
+  const classes = (markup: string) => /<button[^>]*data-routine-run-open[^>]*class="([^"]*)"/.exec(markup)?.[1] ?? "";
+
+  it.each(kinds)("%s: the same chip opens the run, its chevron right after the time, no Details word", (_kind, props) => {
+    const markup = draw({ ...props, onOpen: vi.fn() });
+    expect(markup.match(/data-routine-run-open/g)).toHaveLength(1);
+    expect(markup).not.toContain("data-routine-run-details");
+    expect(words(markup)).not.toMatch(/\bDetails\b/);
+    // the same touch target on every row: the problem row's own chip
+    expect(classes(markup)).not.toBe("");
+    expect(classes(markup)).toBe(classes(draw({ ...kinds[0][1], onOpen: vi.fn() })));
+    // the first line ends with the chevron, after the time or how long it
+    // runs (a run waiting or queued has neither: its words keep that room)
+    const line = firstLine(markup);
+    expect(line).toContain("lucide-chevron-right");
+    const when = Math.max(line.lastIndexOf("<time"), line.lastIndexOf("data-routine-run-elapsed"), line.lastIndexOf("data-routine-run-status"));
+    expect(when).toBeGreaterThan(-1);
+    expect(line.lastIndexOf("lucide-chevron-right")).toBeGreaterThan(when);
+    expect(line.slice(line.lastIndexOf("lucide-chevron-right"))).not.toMatch(/<span[^>]*>[^<\s]/);
+    // the ear hears the row's state, as the eye sees it in the glyph: in the
+    // chip's name (the problem row) or as its description (the glyph itself)
+    const label = /<button[^>]*data-routine-run-open[^>]*aria-label="([^"]+)"/.exec(markup)?.[1] ?? "";
+    const glyphLabel = /<span[^>]*role="img" aria-label="([^"]+)"/.exec(line)?.[1] ?? "";
+    expect(glyphLabel).not.toBe("");
+    const describedBy = /<button[^>]*data-routine-run-open[^>]*aria-describedby="([^"]+)"/.exec(markup)?.[1];
+    const glyphId = /<span id="([^"]+)" role="img"/.exec(line)?.[1];
+    expect(label.startsWith(`${glyphLabel}: `) || (Boolean(glyphId) && describedBy === glyphId)).toBe(true);
+    // Stop and Resume are never inside the chip
+    expect(opener(markup)).not.toContain("data-run-stop");
+  });
+
+  it.each(kinds)("%s: without a way to open the run, no button and no chevron", (_kind, props) => {
+    const markup = draw(props);
+    expect(markup).not.toContain("data-routine-run-open");
+    expect(markup).not.toContain("lucide-chevron-right");
+  });
+
+  it.each(["en", "fr"] as const)("a running row (%s): the spinner says running, the word is whole or absent, never a stub; how long and Stop stay", (lang) => {
+    try {
+      setLocale(lang);
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.UTC(2026, 10, 4, 21, 0));
+      const markup = draw({ message: message("running", { routineName: "Nightly backup verification for every site", startedAt: Date.UTC(2026, 10, 4, 20, 49) }), onOpen: vi.fn(), onStop: vi.fn() });
+      const running = lang === "fr" ? "En cours" : "Running";
+      // the spinner names the state, for the eye (its tooltip) and the ear
+      const glyph = /<span[^>]*role="img" aria-label="([^"]+)" title="([^"]+)"[^>]*>(.*?)<\/span>/.exec(firstLine(markup));
+      expect(glyph?.[1]).toBe(running);
+      expect(glyph?.[2]).toBe(running);
+      expect(glyph?.[3]).toContain("data-coding-spinner");
+      // the word: never cut with an ellipsis; shown whole on a line with
+      // room for it (30rem), the name then leaving it that room, absent on a
+      // narrower one
+      const box = /<span[^>]*data-routine-run-word[^>]*class="([^"]*)"/.exec(markup)?.[1].split(" ") ?? [];
+      expect(box).toEqual(expect.arrayContaining(["hidden", "shrink-0", "whitespace-nowrap", "@min-[30rem]/run-line:flex"]));
+      expect(box).not.toContain("truncate");
+      const name = /<span[^>]*data-routine-run-name[^>]*class="([^"]*)"/.exec(markup)?.[1].split(" ") ?? [];
+      expect(name).toContain("@min-[30rem]/run-line:max-w-[calc(100cqw-17rem)]");
+      const status = /<span[^>]*data-routine-run-status[^>]*class="([^"]*)"[^>]*>([^<]*)</.exec(markup);
+      expect(status?.[2]).toBe(running);
+      const word = status?.[1].split(" ") ?? [];
+      expect(word).not.toContain("truncate");
+      expect(word).toContain("whitespace-nowrap");
+      expect(word).toContain("shrink-0");
+      expect(markup).toContain("11 min");
+      expect(markup).toContain("data-run-stop");
+    } finally {
+      vi.useRealTimers();
+      setLocale("en");
+    }
+  });
+
+  // #4275 review: a waiting or queued row given a time at a narrow width
+  // left its state words a label and an ellipsis ("En attente : …"); a live
+  // run has no time, so its words keep the room the time would take
+  it.each(["en", "fr"] as const)("a waiting or queued row (%s): no time on the line, its words keep that room, whole in the tooltip", (lang) => {
+    try {
+      setLocale(lang);
+      for (const status of ["waiting", "queued"] as const) {
+        const markup = draw({ message: message(status, { routineName: "Supplier follow-up", attention: status === "waiting" ? "Waits for your answer" : undefined }), onOpen: vi.fn(), onStop: vi.fn() });
+        const line = firstLine(markup);
+        expect(line).not.toContain("<time");
+        expect(line).not.toContain("data-routine-run-elapsed");
+        const said = /<span[^>]*data-routine-run-status[^>]*>([^<]*)</.exec(line)?.[1] ?? "";
+        expect(said).not.toBe("");
+        if (status === "waiting") expect(said).toContain("Waits for your answer");
+        // the whole line in its tooltip, the words whole
+        const tooltip = /<div[^>]*data-routine-run-line[^>]*title="([^"]*)"/.exec(markup)?.[1] ?? "";
+        expect(tooltip).toContain(said);
+        expect(markup).toContain("data-run-stop");
+      }
+    } finally {
+      setLocale("en");
+    }
   });
 });

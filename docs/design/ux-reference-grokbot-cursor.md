@@ -693,13 +693,19 @@ dessous (« écran de » suivi du nom du bot).
     coins de 24 px, aligné au début ; une carte de question : `min(80 %, 560 px, 100 % - 82 px)`,
     coins de 24 px. Espacements de la référence : 4, 8 et 12 px.
   Chez nous (`RoutineRunCard`, une seule forme pour chaque rangée de routine du chat) : la
-  ligne porte la puce (glyphe et nom ; le triangle d'avertissement quand il y a un problème,
-  la roue pendant qu'elle roule), puis « · » et ce qu'elle dit quand c'est une rangée (en
-  cours, en file, échouée, repliée), puis « · » et l'heure juste après, en encre tertiaire,
-  puis Reprendre, Arrêter et « Détails › » en puces au bout (Détails ouvre la même fenêtre
-  que la puce, au toucher aussi : l'entrée Détails de l'ancienne rangée reste). La puce du nom
-  ne rétrécit jamais avant les mots d'état (`shrink-0`, au plus 70 % de la ligne) : à la
-  largeur étroite, ce sont les mots d'état qui se coupent, jamais le nom en premier. Un résultat met ses mots sous le nom (alignés
+  ligne porte la puce, la même que celle de la rangée de problème (#4275) : le glyphe (le
+  triangle d'avertissement quand il y a un problème, la roue pendant qu'elle roule, nommé
+  par l'état dans son infobulle), le nom, puis « · » et ce qu'elle dit quand c'est une
+  rangée (en cours, en file, échouée, repliée), puis « · » et l'heure (ou depuis combien de
+  temps elle roule) en encre tertiaire, puis le chevron. Toute la puce ouvre la fenêtre de
+  l'exécution : une seule façon d'ouvrir les détails sur chaque rangée (problème, résultat,
+  en attente de la personne, en cours), au même endroit, avec la même cible au toucher ;
+  plus de « Détails › » à part au bout de la ligne. Reprendre et Arrêter restent leurs
+  propres puces au bout de la ligne. Le nom ne rétrécit jamais avant les mots d'état
+  (`shrink-0`, borné par la largeur de la ligne, `cqw`) : à la largeur étroite, ce sont les
+  mots d'état qui se coupent, jamais le nom en premier. Un mot d'état seul (« En cours »,
+  « En file ») est entier ou absent, jamais un bout (« En … ») : la roue dit déjà qu'elle
+  roule, et la durée et Arrêter restent. Un résultat met ses mots sous le nom (alignés
   sur le nom, 18 px), 13 px sur 18 px en encre principale, une ou deux lignes tirées des
   propres mots du bot (sa ligne de conclusion, `reportBrief`), jamais une phrase qui ne fait
   que pointer un formulaire (« Décoche-le ou appuie sur Passer », `isPointerLine`), jamais un
@@ -707,7 +713,7 @@ dessous (« écran de » suivi du nom du bot).
   personne (une question sans réponse : une seule ligne calme « X a besoin de toi », ses
   options sont dans la zone épinglée, une seule fois, #4204 ; répondue, ses points restent), la ligne « A demandé » des coéquipiers, et enfin le widget que la passe a dessiné
   pour la personne, utilisable sur place : sa réponse est le message de la personne au bot
-  dans cette conversation. Aucune bande vide, aucun « Détails » détaché en bas à droite de la carte. Le
+  dans cette conversation. Aucune bande vide, aucun « Détails » détaché sur la ligne ni en bas à droite de la carte. Le
   rapport ne se déplie jamais dans le chat : la puce ouvre la fenêtre de l'exécution avec le
   rapport entier, comme un message normal du bot. Aucune police de terminal.
 - **Rangée de problème d'une routine (#4161)** : le propriétaire le 2026-11-13 sur la rangée

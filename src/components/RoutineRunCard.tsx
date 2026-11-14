@@ -136,25 +136,37 @@ const DONE = { label: "routineRun.card.done" as const };
  * (docs/design/ux-reference-grokbot-cursor.md 2.7): a 24px chip, pill
  * corners, 4px before the glyph and 6px after the name, 2px between them,
  * 12px type on a 16px line in the secondary ink. */
-// #4234 review: the chip never shrinks (a narrow window cut the name after
-// a few letters; even a weighted shrink cut a fraction of a pixel, enough
-// for an ellipsis): the status words are cut first. Only a name longer than
-// the line less the room its other parts need at their smallest is cut:
-// the dots, a few status letters, the time and Details (7.5rem), and Stop or
-// Resume beside them on a live or paused run (10.5rem).
-const RUN_CHIP_ROOM = "max-w-[calc(100%-7.5rem)]";
-const RUN_CHIP_ROOM_ACTIONS = "max-w-[calc(100%-10.5rem)]";
-const RUN_CHIP = "inline-flex h-6 min-w-0 shrink-0 items-center gap-0.5 rounded-full ps-1 pe-1.5 text-ink-secondary";
+/** #4275: the one way to a run's details on every row (a problem, a result,
+ * a run waiting on the person, a running run): the reference's chip, grown
+ * to the row's lines: 4px above and below a 16px line (24px), 4px before
+ * the glyph and 6px after, the hover fill; as wide as its words, never the
+ * whole column. Its first line ends with the chevron, right after the time. */
+const RUN_OPEN = "flex w-fit min-w-0 max-w-full flex-col items-start rounded-xl py-1 ps-1 pe-1.5 text-start text-[12px] leading-4 text-ink-secondary";
+const RUN_FIRST_LINE = "flex h-4 min-w-0 max-w-full items-center gap-0.5";
+// #4234 review: the name never shrinks (a narrow window cut it after a few
+// letters; even a weighted shrink cut a fraction of a pixel, enough for an
+// ellipsis): the status words are cut first. Only a name longer than the
+// line (its container, cqw) less the room its other parts need at their
+// smallest is cut: the glyph, the dots, a few status letters, the time and
+// the chevron (9rem), and Stop or Resume beside them on a live or paused
+// run (12rem).
+const RUN_NAME_ROOM = "max-w-[calc(100cqw-9rem)]";
+const RUN_NAME_ROOM_ACTIONS = "max-w-[calc(100cqw-12rem)]";
+/** #4275: and on a line wide enough for a live run's whole state word,
+ * that word as well (17rem). */
+const RUN_NAME_ROOM_WORD = "@min-[30rem]/run-line:max-w-[calc(100cqw-17rem)]";
 /** The chip that opens something: the reference's hover fill, 120ms. */
 const RUN_CHIP_INTERACTIVE = "cursor-pointer transition-colors duration-[120ms] hover:bg-ink/[0.06] hover:text-ink active:bg-ink/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
 /** Stop and Resume on the line: the same chip, without a glyph of its own. */
 const RUN_CHIP_ACTION = "inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-1.5 text-ink-tertiary transition-colors duration-[120ms] hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
 /** The dot between the line's parts: always the same node, empty and
  * hidden when the part after it has nothing to say. */
-function Separator({ shown, afterChip = false }: { shown: boolean; afterChip?: boolean }) {
-  // after the chip, its own 6px end padding is the space before the dot,
-  // so the dot keeps as much after it: 8px on each side with the line's gap
-  return <span aria-hidden="true" className={cn("shrink-0 text-ink-tertiary", afterChip ? "pe-1.5" : "px-1", !shown && "hidden")}>{shown ? "·" : ""}</span>;
+function Separator({ shown }: { shown: boolean }) {
+  return <span aria-hidden="true" className={cn("shrink-0 px-1 text-ink-tertiary", !shown && "hidden")}>{shown ? "·" : ""}</span>;
+}
+/** #4275: the chevron that ends the opener's first line, on every row. */
+function OpenChevron() {
+  return <ChevronRight aria-hidden="true" size={12} className="ms-0.5 shrink-0 text-ink-tertiary rtl:rotate-180" />;
 }
 /** What comes under the line starts where the routine's name does: the
  * chip's 4px, the 12px glyph and the 2px gap. */
@@ -245,7 +257,7 @@ export function RoutineRunCard({
   /** 2026-10-26: the failure paused its routine (N in a row): turn it back
    * on in one click, the failure count from zero. Absent: no button. */
   onResume?: () => void;
-  /** 2026-11-05 (#2096): Stop lives on the run itself, beside Details, as
+  /** 2026-11-05 (#2096): Stop lives on the run itself, beside its chip, as
    * long as the run is live. Absent: no button. */
   onStop?: () => void;
   /** 2026-11-03: opens the thread a teammate works in (the run handed work
@@ -255,8 +267,9 @@ export function RoutineRunCard({
 }) {
   const run = useSettledRoutineRun(message.routineRun);
   const briefId = useId();
+  const statusId = useId();
   const running = run?.status === "running" && !run.goalStatus;
-  // A live run (queued, running, waiting on someone) keeps Stop beside Details (#2096).
+  // A live run (queued, running, waiting on someone) keeps Stop beside its chip (#2096).
   const live = Boolean(run && !run.goalStatus && (run.status === "queued" || run.status === "running" || run.status === "waiting"));
   const now = useNow(Boolean(running && run?.startedAt));
   // Newer computers can send this message kind to an older or partially
@@ -386,14 +399,14 @@ export function RoutineRunCard({
           : brief;
     const content = (
       <>
-        <span className="flex h-4 min-w-0 max-w-full items-center gap-0.5">
+        <span data-routine-run-first-line className={RUN_FIRST_LINE}>
           <span role="img" aria-label={statusLabel} title={statusLabel} data-routine-run-status={run.goalStatus ?? run.status} className={cn("flex shrink-0", tone)}>
             {tone === "text-danger" ? <CircleAlert aria-hidden="true" size={12} /> : <TriangleAlert aria-hidden="true" size={12} />}
           </span>
           {name && <span data-routine-run-name className="min-w-0 truncate" title={name}>{name}</span>}
           <Separator shown={Boolean(name)} />
           <span className="shrink-0 text-ink-tertiary">{time}</span>
-          {onOpen && <ChevronRight aria-hidden="true" size={12} className="ms-0.5 shrink-0 text-ink-tertiary rtl:rotate-180" />}
+          {onOpen && <OpenChevron />}
         </span>
         {sentence && (
           <span id={briefId} data-routine-run-brief dir="auto" title={sentence} className="mt-0.5 line-clamp-2 ps-[14px] text-[13px] leading-[18px] text-ink">{sentence}</span>
@@ -407,10 +420,6 @@ export function RoutineRunCard({
         )}
       </>
     );
-    // the reference's chip, grown to the row's lines: 4px above and below,
-    // 4px before the glyph and 6px after, the hover fill; as wide as its
-    // words, never the whole column
-    const rowClass = "flex w-fit min-w-0 max-w-full flex-col items-start rounded-xl py-1 ps-1 pe-1.5 text-start text-[12px] leading-4 text-ink-secondary";
     return (
       <section
         data-routine-run-card
@@ -429,12 +438,12 @@ export function RoutineRunCard({
             title={t("routineRun.details")}
             aria-label={t("routineRun.stateLine", { status: statusLabel, reason: openLabel })}
             aria-describedby={sentence ? briefId : undefined}
-            className={cn(rowClass, RUN_CHIP_INTERACTIVE)}
+            className={cn(RUN_OPEN, RUN_CHIP_INTERACTIVE)}
           >
             {content}
           </button>
         ) : (
-          <div data-routine-problem-row className={rowClass}>{content}</div>
+          <div data-routine-problem-row className={RUN_OPEN}>{content}</div>
         )}
         {/* Resume and Stop: their own buttons under the row, where its words
             start, so the row keeps the width of its words at any width */}
@@ -446,51 +455,57 @@ export function RoutineRunCard({
     );
   }
 
-  // #4234 (the reference's system event): the routine's glyph and name are
-  // one chip, and the chip is the run's Details: it opens the run's window
-  const nameChip = (
-    <>
-      <span aria-hidden="true" className="flex shrink-0">{glyph}</span>
-      <span data-routine-run-name className="min-w-0 truncate" title={name}>{name}</span>
-    </>
-  );
-  const chipRoom = resume || stop ? RUN_CHIP_ROOM_ACTIONS : RUN_CHIP_ROOM;
-  const entry = onOpen ? (
-    <button type="button" data-routine-run-open onClick={onOpen} title={t("routineRun.details")} aria-label={openLabel} className={cn(RUN_CHIP, chipRoom, RUN_CHIP_INTERACTIVE)}>
-      {nameChip}
-    </button>
-  ) : (
-    <span className={cn(RUN_CHIP, chipRoom)}>{nameChip}</span>
-  );
-  // #4234 review: the old row's Details entry stays a word on the line, for
-  // a touch screen too; the chip opens the same window
-  const details = onOpen && (
-    <button key="details" type="button" data-routine-run-details onClick={onOpen} aria-label={openLabel} className={RUN_CHIP_ACTION}>
-      {/* a narrow window keeps the chevron alone: its name is the label */}
-      <span className="max-sm:hidden">{t("routineRun.details")}</span>
-      <ChevronRight aria-hidden="true" size={12} className="rtl:rotate-180" />
-    </button>
-  );
+  // #4234 (the reference's system event), #4275: the routine's glyph, its
+  // name, what the row says and its time are one chip, the same as the
+  // problem row's, and the chip is the run's one way to its Details: it
+  // opens the run's window, its chevron ending its first line (after the
+  // time; a live run has no time, its words keep that room, a running run
+  // shows how long instead). The chip keeps its name ("View run for ..."),
+  // and its description for the ear is the glyph's state word.
+  // #4275: the state word of a run the spinner draws ("Running", "Queued")
+  // is whole or absent, never a stub ("En ..."): whole on a line with room
+  // for it and the name (30rem), the name then keeping the rest; absent on
+  // a narrower line, where the spinner says it (its tooltip, and the chip's
+  // name for the ear), how long and Stop staying. A sentence (a state and
+  // its reason) is cut with an ellipsis, its whole in the line's tooltip.
+  const spinnerWord = Boolean(said) && said === statusLabel && live && run.status !== "waiting";
   const when = elapsed
     ? <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>
-    : !live ? time : null;
+    : live ? null : time;
+  const nameRoom = resume || stop ? RUN_NAME_ROOM_ACTIONS : RUN_NAME_ROOM;
+  const firstLine = (
+    <span data-routine-run-first-line className={RUN_FIRST_LINE}>
+      <span id={statusId} role="img" aria-label={statusLabel} title={statusLabel} className="flex shrink-0">{glyph}</span>
+      <span data-routine-run-name className={cn("min-w-0 shrink-0 truncate", nameRoom, spinnerWord && RUN_NAME_ROOM_WORD)} title={name}>{name}</span>
+      {/* one tree whatever the line says (the flash rule, 2026-11-03): a
+          part with nothing to say is hidden, never taken out */}
+      <span data-routine-run-word className={spinnerWord ? "hidden shrink-0 items-center whitespace-nowrap @min-[30rem]/run-line:flex" : "contents"}>
+        <Separator shown={Boolean(said && name)} />
+        <span data-routine-run-status={said ? true : undefined} dir="auto" aria-live="polite" className={cn(spinnerWord ? "shrink-0 whitespace-nowrap" : "min-w-8 truncate", !said && "hidden", running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{said}</span>
+      </span>
+      <Separator shown={Boolean(pausedWords && (name || said))} />
+      <span data-routine-auto-paused={pausedAfter ?? undefined} className={cn("min-w-8 truncate", !pausedWords && "hidden")}>{pausedWords}</span>
+      <Separator shown={Boolean(when && (name || said || pausedWords))} />
+      <span className={cn("shrink-0 text-ink-tertiary", !when && "hidden")}>{when}</span>
+      {onOpen && <OpenChevron />}
+    </span>
+  );
+  const entry = onOpen ? (
+    <button type="button" data-routine-run-open onClick={onOpen} title={t("routineRun.details")} aria-label={openLabel} aria-describedby={statusId} className={cn(RUN_OPEN, RUN_CHIP_INTERACTIVE)}>
+      {firstLine}
+    </button>
+  ) : (
+    <span className={RUN_OPEN}>{firstLine}</span>
+  );
   const line = (
     <div
       data-routine-run-line
       // the whole line in its tooltip: it is cut with an ellipsis
       title={[name, said, pausedWords, elapsed ?? (live ? "" : routineDateTime(at))].filter(Boolean).join(" · ")}
-      className="flex min-h-6 w-full min-w-0 items-center gap-0.5 text-[12px] leading-4 text-ink-secondary"
+      className="@container/run-line flex min-h-6 w-full min-w-0 items-center gap-0.5 text-[12px] leading-4 text-ink-secondary"
     >
       {entry}
-      {/* one tree whatever the line says (the flash rule, 2026-11-03): a
-          part with nothing to say is hidden, never taken out */}
-      <Separator shown={Boolean(said && name)} afterChip />
-      <span data-routine-run-status={said ? true : undefined} dir="auto" aria-live="polite" className={cn("min-w-8 truncate", !said && "hidden", running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{said}</span>
-      <Separator shown={Boolean(pausedWords && (name || said))} afterChip={!said} />
-      <span data-routine-auto-paused={pausedAfter ?? undefined} className={cn("min-w-8 truncate", !pausedWords && "hidden")}>{pausedWords}</span>
-      <Separator shown={Boolean(when && (name || said || pausedWords))} afterChip={!said && !pausedWords} />
-      <span className={cn("shrink-0 text-ink-tertiary", !when && "hidden")}>{when}</span>
-      {(resume || stop || details) && <span className="ms-auto flex shrink-0 items-center gap-0.5 ps-1">{resume}{stop}{details}</span>}
+      {(resume || stop) && <span className="ms-auto flex shrink-0 items-center gap-0.5 ps-1">{resume}{stop}</span>}
     </div>
   );
 

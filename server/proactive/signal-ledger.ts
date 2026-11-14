@@ -46,6 +46,9 @@ export interface SignalEntry {
   channels: string[];
   state: SignalState;
   answer?: string;
+  /** S9: when the person answered it (the metrics' time to answer runs
+   * from `firstAt`, the spell's start, to here). */
+  answeredAt?: number;
   /** Reminder steps already told (the escalation ladder's clock). */
   reminded?: number;
   /** A short human label, never content (a card's title). */
@@ -179,6 +182,7 @@ export class SignalLedger {
       entry.firstAt = at;
       delete entry.reminded;
       delete entry.answer;
+      delete entry.answeredAt;
     }
     entry.state = "told";
     entry.toldAt = at;
@@ -210,6 +214,7 @@ export class SignalLedger {
     if (!entry || entry.state === state) return false;
     entry.state = state;
     entry.lastAt = this.now();
+    if (state === "answered") entry.answeredAt = entry.lastAt;
     if (answer !== undefined) entry.answer = answer.slice(0, 200);
     this.changed(person, entry.kind);
     return true;
@@ -310,6 +315,7 @@ function readEntry(value: unknown): SignalEntry | null {
     channels: Array.isArray(raw.channels) ? raw.channels.filter((channel): channel is string => typeof channel === "string").slice(0, 10) : [],
     state,
     ...(typeof raw.answer === "string" ? { answer: raw.answer } : {}),
+    ...(Number.isFinite(raw.answeredAt) ? { answeredAt: raw.answeredAt as number } : {}),
     ...(Number.isFinite(raw.reminded) ? { reminded: raw.reminded as number } : {}),
     ...(typeof raw.label === "string" ? { label: raw.label } : {}),
     ...(ref ? { ref } : {}),
@@ -440,4 +446,97 @@ export const signalKeys = {
  * and those told per conversation (signalKeys.inHome). */
 export function settleKeyed(ledger: SignalLedger, filter: { kind: string; key: string }, state: Exclude<SignalState, "open" | "told">): number {
   return ledger.settleWhere(filter, state) + ledger.settleWhere({ kind: filter.kind, keyPrefix: `${filter.key}@` }, state);
+}
+
+/** #4250 (S9): how a card or an attention row ended, for the signal
+ * ledger. `answered` only for the person's own act: a choice, a skip, a
+ * "handled". `expired`: it waited past its delay unanswered. `retired`: the
+ * server or the bot closed it without the person (a stalled turn, an
+ * interrupt, a restart, a newer proposal, an automatic apply, a card put
+ * away), which is neither answered nor ignored. */
+export type CardSignalState = "answered" | "expired" | "retired";
+
+export interface CardSignalEnding {
+  state: CardSignalState;
+  requestId?: string;
+  bot?: string;
+  /** A keyed card's key (signalKeys keys of keyed and fix cards). */
+  askKey?: string;
+  /** An attention row: the bot message it was read from. */
+  source?: { threadId: string; messageId: string };
+}
+
+/** #4250 (S9): how a message's card or attention ended; null while it
+ * waits (or for a message with neither). */
+export function cardSignalEnding(message: unknown): CardSignalEnding | null {
+  if (!message || typeof message !== "object") return null;
+  const row = message as {
+    from?: { botId?: unknown };
+    card?: { requestId?: unknown; askKey?: unknown; answered?: unknown; dismissed?: unknown; expired?: unknown; skipped?: unknown; autoApplied?: unknown };
+    attention?: { botId?: unknown; threadId?: unknown; sourceMessageId?: unknown; handledAt?: unknown; closed?: unknown };
+  };
+  const bot = typeof row.from?.botId === "string" && row.from.botId ? row.from.botId : undefined;
+  const card = row.card;
+  if (card) {
+    const answered = typeof card.answered === "string" ? card.answered : card.answered === true ? "yes" : "";
+    // the person skipped it (#3471): their own act
+    const state: CardSignalState | null = card.skipped === true ? "answered"
+      : answered === "unavailable" || card.autoApplied === true ? "retired"
+      // a verdict on a card closed as stale (a restart, a newer proposal) is the server's
+      : answered ? (card.expired === true ? "retired" : "answered")
+      : card.expired === true ? "expired"
+      // closed with no choice: put away (an automatic apply, a passive card)
+      : card.dismissed === true ? "retired"
+      : null;
+    if (!state) return null;
+    return {
+      state,
+      ...(typeof card.requestId === "string" && card.requestId ? { requestId: card.requestId } : {}),
+      ...(bot ? { bot } : {}),
+      ...(typeof card.askKey === "string" && card.askKey ? { askKey: card.askKey } : {}),
+    };
+  }
+  const attention = row.attention;
+  if (!attention || !Number.isFinite(attention.handledAt)) return null;
+  const state: CardSignalState = attention.closed === "expired" ? "expired" : "answered";
+  const attentionBot = typeof attention.botId === "string" && attention.botId ? attention.botId : bot;
+  return {
+    state,
+    ...(attentionBot ? { bot: attentionBot } : {}),
+    ...(typeof attention.threadId === "string" && typeof attention.sourceMessageId === "string" ? { source: { threadId: attention.threadId, messageId: attention.sourceMessageId } } : {}),
+  };
+}
+
+/** #4250 (S9): a card ended (the message `messageId` of `threadId`, its
+ * request `requestId` for an approval): the person answered it, it expired
+ * unanswered, or it was closed without them (retired). The items told
+ * about it end the same way, and an answer ends their time to answer. An
+ * item is about the card when it points at it (its `ref`), when it is the
+ * card's own "needs you" signal (signalKeys.needsYou of the message or of
+ * the attention row's source, signalKeys.runNeedsYou for a run's card), or
+ * when it is the keyed card's own entry (its `askKey`, or that key told per
+ * conversation, signalKeys.inHome). Only the card's bot's entries are
+ * read. Returns how many were settled. */
+export function settleCardSignals(
+  ledger: SignalLedger,
+  card: { person?: string; bot?: string; threadId: string; messageId: string; requestId?: string; askKey?: string; source?: { threadId: string; messageId: string } },
+  state: CardSignalState,
+  answer?: string,
+): number {
+  const own = new Set([signalKeys.needsYou(card), ...(card.source ? [signalKeys.needsYou(card.source)] : [])]);
+  if (card.askKey) {
+    own.add(card.askKey);
+    own.add(signalKeys.inHome(card.askKey, card.threadId));
+  }
+  const runCard = `:${card.messageId}`;
+  let settled = 0;
+  for (const { person, entry } of ledger.entries({ ...(card.person !== undefined ? { person: card.person } : {}), ...(card.bot !== undefined ? { bot: card.bot } : {}) })) {
+    if (entry.state !== "open" && entry.state !== "told") continue;
+    const ref = entry.ref;
+    const points = ref?.threadId === card.threadId && ref.requestId !== undefined && (ref.requestId === card.messageId || ref.requestId === card.requestId);
+    const isOwn = own.has(entry.key) || (entry.key.startsWith("needs-you:run:") && entry.key.endsWith(runCard));
+    if (!points && !isOwn) continue;
+    if (ledger.settle(person, entry.bot, entry.key, state, state === "answered" ? answer : undefined)) settled += 1;
+  }
+  return settled;
 }

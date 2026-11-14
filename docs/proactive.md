@@ -372,3 +372,53 @@ Never an automatic answer: every card stays the person's to answer.
 
 Tests: `server/proactive/answer-learning.test.ts` (prompt section, the
 card's order and offer, the click that writes the line, a restart).
+
+## Usefulness metrics (`server/proactive/proactive-metrics.ts`, #4250 S9)
+
+The Proactivity group of the bot's Analytics tab (`GET
+/api/bots/:id/proactive-metrics`, same range, same readers) also says
+whether the bot's signals were worth the person's attention. Nothing is
+counted twice: `ProactiveMetricsLedger.read` takes these figures, when it is
+asked, from the signal ledger, the routine runs and the usage ledger
+(`usefulnessSources`), for the bot and per routine:
+
+- signals told: ledger entries told to the person (a `toldAt`), by the start
+  of their spell; an answer record of answer learning (`card-answer`) is not
+  one, nor an approval's reach entry (`reach-card`: the reminder ladder of a
+  card whose own entry already speaks for it, and an approval of a live chat
+  is not a proactive signal);
+- answered and ignored count only the items that wait on the person's
+  answer (`signalAwaitsAnswer`: a proposal, a "needs you" card or attention
+  row, a keyed or fix card, an entry pointing at a card's request). A notice
+  told for information (a run's problem, a reach notice, runs skipped while
+  away, a paused routine) counts as told, never as answered or ignored;
+- answered: the person answered the item (a choice, a skip, "handled"). A
+  card or an attention row that ends ends the items told about it
+  (`cardSignalEnding`, then `settleCardSignals`: the item's `ref`, its own
+  "needs you" key, or the keyed card's own key), and a proposal points at
+  its card, so its yes, no, skip or expiry ends it. A card the server or the
+  bot closed without the person (a stalled turn, an interrupt, a restart, a
+  newer proposal, an automatic apply, a passive card put away) ends its items
+  retired; an approval resolved by the driver, a rule or Full access ends
+  retired too (`requestOutcome`). The ledger keeps `answeredAt`; a new spell
+  of the same key starts it over;
+- ignored: expired, or still unanswered 24 h after it was raised (`firstAt`);
+  an item whose cause went away by itself, or that was closed without the
+  person (retired), is neither;
+- median time to answer, from raised (`firstAt`) to answered;
+- turns avoided by pre-checks: runs a pre-check ended with nothing to do
+  (`nothing_to_report`, no model turn);
+- tokens per answered signal: input plus output of the routine turns over
+  the answered signals.
+
+An entry's routine is the one its key names (`routine-problem:`,
+`away-skips:`, `routine-suspended:`), the run its key names (`run-problem:`,
+`run-access:`, `run-deferred:`, `needs-you:run:`), else the run whose
+conversation it points at; its name is the routine store's, else a kept
+run's. The routines group lists the twenty busiest.
+`answeredAt` is one more field of an entry: the previous version reads the
+file and leaves it out.
+
+Tests: `server/proactive/proactive-metrics.test.ts`,
+`server/reach-me/service.test.ts`,
+`src/components/bot-settings/BotProactiveMetricsGroup.test.ts`.

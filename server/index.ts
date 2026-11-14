@@ -129,7 +129,7 @@ import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
 import { createProactiveMetricsRoutes } from "./routes/proactive-metrics.ts";
 import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptions.ts";
 import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
-import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
+import { ProactiveMetricsLedger, usefulnessSources } from "./proactive/proactive-metrics.ts";
 import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import { domainLabel, FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
 import { ProactiveChoices, watchMovedLine, watchPauseLine } from "./proactive/proactive-choices.ts";
@@ -786,7 +786,7 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
 import { RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
-import { createTellPerson, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
+import { cardSignalEnding, createTellPerson, settleCardSignals, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
 import { answeredCardText, answerHistory, answerLearningNote, answersOnKind, instructionsWithAlwaysLine, learnFromAnsweredCard, type AnswerScope } from "./proactive/answer-learning.ts";
 import { clipReadable } from "../shared/routine-result.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
@@ -14696,8 +14696,12 @@ store.onChange((change) => {
       if (routineNeedMayMove(change.message)) routineNeedsWatch.touch();
       // an answered card: its banner leaves the desktop, the phone and the watch
       const settledRequest = settledCardRequest(change.message);
+      const ended = cardSignalEnding(change.message);
+      // #4250 (S9): the items told about a card (or an attention row) end
+      // with it, in the signal ledger
+      if (ended) settleCardSignals(signalLedger, { threadId: change.threadId, messageId: change.message.id, ...ended }, ended.state);
       if (settledRequest) {
-        withdrawApprovalNotice(change.threadId, settledRequest);
+        withdrawApprovalNotice(change.threadId, settledRequest, ended?.state ?? "retired");
         // the card is closed now: its conversation stops waiting on the person
         settleWaitingActivity(change.threadId);
       }
@@ -20135,7 +20139,15 @@ const proactiveProposals = new ProactiveProposals(process.env.VITEST ? null : jo
 /** #2698: per-bot proactivity metrics (wakes, proposals, writes, cost). */
 const proactiveMetrics = new ProactiveMetricsLedger({
   file: process.env.VITEST ? null : join(DATA_DIR, "proactive-metrics.json"),
-  timeZone: () => routineTimeZone()
+  timeZone: () => routineTimeZone(),
+  // #4250 (S9): usefulness, read from the signal ledger, the runs and the usage ledger
+  usefulness: usefulnessSources({
+    signals: (botId) => signalLedger.entries({ bot: botId }).map(({ entry }) => entry),
+    runs: (botId) => routines?.listRunsForBot(botId) ?? [],
+    routineName: (routineId) => routines?.routineById(routineId)?.name,
+    turns: (botId, range) => readUsage(DATA_DIR, range).flatMap((row) => row.botId === botId && row.trigger.kind === "routine" && row.trigger.routineId
+      ? [{ at: row.at, input: row.input, output: row.output, routineId: row.trigger.routineId }] : []),
+  }),
 });
 proactiveProposals.observe((event) => proactiveMetrics.count(event.botId, event.kind));
 if (!process.env.VITEST) process.once("exit", () => proactiveMetrics.flush());
@@ -25648,7 +25660,8 @@ function postDailySuggestions(botId: string, threadId: string, suggestions: read
     const bot = store.bot(botId);
     // #4250: told through tellPerson, once per proposal
     if (bot) tellPerson(attentionPerson(bot, threadId) || effectiveBotOwner(bot) || "", {
-      key: signalKeys.proposal(proposal.id), kind: "proposal", bot: bot.id, label: card.title, ref: { threadId },
+      // #4250 (S9): the card it points at, so its end (yes, no, skip, expiry) ends it in the ledger
+      key: signalKeys.proposal(proposal.id), kind: "proposal", bot: bot.id, label: card.title, ref: { threadId, requestId: message.id },
       notification: { notification: deliverableNotification("proposal", bot, threadId, card.subtitle, { avatarUrl: bot.avatarUrl, title: card.title, proposalId: proposal.id }) },
     });
   }

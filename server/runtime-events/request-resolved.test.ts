@@ -69,3 +69,19 @@ describe("request.resolved on a conversation no turn runs in (#3300)", () => {
     expect(activity.t1).toBe("waiting-on-you");
   });
 });
+
+describe("#4250 (S9): how a resolved request's card ended, for the signal ledger", () => {
+  it("answered only for a person's answer, expired on its timeout, retired when closed without the person", () => {
+    const outcomes: Record<string, string> = {};
+    for (const source of ["user", "chat", "peer", "timeout", "system", "full-access", "admin-rule", "engine_cap", "custom-rule-deny", "unknown-tool", "auto", undefined]) {
+      const { host } = hostWith([prompt("p", 10), perm("m0", 11, "req_a")]);
+      host.withdrawApprovalNotice = (_thread: string, _request: string, outcome: string) => { outcomes[String(source)] = outcome; };
+      handleRequestResolved({ type: "request.resolved", threadId: "t1", requestId: "req_a", behavior: "allow", source }, { bot: { id: "b1" } }, host);
+    }
+    expect(outcomes).toEqual({
+      user: "answered", chat: "answered", peer: "answered", timeout: "expired",
+      system: "retired", "full-access": "retired", "admin-rule": "retired", engine_cap: "retired",
+      "custom-rule-deny": "retired", "unknown-tool": "retired", auto: "retired", undefined: "retired",
+    });
+  });
+});

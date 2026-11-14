@@ -359,11 +359,15 @@ export class ReachMe {
     return this.followedCards().length;
   }
 
-  /** A card was answered (anywhere), dismissed or expired: its code goes. */
-  cardSettled(threadId: string, requestId?: string): void {
-    for (const { person, entry } of this.followedCards()) {
+  /** A card was answered (anywhere), dismissed or expired: its code goes.
+   * #4250 (S9): the ledger keeps how it ended (answered, expired, or
+   * retired when it was withdrawn for another reason), for the metrics,
+   * whatever reminder step it reached. */
+  cardSettled(threadId: string, requestId?: string, outcome: "answered" | "expired" | "retired" = "retired"): void {
+    const open = this.signals.entries({ kind: REACH_CARD_KIND }).filter(({ entry }) => (entry.state === "open" || entry.state === "told") && entry.ref?.requestId);
+    for (const { person, entry } of open) {
       if (entry.ref?.threadId !== threadId || (requestId && entry.ref.requestId !== requestId)) continue;
-      this.signals.settle(person, entry.bot, entry.key, "retired");
+      this.signals.settle(person, entry.bot, entry.key, outcome);
       this.raised.delete(`${person}\u0000${entry.key}`);
     }
     if (requestId) {

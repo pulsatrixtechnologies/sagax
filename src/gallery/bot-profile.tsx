@@ -430,6 +430,14 @@ function proactiveMetrics(days: number) {
     botId: BOT_ID, days, from: "", to: "", series: [],
     totals: { ...totals, precision: judged ? totals.accepted / judged : null, minutesSaved: totals.reported * 10 + totals.writes * 2 + totals.accepted * 5 },
     minutesPerReport: 10, minutesPerWrite: 2, minutesPerAccepted: 5,
+    // #4250 (S9): usefulness, for the bot and per routine
+    usefulness: { told: Math.round(31 * scale), answered: Math.round(24 * scale), ignored: Math.round(4 * scale), medianAnswerMs: 47 * 60_000, turnsAvoided: Math.round(96 * scale), tokens: Math.round(412_000 * scale), tokensPerAnswered: 17_167 },
+    routines: [
+      { routineId: "rt_inbox", name: "Morning inbox sweep", told: Math.round(14 * scale), answered: Math.round(12 * scale), ignored: Math.round(1 * scale), medianAnswerMs: 22 * 60_000, turnsAvoided: Math.round(61 * scale), tokens: Math.round(180_000 * scale), tokensPerAnswered: 15_000 },
+      { routineId: "rt_backups", name: "Backup check", told: Math.round(9 * scale), answered: Math.round(7 * scale), ignored: Math.round(2 * scale), medianAnswerMs: 3 * 3_600_000 + 10 * 60_000, turnsAvoided: Math.round(35 * scale), tokens: Math.round(140_000 * scale), tokensPerAnswered: 20_000 },
+      { routineId: "rt_weekly", name: "Weekly review", told: Math.round(2 * scale), answered: 0, ignored: Math.round(1 * scale), medianAnswerMs: null, turnsAvoided: 0, tokens: Math.round(52_000 * scale), tokensPerAnswered: null },
+    ],
+    ignoredAfterHours: 24,
   };
 }
 

@@ -26,7 +26,7 @@ function scheduleApprovalExpiry(   target: { threadId: string; requestId: string
       }
       host.askMessageByRequest.delete(`${threadId}:${requestId}`);
       host.pendingCommandRules.delete(`${threadId}:${requestId}`);
-      host.withdrawApprovalNotice(threadId, requestId);
+      host.withdrawApprovalNotice(threadId, requestId, "expired");
       appendDecision(DATA_DIR, {
         threadId, requestId, botId: target.botId, botName: target.botName,
         tool: card.tool, summary: card.subtitle, decision: "auto-denied", source: "expired"

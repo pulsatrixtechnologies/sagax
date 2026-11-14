@@ -1,6 +1,9 @@
 // #2698: the Proactivity group of the bot's Analytics tab, under Usage and in
 // the same range (7 / 30 / 90 days): wakes, proposals accepted / declined /
 // unanswered, writes, cost of the wakes, estimated time saved and precision.
+// #4250 (S9): then its usefulness (signals told, answered and ignored, the
+// median time to answer, turns avoided by pre-checks, tokens per answered
+// signal) and the same figures per routine, in a group of their own.
 // From GET /api/bots/:id/proactive-metrics (shared/proactive-metrics.ts).
 //
 // Left out entirely (never greyed) when the caller may not read the bot-wide
@@ -9,11 +12,12 @@
 import { useEffect, useState } from "react";
 
 import { activeLocale, t } from "@/lib/i18n";
-import { formatMoney } from "@/lib/usage";
+import { formatMoney, formatTokens } from "@/lib/usage";
+import { formatDuration } from "@/lib/usage-trace";
 import { api, type Bot } from "@/state/store";
 import type { BotAnalyticsDays } from "../../../shared/bot-analytics";
 import { proactiveModeFor } from "../../../shared/proactive-mode";
-import type { ProactiveMetrics } from "../../../shared/proactive-metrics";
+import type { ProactiveMetrics, RoutineUsefulness, SignalUsefulness } from "../../../shared/proactive-metrics";
 import { CompactRow, DescribedRow, HelpTip, SettingsGroup } from "../SettingsPrimitives";
 
 const FIGURE = "tabular-nums text-[13px] leading-[18px] text-ink-secondary";
@@ -31,10 +35,62 @@ function hours(minutes: number): string {
   return `${new Intl.NumberFormat(activeLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(minutes / 60)} h`;
 }
 
+function usefulnessRecorded(figures: SignalUsefulness | undefined): boolean {
+  return Boolean(figures && figures.told + figures.turnsAvoided + figures.tokens > 0);
+}
+
+function UsefulnessRows({ figures, ignoredAfterHours }: { figures: SignalUsefulness; ignoredAfterHours: number }) {
+  return (
+    <>
+      <DescribedRow
+        label={t("botProfile.proactive.signals")}
+        description={t("botProfile.proactive.signalsDetail", { answered: count(figures.answered), ignored: count(figures.ignored) })}
+        help={t("botProfile.proactive.signalsHelp", { hours: ignoredAfterHours })}
+        rowId="botProactiveSignals"
+      >
+        <span className={STRONG}>{count(figures.told)}</span>
+      </DescribedRow>
+      <CompactRow label={t("botProfile.proactive.answerTime")} rowId="botProactiveAnswerTime">
+        <span className={FIGURE}>{figures.medianAnswerMs === null ? "..." : formatDuration(figures.medianAnswerMs)}</span>
+      </CompactRow>
+      <CompactRow label={t("botProfile.proactive.avoided")} rowId="botProactiveAvoided">
+        <span className={FIGURE}>{count(figures.turnsAvoided)}</span>
+      </CompactRow>
+      <DescribedRow
+        label={t("botProfile.proactive.tokensPerAnswer")}
+        description={t("botProfile.proactive.tokensDetail", { tokens: formatTokens(figures.tokens) })}
+        rowId="botProactiveTokens"
+      >
+        <span className={STRONG}>{figures.tokensPerAnswered === null ? "..." : formatTokens(figures.tokensPerAnswered)}</span>
+      </DescribedRow>
+    </>
+  );
+}
+
+function routineLine(row: RoutineUsefulness): string {
+  const parts = [t("botProfile.proactive.routineDetail", { told: count(row.told), answered: count(row.answered), ignored: count(row.ignored), avoided: count(row.turnsAvoided) })];
+  if (row.medianAnswerMs !== null) parts.push(t("botProfile.proactive.routineMedian", { time: formatDuration(row.medianAnswerMs) }));
+  return parts.join(", ");
+}
+
+export function RoutineUsefulnessGroup({ routines }: { routines: RoutineUsefulness[] }) {
+  if (!routines.length) return null;
+  return (
+    <SettingsGroup title={t("botProfile.proactive.routines")} groupId="botProactiveRoutines">
+      {routines.map((row) => (
+        <DescribedRow key={row.routineId} label={row.name || t("botProfile.proactive.unnamedRoutine")} description={routineLine(row)} rowId={`botProactiveRoutine-${row.routineId}`}>
+          <span className={FIGURE}>{row.tokensPerAnswered === null ? "..." : t("botProfile.proactive.routineTokens", { tokens: formatTokens(row.tokensPerAnswered) })}</span>
+        </DescribedRow>
+      ))}
+    </SettingsGroup>
+  );
+}
+
 export function BotProactiveMetricsView({ data, proactive }: { data: ProactiveMetrics | null; proactive: boolean }) {
   if (!data) return null;
   const totals = data.totals;
-  const recorded = totals.wakes + totals.proposed + totals.writes > 0;
+  const useful = usefulnessRecorded(data.usefulness);
+  const recorded = totals.wakes + totals.proposed + totals.writes > 0 || useful;
   if (!proactive && !recorded) return null;
   const help = (
     <HelpTip label={t("settings.moreAbout", { title: t("botProfile.proactive.saved") })}>
@@ -74,6 +130,7 @@ export function BotProactiveMetricsView({ data, proactive }: { data: ProactiveMe
               {help}
             </span>
           </CompactRow>
+          {data.usefulness && useful ? <UsefulnessRows figures={data.usefulness} ignoredAfterHours={data.ignoredAfterHours ?? 24} /> : null}
         </>
       )}
     </SettingsGroup>
@@ -91,5 +148,11 @@ export function BotProactiveMetricsGroup({ bot, days }: { bot: Bot; days: BotAna
     );
     return () => { live = false; };
   }, [bot.id, days]);
-  return <BotProactiveMetricsView data={answers[key] ?? null} proactive={proactiveModeFor(bot) !== "off"} />;
+  const data = answers[key] ?? null;
+  return (
+    <>
+      <BotProactiveMetricsView data={data} proactive={proactiveModeFor(bot) !== "off"} />
+      {data?.routines ? <RoutineUsefulnessGroup routines={data.routines} /> : null}
+    </>
+  );
 }

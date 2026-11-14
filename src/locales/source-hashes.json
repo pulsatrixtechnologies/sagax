@@ -18649,7 +18649,19 @@
       "myConnections.github.storeSealed": "4df3faa388075c10a6479ae6eca5802cd53ab935934609c78091c52ab2716d6f",
       "myConnections.github.storeUnavailable": "259a29b92307f6b29b379f3bc0b2f234c699d32d49f9420f3064d232ef3b1b5e",
       "myConnections.github.savedKeysUnreadable": "fa56b20256cc2b201b288a2418a11ff410118908d0ffca03b5656cc7652ec530",
-      "myConnections.github.unreadableSummary": "ffa4aee26131c760e81c77116e2afe8554783c34be4dd940b8152247f684a289"
+      "myConnections.github.unreadableSummary": "ffa4aee26131c760e81c77116e2afe8554783c34be4dd940b8152247f684a289",
+      "botProfile.proactive.signals": "684601eebd0c034916429444cf85d86fd6061cb54c2b9fbe5f0417e18d213467",
+      "botProfile.proactive.signalsDetail": "9c8fb7593d9f08a3c0fd8bd9e8fd9b8073853e2dfb71a814087bbda2d9b68ad4",
+      "botProfile.proactive.signalsHelp": "fae294e6cbb7919f9720657a5097e55d8be924ad3752719f6dc3ef01dbb43136",
+      "botProfile.proactive.answerTime": "ba0b8dfe7404676d4eaef369796a32cd34ac148e78a935074b164b14339fef5e",
+      "botProfile.proactive.avoided": "d591a82e93f2678424f9728f165c689a2214bf8b06727d0789dfd7478a3be750",
+      "botProfile.proactive.tokensPerAnswer": "0bfaf102e829a871551f3f98dda9582e008b917cce4cefdcec23c2e7a439cc28",
+      "botProfile.proactive.tokensDetail": "f198d05dc7c19c54ccd1cf0ddf0ef5095a1f931e280522085e9c24d38ad88750",
+      "botProfile.proactive.routines": "284fe0a4fe0c1d1dcc2ceb99b2694086c2c612e3278417f1a98d3f7798909260",
+      "botProfile.proactive.routineDetail": "3f5728ad38ee9b70908d8e9228b1c3f44a57840af2882b9ef4bcbe409ca887f1",
+      "botProfile.proactive.routineMedian": "6a0d667dd4e3cfb831669a3c367593f92b11e153f3dd77f5cb8abb7f684380b5",
+      "botProfile.proactive.routineTokens": "7ef1fd6f6f02e2f7309f383e42571e64ddba0d144ad81e42f94d4f816f038dd3",
+      "botProfile.proactive.unnamedRoutine": "2f1861d4bf560799deec5225f46876d9614adbf7a1f9d83041cd9c435ad10677"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

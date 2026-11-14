@@ -255,6 +255,29 @@ describe("ProviderRegistry", () => {
     }
   });
 
+  it("describe() starts one engine's status probe per loop turn, never every probe in one stretch (#3598)", async () => {
+    const fake = makeFakeDriver();
+    const registry = new ProviderRegistry([fake.driver]);
+    await registry.load({ a: { driver: "fake" }, b: { driver: "fake" }, c: { driver: "fake" }, d: { driver: "fake" }, e: { driver: "fake" } });
+
+    const perStretch: number[] = [];
+    let counted = 0;
+    let watching = true;
+    const count = () => {
+      perStretch.push(fake.probes.length - counted);
+      counted = fake.probes.length;
+      if (watching) setImmediate(count);
+    };
+    const read = registry.describe();
+    count();
+    const described = await read;
+    watching = false;
+
+    expect(described.map((d) => d.snapshot.state)).toEqual(["available", "available", "available", "available", "available"]);
+    expect(fake.probes).toEqual(["a", "b", "c", "d", "e"]);
+    expect(Math.max(...perStretch)).toBe(1);
+  });
+
   it("forwards a live instance's declared effort levels in describe()", async () => {
     const fake = makeFakeDriver({ effortLevels: ["low", "high"] });
     const registry = new ProviderRegistry([fake.driver]);
@@ -354,6 +377,8 @@ describe("ProviderRegistry", () => {
 
     const described = Promise.all([registry.describe(), registry.describe(), registry.describe()]);
     const direct = registry.get("a")!.snapshot();
+    // #3598: the second engine's probe starts one loop turn after the first.
+    await new Promise((resolve) => setImmediate(resolve));
     expect(fake.probes.sort()).toEqual(["a", "b"]);
     release();
     for (const rows of await described) {

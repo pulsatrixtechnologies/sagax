@@ -19,6 +19,9 @@ struct NamesLineParty: Identifiable {
     var agent = false
     /// #4112: the person's phone line ("sms" or "call"): a phone glyph.
     var phone: String? = nil
+    /// #4122: the words after the source that never give way (the
+    /// number): where the line is short of room, only they stay by the glyph.
+    var detail: String? = nil
     var open: (() -> Void)? = nil
 }
 
@@ -45,9 +48,11 @@ struct NamesLineView: View {
             } else {
                 // #3581: one line; where it does not fit, fewer names and a
                 // larger count ("A, B and 13 others"), the count always whole
+                // #4122: a phone line's source word gives way before a name
                 ViewThatFits(in: .horizontal) {
-                    ForEach(NamesLineFit.shownCounts(total: parties.count, most: Self.shown), id: \.self) { shown in
-                        HStack(spacing: 6) { pieces(shown: shown, ink: ink) }
+                    ForEach(Array(NamesLineFit.attempts(total: parties.count, most: Self.shown,
+                                                        compactable: parties.contains { $0.detail != nil }).enumerated()), id: \.offset) { _, attempt in
+                        HStack(spacing: 6) { pieces(shown: attempt.shown, compact: attempt.compact, ink: ink) }
                             .fixedSize()
                     }
                     // not even one name and the count fit: the wrapping line
@@ -73,7 +78,7 @@ struct NamesLineView: View {
     /// is one piece with the last name or the count, so a wrapped line
     /// never begins with "·".
     @ViewBuilder
-    private func pieces(shown: Int, ink: ApprovalInk) -> some View {
+    private func pieces(shown: Int, compact: Bool = false, ink: ApprovalInk) -> some View {
         let names = Array(parties.prefix(shown))
         let others = parties.count - names.count
         let count = names.count + (others > 0 ? 1 : 0)
@@ -86,7 +91,7 @@ struct NamesLineView: View {
             // a comma hugs the name before it; the tail hugs the last piece
             let last = others == 0 && index == names.count - 1
             HStack(spacing: 6) {
-                name(party, ink: ink, comma: index < count - 2)
+                name(party, ink: ink, comma: index < count - 2, compact: compact)
                 if last { tailPiece(ink) }
             }
             .fixedSize()
@@ -140,10 +145,10 @@ struct NamesLineView: View {
     private var and: String { String(localized: "chat.names.and", defaultValue: "and") }
 
     @ViewBuilder
-    private func name(_ party: NamesLineParty, ink: ApprovalInk, comma: Bool = false) -> some View {
+    private func name(_ party: NamesLineParty, ink: ApprovalInk, comma: Bool = false, compact: Bool = false) -> some View {
         let label = HStack(spacing: 5) {
             face(party, ink: ink)
-            (Text(verbatim: party.name).foregroundColor(ink.ink)
+            (Text(verbatim: compact ? party.detail ?? party.name : party.name).foregroundColor(ink.ink)
                 + Text(verbatim: comma ? "," : "").foregroundColor(ink.secondary))
                 .font(ink.font(12, .medium))
                 .lineLimit(1)
@@ -202,6 +207,7 @@ struct IncomingLineView: View {
                     name: IncomingAskerName.of(asker),
                     agent: asker.agent,
                     phone: asker.phone,
+                    detail: IncomingAskerName.detail(asker),
                     open: { opened = asker }
                 )
             },
@@ -213,6 +219,16 @@ struct IncomingLineView: View {
         .sheet(item: $opened) { asker in
             IncomingExchangeSheet(asker: asker, exchanges: line.exchanges(of: asker))
         }
+#if DEBUG
+        // `-previewOpenIncoming <row id>`: the line holding that row opens on
+        // its asker (store preview captures, ios/parity/phone-line-preview.py)
+        .task {
+            if let id = UserDefaults.standard.string(forKey: "previewOpenIncoming"),
+               let exchange = line.exchanges.first(where: { $0.id == id }) {
+                opened = exchange.asker
+            }
+        }
+#endif
     }
 }
 
@@ -231,6 +247,16 @@ enum IncomingAskerName {
         }
         if asker.name.isEmpty { return asker.agent ? String(localized: "AI client") : String(localized: "a teammate") }
         return asker.name
+    }
+
+    /// #4122: the number of a phone line's name, the part that never gives
+    /// way on a short line (NamesLineFit.detail), or nil.
+    static func detail(_ asker: IncomingAsker) -> String? {
+        guard let phone = asker.phone else { return nil }
+        let lead = phone == "call"
+            ? String(localized: "chat.incoming.phoneCall", defaultValue: "Phone call")
+            : String(localized: "chat.incoming.textMessage", defaultValue: "Text Message")
+        return NamesLineFit.detail(name: of(asker), lead: lead)
     }
 }
 

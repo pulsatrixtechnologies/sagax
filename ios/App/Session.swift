@@ -524,7 +524,7 @@ final class Session: ObservableObject {
         }
         if (arguments.contains("-store-preview") || arguments.contains("-computer-switcher-preview")),
            let url = Bundle.main.url(
-               forResource: arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
+               forResource: arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-phone-line-preview") ? "PhoneLinePreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
                withExtension: "json"
            ),
            let data = try? Data(contentsOf: url),

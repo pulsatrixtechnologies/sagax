@@ -14305,6 +14305,8 @@
   "botProfile.tab.stats": "Analytics",
   "botProfile.tab.outcomes": "Outcomes",
   "outcomes.onTrack": "On track",
+  "outcomes.new": "New outcome",
+  "outcomes.newPlaceholder": "What result should it keep true?",
   "outcomes.replyInChat": "Reply in chat",
   "outcomes.results": "Results",
   "outcomes.recentRuns": "Recent runs",

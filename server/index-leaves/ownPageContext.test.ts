@@ -22,3 +22,10 @@ describe("ownPageContext and a selected passage (#4099)", () => {
     expect(check(undefined)({ cardId: "c_1", page }, "b1", { kind: "local" })).toEqual({ cardId: "c_1" });
   });
 });
+
+describe("ownPageContext and a new outcome (#4098)", () => {
+  it("keeps the outcome mark when another person's page is dropped", () => {
+    expect(check({ botId: "b2" })({ page, outcome: true }, "b1", { kind: "local" })).toEqual({ outcome: true });
+    expect(check(undefined)({ outcome: true }, "b1", { kind: "local" })).toEqual({ outcome: true });
+  });
+});

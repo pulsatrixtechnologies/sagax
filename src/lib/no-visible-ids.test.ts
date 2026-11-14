@@ -280,7 +280,7 @@ describe("no UUID on screen", () => {
       { id: ACCOUNT_ID, routineId: THREAD_ID, routineName: "Morning digest", botId: BOT_ID, target: "bot", runOn: "maus", manual: false, status: "completed", scheduledFor: 3, createdAt: 3, finishedAt: 3, output: "Twelve emails read." },
     ] as never[];
     const outcomes = outcomesOf(routines, runs, [], 10);
-    const actions = { onReply: () => {}, onOpenRoutine: () => {}, onOpenRun: () => {}, onAsk: () => {} };
+    const actions = { onReply: () => {}, onOpenRoutine: () => {}, onOpenRun: () => {}, onAsk: () => {}, onNewOutcome: () => {} };
     const text = visibleText(createElement(OutcomesCard, { outcomes, routines, runs, loadState: "ready", actions, defaultOpen: outcomes.map((outcome) => outcome.id) }));
     expectNoUuid(text);
     expect(text).toContain("Morning digest");

@@ -14306,6 +14306,8 @@
   "botProfile.tab.stats": "Analytique",
   "botProfile.tab.outcomes": "Objectifs",
   "outcomes.onTrack": "En bonne voie",
+  "outcomes.new": "Nouvel objectif",
+  "outcomes.newPlaceholder": "Quel résultat veux-tu qu'il maintienne?",
   "outcomes.replyInChat": "Répondre dans le chat",
   "outcomes.results": "Résultats",
   "outcomes.recentRuns": "Exécutions récentes",

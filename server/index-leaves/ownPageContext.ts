@@ -18,7 +18,8 @@ function ownPageContext(context: DataContext | undefined, botId: string, auth: R
     && Boolean(owner) && Boolean(host.store.bot(botId) && host.canOnBot(host.authzViewerFromId(owner!), "bot.use", host.botFacts(host.store.bot(botId))));
   if (mine || shared) return context;
   const { page: _dropped, ...rest } = context;
-  return rest.cardId ? rest : undefined;
+  // a Data card or a new outcome (#4098) stays without the page
+  return rest.cardId || rest.outcome ? rest : undefined;
 
 }
   return ownPageContext;

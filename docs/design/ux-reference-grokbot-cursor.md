@@ -501,9 +501,15 @@ Chez nous (`BotProfilePage.tsx-parts/Outcomes.tsx`, `BotProfileTabs.tsx`) :
   récentes (crochet ou tiret, nom, Fait ou « Rien à signaler », date ; cinq puis
   le pli ; une ligne ouvre l'exécution dans le chat).
 - Aucune routine : la ligne discrète des routines et son « Demande-le dans le
-  chat » (`RoutinesAskHint`), la même que la carte Routines. « Nouvel objectif »,
-  le regroupement et ce que le serveur dira de ce qui attend viennent aux lots
-  suivants.
+  chat » (`RoutinesAskHint`), la même que la carte Routines.
+- « Nouvel objectif » à droite de l'étiquette (la pilule d'action partagée, un
+  plus et le libellé, comme l'action des autres sections) : un champ sous
+  l'étiquette, en haut de la carte ; Entrée envoie les mots de la personne comme
+  son propre message dans la conversation du bot, marqué comme demande
+  d'objectif (`dataContext.outcome`), et la page passe au chat, où la carte de
+  proposition de routine arrive comme toute autre ; Échap range le champ. Le
+  regroupement (« Déplacer vers un objectif ») vient avec les enregistrements
+  d'objectifs du serveur.
 
 ### 2.5 Réglages
 

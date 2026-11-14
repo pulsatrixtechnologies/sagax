@@ -15,6 +15,10 @@ export interface DataContext {
    * message is about it. The person's own page of this bot (the server
    * checks); its title is the page's, never an instruction. */
   page?: PageContextRef;
+  /** A new outcome the person asked for from the bot page's Outcomes tab
+   * (#4098): their words are the result they want kept true, and the bot
+   * answers with a routine proposal (OUTCOME_REQUEST_HINT). */
+  outcome?: true;
 }
 
 /** The page a message was sent from: shown on the message as a chip, and
@@ -107,6 +111,11 @@ export function pageContextPrompt(ref: PageContextRef): string {
   return `<page-context>${payload}</page-context>`;
 }
 
+/** What the bot reads with a new outcome (#4098): the words that follow are
+ * the result the person wants kept true; the proposal card is how they
+ * accept it, as for any routine proposal. */
+export const OUTCOME_REQUEST_HINT = "The person asks for a new outcome: their message is a result they want this bot to keep true. Answer by calling propose_routine: start its instructions with one line \"/goal <that result, in a few words>\", then the steps that keep it true; name the routine after the result and give it a schedule that fits. The proposal card is how they accept it.";
+
 /** The client's record of the result the Data tab is showing. */
 export interface DataViewContext extends DataContext {
   botId: string;
@@ -135,6 +144,7 @@ export function dataContextPrompt(context: DataContext): string {
     parts.push(`<data-context>${payload}</data-context>`);
   }
   if (context.page) parts.push(pageContextPrompt(context.page));
+  if (context.outcome) parts.push(`<outcome-request>${JSON.stringify({ hint: OUTCOME_REQUEST_HINT }).replaceAll("<", "\\u003c")}</outcome-request>`);
   return parts.join("\n");
 }
 

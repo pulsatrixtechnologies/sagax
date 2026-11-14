@@ -39,7 +39,21 @@ export const PERSON_ATTENTION_MAX_ITEMS = 12;
 const ITEM_MAX = 600;
 
 const TAG = /\[\s*(?:HUMAIN|HUMAN|NEEDS[_ -]HUMAN|ACTION[_ -]REQUISE|ACTION[_ -]REQUIRED)\s*\]/i;
-const TAG_LINE = new RegExp(`^\\s*(?:[-*+•]|\\d+[.)])?\\s*(?:\\*\\*|__)?\\s*${TAG.source}\\s*(?:\\*\\*|__)?\\s*[:—–-]?\\s*(.*)$`, "i");
+// A bold tag takes the marks that close it, before or after its colon
+// (**[HUMAIN]**, **[HUMAIN]:**, **[HUMAIN] :**); a bare tag takes none, so
+// "[HUMAIN] **100201** ..." keeps the bold that opens its ticket. A bold
+// opened on the tag and closed at the end of the line ("**[HUMAIN] 100201 :
+// fermer**") loses that last unpaired mark in tagText.
+const TAG_LINE = new RegExp(`^\\s*(?:[-*+•]|\\d+[.)])?\\s*(?:(?<bold>\\*\\*|__)\\s*${TAG.source}\\s*(?:(?:\\*\\*|__)\\s*[:—–-]?|[:—–-]\\s*(?:\\*\\*|__)?)?|${TAG.source})\\s*[:—–-]?\\s*(?<rest>.*)$`, "i");
+
+/** The words of a tagged line, without a bold mark the tag left unpaired. */
+function tagText(match: RegExpExecArray): string {
+  const rest = match.groups?.rest ?? "";
+  const mark = match.groups?.bold;
+  if (!mark || !rest.trimEnd().endsWith(mark) || rest.split(mark).length % 2 === 1) return rest;
+  return rest.trimEnd().slice(0, -mark.length).trimEnd();
+}
+
 const QUESTION_LINE = /^\s*[*_`]*NEEDS INPUT\s*:[*_`]*\s*(.+)$/i;
 const BARE_NEEDS_INPUT = /^\s*[*_`]*NEEDS INPUT\s*:?\s*[*_`]*\s*$/i;
 
@@ -128,7 +142,7 @@ function taggedItems(lines: string[]): PersonAttentionItem[] {
   for (let index = 0; index < lines.length; index += 1) {
     const match = TAG_LINE.exec(lines[index]!);
     if (!match) continue;
-    const parts = [match[1] ?? ""];
+    const parts = [tagText(match)];
     while (index + 1 < lines.length) {
       const next = lines[index + 1]!;
       if (!next.trim() || /^\s*(?:[-*+•]|\d+[.)])\s/.test(next) || TAG_LINE.test(next) || QUESTION_LINE.test(next) || STATUS_LINE.test(next.trim()) || /^\s*#/.test(next)) break;

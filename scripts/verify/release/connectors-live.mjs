@@ -280,6 +280,10 @@ async function oneTurn(api, bot, text, timeoutMs) {
   const opened = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Connector live check", approvalMode: "ask" });
   const threadId = opened.body?.task?.threadId;
   if (opened.status >= 300 || !threadId) throw new Error(`opening a conversation answered ${opened.status}: ${JSON.stringify(opened.body).slice(0, 200)}`);
+  // One approval level per bot (#4200): the conversation keeps no level of its
+  // own, so a level chosen from it is the bot's. Set Ask on the bot itself.
+  const leveled = await api("PATCH", `/api/bots/${bot.id}/tasks/${threadId}`, { approvalMode: "ask" });
+  if (leveled.status >= 300) throw new Error(`setting the bot to Ask answered ${leveled.status}: ${JSON.stringify(leveled.body).slice(0, 200)}`);
   const started = Date.now();
   const sent = await api("POST", `/api/bots/${bot.id}/messages`, { text, threadId });
   if (sent.status >= 300) throw new Error(`the message answered ${sent.status}: ${JSON.stringify(sent.body).slice(0, 200)}`);

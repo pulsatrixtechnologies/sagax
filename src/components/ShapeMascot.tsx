@@ -27,9 +27,8 @@ import { requestFrame, subscribeFrames, trackPointer } from "open-bot-avatar/dom
 import { MAUS_COLORS } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { isBodyShape, MASCOT_SHAPES, SHAPE_SKIN_TIER, SHAPE_SKINS, type BodyShape, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
-import type { ShapeAvatarDef } from "../../shared/shape-avatar-def";
-import { isObjectShapeId } from "../../shared/shape-avatar-presets";
-import { engineMood, eyeMarkup, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stillUrl, type BakedStill, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
+import type { MascotAvatarDef } from "../../shared/mascot-look";
+import { bakedShapeFor, engineMood, eyeMarkup, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stillUrl, type BakedStill, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
 import { shapeSkinBase, shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
@@ -55,8 +54,8 @@ export interface ShapeMascotProps {
   moveBody?: boolean;
   /** The face turns toward the pointer (on by default while live). */
   trackPointer?: boolean;
-  /** A person's own drawing (mascotLook.avatarDef). */
-  avatarDef?: ShapeAvatarDef;
+  /** A person's own drawing (mascotLook.avatarDef): the older portable format or a pasted open-bot-avatar definition. */
+  avatarDef?: MascotAvatarDef;
   /** The accessible name (the bot's name); none marks the mascot decorative. */
   label?: string | null;
   className?: string;
@@ -437,7 +436,7 @@ export function ShapeMascot({
   const uid = `shape-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   // the still: the shape's baked frames, or (a person's own drawing, the flat Outline skin) inferred once here
-  const bakedId: MascotShape | null = depth === 0 ? null : avatarDef ? (avatarDef.id && isObjectShapeId(avatarDef.id) ? avatarDef.id : null) : known;
+  const bakedId: MascotShape | null = depth === 0 ? null : bakedShapeFor(known, avatarDef);
   const baked = useBakedStill(bakedId);
   const still = bakedId ? baked : runtimeStill(definition, depth);
   const motion = engineMood(mood);

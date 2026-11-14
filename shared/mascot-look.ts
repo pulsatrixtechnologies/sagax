@@ -35,7 +35,11 @@
  * the choice made before. Absent means the owl, as every bot had before.
  */
 import { z } from "zod";
+import { engineAvatarDefSchema, type EngineAvatarDef } from "./engine-avatar-def.ts";
 import { shapeAvatarDefSchema, type ShapeAvatarDef } from "./shape-avatar-def.ts";
+
+/** A person's own shape: the older portable format, or a pasted open-bot-avatar definition (#4160). */
+export type MascotAvatarDef = ShapeAvatarDef | EngineAvatarDef;
 
 export const MASCOT_CHARACTERS = ["owl", "crab", "shape", "trombi", "bunbu", "shiba", "grump", "ogre", "frog"] as const;
 export type MascotCharacter = (typeof MASCOT_CHARACTERS)[number];
@@ -500,11 +504,13 @@ export const mascotLookSchema = z
     style: z.enum(["2d", "3d"]).optional(),
     shape: z.preprocess((value) => (typeof value === "string" && Object.hasOwn(LEGACY_SHAPES, value) ? LEGACY_SHAPES[value] : value), z.enum(MASCOT_SHAPES)).optional(),
     /**
-     * A person's own Shape avatar definition (imported or generated). Geometry
-     * only; validated by shapeAvatarDefSchema. When set on character "shape",
-     * the renderer prefers it over the catalog body for that bot.
+     * A person's own Shape avatar definition (imported, generated or pasted).
+     * Geometry only: the older portable format (shapeAvatarDefSchema) or an
+     * open-bot-avatar definition (engineAvatarDefSchema, checked by the
+     * engine's validateAvatar, #4160). When set on character "shape", the
+     * renderer prefers it over the catalog body for that bot.
      */
-    avatarDef: shapeAvatarDefSchema.optional(),
+    avatarDef: z.union([shapeAvatarDefSchema, engineAvatarDefSchema]).optional(),
     skins: z
       .object({
         shape: z.preprocess(legacy(LEGACY_SHAPE_SKINS), z.enum(SHAPE_SKINS)).optional(),
@@ -522,7 +528,7 @@ export const mascotLookSchema = z
   .strict();
 
 export type MascotLook = z.infer<typeof mascotLookSchema>;
-export type { ShapeAvatarDef };
+export type { EngineAvatarDef, ShapeAvatarDef };
 
 export const DEFAULT_MASCOT_LOOK: MascotLook = Object.freeze({ character: "owl" }) as MascotLook;
 
@@ -534,6 +540,11 @@ export const DEFAULT_MASCOT_LOOK: MascotLook = Object.freeze({ character: "owl" 
 export function botMascotLook(value: unknown): MascotLook {
   const parsed = mascotLookSchema.safeParse(value);
   if (parsed.success) return parsed.data;
+  // a person's own shape this build cannot draw drops alone: the bot keeps its character, shape and skins (#4160)
+  if (value && typeof value === "object" && "avatarDef" in value) {
+    const { avatarDef: _dropped, ...kept } = value as { avatarDef?: unknown };
+    return botMascotLook(kept);
+  }
   if (!value || typeof value !== "object" || !("skins" in value)) return DEFAULT_MASCOT_LOOK;
   const { skins, ...rest } = value as { skins?: unknown };
   const known: Record<string, string> = {};
@@ -562,7 +573,7 @@ export function botMascotLook(value: unknown): MascotLook {
 /** The look with every choice filled in. */
 export function completeMascotLook(value: unknown): Required<Omit<MascotLook, "skins" | "avatarDef">> & {
   skins: { shape: ShapeSkin; trombi: TrombiSkin; bunbu: BunbuSkin; shiba: ShibaSkin; grump: GrumpSkin; ogre: OgreSkin; frog: FrogSkin; crab: CrabSkin };
-  avatarDef?: ShapeAvatarDef;
+  avatarDef?: MascotAvatarDef;
 } {
   const look = botMascotLook(value);
   return {

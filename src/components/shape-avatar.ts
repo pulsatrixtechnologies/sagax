@@ -18,6 +18,8 @@
 import { avatarFrame, getExample, validateAvatar, type AvatarDefinition, type AvatarMotion, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import baked from "../../shared/shape-avatars.json" with { type: "json" };
 import type { MascotShape } from "../../shared/mascot-look.ts";
+import { isEngineAvatarDef, type EngineAvatarDef } from "../../shared/engine-avatar-def.ts";
+import type { MascotAvatarDef } from "../../shared/mascot-look.ts";
 import type { ShapeAvatarDef } from "../../shared/shape-avatar-def.ts";
 import { isObjectShapeId } from "../../shared/shape-avatar-presets.ts";
 import { boxFit, fitPath, flattenPath, liveOutlineFromDef, smoothClosedOutline } from "../../shared/shape-avatar-outline.ts";
@@ -111,9 +113,29 @@ export function ownDefinition(def: ShapeAvatarDef, shape: MascotShape): AvatarDe
   return resolved;
 }
 
+const BY_PASTED = new WeakMap<EngineAvatarDef, AvatarDefinition>();
+
+/** A pasted open-bot-avatar definition (#4160): the engine's own, checked again; one it refuses falls back to the bot's shape. */
+export function pastedDefinition(def: EngineAvatarDef, shape: MascotShape): AvatarDefinition {
+  const cached = BY_PASTED.get(def);
+  if (cached) return cached;
+  const result = validateAvatar(def);
+  const resolved = result.ok ? result.value : shapeDefinition(shape);
+  BY_PASTED.set(def, resolved);
+  return resolved;
+}
+
 /** The definition a bot's look draws. */
-export function lookDefinition(shape: MascotShape, avatarDef?: ShapeAvatarDef): AvatarDefinition {
-  return avatarDef ? ownDefinition(avatarDef, shape) : shapeDefinition(shape);
+export function lookDefinition(shape: MascotShape, avatarDef?: MascotAvatarDef): AvatarDefinition {
+  if (!avatarDef) return shapeDefinition(shape);
+  return isEngineAvatarDef(avatarDef) ? pastedDefinition(avatarDef, shape) : ownDefinition(avatarDef, shape);
+}
+
+/** The catalog shape whose baked still a look draws: its own shape, a saved object preset, or none for a person's own drawing. */
+export function bakedShapeFor(shape: MascotShape, avatarDef?: MascotAvatarDef): MascotShape | null {
+  if (!avatarDef) return shape;
+  if (isEngineAvatarDef(avatarDef)) return null;
+  return avatarDef.id && isObjectShapeId(avatarDef.id) ? avatarDef.id : null;
 }
 
 /** The app's moods for a shape (Avatar.tsx shapeMoodFor maps the bot's state onto them). */

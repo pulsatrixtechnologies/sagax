@@ -413,7 +413,15 @@ cross-section under its projection, with the eyes over it. The fourteen moves
 into the egg, the hexagon or the triangle, and the dots, mark, badge, rings,
 ribbons and specks beside it; a tap on a shape in the sidebar plays one.
 Colour stays on the bot. Custom definitions on
-`mascotLook.avatarDef` are fitted into the engine's box. The former desktop
+`mascotLook.avatarDef` are fitted into the engine's box. That field also
+takes an open-bot-avatar definition as is (#4160): Appearance > Shape >
+Paste a definition takes the JSON the engine's editor or its prompt gives,
+checks it with `validateAvatar` (`shared/engine-avatar-def.ts`, again on the
+server through `mascotLookSchema`) and stores it on the look; the Shape grid
+shows it first, by its name, as the chosen shape, and picking a catalog
+shape drops it. The bot's catalog shape stays on the look, so a build or a
+platform that cannot draw the pasted one shows that shape (a stored
+definition that no longer validates drops alone, never the whole look). The former desktop
 engine (`shape-engine.ts`, `shape-volume.ts`, `shape-motion.ts`) stays as the
 reference the phone's Swift engine is generated from until the phone follows
 (#4159). Every definition is checked with `validateAvatar`
@@ -426,6 +434,7 @@ reference the phone's Swift engine is generated from until the phone follows
 |---|---|
 | Geometry (radii, faces, skins) | `shared/mascot-geometry.json` |
 | Portable definition schema | `shared/shape-avatar-def.ts` |
+| A pasted open-bot-avatar definition (#4160) | `shared/engine-avatar-def.ts`, `MascotLookEditor.tsx` `PasteShape` |
 | Object presets (bodies and eyes read from `mascot-geometry.json`) | `shared/shape-avatar-presets.ts` |
 | Generate from a description | `shared/shape-avatar-generate.ts`, `server/media/shape-avatar.ts` |
 | Drawing (the engine's definitions, still and live) | `src/components/shape-avatar.ts`, `ShapeMascot.tsx`, `shared/shape-avatars.json`, `third_party/open-bot-avatar/` |

@@ -27,6 +27,11 @@ describe("a bot's look", () => {
     expect(botLook({ name: "A", color: "green", mascotLook: { character: "shiba", avatarDef } }, exists)).toMatchObject({ avatarDef: null });
   });
 
+  it("sends a pasted open-bot-avatar definition as no drawing, so a console draws the catalog shape and never reads eyes it lacks (#4160)", () => {
+    const pasted = { version: 1, id: "kite", name: "Kite", body: { path: "M50 10L86 50L50 90L14 50Z" }, eyes: { x: 50, y: 48, spacing: 14, scale: 1 } };
+    expect(botLook({ name: "A", color: "green", mascotLook: { character: "shape", shape: "star", avatarDef: pasted } }, exists)).toMatchObject({ character: "shape", shape: "star", avatarDef: null });
+  });
+
   it("names the character, its family, skin and shape as stored", () => {
     expect(botLook({ name: "A", color: "tomato", mascotLook: { character: "shape", shape: "star", skins: { shape: "nebula" } } }, exists)).toMatchObject({
       // star is a shape of its own since the full shape set (#1513, 2026-10-28)

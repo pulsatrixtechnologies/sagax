@@ -11,7 +11,10 @@ import { runLoginShellProbe } from "../env-path.ts";
 import { spawnPcHook } from "../hooks/lifecycle-hook-exec.ts";
 import { execCli, killCliTree, spawnCli } from "../procs.ts";
 import { spawnSource } from "../resource-usage/sources.ts";
-import { CHILD_NICE, execChild, execChildAsync, type ExecChildError, HelperChild, pendingStart, spawnChild, spawnHelperPid, startSpawnHelper, stopSpawnHelper } from "./spawn-helper.ts";
+import {
+  CHILD_NICE, execChild, execChildAsync, type ExecChildError, HelperChild, noteProcessStart, pendingStart, SLOW_START_MS, spawnChild, spawnHelperPid,
+  startSpawnHelper, stopSpawnHelper, STRETCH_STARTS_LIMIT,
+} from "./spawn-helper.ts";
 
 const PROBE = `
 const out = { argv: process.argv.slice(1), env: process.env, cwd: process.cwd(), uid: process.getuid(), gid: process.getgid(), ppid: process.ppid };
@@ -387,4 +390,46 @@ describe.runIf(posix)("spawn helper (#3680)", () => {
     process.kill(live.pid!, "SIGKILL");
     await ended;
   }, 15_000);
+});
+
+// #3598: the server measures its own process starts. A start whose
+// synchronous part is slow is logged with the program's name (never its
+// folder nor its arguments), the server's resident memory and the starts of
+// the same stretch; a stretch with more starts than STRETCH_STARTS_LIMIT is
+// logged with its programs.
+describe("process starts measured on the main thread (#3598)", () => {
+  const lines: string[] = [];
+  const loopTurn = () => new Promise((resolve) => setImmediate(resolve));
+  beforeAll(() => {
+    startSpawnHelper({ log: (line) => lines.push(line) });
+    stopSpawnHelper();
+  });
+
+  it("logs a slow start with its program's name, the server's memory and its stretch", async () => {
+    lines.length = 0;
+    await loopTurn();
+    noteProcessStart("/home/someone/private-folder/engine-cli", 5);
+    noteProcessStart("/home/someone/private-folder/engine-cli", SLOW_START_MS + 50);
+    await loopTurn();
+    const slow = lines.filter((line) => line.startsWith("[spawn-slow]"));
+    expect(slow).toHaveLength(1);
+    expect(slow[0]).toMatch(/^\[spawn-slow\] engine-cli took 150 ms on the main thread to start; server rss \d+ MB; start 2 of this stretch \(155 ms\)$/);
+    expect(lines.join("\n")).not.toContain("private-folder");
+  });
+
+  it("logs a stretch that starts more processes than the limit, and only such a stretch", async () => {
+    lines.length = 0;
+    await loopTurn();
+    for (let i = 0; i < STRETCH_STARTS_LIMIT; i++) noteProcessStart("probe", 1);
+    await loopTurn();
+    expect(lines.filter((line) => line.startsWith("[spawn-stretch]"))).toEqual([]);
+    // real starts count too, through spawnChild
+    const children = Array.from({ length: STRETCH_STARTS_LIMIT + 1 }, () => spawnChild(process.execPath, ["-e", ""], { stdio: "ignore" }));
+    await loopTurn();
+    const stretch = lines.filter((line) => line.startsWith("[spawn-stretch]"));
+    expect(stretch).toHaveLength(1);
+    expect(stretch[0]).toMatch(new RegExp(`^\\[spawn-stretch\\] ${STRETCH_STARTS_LIMIT + 1} process starts in one synchronous stretch \\(\\d+ ms\\): `));
+    expect(stretch[0]!.split(": ")[1]!.split(", ")).toHaveLength(STRETCH_STARTS_LIMIT + 1);
+    await Promise.all(children.map((child) => new Promise((resolve) => child.once("close", resolve))));
+  });
 });

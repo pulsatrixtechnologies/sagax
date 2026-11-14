@@ -206,7 +206,8 @@ function serverShareMs(line: string): number {
 // real engine's start shortened to 1.5 s): a no-tool turn and a turn with
 // tools on a warm conversation each reach the engine in well under 5 s of the
 // server's own time, on the warm engine, with no second copy of the opening
-// block. The lines are printed for the record.
+// block. The lines are printed for the record. #3598: and no turn starts more
+// processes in one synchronous stretch than the server allows itself.
 it("a warm conversation's no-tool and tool turns reach the engine without a start or a second opening block (#4215)", async () => {
   for (const toolMs of [0, 400]) {
     await withLatencyFixture({ coldMs: 1_500, ...(toolMs ? { toolMs } : {}) }, async (fixture) => {
@@ -223,6 +224,11 @@ it("a warm conversation's no-tool and tool turns reach the engine without a star
         expect(serverShareMs(line)).toBeLessThan(5_000);
       }
       if (toolMs) for (const line of lines) expect(Number(/tools=(\d+)/.exec(line)?.[1])).toBeGreaterThanOrEqual(1);
+      // #3598: no turn's preparation starts more processes in one synchronous
+      // stretch than the agreed number (STRETCH_STARTS_LIMIT, spawn-helper.ts):
+      // the server logs such a stretch, and none comes after the first send
+      const log = fixture.serverLog();
+      expect(log.slice(log.indexOf("[omb-turn]")).split("\n").filter((line) => line.includes("[spawn-stretch]"))).toEqual([]);
       expect(fixture.promptPids().size).toBe(1);
     });
   }

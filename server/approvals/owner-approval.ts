@@ -39,7 +39,7 @@ import { parseGrokGatewayToolId } from "../../shared/grok-cloud-connectors.ts";
 import { connectorWriteKind } from "../../shared/engine-connectors.ts";
 import { screenAppTarget, type ScreenAppIdentity } from "../../shared/computer-app.ts";
 import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
-import { sensitiveReadPath } from "../safety/sensitive-path.ts";
+import { credentialReadPath, sensitiveReadPath, shellCredentialPaths } from "../safety/sensitive-path.ts";
 
 export const BOT_PERMISSION_MODES = ["approval", "auto", "bypass"] as const;
 export type BotPermissionMode = (typeof BOT_PERMISSION_MODES)[number];
@@ -391,6 +391,34 @@ const BULK_TOOL = /(^|[_.:-])(bulk|batch|mass|many)([_.:-]|$)/i;
 const ID_LIST_KEYS = ["ids", "id", "records", "items", "tickets", "entries", "targets", "recordIds", "ticketIds"];
 const MESSAGE_RESOURCE = /(^|\/)(messages?|mail|emails?|sms|calls?)$/i;
 
+/** The shell line a call carries, under command, cmd or script (the
+ * built-in Bash, an engine's own shell tool, the folded native command line
+ * of Codex and the ACP engines); with `argv`, a list of words reads as
+ * its words joined. */
+function shellLineOf(args: Record<string, unknown> | undefined, argv = false): string | undefined {
+  for (const key of ["command", "cmd", "script"]) {
+    const value = args?.[key];
+    if (typeof value === "string") return value;
+    if (argv && Array.isArray(value) && value.length && value.every((word) => typeof word === "string")) return value.join(" ");
+  }
+  return undefined;
+}
+
+/** #3697: a call that reads a credential file or folder or a process
+ * secret (server/safety/sensitive-path.ts credentialReadPath, one rule for
+ * both): named by a file tool that only reads (readOnlyFileTool: Read,
+ * Grep, Glob, LS, an environment's read_file or list_files), or read by a
+ * shell line (shellCredentialPaths). The `path` of any other tool (a
+ * connector's API route, a file change) is not a local read. A Glob whose
+ * folder is only inside its `pattern` is not seen. */
+export function credentialReadOf(call: Pick<RuleCall, "tool" | "input">): boolean {
+  const args = parseArgs(call.input);
+  const line = shellLineOf(args, true);
+  if (line !== undefined && shellCredentialPaths(line).length) return true;
+  if (!readOnlyFileTool(call.tool)) return false;
+  return (callFilePaths(call.input) ?? []).some((path) => credentialReadPath(path));
+}
+
 /** Which destructive kind a call is, or undefined. A delete first, then a
  * change to two or more records at once, then a message that leaves the
  * organization (email, SMS, call). */
@@ -413,10 +441,7 @@ export function destructiveKindOf(call: Pick<RuleCall, "tool" | "input" | "hints
   // allow rule was made for a delete. The line arrives under command/cmd/script
   // (the built-in Bash, an engine's own shell tool, and the folded native
   // command line index.ts builds for Codex and the ACP engines alike).
-  const shellLine = typeof args?.command === "string" ? args.command
-    : typeof args?.cmd === "string" ? args.cmd
-      : typeof args?.script === "string" ? args.script
-        : undefined;
+  const shellLine = shellLineOf(args);
   if (shellLine && readShell(shellLine).actions.has("delete")) return "delete";
   const writes = described.risk === "write" || described.risk === "execute" || connectorWrite !== null;
   if (BULK_TOOL.test(parseToolId(call.tool).name)) return "bulk";
@@ -587,6 +612,10 @@ export function ownerDecision(input: {
   // Always allow rule saved on it).
   const ownEnvironmentChange = input.ownEnvironment === true && input.mode !== "approval" && (destructive === "delete" || destructive === "bulk");
   if (destructive && !ownEnvironmentChange) return { kind: "card", reason: "destructive", destructive };
+  // #3697: Approve for me never reads a credential file or folder, or a
+  // process secret, unasked (a file tool or a shell command's arguments);
+  // an Always allow saved on that card answers it next time.
+  if (input.mode === "auto" && credentialReadOf(input.call)) return { kind: "card", reason: "no-rule" };
   if (input.mode === "auto") return { kind: "allow", source: "owner-auto" };
   return { kind: "card", reason: "no-rule" };
 }

@@ -353,14 +353,13 @@ app.whenReady().then(async () => {
       console.log(JSON.stringify({ provider: "grok", model, mode, resumed: turn === 2, reviewedReads: mode === "auto", sagaxInternalNoCard: true, realAgentsMcp: true }));
     }
   }
-  // A delete and a question keep their card at Auto. A command spelled as
-  // one of Sagax's own tools is judged as the command it is: at Ask, where
-  // Sagax's own tools answer with no card, it still waits for the person.
-  // Known (#3697): at Auto, Approve for me answers that command with no card,
-  // even when it reads a credential file; the step runs at Ask until then.
+  // A delete, a question and a command that reads a credential file keep
+  // their card at Auto. The command is spelled as one of Sagax's own tools:
+  // it is judged as the command it is, and its credential read keeps the
+  // card at Auto (#3697).
   for (const instanceId of ["grok-delete", "grok-spoof", "grok-question"]) {
     const bot = (await api("/api/bots", "POST", { modelSelection: { instanceId, model: "grok-4.6" } })).body.bot;
-    const level = instanceId === "grok-spoof" ? "ask" : "auto";
+    const level = "auto";
     await coordinator.request(child, bot.id, level);
     assert.equal((await api(`/api/bots/${bot.id}/messages`, "POST", { text: "Verify this action still needs a person" })).status, 202);
     const card = await until(async () => pendingCard((await api("/api/bots")).body.bots.find((candidate) => candidate.id === bot.id)));

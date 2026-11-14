@@ -28,6 +28,7 @@
 // no-new-privileges, the runtime's seccomp profile): the only mounts are the
 // provisioner's own (docs/user-sandbox.md).
 
+import { programOf } from "../../shared/custom-rules.ts";
 import { sagaxFolder } from "../../shared/human-id.ts";
 
 /** A file name that holds credentials even without a leading dot. */
@@ -137,4 +138,147 @@ export function sensitiveReadPath(path: string): boolean {
   const made = sagaxFolder(path);
   if (made) return made.rest.length > 0 && sensitiveEnvironmentPath(made.rest.join("/"));
   return sensitiveEnvironmentPath(path);
+}
+
+/** Programs that never read the files their operands name: they print text,
+ * test a name, make, move, link, write (`tee`) or change the mode or owner
+ * of a file (an input redirection on their line is still read). */
+const NON_READERS: ReadonlySet<string> = new Set(["echo", "printf", "touch", "mkdir", "chmod", "chown", "chgrp", "mv", "ln", "tee", "test", "[", "[["]);
+/** Programs whose last operand is the destination they write (`cp a b`),
+ * unless the destination is given by `-t`. */
+const COPIERS: ReadonlySet<string> = new Set(["cp", "install", "rsync", "scp"]);
+/** Programs whose first operand is a pattern, not a file. */
+const PATTERN_FIRST: ReadonlySet<string> = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
+/** A flag whose value is a name pattern, not a file (`find -name '*.pem'`). */
+const PATTERN_FLAG = /^-(?:i?name|i?path|i?regex|i?wholename|i?lname)$/;
+/** ssh-keygen flags that read an existing key (`-y`, `-l`, `-e`, `-i`, `-p`,
+ * `-c`, `-B`); without one, `-f` names the key it writes. */
+const KEYGEN_READS = /^-[A-Za-z]*[ylepicB]/;
+/** Programs whose operands are URLs or API routes, never local paths, with
+ * the flags whose value is a file they read (`curl -T f`, `gh api --input
+ * f`); a value `@file` (`-d @f`, `-F k=@f`) is read too. `-o` and every
+ * other value is written or is not a file. */
+const URL_FILE_FLAGS: ReadonlyMap<string, RegExp> = new Map([
+  ["curl", /^(?:-[TEKb]|--(?:upload-file|cert|key|cacert|capath|config|netrc-file|cookie))$/],
+  ["wget", /^(?:-i|--(?:input-file|certificate|private-key|ca-certificate|load-cookies|post-file|body-file))$/],
+  ["gh api", /^--input$/],
+]);
+/** A message, title or body given by its flag (`git commit -m "..."`, `gh
+ * issue create --title "..."`): text, not a path. A value with a command
+ * substitution in it is kept, since that command runs. */
+const MESSAGE_VALUE = /(^|\s)(?:-a?m|--message|--title|--body|--subject)(?:=|\s+)("(?:[^"\\]|\\.)*"|'[^']*'|[^\s;&|]+)/g;
+/** A source file named like a credential (`src/auth/token.ts`) and a
+ * committed example of an env file hold no credential. */
+const NOT_A_CREDENTIAL_FILE = /^(?:[^/]*\.(?:ts|tsx|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|swift|c|h|cc|cpp|cs|php|md)|\.env\.(?:example|sample|template|dist))$/i;
+/** An output redirection and its target (`> f`, `>> f`, `2> f`, `&> f`,
+ * `>&2`): written, never read. A process substitution `>(...)` stays. */
+const OUTPUT_REDIRECTION = /(?:\d*|&)>>?[|&]?(?!\()\s*['"]?[^\s<>'"&;|()]*['"]?/g;
+/** An input redirection and its source (`< f`), not a here-doc. */
+const INPUT_REDIRECTION = /(?<!<)<(?![<(])\s*['"]?([^\s<>'"]+)['"]?/g;
+
+/** Whether a shell word reads as a path: it has a `/`, starts with `~` or
+ * `.`, or is a file name with an extension. A bare word (`token`, `secret`,
+ * a commit message's words, a search term) is not a file. */
+function pathLike(word: string): boolean {
+  return word.includes("/") || /^[~.]/.test(word) || /[^.]\.[A-Za-z0-9]+$/.test(word);
+}
+
+/** A standard stream (`/dev/stdin`, `/dev/stdout`, `/dev/stderr`,
+ * `/dev/fd/0` to `/dev/fd/2`): the call's own input and output, not a
+ * process secret. */
+const STANDARD_STREAM = /^\/dev\/(?:stdin|stdout|stderr|fd\/[0-2])$/;
+
+/** #3697: whether a read of this path, by a file tool or by a shell line,
+ * reads a credential (one predicate for both): a process secret, or a
+ * credential location (credentialLocation) other than a standard stream, a
+ * source file or an env example. A source file or an env example is still
+ * one inside a credential dot folder (`~/.ssh`, `~/.aws`) or a credential
+ * folder under .config; a folder only named like a credential (`src/tokens`,
+ * `server/secrets`) does not make its source files credentials. */
+export function credentialReadPath(path: string): boolean {
+  if (path.trim().startsWith("/") && STANDARD_STREAM.test(lexical(path))) return false;
+  if (!credentialLocation(path)) return false;
+  if (procSecretPath(path)) return true;
+  const parts = partsOf(path);
+  if (!NOT_A_CREDENTIAL_FILE.test(parts.at(-1) ?? "")) return true;
+  const folders = parts.slice(0, -1);
+  return folders.some((part, index) => CREDENTIAL_DOTNAME.test(part)
+    || (part === ".config" && CREDENTIAL_CONFIG.test(folders[index + 1] ?? "")));
+}
+
+/** #3697: the credential locations and process secrets a shell line reads
+ * (credentialLocation): every path-like word of each command on the line
+ * (`;`, `&&`, `|`, `$(...)`, `(`, backticks), the program word included (a
+ * quoted path inside an interpreter's one-liner lands there), a value after
+ * `=` (`--env-file=.env`, `if=/proc/self/environ`) and every input
+ * redirection (`< file`). Not read, so not counted: an output redirection's
+ * target, the operands of a program that does not read them (echo, printf,
+ * touch, mkdir, chmod, chown, chgrp, mv, ln, tee, test, `git check-ignore`,
+ * ssh-keygen writing a key), a copy's destination, a search or name pattern
+ * (grep's first operand, `find -name`), a message (`-m`, `--title`,
+ * `--body`), a URL or API route (curl, wget and `gh api` operands, a word
+ * with a scheme). `$HOME` reads as `~`. The program is found by
+ * shared/custom-rules.ts programOf (wrappers and their flags skipped).
+ * Each path is judged by credentialReadPath, the same rule as a file
+ * tool's path. Lexical: no link is followed, and the line is read as text,
+ * so a name joined from quoted pieces (`cat ."env"`), a path built while
+ * the command runs, a list of paths fed to another program (`xargs cat <
+ * list.txt`) and an interactive terminal's keystrokes are not seen. */
+export function shellCredentialPaths(line: string): string[] {
+  const found: string[] = [];
+  const check = (word: string) => {
+    const path = word.replace(/^\$\{?HOME\}?(?=\/|$)/, "~");
+    if (!path || path.includes("://") || !pathLike(path)) return;
+    if (credentialReadPath(path) && !found.includes(path)) found.push(path);
+  };
+  const reads = line
+    .replace(MESSAGE_VALUE, (whole, lead: string, value: string) => (/\$\(|`/.test(value) ? whole : lead))
+    .replace(OUTPUT_REDIRECTION, " ");
+  for (const segment of reads.split(/\n|\r|;|&&?|\|\|?|`|\$\(|\(|\)/)) {
+    for (const match of segment.matchAll(INPUT_REDIRECTION)) check(match[1]!);
+    const words = segment.replace(INPUT_REDIRECTION, " ").split(/[\s<>'"{}]+/).filter(Boolean);
+    const { index, program } = programOf(words);
+    const rest = words.slice(index + 1);
+    if (NON_READERS.has(program) || (program === "git" && rest[0] === "check-ignore")) continue;
+    if (program === "ssh-keygen" && !rest.some((word) => KEYGEN_READS.test(word))) continue;
+    if (index < words.length) check(words[index]!);
+    const fileFlags = URL_FILE_FLAGS.get(program === "gh" && rest[0] === "api" ? "gh api" : program);
+    const operands: string[] = [];
+    let patternPending = PATTERN_FIRST.has(program);
+    let skipNext = false;
+    let readNext = false;
+    let target = false;
+    for (const word of rest) {
+      if (readNext) { readNext = false; check(word); continue; }
+      if (skipNext) { skipNext = false; continue; }
+      const eq = word.indexOf("=");
+      if (fileFlags) {
+        // a URL or route is never a local path; a file flag's value and an
+        // `@file` value are read
+        const at = word.indexOf("@");
+        if (word.startsWith("-") && fileFlags.test(eq > 0 ? word.slice(0, eq) : word)) {
+          if (eq > 0) check(word.slice(eq + 1));
+          else readNext = true;
+        } else if (at === 0 || (at > 0 && word[at - 1] === "=")) check(word.slice(at + 1));
+        continue;
+      }
+      if (word.startsWith("-")) {
+        if (eq > 0) check(word.slice(eq + 1));
+        if (PATTERN_FLAG.test(word)) skipNext = true;
+        else if (COPIERS.has(program) && /^(?:-t|--target-directory)$/.test(word)) { skipNext = true; target = true; }
+        else if (COPIERS.has(program) && word.startsWith("--target-directory=")) target = true;
+        // a pattern given by its flag (`-e token`): every operand is a file
+        else if (patternPending && /^-(?:e|-regexp)$/.test(word)) { patternPending = false; skipNext = true; }
+        else if (patternPending && /^-(?:f|-file)$/.test(word)) patternPending = false;
+        continue;
+      }
+      if (patternPending) { patternPending = false; continue; }
+      const value = /^[A-Za-z_][A-Za-z0-9_]*=/.exec(word);
+      if (value) check(word.slice(value[0].length));
+      operands.push(word);
+    }
+    // a copy's last operand is the destination it writes
+    for (const word of COPIERS.has(program) && !target ? operands.slice(0, -1) : operands) check(word);
+  }
+  return found;
 }

@@ -1,13 +1,15 @@
 // Compose "Create new Bot" dispatches `{ type: "newBot" }` and closes: instant
 // create, no NewBotDialog, no Start from, no Browse templates.
-// Templates live in Plugins → Bot templates (the catalogue titled Browse
-// Bots). Plugins is the sidebar foot's round apps-grid button, named
-// "Connect apps" until 0.8.52 (UX reference 8.0 bis). The sidebar has no
-// Browse Bots button.
+// Templates live in Connect Apps → Bot templates (the catalogue titled
+// Browse Bots). Connect Apps is the sidebar foot's round apps-grid button
+// (FootConnectApps), whose accessible name is the window's title,
+// connectApps.title: "Plugins" from 0.8.52 until #4169 renamed the window.
+// The sidebar has no Browse Bots button.
 // NewBotDialog stays on Team map → manage a named team → New Bot.
 // Unassigned (`data-team-key=""`) has no New Bot: TeamDialog.managing is
 // Boolean(section) && !rename, and an empty key is falsy.
 
+import { readFileSync } from "node:fs";
 import { jsLiteral } from "./js-literal.mjs";
 import { clickAccessible, dismissOverlays } from "./ui-click.ts";
 
@@ -38,18 +40,22 @@ export function catalogTemplateTools(snap: string): boolean {
   return snap.includes("Import") && snap.includes("Share a team");
 }
 
-/** The sidebar foot's round apps-grid button (FootConnectApps). */
-export const PLUGINS_BUTTON = "Plugins";
+/** The sidebar foot's round apps-grid button (FootConnectApps): its
+ * accessible name is the English connectApps.title, read from the locale so
+ * a rename of the window cannot leave the smokes clicking a stale name. */
+export const CONNECT_APPS_BUTTON: string = (JSON.parse(
+  readFileSync(new URL("../../src/locales/en.json", import.meta.url), "utf8"),
+) as Record<string, string>)["connectApps.title"]!;
 
 /** View all or a bot detail. The hosted home is heading "Browse Bots", and
- * its Back returns to Plugins, so that Back is not a step to click. */
+ * its Back returns to Connect Apps, so that Back is not a step to click. */
 export function nestedTemplatesCatalog(snap: string): boolean {
   return snap.includes('button "Back"')
     && !snap.includes('heading "Browse Bots"')
     && (snap.includes("Browse Bots") || snap.includes('heading "Templates"'));
 }
 
-/** Open Plugins, then Bot templates. Import / Share a team are on that
+/** Open Connect Apps, then Bot templates. Import / Share a team are on that
  * catalogue's Templates section. A catalogue already open on a detail walks
  * Back until those tools show; the home's own Back is left alone. */
 export async function openTemplatesCatalog(flow: CatalogFlow): Promise<void> {
@@ -59,7 +65,7 @@ export async function openTemplatesCatalog(flow: CatalogFlow): Promise<void> {
   const inWindow = snap.includes('button "Bot templates"')
     || snap.includes('heading "Browse Bots"')
     || nestedTemplatesCatalog(snap);
-  if (!inWindow) await flow.click(PLUGINS_BUTTON);
+  if (!inWindow) await flow.click(CONNECT_APPS_BUTTON);
   await until(async () => {
     const next = await flow.snapshot();
     if (catalogTemplateTools(next)) return true;

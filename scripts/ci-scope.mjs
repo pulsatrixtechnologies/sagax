@@ -16,12 +16,13 @@ const MOBILE_PATHS = /^(?:ios\/|android\/|\.github\/workflows\/ci\.yml$|scripts\
 // shared/), but the tests also read files of the repository while they run:
 // the shared/ vectors and contracts (BackgroundThreadsTests,
 // BotFieldRulesParityTests), the desktop's locale catalogs (StepLabelTests),
-// src/styles.css (MascotShadowTests), the mascot art (HdMascotTests), the OS
-// permission vectors and the server's client allow list. ci-scope.test.ts
-// fails when a test reads a path this list misses. Markdown never counts (the
-// one note a test reads, docs/releases/0.4.14.md, is fixed). The workflow
-// counts too, so a change to the job runs it once.
-const SWIFT_PACKAGE_PATHS = /^(?:ios\/|shared\/|src\/locales\/|src\/assets\/mascots\/|src\/styles\.css$|electron\/os-permissions\.vectors\.json$|server\/auth\/client-allow\.ts$|\.github\/workflows\/ci\.yml$)/;
+// src/styles.css (MascotShadowTests), the mascot art (HdMascotTests), the
+// shape mascots' baked stills (ShapeEngineStillTests), the OS permission
+// vectors and the server's client allow list. ci-scope.test.ts fails when a
+// test reads a path this list misses. Markdown never counts (the one note a
+// test reads, docs/releases/0.4.14.md, is fixed). The workflow counts too, so
+// a change to the job runs it once.
+const SWIFT_PACKAGE_PATHS = /^(?:ios\/|shared\/|src\/locales\/|src\/assets\/mascots\/|src\/components\/shape-stills\/|src\/styles\.css$|electron\/os-permissions\.vectors\.json$|server\/auth\/client-allow\.ts$|\.github\/workflows\/ci\.yml$)/;
 
 /** Whether a push's changed paths can move the Swift package tests' result.
  * An empty or malformed list counts, as everything does for selectCiScope. */

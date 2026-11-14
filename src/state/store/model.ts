@@ -1678,8 +1678,8 @@ export type Action =
        * the composer for this thread's next turn ("" = Moi); absent: none. */
       perspicaxRole?: string;
       onError?: () => void;
-      /** the server took the message (its receipt came back) */
-      onSent?: () => void;
+      /** the server took the message (its receipt came back, passed on) */
+      onSent?: (receipt?: unknown) => void;
     }
   | { type: "stopParallelTask"; botId: string; threadId: string }
   | { type: "pendingQueued"; threadId: string; queueId: string; text: string; reason?: SteerQueueReason }

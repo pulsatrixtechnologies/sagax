@@ -2,6 +2,7 @@
 /** acceptDirectSend (#1388). Pure move from server/index.ts. */
 import { queuedSteeredMessage } from "../turns/steer-queue.ts";
 import { notePersonWrote } from "../team-work/person-note.ts";
+import { callBusyMode, parallelOrWait } from "../busy-routing.ts";
 export type Host = Record<string, any>;
 
 export function createAcceptDirectSend(getHost: () => Host): any {
@@ -25,13 +26,15 @@ async function acceptDirectSend(
     /** A person is proven present (a paired session, or the desktop's owner
      * capability): steering their words in clears the unattended mark. */
     personPresent: boolean;
+    /** The asker's key for the per-person parallel limit (absent: the operator). */
+    principalId?: string;
   },
   guardedStart?: (currentAtStart: BotRecord) => Promise<DirectSendReceipt>,
 ): Promise<DirectSendReceipt> {
   const host = getHost();
   const { spokenLineFields } = host;
 
-  const { botId, threadId, text, sendId, replyTo, sender, trigger, via, speaker, callId, dataContext, personPresent } = input;
+  const { botId, threadId, text, sendId, replyTo, sender, trigger, via, speaker, callId, dataContext, personPresent, principalId } = input;
   const refused = host.directSendRefusal(botId, threadId);
   if (refused) throw refused;
   return host.sendSequencer.run(
@@ -98,6 +101,38 @@ async function acceptDirectSend(
       // Claude can accept the message inside its live turn. If the write
       // loses a race with turn settlement, or the engine cannot steer, the
       // existing server-side queue records it atomically for the next turn.
+      // #4216: a request said on a call while the bot works starts beside
+      // the running work as its own parallel task (server/busy-routing.ts
+      // callBusyMode); a correction or a follow-up steers it below, and one
+      // that needs its result waits in the queue, as does a request past the
+      // bot's parallel limit.
+      const callMode = currentAtStart.busy && via === "call" && host.autoRoutableThread(botId, threadId) && !host.isInternalTurn(threadId)
+        ? callBusyMode({ text, running: host.runningRequestText(threadId) })
+        : undefined;
+      // `capacity`: the bot's parallel limit refused a task for it (#4216);
+      // the receipt says so, and the call tells the caller it waits
+      const queueAfter = (reason?: "capacity") => {
+        const queued = host.queueSteeredMessage(currentAtStart.id, threadId, text, {
+          ...(reason ? { reason } : {}),
+          replyToId: replyTo?.id,
+          sendId,
+          dataContext,
+          prompt: host.promptWithReply(host.promptWithDataContext(text, dataContext), replyTo, host.cfg.profile?.name?.trim() || "User"),
+          sender,
+          trigger,
+          speaker,
+          via,
+          callId
+        });
+        return { ok: true as const, queued: true as const, queueId: queued.id, threadId, ...(reason ? { reason } : {}) };
+      };
+      if (callMode === "parallel") {
+        return parallelOrWait(() => host.startParallelTask({
+          botId, threadId, text, replyTo, sendId, sender, trigger, speaker, via, callId,
+          ...(principalId ? { principalId } : {})
+        }), () => queueAfter("capacity"));
+      }
+      if (callMode === "after") return queueAfter();
       if (currentAtStart.busy) {
         const instance = host.runningTurnInstance(currentAtStart, threadId);
         let steered: SteerOutcome = "refused";

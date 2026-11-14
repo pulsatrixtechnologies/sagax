@@ -1208,3 +1208,104 @@ describe("LiveCallController record", () => {
     await expect(t.start()).resolves.toBeTruthy();
   });
 });
+
+// #4216: requests said while the bot works start beside it as parallel tasks;
+// each result is spoken as it finishes, with a lead naming the request.
+describe("LiveCallController parallel requests (#4216)", () => {
+  const hear = (t: ReturnType<typeof setup>, text: string, at: number) =>
+    t.socket().receive({ type: "session.input_transcript.delta", delta: text, start_ms: at, end_ms: at + 100 });
+  const delegate = async (t: ReturnType<typeof setup>, id: string, offset: number) => {
+    t.socket().receive({ type: "session.delegation.created", offset_ms: offset, delegation: { id, target: "client", type: "delegation" } });
+    await vi.advanceTimersByTimeAsync(DELEGATION_SETTLE_MS + 1);
+  };
+  /** The next request starts as a parallel task, as the harness starts one. */
+  const parallelNext = (t: ReturnType<typeof setup>, messageId: string, title: string, waiting = false) =>
+    vi.mocked(t.deps.send).mockImplementationOnce(async () => {
+      t.message({ id: messageId, role: "user", kind: "text", text: title, via: "call", parallelTask: { threadId: `p-${messageId}`, title, requestMessageId: "", role: "request" } });
+      return { kind: "parallel", messageId, title, waiting };
+    });
+  const result = (t: ReturnType<typeof setup>, id: string, requestId: string, title: string, text: string) =>
+    t.message({ id, text, replyToId: requestId, parallelTask: { threadId: `p-${requestId}`, title, requestMessageId: requestId, role: "result", state: "done" } });
+
+  it("speaks each result once, as it finishes, led by the request it answers", async () => {
+    const t = setup();
+    await t.start();
+    hear(t, "check my unread mail", 100);
+    await delegate(t, "del_1", 300);
+    t.setActivity("working");
+    parallelNext(t, "p1", "check the new posts");
+    hear(t, "check the new posts", 2_000);
+    await delegate(t, "del_2", 2_200);
+    parallelNext(t, "p2", "the last text message");
+    hear(t, "tell me the last text message", 4_000);
+    await delegate(t, "del_3", 4_200);
+    // the second request finishes first
+    result(t, "r2", "p2", "the last text message", "Sam wrote: on my way.");
+    await vi.advanceTimersByTimeAsync(0);
+    result(t, "r1", "p1", "check the new posts", "Three new posts.");
+    await vi.advanceTimersByTimeAsync(0);
+    // the same result patched again is not read twice
+    t.patch({ id: "r2", text: "Sam wrote: on my way.", parallelTask: { threadId: "p-p2", title: "the last text message", requestMessageId: "p2", role: "result", state: "done" } });
+    await vi.advanceTimersByTimeAsync(0);
+    const said = t.socket().appends("commentary").map((e) => String(e.content));
+    expect(said).toEqual([
+      `${LIVE_COPY.parallelAnswerLead("the last text message")} Sam wrote: on my way.`,
+      `${LIVE_COPY.parallelAnswerLead("check the new posts")} Three new posts.`,
+    ]);
+  });
+
+  it("the first request's own answer still ends with no missing-answer line for the others", async () => {
+    const t = setup();
+    await t.start();
+    hear(t, "check my unread mail", 100);
+    await delegate(t, "del_1", 300);
+    t.setActivity("working");
+    await vi.advanceTimersByTimeAsync(0);
+    parallelNext(t, "p1", "check the new posts");
+    hear(t, "check the new posts", 2_000);
+    await delegate(t, "del_2", 2_200);
+    t.patch({ id: "b1", text: "Two new emails.", requestMessageId: "m1", turnTerminal: true });
+    await vi.advanceTimersByTimeAsync(0);
+    t.setActivity("idle");
+    await vi.advanceTimersByTimeAsync(0);
+    const said = t.socket().appends("commentary").map((e) => String(e.content));
+    expect(said).toEqual(["Two new emails."]);
+    expect(said).not.toContain(LIVE_COPY.noAnswer);
+  });
+
+  it("says when a request waits past the bot's parallel limit", async () => {
+    const t = setup();
+    await t.start();
+    t.setActivity("working");
+    parallelNext(t, "p1", "check the new posts", true);
+    hear(t, "check the new posts", 2_000);
+    await delegate(t, "del_2", 2_200);
+    expect(t.socket().appends("commentary").map((e) => String(e.content))).toEqual([LIVE_COPY.parallelWaiting("check the new posts")]);
+  });
+
+  it("says so too when the per-person limit refuses another task and the request waits in the queue", async () => {
+    const t = setup();
+    await t.start();
+    t.setActivity("working");
+    vi.mocked(t.deps.send).mockResolvedValueOnce({ kind: "queued", queueId: "q9", parallelLimit: true });
+    hear(t, "check the new posts", 2_000);
+    await delegate(t, "del_2", 2_200);
+    expect(t.socket().appends("commentary").map((e) => String(e.content))).toEqual([LIVE_COPY.parallelWaiting("check the new posts")]);
+  });
+
+  it("keeps the call up while a parallel request still runs", async () => {
+    const t = setup();
+    t.settings.idleMinutes = 1;
+    await t.start();
+    t.setActivity("working");
+    parallelNext(t, "p1", "check the new posts");
+    hear(t, "check the new posts", 2_000);
+    await delegate(t, "del_2", 2_200);
+    t.setActivity("idle");
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    expect(t.controller.current()?.status).toBe("live");
+    result(t, "r1", "p1", "check the new posts", "Three new posts.");
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    expect(t.controller.current()).toBeNull();
+  });
+});

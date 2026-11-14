@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { classifyBusySend, isBusySendRequest, namedResources, resourcesOverlap } from "../shared/parallel-tasks.ts";
-import { RoutableSteers, ROUTE_HANDLE_TTL_MS, busyClassifyPrompt, classifyWithoutSteer, orchestratedSteerText, parseBusyClassification, routeResources } from "./busy-routing.ts";
+import { RoutableSteers, ROUTE_HANDLE_TTL_MS, busyClassifyPrompt, callBusyMode, classifyWithoutSteer, isSpokenCallSend, orchestratedSteerText, parallelOrWait, parseBusyClassification, routeResources } from "./busy-routing.ts";
 import { parallelBlocked, parallelResourceBlocked } from "./parallel-tasks.ts";
 
 describe("classifyBusySend", () => {
@@ -165,5 +165,90 @@ describe("one line per resource for parallel tasks", () => {
   it("a task naming no resource never waits on one", () => {
     const plain = task("p1", 2);
     expect(parallelResourceBlocked({ task: plain, tasks: [task("p0", 1, ["id:9"]), plain], busy: () => true })).toBe(false);
+  });
+});
+
+// #4216: on a call, a new request said while the bot works starts beside it
+// as a parallel task; a correction or a follow-up of the running work steers.
+describe("callBusyMode (#4216)", () => {
+  it("starts each independent spoken request beside the running work, questions included", () => {
+    const running = "check my unread mail";
+    for (const text of [
+      "check the new posts",
+      "ask the team bot how the backup job is doing",
+      "tell me the last text message I received",
+      "what's the weather tomorrow?",
+      "what time is it in Tokyo",
+      "also check my calendar for tomorrow",
+      "regarde les nouvelles publications",
+      "dis-moi le dernier texto reçu",
+    ]) expect(callBusyMode({ text, running }), text).toBe("parallel");
+  });
+
+  it("steers a correction or a follow-up of the request in progress", () => {
+    for (const text of [
+      "instead, only the work inbox",
+      "actually only the ones from today",
+      "also for that, flag the urgent ones",
+      "no, the other account",
+      "plutôt la boîte du travail",
+      "en fait, juste ceux d'aujourd'hui",
+      "aussi pour ça, marque les urgents",
+      "how is it going?",
+      "ça avance?",
+      "stop",
+      "and in Quebec City",
+      "what about tomorrow?",
+      "et pour demain?",
+    ]) expect(callBusyMode({ text, running: "check my unread mail" }), text).toBe("steer");
+  });
+
+  it("steers a correction that stops, narrows or points back at the running request, never a task of its own", () => {
+    const running = "check my unread mail and reply to the urgent one";
+    for (const text of [
+      "wait, don't send it yet",
+      "don't send it",
+      "forget it",
+      "oublie ça",
+      "attends, envoie-le pas",
+      "n'envoie pas le courriel",
+      "change it to Friday",
+      "use the work account",
+      "hold on",
+      "only the urgent ones",
+      "just the ones from today",
+      "juste ceux d'aujourd'hui",
+      "make it shorter",
+      "send it to the team too",
+    ]) expect(callBusyMode({ text, running }), text).toBe("steer");
+  });
+
+  it("a request that needs the running result waits for it", () => {
+    expect(callBusyMode({ text: "then send the summary to my phone", running: "check my unread mail" })).toBe("after");
+    expect(callBusyMode({ text: "ensuite envoie le résumé par texto", running: "check my unread mail" })).toBe("after");
+  });
+
+  it("only a whole spoken line is routed: not a partial, not the end of a cut sentence, not a typed line", () => {
+    expect(isSpokenCallSend({ callId: "c", utteranceId: "u" })).toBe(true);
+    expect(isSpokenCallSend({ callId: "c", utteranceId: "u", speculative: true })).toBe(false);
+    expect(isSpokenCallSend({ callId: "c", utteranceId: "u", continues: true })).toBe(false);
+    // typed in the composer while a call is open: the call id only
+    expect(isSpokenCallSend({ callId: "c" })).toBe(false);
+    expect(isSpokenCallSend(undefined)).toBe(false);
+  });
+});
+
+describe("parallelOrWait (#4216)", () => {
+  it("starts the task while the bot's parallel limit allows it", async () => {
+    await expect(parallelOrWait(async () => "started", () => "waiting")).resolves.toBe("started");
+  });
+
+  it("waits in the queue once the limit refuses another task", async () => {
+    const refused = Object.assign(new Error("limit"), { status: 409, code: "parallel_limit" });
+    await expect(parallelOrWait(async () => { throw refused; }, () => "waiting")).resolves.toBe("waiting");
+  });
+
+  it("any other failure is not hidden", async () => {
+    await expect(parallelOrWait(async () => { throw new Error("boom"); }, () => "waiting")).rejects.toThrow("boom");
   });
 });

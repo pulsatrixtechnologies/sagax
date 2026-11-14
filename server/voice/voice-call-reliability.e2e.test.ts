@@ -99,11 +99,12 @@ it("delivers words said while the bot works once: steered in, never handed back 
     const replies = async () => (await t.messages()).filter((m) => m.role === "bot" && m.turnTerminal).length;
     await t.send({ text: "[gate:one] take a good memory of when we are talking", sendId: "send-one-0000000001", voiceCall: { callId: CALL_ID, utteranceId: "utt-00000001" } });
     await expect.poll(t.busy, { timeout: 15_000 }).toBe(true);
-    // said while the bot works: joins its turn
-    const steered = await t.send({ text: "give me a good prompt", sendId: "send-two-0000000002", voiceCall: { callId: CALL_ID, utteranceId: "utt-00000002" } });
+    // a follow-up said while the bot works: joins its turn (#4216: a new
+    // independent request would start beside it instead)
+    const steered = await t.send({ text: "actually, give me a good prompt", sendId: "send-two-0000000002", voiceCall: { callId: CALL_ID, utteranceId: "utt-00000002" } });
     expect(steered.steered).toBe(true);
     // the same utterance again (a retry with a new send id): the first receipt
-    const again = await t.send({ text: "give me a good prompt", sendId: "send-two-retry-00000003", voiceCall: { callId: CALL_ID, utteranceId: "utt-00000002" } });
+    const again = await t.send({ text: "actually, give me a good prompt", sendId: "send-two-retry-00000003", voiceCall: { callId: CALL_ID, utteranceId: "utt-00000002" } });
     expect(again.message?.id).toBe(steered.message.id);
     t.open("one");
     await expect.poll(replies, { timeout: 15_000 }).toBe(1);
@@ -125,7 +126,7 @@ it("delivers words said while the bot works once: steered in, never handed back 
     const spoken = sent[1].split("</system-reminder>").at(-1) ?? "";
     expect(spoken).not.toContain("give me a good prompt");
     const users = (await t.messages()).filter((m) => m.role === "user");
-    expect(users.filter((m) => m.text === "give me a good prompt")).toHaveLength(1);
+    expect(users.filter((m) => m.text === "actually, give me a good prompt")).toHaveLength(1);
   } finally {
     await t.fixture.close();
   }

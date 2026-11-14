@@ -5,6 +5,7 @@ import {
   applyTopicEvent,
   callHasBackgroundWork,
   callHasParkableWork,
+  callSendWaitsForSlot,
   classifyVoiceIntent,
   howToSpeakTopicResult,
   isNewVoiceTopic,
@@ -88,6 +89,19 @@ describe("voice topics", () => {
     expect(openTopics(topics).map((t) => t.id)).toEqual(["b"]);
   });
 
+  it("#4216: a request said on a call that the parallel limit sent to the queue is said to wait", () => {
+    expect(callSendWaitsForSlot({ ok: true, queued: true, queueId: "q1", threadId: "t", reason: "capacity" })).toBe(true);
+    // a correction or a request that needs the running result waits silently, as before
+    expect(callSendWaitsForSlot({ ok: true, queued: true, queueId: "q1", threadId: "t" })).toBe(false);
+    expect(callSendWaitsForSlot({ ok: true, threadId: "t", message: { id: "m" } })).toBe(false);
+    expect(callSendWaitsForSlot(undefined)).toBe(false);
+  });
+
+  it("#4216: a finished parallel request is spoken whole after its lead, not clipped", () => {
+    const answer = "You have three new posts. The first is about the release. The second asks about pricing. The third is a thank you from a reader who liked the guide on backups and asked for a follow up.";
+    expect(announceTopic("check the new posts", answer)).toBe(`For check the new posts: ${answer}`);
+  });
+
   it("announces a finished background topic in a short spoken line", () => {
     expect(announceTopic("weather in Montreal", "It is 12 and sunny with a light wind from the west.")).toBe(
       "For weather in Montreal: It is 12 and sunny with a light wind from the west.",
@@ -133,7 +147,9 @@ describe("voice topics", () => {
   it("a result for an older topic is announced; the latest is spoken in full", () => {
     expect(howToSpeakTopicResult({ replyUserId: "b", lastUserId: "b" })).toBe("full");
     expect(howToSpeakTopicResult({ replyUserId: "a", lastUserId: "b" })).toBe("announce");
-    expect(howToSpeakTopicResult({ isParallelResult: true, replyUserId: "b", lastUserId: "b" })).toBe("full");
+    // #4216: a request that ran beside the others is always led by its name,
+    // even when it was the last thing said
+    expect(howToSpeakTopicResult({ isParallelResult: true, replyUserId: "b", lastUserId: "b" })).toBe("announce");
     expect(howToSpeakTopicResult({ isParallelResult: true, replyUserId: "a", lastUserId: "b" })).toBe("announce");
   });
 

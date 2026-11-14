@@ -119,7 +119,7 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
             })
             .then((body) => {
               if (body === null) return;
-              action.onSent?.();
+              action.onSent?.(body);
               if (body?.message && typeof body.threadId === "string") {
                 rawDispatch({ type: "messageAdded", threadId: body.threadId, message: body.message });
               }

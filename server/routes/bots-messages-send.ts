@@ -24,8 +24,11 @@ import {
 import { achievementSendEvents } from "../achievements/achievements.ts";
 import { admit } from "../admission.ts";
 import {
+  callBusyMode,
   classifyWithoutSteer,
+  isSpokenCallSend,
   orchestratedSteerText,
+  parallelOrWait,
 } from "../busy-routing.ts";
 import { prepareWidgetPress } from "../widgets/chat-widgets.ts";
 import { claudeActivityEvents } from "../engines/claude-activity.ts";
@@ -100,6 +103,9 @@ async function runSequencedBotSend(input: {
   threadId: string;
   trigger: UsageTrigger;
   voiceCall: any;
+  /** #4216: a whole line said on a call, read before the duplex marks are
+   * dropped (a speech-to-text partial stays a partial with duplex off). */
+  spokenLine: boolean;
   store: any;
   messageSender: any;
   cfg: any;
@@ -132,7 +138,7 @@ async function runSequencedBotSend(input: {
   stoppingThreads: any;
 }): Promise<any> {
   const {
-    auth, body, bot, busyMode, dataContext, guarded, replyTo, sendId, text, threadId, trigger, voiceCall,
+    auth, body, bot, busyMode, dataContext, guarded, replyTo, sendId, text, threadId, trigger, voiceCall, spokenLine,
     store, messageSender, cfg, threadBusy,
     IDENTITY, DESKTOP_MANAGED, DUPLEX_JOIN_RUNNING_TURN,
     activeGroupTurnForBot, autoRoutableThread, botAtThreadCapacity, busyClassifyEngine,
@@ -229,17 +235,19 @@ async function runSequencedBotSend(input: {
     if (duplex !== DUPLEX_JOIN_RUNNING_TURN) return duplex;
   }
 
-  // A new request while this conversation works: its own task, which
-  // runs now (or when a slot frees) and answers here.
-  if (currentAtStart.busy && busyMode === "parallel") {
-    return startParallelTask({
-      botId: bot.id, threadId, text, replyTo, sendId, sender: messageSender(auth), trigger,
-      speaker: speakerFor(auth), principalId: auth.kind === "session" ? personKey(auth.session) : undefined, auth,
-    });
-  }
-  // After this one: wait in the queue, never joining the running turn.
-  if (currentAtStart.busy && busyMode === "after") {
+  // #4216: a line said on a call while the bot works starts beside the
+  // running work as its own parallel task, unless it corrects or follows
+  // up that work (it steers) or needs its result (it waits): callBusyMode.
+  // Lines typed while a call is open keep joining the running turn.
+  const callMode = currentAtStart.busy && busyMode === "steer" && voiceCall && spokenLine
+    && autoRoutableThread(bot.id, threadId) && !isInternalTurn(threadId)
+    ? callBusyMode({ text, running: runningRequestText(threadId) })
+    : undefined;
+  // `capacity`: the bot's parallel limit refused a call request a task
+  // (#4216); the receipt says so and the call tells the caller it waits
+  const queueAfter = (reason?: "capacity") => {
     const queued = queueSteeredMessage(currentAtStart.id, threadId, text, {
+      ...(reason ? { reason } : {}),
       replyToId: replyTo?.id,
       sendId,
       ...(dataContext ? { dataContext } : {}),
@@ -251,7 +259,22 @@ async function runSequencedBotSend(input: {
       // #2575: an AI client's prompt keeps its own turn and reply
       ...(body.aiClient === true ? { aiClient: true } : {}),
     });
-    return { ok: true as const, queued: true as const, queueId: queued.id, threadId };
+    return { ok: true as const, queued: true as const, queueId: queued.id, threadId, ...(reason ? { reason } : {}) };
+  };
+  // A new request while this conversation works: its own task, which
+  // runs now (or when a slot frees) and answers here.
+  if (currentAtStart.busy && (busyMode === "parallel" || callMode === "parallel")) {
+    const start = () => startParallelTask({
+      botId: bot.id, threadId, text, replyTo, sendId, sender: messageSender(auth), trigger,
+      speaker: speakerFor(auth), principalId: auth.kind === "session" ? personKey(auth.session) : undefined, auth,
+      ...(voiceCall ? { voiceCall } : {}),
+    });
+    // a call request past the bot's parallel limit waits in the queue
+    return callMode ? parallelOrWait(start, () => queueAfter("capacity")) : start();
+  }
+  // After this one: wait in the queue, never joining the running turn.
+  if (currentAtStart.busy && (busyMode === "after" || callMode === "after")) {
+    return queueAfter();
   }
   // Claude can accept the message inside its live turn. If the write
   // loses a race with turn settlement, or the engine cannot steer, the
@@ -612,8 +635,10 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     if (body.busyMode !== undefined && !isBusySendRequest(body.busyMode)) {
       return json(res, 400, { error: "busyMode must be auto, steer, parallel or after" });
     }
-    // On a call, words said while the bot works always join its turn: a
-    // phone has no "run this in parallel" (and no chooser asks).
+    // On a call, words said while the bot works start here as "steer";
+    // runSequencedBotSend then routes a whole spoken line by callBusyMode
+    // (#4216: a new request starts beside the running work, a correction
+    // steers it). No chooser asks.
     // Auto (what the apps ask since 2026-10-18, `routeWhileBusy: true`, a
     // field an older server ignores, or busyMode "auto"): the bot
     // orchestrates (server/busy-routing.ts). A send that names no mode (the
@@ -667,6 +692,7 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
       sendFingerprint(text, replyTo?.id),
       () => runSequencedBotSend({
         auth, body, bot, busyMode, dataContext, guarded, replyTo, sendId, text, threadId, trigger, voiceCall,
+        spokenLine: !guarded && isSpokenCallSend(parsedVoiceCall ?? undefined),
         store, messageSender, cfg, threadBusy,
         IDENTITY, DESKTOP_MANAGED, DUPLEX_JOIN_RUNNING_TURN,
         activeGroupTurnForBot, autoRoutableThread, botAtThreadCapacity, busyClassifyEngine,

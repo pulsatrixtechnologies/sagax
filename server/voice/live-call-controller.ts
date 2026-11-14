@@ -55,7 +55,14 @@ export interface LiveSocket {
 }
 
 export type LiveActivity = "idle" | "working" | "waiting";
-export type LiveSendResult = { kind: "started" | "steered"; messageId: string } | { kind: "queued"; queueId: string };
+export type LiveSendResult =
+  | { kind: "started" | "steered"; messageId: string }
+  /** `parallelLimit` (#4216): a call request the per-person parallel limit
+   * refused as a task; it waits in the queue and the call says so. */
+  | { kind: "queued"; queueId: string; parallelLimit?: boolean }
+  /** #4216: started beside the running work as its own parallel task;
+   * `waiting` past the bot's parallel limit, until a slot frees. */
+  | { kind: "parallel"; messageId: string; title: string; waiting: boolean };
 export type LiveRespondResult = { ok: true } | { ok: false; error: string };
 
 export interface LiveCallDeps {
@@ -156,6 +163,9 @@ interface Call {
   claimNextTerminal: boolean;
   /** call requests waiting in the thread's queue (queue ids), until delivered or removed */
   queuedIds: Set<string>;
+  /** #4216: call requests running beside the others as parallel tasks
+   * (request line id → its title), until their result is spoken */
+  parallelRequests: Map<string, string>;
   /** typed user messages on the thread (id → text), until their answer arrives */
   typedTexts: Map<string, string>;
   /** Lines a drain delivered together, as one turn answering the last of
@@ -307,6 +317,7 @@ export class LiveCallController {
       pendingCall: new Set(),
       claimNextTerminal: false,
       queuedIds: new Set(),
+      parallelRequests: new Map(),
       typedTexts: new Map(),
       batches: new Map(),
       drainBatch: null,
@@ -464,6 +475,11 @@ export class LiveCallController {
       this.maybeStatus(call);
       return;
     }
+    // a request running beside the others still owes its answer
+    if (call.parallelRequests.size) {
+      this.touch(call);
+      return;
+    }
     const idleMs = this.deps.settings().idleMinutes * 60_000;
     if (this.now() - call.lastActivityAt >= idleMs) void this.hangUp(call, "idle").catch(reportBackgroundError);
   }
@@ -575,8 +591,13 @@ export class LiveCallController {
     this.append(call, "thinking", LIVE_COPY.working, id);
     try {
       const result = await this.deps.send({ auth: call.auth, botId: call.state.botId, threadId: call.state.threadId, text: said, callId: call.state.callId });
-      if (result.kind === "queued") call.queuedIds.add(result.queueId);
-      else if (result.kind === "steered") {
+      if (result.kind === "queued") {
+        call.queuedIds.add(result.queueId);
+        if (result.parallelLimit) this.append(call, "commentary", LIVE_COPY.parallelWaiting(said), id);
+      } else if (result.kind === "parallel") {
+        call.parallelRequests.set(result.messageId, result.title);
+        if (result.waiting) this.append(call, "commentary", LIVE_COPY.parallelWaiting(result.title), id);
+      } else if (result.kind === "steered") {
         call.pendingCall.add(result.messageId);
         call.claimNextTerminal = true;
       } else call.pendingCall.add(result.messageId);
@@ -681,7 +702,10 @@ export class LiveCallController {
     if (type === "message") this.trackDrain(call, message);
     if (message.role === "user") {
       if (type !== "message" || message.kind !== "text") return;
-      if (message.via === "call") {
+      if (message.via === "call" && message.parallelTask?.role === "request") {
+        // #4216: its own task answers it, not the conversation's turn
+        if (!call.parallelRequests.has(message.id)) call.parallelRequests.set(message.id, message.parallelTask.title);
+      } else if (message.via === "call") {
         if (message.queueId) call.queuedIds.delete(message.queueId);
         call.pendingCall.add(message.id);
       } else if (this.typedByCaller(call, message)) {
@@ -713,7 +737,28 @@ export class LiveCallController {
       }
       return;
     }
+    if (message.kind === "text" && message.parallelTask?.role === "result") {
+      this.onParallelAnswer(call, message);
+      return;
+    }
     if (message.kind === "text" && message.turnTerminal && !call.spokenAnswers.has(message.id)) this.onAnswer(call, message);
+  }
+
+  /** #4216: a call request that ran as its own task finished. Its result is
+   * spoken now, in the order results finish, led by the request it answers;
+   * once. */
+  private onParallelAnswer(call: Call, message: Message): void {
+    const request = message.parallelTask?.requestMessageId;
+    if (!request || call.spokenAnswers.has(message.id)) return;
+    const title = call.parallelRequests.get(request);
+    if (title === undefined) return;
+    const utterances = this.deps.speakable(message.text ?? "");
+    const chunks = commentaryChunks([LIVE_COPY.parallelAnswerLead(title), ...utterances]);
+    call.parallelRequests.delete(request);
+    call.spokenAnswers.add(message.id);
+    if (!utterances.length || !chunks.length) return;
+    call.stats.replies += 1;
+    for (const chunk of chunks) this.append(call, "commentary", chunk, null);
   }
 
   /** A line the caller typed in a client (every client sends a sendId with

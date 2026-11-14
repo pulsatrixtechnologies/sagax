@@ -214,8 +214,20 @@ says `by: "bot"`. A goodbye that fails or is interrupted drops the
 request and keeps the call, so a later turn does not inherit the hang-up.
 The page mutes at once and lets that goodbye finish before it leaves the
 call. A newer call is not ended by the old turn. The next written turn
-gets the ended note. On a call, words sent while the bot works join its
-turn (no parallel or after chooser). Advanced > "Full-duplex conversation"
+gets the ended note. On a call (#4216), a whole line said while the bot
+works starts at once beside the running work as its own parallel task
+(the same tasks a typed send can become, up to the bot's parallel limit;
+past it the request waits and the call says so), and its result is spoken
+when it finishes, after a short lead naming the request. A correction or a
+follow-up of the running work ("instead", "actually", "no, ...", "wait",
+"don't", "change ...", "use ...", "forget it", "also for that", "how is it
+going", an elliptic "and in ...", "what about ...", a short line that only
+narrows it, "only the urgent ones", or points back at it, "make it shorter",
+and their French forms) steers it, and a request
+that needs its result ("then", "once you are done") waits for it
+(`server/busy-routing.ts` `callBusyMode`). Speech-to-text partials, the end
+of a sentence cut by a pause, and lines typed while a call is open join the
+running turn as before (no chooser). Advanced > "Full-duplex conversation"
 is off by default on every channel. When the person turns it on and the
 server has `SAGAX_VOICE_FULL_DUPLEX=1`, a new utterance interrupts the
 in-flight turn, discards the steer queue, and starts only those words

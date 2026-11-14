@@ -133,4 +133,26 @@ describe("the live call bar's bubbles", () => {
     ];
     expect(callBarLines(messages).map((m) => m.id)).toEqual(["u1", "b1", "u2"]);
   });
+
+  it("#4216: a request said on the call that runs beside the others keeps its own row, card and result", () => {
+    const messages = [
+      line("u1", "user", "check my unread mail", 1_000, { voiceCall: { callId: "call-1", utteranceId: "x1" } }),
+      line("u2", "user", "check the new posts", 2_000, {
+        voiceCall: { callId: "call-1", utteranceId: "x2" },
+        parallelTask: { threadId: "p1", title: "check the new posts", requestMessageId: "u2", role: "request" },
+      }),
+      { id: "c2", role: "bot", kind: "activity", at: 2_001, tool: { name: "Parallel task #check the new posts", ok: true },
+        parallelTask: { threadId: "p1", title: "check the new posts", requestMessageId: "u2", role: "card", state: "running" } } as Message,
+      line("r2", "bot", "Three new posts.", 3_000, {
+        parallelTask: { threadId: "p1", title: "check the new posts", requestMessageId: "u2", role: "result", state: "done" },
+      }),
+      line("b1", "bot", "Two new emails.", 4_000),
+    ];
+    const plan = voiceCallPlan(messages);
+    // the call card keeps the call's own exchange; the parallel request and
+    // its result are rows of their own, beside the task card
+    expect([...plan.hidden]).toEqual(["u1", "b1"]);
+    const seen = new Set<string>();
+    expect(messages.map((m) => foldVoiceMessage(m, plan, seen).kind)).toEqual(["card", "keep", "keep", "keep", "skip"]);
+  });
 });

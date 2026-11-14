@@ -114,4 +114,15 @@ describe("speech fence after barge-in", () => {
     expect(next.text).toBe("It is sunny.");
     expect(next.fence.dropOldReply).toBe(false);
   });
+
+  it("#4216: a request started beside the running turn does not silence that turn's answer", () => {
+    // the first answer's row was opened before the second request was said
+    const asked = { id: "u1", role: "user" as const, kind: "text", text: "check my unread mail" };
+    const answer = { id: "b1", role: "bot" as const, kind: "text", text: "Two new emails.", requestMessageId: "u1" };
+    const beside = { id: "u2", role: "user" as const, kind: "text", text: "check the new posts", parallelTask: { role: "request", requestMessageId: "u2" } };
+    const result = { id: "r2", role: "bot" as const, kind: "text", text: "Three new posts.", parallelTask: { role: "result", requestMessageId: "u2" } };
+    const settled = settleReplies(createSpeechFence(), [asked, answer, beside, result], ["b1", "r2"]);
+    expect(settled.speak.map((reply) => reply.id)).toEqual(["b1", "r2"]);
+    expect(settled.skip).toEqual([]);
+  });
 });

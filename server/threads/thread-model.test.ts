@@ -160,18 +160,21 @@ describe("threads follow their bot's model", () => {
     expect(ownModel(open(), "legacy", "copy")).toBeUndefined();
   });
 
+  // #4200 (one approval level per bot, #4226): a conversation holds no level
+  // of its own, so "every level" is the bot's, read through each thread, and
+  // the Always allow list a thread saved.
   it("followBotModel clears exactly the listed threads' own model, in one write, and keeps every level", () => {
     const store = open();
     const bot = store.createBot();
     const first = bot.threadId;
-    store.patchBot(bot.id, { modelSelection: codex });
+    store.patchBot(bot.id, { modelSelection: codex, approvalMode: "full", autoApprove: false });
     const full = store.createTask(bot.id, "Full on Claude")!;
     const asks = store.createTask(bot.id, "Ask on Claude")!;
     const same = store.createTask(bot.id, "Full on the same engine")!;
     const untouched = store.createTask(bot.id, "Not listed")!;
-    store.switchTaskModel(bot.id, full.threadId, sonnet, false, { approvalMode: "full", autoApprove: false, alwaysAllow: ["Bash"] });
+    store.switchTaskModel(bot.id, full.threadId, sonnet, false, { alwaysAllow: ["Bash"] });
     store.switchTaskModel(bot.id, asks.threadId, sonnet, false, { approvalMode: "ask" });
-    store.switchTaskModel(bot.id, same.threadId, { ...codex, effort: "high" }, false, { approvalMode: "full" });
+    store.switchTaskModel(bot.id, same.threadId, { ...codex, effort: "high" }, false);
     store.switchTaskModel(bot.id, untouched.threadId, opus, false);
     const resets: Array<[ModelSelection, ModelSelection]> = [];
     const moved = store.followBotModel(bot.id, [full.threadId, asks.threadId, same.threadId, first], (from, to) => {
@@ -179,33 +182,36 @@ describe("threads follow their bot's model", () => {
       return { rewound: true };
     });
     expect(moved.sort()).toEqual([full.threadId, asks.threadId, same.threadId].sort());
-    expect(store.taskByThread(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: ["Bash"], rewound: true });
+    expect(store.taskByThread(bot.id, full.threadId)).toMatchObject({ alwaysAllow: ["Bash"], rewound: true });
+    expect(store.projectBotForTask(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: ["Bash"] });
     expect(store.taskByThread(bot.id, full.threadId)?.modelSelection).toBeUndefined();
-    expect(store.taskByThread(bot.id, asks.threadId)).toMatchObject({ approvalMode: "ask" });
-    expect(store.taskByThread(bot.id, same.threadId)).toMatchObject({ approvalMode: "full" });
+    // The level written with a model switch never stays on the conversation.
+    expect(store.taskByThread(bot.id, asks.threadId)?.approvalMode).toBeUndefined();
+    expect(store.projectBotForTask(bot.id, asks.threadId)?.approvalMode).toBe("full");
+    expect(store.projectBotForTask(bot.id, same.threadId)?.approvalMode).toBe("full");
     expect(ownModel(store, bot.id, untouched.threadId)).toEqual(opus);
     expect(resets.map(([, to]) => to)).toEqual([codex, codex, codex]);
     const reloaded = open();
     expect(ownModel(reloaded, bot.id, full.threadId)).toBeUndefined();
-    expect(reloaded.taskByThread(bot.id, full.threadId)?.approvalMode).toBe("full");
+    expect(reloaded.projectBotForTask(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash"] });
     expect(ownModel(reloaded, bot.id, untouched.threadId)).toEqual(opus);
   });
 
   it("a following thread keeps its Full access and approvals when the bot moves to another engine", () => {
     const store = open();
     const bot = store.createBot();
+    store.patchBot(bot.id, { approvalMode: "full", autoApprove: false });
     const full = store.createTask(bot.id, "Full")!;
-    store.patchTask(bot.id, full.threadId, { approvalMode: "full", autoApprove: false, alwaysAllow: ["Bash"] });
+    store.patchTask(bot.id, full.threadId, { alwaysAllow: ["Bash"] });
     store.patchBot(bot.id, { modelSelection: opus });
-    expect(store.taskByThread(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash"] });
+    expect(store.projectBotForTask(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash"] });
     store.patchBot(bot.id, { modelSelection: codex });
-    expect(store.taskByThread(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: ["Bash"] });
-    expect(open().taskByThread(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash"] });
+    expect(store.projectBotForTask(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: ["Bash"] });
+    expect(open().projectBotForTask(bot.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash"] });
 
     const other = store.createTask(bot.id, "Full again")!;
-    store.patchTask(bot.id, other.threadId, { approvalMode: "full", autoApprove: false });
     store.applyModelDefault(bot.id, sonnet);
-    expect(store.taskByThread(bot.id, other.threadId)?.approvalMode).toBe("full");
+    expect(store.projectBotForTask(bot.id, other.threadId)?.approvalMode).toBe("full");
   });
 
   it("the wire carries the model a thread runs on and whether it follows the bot", () => {

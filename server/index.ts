@@ -18980,7 +18980,7 @@ const peerOutcomeDeps: PeerOutcomeDeps<BotRecord> = {
     setTimeout(() => {
       if (threadBusy(bot.id, threadId) || !store.taskByThread(bot.id, threadId)) return settleNow();
       const speaker = threadContinuationSpeaker(threadId);
-      startTurn(bot.id, prompt, { threadId, cardContinuation: true, ...(speaker ? { speaker } : {}) })
+      startTurn(bot.id, prompt, { threadId, cardContinuation: true, keepClosed: true, ...(speaker ? { speaker } : {}) })
         .catch((error) => {
           console.warn(`[peer-outcome] thread ${threadId.slice(0, 8)}: the ask could not start: ${error instanceof Error ? error.message : String(error)}`);
           settleNow();
@@ -19908,6 +19908,9 @@ async function startTurn(
      * The prompt is control-plane context: it reaches the provider without
      * masquerading as another message authored by the user. */
     cardContinuation?: boolean;
+    /** #4238: the server's own outcome ask in an exchange it already
+     * answered: a closed thread stays closed (nobody picked it back up). */
+    keepClosed?: boolean;
     /** Harness-only provenance: an explicitly bound continuation, never a
      * client option and never inferred from the latest user on the thread. */
     requestMessageId?: string;

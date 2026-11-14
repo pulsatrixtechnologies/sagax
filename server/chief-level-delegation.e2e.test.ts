@@ -48,7 +48,7 @@ it("starts a thread a Chief opens with a teammate at the Chief's level, and a Ch
     // each bot's own level is Ask before the Chief conversation is raised.
     for (const id of [chief.id, ada.id, bea.id]) await api("PATCH", `/api/bots/${id}`, { approvalMode: "ask" });
 
-    // The person put this Chief conversation on Approve for me.
+    // The person put the Chief on Approve for me from this conversation.
     await api("PATCH", `/api/bots/${chief.id}/tasks/${chief.activeTaskId}`, { approvalMode: "auto", acknowledgeLocalAuto: true });
     const adaTurn = await bringIn(chief, chief.activeTaskId, ada, "check-auto");
     // Ada's own level is Ask, yet the thread Clive opened with her runs Approve for me,
@@ -59,7 +59,10 @@ it("starts a thread a Chief opens with a teammate at the Chief's level, and a Ch
       && message.tool?.name === "Approve for me — delegated by Clive, a Primary Bot on Approve for me")).toBe(true);
     expect((await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === ada.id).approvalMode ?? "ask").toBe("ask");
 
-    // A Chief conversation still on Ask raises nobody.
+    // A Chief on Ask raises nobody. #4200 (one approval level per bot,
+    // #4226): the level picked in a conversation is the Chief's own, so the
+    // person puts the Chief back on Ask before this part.
+    await api("PATCH", `/api/bots/${chief.id}`, { approvalMode: "ask" });
     const askThread = (await api("POST", `/api/bots/${chief.id}/tasks`, { title: "Plain Ask work" }, 201)).task;
     const beaTurn = await bringIn(chief, askThread.threadId, bea, "check-ask");
     expect(beaTurn.permissionMode).toBe("default");

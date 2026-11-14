@@ -19,8 +19,17 @@ import { hostTimeout } from "../testing/host-timeout.ts";
 import { jsLiteral } from "../../scripts/testing/js-literal.mjs";
 import { openSse } from "../testing/sse.ts";
 import { withoutTurnClock } from "../testing/turn-clock-text.ts";
+import { VOLATILE_SECTIONS_NOTE_PREFIX } from "../drivers/prompt-split.ts";
 
 const count = (text: string, needle: string) => text.split(needle).length - 1;
+/** A resumed turn's prompt without the note of changed volatile sections
+ * (server/drivers/prompt-split.ts changedSectionsNote) in front of it. */
+const withoutVolatileSections = (text: string) => {
+  const start = text.indexOf(`<system-reminder>\n${VOLATILE_SECTIONS_NOTE_PREFIX}`);
+  if (start !== 0) return text;
+  const end = text.indexOf("</system-reminder>");
+  return end < 0 ? text : text.slice(end + "</system-reminder>".length).replace(/^\n+/, "");
+};
 // The platform's GO rule (1fccfa2eb4) names untrusted webhook/event content
 // and the roster marker (#1997) names the roster's labels; neither speaks of
 // teammates, so a check on the teammate wording sets both aside.
@@ -1360,7 +1369,14 @@ it("keeps resuming an ordinary turn after a soul change, as before", () => fixtu
   await f.send("Second message.");
   await f.wait();
   expect(f.launches().at(-1).resume).not.toBeNull();
-  expect(withoutTurnClock(f.prompt(f.turns().at(-1)))).toBe("Second message.");
+  // #4228 made the person's connector list volatile on purpose ("its
+  // background read landed after the first turn ... It is volatile now"):
+  // when that read lands between the turns, the resumed turn carries the
+  // changed section alone. The soul change itself still adds nothing.
+  const prompt = withoutTurnClock(f.prompt(f.turns().at(-1)));
+  expect(prompt).not.toContain("NEW_SOUL_MARK");
+  expect(prompt).not.toContain("received an update outside your provider session");
+  expect(withoutVolatileSections(prompt)).toBe("Second message.");
 }), hostTimeout(60_000));
 
 // ── Steers: never counted as received on output alone ──

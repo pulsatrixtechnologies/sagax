@@ -68,18 +68,20 @@ describe("the start sweep", () => {
     const store = new Store(newBotDefault);
     const browser = store.createBot({}, { seedMessages: false });
     store.patchBot(browser.id, { computer: "browser", approvalMode: "auto", autoApprove: true, alwaysAllow: ["Bash"] });
-    const thread = store.createTask(browser.id, "Its own level", false)!;
-    store.patchTask(browser.id, thread.threadId, { approvalMode: "full" });
+    // #4200 (one approval level per bot, #4226): a conversation holds no
+    // level of its own; it runs at the bot's, with the rules saved in it.
+    const thread = store.createTask(browser.id, "Its own rules", false)!;
+    store.patchTask(browser.id, thread.threadId, { alwaysAllow: ["Read"] });
     const pinned = store.createTask(browser.id, "Pinned to a VM", false)!;
-    store.patchTask(browser.id, pinned.threadId, { surface: "vm", surfaceSource: "user", approvalMode: "auto" });
+    store.patchTask(browser.id, pinned.threadId, { surface: "vm", surfaceSource: "user" });
 
     expect(store.retireFixedWorkspaces()).toEqual({ bots: 1, pins: 1 });
 
     const reloaded = new Store(newBotDefault);
     expect(reloaded.bot(browser.id)).toMatchObject({ approvalMode: "auto", autoApprove: true, alwaysAllow: ["Bash"] });
     expect(reloaded.bot(browser.id)?.computer).toBeUndefined();
-    expect(reloaded.taskByThread(browser.id, thread.threadId)?.approvalMode).toBe("full");
-    expect(reloaded.taskByThread(browser.id, pinned.threadId)).toMatchObject({ approvalMode: "auto" });
+    expect(reloaded.projectBotForTask(browser.id, thread.threadId)).toMatchObject({ approvalMode: "auto", alwaysAllow: ["Bash", "Read"] });
+    expect(reloaded.projectBotForTask(browser.id, pinned.threadId)).toMatchObject({ approvalMode: "auto", alwaysAllow: ["Bash"] });
     expect(reloaded.taskByThread(browser.id, pinned.threadId)?.surface).toBeUndefined();
   });
 });

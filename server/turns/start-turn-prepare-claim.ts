@@ -217,8 +217,10 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
     watchdog.watch(state.threadId, state.bot.id);
     // A closed thread that gets a new turn is open again: the person (or the
     // opener) picked it back up, so its row returns to the sidebar and
-    // list_threads stops calling it closed. No-op on an open thread.
-    store.setTaskClosedBy(state.bot.id, state.threadId, null);
+    // list_threads stops calling it closed. No-op on an open thread. The
+    // server's own outcome ask (#4238, keepClosed) is not a pick-up: the
+    // direct work it follows was answered and closed.
+    if (!state.opts?.keepClosed) store.setTaskClosedBy(state.bot.id, state.threadId, null);
     // The badge is "this bot answered you, and you have not looked yet". A
     // person starting a turn has looked; a teammate's hop has not — the fold
     // never re-marks an internal turn, so clearing here would silently spend

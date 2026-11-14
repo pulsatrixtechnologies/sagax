@@ -123,6 +123,9 @@ public enum RoutinePatch {
         if let window = schedule.window { body["window"] = ["start": window.start, "end": window.end] }
         if let endsAt = schedule.endsAt { body["endsAt"] = endsAt }
         if let source = schedule.source { body["source"] = source }
+        if let resources = schedule.resources { body["resources"] = resources }
+        if let events = schedule.events { body["events"] = events }
+        if let filters = schedule.filters { body["filters"] = filters }
         if clearingAbsent && schedule.type == .interval {
             if schedule.weekdays == nil { body["weekdays"] = NSNull() }
             if schedule.window == nil { body["window"] = NSNull() }
@@ -145,6 +148,9 @@ public enum RoutinePatch {
             && a.window == b.window
             && a.endsAt == b.endsAt
             && a.source == b.source
+            && a.resources == b.resources
+            && a.events == b.events
+            && a.filters == b.filters
             && sameTiming(a, b)
     }
 

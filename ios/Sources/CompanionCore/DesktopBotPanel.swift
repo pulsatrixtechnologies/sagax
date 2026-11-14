@@ -376,7 +376,7 @@ public struct WebhookListing: Decodable, Hashable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, botId, enabled, deliveryCount, endpointId, lastReceivedAt, source, signingSecretSet
+        case id, name, botId, enabled, deliveryCount, endpointId, lastReceivedAt, source, sourceNext, signingSecretSet
         case routineId, tokenLast4, tokenPending, verificationPending, verifiedAt
     }
 
@@ -395,7 +395,12 @@ public struct WebhookListing: Decodable, Hashable, Identifiable, Sendable {
         tokenPending = (try? c.decodeIfPresent(Bool.self, forKey: .tokenPending)) ?? false
         verificationPending = (try? c.decodeIfPresent(Bool.self, forKey: .verificationPending)) ?? false
         verifiedAt = try? c.decodeIfPresent(Double.self, forKey: .verifiedAt)
-        if let source = try? c.decode(WebhookSourceWire.self, forKey: .source) {
+        // #4250: a source the previous app release cannot read rides under
+        // `sourceNext` (shared/webhooks.ts webhookForApp); this build reads
+        // it as `source`, as the desktop's webhookFromServer does.
+        let wire = (try? c.decode(WebhookSourceWire.self, forKey: .source))
+            ?? (try? c.decode(WebhookSourceWire.self, forKey: .sourceNext))
+        if let source = wire {
             sourceType = source.type
             sourceEvents = source.events ?? []
             sourceFilters = WebhookPublicURL.filtersLine(source.filters ?? [:])
@@ -447,7 +452,10 @@ public enum WebhookPublicURL {
         return trimmed + path
     }
 
-    /// Brand names, never translated (`TRIGGER_SOURCES` labels).
+    /// Brand names, never translated (`TRIGGER_SOURCES` labels). The
+    /// sources that are not a brand (bot email, bot phone, product change)
+    /// are the desktop's `triggers.source.*` words, which the app translates
+    /// (`isTranslatedSource`).
     public static func sourceLabel(_ type: String) -> String {
         switch type {
         case "github": "GitHub"
@@ -461,8 +469,15 @@ public enum WebhookPublicURL {
         case "linear": "Linear"
         // not a brand: the app translates it (Localizable "Bot email")
         case "botmail": "Bot email"
+        case "telephony": "Bot phone"
+        case "perspicax": "Product change"
         default: type
         }
+    }
+
+    /// A source named in words (Localizable keys), not a brand.
+    public static func isTranslatedSource(_ type: String) -> Bool {
+        ["botmail", "telephony", "perspicax"].contains(type)
     }
 
     /// English label of each typed trigger event kind, the desktop's

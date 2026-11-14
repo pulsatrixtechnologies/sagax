@@ -435,9 +435,17 @@ enum RoutineWording {
             let date = Date(timeIntervalSince1970: at / 1_000)
             return "\(date.formatted(.dateTime.weekday(.wide).month(.wide).day())), \(date.formatted(date: .omitted, time: .shortened))"
         case .webhook: return String(localized: "Incoming webhook")
-        case .event: return String(localized: "Incoming email")
+        case .event:
+            if schedule.isProductEvent { return String(localized: "Product change: \(Self.productResources(schedule))") }
+            return String(localized: "Incoming email")
         default: return compact(schedule)
         }
+    }
+
+    /// The watched resources of a product change trigger, as the desktop
+    /// lists them (#4250).
+    static func productResources(_ schedule: RoutineSchedule) -> String {
+        (schedule.resources ?? []).joined(separator: ", ")
     }
 
     /// Short weekday names, index 0 = Sunday (the desktop's `dayNames`).
@@ -489,6 +497,7 @@ enum RoutineWording {
         case .webhook:
             return String(localized: "When a webhook fires")
         case .event:
+            if schedule.isProductEvent { return String(localized: "When \(Self.productResources(schedule)) changes") }
             return String(localized: "When email arrives")
         case .unknown:
             return String(localized: "Newer schedule")

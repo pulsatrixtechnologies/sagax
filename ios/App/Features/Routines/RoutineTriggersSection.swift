@@ -67,9 +67,11 @@ struct RoutineTriggersSection: View {
         }
     }
 
-    /// A brand as written; bot email (not a brand) in the app's language.
+    /// A brand as written; bot email, bot phone and product change (not
+    /// brands) in the app's language.
     private static func sourceName(_ type: String) -> String {
-        type == "botmail" ? String(localized: "Bot email") : WebhookPublicURL.sourceLabel(type)
+        let label = WebhookPublicURL.sourceLabel(type)
+        return WebhookPublicURL.isTranslatedSource(type) ? String(localized: String.LocalizationValue(label)) : label
     }
 
     private func title(_ hook: WebhookListing) -> String {

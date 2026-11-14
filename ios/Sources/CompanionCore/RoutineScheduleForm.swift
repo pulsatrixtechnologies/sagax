@@ -33,6 +33,10 @@ public enum RoutineRecurrence: String, CaseIterable, Hashable, Sendable {
     /// "When email arrives": shown only for a routine that already starts
     /// that way, kept as it is.
     case email
+    /// "When something changes in a product" (#4250): the watched resources
+    /// (`perspicax://...`). Offered on a server linked to Perspicax and
+    /// kept for a routine that already starts that way, as on the desktop.
+    case product
 
     /// The model frequency behind a choice, nil for once, interval and advanced.
     public var frequency: RoutineScheduleFrequency? {
@@ -43,12 +47,12 @@ public enum RoutineRecurrence: String, CaseIterable, Hashable, Sendable {
         case .days: .days
         case .monthly: .monthly
         case .yearly: .yearly
-        case .none, .interval, .advanced, .webhook, .email: nil
+        case .none, .interval, .advanced, .webhook, .email, .product: nil
         }
     }
 
-    /// Started by a webhook or an email instead of the clock.
-    public var isTrigger: Bool { self == .webhook || self == .email }
+    /// Started by a webhook, an email or a product change instead of the clock.
+    public var isTrigger: Bool { self == .webhook || self == .email || self == .product }
 
     /// Repeats on the clock: what timing, overlap, auto pause, continuity
     /// and a watch apply to.
@@ -116,6 +120,9 @@ public struct RoutineScheduleForm: Hashable, Sendable {
     public var earlyMinutes: Int
     /// Flexible: minutes after; 0 means ready by the scheduled time.
     public var lateMinutes: Int
+    /// "Watched resources" of a product change trigger: one URI per line
+    /// (the desktop's ProductDraft).
+    public var productResources: String
 
     public static let defaultEarlyMinutes = 15
     public static let defaultLateMinutes = 15
@@ -140,12 +147,14 @@ public struct RoutineScheduleForm: Hashable, Sendable {
         var windowEnd: String
         var endsOnDate: Bool
         var endDate: Date
+        var productResources: String
     }
 
     private var snapshot: Snapshot {
         Snapshot(recurrence: recurrence, model: model, timeZone: timeZone, intervalMinutes: intervalMinutes,
                  intervalDays: intervalDays, intervalWeekdays: intervalWeekdays, windowCustom: windowCustom,
-                 windowStart: windowStart, windowEnd: windowEnd, endsOnDate: endsOnDate, endDate: endDate)
+                 windowStart: windowStart, windowEnd: windowEnd, endsOnDate: endsOnDate, endDate: endDate,
+                 productResources: productResources)
     }
 
     /// The person touched the schedule.
@@ -204,9 +213,11 @@ public struct RoutineScheduleForm: Hashable, Sendable {
             earlyMinutes = Self.defaultEarlyMinutes
             lateMinutes = Self.defaultLateMinutes
         }
+        productResources = (schedule?.isProductEvent == true ? schedule?.resources : nil)?.joined(separator: "\n") ?? ""
         opened = Snapshot(recurrence: recurrence, model: self.model, timeZone: timeZone, intervalMinutes: intervalMinutes,
                           intervalDays: intervalDays, intervalWeekdays: intervalWeekdays, windowCustom: windowCustom,
-                          windowStart: windowStart, windowEnd: windowEnd, endsOnDate: endsOnDate, endDate: endDate)
+                          windowStart: windowStart, windowEnd: windowEnd, endsOnDate: endsOnDate, endDate: endDate,
+                 productResources: productResources)
     }
 
     // MARK: Reading a schedule
@@ -235,7 +246,7 @@ public struct RoutineScheduleForm: Hashable, Sendable {
         switch schedule.type {
         case .once, .unknown: return .none
         case .webhook: return .webhook
-        case .event: return .email
+        case .event: return schedule.isProductEvent ? .product : .email
         case .interval: return .interval
         case .daily: return RoutineRecurrence(model(for: schedule)?.frequency ?? .daily)
         case .cron: return model(for: schedule).map { RoutineRecurrence($0.frequency) } ?? .advanced
@@ -330,6 +341,35 @@ public struct RoutineScheduleForm: Hashable, Sendable {
     public mutating func toggleIntervalWeekday(_ day: Int) {
         if intervalWeekdays.contains(day) { intervalWeekdays.removeAll { $0 == day } }
         else { intervalWeekdays = (intervalWeekdays + [day]).sorted() }
+    }
+
+    // MARK: Product change (#4250, shared/routine-product-event.ts)
+
+    public static let productResourcePrefix = "perspicax://"
+    /// As many as a trigger's filter holds.
+    public static let productResourcesMax = 20
+    public static let productResourceMaxChars = 200
+
+    /// The URIs of the field: one per line or comma, trimmed, empty dropped
+    /// (the desktop's draftUris).
+    public static func productURIs(_ text: String) -> [String] {
+        text.split(whereSeparator: { $0 == "\n" || $0 == "," || $0 == "\r" || $0 == "\r\n" })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// The watched URIs to save, deduplicated, or nil when the desktop's
+    /// cleanProductEventSchedule would refuse them.
+    public static func cleanProductResources(_ text: String) -> [String]? {
+        var resources: [String] = []
+        for uri in productURIs(text) {
+            guard uri.lowercased().hasPrefix(productResourcePrefix), uri.count <= productResourceMaxChars,
+                  uri.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
+                  uri.rangeOfCharacter(from: CharacterSet(charactersIn: "{}")) == nil else { return nil }
+            if !resources.contains(uri) { resources.append(uri) }
+        }
+        guard !resources.isEmpty, resources.count <= productResourcesMax else { return nil }
+        return resources
     }
 
     // MARK: Validation (the desktop's messages)
@@ -437,6 +477,8 @@ public struct RoutineScheduleForm: Hashable, Sendable {
         case schedule(RoutineScheduleModel.Problem)
         /// The cron calculator's message (`CronExpression.Failure`).
         case cron(String)
+        /// A product change trigger without a valid watched address.
+        case productResources
 
         public var message: String {
             switch self {
@@ -447,11 +489,13 @@ public struct RoutineScheduleForm: Hashable, Sendable {
             case .schedule(.noTime): "Add at least one time."
             case .schedule(.badTime): "Choose a valid time."
             case let .cron(message): message
+            case .productResources: "Enter at least one watched address (perspicax://...), with any {...} part filled in."
             }
         }
     }
 
     public var problem: Problem? {
+        if recurrence == .product, Self.cleanProductResources(productResources) == nil { return .productResources }
         if intervalInvalid { return .intervalRange }
         if intervalDaysInvalid { return .noDays }
         if windowInvalid { return .window(minutes: (intervalMinutes ?? 0) == 0 ? 5 : intervalMinutes ?? 5) }
@@ -521,6 +565,11 @@ public struct RoutineScheduleForm: Hashable, Sendable {
         case .email:
             guard let original, original.type == .event else { throw RoutineScheduleError("Choose a valid schedule.") }
             return original
+        case .product:
+            guard let resources = Self.cleanProductResources(productResources) else {
+                throw RoutineScheduleError(Problem.productResources.message)
+            }
+            return .productEvent(resources: resources)
         case .hourly, .daily, .weekdays, .days, .monthly, .yearly, .advanced:
             guard let schedule = preview?.schedule else { throw RoutineScheduleError("Choose a valid schedule.") }
             return schedule

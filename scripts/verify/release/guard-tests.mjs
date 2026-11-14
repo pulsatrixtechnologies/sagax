@@ -79,6 +79,8 @@ export const SOURCE_TEXT_TESTS = [
   "src/components/InspectorPanel.i18n.dom.test.ts",
   "src/components/ios-desktop-tokens.test.ts",
   "src/components/ios-desktop-wording.test.ts",
+  // #4305: the phone's trigger kinds and sources against the desktop's
+  "src/components/ios-trigger-parity.test.ts",
   "src/components/LimitResetContinue.dom.test.ts",
   "src/components/list-virtualization.test.ts",
   "src/components/MentionTextarea.test.ts",

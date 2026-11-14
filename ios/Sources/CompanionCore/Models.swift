@@ -2363,8 +2363,10 @@ public struct RoutineSchedule: Codable, Hashable, Sendable {
         /// Starts when the routine's own webhook receives a delivery
         /// (`{ type: "webhook" }`, 2026-10-29: chosen in the editor).
         case webhook
-        /// Starts when an email arrives (`{ type: "event", source: "email" }`).
-        /// Kept as it is: the editor never makes one.
+        /// Starts on an event (`{ type: "event", source }`): an email arrives
+        /// (kept as it is: the editor never makes one), GitHub events (kept
+        /// as they are), or a watched resource changes in a product
+        /// (`source: "perspicax"`, #4250: shown and edited as on the desktop).
         case event
         /// A schedule introduced by a newer desktop. It remains visible but
         /// cannot be toggled or saved until the user chooses a supported kind.
@@ -2401,8 +2403,26 @@ public struct RoutineSchedule: Codable, Hashable, Sendable {
     public var timing: String? = nil
     public var windowEarlyMinutes: Int? = nil
     public var windowLateMinutes: Int? = nil
-    /// `event`: what starts it ("email").
+    /// `event`: what starts it ("email", "github", "perspicax").
     public var source: String? = nil
+    /// `event` from "perspicax" (`shared/routine-product-event.ts`): the
+    /// watched URIs (`perspicax://...`).
+    public var resources: [String]? = nil
+    /// `event` from "github" (`shared/routine-github.ts`): its kinds and
+    /// filters, carried so a copy or a save keeps them.
+    public var events: [String]? = nil
+    public var filters: [String: [String]]? = nil
+
+    /// A routine started when something changes in a product (#4250).
+    public var isProductEvent: Bool { type == .event && source == "perspicax" }
+
+    /// `{ type: "event", source: "perspicax", resources }`.
+    public static func productEvent(resources: [String]) -> Self {
+        var schedule = Self(type: .event)
+        schedule.source = "perspicax"
+        schedule.resources = resources
+        return schedule
+    }
 
     /// Started by a webhook or an email, not by the clock.
     public var isTrigger: Bool { type == .webhook || type == .event }

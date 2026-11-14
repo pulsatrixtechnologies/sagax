@@ -537,7 +537,24 @@ each journaled edit (`onMemoryChange`), and within the hour on the brief
 cards pass (an edit by a shell in the bot's folder); it is never deleted or
 turned back on from there. The per bot state stays in
 `DATA_DIR/heartbeat.json` (version 1, readable by the previous version). The
-person's « never » on heartbeat wakes (#2694) keeps the check quiet.
+person's « never » on heartbeat wakes (#2694), or votes past the mute line,
+pause the routine at once and leave no mute behind (`muteToPause`): one
+switch, the routine's own on and off; a checklist switched off before the
+upgrade becomes a paused routine.
+
+A code check that stands for a proactive kind gives its run that kind's
+wake identity (`RoutinePrecheckVerdict.proactive`, copied onto
+`run.proactive` by the scheduler): a Flow watch alert carries source
+`watch`, its watch, domain and the read-only tools the person's yes covers
+(#3431 reads without a card, #3457 exits on its card, #3423 no old mute
+applies); a checklist run carries the topic `heartbeat`, so its thumbs and
+« never » reach the checklist. Both post their report.
+
+The previous release does not know the code checks `flow_watch` and
+`heartbeat`: `routines.json` stores them as a file watch on
+`.sagax-code-check/<check>`, a file nothing creates, that every release
+reads and that never wakes (`storedRoutinePrecheck`); this release reads it
+back as its code check (`loadRoutinePrecheck`). Kept for one release.
 
 Since S5 step c, `wait_until` and this checklist read a page, a file or a
 program through one reader, `readProbe` (`server/waits/wait-probes.ts`);

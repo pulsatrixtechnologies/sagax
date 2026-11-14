@@ -21,6 +21,7 @@ import { dirname, join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
 import type { RoutinePrecheckVerdict } from "../routines/routine-precheck.ts";
+import type { RoutineRunProactive } from "../routines/routine-run-types.ts";
 import type { Routine, RoutineInput } from "../routines/routines.ts";
 import { DATA_DIR } from "../config.ts";
 import { noteAtRestWrite, readAtRestTextSync } from "../encryption/content-at-rest.ts";
@@ -242,6 +243,12 @@ export function heartbeatRoutinePrompt(): string {
   return `[Heartbeat] Your ${HEARTBEAT_PATH} checklist found a gap (what it found is below). Handle what you can now and tell the person in this chat what you did or what they need to do. Keep it short. You can edit ${HEARTBEAT_PATH} with docs_update when an item is done or no longer needed.`;
 }
 
+/** #4250 (S5): the wake identity a checklist run carries (its run's
+ * `proactive`): the topic "heartbeat" (routine-run-card.ts wakeTopicOf), so
+ * the thumbs and « never » on its card still reach the checklist (#2694);
+ * its report posts, as the heartbeat's run in the main chat did. */
+export const HEARTBEAT_WAKE: RoutineRunProactive = { mode: "proactive", hops: 0, sources: [HEARTBEAT_CHECK], alwaysReport: true };
+
 export function isHeartbeatRoutine(routine: Pick<Routine, "precheck">): boolean {
   const precheck = routine.precheck as { kind?: string; check?: string } | undefined;
   return precheck?.kind === "code" && precheck.check === HEARTBEAT_CHECK;
@@ -268,9 +275,10 @@ export interface HeartbeatDeps {
   runAs?(botId: string): string | undefined;
   language?(botId: string): HeartbeatLanguage;
   /** #2694: the person said "never" to heartbeat wakes, or voted them down
-   * past the mute line (votes fade): the bot is not woken. */
+   * past the mute line. #4250: that is the checklist routine's pause (one
+   * switch): read once, it pauses the routine and is cleared. */
   muted?(botId: string): boolean;
-  /** Set or clear that mute (Settings' switch clears it when turned on). */
+  /** Set or clear that mute. */
   setMuted?(botId: string, muted: boolean): void;
   probes?: Partial<HeartbeatProbes>;
   file?: string;
@@ -341,18 +349,38 @@ export class HeartbeatManager {
     if (!list.items.length) return existing ?? null;
     const schedule = heartbeatSchedule(list.everyMs, this.now());
     if (existing) {
-      const every = existing.schedule.type === "interval" ? existing.schedule.everyMinutes : undefined;
-      return every === schedule.everyMinutes ? existing : manager.update(existing.id, { schedule });
+      this.muteToPause(botId);
+      const current = this.routineOf(botId) ?? existing;
+      const every = current.schedule.type === "interval" ? current.schedule.everyMinutes : undefined;
+      return every === schedule.everyMinutes ? current : manager.update(current.id, { schedule });
     }
-    return manager.create({
+    // a checklist the person had switched off (a server before #4250) is made paused
+    const muted = this.deps.muted?.(botId) === true;
+    const created = manager.create({
       name: heartbeatRoutineName(this.deps.language?.(botId) ?? "en"),
       prompt: heartbeatRoutinePrompt(),
       botId,
-      enabled: true,
+      enabled: !muted,
       schedule,
       precheck: { kind: "code", check: HEARTBEAT_CHECK },
       overlap: "skip",
     }, this.deps.runAs?.(botId));
+    if (muted) this.deps.setMuted?.(botId, false);
+    return created;
+  }
+
+  /** #4250: one switch. A mute the person's feedback set (« never », or
+   * votes past the mute line) becomes the checklist routine's pause and is
+   * cleared: nothing hidden is left behind, and resuming the routine runs
+   * it. Without a routine (notes only) the mute stays the switch. True when
+   * the routine was paused. */
+  muteToPause(botId: string): boolean {
+    if (!this.deps.muted?.(botId)) return false;
+    const routine = this.routineOf(botId);
+    if (!routine) return false;
+    if (routine.enabled !== false) this.deps.routines()?.update(routine.id, { enabled: false });
+    this.deps.setMuted?.(botId, false);
+    return true;
   }
 
   /** #4250: the checklist's one switch, the one Settings shows: its
@@ -417,13 +445,16 @@ export class HeartbeatManager {
       }
       return { wake: false, reason: `${HEARTBEAT_PATH} has no line to check` };
     }
-    if (this.deps.muted?.(botId)) return { wake: false, reason: "You muted the checklist's alerts" };
+    if (this.deps.muted?.(botId)) {
+      this.muteToPause(botId);
+      return { wake: false, reason: "You turned the checklist off" };
+    }
     const { fresh, state } = await evaluateHeartbeat(list, this.state[botId], this.probes, this.now());
     this.state[botId] = state;
     this.save();
     // #2820: only a probe in gap wakes the model; notes are context, never a trigger
     if (!fresh.length) return { wake: false, reason: "Every line of the checklist is met" };
-    return { wake: true, note: heartbeatNote(fresh, list.notes) };
+    return { wake: true, note: heartbeatNote(fresh, list.notes), proactive: structuredClone(HEARTBEAT_WAKE) };
   }
 
   private save(): void {

@@ -21261,7 +21261,11 @@ function feedbackOnWake(botId: string, topic: string, choice: BriefFeedback, whe
   const person = (effectiveBotOwner(bot) || "").trim().toLowerCase();
   if (choice === "never" && watches.length && person) {
     for (const row of watches) proactiveChoices.stopWatch(person, row.domain, row.id, "alert");
-  } else backgroundBriefs.topicFeedback(bot.id, kind, choice);
+  } else {
+    backgroundBriefs.topicFeedback(bot.id, kind, choice);
+    // #4250: the checklist's mute is its routine's pause (one switch)
+    if (kind === "heartbeat") heartbeat.muteToPause(bot.id);
+  }
   const said = message?.routineRun?.summary ?? message?.attention?.items[0]?.text ?? message?.text ?? "";
   rememberBriefFeedback(bot.id, choice, said || kind, kind);
   if (message && where.threadId) {

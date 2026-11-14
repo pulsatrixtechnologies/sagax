@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { parseMemoryPath } from "../memory/memory-store.ts";
 import { docPath } from "../workspace/workspace-tools.ts";
-import type { Routine, RoutineInput } from "../routines/routines.ts";
+import type { Routine, RoutineInput, RoutineRun } from "../routines/routines.ts";
+import { routineRunCard, wakeTopicOf } from "../routines/routine-run-card.ts";
 import { HEARTBEAT_CHECK, HeartbeatManager, parseHeartbeat, type HeartbeatProbes } from "./heartbeat.ts";
 
 const CHECKLIST = `# Heartbeat
@@ -65,7 +66,7 @@ describe("HeartbeatManager", () => {
     let checklist = text;
     let nextId = 0;
     const routines: Routine[] = [];
-    const runs: Array<{ botId: string; routineId: string; prompt: string; runAs?: string }> = [];
+    const runs: Array<{ botId: string; routineId: string; prompt: string; runAs?: string; proactive?: RoutineRun["proactive"] }> = [];
     const routineManager = {
       list: () => routines,
       create: (input: RoutineInput, runAs?: string): Routine => {
@@ -101,7 +102,7 @@ describe("HeartbeatManager", () => {
         const verdict = await manager.check(routine);
         if (verdict.wake) {
           // the run reads the routine's instructions and the gaps as its data
-          runs.push({ botId: routine.botId, routineId: routine.id, prompt: `${routine.prompt}\n${verdict.note ?? ""}`, ...(routine.runAs ? { runAs: routine.runAs } : {}) });
+          runs.push({ botId: routine.botId, routineId: routine.id, prompt: `${routine.prompt}\n${verdict.note ?? ""}`, ...(routine.runAs ? { runAs: routine.runAs } : {}), ...(verdict.proactive ? { proactive: verdict.proactive } : {}) });
           woken.push(routine.botId);
         }
       }
@@ -190,16 +191,58 @@ describe("HeartbeatManager", () => {
     expect(h.runs).toHaveLength(2);
   });
 
-  it("stays quiet while the person muted the heartbeat, and wakes once it fades (#2694)", async () => {
+  // #4250 changed it on purpose (one switch, nothing hidden): the person's
+  // mute (#2694) is the routine's pause; resuming the routine wakes it again
+  it("stays quiet while the person muted the heartbeat: the mute pauses its routine, and resuming it wakes again (#2694)", async () => {
     let mute = true;
-    const h = harness("- process Backup running", { processes: async () => [] }, undefined, () => mute);
+    const h = harness("- process Backup running", { processes: async () => [] }, undefined, () => mute, (_bot, value) => { mute = value; });
     await h.manager.tick();
     h.advance(31 * 60_000);
     await h.manager.tick();
     expect(h.runs).toEqual([]);
-    mute = false;
+    expect(h.routines[0]!.enabled).toBe(false);
+    expect(mute).toBe(false);
+    h.routines[0]!.enabled = true;
     h.advance(31 * 60_000);
     expect(await h.manager.tick()).toEqual(["osprey"]);
+  });
+
+  it("#4250: a checklist run keeps the heartbeat topic, so its thumbs and « never » still reach the checklist (#2694)", async () => {
+    const h = harness("- process Backup running", { processes: async () => [] });
+    expect(await h.manager.tick()).toEqual(["osprey"]);
+    const proactive = h.runs[0]!.proactive;
+    expect(proactive).toMatchObject({ sources: ["heartbeat"], alwaysReport: true });
+    expect(wakeTopicOf({ proactive })).toBe("heartbeat");
+    const card = routineRunCard({ id: "run-1", routineId: h.routines[0]!.id, routineName: "Checklist", botId: "osprey", status: "completed", output: "Backup is down.", scheduledFor: 1, createdAt: 1, proactive } as unknown as RoutineRun);
+    expect(card.wakeTopic).toBe("heartbeat");
+  });
+
+  it("#4250: a checklist the person had switched off before the upgrade becomes a paused routine, with no mute left behind", async () => {
+    let mute = true;
+    let probes = 0;
+    const h = harness("- process Backup running", { processes: async () => { probes += 1; return []; } }, undefined, () => mute, (_bot, value) => { mute = value; });
+    await h.manager.tick();
+    expect(h.routines).toHaveLength(1);
+    expect(h.routines[0]!.enabled).toBe(false);
+    expect(mute).toBe(false);
+    expect(h.checks.on("osprey")).toBe(false);
+    expect(probes).toBe(0);
+    // resumed from the routines list: it runs, nothing hidden holds it back
+    h.routines[0]!.enabled = true;
+    expect(h.checks.on("osprey")).toBe(true);
+    expect(await h.manager.tick()).toEqual(["osprey"]);
+  });
+
+  it("#4250: a « never » on a checklist run pauses its routine at once (one switch)", async () => {
+    let mute = false;
+    const h = harness("- process Backup running", { processes: async () => [] }, undefined, () => mute, (_bot, value) => { mute = value; });
+    await h.manager.tick();
+    expect(h.routines[0]!.enabled).toBe(true);
+    mute = true;
+    expect(h.checks.muteToPause("osprey")).toBe(true);
+    expect(h.routines[0]!.enabled).toBe(false);
+    expect(mute).toBe(false);
+    expect(h.checks.on("osprey")).toBe(false);
   });
 
   it("#4250: Settings' switch and the routines list are one switch: the checklist routine's own on and off", async () => {

@@ -35,4 +35,8 @@ describe("#4250 step b: the checklist is a routine's pre-check", () => {
     expect(source).toMatch(/onMemoryChange\(\(botId, path\) => \{\n\s*if \(path === HEARTBEAT_PATH\) heartbeat\.sync\(botId\);/);
     expect(source).toMatch(/briefCardsPass\(\);[\s\S]{0,600}heartbeat\.syncDue\(\)/);
   });
+
+  it("a « never » or votes on a checklist run become its routine's pause at once (one switch)", () => {
+    expect(source).toMatch(/backgroundBriefs\.topicFeedback\(bot\.id, kind, choice\);\n\s*\/\/[^\n]*\n\s*if \(kind === "heartbeat"\) heartbeat\.muteToPause\(bot\.id\);/);
+  });
 });

@@ -4,7 +4,8 @@
 // Rows: the engine of the bot, generated from BUILT_IN_DRIVERS. Every driver
 // kind is either a row that runs on its fake (the fake Claude CLI, the fake
 // ACP CLI for an ACP driver, the fake Codex app-server, or a local
-// chat-completions stub for the chat family) or is exempted below with a
+// chat-completions stub for each engine of the chat family, on its own path
+// of the stub) or is exempted below with a
 // written reason; a new driver fails this file until it is one or the other.
 //
 // Columns: the provider of the connector. Part 1 runs the real server and
@@ -34,11 +35,12 @@
 // POSIX-gated like the other CLI e2es (the fakes are shebang scripts).
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
 import { isHeldRequestId } from "../harness/held-requests.ts";
@@ -57,13 +59,20 @@ import type { ConnectorAccount, ConnectorProvider } from "./types.ts";
 const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
+const FAKE_PI = join(SERVER_DIR, "testing", "fake-pi-cli.ts");
+const FAKE_MUSE = join(SERVER_DIR, "testing", "fake-muse-cli.ts");
 const FAKE_CODEX = join(SERVER_DIR, "testing", "fake-codex-app-server.ts");
 const ROOM_AGENT = join(SERVER_DIR, "testing", "room-handoff-agent.ts");
 const FIXTURES = join(SERVER_DIR, "testing", "fixtures", "connectors");
 const posixOnly = describe.skipIf(process.platform === "win32");
 
-/** A row of the matrix: an engine on its fake. */
-interface Row { kind: string; fake: "claude" | "acp" | "codex" | "chat"; model: string; environment?: Record<string, string> }
+/** A row of the matrix: an engine on its fake. A chat row's `config` is its
+ * instance config besides the stub's address. */
+interface Row { kind: string; fake: "claude" | "acp" | "pi" | "muse" | "codex" | "chat"; model: string; environment?: Record<string, string>; config?: Record<string, unknown> }
+
+/** The Qwen route of the matrix home's settings file: model `fake-model`
+ * of the `openai` provider, as Qwen names it over ACP. */
+const QWEN_ROUTE = "fake-model(openai)";
 
 /** Every driver kind with a row on a fake. */
 export const MATRIX_ROWS: readonly Row[] = [
@@ -78,24 +87,34 @@ export const MATRIX_ROWS: readonly Row[] = [
   { kind: "deepseekAgent", fake: "acp", model: "fake-model", environment: { FAKE_ACP_MODELS: "fake-model" } },
   { kind: "copilotAgent", fake: "acp", model: "fake-model", environment: { FAKE_ACP_MODELS: "fake-model" } },
   { kind: "customAcp", fake: "acp", model: "fake-model", environment: { FAKE_ACP_MODELS: "fake-model" } },
+  // #3286: Qwen's model is a route of its settings file (written in the
+  // matrix home below); Cline connects the servers of its own settings file,
+  // which the fake ACP CLI reads as Cline does
+  { kind: "qwenAgent", fake: "acp", model: QWEN_ROUTE, environment: { FAKE_ACP_MODELS: QWEN_ROUTE } },
+  { kind: "clineAgent", fake: "acp", model: "cline-default", environment: { CLINE_API_KEY: "matrix-fixture-key" } },
+  // #3286: Antigravity runs the fake ACP CLI staged as its runtime (the ACP
+  // server and its harness sibling) on a signed-in profile of each instance
+  { kind: "antigravityAgent", fake: "acp", model: "fake-model", environment: { FAKE_ACP_MODELS: "fake-model", FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODES: "default,auto_edit,yolo" } },
+  // #3286: pi connects the agents server of its MCP config as its own client
+  { kind: "piAgent", fake: "pi", model: "fake-model" },
+  // #3286: Muse Code connects the agents server of its session config as its
+  // own MCP client, on the fake Muse Code CLI that speaks its session protocol
+  { kind: "museCode", fake: "muse", model: "fake-model", environment: { META_API_KEY: "matrix-fixture-key" } },
   { kind: "codex", fake: "codex", model: "gpt-fake-default" },
   { kind: "openai-compat", fake: "chat", model: "matrix-model" },
+  // #3286: every vendor chat engine takes a local test endpoint in its
+  // instance config, so each one runs on the stub under its own path
+  { kind: "grok", fake: "chat", model: "grok-4.7", environment: { XAI_API_KEY: "matrix-fixture-key" } },
+  { kind: "minimax", fake: "chat", model: "MiniMax-M3", environment: { MINIMAX_API_KEY: "matrix-fixture-key" } },
+  { kind: "mistral", fake: "chat", model: "mistral-large-latest", environment: { MISTRAL_API_KEY: "matrix-fixture-key" } },
+  { kind: "cerebras", fake: "chat", model: "gpt-oss-120b", environment: { CEREBRAS_API_KEY: "matrix-fixture-key" } },
+  { kind: "groq", fake: "chat", model: "openai/gpt-oss-120b", environment: { GROQ_API_KEY: "matrix-fixture-key" } },
+  { kind: "meta", fake: "chat", model: "muse-wonder-1.0", environment: { META_API_KEY: "matrix-fixture-key" } },
 ];
 
-/** Every other driver kind, and why it has no row yet. A reason is a sentence. */
-export const MATRIX_EXEMPT: Readonly<Record<string, string>> = {
-  grok: "the Grok API engine is a chat-completions client like the openai-compat row, but its instance takes only the vendor's own endpoint, so no local stub is wired for it yet",
-  qwenAgent: "an ACP driver whose models come from the person's own Qwen settings file, which no fake provides yet; the ACP family runs on the fake ACP CLI through every other ACP row",
-  clineAgent: "an ACP driver that mounts the agents server through its own settings file (CLINE_MCP_SETTINGS_PATH), which the fake ACP CLI does not read yet; the ACP family runs through every other ACP row",
-  piAgent: "the fake pi CLI has no mode that calls an MCP tool of the agents server yet; pi mounts the same agents server as every row above",
-  antigravityAgent: "the fake Antigravity CLI has no mode that calls an MCP tool of the agents server yet; it mounts the same agents server as every row above",
-  minimax: "a chat-completions engine on its vendor's fixed endpoint, so no local stub is wired for it yet; the chat family runs through the openai-compat row on a local stub",
-  mistral: "a chat-completions engine on its vendor's fixed endpoint, so no local stub is wired for it yet; the chat family runs through the openai-compat row on a local stub",
-  cerebras: "a chat-completions engine on its vendor's fixed endpoint, so no local stub is wired for it yet; the chat family runs through the openai-compat row on a local stub",
-  groq: "a chat-completions engine on its vendor's fixed endpoint, so no local stub is wired for it yet; the chat family runs through the openai-compat row on a local stub",
-  meta: "a chat-completions engine on its vendor's fixed endpoint, so no local stub is wired for it yet; the chat family runs through the openai-compat row on a local stub",
-  museCode: "Muse Code has no fake CLI yet; it mounts the same agents server as every row above",
-};
+/** Every other driver kind, and why it has no row yet. A reason is a sentence.
+ * #3286: none left; a new driver lands with a row or a reason here. */
+export const MATRIX_EXEMPT: Readonly<Record<string, string>> = {};
 
 describe("connector matrix rows (#3354)", () => {
   it("gives every built-in driver a row on a fake or a written reason", () => {
@@ -114,11 +133,16 @@ interface HostCall { principalId: string; engine: string; connector: string; too
 
 const SEND_ARGS = { to: "someone@example.com", body: "hello from the matrix" };
 const readArgs = (row: string) => ({ query: `${row}-read` });
+/** The stub path of a chat row: the OpenAI-compatible row keeps /v1, every
+ * other chat engine answers under /<kind>/v1. */
+const CHAT_ROOT = "openai-compat";
+const chatPath = (row: Row) => (row.kind === CHAT_ROOT ? "/v1" : `/${row.kind}/v1`);
 const instanceOf = (row: Row, scenario: "read" | "send") =>
-  row.fake === "claude" ? "claude" : row.fake === "codex" ? "codex" : row.fake === "chat" ? "openaiCompat" : `${row.kind}-${scenario}`;
+  row.fake === "claude" ? "claude" : row.fake === "codex" ? "codex"
+    : row.fake === "chat" ? (row.kind === CHAT_ROOT ? "openaiCompat" : `${row.kind}-chat`) : `${row.kind}-${scenario}`;
 /** The text a row's reply carries once its call landed. */
 const DONE = "matrix:call_connector done";
-const doneOf = (row: Row) => (row.fake === "claude" ? "mcp:call_connector:" : row.fake === "acp" ? "agents:call_connector ->" : DONE);
+const doneOf = (row: Row) => (row.fake === "claude" ? "mcp:call_connector:" : row.fake === "acp" || row.fake === "pi" || row.fake === "muse" ? "agents:call_connector ->" : DONE);
 /** What a scripted turn calls, by the marker its text holds: the Codex row's
  * plan and the chat stub's answers both come from here. */
 const scripted = (row: string, text: string): Array<{ tool: string; arguments: Record<string, unknown> }> =>
@@ -128,22 +152,64 @@ const scripted = (row: string, text: string): Array<{ tool: string; arguments: R
       ? [{ tool: "call_connector", arguments: { connector: TEST_HOST_CONNECTOR, tool: "send_message", arguments: SEND_ARGS } }]
       : [];
 
+/** The Antigravity row's runtime: the fake ACP CLI as the ACP server and as
+ * its harness sibling, the two files the driver resolves a custom executable
+ * by (server/drivers/antigravity-runtime.ts externalRuntime). */
+function stageAntigravityRuntime(home: string): string {
+  const directory = join(home, "antigravity-runtime");
+  mkdirSync(directory, { recursive: true });
+  const executable = join(directory, "agy_acp_server.ts");
+  copyFileSync(FAKE_ACP, executable);
+  copyFileSync(FAKE_ACP, join(directory, "localharness_external"));
+  chmodSync(executable, 0o755);
+  chmodSync(join(directory, "localharness_external"), 0o755);
+  return executable;
+}
+
+/** The PATH of the matrix server: node (the fakes' interpreter) and git, linked
+ * into the matrix home, then the system folders. The PATH of the machine
+ * running the matrix also holds its installed engines (a real Claude Code,
+ * Cursor or Codex CLI): the server would probe each of them on every bot it
+ * creates and every status read, and on a busy machine those probes run to
+ * their 8 s limit, outside anything a row controls (#3286). */
+function matrixPath(home: string): string {
+  const bin = join(home, "bin");
+  if (!existsSync(bin)) {
+    mkdirSync(bin, { recursive: true });
+    symlinkSync(process.execPath, join(bin, "node"));
+    const git = (process.env.PATH ?? "").split(delimiter).map((dir) => join(dir, "git")).find((file) => existsSync(file));
+    if (git) symlinkSync(git, join(bin, "git"));
+  }
+  return [bin, "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(delimiter);
+}
+
 /** A local chat-completions endpoint that answers as a model calling the
  * agents tools: each request gets the next call of its turn's script, then a
- * text that quotes every tool result. */
+ * text that quotes every tool result. The row is the path's first segment
+ * (/<kind>/v1/chat/completions), the OpenAI-compatible row when it is /v1.
+ * Anything but chat completions (a model list) is not found, so an engine
+ * keeps its built-in catalog. */
 function chatStub(): { server: Server; requests: number } {
   const state = { server: undefined as unknown as Server, requests: 0 };
   state.server = createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
+      const path = (req.url ?? "").split("?")[0]!;
+      if (!path.endsWith("/chat/completions")) {
+        res.writeHead(404, { "content-type": "application/json" });
+        res.end("{}");
+        return;
+      }
+      const first = path.split("/")[1] ?? "";
+      const row = first === "v1" ? CHAT_ROOT : first;
       state.requests += 1;
       const body = JSON.parse(raw || "{}") as { stream?: boolean; messages?: Array<{ role: string; content?: unknown }>; tools?: Array<{ function: { name: string } }> };
       const messages = body.messages ?? [];
       const lastUser = messages.findLastIndex((m) => m.role === "user");
       const text = (m?: { content?: unknown }) => typeof m?.content === "string" ? m.content : JSON.stringify(m?.content ?? "");
       const results = messages.slice(lastUser + 1).filter((m) => m.role === "tool");
-      const plan = scripted("openai-compat", text(messages[lastUser]));
+      const plan = scripted(row, text(messages[lastUser]));
       const names = (body.tools ?? []).map((tool) => tool.function.name);
       const named = (tool: string) => names.find((name) => name === tool || name.endsWith(`_${tool}`)) ?? tool;
       const next = plan[results.length];
@@ -172,6 +238,7 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
   let stderr = "";
   let codexPlan = "";
   let stub: ReturnType<typeof chatStub>;
+  const stubPort = () => (stub.server.address() as { port: number }).port;
 
   const api = async (method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> => {
     const res = await fetch(`${base}${path}`, {
@@ -203,11 +270,24 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
     existsSync(callsFile) ? readFileSync(callsFile, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as HostCall) : [];
   const sends = (engine: string) => hostCalls().filter((c) => c.engine === engine && c.tool === "send_message");
 
+  /** The bots the running test made. */
+  let made: string[] = [];
   const newBot = async (name: string) => {
     const created = await api("POST", "/api/bots", { name });
     expect(created.status, JSON.stringify(created.body)).toBeLessThan(300);
+    made.push(created.body.bot.id);
     return created.body.bot as { id: string; threadId: string };
   };
+  // every test stops its bots' turns once it ends, so a test that failed
+  // leaves nothing running into the tests after it on the shared server
+  afterEach(async () => {
+    const bots = made;
+    made = [];
+    if (!child) return;
+    for (const id of bots) {
+      try { await api("POST", `/api/bots/${id}/interrupt`, {}); } catch { /* the server is gone: nothing runs */ }
+    }
+  });
   const useRow = async (bot: { id: string }, row: Row, scenario: "read" | "send") => {
     const picked = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: instanceOf(row, scenario), model: row.model } });
     expect(picked.status, JSON.stringify(picked.body)).toBe(200);
@@ -246,24 +326,32 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
       expect(answered.status, JSON.stringify(answered.body)).toBeLessThan(300);
     });
 
+
   const claudeCall = (when: string, args: Record<string, unknown>, tool = "call_connector") => ({ server: "agents", tool, when, arguments: args });
   const start = async () => {
     stderr = "";
     child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
       cwd: join(SERVER_DIR, ".."),
       env: {
-        ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
+        // only the rows' fakes: the engines installed on the machine running
+        // the matrix are out of its reach (matrixPath)
+        PATH: matrixPath(home),
         HOME: home,
         USERPROFILE: home,
         SAGAX_PORT: String(port),
         SAGAX_TEST_CONNECTOR_HOST: callsFile,
         SAGAX_TEST_INTERNAL_CAPABILITY_KEY: "connector-matrix-e2e-capability-key-0123456789",
+        // the whole matrix runs inside the server's boot window, where every
+        // engine probe takes one of two shared slots: one row's probes would
+        // queue behind every other row's. The boot memory limit is not what
+        // the matrix checks (server/engines/engine-start-gate.test.ts does).
+        SAGAX_BOOT_ENGINE_SLOTS: "0",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stderr!.on("data", (c) => (stderr += c));
     child.stdout!.on("data", (c) => (stderr += c));
-    const deadline = Date.now() + 20_000;
+    const deadline = Date.now() + 30_000;
     for (;;) {
       try {
         if ((await fetch(`${base}/api/health`)).ok) break;
@@ -286,6 +374,8 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
   beforeAll(async () => {
     chmodSync(FAKE_CLAUDE, 0o755);
     chmodSync(FAKE_ACP, 0o755);
+    chmodSync(FAKE_PI, 0o755);
+    chmodSync(FAKE_MUSE, 0o755);
     chmodSync(FAKE_CODEX, 0o755);
     expect(existsSync(ROOM_AGENT)).toBe(true);
     home = mkdtempSync(join(tmpdir(), "sagax-connector-matrix-"));
@@ -294,6 +384,9 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
     stub = chatStub();
     await new Promise<void>((resolve) => stub.server.listen(0, "127.0.0.1", resolve));
     mkdirSync(join(home, ".sagax"), { recursive: true });
+    // the Qwen row's model route (server/drivers/acp/qwen.ts readQwenRoutes)
+    mkdirSync(join(home, ".qwen"), { recursive: true });
+    writeFileSync(join(home, ".qwen", "settings.json"), JSON.stringify({ modelProviders: { openai: [{ id: "fake-model" }] } }));
     const instances: Record<string, unknown> = {};
     for (const row of MATRIX_ROWS) {
       if (row.fake === "claude") {
@@ -337,8 +430,48 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
         };
         continue;
       }
-      if (row.fake === "chat") continue;
+      if (row.fake === "chat") {
+        // the OpenAI-compatible row is set through the config route below
+        if (row.kind !== CHAT_ROOT) {
+          instances[instanceOf(row, "read")] = {
+            driver: row.kind,
+            environment: { ...row.environment },
+            config: { ...row.config, url: `http://127.0.0.1:${stubPort()}${chatPath(row)}` },
+          };
+        }
+        continue;
+      }
+      if (row.fake === "pi" || row.fake === "muse") {
+        const prefix = row.fake === "pi" ? "FAKE_PI" : "FAKE_MUSE";
+        for (const scenario of ["read", "send"] as const) {
+          instances[instanceOf(row, scenario)] = {
+            driver: row.kind,
+            environment: {
+              ...row.environment,
+              ...(row.fake === "pi" ? { FAKE_PI_MODE: "mcp-call" } : {}),
+              [`${prefix}_MCP_CALLS`]: scenario === "read" ? "connectors,call_connector" : "call_connector",
+              [`${prefix}_MCP_CALL_ARGS`]: JSON.stringify({
+                connectors: {},
+                call_connector: scenario === "read"
+                  ? { connector: TEST_HOST_CONNECTOR, tool: "search_messages", arguments: readArgs(row.kind) }
+                  : { connector: TEST_HOST_CONNECTOR, tool: "send_message", arguments: SEND_ARGS },
+              }),
+            },
+            config: row.fake === "pi" ? { cli: FAKE_PI, fullAuto: true } : { cli: FAKE_MUSE },
+          };
+        }
+        continue;
+      }
+      // the Antigravity row: the fake ACP CLI staged as the runtime and its
+      // harness sibling (server/drivers/antigravity-runtime.ts), and a signed-in
+      // profile of each instance (server/drivers/antigravity-acp.ts)
+      const cli = row.kind === "antigravityAgent" ? stageAntigravityRuntime(home) : FAKE_ACP;
       for (const scenario of ["read", "send"] as const) {
+        if (row.kind === "antigravityAgent") {
+          const profile = join(home, ".sagax", "providers", "antigravity", createHash("sha256").update(instanceOf(row, scenario)).digest("hex"), "antigravity-acp");
+          mkdirSync(profile, { recursive: true });
+          writeFileSync(join(profile, "acp_token.json"), "{}\n");
+        }
         instances[instanceOf(row, scenario)] = {
           driver: row.kind,
           environment: {
@@ -353,7 +486,7 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
                 : { connector: TEST_HOST_CONNECTOR, tool: "send_message", arguments: SEND_ARGS },
             }),
           },
-          config: { cli: FAKE_ACP, fullAuto: true },
+          config: { cli, fullAuto: true },
         };
       }
     }
@@ -362,10 +495,9 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
     base = `http://127.0.0.1:${port}`;
     await start();
     // the chat row: an OpenAI-compatible endpoint on the local stub
-    const stubPort = (stub.server.address() as { port: number }).port;
-    const configured = await api("PATCH", "/api/config", { openaiCompat: { key: "matrix-fixture-key", url: `http://127.0.0.1:${stubPort}/v1`, model: "matrix-model" } });
+    const configured = await api("PATCH", "/api/config", { openaiCompat: { key: "matrix-fixture-key", url: `http://127.0.0.1:${stubPort()}/v1`, model: "matrix-model" } });
     expect(configured.status, JSON.stringify(configured.body)).toBeLessThan(300);
-  }, 30_000);
+  }, 60_000);
 
   afterAll(async () => {
     await stop();
@@ -427,7 +559,7 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
       expect(again.cards, row.kind).toEqual([]);
       expect(sends(row.kind), row.kind).toHaveLength(before + 1);
     }
-  }, 180_000);
+  }, 300_000);
 
   it("a Refuse rule saved from one row's card refuses the same call on every row", async () => {
     const bot = await newBot("Matrix Refuse");
@@ -516,7 +648,7 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
     const after = await turn(bot, claude, "RESTART_READ the inbox");
     expect(after.reply).toContain("mcp:call_connector:ok");
     expect(hostCalls().filter((c) => c.arguments.query === "restart")).toHaveLength(1);
-  }, 90_000);
+  }, 180_000);
 });
 
 // Part 2: the provider axis, on the real hosts and their fakes.
@@ -563,6 +695,8 @@ posixOnly("connector matrix, provider columns on the real hosts (#3354)", () => 
   beforeAll(async () => {
     chmodSync(FAKE_CLAUDE, 0o755);
     chmodSync(FAKE_ACP, 0o755);
+    chmodSync(FAKE_PI, 0o755);
+    chmodSync(FAKE_MUSE, 0o755);
     chmodSync(FAKE_CODEX, 0o755);
     root = realpathSync(mkdtempSync(join(tmpdir(), "sagax-connector-columns-")));
     for (const person of PEOPLE) {

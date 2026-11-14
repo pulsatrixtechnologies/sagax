@@ -819,6 +819,26 @@ let agentsMcp: McpEntry | null = null;
 // mcp-tools mode: every entry from the last session/new or session/load
 type AnyMcpEntry = { name: string; command?: string; args?: string[]; env?: Array<{ name: string; value: string }>; url?: string; headers?: Array<{ name: string; value: string }> };
 let sessionMcp: AnyMcpEntry[] = [];
+/** #3286: Cline records ACP's mcpServers without connecting them and
+ * connects the servers of its own settings file instead
+ * (server/drivers/acp/cline.ts), so the fake does the same when that file is
+ * named: the servers a Cline turn really reaches, or null for any other
+ * engine. */
+function clineSettingsMcp(): AnyMcpEntry[] | null {
+  const path = process.env.CLINE_MCP_SETTINGS_PATH;
+  if (!path) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as { mcpServers?: Record<string, { transport?: { command?: string; args?: string[]; env?: Record<string, string> } }> };
+    return Object.entries(parsed.mcpServers ?? {}).map(([name, server]) => ({
+      name,
+      ...(server.transport?.command ? { command: server.transport.command } : {}),
+      args: server.transport?.args ?? [],
+      env: Object.entries(server.transport?.env ?? {}).map(([key, value]) => ({ name: key, value: String(value) })),
+    }));
+  } catch {
+    return [];
+  }
+}
 /** grok 1.0.25's initialize (`grok mcp doctor`, captured Oct 8 2026) */
 const GROK_MCP_HANDSHAKE = { protocolVersion: "2025-11-25", capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } }, clientInfo: { name: "grok-shell", version: "1.0.25" } };
 
@@ -1181,8 +1201,8 @@ function handle(msg: any) {
         dumpState.mcpServers = servers;
         writeFileSync(process.env.FAKE_ACP_DUMP, JSON.stringify(dumpState, null, 2));
       }
-      agentsMcp = servers.find((s: any) => s?.name === "agents") ?? null;
-      sessionMcp = servers as AnyMcpEntry[];
+      sessionMcp = clineSettingsMcp() ?? servers as AnyMcpEntry[];
+      agentsMcp = (sessionMcp.find((s) => s?.name === "agents") as McpEntry | undefined) ?? null;
       if (process.env.FAKE_ACP_DUMP && !backgroundText) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(servers, null, 2));
       }
@@ -1222,7 +1242,7 @@ function handle(msg: any) {
       if (process.env.FAKE_ACP_DUMP) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
       }
-      if (!cachedLiveLoad) sessionMcp = msg.params?.mcpServers ?? [];
+      if (!cachedLiveLoad) sessionMcp = clineSettingsMcp() ?? msg.params?.mcpServers ?? [];
       const opts = configOptions();
       const mdls = sessionModels(loadedSessionModel(msg.params?.sessionId));
       liveSession = typeof msg.params?.sessionId === "string" ? msg.params.sessionId : liveSession;
@@ -1242,7 +1262,7 @@ function handle(msg: any) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
       }
       // a resume reconnects the MCP servers it is given, as a load does
-      if (Array.isArray(msg.params?.mcpServers)) sessionMcp = msg.params.mcpServers;
+      if (Array.isArray(msg.params?.mcpServers)) sessionMcp = clineSettingsMcp() ?? msg.params.mcpServers;
       const opts = configOptions();
       const mdls = sessionModels();
       liveSession = typeof msg.params?.sessionId === "string" ? msg.params.sessionId : liveSession;

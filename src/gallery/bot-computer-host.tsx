@@ -3,8 +3,10 @@
  * with its tags and ⋯ menu, and a bot thread on a mock "FS-01" (the
  * isolated / as-is question, the quiet shell step, the provisioning state).
  * Every call is mocked; no real host. Not shipped.
- * ?skin=<id>&lang=<code>&view=card|picker|row|thread */
-import { StrictMode, useState, type ReactNode } from "react";
+ * #4327: view=row takes bots=<n> (1 to 6, default 1), the bots that work
+ * on FS-01, each with its isolated / as-is answer (set in Bots…).
+ * ?skin=<id>&lang=<code>&view=card|picker|row|thread&bots=<n> */
+import { StrictMode, useMemo, useReducer, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { Monitor, Server } from "lucide-react";
 import { ComputerCard } from "../components/bot-settings/ComputerCard";
@@ -15,7 +17,7 @@ import { ToolActivity } from "../components/ToolActivity";
 import { CHAT_BUBBLE_WIDTH_CLASS } from "../lib/chat-bubble-width";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
-import { StoreProvider, type Bot, type Message } from "../state/store";
+import { BotEditorStore, StoreProvider, initialState, reducer, type AppState, type Bot, type Message } from "../state/store";
 import type { BotComputerHostView } from "../../shared/bot-computer-host";
 import type { UnattendedHostRow } from "../../shared/remote-unattended-host";
 import "../styles.css";
@@ -30,8 +32,18 @@ const FS01 = `h_${"a".repeat(32)}`;
 const STUDIO = `h_${"b".repeat(32)}`;
 const NOW = Date.now();
 
+const ROW_BOTS = [
+  { id: "bot-1", name: "Scout", color: "#4f8cff" },
+  { id: "bot-2", name: "Atlas", color: "#e5484d" },
+  { id: "bot-3", name: "Nova", color: "#30a46c" },
+  { id: "bot-4", name: "Orion", color: "#f5a524" },
+  { id: "bot-5", name: "Lyra", color: "#8e4ec6" },
+  { id: "bot-6", name: "Juno", color: "#12a594" },
+].slice(0, Math.min(6, Math.max(1, Number(params.get("bots")) || 1)));
+const rowModes = Object.fromEntries(ROW_BOTS.map((each, index) => [each.id, index % 3 === 1 ? "as_is" : "isolated"] as const));
+
 const hostViews: BotComputerHostView[] = [
-  { hostId: FS01, name: "FS-01", os: "linux", online: true, botComputer: true, tags: ["nas", "unraid"], shellOnly: true, access: "always", modes: { "bot-1": "isolated" }, vm: { engine: "libvirt", state: "provisioning", name: "sagax-scout", step: "Creating the disk", updatedAt: NOW } },
+  { hostId: FS01, name: "FS-01", os: "linux", online: true, botComputer: true, tags: ["nas", "unraid"], shellOnly: true, access: "always", modes: rowModes, vm: { engine: "libvirt", state: "provisioning", name: "sagax-scout", step: "Creating the disk", updatedAt: NOW } },
   { hostId: STUDIO, name: "Studio-Mac", os: "macos", online: false, botComputer: true, tags: ["gpu"], shellOnly: false, access: "ask", modes: {}, vm: null },
 ];
 const rows: UnattendedHostRow[] = [
@@ -73,10 +85,19 @@ function Picker() {
 }
 
 function Row() {
+  // the person's bots, so each environment row shows its mascot and name
+  const [current, apply] = useReducer((state: AppState, action: Parameters<typeof reducer>[1]) => { try { return reducer(state, action); } catch { return state; } }, {
+    ...initialState,
+    connected: true,
+    bots: ROW_BOTS.map((each) => ({ ...each, threadId: `${each.id}-t`, title: "", description: "", notifications: true, unread: false, busy: false, messages: [] }) as unknown as Bot),
+  });
+  const value = useMemo(() => ({ state: current, dispatch: apply, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} }), [current]);
   return (
-    <Frame width={980}>
-      <UnattendedHostsSection state={{ hosts: rows, available: true, loading: false, reload: () => {} }} />
-    </Frame>
+    <BotEditorStore value={value as never}>
+      <Frame width={980}>
+        <UnattendedHostsSection state={{ hosts: rows, available: true, loading: false, reload: () => {} }} />
+      </Frame>
+    </BotEditorStore>
   );
 }
 

@@ -12,6 +12,8 @@
 // names) and, for a colleague's computer, "Shared by <name>"; the menu adds
 // "Bots…" and "Share…" on the person's own hosts (Share only inside an
 // organization: an impossible option is hidden, never greyed).
+// #4327: the menu keeps the computer's own actions; how each bot uses the
+// computer (isolated or as-is) is set in Bots….
 // #3134: two sections, "Unattended computers" (the enrolled hosts) and "My
 // devices" (the Sagax installs: this computer, a phone, a tablet), each card
 // the same height: bots, shares and "Bot computer" ride the card's line as
@@ -98,7 +100,7 @@ export function sortDeviceEntries(devices: readonly MyDevice[], hosts: readonly 
 
 function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotComputerChanged }: {
   row: UnattendedHostRow;
-  /** #2726: this host as a bot computer (toggle, tags, per-bot mode). */
+  /** #2726: this host as a bot computer (toggle, tags, per-bot mode in Bots…). */
   botComputer: BotComputerHostView | null;
   onBotComputerChanged: () => void;
   os?: UnattendedHostOs;
@@ -143,6 +145,7 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
     [t("remoteSessionsAdmin.hosts.col.tags"), (botComputer?.tags ?? []).join(", ")],
   ];
   const enrolled = row.state === "enrolled";
+  const botsWorkHere = Object.keys(botComputer?.modes ?? {}).length > 0;
   return (
     <DeviceCardRow kind="unattended-host" icon={Monitor} online={unattendedHostOnline(row)} line={hostLine(row, os)}
       meta={(
@@ -184,7 +187,8 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
           {mine && canRevokeUnattendedHost(row) && (
             <PageMenuItem icon={ShieldOff} data-unattended-host-revoke="" aria-disabled={busy || undefined} onClick={() => { if (busy) return; close(); onRevoke(row); }}>{t("remoteSessionsAdmin.hosts.revoke")}</PageMenuItem>
           )}
-          {mine && row.state === "enrolled" && (
+          {/* #4327: on a shared computer, Bots… keeps only the environment of the person's bots. */}
+          {enrolled && (mine || botsWorkHere) && (
             <PageMenuItem icon={BotIcon} data-unattended-host-bots-edit="" onClick={() => { close(); setEditingBots(true); }}>{t("remoteSessionsAdmin.hosts.bots.menu")}</PageMenuItem>
           )}
           {mine && row.state === "enrolled" && (
@@ -203,7 +207,8 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
       }}>
       <HostBotComputerTags hostId={row.hostId} host={botComputer} editing={editingTags}
         onDone={() => setEditingTags(false)} onChanged={onBotComputerChanged} />
-      {editingBots && <HostBotsDialog hostId={row.hostId} host={label} value={bots} onSaved={setBots} onClose={() => setEditingBots(false)} />}
+      {editingBots && <HostBotsDialog hostId={row.hostId} host={label} value={bots} scoped={mine} computer={botComputer}
+        onSaved={setBots} onComputerChanged={onBotComputerChanged} onClose={() => setEditingBots(false)} />}
       {placing && <HostTeamDialog hostId={row.hostId} host={label} onClose={() => setPlacing(false)} />}
       {sharing && <HostShareDialog hostId={row.hostId} host={label} shares={shares} onChanged={setShares} onClose={() => setSharing(false)} />}
       {details && (

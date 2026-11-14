@@ -333,13 +333,16 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
           const tellThePerson = () => {
             const notification = host.originApprovals.notificationFor(event.threadId, message.id);
             if (!notification) return;
-            // the bot is not working now. it is waiting on a person
-            if (bot) host.store.setTaskActivity(bot.id, event.threadId, "waiting-on-you");
+            // the bot is not working now. it is waiting on a person; #4205: a
+            // card raised with wait false holds nothing, the conversation's
+            // turn state included (openQuestionCard skips it too)
+            const holds = card.noHold !== true;
+            if (bot && holds) host.store.setTaskActivity(bot.id, event.threadId, "waiting-on-you");
             // A routine run's card waits in its hidden task: its one message in
             // the person's conversation says so and opens the run (2026-10-22).
             const waitingRun = routineRun ? host.routines?.runForThread(event.threadId) : null;
             if (waitingRun?.status === "waiting") host.syncRoutineRunToSource(waitingRun);
-            else if (!bot && asker.busy) host.store.setActivity(asker.id, "waiting-on-you");
+            else if (!bot && asker.busy && holds) host.store.setActivity(asker.id, "waiting-on-you");
             if (event.requestId) host.showWaitingOnPersonChip(event.threadId, event.requestId, asker, permission ? "approval" : "answer");
             const notificationThread = notification.threadId;
             const notificationBot = (notificationThread !== event.threadId && host.store.botByThread(notificationThread))

@@ -106,5 +106,9 @@ it("a run with [HUMAIN] items gives one card per item, not two, and rings once p
     expect(rows.filter((message: any) => message.kind === "routine.run" && message.routineRun?.runId === run.id)).toHaveLength(1);
     const rings = stream.frames.filter((frame) => frame.kind === "notify" && (frame.notification?.kind === "question" || frame.notification?.kind === "needs-you"));
     expect(rings.map((frame) => frame.notification.kind)).toEqual(["question", "question"]);
+    // #4205: a card raised with wait false holds nothing: the bot is not
+    // shown waiting on the person, so its next turn is not held
+    const atlasNow = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.atlas.id);
+    expect(atlasNow.busy).toBeFalsy();
   } finally { stream.close(); }
 }), 60_000);

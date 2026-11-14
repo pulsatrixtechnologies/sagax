@@ -34,7 +34,9 @@ both write `proactive`).
   (`domains`) and the domains they can choose (`available`, from the watch
   loop's listing on that bot, else their main bot): each with its slug,
   label, audience, `eligible`, and its watches (id, summary, cadence,
-  products, `runs`, `missing: product|skill`). When none can be listed,
+  products, `runs`, `missing: product|skill|read`; `read` (#3408): the
+  connection does not serve the watch's observe tool as a read, so it is
+  never offered). When none can be listed,
   `unavailable` says why. With `?view=all` (#3432) it adds `receive`, what
   Settings, Notifications, « Ce que je reçois » and each bot's « Ce que ce
   bot suit pour toi » draw: `bots` (the person's own visible bots, main bot

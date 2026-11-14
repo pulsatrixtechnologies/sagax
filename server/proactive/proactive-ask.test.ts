@@ -615,6 +615,16 @@ describe("#3513: nothing can be offered yet", () => {
     expect(nothingYetText({ skills: [], products: [], causes: [] }, "fr")).toMatch(/le pack de ton organisation ne propose encore aucune alerte\.$/);
   });
 
+  it("#3408: a read the connection cannot run names the domain the connection does not give, never the tool nor a reconnection", async () => {
+    const unread: OfferedDomain = { ...DISPATCH, eligible: false, watches: DISPATCH.watches.map((watch) => ({ ...watch, runs: false, missing: "read", lacking: ["dispatch_query"] })) };
+    const h = harness({ offered: { main: [unread] } });
+    const listing = await h.ask.listing(PERSON);
+    expect(listing.nothing).toMatchObject({ skills: [], products: ["Répartition"], causes: [] });
+    const said = await h.ask.onOwnerTurn(PERSON, "main");
+    expect(said?.text).toBe("Du nouveau : je ne t'envoie plus rien de moi-même tant que tu ne l'as pas choisi. Je ne peux encore rien te proposer : ta connexion ne donne pas accès à Répartition.");
+    expect(said?.text).not.toMatch(/dispatch_query|serveur de ton organisation/);
+  });
+
   it("a listing that cannot be read now says nothing and keeps the sentence for a later turn", async () => {
     const store = new ProactiveChoices(undefined, () => START - DAY);
     let fail = true;

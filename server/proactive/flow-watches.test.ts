@@ -366,6 +366,34 @@ describe("the loop", () => {
     expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
   });
 
+  it("#3408: a team member's bot without the dispatch skill is never offered a dispatch watch, nor woken by one", async () => {
+    const dispatch = watch({ id: "w-dispatch", domain: "dispatch", skill: "dispatch-x" });
+    const h = harness({ skills: ["reporting-x"], watches: [watch(), dispatch], choices: [{ person: "person-1", domains: [{ domain: "dispatch", botId: "b1" }] }] });
+    const listing = await h.loop.offered("person-1", "b1");
+    if (!listing.ok) throw new Error("not listed");
+    expect(listing.domains.find((row) => row.domain === "dispatch")).toMatchObject({ eligible: false });
+    await h.loop.tick();
+    expect(h.offered).toEqual([]);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("#3408: a watch whose read the person's connection cannot run is never offered", async () => {
+    const h = harness({
+      watches: [
+        watch(),
+        watch({ id: "w-unserved", domain: "billing", observe: { tool: "cw_psa_finance_query", args: {} } }),
+        watch({ id: "w-writer", domain: "changes", observe: { tool: "cw_psa_service_write", args: {} } }),
+      ],
+    });
+    const listing = await h.loop.offered("person-1", "b1");
+    if (!listing.ok) throw new Error("not listed");
+    expect(listing.domains.map((row) => [row.domain, row.eligible])).toEqual([["billing", false], ["changes", false], ["service", true]]);
+    expect(listing.domains.find((row) => row.domain === "billing")?.watches[0]).toMatchObject({ runs: false, missing: "read", lacking: ["cw_psa_finance_query"] });
+    expect(listing.domains.find((row) => row.domain === "changes")?.watches[0]).toMatchObject({ runs: false, missing: "read", lacking: ["cw_psa_service_write"] });
+    // the connection is opened once for the products and the reads together
+    expect(h.sessions()).toBe(1);
+  });
+
   it("the person's products are read once a day, not every hour", async () => {
     const h = harness({ observed: { items: [] } });
     await h.loop.tick();

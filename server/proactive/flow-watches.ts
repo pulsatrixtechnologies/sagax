@@ -100,9 +100,10 @@ export interface OfferedWatch {
   products: string[];
   /** It would run for this person on this bot; else what is missing. */
   runs: boolean;
-  missing?: "product" | "skill";
+  missing?: "product" | "skill" | "read";
   /** #3513: what is missing, by name: the products the person's connection
-   * does not serve, or the skill the bot does not hold. */
+   * does not serve, the skill the bot does not hold, or (#3408) the observe
+   * tool the connection does not serve as a read. */
   lacking?: string[];
   /** #3431: the tools it declares (else its observe tool), for the card's
    * details; only those the connection marks read-only pass without a card. */
@@ -446,6 +447,13 @@ export function observeCall(observe: WatchObserve, session: Pick<ObserveSession,
   return { name: "flow_action", args: { action: observe.action, params: observe.params } };
 }
 
+/** #3408: the tool an observe reads with on this connection, by name. */
+function observeTool(observe: WatchObserve, session: Pick<ObserveSession, "tools">): string {
+  if ("tool" in observe) return observe.tool;
+  if ("recipe" in observe) return session.tools.has("flow") ? "flow" : "flow_run";
+  return "flow_action";
+}
+
 /** The tool name the proposed step is classified by. A declared read is a
  * `read_` step, still a write when its name carries a write verb (a
  * routine runs); a declared write is always a write. The server's own
@@ -736,6 +744,10 @@ export class FlowWatchLoop {
   private readonly now: () => number;
   private readonly listings = new Map<string, Cached<FlowWatchListing>>();
   private readonly products = new Map<string, Cached<string[]>>();
+  /** #3408: the tools the person's connection serves, read with the
+   * products (same session, same day), so a watch whose read cannot run is
+   * never offered. */
+  private readonly reads = new Map<string, Pick<ObserveSession, "tools" | "readOnly">>();
   private readonly facts = new Map<string, Cached<Map<string, unknown>>>();
   private running = false;
 
@@ -836,9 +848,17 @@ export class FlowWatchLoop {
     if (hit) return hit;
     const universe = (await this.listing(helper, [], botId)).watches.flatMap((watch) => watch.products);
     const found = await this.deps.session(person, botId, async (session) => {
+      this.reads.set(person, { tools: new Set(session.tools), readOnly: new Set(session.readOnly) });
       if (!(await session.holdsProfile())) return [];
       return productsForApis(await session.apis(), universe);
     }).catch(() => null);
+    if (found === null) this.reads.delete(person);
+    // the reads and the products of a person are read and dropped together
+    while (this.reads.size > 200) {
+      const oldest = this.reads.keys().next().value!;
+      this.reads.delete(oldest);
+      this.products.delete(oldest);
+    }
     this.products.set(person, { at: this.now(), value: found ?? [], ttl: found === null ? WATCH_RETRY_MS : WATCH_PRODUCTS_MS });
     return found;
   }
@@ -858,12 +878,15 @@ export class FlowWatchLoop {
     if (products === null) return { ok: false, botId, cause: "no-access" };
     const held = new Set(products);
     const skills = this.skillsOnce(botId, person);
+    const reads = this.reads.get(person);
     const byDomain = new Map<string, OfferedWatch[]>();
     for (const watch of universe.watches) {
       const absent = watch.products.filter((product) => !held.has(product));
+      const unread = !absent.length && reads && "refused" in observeCall(watch.observe, reads) ? observeTool(watch.observe, reads) : undefined;
       const missing = absent.length ? "product" as const
-        : watch.skill && !skills().has(watch.skill) ? "skill" as const : undefined;
-      const lacking = missing === "product" ? absent : missing === "skill" ? [watch.skill] : [];
+        : watch.skill && !skills().has(watch.skill) ? "skill" as const
+        : unread ? "read" as const : undefined;
+      const lacking = missing === "product" ? absent : missing === "skill" ? [watch.skill] : missing === "read" ? [unread!] : [];
       const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing, lacking } : {}), tools: declaredTools(watch) };
       byDomain.set(watch.domain, [...(byDomain.get(watch.domain) ?? []), row]);
     }

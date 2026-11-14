@@ -120,8 +120,12 @@ export function createProactiveChoicesRoutes(deps: ProactiveChoicesRouteDeps): R
     }
     if (isOn && !domain.eligible) {
       const missing = new Set(domain.watches.map((watch) => watch.missing));
-      const why = missing.has("product") && missing.has("skill") ? "a product your connection does not serve, or a skill this bot does not hold"
-        : missing.has("skill") ? "this bot does not hold the skill its watches use" : "your connection does not serve a product its watches need";
+      const causes = [
+        missing.has("product") ? "your connection does not serve a product its watches need" : "",
+        missing.has("skill") ? "this bot does not hold the skill its watches use" : "",
+        missing.has("read") ? "your connection does not serve the read its watches use" : "",
+      ].filter(Boolean);
+      const why = causes.join(", or ") || "your connection does not serve a product its watches need";
       return { status: 409, body: { error: `domain "${change.domain}" cannot run on this bot: ${why}`, ...availableView(listing) } };
     }
     return null;

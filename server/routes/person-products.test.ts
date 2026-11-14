@@ -10,12 +10,20 @@ import { createPersonProductsRoutes, type PersonProductsRouteDeps } from "./pers
 import { PASS } from "./table.ts";
 
 const SECRET = "s3cret-value-never-shown";
+// A product as Perspicax serves it (crates/gateway/openapi.json PersonProduct).
+const ACTIONS = { set_own_key: true, replace_key: false, test: true, remove_own_key: false, sign_in: false, sign_out: false };
 const raw = (state = "key_missing", extra: Record<string, unknown> = {}) => ({
-  id: "psa", name: "Acme PSA", state,
-  form: { kind: "basic", fields: [{ slot: "username", label: { en: "Username" }, required: true }, { slot: "password", label: { en: "Password" }, secret: true, required: true }] },
-  actions: ["set_own_key", "test"],
+  id: "psa", name: "Acme PSA", auth_state: "missing", setup: { missing: [], per_customer_address: false }, state,
+  base_url: "https://psa.acme.example", reason_code: null, takes_key_kind: "basic",
+  key: { source: null, named: false, own: false },
+  profiles: [{ name: "Technicians", mode: "hybrid", personal: false }],
+  form: { kind: "basic", fields: [{ slot: "username", label: { en: "Username", fr: "Nom" }, secret: false, required: true }, { slot: "password", label: { en: "Password", fr: "Mot de passe" }, secret: true, required: true }] },
+  actions: ACTIONS,
+  console_url: "https://console.example/products/psa",
   ...extra,
 });
+/** a key write or a test answers a KeyOutcome: the product is inside */
+const outcome = (product: Record<string, unknown>) => ({ audit_id: "a-1", credential_id: "cred-1", product, test: null });
 
 function fakePerspicax(answer: (method: string, path: string, body: unknown) => { ok: boolean; status: number; body?: unknown; error?: string }) {
   const calls: Array<{ method: string; path: string; body: unknown; token: string }> = [];
@@ -27,17 +35,17 @@ function fakePerspicax(answer: (method: string, path: string, body: unknown) => 
   return { calls, call };
 }
 
-function harness(options: { linked?: boolean; person?: boolean; token?: string | null; answer?: Parameters<typeof fakePerspicax>[0]; now?: () => number } = {}) {
+function harness(options: { linked?: boolean; person?: boolean; token?: string | null; answer?: Parameters<typeof fakePerspicax>[0]; now?: () => number; actions?: Record<string, boolean> } = {}) {
   const px = fakePerspicax(options.answer ?? ((method, path) => {
     if (method === "GET" && path === PERSON_PRODUCTS_PATH) return { ok: true, status: 200, body: { products: [raw()] } };
-    if (method === "GET") return { ok: true, status: 200, body: raw() };
-    if (method === "PUT") return { ok: true, status: 200, body: raw("connected", { key: { source: "own", kind: "basic", ending: "ada", last_test: { at: "2026-11-13T10:00:00Z", ok: true } } }) };
-    return { ok: true, status: 200, body: raw("connected") };
+    if (method === "GET") return { ok: true, status: 200, body: raw("key_missing", options.actions ? { actions: options.actions } : {}) };
+    if (method === "PUT") return { ok: true, status: 200, body: outcome(raw("connected", { key: { source: "user", named: true, own: true, auth_type: "basic", last4: "ada", last4_slot: "username", last_test: { at: "2026-11-13T10:00:00Z", ok: true, code: "ok" } } })) };
+    return { ok: true, status: 200, body: outcome(raw("connected")) };
   }));
   const client = createPersonProductsClient({ call: px.call, ...(options.now ? { now: options.now } : {}) });
   const deps: PersonProductsRouteDeps = {
     organization: () => options.linked ?? true,
-    person: () => (options.person ?? true) ? { principalId: "p-ada" } : null,
+    person: () => (options.person ?? true) ? { principalId: "p-ada", sub: "sub-ada" } : null,
     subjectToken: async () => options.token === undefined ? "sign-in-token" : options.token,
     client,
   };
@@ -97,9 +105,35 @@ describe("person products routes", () => {
     expect(answer.status).toBe(200);
     expect((answer.body.product as { state: string }).state).toBe("connected");
     const put = calls.filter((call) => call.method === "PUT");
-    expect(put).toEqual([{ method: "PUT", path: `${PERSON_PRODUCTS_PATH}/psa/key`, body: { values: { username: "ada", password: SECRET } }, token: "sign-in-token" }]);
+    expect(put).toEqual([{ method: "PUT", path: `${PERSON_PRODUCTS_PATH}/psa/key`, body: { sub: "sub-ada", target: "own", values: { username: "ada", password: SECRET } }, token: "sign-in-token" }]);
+    expect((answer.body.product as { key: unknown }).key).toMatchObject({ source: "own", kind: "basic", ending: "ada", endingSlot: "username" });
     expect(JSON.stringify(answer)).not.toContain(SECRET);
     expect(JSON.stringify([...log.mock.calls, ...warn.mock.calls])).not.toContain(SECRET);
+  });
+
+  it("send Perspicax's KeyBody: the person's sub, the target and the values; serving to replace the key that serves them", async () => {
+    const own = harness();
+    await own.request("PUT", "/api/me/perspicax/products/psa/key", { values: { username: "ada", password: SECRET } });
+    expect(own.calls.find((call) => call.method === "PUT")?.body).toEqual({ sub: "sub-ada", target: "own", values: { username: "ada", password: SECRET } });
+    // only replace_key allowed: the write replaces the serving key
+    const serving = harness({ actions: { ...ACTIONS, set_own_key: false, replace_key: true } });
+    await serving.request("PUT", "/api/me/perspicax/products/psa/key", { values: { username: "ada", password: SECRET } });
+    expect(serving.calls.find((call) => call.method === "PUT")?.body).toMatchObject({ sub: "sub-ada", target: "serving" });
+    // both allowed: the person's choice is sent
+    const both = harness({ actions: { ...ACTIONS, replace_key: true } });
+    await both.request("PUT", "/api/me/perspicax/products/psa/key", { target: "serving", values: { username: "ada", password: SECRET } });
+    expect(both.calls.find((call) => call.method === "PUT")?.body).toMatchObject({ target: "serving" });
+    // a target that is not one of Perspicax's is not sent
+    const unknown = harness();
+    const refused = await unknown.request("PUT", "/api/me/perspicax/products/psa/key", { target: "everyone", values: { username: "ada", password: SECRET } });
+    expect(refused.status).toBe(400);
+    expect(unknown.calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it("read the product inside a KeyOutcome, address, access and actions included", async () => {
+    const { request } = harness();
+    const answer = await request("POST", "/api/me/perspicax/products/psa/test");
+    expect(answer.body.product).toMatchObject({ id: "psa", state: "connected", address: "https://psa.acme.example", roles: [{ name: "Technicians", mode: "hybrid", personal: false }], actions: ["set_own_key", "test"] });
   });
 
   it("refuse values that do not fit the form, sending nothing", async () => {
@@ -152,7 +186,7 @@ describe("product key card save", () => {
     id: "m-1",
     secret: { target: "perspicaxProduct", label: "Acme PSA", description: "", placeholder: "", helpUrl: "", requestKey: "r", product: { id: "psa", name: "Acme PSA", reason: "key_missing" }, ...over } as never,
   });
-  const product = (state: string) => ({ id: "psa", name: "Acme PSA", state, roles: [], actions: [], key: { source: "own", lastTest: { at: "2026-11-13T10:00:00Z", ok: state === "connected", ...(state === "connected" ? {} : { status: 401, code: "unauthorized" }) } } }) as never;
+  const product = (state: string) => ({ id: "psa", name: "Acme PSA", state, roles: [], actions: [], key: { source: "own", own: true, named: true, lastTest: { at: "2026-11-13T10:00:00Z", ok: state === "connected", ...(state === "connected" ? {} : { status: 401, code: "unauthorized" }) } } }) as never;
   async function save(options: { owner?: string; state?: string; message?: ReturnType<typeof card> | null } = {}) {
     const patchCard = vi.fn();
     const resume = vi.fn(() => true);
@@ -160,7 +194,7 @@ describe("product key card save", () => {
     const run = (await import("./person-products.ts")).createSaveProductKeyCard({
       card: () => options.message === undefined ? card() : options.message,
       cardOwner: () => "p-ada",
-      person: () => ({ principalId: options.owner ?? "p-ada" }),
+      person: () => ({ principalId: options.owner ?? "p-ada", sub: "sub-ada" }),
       setProductKey,
       patchCard,
       resume,
@@ -178,7 +212,7 @@ describe("product key card save", () => {
 
   it("keeps only the test's outcome on the card and resumes the bot on an accepted key", async () => {
     const { answer, patchCard, resume, setProductKey } = await save();
-    expect(setProductKey).toHaveBeenCalledWith({ principalId: "p-ada" }, "psa", { username: "ada", password: SECRET });
+    expect(setProductKey).toHaveBeenCalledWith({ principalId: "p-ada", sub: "sub-ada" }, "psa", { username: "ada", password: SECRET });
     expect(answer.status).toBe(200);
     expect(patchCard.mock.calls[0]![2]).toMatchObject({ result: { ok: true } });
     expect(JSON.stringify(patchCard.mock.calls)).not.toContain(SECRET);

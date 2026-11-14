@@ -21,10 +21,14 @@ const state = params.get("state") ?? "pending";
 const product = parsePersonProduct({
   id: "prod-docs", name: "Knowledge Base", state: state === "refused" ? "key_refused" : "key_missing",
   form: { kind: "basic", fields: [
-    { slot: "username", label: { en: "Username", fr: "Nom d'utilisateur" }, required: true },
+    { slot: "username", label: { en: "Username", fr: "Nom d'utilisateur" }, secret: false, required: true },
     { slot: "password", label: { en: "Password", fr: "Mot de passe" }, secret: true, required: true },
   ] },
-  actions: ["set_own_key"],
+  base_url: "https://docs.example.org", reason_code: null, takes_key_kind: "basic",
+  profiles: [{ name: "Technicians", mode: "compact", personal: false }],
+  key: { source: null, named: false, own: false },
+  actions: { set_own_key: true, replace_key: false, test: false, remove_own_key: false, sign_in: false, sign_out: false },
+  console_url: "https://px.example.test/console/products/prod-docs",
 });
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);

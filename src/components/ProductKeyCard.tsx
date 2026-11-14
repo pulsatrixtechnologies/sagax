@@ -15,7 +15,7 @@ import { ExternalLink, KeyRound, Loader2, RefreshCw, X } from "lucide-react";
 import { openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
-import { loadPersonProduct, productKeyAction, productStateLabel, productsUnavailable, type PersonProduct } from "@/lib/person-products";
+import { loadPersonProduct, productKeyTargets, productStateLabel, productsUnavailable, type PersonProduct } from "@/lib/person-products";
 import { api, useStore, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { ASK_PRIMARY_BUTTON, ASK_QUIET_BUTTON, AskCard, AskSettledLine, returnFocusToComposer } from "./AskCard";
@@ -118,7 +118,7 @@ export function ProductKeyCard({ botId, threadId, message }: { botId: string; th
     void api(`${endpoint}/dismiss`, { method: "POST", body: JSON.stringify({ threadId }) }).catch(() => {});
   };
 
-  const keyAction = product ? productKeyAction(product) : null;
+  const typesKey = product ? productKeyTargets(product).length > 0 : false;
   // a refused save says the refusal on its own line, once: the reason the
   // card was raised for is then out of date
   const explanation = refused ? t("productKeyCard.why.setup", { name: asked.name })
@@ -140,7 +140,7 @@ export function ProductKeyCard({ botId, threadId, message }: { botId: string; th
             {t("productKeyCard.refused", { reason: reasonWords || "?" })}
           </p>
         )}
-        {product && keyAction && product.form ? (
+        {product && typesKey && product.form ? (
           <ProductKeyForm form={product.form} productName={product.name} variant="card" onSave={save} submitLabel={t("productKeyCard.save")} />
         ) : product ? (
           <div className="space-y-2 text-[12.5px] leading-relaxed text-ink-secondary">

@@ -15006,5 +15006,8 @@
   "review.reason.noPerson": "Ce bot n'a personne à qui envoyer la revue.",
   "settings.receive.group.reviews": "Revues",
   "settings.receive.endOfDay.switch": "Revue de fin de journée de {name}",
-  "settings.receive.weekly.switch": "Revue de la semaine de {name}"
+  "settings.receive.weekly.switch": "Revue de la semaine de {name}",
+  "personProducts.access.direct": "Donné à toi directement",
+  "personProducts.key.expired": "Expirée le",
+  "personProducts.test.since": "En échec depuis le {when}"
 }

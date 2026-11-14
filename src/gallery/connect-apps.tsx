@@ -252,20 +252,32 @@ if (params.has("products")) {
     { slot: "username", label: { en: "Username", fr: "Nom d'utilisateur" }, secret: false, required: true },
     { slot: "password", label: { en: "Password", fr: "Mot de passe" }, secret: true, required: true },
   ] };
+  // Perspicax's own shape (crates/gateway/openapi.json PersonProduct): base_url,
+  // reason_code, profiles, key.source user/profile/default with auth_type and
+  // last4, actions as an object of booleans
+  const allowed = (...names: string[]) => Object.fromEntries(["set_own_key", "replace_key", "test", "remove_own_key", "sign_in", "sign_out"].map((name) => [name, names.includes(name)]));
+  const setup = { missing: [], per_customer_address: false };
   const products = [
-    { id: "prod-psa", name: "Service Desk", icon: { domain: "example.com" }, state: "connected", address: "https://desk.example.com",
-      access: { roles: [{ slug: "tech", name: "Technicians", mode: "hybrid" }] },
-      key: { source: "own", kind: "basic", ending: "a1b2", last_test: { at: new Date(Date.now() - 3 * 3_600_000).toISOString(), ok: true } },
-      form, actions: ["set_own_key", "test", "remove_own_key"], console_url: "https://px.example.test/console/products/prod-psa" },
-    { id: "prod-docs", name: "Knowledge Base", state: "key_missing", address: "https://docs.example.org",
-      access: { roles: [{ slug: "tech", name: "Technicians", mode: "compact" }] },
+    { id: "prod-psa", name: "Service Desk", auth_state: "ok", setup, state: "connected", base_url: "https://desk.example.com", reason_code: null, takes_key_kind: "basic",
+      profiles: [{ name: "Technicians", mode: "hybrid", personal: false }, { name: "direct", mode: "compact", personal: true }],
+      key: { source: "user", named: true, own: true, name: "Mine", auth_type: "basic", last4: "a1b2", last4_slot: "username", expires_at: new Date(Date.now() + 40 * 86_400_000).toISOString(),
+        last_test: { at: new Date(Date.now() - 3 * 3_600_000).toISOString(), ok: true, code: "ok", status: 200 } },
+      form, actions: allowed("set_own_key", "test", "remove_own_key"), console_url: "https://px.example.test/console/products/prod-psa" },
+    { id: "prod-docs", name: "Knowledge Base", auth_state: "missing", setup, state: "key_missing", base_url: "https://docs.example.org", reason_code: "no_key", takes_key_kind: "api_key",
+      profiles: [{ name: "Technicians", mode: "compact", personal: false }],
+      key: { source: null, named: false, own: false },
       form: { kind: "api_key", fields: [{ slot: "token", label: { en: "API token", fr: "Jeton API" }, secret: true, required: true }] },
-      actions: ["set_own_key"], console_url: "https://px.example.test/console/products/prod-docs" },
-    { id: "prod-edr", name: "Endpoint Security", state: "key_refused", state_code: "unauthorized",
-      access: { roles: [{ slug: "sec", name: "Security", mode: "minimal" }] },
-      key: { source: "own", kind: "api_key", ending: "9f0c", last_test: { at: new Date(Date.now() - 20 * 60_000).toISOString(), ok: false, code: "unauthorized", status: 401 } },
-      form, actions: ["set_own_key", "test", "remove_own_key"] },
-    { id: "prod-voice", name: "Phone Lines", state: "not_served", access: { roles: [] }, actions: [], console_url: "https://px.example.test/console/products/prod-voice" },
+      actions: allowed("set_own_key"), console_url: "https://px.example.test/console/products/prod-docs" },
+    { id: "prod-edr", name: "Endpoint Security", auth_state: "failing", setup, state: "key_refused", base_url: "https://edr.example.net", reason_code: "unauthorized", takes_key_kind: "basic",
+      profiles: [{ name: "Security", mode: "minimal", personal: false }],
+      key: { source: "profile", named: true, own: false, name: "Security team", auth_type: "basic", last4: "9f0c", last4_slot: "username",
+        last_test: { at: new Date(Date.now() - 20 * 60_000).toISOString(), ok: false, code: "unauthorized", status: 401, since: new Date(Date.now() - 2 * 86_400_000).toISOString() } },
+      form, actions: allowed("set_own_key", "replace_key", "test"), console_url: "https://px.example.test/console/products/prod-edr" },
+    { id: "prod-wiki", name: "Team Wiki", auth_state: "ok", setup, state: "connected", base_url: "https://wiki.example.org", reason_code: null, takes_key_kind: "bearer",
+      profiles: [{ name: "Technicians", mode: "group", personal: false }],
+      key: { source: "default", named: false, own: false }, form: null, actions: allowed("test"), console_url: "https://px.example.test/console/products/prod-wiki" },
+    { id: "prod-voice", name: "Phone Lines", auth_state: "none", setup: { missing: ["address"], per_customer_address: true }, state: "not_served", base_url: null, reason_code: null, takes_key_kind: null,
+      profiles: [], key: { source: null, named: false, own: false }, form: null, actions: allowed(), console_url: "https://px.example.test/console/products/prod-voice" },
   ];
   // &products=many: twelve rows, every state, the longest French ones, to
   // check at phone width that a long state never cuts a product's name
@@ -276,7 +288,7 @@ if (params.has("products")) {
       ["Network Controller", "key_refused"], ["Password Manager", "setup_incomplete"],
       ["Quoting and Procurement", "no_key_needed"], ["Dashboards", "unknown_state"],
     ];
-    more.forEach(([name, state], index) => products.push({ id: `prod-more-${index}`, name, state, access: { roles: [{ slug: "tech", name: "Technicians", mode: "group" }] }, actions: [] } as never));
+    more.forEach(([name, state], index) => products.push({ id: `prod-more-${index}`, name, auth_state: "missing", setup, state, base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: null, named: false, own: false }, form: null, actions: allowed(), console_url: "" } as never));
   }
   // what Perspicax answers, read as the Sagax server reads it
   const served = parsePersonProducts(products);

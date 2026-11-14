@@ -4,6 +4,13 @@
 // app as is (GET /api/me/perspicax/products) and drawn in Connect Apps >
 // Manage at the Me scope, on a product's page and on the product key card.
 //
+// The shape is Perspicax's own (crates/gateway/openapi.json PersonProduct,
+// PersonKey, PersonProfile, ProductActions, KeyBody, KeyOutcome); this file
+// is the one place it is read, and names it in Sagax's words: `base_url` is
+// the address, `reason_code` the state code, `profiles` the access, the key's
+// `source` user/profile/default its own/role/shared source, `auth_type` its
+// kind and `last4` its ending.
+//
 // Perspicax decides everything: the state, the key form and the actions the
 // person may take. Sagax compares nothing and names no product; it words
 // generic states and kinds, and ignores what it does not know (an unknown
@@ -22,23 +29,37 @@ export type ProductState = KnownProductState | "unknown";
 export const PRODUCT_ACTIONS = ["set_own_key", "replace_key", "test", "remove_own_key", "sign_in", "sign_out"] as const;
 export type ProductAction = typeof PRODUCT_ACTIONS[number];
 
+/** Perspicax's PersonKey.source, in Sagax's words: `user` is the person's own
+ * key, `profile` a key of one of their roles, `default` the organization's. */
 export type ProductKeySource = "own" | "role" | "shared";
+
+/** KeyBody.target: the person's own key, or the key that serves them. */
+export type ProductKeyTarget = "own" | "serving";
+export const PRODUCT_KEY_TARGETS: readonly ProductKeyTarget[] = ["own", "serving"];
 
 export interface ProductKeyTest {
   at: string;
   ok: boolean;
   code?: string;
   status?: number;
+  /** when the key started failing */
+  since?: string;
 }
 
 export interface ProductKey {
   source: ProductKeySource | "unknown";
+  /** the person's own key */
+  own: boolean;
+  /** the person may manage it: its own facts follow */
+  named: boolean;
   kind?: string;
   /** only for a key the person may manage */
   name?: string;
-  /** the masked ending, never of a secret slot */
+  /** the last four characters Perspicax shows, and the slot they are from */
   ending?: string;
+  endingSlot?: string;
   expiresAt?: string;
+  expiredAt?: string;
   lastTest?: ProductKeyTest;
 }
 
@@ -55,10 +76,12 @@ export interface ProductForm {
   fields: ProductFormField[];
 }
 
+/** A profile the person holds that serves the product. `personal`: the
+ * hidden role of a direct link, never shown by its name. */
 export interface ProductRole {
-  slug: string;
   name: string;
   mode?: string;
+  personal: boolean;
 }
 
 export interface PersonProduct {
@@ -98,23 +121,41 @@ function parseTest(raw: unknown): ProductKeyTest | undefined {
   if (!test || !at || typeof test.ok !== "boolean") return undefined;
   const code = text(test.code, 128);
   const status = typeof test.status === "number" && Number.isInteger(test.status) ? test.status : undefined;
-  return { at, ok: test.ok, ...(code ? { code } : {}), ...(status !== undefined ? { status } : {}) };
+  const since = text(test.since, 64);
+  return { at, ok: test.ok, ...(code ? { code } : {}), ...(status !== undefined ? { status } : {}), ...(since ? { since } : {}) };
 }
 
-function parseKey(raw: unknown): ProductKey | undefined {
+const KEY_SOURCES: Record<string, ProductKeySource> = { user: "own", profile: "role", default: "shared" };
+
+/** PersonKey: undefined when no key serves the person (no source, nothing
+ * named). `takesKind` is the kind the product takes, the kind of a key the
+ * person may not see. */
+function parseKey(raw: unknown, takesKind: string | undefined): ProductKey | undefined {
   const key = record(raw);
   if (!key) return undefined;
-  const source = key.source === "own" || key.source === "role" || key.source === "shared" ? key.source : "unknown";
-  const kind = text(key.kind, 64);
+  const own = key.own === true;
+  const named = key.named === true;
+  const rawSource = text(key.source, 32);
+  if (!rawSource && !own && !named) return undefined;
+  const source: ProductKey["source"] = own ? "own" : (rawSource && KEY_SOURCES[rawSource]) || "unknown";
+  const kind = text(key.auth_type, 64) ?? takesKind;
   const name = text(key.name, 256);
-  const ending = text(key.ending, 16);
+  const ending = text(key.last4, 16);
+  const endingSlot = ending ? text(key.last4_slot, 64) : undefined;
   const expiresAt = text(key.expires_at, 64);
+  const expiredAt = text(key.expired_at, 64);
   const lastTest = parseTest(key.last_test);
   return {
-    source,
-    ...(kind ? { kind } : {}), ...(name ? { name } : {}), ...(ending ? { ending } : {}),
-    ...(expiresAt ? { expiresAt } : {}), ...(lastTest ? { lastTest } : {}),
+    source, own, named,
+    ...(kind ? { kind } : {}), ...(name ? { name } : {}), ...(ending ? { ending } : {}), ...(endingSlot ? { endingSlot } : {}),
+    ...(expiresAt ? { expiresAt } : {}), ...(expiredAt ? { expiredAt } : {}), ...(lastTest ? { lastTest } : {}),
   };
+}
+
+/** ProductActions: an object of booleans (Perspicax's shape), or a list. */
+function parseActions(raw: unknown): ProductAction[] {
+  const listed = Array.isArray(raw) ? raw : Object.entries(record(raw) ?? {}).flatMap(([action, allowed]) => allowed === true ? [action] : []);
+  return PRODUCT_ACTIONS.filter((action) => listed.includes(action));
 }
 
 function parseFields(raw: unknown): ProductFormField[] {
@@ -151,26 +192,23 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const name = text(product?.name, 256);
   if (!product || !id || !name) return null;
   const state: ProductState = (PRODUCT_STATES as readonly string[]).includes(product.state as string) ? product.state as KnownProductState : "unknown";
-  const stateCode = text(product.state_code, 128);
-  const address = text(product.address);
+  const stateCode = text(product.reason_code, 128);
+  const address = text(product.base_url);
   const domain = text(record(product.icon)?.domain, 253);
-  const roles = Array.isArray(record(product.access)?.roles)
-    ? (record(product.access)!.roles as unknown[]).flatMap((entry) => {
-      const role = record(entry);
-      const slug = text(role?.slug, 128);
-      const roleName = text(role?.name, 256) ?? slug;
-      const mode = text(role?.mode, 64);
-      return slug && roleName ? [{ slug, name: roleName, ...(mode ? { mode } : {}) }] : [];
+  const roles = Array.isArray(product.profiles)
+    ? product.profiles.flatMap((entry): ProductRole[] => {
+      const profile = record(entry);
+      const roleName = text(profile?.name, 256);
+      const mode = text(profile?.mode, 64);
+      return roleName ? [{ name: roleName, ...(mode ? { mode } : {}), personal: profile!.personal === true }] : [];
     })
     : [];
-  const key = parseKey(product.key);
+  const key = parseKey(product.key, text(product.takes_key_kind, 64));
   const formRaw = record(product.form);
   const formKind = text(formRaw?.kind, 64);
   const formFields = parseFields(formRaw?.fields);
   const signInFields = parseFields(record(product.sign_in)?.fields);
-  const actions = Array.isArray(product.actions)
-    ? [...new Set(product.actions.filter((action): action is ProductAction => (PRODUCT_ACTIONS as readonly unknown[]).includes(action)))]
-    : [];
+  const actions = parseActions(product.actions);
   const consoleUrl = text(product.console_url);
   return {
     id, name, state, roles, actions,
@@ -184,7 +222,7 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   };
 }
 
-/** A list answer: `{ products: [...] }` or a bare array. */
+/** A list answer: Perspicax's bare array, or `{ products: [...] }`. */
 export function parsePersonProducts(raw: unknown): PersonProduct[] {
   const list = Array.isArray(raw) ? raw : record(raw)?.products;
   if (!Array.isArray(list)) return [];
@@ -213,6 +251,14 @@ export function productKeyValues(form: ProductForm | undefined, raw: unknown): R
     if (field.required && !out[field.slot]?.trim()) return null;
   }
   return Object.keys(out).length > 0 ? out : null;
+}
+
+/** The key a write sets when the person did not choose: their own when
+ * Perspicax lets them add one, else the one that serves them. Null: neither. */
+export function productKeyTarget(actions: readonly ProductAction[]): ProductKeyTarget | null {
+  if (actions.includes("set_own_key")) return "own";
+  if (actions.includes("replace_key")) return "serving";
+  return null;
 }
 
 /** The state a product key card needs the person for. */

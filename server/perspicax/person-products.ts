@@ -5,17 +5,27 @@
 //
 //   GET    /api/v1/pulsabot/people/me/products
 //   GET    /api/v1/pulsabot/people/me/products/{id}
-//   PUT    /api/v1/pulsabot/people/me/products/{id}/key    { values } (set or replace, then test)
+//   PUT    /api/v1/pulsabot/people/me/products/{id}/key    KeyBody { sub, target, values } (set or replace, then test)
 //   POST   /api/v1/pulsabot/people/me/products/{id}/test
 //   DELETE /api/v1/pulsabot/people/me/products/{id}/key
 //
-// The answer is the product object (shared/person-products.ts), parsed
-// tolerantly. A Perspicax older than these routes answers 404 or 405: that
+// A read answers the PersonProduct (a list: a bare array of them); a write or
+// a test answers a KeyOutcome whose `product` is the product as it is now
+// (shared/person-products.ts reads both). KeyBody's `sub` is the person the
+// subject token names, `target` own (their own key) or serving (the key that
+// serves them, one they may manage). A Perspicax older than these routes answers 404 or 405: that
 // reads "unavailable", and nothing shows in Sagax. The list is kept 30
 // seconds per person; any write drops it. No body is ever logged: a key's
 // values pass once, to Perspicax, and are dropped.
 import type { LinkPostResult } from "./perspicax-link.ts";
-import { parsePersonProduct, parsePersonProducts, type PersonProduct } from "../../shared/person-products.ts";
+import { parsePersonProduct, parsePersonProducts, type PersonProduct, type ProductKeyTarget } from "../../shared/person-products.ts";
+
+/** Perspicax's KeyBody. */
+export interface PersonProductKeyBody {
+  sub: string;
+  target: ProductKeyTarget;
+  values: Record<string, string>;
+}
 
 export const PERSON_PRODUCTS_PATH = "/api/v1/pulsabot/people/me/products";
 export const PERSON_PRODUCTS_TIMEOUT_MS = 10_000;
@@ -42,7 +52,7 @@ export type PersonProductOne = { ok: true; product: PersonProduct } | PersonProd
 export interface PersonProductsClient {
   list(principalId: string, subjectToken: string): Promise<PersonProductsList>;
   get(principalId: string, subjectToken: string, productId: string): Promise<PersonProductOne>;
-  setKey(principalId: string, subjectToken: string, productId: string, values: Record<string, string>): Promise<PersonProductOne>;
+  setKey(principalId: string, subjectToken: string, productId: string, body: PersonProductKeyBody): Promise<PersonProductOne>;
   test(principalId: string, subjectToken: string, productId: string): Promise<PersonProductOne>;
   removeKey(principalId: string, subjectToken: string, productId: string): Promise<PersonProductOne>;
   /** drop a person's kept list */
@@ -66,7 +76,7 @@ function failure(result: Extract<LinkPostResult, { ok: false }>, one: boolean): 
   return { ok: false, error: "refused", ...(result.status !== undefined ? { status: result.status } : {}), ...(code ? { code } : {}) };
 }
 
-/** `{ product }` or the bare object. */
+/** KeyOutcome `{ product, ... }` or the bare PersonProduct. */
 function oneProduct(body: unknown): PersonProduct | null {
   const wrapped = body && typeof body === "object" && "product" in body ? (body as { product: unknown }).product : body;
   return parsePersonProduct(wrapped);
@@ -103,8 +113,9 @@ export function createPersonProductsClient(deps: { call: PersonProductsCall; now
       const product = oneProduct(result.body);
       return product ? { ok: true, product } : { ok: false, error: "unavailable" };
     },
-    async setKey(principalId, subjectToken, productId, values) {
-      return write(principalId, await deps.call("PUT", `${productPath(productId)}/key`, { values }, limits(subjectToken, true)));
+    async setKey(principalId, subjectToken, productId, body) {
+      const keyBody: PersonProductKeyBody = { sub: body.sub, target: body.target, values: body.values };
+      return write(principalId, await deps.call("PUT", `${productPath(productId)}/key`, keyBody, limits(subjectToken, true)));
     },
     async test(principalId, subjectToken, productId) {
       return write(principalId, await deps.call("POST", `${productPath(productId)}/test`, {}, limits(subjectToken, true)));

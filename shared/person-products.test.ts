@@ -5,18 +5,27 @@ import { describe, expect, it } from "vitest";
 
 import { parsePersonProduct, parsePersonProducts, productCardReason, productKeyResumeText, productKeyValues } from "./person-products.ts";
 
+// The product object exactly as Perspicax serves it (crates/gateway/openapi.json
+// PersonProduct: base_url, reason_code, profiles, key.auth_type/last4, actions
+// as an object of booleans).
 const product = {
-  id: "psa", name: "Acme PSA", icon: { domain: "acme.example" },
-  state: "key_refused", state_code: "expired",
-  address: "https://psa.acme.example",
-  access: { roles: [{ slug: "tech", name: "Technicians", mode: "hybrid" }] },
-  key: { source: "own", kind: "basic", name: "mine", ending: "1a2b", expires_at: "2026-12-01T00:00:00Z", last_test: { at: "2026-11-13T10:00:00Z", ok: false, code: "unauthorized", status: 401 } },
+  id: "psa", name: "Acme PSA",
+  auth_state: "failing", setup: { missing: [], per_customer_address: false },
+  state: "key_refused", reason_code: "expired",
+  base_url: "https://psa.acme.example",
+  takes_key_kind: "basic",
+  profiles: [{ name: "Technicians", mode: "hybrid", personal: false }, { name: "u-ada", mode: "compact", personal: true }],
+  key: {
+    source: "user", named: true, own: true, id: "cred-1", name: "mine", auth_type: "basic",
+    last4: "1a2b", last4_slot: "username", expires_at: "2026-12-01T00:00:00Z", expired_at: null, fits: true, health: "failing",
+    last_test: { at: "2026-11-13T10:00:00Z", ok: false, code: "unauthorized", status: 401, since: "2026-11-12T08:00:00Z" },
+  },
   form: { kind: "basic", fields: [
     { slot: "username", label: { en: "Username", fr: "Nom d'utilisateur" }, secret: false, required: true },
     { slot: "password", label: { en: "Password", fr: "Mot de passe" }, secret: true, required: true },
     { slot: "site", label: "Site", required: false },
   ] },
-  actions: ["set_own_key", "test", "remove_own_key", "teleport"],
+  actions: { set_own_key: true, replace_key: false, test: true, remove_own_key: true, sign_in: false, sign_out: false, teleport: true },
   console_url: "https://console.example/products/psa",
   future_field: { anything: true },
 };
@@ -25,15 +34,36 @@ describe("person products contract", () => {
   it("reads the product object and drops what it does not know", () => {
     const parsed = parsePersonProduct(product)!;
     expect(parsed).toMatchObject({
-      id: "psa", name: "Acme PSA", icon: { domain: "acme.example" }, state: "key_refused", stateCode: "expired",
-      address: "https://psa.acme.example", roles: [{ slug: "tech", name: "Technicians", mode: "hybrid" }],
-      key: { source: "own", kind: "basic", ending: "1a2b", lastTest: { ok: false, code: "unauthorized", status: 401 } },
+      id: "psa", name: "Acme PSA", state: "key_refused", stateCode: "expired",
+      address: "https://psa.acme.example",
+      roles: [{ name: "Technicians", mode: "hybrid", personal: false }, { name: "u-ada", mode: "compact", personal: true }],
+      key: {
+        source: "own", own: true, named: true, name: "mine", kind: "basic", ending: "1a2b", endingSlot: "username", expiresAt: "2026-12-01T00:00:00Z",
+        lastTest: { ok: false, code: "unauthorized", status: 401, since: "2026-11-12T08:00:00Z" },
+      },
       actions: ["set_own_key", "test", "remove_own_key"],
       consoleUrl: "https://console.example/products/psa",
     });
     expect(parsed.form?.fields.map((field) => [field.slot, field.secret, field.required])).toEqual([["username", false, true], ["password", true, true], ["site", false, false]]);
     expect(parsed.form?.fields[2]!.label).toEqual({ en: "Site" });
     expect(JSON.stringify(parsed)).not.toContain("future_field");
+  });
+
+  it("words each key source Perspicax names, and keeps no key when none serves", () => {
+    const keyOf = (key: Record<string, unknown>) => parsePersonProduct({ ...product, key })?.key;
+    expect(keyOf({ source: "profile", named: false, own: false })).toMatchObject({ source: "role", own: false, named: false });
+    expect(keyOf({ source: "default", named: true, own: false, auth_type: "bearer", last4: "zz99" })).toMatchObject({ source: "shared", kind: "bearer", ending: "zz99" });
+    expect(keyOf({ source: "user", named: true, own: true })?.source).toBe("own");
+    expect(keyOf({ source: null, named: false, own: false })).toBeUndefined();
+    expect(keyOf({ source: "default", named: false, own: false, expired_at: "2026-11-01T00:00:00Z" })).toMatchObject({ expiredAt: "2026-11-01T00:00:00Z" });
+    // a key the person may not manage: its kind is the kind the product takes
+    expect(keyOf({ source: "default", named: false, own: false })?.kind).toBe("basic");
+  });
+
+  it("reads the actions Perspicax allows, as its object of booleans or as a list", () => {
+    expect(parsePersonProduct({ ...product, actions: { set_own_key: false, replace_key: true, test: true, remove_own_key: false, sign_in: false, sign_out: false } })?.actions).toEqual(["replace_key", "test"]);
+    expect(parsePersonProduct({ ...product, actions: ["test", "test", "nope"] })?.actions).toEqual(["test"]);
+    expect(parsePersonProduct({ ...product, actions: null })?.actions).toEqual([]);
   });
 
   it("keeps an unknown state as unknown, and a row without an id or a name out", () => {

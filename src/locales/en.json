@@ -15006,5 +15006,8 @@
   "review.reason.noPerson": "This bot has no person to send the review to.",
   "settings.receive.group.reviews": "Reviews",
   "settings.receive.endOfDay.switch": "End of day review from {name}",
-  "settings.receive.weekly.switch": "Weekly review from {name}"
+  "settings.receive.weekly.switch": "Weekly review from {name}",
+  "personProducts.access.direct": "Given to you directly",
+  "personProducts.key.expired": "Expired",
+  "personProducts.test.since": "Failing since {when}"
 }

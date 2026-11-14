@@ -7,17 +7,18 @@ import { useCallback, useEffect, useState } from "react";
 import { t, activeLocale } from "@/lib/i18n";
 import { api, ApiError } from "@/state/store";
 import type { LocaleKey } from "@/locales";
-import type { PersonProduct, ProductAction, ProductFormField, ProductKey, ProductState } from "../../shared/person-products";
+import type { PersonProduct, ProductFormField, ProductKey, ProductKeyTarget, ProductState } from "../../shared/person-products";
 
-export type { PersonProduct, ProductAction, ProductFormField, ProductState } from "../../shared/person-products";
+export type { PersonProduct, ProductAction, ProductFormField, ProductKeyTarget, ProductState } from "../../shared/person-products";
 
 const PRODUCTS = "/api/me/perspicax/products";
 const productPath = (id: string) => `${PRODUCTS}/${encodeURIComponent(id)}`;
 
 export const loadPersonProducts = () => api<{ products: PersonProduct[] }>(PRODUCTS).then((body) => body.products ?? []);
 export const loadPersonProduct = (id: string) => api<{ product: PersonProduct }>(productPath(id)).then((body) => body.product);
-export const savePersonProductKey = (id: string, values: Record<string, string>) =>
-  api<{ product: PersonProduct }>(`${productPath(id)}/key`, { method: "PUT", body: JSON.stringify({ values }) }).then((body) => body.product);
+/** `target`: the person's own key, or the key that serves them (Perspicax's KeyBody). */
+export const savePersonProductKey = (id: string, target: ProductKeyTarget, values: Record<string, string>) =>
+  api<{ product: PersonProduct }>(`${productPath(id)}/key`, { method: "PUT", body: JSON.stringify({ target, values }) }).then((body) => body.product);
 export const testPersonProduct = (id: string) =>
   api<{ product: PersonProduct }>(`${productPath(id)}/test`, { method: "POST", body: "{}" }).then((body) => body.product);
 export const removePersonProductKey = (id: string) =>
@@ -75,10 +76,17 @@ export function productConnected(state: ProductState): boolean {
   return state === "connected" || state === "no_key_needed";
 }
 
+/** The roles somebody named that give the person the product: a personal
+ * profile (the hidden role of a direct link) is never read as a role name. */
+export function namedRoles(product: Pick<PersonProduct, "roles">): PersonProduct["roles"] {
+  return product.roles.filter((role) => !role.personal);
+}
+
 /** The grey line under the name: the roles that give the product, else
  * its address. The state is said once, at the row's right. */
 export function productRowSub(product: PersonProduct): string {
-  if (product.roles.length > 0) return product.roles.map((role) => role.name).join(", ");
+  const roles = namedRoles(product);
+  if (roles.length > 0) return roles.map((role) => role.name).join(", ");
   return product.address ? hostOf(product.address) : "";
 }
 
@@ -97,11 +105,13 @@ export function hostOf(address: string): string {
   }
 }
 
-/** Who the serving key is from, in words. */
-export function productKeySourceLabel(key: ProductKey, roles: PersonProduct["roles"]): string {
+/** Who the serving key is from, in words (Perspicax's PersonKey.source:
+ * user, profile, default). */
+export function productKeySourceLabel(key: ProductKey, product: Pick<PersonProduct, "roles">): string {
   if (key.source === "own") return t("personProducts.key.own");
   if (key.source === "role") {
     // with several roles the contract does not say whose key serves: generic words
+    const roles = namedRoles(product);
     const role = roles.length === 1 ? roles[0]!.name : undefined;
     return role ? t("personProducts.key.role", { role }) : t("personProducts.key.roleAny");
   }
@@ -151,10 +161,12 @@ export function productFieldLabel(field: ProductFormField): string {
   return (french ? field.label.fr ?? field.label.en : field.label.en ?? field.label.fr) ?? field.slot;
 }
 
-/** Whether the person may type a key here: Perspicax listed the action and a form. */
-export function productKeyAction(product: PersonProduct): Extract<ProductAction, "set_own_key" | "replace_key"> | null {
-  if (!product.form) return null;
-  if (product.actions.includes("set_own_key")) return "set_own_key";
-  if (product.actions.includes("replace_key")) return "replace_key";
-  return null;
+/** The keys the person may type here, in order: their own (set_own_key),
+ * then the one that serves them (replace_key). None without a form. */
+export function productKeyTargets(product: Pick<PersonProduct, "form" | "actions">): ProductKeyTarget[] {
+  if (!product.form) return [];
+  return [
+    ...(product.actions.includes("set_own_key") ? ["own" as const] : []),
+    ...(product.actions.includes("replace_key") ? ["serving" as const] : []),
+  ];
 }

@@ -289,8 +289,8 @@ describe("no UUID on screen", () => {
   it("a Perspicax product's row and page name the product and its roles, never its id (#4185)", () => {
     const product = {
       id: BOT_ID, name: "Service Desk", state: "key_refused" as const, stateCode: "unauthorized",
-      roles: [{ slug: PERSON_ID, name: "Technicians", mode: "read" }], actions: ["set_own_key" as const, "test" as const],
-      key: { source: "own" as const, kind: "api_key", name: THREAD_ID, ending: "a1b2", lastTest: { at: "2026-11-13T10:00:00.000Z", ok: false, status: 401, code: "unauthorized" } },
+      roles: [{ name: "Technicians", mode: "read", personal: false }, { name: PERSON_ID, mode: "compact", personal: true }], actions: ["set_own_key" as const, "test" as const],
+      key: { source: "own" as const, own: true, named: true, kind: "api_key", name: THREAD_ID, ending: "a1b2", endingSlot: "token", lastTest: { at: "2026-11-13T10:00:00.000Z", ok: false, status: 401, code: "unauthorized" } },
       form: { kind: "api_key", fields: [{ slot: "token", label: { en: "API token" }, secret: true, required: true }] },
       consoleUrl: `https://console.example.test/products/${BOT_ID}`,
     };

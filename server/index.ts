@@ -29918,12 +29918,12 @@ ROUTES.push(createMeAvatarRoutes({
 }));
 // #4185: the person's Perspicax products in Connect Apps (server/routes/person-products.ts),
 // read and written as the person (their own sign-in token) through the link.
-function personProductsOwner(auth: RequestAuth): { principalId: string } | null {
+function personProductsOwner(auth: RequestAuth): { principalId: string; sub: string } | null {
   if (IDENTITY.kind !== "perspicax" || auth.kind !== "session") return null;
   const principalId = auth.session.principalId?.trim().toLowerCase();
   const person = principalId ? principals.byId(principalId) : undefined;
   if (!person?.subject || person.subject.iss !== IDENTITY.issuer || person.disabledAt !== undefined) return null;
-  return { principalId: person.id };
+  return { principalId: person.id, sub: person.subject.sub };
 }
 async function personProductsSubjectToken(principalId: string): Promise<string | null> {
   const person = principals.byId(principalId);

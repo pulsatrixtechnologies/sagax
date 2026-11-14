@@ -3,7 +3,7 @@
 //
 //   GET    /api/me/perspicax/products            { products: PersonProduct[] }
 //   GET    /api/me/perspicax/products/:id        { product }
-//   PUT    /api/me/perspicax/products/:id/key    { values: { slot: value } } -> { product }
+//   PUT    /api/me/perspicax/products/:id/key    { target?: "own" | "serving", values: { slot: value } } -> { product }
 //   POST   /api/me/perspicax/products/:id/test   -> { product }
 //   DELETE /api/me/perspicax/products/:id/key    -> { product }
 //
@@ -20,13 +20,15 @@
 // so no client takes it for its own Sagax session ending.
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { PersonProductOne, PersonProductsClient, PersonProductsFailure } from "../perspicax/person-products.ts";
-import { PRODUCT_KEY_VALUE_MAX_BYTES, productKeyValues } from "../../shared/person-products.ts";
+import { PRODUCT_KEY_TARGETS, PRODUCT_KEY_VALUE_MAX_BYTES, productKeyTarget, productKeyValues, type ProductKeyTarget } from "../../shared/person-products.ts";
 import { PRODUCT_KEY_TARGET } from "../../shared/credential-request.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface PersonProductsOwner {
   principalId: string;
+  /** the person's Perspicax subject: KeyBody's `sub` */
+  sub: string;
 }
 
 export interface PersonProductsRouteDeps {
@@ -64,18 +66,22 @@ export function personProductsError(code: PersonProductsErrorCode, upstream?: st
   return { status: ERRORS[code].status, body: { error: ERRORS[code].error, code, ...(upstream ? { reason: upstream } : {}) } };
 }
 
-/** Set or replace the person's own key on a product, then test it
- * (Perspicax's order): the one write the window and the chat card share.
- * `values` is checked against the product's current form first. */
+/** Set the person's own key on a product or replace the key that serves
+ * them, then test it (Perspicax's order): the one write the window and the
+ * chat card share. `values` is checked against the product's current form
+ * first; `target` is the person's choice, else their own key when Perspicax
+ * lets them add one, else the serving key. */
 export function createSetProductKey(deps: Pick<PersonProductsRouteDeps, "subjectToken" | "client">) {
-  return async function setProductKey(owner: PersonProductsOwner, productId: string, rawValues: unknown): Promise<PersonProductOne | { ok: false; error: "invalid" } | { ok: false; error: "sign_in" }> {
+  return async function setProductKey(owner: PersonProductsOwner, productId: string, rawValues: unknown, rawTarget?: unknown): Promise<PersonProductOne | { ok: false; error: "invalid" } | { ok: false; error: "sign_in" }> {
+    if (rawTarget !== undefined && !(PRODUCT_KEY_TARGETS as readonly unknown[]).includes(rawTarget)) return { ok: false, error: "invalid" };
     const token = await deps.subjectToken(owner.principalId);
     if (!token) return { ok: false, error: "sign_in" };
     const current = await deps.client.get(owner.principalId, token, productId);
     if (!current.ok) return current;
     const values = productKeyValues(current.product.form, rawValues);
-    if (!values || !current.product.form) return { ok: false, error: "invalid" };
-    return deps.client.setKey(owner.principalId, token, productId, values);
+    const target = (rawTarget as ProductKeyTarget | undefined) ?? productKeyTarget(current.product.actions);
+    if (!values || !current.product.form || !target) return { ok: false, error: "invalid" };
+    return deps.client.setKey(owner.principalId, token, productId, { sub: owner.sub, target, values });
   };
 }
 export type SetProductKey = ReturnType<typeof createSetProductKey>;
@@ -170,8 +176,8 @@ export function createPersonProductsRoutes(deps: PersonProductsRouteDeps): Route
       } catch {
         return fail("product_key_invalid");
       }
-      const values = body && typeof body === "object" ? (body as { values?: unknown }).values : undefined;
-      return answer(await setProductKey(person, productId, values));
+      const fields = body && typeof body === "object" ? body as { values?: unknown; target?: unknown } : {};
+      return answer(await setProductKey(person, productId, fields.values, fields.target));
     }
     const token = await deps.subjectToken(person.principalId);
     if (!token) return fail("products_sign_in_again");

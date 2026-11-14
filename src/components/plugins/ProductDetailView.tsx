@@ -2,7 +2,8 @@
 // window's own stack, in the layout of a plugin's page: the mark, the name
 // and the state; a "Key" card (who the key is from, its kind, its masked
 // ending, its expiry and its last test, with the person's own actions); the
-// address; the access the person has through their roles. The actions are
+// address; the access the person has through their roles (a direct link in
+// words, never its hidden role's name). The actions are
 // exactly those Perspicax lists for the person: none other is drawn. The
 // "..." menu opens the product in Perspicax and copies its id.
 import { useState } from "react";
@@ -14,8 +15,8 @@ import { t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
 import { readableError } from "@/lib/plain-error";
 import {
-  productKeyAction, productKeySourceLabel, productKindLabel, productModeLabel,
-  removePersonProductKey, savePersonProductKey, testPersonProduct, type PersonProduct,
+  productFieldLabel, productKeySourceLabel, productKeyTargets, productKindLabel, productModeLabel,
+  removePersonProductKey, savePersonProductKey, testPersonProduct, type PersonProduct, type ProductKeyTarget,
 } from "@/lib/person-products";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader } from "./PluginParts";
@@ -45,18 +46,25 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
   onBack: () => void;
   trail?: readonly Crumb[];
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<ProductKeyTarget | null>(null);
   const [busy, setBusy] = useState<"test" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const keyAction = productKeyAction(product);
+  const targets = productKeyTargets(product);
   const key = product.key;
   const lastTest = key?.lastTest;
   const tested = when(lastTest?.at);
-  const expires = key?.expiresAt ? (() => {
-    const ms = Date.parse(key.expiresAt!);
-    return Number.isFinite(ms) ? new Date(ms).toLocaleDateString() : key.expiresAt!;
-  })() : null;
+  const day = (at: string | undefined) => {
+    if (!at) return null;
+    const ms = Date.parse(at);
+    return Number.isFinite(ms) ? new Date(ms).toLocaleDateString() : at;
+  };
+  const expired = day(key?.expiredAt);
+  const expires = expired ? null : day(key?.expiresAt);
+  const failingSince = lastTest && !lastTest.ok ? day(lastTest.since) : null;
+  // the slot the ending is from, by its label in the form when the form names it
+  const endingField = key?.endingSlot ? product.form?.fields.find((field) => field.slot === key.endingSlot) : undefined;
+  const endingFrom = endingField ? productFieldLabel(endingField) : key?.endingSlot;
 
   const run = async (kind: "test" | "remove", work: () => Promise<PersonProduct>) => {
     setBusy(kind);
@@ -69,13 +77,13 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
       setBusy(null);
     }
   };
-  const save = async (values: Record<string, string>) => {
+  const save = async (target: ProductKeyTarget, values: Record<string, string>) => {
     setError(null);
     try {
-      const next = await savePersonProductKey(product.id, values);
+      const next = await savePersonProductKey(product.id, target, values);
       onChanged(next);
       // a refused key stays open with the vendor's reason so the person corrects it
-      if (next.key?.lastTest?.ok !== false) setEditing(false);
+      if (next.key?.lastTest?.ok !== false) setEditing(null);
     } catch (failure) {
       setError(readableError(failure));
       throw failure;
@@ -116,47 +124,52 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
         <PluginCard title={t("personProducts.key.title")}>
           {key ? (
             <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[13px] leading-5" data-person-product-key={key.source}>
-              <KeyRow label={t("personProducts.key.from")} value={productKeySourceLabel(key, product.roles)} title={key.name} />
+              <KeyRow label={t("personProducts.key.from")} value={productKeySourceLabel(key, product)} title={key.name} />
               {key.kind && <KeyRow label={t("personProducts.key.kind")} value={productKindLabel(key.kind)} />}
-              {key.ending && <KeyRow label={t("personProducts.key.ending")} value={`•••• ${key.ending}`} />}
+              {key.ending && <KeyRow label={t("personProducts.key.ending")} value={`•••• ${key.ending}`} title={endingFrom} />}
+              {expired && <KeyRow label={t("personProducts.key.expired")} value={expired} />}
               {expires && <KeyRow label={t("personProducts.key.expires")} value={expires} />}
               {testLine && (
                 <div className="contents">
                   <dt className="py-[9px] text-ink-tertiary">{t("personProducts.key.lastTest")}</dt>
-                  <dd className="min-w-0 py-[9px] text-right" data-person-product-test={lastTest!.ok ? "ok" : "refused"}>{testLine}</dd>
+                  <dd className="min-w-0 py-[9px] text-right" data-person-product-test={lastTest!.ok ? "ok" : "refused"}
+                    title={failingSince ? t("personProducts.test.since", { when: failingSince }) : undefined}>{testLine}</dd>
                 </div>
               )}
             </dl>
           ) : (
             <p className="py-[9px] text-[13px] leading-5 text-ink-secondary" data-person-product-key="none">{t("personProducts.key.none")}</p>
           )}
-          {editing && product.form && keyAction ? (
+          {editing && product.form && targets.includes(editing) ? (
             <div className="border-t-[0.5px] border-ink/10 py-3">
               <ProductKeyForm
                 form={product.form}
                 productName={product.name}
                 variant="page"
-                onSave={save}
-                onCancel={() => setEditing(false)}
+                onSave={(values) => save(editing, values)}
+                onCancel={() => setEditing(null)}
               />
             </div>
-          ) : (keyAction || product.actions.includes("test") || product.actions.includes("remove_own_key")) ? (
+          ) : (targets.length > 0 || product.actions.includes("test") || product.actions.includes("remove_own_key")) ? (
             <div className="flex flex-wrap items-center gap-2 border-t-[0.5px] border-ink/10 py-2.5" data-person-product-actions>
-              {keyAction && (
-                <button type="button" className={PLUGINS.primaryPill} disabled={busy !== null} onClick={() => setEditing(true)} data-person-product-action={keyAction === "replace_key" && key?.source !== "own" ? "replace_shared" : key?.source === "own" ? "replace_own" : "add_own"}>
-                  <KeyRound size={14} aria-hidden="true" />
-                  {keyAction === "replace_key" && key?.source !== "own"
-                    ? t("personProducts.action.replaceShared")
-                    : key?.source === "own" ? t("personProducts.action.replaceOwn") : t("personProducts.action.addOwn")}
-                </button>
-              )}
-              {product.actions.includes("test") && key && (
+              {targets.map((target, index) => {
+                // own: add the person's key, or replace it when the serving key is theirs; serving: replace the key that serves them
+                const action = target === "serving" ? "replace_shared" : key?.own ? "replace_own" : "add_own";
+                return (
+                  <button key={target} type="button" className={index === 0 ? PLUGINS.primaryPill : PLUGINS.fillPill} disabled={busy !== null} onClick={() => setEditing(target)} data-person-product-action={action}>
+                    <KeyRound size={14} aria-hidden="true" />
+                    {action === "replace_shared" ? t("personProducts.action.replaceShared")
+                      : action === "replace_own" ? t("personProducts.action.replaceOwn") : t("personProducts.action.addOwn")}
+                  </button>
+                );
+              })}
+              {product.actions.includes("test") && (
                 <button type="button" className={PLUGINS.fillPill} disabled={busy !== null} onClick={() => void run("test", () => testPersonProduct(product.id))} data-person-product-action="test">
                   {busy === "test" ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <FlaskConical size={14} aria-hidden="true" />}
                   {t("personProducts.action.test")}
                 </button>
               )}
-              {product.actions.includes("remove_own_key") && key?.source === "own" && (
+              {product.actions.includes("remove_own_key") && (
                 <button type="button" className={PLUGINS.fillPill} disabled={busy !== null} onClick={() => void run("remove", () => removePersonProductKey(product.id))} data-person-product-action="remove">
                   {busy === "remove" ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
                   {t("personProducts.action.remove")}
@@ -181,11 +194,11 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
         {product.roles.length > 0 && (
           <PluginCard title={t("personProducts.access")}>
             <ul data-person-product-roles>
-              {product.roles.map((role) => {
+              {product.roles.map((role, index) => {
                 const mode = productModeLabel(role.mode);
                 return (
-                  <li key={role.slug} className="flex min-h-[38px] items-center gap-3 py-1.5" title={role.slug}>
-                    <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink">{role.name}</span>
+                  <li key={`${index}:${role.name}`} className="flex min-h-[38px] items-center gap-3 py-1.5" data-person-product-role={role.personal ? "direct" : "role"}>
+                    <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink">{role.personal ? t("personProducts.access.direct") : role.name}</span>
                     {mode && <span className="shrink-0 text-[12.5px] text-ink-secondary" data-person-product-mode>{mode}</span>}
                   </li>
                 );

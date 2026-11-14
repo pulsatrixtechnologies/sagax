@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { freePortBlock } from "./testing/ports.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { removeTempDir, stopGracefully } from "./testing/cleanup.ts";
 import { readCuaConnection } from "./local-computer.ts";
 import { DESKTOP_PARENT_IMPORT, DESKTOP_PARENT_STDIO, handDesktopComputer } from "./testing/desktop-computer.ts";
 
@@ -108,7 +108,9 @@ describe("surface pin provenance against the real server", () => {
     const proc = child;
     child = null;
     writeFileSync(finishFile, "finish");
-    await waitForExit(proc, { signal: "SIGTERM" });
+    // Over the IPC channel, as the desktop app stops it: a SIGTERM is a kill
+    // on Windows, and the pin a test just set would never reach disk (#4107).
+    await stopGracefully(proc);
   }
 
   beforeAll(async () => {

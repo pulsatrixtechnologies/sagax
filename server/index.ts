@@ -879,7 +879,7 @@ import { CONTROL_ACT_WITHIN_MS, CONTROL_WAIT_MS } from "./control-client.ts";
 import { modelContextWindow } from "./models/model-context-window.ts";
 import { cloudRefusal } from "../shared/place-view.ts";
 import { PendingTurnCancellations, ProviderTurnGenerationRegistry, RetiredTurnRegistry, guardTurnDispatch } from "./turns/turn-dispatch-guard.ts";
-import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
+import { createGracefulShutdown, isGracefulStopMessage } from "./process/graceful-shutdown.ts";
 import { legacyCutTurnSpeakers, shutdownDrainMs } from "./turns/interrupted-turns.ts";
 import { SpeakerDerivedMap, SpeakerDerivedSet, ThreadSpeakers } from "./turns/thread-speakers.ts";
 import { clearHeldSteersForThread,
@@ -36209,5 +36209,11 @@ function threadWaitsOnPerson(threadId: string): boolean {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, gracefulShutdown);
 }
+// Windows has no SIGTERM: a kill there ends the process at once, before the
+// turns drain and the deferred saves land. The app that launched the server
+// asks for the same stop over its parent port instead (#4107, #3812).
+utilityParentPort?.on("message", (event) => {
+  if (isGracefulStopMessage(event?.data)) gracefulShutdown();
+});
 
 // #1388: populate shared leaf host after all bindings exist (getHost is lazy).

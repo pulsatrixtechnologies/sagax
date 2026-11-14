@@ -1,4 +1,13 @@
 import { reportBackgroundError } from "../background-error.ts";
+/** What the app that launched the server sends over its parent port to stop
+ * it as SIGTERM does: Windows has no SIGTERM, a kill there ends the process at
+ * once (#4107, #3812). */
+export const GRACEFUL_STOP_MESSAGE = "sagax:graceful-stop";
+
+export function isGracefulStopMessage(message: unknown): boolean {
+  return (message as { type?: unknown } | null | undefined)?.type === GRACEFUL_STOP_MESSAGE;
+}
+
 export interface GracefulShutdownOptions {
   /** Runs first, alone, bounded by drainTimeoutMs: the turns in progress
    * finish while nothing new starts. Its failure or timeout never blocks

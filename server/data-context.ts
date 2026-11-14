@@ -30,7 +30,9 @@ const dataContextSchema = z.object({
   // the page open over the conversation (2026-10-28): checked against its
   // person and bot by the caller (server/index.ts ownPageContext)
   page: pageContextSchema.optional(),
-}).strict().refine((context) => Boolean(context.cardId) || Boolean(context.page), "a Data card or a page")
+  // a new outcome asked from the bot page (#4098, shared/data-context.ts)
+  outcome: z.literal(true).optional(),
+}).strict().refine((context) => Boolean(context.cardId) || Boolean(context.page) || context.outcome === true, "a Data card, a page or an outcome")
   .refine((context) => context.draftSql === undefined || Boolean(context.cardId), "draftSql goes with a Data card");
 
 /** Parse an optional `dataContext` from a messages POST body. */
@@ -38,8 +40,8 @@ export function parseDataContext(value: unknown): DataContext | undefined {
   if (value === undefined || value === null) return undefined;
   const parsed = dataContextSchema.safeParse(value);
   if (!parsed.success) {
-    throw Object.assign(new Error("dataContext must name a Data card (c_<n>) with an optional draftSql of at most 100 KB, or a page ({ pageId, title, version?, selection? })"), { status: 400 });
+    throw Object.assign(new Error("dataContext must name a Data card (c_<n>) with an optional draftSql of at most 100 KB, or a page ({ pageId, title, version?, selection? }), or outcome: true"), { status: 400 });
   }
-  const { cardId, draftSql, page } = parsed.data;
-  return { ...(cardId ? { cardId } : {}), ...(draftSql !== undefined ? { draftSql } : {}), ...(page ? { page: { pageId: page.pageId, title: page.title, ...(page.version !== undefined ? { version: page.version } : {}), ...(page.selection ? { selection: page.selection } : {}) } } : {}) };
+  const { cardId, draftSql, page, outcome } = parsed.data;
+  return { ...(cardId ? { cardId } : {}), ...(draftSql !== undefined ? { draftSql } : {}), ...(page ? { page: { pageId: page.pageId, title: page.title, ...(page.version !== undefined ? { version: page.version } : {}), ...(page.selection ? { selection: page.selection } : {}) } } : {}), ...(outcome ? { outcome } : {}) };
 }

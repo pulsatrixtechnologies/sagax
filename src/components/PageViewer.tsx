@@ -9,9 +9,11 @@
 //     same place: the conversation stays mounted under the panel);
 //   - top centre, the title pill: a click turns it into a field (pencil),
 //     Enter renames, Escape cancels;
-//   - top right, « ⋯ » (versions, annotate, present, edit, comments,
-//     decline a proposed version, Always on top in an own desktop window)
-//     and Share;
+//   - top right, the chat toggle (over a conversation on a wide enough
+//     host only) and Download as icon buttons (#4099; on a narrow bar
+//     Download is in « ⋯ »), then « ⋯ » (versions, annotate, present,
+//     edit, comments, decline a proposed version, Always on top in an own
+//     desktop window), Full screen and Share;
 //   - the page itself, whole and interactive, in the app's theme.
 // Earlier lots (Grok Bot parity R8, chat rows 31 to 34) are all still here:
 // rename, versions, the person's own edit, comments, the annotation mode
@@ -28,7 +30,7 @@
 // frame, and its fields are plain text (parseAnnotationMessage). Nothing
 // reaches a bot until the person presses Send.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Check, Download, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, MessageSquare, Minimize2, Palette, Pencil, Pin, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
+import { Check, Download, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, MessageSquare, Minimize2, Palette, PanelLeftClose, Pencil, Pin, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -56,6 +58,8 @@ import { useWidgetTheme } from "./WidgetFrame";
 import { encodeSkinTokens } from "@/lib/page-theme";
 import { MenuItem, PopoverMenu } from "./bot-settings/FilesSection";
 import { PageCapabilityStrip, useCapabilityStripVisible, usePageCapabilityBroker } from "./PageCapabilityStrip";
+import { PageSelectionAsk } from "./PageSelectionAsk";
+import type { PageContextRef } from "../../shared/data-context";
 
 export { needsLinkConfirm, pageErrorText };
 
@@ -286,20 +290,57 @@ export interface PageSurfaceProps {
   onChange?(page: PublishedPageSummary): void;
   /** Extra entries of « ⋯ » (Open in a window). */
   moreItems?(close: () => void): ReactNode;
+  /** The page over its conversation: the top bar's chat toggle puts the
+   * conversation beside the page and takes it away (#4099). Absent in a
+   * window of its own, where no conversation is there to show. */
+  chat?: PageChatToggle;
   /** Drawn over the page, at the bottom (the conversation's composer). */
   footer?: ReactNode;
+  /** Ask the bot about a selected passage, in place (#4099): the person's
+   * own page over their conversation with its bot. Absent elsewhere (a
+   * window of its own, a reading link). */
+  ask?: PageAsk;
   /** A window of its own, with no conversation beside it: the page is asked
    * again now and then, so a new version from the bot is drawn in place. */
   follow?: boolean;
   className?: string;
 }
 
+export interface PageChatToggle {
+  /** The conversation is beside the page. */
+  open: boolean;
+  /** The host is too narrow to put it beside (the page then covers it):
+   * the toggle is not drawn while the conversation is not beside. */
+  disabled?: boolean;
+  onToggle(): void;
+}
+
+export interface PageAsk {
+  avatar: ReactNode;
+  botName: string;
+  /** The bot's conversation is working. */
+  working: boolean;
+  /** Send the words as the person's message in the bot's conversation, about
+   * this page and its selected passage. */
+  onSend(text: string, page: PageContextRef): void;
+}
+
 export const PAGE_FOLLOW_MS = 5_000;
 
-export function PageSurface({ pageId, version: initialVersion, initialTitle = "", latestVersion, onClose, onChange, moreItems, footer, follow = false, className }: PageSurfaceProps) {
+/** The top bar is under its narrow container query (@max-[34rem]/pagehead):
+ * there Download hides from the bar and shows in « ⋯ ». Read when the menu
+ * opens; a bar not laid out (width 0) counts as wide. */
+export function narrowBar(header: HTMLElement | null): boolean {
+  const width = header?.getBoundingClientRect().width ?? 0;
+  const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  return width > 0 && width < 34 * rem;
+}
+
+export function PageSurface({ pageId, version: initialVersion, initialTitle = "", latestVersion, onClose, onChange, moreItems, chat, footer, ask, follow = false, className }: PageSurfaceProps) {
   const { dispatch } = useStore();
   const policy = usePagesPolicy();
   const [page, setPage] = useState<PublishedPageSummary | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const [version, setVersion] = useState<number | null>(initialVersion ?? null);
   const [panel, setPanel] = useState<Panel>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -415,14 +456,14 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   // browser tab the browser's own chrome stays and so does the header.
   const hideChrome = follow && Boolean(windowSelf);
   const chrome = useHoverChrome(hideChrome, sharing || panel !== null, windowSelf?.onPointer);
-  const innerFrame = () => {
+  const innerFrame = useCallback(() => {
     // the page's own frame, inside this viewer's wrapper, and nothing else
     try {
       return frameRef.current?.contentWindow?.frames[0] ?? null;
     } catch {
       return null;
     }
-  };
+  }, []);
   // what the page may ask of Sagax (#3413): the same broker as the reading link's
   const broker = usePageCapabilityBroker({ pageId, drawn: `${version ?? ""}:${reloads}`, ...(version !== null ? { version } : {}), preview: () => frameRef.current, frame: innerFrame });
   const capsShown = useCapabilityStripVisible(broker);
@@ -519,22 +560,53 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
           runs to the top edge; only the round buttons and the pill catch
           the pointer */}
       {/* @container: on a narrow page (a phone, a split pane) Share keeps only
-          its icon and the title pill takes the room between the buttons, so
-          the pill never runs under « … » (390 px, lot 5). */}
-      <header data-page-header className={cn("@container/pagehead pointer-events-none absolute inset-x-0 top-0 z-[2] flex h-14 items-center gap-2 px-3 [&>*]:pointer-events-auto",
+          its icon. Three columns: the side ones never shrink under their
+          buttons and share what is left, so the title pill stays centred
+          while it can and is cut short before it runs under a button (390 px,
+          lot 5; the chat toggle and Download joined the right, #4099). */}
+      <header ref={headerRef} data-page-header className={cn("@container/pagehead pointer-events-none absolute inset-x-0 top-0 z-[2] grid h-14 grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)] items-center gap-2 px-3 [&>*]:pointer-events-auto",
         hideChrome && "transition-opacity duration-150 motion-reduce:transition-none", hideChrome && !chrome.shown && "opacity-0", hideChrome && isMac && "ps-20")}>
         {/* own window, no native title bar (#2336): the header moves the window */}
         {hideChrome && chrome.shown && <div data-page-drag aria-hidden="true" className="window-drag !pointer-events-none absolute inset-0 -z-10" />}
-        <button type="button" data-page-close aria-label={t("pages.backToChat")} title={t("pages.backToChat")} onClick={onClose} className={cn(ROUND, "window-no-drag")}>
-          <X size={17} />
-        </button>
-        {follow && refreshedAt !== null && <PageRefreshed at={refreshedAt} />}
-        <div className="!pointer-events-none absolute inset-x-28 flex justify-center @max-[34rem]/pagehead:start-14 @max-[34rem]/pagehead:end-[9.5rem]">
-          <div className="pointer-events-auto window-no-drag min-w-0 max-w-full">
-            <PageTitlePill title={title} busy={busy} onRename={rename} />
-          </div>
+        <div className="flex min-w-0 items-center gap-2 justify-self-start">
+          <button type="button" data-page-close aria-label={t("pages.backToChat")} title={t("pages.backToChat")} onClick={onClose} className={cn(ROUND, "window-no-drag")}>
+            <X size={17} />
+          </button>
+          {follow && refreshedAt !== null && <PageRefreshed at={refreshedAt} />}
         </div>
-        <div className="ms-auto flex items-center gap-2">
+        <div className="window-no-drag flex min-w-0 max-w-full justify-self-center">
+          <PageTitlePill title={title} busy={busy} onRename={rename} />
+        </div>
+        <div className="flex items-center gap-2 justify-self-end">
+          {/* a narrow host can only cover: the toggle is hidden there, never
+              greyed (an option that cannot work is not shown) */}
+          {chat && !(chat.disabled === true && !chat.open) && (
+            <button
+              type="button"
+              data-page-chat-toggle=""
+              aria-pressed={chat.open}
+              aria-label={chat.open ? t("pages.hideConversation") : t("pages.showConversation")}
+              title={chat.open ? t("pages.hideConversation") : t("pages.showConversation")}
+              className={cn(ROUND, "window-no-drag")}
+              onClick={chat.onToggle}
+            >
+              {chat.open ? <PanelLeftClose size={17} /> : <MessageSquare size={17} />}
+            </button>
+          )}
+          {/* Download saves the shown version: the page's export (#4099).
+              On a narrow bar it lives in « ⋯ » instead (narrowBar), so the
+              title pill keeps its room: one place per width. */}
+          <button
+            type="button"
+            data-page-download=""
+            aria-label={t("pages.download")}
+            title={t("pages.download")}
+            disabled={!shown}
+            className={cn(ROUND, "window-no-drag disabled:opacity-40 @max-[34rem]/pagehead:hidden")}
+            onClick={() => void exportVersion()}
+          >
+            <Download size={17} />
+          </button>
           {page && (
             <PopoverMenu label={t("pages.more")} menuLabel={t("pages.more")} icon={<Ellipsis size={17} />} buttonClass={ROUND} data-page-more="">
               {(close) => (
@@ -544,7 +616,7 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
                   <MenuItem icon={<Play size={14} />} label={t("pages.present")} onClick={() => { close(); present(); }} />
                   <MenuItem icon={<Pencil size={14} />} label={t("pages.edit")} onClick={() => { close(); toggle("edit"); }} />
                   {shown?.kind === "design" && <MenuItem icon={<Palette size={14} />} label={t("pages.designSystem")} data-page-design-system="" onClick={() => { close(); toggle("design"); }} />}
-                  {shown && <MenuItem icon={<Download size={14} />} label={t("pages.export")} data-page-export="" onClick={() => { close(); void exportVersion(); }} />}
+                  {shown && narrowBar(headerRef.current) && <MenuItem icon={<Download size={14} />} label={t("pages.download")} data-page-download-item="" onClick={() => { close(); void exportVersion(); }} />}
                   <MenuItem icon={<MessageSquare size={14} />} label={`${t("pages.comments.title")}${page.comments ? ` (${page.comments})` : ""}`} onClick={() => { close(); toggle("comments"); }} />
                   {proposed && (
                     <MenuItem icon={<XCircle size={14} />} label={t("pages.decline")} onClick={() => {
@@ -605,6 +677,19 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
             <PageFrame src={src} frameRef={frameRef} title={t("pages.previewTitle", { title })} theme={theme} className="min-h-0 w-full flex-1" />
           ) : (
             <div className="flex flex-1 items-center justify-center"><Loader2 size={16} className="animate-spin text-ink-secondary" /></div>
+          )}
+          {/* the in-place ask about a selected passage (#4099); annotation
+              mode keeps the selection for its own notes */}
+          {ask && src && !annotating && !gone && (
+            <PageSelectionAsk
+              frame={innerFrame}
+              frameElement={frameRef}
+              drawn={src}
+              avatar={ask.avatar}
+              botName={ask.botName}
+              working={ask.working}
+              onSend={(text, selection) => ask.onSend(text, { pageId, title, ...(version !== null ? { version } : {}), selection })}
+            />
           )}
           {footer}
         </div>

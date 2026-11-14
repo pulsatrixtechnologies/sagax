@@ -545,6 +545,13 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           onClose();
           dispatch({ type: "select", id: bot.id });
         },
+        // "New outcome": the person's own message in the bot's one
+        // conversation, marked as an outcome ask; the page moves to the chat
+        onNewOutcome: (text) => {
+          onClose();
+          dispatch({ type: "select", id: bot.id });
+          dispatch({ type: "send", botId: bot.id, text, dataContext: { outcome: true } });
+        },
       }}
     />
   );

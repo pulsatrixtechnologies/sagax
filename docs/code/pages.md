@@ -37,17 +37,24 @@ scaled-down drawing of its top and its icon, title and "Page"
 (`PagePublishCard`). A click opens it in the conversation frame
 (`PageSurface` in src/components/PageViewer.tsx, src/lib/open-page.ts,
 src/lib/page-chat-layout.ts): Back to chat (×) top left, the title pill
-(click to rename, Enter saves), « ⋯ » and Share top right. Default surface
+(click to rename, Enter saves), and top right the chat toggle, Download,
+« ⋯ », Full screen and Share (#4099). Default surface
 for published HTML pages is **stage** (measured reference design 0.78.1 HTML/file
 artifacts and Sagax 0.8.23 iOS): the page covers the mounted conversation and
 the composer docks on the page (`data-page-stage-chat=docked`). The chat
 column stays mounted underneath (`inert` while covered) so closing returns
-to the same scroll. Optional **Show conversation** in « ⋯ » switches to
-beside when the ChatView host is wide enough (host ResizeObserver, not the
-window; Sagax richer control / Grok canvas chat-pane analogue). Hide
-conversation returns to stage. Split-view side chats never host the panel.
-Every earlier tool (versions, annotate, present, edit, comments, decline)
-is in « ⋯ ». The app's own preview takes `bare=1` (no banner inside the
+to the same scroll. The top bar's chat toggle (`data-page-chat-toggle`,
+`aria-pressed`) switches to beside when the ChatView host is wide enough
+(host ResizeObserver, not the window; Sagax richer control / Grok canvas
+chat-pane analogue; not drawn on a narrow host, where the page can only
+cover, unless the conversation is still beside) and back to stage. A page in
+a window of its own has no toggle. Download (`data-page-download`) saves
+the shown version through the existing export
+(`GET /api/pages/:id/versions/:n/export`); under the bar's narrow
+container query (`@max-[34rem]/pagehead`) it leaves the bar for « ⋯ »
+(`data-page-download-item`, `narrowBar`) so the title pill keeps its room. Split-view side chats never host
+the panel. Every other earlier tool (versions, annotate, present, edit,
+comments, decline) is in « ⋯ ». The app's own preview takes `bare=1` (no banner inside the
 app), `theme=light|dark` and `y=<n>`: its frame runs a small script that
 scrolls to `y` and posts `sagax-page-scroll` with a number to the app, so a
 new version the bot proposes is drawn in place at the same place. A reading
@@ -84,7 +91,22 @@ anchor and its box in the frame's viewport on a selection, on scroll and on
 resize, and a clear when it goes; the app posts the same message to the
 inner frame to follow a passage in a new version or to drop it, and the
 frame hears only `window.top` (shared/page-selection.ts,
-`server/pages/page-selection-bridge.test.ts`). An older card that a newer version replaced says "Updated below"
+`server/pages/page-selection-bridge.test.ts`). On the person's own page over its
+bot's conversation (`PageSurface`'s `ask`, given by `ChatViewPagePanel`), the
+app draws from that box, above the frame and never inside the page
+(`src/components/PageSelectionAsk.tsx`): an outline in the skin's accent, a
+"Selected text" tag on its top edge, and a small composer under the passage
+(over it near the bottom) with the bot's avatar, one field and a round send
+button. Send is the person's ordinary message in the bot's conversation with
+the page and `selection` (`withPageContext`); the message shows the page chip
+and the passage in the reply's quote strip (`PageSelectionQuote`) at once
+(`pageAskSend` gives it a sendId, as the composer does). A bot busy with
+something else still takes the ask: it queues like the chat. Once the person
+has asked, while the bot works the composer shows the chat's working line in
+place; when its new version is
+drawn the app asks the frame for the passage again on load, and the outline
+follows it or goes. Escape or a click elsewhere puts it away (the page stays
+open); annotation mode keeps the selection for its own notes. An older card that a newer version replaced says "Updated below"
 (also when the thread already names a newer version than the mounted card)
 and opens the latest page. Tests: `shared/data-context.test.ts`,
 `server/data-context.test.ts`, `src/components/PageComposerParts.test.ts`,
@@ -483,7 +505,7 @@ optional `design_system`, `design_tokens`), stored and versioned by
   `POST /api/pages/:id/versions` with `designSystem` (the person's pick),
   `GET /api/pages/:id/versions/:n/export?theme=` (`{ filename, html }`, any kind).
 - Viewer: « ⋯ » > Design system (side panel, swatches, the person's own
-  removable) and Export (HTML). Iteration stays in the same conversation
+  removable); the top bar's Download saves the HTML export (#4099). Iteration stays in the same conversation
   (`proposePageCard` appends to the thread): never a new thread.
 - Bot knowledge: guide `designs` (scripts/self-knowledge/guides.ts) and one
   line in `PAGE_TARGET_PROMPT` (a design skips choose_page_target).

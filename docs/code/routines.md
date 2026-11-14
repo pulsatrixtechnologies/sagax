@@ -58,6 +58,16 @@ row or the person's own line lands in a conversation, and sends the
 `routine` frame of each routine whose need moved. Nothing of what the row
 gate decides changes, and no chat row is written for it.
 
+"New outcome" at the right of the tab's label opens a field; Enter sends the
+person's words as their own message in the bot's one conversation with
+`dataContext.outcome: true` (shared/data-context.ts), and the page moves to
+the chat. The server keeps the mark like the rest of the context
+(`parseDataContext`, `ownPageContext`) and gives the model an
+`<outcome-request>` envelope with `OUTCOME_REQUEST_HINT`: answer with
+`propose_routine` whose instructions start with a `/goal` line and whose name
+is the result. The proposal card arrives in the chat as any routine
+proposal; once accepted, the routine shows as an outcome named by its goal.
+
 ## A run's widget in the chat (#4234, 2026-11-13)
 
 A routine run works in its own hidden task, so a widget it draws there

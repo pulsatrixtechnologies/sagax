@@ -6,9 +6,13 @@
 // here), then Results, Routines and Recent runs. No new state: the chat's
 // card says the question, the routine's page its settings, the run window
 // its run; this tab only reads them and points there.
+// "New outcome" (#4098): a field under the label; Enter sends the result the
+// person wants as their own message in the bot's one conversation, marked as
+// an outcome ask (shared/data-context.ts OUTCOME_REQUEST_HINT), and the page
+// moves to the chat, where the routine proposal card arrives as any other.
 // Look: docs/design/ux-reference-grokbot-cursor.md, 2.4 ter.
-import { useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Flag, Minus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronDown, ChevronRight, Flag, Minus, Plus } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -21,6 +25,7 @@ import { ShowMoreFold } from "../../ShowMoreFold";
 import { ActivityStatusIcon } from "../../bot-settings/ActivityCard";
 import { RoutinesAskHint } from "../../bot-settings/RoutinesSection";
 import { PanelRow, PanelRows, onOff } from "../../routines/PanelRows";
+import { PILL as ACTION_PILL, PLAIN_FIELD } from "../../SettingsPrimitives";
 import { runActivityStatus } from "../../routines/RoutineRunDetail";
 import { ProfileCard } from "./cards";
 
@@ -82,7 +87,47 @@ export type OutcomesActions = {
   onOpenRun: (runId: string) => void;
   /** No routine yet: asking the bot in chat is the way in. */
   onAsk: () => void;
+  /** "New outcome": the person's words go to the bot's chat as an outcome
+   * ask; the page moves to the chat. */
+  onNewOutcome: (text: string) => void;
 };
+
+/** The field "New outcome" opens under the label: Enter sends, Escape puts
+ * it away. */
+function NewOutcomeField({ onSend, onDone }: { onSend: (text: string) => void; onDone: () => void }) {
+  const [text, setText] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { input.current?.focus(); }, []);
+  return (
+    <div data-outcomes-new-field="" className="px-2 pb-1 pt-1">
+      <input
+        ref={input}
+        type="text"
+        value={text}
+        aria-label={t("outcomes.new")}
+        placeholder={t("outcomes.newPlaceholder")}
+        enterKeyHint="send"
+        className={PLAIN_FIELD}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            onDone();
+            return;
+          }
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          const words = text.trim();
+          if (!words) return;
+          onSend(words);
+          onDone();
+        }}
+      />
+    </div>
+  );
+}
 
 function OutcomeRow({ outcome, routines, runs, open, onToggle, actions }: {
   outcome: Outcome;
@@ -161,6 +206,7 @@ export function OutcomesCard({ outcomes, routines, runs, loadState, actions, def
   defaultOpen?: readonly string[];
 }) {
   const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set(defaultOpen));
+  const [adding, setAdding] = useState(false);
   const toggle = (id: string) => setOpened((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -179,8 +225,16 @@ export function OutcomesCard({ outcomes, routines, runs, loadState, actions, def
     );
   }
   return (
-    <ProfileCard title={t("botProfile.tab.outcomes")} groupId="bot-profile-outcomes">
-      <div data-outcomes-card="" className="flex min-w-0 flex-col px-1">{body}</div>
+    <ProfileCard title={t("botProfile.tab.outcomes")} groupId="bot-profile-outcomes"
+      accessory={
+        <button type="button" data-outcomes-new="" aria-expanded={adding} onClick={() => setAdding((open) => !open)} className={cn(ACTION_PILL, "ml-auto shrink-0")}>
+          <Plus size={14} aria-hidden="true" />{t("outcomes.new")}
+        </button>
+      }>
+      <div data-outcomes-card="" className="flex min-w-0 flex-col px-1">
+        {adding && <NewOutcomeField onSend={actions.onNewOutcome} onDone={() => setAdding(false)} />}
+        {body}
+      </div>
     </ProfileCard>
   );
 }

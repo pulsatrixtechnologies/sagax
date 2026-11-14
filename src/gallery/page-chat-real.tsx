@@ -7,7 +7,9 @@
  * &wait=1 adds the "finishing another conversation" wait chip after it
  * (tool details on), which the working line names instead of a row.
  * The script drives it like a person: open the card, Show conversation,
- * send, Back to chat. window.__pageChatReal reports what it saw. */
+ * send, Back to chat. window.__pageChatReal reports what it saw;
+ * window.__pageChatReal.publish() lands the bot's next version and ends its
+ * turn, as the server's frames would (the in-place ask, #4099). */
 import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -30,11 +32,11 @@ const fr = lang === "fr";
 document.cookie = `sagax-gallery-lang=${fr ? "fr" : "en"}; path=/; SameSite=Lax`;
 const title = fr ? "Rapport mensuel synthétique" : "Synthetic monthly report";
 const at = Date.UTC(2026, 9, 31, 13, 0);
-const versions = Number(params.get("versions") ?? "2");
+let versions = Number(params.get("versions") ?? "2");
 
 declare global {
   interface Window {
-    __pageChatReal: { sends: unknown[] };
+    __pageChatReal: { sends: unknown[]; publish?: () => void };
   }
 }
 window.__pageChatReal = { sends: [] };
@@ -126,6 +128,15 @@ function Gallery() {
   }, []);
   const value = useMemo(() => ({ state, dispatch, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} }), [state, dispatch]);
   const bot = state.bots.find((entry) => entry.id === "scout")!;
+  window.__pageChatReal.publish = () => {
+    versions += 1;
+    const current = state.bots.find((entry) => entry.id === "scout")!;
+    apply({ type: "messageAdded", threadId: "scout-thread", message: line(`p${versions}`, "bot", title, 30, current.activeLeafId ?? undefined, { pagePublish: { pageId, version: versions, title } }) } as Action);
+    // a bot frame carries no transcript
+    const { messages: _messages, activeLeafId: _leaf, ...frame } = current;
+    apply({ type: "botPatched", bot: { ...frame, busy: false, activity: "idle", tasks: current.tasks?.map((task) => ({ ...task, busy: false, activity: "idle" })) } } as Action);
+    setTick((n) => n + 1);
+  };
   return (
     <BotEditorStore value={value as never}>
       <div data-gallery-page-chat-real="" className="flex h-dvh w-full overflow-hidden bg-app">

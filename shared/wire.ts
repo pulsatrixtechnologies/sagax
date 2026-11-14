@@ -14,6 +14,7 @@ import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
+import type { DataContext } from "./data-context.ts";
 import type { LearnedSkillLine } from "./learned-skill-line.ts";
 import type { DirectTriggers } from "./direct-triggers.ts";
 import type { FinishUntilLine } from "./finish-until-line.ts";
@@ -1320,8 +1321,10 @@ export interface WireMessage extends WaitLineField {
    * app draws it as a chip over the words), the person was viewing when they sent
    * this (shared/data-context.ts). Its own field, so `text` stays exactly
    * what they typed; the server puts the hint in front of the text it
-   * sends the model for this turn and for every retry of it. */
-  dataContext?: { cardId?: string; draftSql?: string; page?: { pageId: string; title: string; version?: number } };
+   * sends the model for this turn and for every retry of it. A selected
+   * passage of the page (#4099) is drawn as a quote under the chip; a new
+   * outcome (#4098) draws nothing more than the words. */
+  dataContext?: DataContext;
   /** user messages waiting in the steer-queue while the bot is mid-turn. */
   queued?: boolean;
   /** A parallel task this line belongs to (shared/parallel-tasks.ts): the

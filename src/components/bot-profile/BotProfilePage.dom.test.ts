@@ -60,6 +60,8 @@ let vaultAnswer: unknown = null;
 let skillsAnswer: unknown = null;
 /** Who the server says the viewer is (null: no viewer, as a solo install). */
 let viewerAnswer: unknown = null;
+/** The messages the page sent to a bot (#4098: New outcome). */
+const sentMessages: Array<{ path: string; body: Record<string, unknown> }> = [];
 
 const { StoreProvider, useStore } = await import("@/state/store");
 const { PersonaEditorModal } = await import("../persona/PersonaEditorModal");
@@ -91,8 +93,12 @@ beforeAll(async () => {
   setAdvancedMode(true);
   vi.stubGlobal("EventSource", FixtureEventSource);
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://localhost/");
+    if (init?.method === "POST" && /^\/api\/bots\/[^/]+\/messages$/.test(url.pathname)) {
+      sentMessages.push({ path: url.pathname, body: JSON.parse(String(init.body)) });
+      return Promise.resolve(json({ ok: true }, 202));
+    }
     if (slackAnswer && url.pathname.endsWith("/slack-management")) return Promise.resolve(json(slackAnswer));
     if (grantsAnswer && url.pathname.endsWith("/grants")) return Promise.resolve(json(grantsAnswer));
     if (capabilitiesAnswer && url.pathname.endsWith("/capabilities")) return Promise.resolve(json(capabilitiesAnswer));
@@ -114,6 +120,7 @@ afterEach(() => {
   vaultAnswer = null;
   skillsAnswer = null;
   viewerAnswer = null;
+  sentMessages.length = 0;
 });
 
 async function mount(locale: "en" | "fr") {
@@ -901,6 +908,46 @@ describe("the Outcomes tab (#4098, first lot: read from the routines that exist)
       await click(row.querySelector<HTMLElement>("button[aria-expanded]"), "row rg");
       const run = node.querySelector<HTMLElement>('[data-outcome-row="routine:rg"] [data-outcome-run="run-d"]')!;
       expect(run.textContent).toContain(t("routineRun.card.done"));
+    }
+    setLocale("en");
+  });
+
+  it("New outcome at the label's right: the person writes the result; Enter sends it as their message in the bot's chat, asking for a routine, and the page moves to the chat", async () => {
+    for (const locale of ["en", "fr"] as const) {
+      if (locale === "fr") {
+        act(() => root.unmount());
+        host.remove();
+        sentMessages.length = 0;
+      }
+      await mount(locale);
+      const node = await openOutcomes([waitingRun, doneRun]);
+      const group = node.querySelector<HTMLElement>("[data-settings-group='bot-profile-outcomes']")!;
+      const add = group.querySelector<HTMLElement>("h3 ~ [data-outcomes-new]")!;
+      expect(add.textContent).toBe(t("outcomes.new"));
+      expect(group.querySelector("[data-outcomes-new-field]")).toBeNull();
+      await click(add, "New outcome");
+      const field = group.querySelector<HTMLInputElement>("[data-outcomes-new-field] input")!;
+      expect(document.activeElement).toBe(field);
+      expect(field.getAttribute("placeholder")).toBe(t("outcomes.newPlaceholder"));
+      // an empty Enter sends nothing
+      await act(async () => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+      expect(sentMessages).toHaveLength(0);
+      // Escape puts the field away
+      await act(async () => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+      expect(group.querySelector("[data-outcomes-new-field]")).toBeNull();
+      await click(group.querySelector<HTMLElement>("[data-outcomes-new]"), "New outcome again");
+      const again = group.querySelector<HTMLInputElement>("[data-outcomes-new-field] input")!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(again, "Every invoice sent within two days");
+        again.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () => { again.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+      await settle();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]!.path).toBe(`/api/bots/${fixture.bot.id}/messages`);
+      expect(sentMessages[0]!.body.text).toBe("Every invoice sent within two days");
+      expect(sentMessages[0]!.body.dataContext).toEqual({ outcome: true });
+      expect(latest.personaEditor).toBeNull();
     }
     setLocale("en");
   });

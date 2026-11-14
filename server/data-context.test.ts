@@ -74,3 +74,15 @@ describe("parseDataContext: a selected passage of the page (#4099)", () => {
     }
   });
 });
+
+describe("parseDataContext: a new outcome asked from the bot page (#4098)", () => {
+  it("accepts the outcome mark alone or with a page or a card", () => {
+    expect(parseDataContext({ outcome: true })).toEqual({ outcome: true });
+    expect(parseDataContext({ cardId: "c_1", outcome: true })).toEqual({ cardId: "c_1", outcome: true });
+    expect(parseDataContext({ page: { pageId: "abcdefgh12345678", title: "Bilan" }, outcome: true })).toEqual({ page: { pageId: "abcdefgh12345678", title: "Bilan" }, outcome: true });
+  });
+
+  it("refuses an outcome mark that is not true", () => {
+    for (const bad of [{ outcome: false }, { outcome: "yes" }, { outcome: 1 }]) expect(refused(bad), JSON.stringify(bad)).toBe(400);
+  });
+});

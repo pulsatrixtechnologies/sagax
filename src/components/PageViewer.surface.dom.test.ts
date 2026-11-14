@@ -15,6 +15,7 @@ vi.mock("@/state/store", () => ({
   api: vi.fn(async (path: string, init?: RequestInit) => {
     calls.push({ path, init });
     if (path === "/api/pages/policy") return { linkSharing: true, readerComments: true };
+    if (/\/export\?/.test(path)) return { filename: "bilan.html", html: "<p>Bilan</p>" };
     const version = /\/versions\/(\d+)$/.exec(path);
     if (version) return { version: { n: Number(version[1]), kind: "html", title: "T", state: "proposed", previewPath: `/pages/preview/abcdefgh12345678/${version[1]}` } };
     if (init?.method === "PATCH") {
@@ -31,6 +32,7 @@ vi.mock("./WidgetFrame", () => ({ useWidgetTheme: () => ({ scheme: "dark", css: 
 
 import { resetOpenPage, rememberPagePlace } from "@/lib/open-page";
 import { PageSurface } from "./PageViewer";
+import { t } from "@/lib/i18n";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -146,6 +148,101 @@ describe("the open page", () => {
     await flush();
     expect(setAlwaysOnTop).toHaveBeenCalledWith(true);
     delete (window as unknown as { artifactWindowSelf?: unknown }).artifactWindowSelf;
+  });
+});
+
+describe("top bar: chat toggle and download (#4099)", () => {
+  const header = () => host.querySelector("[data-page-header]") as HTMLElement;
+  const rightButtons = () => [...header().querySelectorAll<HTMLElement>("button")].map((node) =>
+    node.hasAttribute("data-page-chat-toggle") ? "chat"
+      : node.hasAttribute("data-page-download") ? "download"
+        : node.hasAttribute("data-page-share") ? "share"
+          : node.hasAttribute("data-page-more") ? "more"
+            : null).filter(Boolean);
+
+  it("download is an icon button of the bar, before Share, and saves the shown version", async () => {
+    const createObjectURL = vi.fn(() => "blob:page");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render({});
+    await flush();
+    const download = header().querySelector<HTMLButtonElement>("[data-page-download]");
+    expect(download).not.toBeNull();
+    expect(download!.getAttribute("aria-label")).toBe(t("pages.download"));
+    expect(rightButtons()).toEqual(["download", "more", "share"]);
+    await act(async () => { download!.click(); });
+    await flush();
+    expect(calls.some((call) => call.path.endsWith("/api/pages/abcdefgh12345678/versions/1/export?theme=dark") && call.init?.method === "GET")).toBe(true);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(clicked).toHaveBeenCalledTimes(1);
+    clicked.mockRestore();
+  });
+
+  it("the menu no longer repeats download (one place for each action)", async () => {
+    render({});
+    await flush();
+    act(() => (host.querySelector("[data-page-more]") as HTMLButtonElement).click());
+    expect(document.querySelector("[data-page-export]")).toBeNull();
+    expect(document.querySelector("[data-page-download-item]")).toBeNull();
+    expect([...document.querySelectorAll("[role=menuitem]")].some((node) => node.textContent?.includes(t("pages.download")))).toBe(false);
+  });
+
+  it("on a narrow bar (390 px) Download moves into « ⋯ », so it stays in one place per width", async () => {
+    const createObjectURL = vi.fn(() => "blob:page");
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { width: this.hasAttribute("data-page-header") ? 390 : 0, height: 0, x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      render({});
+      await flush();
+      expect(header().querySelector("[data-page-download]")!.className).toContain("@max-[34rem]/pagehead:hidden");
+      act(() => (host.querySelector("[data-page-more]") as HTMLButtonElement).click());
+      const item = document.querySelector<HTMLButtonElement>("[data-page-download-item]");
+      expect(item?.textContent).toContain(t("pages.download"));
+      await act(async () => { item!.click(); });
+      await flush();
+      expect(calls.some((call) => call.path.includes("/versions/1/export") && call.init?.method === "GET")).toBe(true);
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+    } finally {
+      rect.mockRestore();
+      clicked.mockRestore();
+    }
+  });
+
+  it("the chat toggle sits first at the right, says its state and calls back", async () => {
+    const onToggle = vi.fn();
+    render({ chat: { open: false, onToggle } });
+    await flush();
+    expect(rightButtons()).toEqual(["chat", "download", "more", "share"]);
+    const toggle = header().querySelector<HTMLButtonElement>("[data-page-chat-toggle]")!;
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(toggle.getAttribute("aria-label")).toBe(t("pages.showConversation"));
+    act(() => toggle.click());
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    render({ chat: { open: true, onToggle } });
+    await flush();
+    const pressed = header().querySelector<HTMLButtonElement>("[data-page-chat-toggle]")!;
+    expect(pressed.getAttribute("aria-pressed")).toBe("true");
+    expect(pressed.getAttribute("aria-label")).toBe(t("pages.hideConversation"));
+    // a narrow host can only cover: no toggle at all (hidden, not greyed),
+    // but one still takes the conversation away if it is beside
+    render({ chat: { open: false, disabled: true, onToggle } });
+    await flush();
+    expect(header().querySelector("[data-page-chat-toggle]")).toBeNull();
+    expect(rightButtons()).toEqual(["download", "more", "share"]);
+    render({ chat: { open: true, disabled: true, onToggle } });
+    await flush();
+    expect(header().querySelector<HTMLButtonElement>("[data-page-chat-toggle]")!.disabled).toBe(false);
+  });
+
+  it("a page with no conversation beside it (its own window) has no chat toggle", async () => {
+    render({ follow: true });
+    await flush();
+    expect(header().querySelector("[data-page-chat-toggle]")).toBeNull();
+    expect(header().querySelector("[data-page-download]")).not.toBeNull();
   });
 });
 

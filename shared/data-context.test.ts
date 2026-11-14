@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DATA_CONTEXT_HINT, dataContextFor, dataContextPrompt, fitComments, PAGE_CONTEXT_HINT, PAGE_CONTEXT_MAX_CHARS, PAGE_SELECTION_HINT, promptWithDataContext, setPageContextSource, withPageContext } from "./data-context.ts";
+import { DATA_CONTEXT_HINT, dataContextFor, dataContextPrompt, fitComments, OUTCOME_REQUEST_HINT, PAGE_CONTEXT_HINT, PAGE_CONTEXT_MAX_CHARS, PAGE_SELECTION_HINT, promptWithDataContext, setPageContextSource, withPageContext } from "./data-context.ts";
 import { SAVE_RUN_AS_SKILL_LINE } from "./learn-request.ts";
 import type { PageContextComment } from "./page-threads.ts";
 
@@ -182,5 +182,23 @@ describe("a message about a selected passage of the page (#4099)", () => {
     const payload = envelope(dataContextPrompt({ page: { pageId: page.pageId, title: "Bilan" } }));
     expect(payload.selection).toBeUndefined();
     expect(payload.hint).toBe(PAGE_CONTEXT_HINT);
+  });
+});
+
+describe("a new outcome asked from the bot page (#4098)", () => {
+  const envelope = (prompt: string) => JSON.parse(prompt.slice(prompt.indexOf("<outcome-request>") + "<outcome-request>".length, prompt.indexOf("</outcome-request>")));
+
+  it("gives the bot the standing instruction to answer with propose_routine and a /goal line, ahead of the person's words", () => {
+    const prompt = promptWithDataContext("Every invoice sent within two days", { outcome: true });
+    expect(prompt.endsWith("</outcome-request>\n\nEvery invoice sent within two days")).toBe(true);
+    expect(envelope(prompt).hint).toBe(OUTCOME_REQUEST_HINT);
+    expect(OUTCOME_REQUEST_HINT).toContain("propose_routine");
+    expect(OUTCOME_REQUEST_HINT).toContain("/goal");
+  });
+
+  it("goes with a page or a Data card when there is one, and is absent otherwise", () => {
+    const both = dataContextPrompt({ cardId: "c_1", outcome: true });
+    expect(both.indexOf("<data-context>")).toBeLessThan(both.indexOf("<outcome-request>"));
+    expect(dataContextPrompt({ cardId: "c_1" })).not.toContain("outcome-request");
   });
 });

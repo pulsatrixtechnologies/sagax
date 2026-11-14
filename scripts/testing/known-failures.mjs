@@ -331,13 +331,38 @@ export function failingSwiftTests(log) {
   return { tests: [...tests], errors };
 }
 
-async function github(fetchImpl, apiUrl, token, method, path, body) {
-  const response = await fetchImpl(`${apiUrl}${path}`, {
-    method,
-    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "content-type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return { status: response.status, json: await response.json().catch(() => null) };
+/** How many times a GitHub call is sent before its error stands, and the
+ * wait before each new try (#4315). */
+const GITHUB_ATTEMPTS = 3;
+const GITHUB_RETRY_MS = 1_000;
+
+/** One GitHub API call. Each call opens its own connection (`connection:
+ * close`): bisect runs synchronously between two calls and blocks the event
+ * loop for a minute or more, so a kept-alive socket from the call before it
+ * was closed by GitHub in the meantime, and the next request went out on it
+ * and died with "other side closed" (#4315). A network error or a 5xx answer
+ * is tried again, GITHUB_ATTEMPTS times in all, after a short wait. */
+export async function github(fetchImpl, apiUrl, token, method, path, body, { attempts = GITHUB_ATTEMPTS, retryMs = GITHUB_RETRY_MS } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    let response;
+    try {
+      response = await fetchImpl(`${apiUrl}${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "content-type": "application/json", connection: "close" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, retryMs * attempt));
+      continue;
+    }
+    if (response.status >= 500 && attempt < attempts) {
+      await response.body?.cancel().catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, retryMs * attempt));
+      continue;
+    }
+    return { status: response.status, json: await response.json().catch(() => null) };
+  }
 }
 
 /** The time all bisects of one run may take together. ci.yml gives the
@@ -866,7 +891,7 @@ async function openIssues(options) {
   try {
     open = await listOpenRegressionIssues({ repo, token, apiUrl });
   } catch (error) {
-    console.log(`Open regression issues not listed (${String(error)}): recorded issues kept as is.`);
+    warn(`Open regression issues not listed (${errorText(error)}): recorded issues kept as is.`);
   }
   const openIssues = open ? new Set(open.map((issue) => issue.number)) : undefined;
   const platforms = readPlatforms(options.platforms);
@@ -882,26 +907,33 @@ async function openIssues(options) {
         console.log(`${closed ? "Closed" : "Updated"}: #${issue}, ${ticked} test(s) passing again.`);
       }
     } catch (error) {
-      console.log(`::warning title=Regression issues::${escapeData(`The issues of tests that pass again were not all updated: ${String(error)}`)}`);
+      warn(`The issues of tests that pass again were not all updated: ${errorText(error)}`);
     }
   }
-  const swiftFailed = await reportSwift(options, { repo, token, apiUrl, open });
+  await reportSwift(options, { repo, token, apiUrl, open });
   const { bisect } = await import("../stability/bisect.mjs");
-  const opened = await openRegressionIssues(due, {
-    repo,
-    token,
-    apiUrl,
-    open,
-    results,
-    runUrl: options["run-url"],
-    bisect: (entry, { deadline }) => {
-      try {
-        return bisect({ repo: process.cwd(), file: entry.file, good: entry.good ?? `${entry.firstSha}~20`, bad: entry.firstSha, deadline });
-      } catch (error) {
-        return { verdict: "error", detail: String(error) };
-      }
-    },
-  });
+  let opened = [];
+  try {
+    opened = await openRegressionIssues(due, {
+      repo,
+      token,
+      apiUrl,
+      open,
+      results,
+      runUrl: options["run-url"],
+      bisect: (entry, { deadline }) => {
+        try {
+          return bisect({ repo: process.cwd(), file: entry.file, good: entry.good ?? `${entry.firstSha}~20`, bad: entry.firstSha, deadline });
+        } catch (error) {
+          return { verdict: "error", detail: String(error) };
+        }
+      },
+    });
+  } catch (error) {
+    // The sightings keep these tests without an issue, so the next run on
+    // main opens it.
+    warn(`The regression issue of ${due.length} failure(s) seen twice could not be opened; the next run on main opens it: ${errorText(error)}`);
+  }
   for (const { key, issue, created } of opened) {
     sightings.tests[key].issue = issue;
     console.log(`${created ? "Opened" : "Already open"}: #${issue} ${key}`);
@@ -913,29 +945,41 @@ async function openIssues(options) {
   }
   writeJson(String(options.out), sightings);
   console.log(`${Object.keys(sightings.tests).length} unlisted failure(s) tracked, ${new Set(opened.filter((item) => item.created).map((item) => item.issue)).size} issue(s) opened.`);
-  return swiftFailed ? 1 : 0;
+  // Only a test decides the step's result (#4315): a new failure seen twice
+  // fails it, whether or not its issue could be written. A GitHub call that
+  // failed (listing, updating, opening an issue) is a warning above, never
+  // red by itself.
+  return due.length ? 1 : 0;
 }
 
+/** A bookkeeping failure of open-issues: a warning on the run and a line in
+ * its summary, never a red step by itself (#4315). */
+function warn(text) {
+  console.log(`::warning title=Regression issues::${escapeData(text)}`);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n> [!WARNING]\n> Regression issues: ${inline(text)}\n`);
+}
+
+/** An error with its cause, as fetch's "fetch failed" hides the socket error. */
+const errorText = (error) => `${String(error)}${error?.cause ? ` (${String(error.cause)})` : ""}`;
+
 /** The Swift package tests of this run (`--jobs`, `--swift-log`): an issue
- * or a comment when they failed. True when writing it failed. */
+ * or a comment when they failed; a warning when writing it failed. */
 async function reportSwift(options, { repo, token, apiUrl, open }) {
   const swift = swiftOutcome(readJsonLines(options.jobs));
-  if (!swift || swift.state === "pass") return false;
+  if (!swift || swift.state === "pass") return;
   if (swift.state !== "fail") {
     console.log(swift.state === "no-runner"
       ? `"${swift.job}" got no runner: the Swift package tests did not run, which is not a failure.`
       : `"${swift.job}" stopped before the Swift package tests ran: no Swift issue.`);
-    return false;
+    return;
   }
   let log = "";
   try { log = readFileSync(String(options["swift-log"]), "utf8"); } catch { /* no log uploaded: the issue says no test case failed */ }
   try {
     const { issue, created } = await openSwiftRegressionIssue({ job: swift.job, ...failingSwiftTests(log) }, { repo, token, apiUrl, open, runUrl: options["run-url"], sha: String(options.sha) });
     console.log(`${created ? "Opened" : "Commented on"} #${issue} for the red Swift package tests.`);
-    return false;
   } catch (error) {
-    console.log(`::error title=Swift package tests::${escapeData(`The regression issue could not be written: ${String(error)}`)}`);
-    return true;
+    warn(`The regression issue of the red Swift package tests could not be written: ${errorText(error)}`);
   }
 }
 

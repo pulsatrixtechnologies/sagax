@@ -4,14 +4,15 @@ import { t } from "@/lib/i18n";
 import { limitLine, nearLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
 import { openModelWindow } from "@/lib/model-window";
 import type { Routine } from "@/lib/routines";
-import { api, useStore, type Bot } from "@/state/store";
+import { api, type Bot } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { limitMessageHeld, type LimitLineRow } from "../../shared/limit-failover";
 import { useWeeklyLimit } from "./ChatUsageNotices";
 
 /** The stopped turn's "Continue at 3:40 PM when your limit resets": one click sets up a one-time automation in this
  * conversation that picks up where it stopped. Undefined when there is nothing to offer. */
 export function useLimitResetContinue(botId: string | undefined, threadId: string | undefined, resetsAt: number | undefined) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   const [state, setState] = useState<"idle" | "working" | "set">("idle");
   if (!botId || !threadId || !resetsAt || resetsAt <= Date.now() || state === "set") return undefined;
   return {
@@ -57,11 +58,12 @@ export function EngineLimitIndicator({
    * has it: a task, a side chat or a preview is not the bot's main thread. */
   messages?: readonly LimitLineRow[];
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
   const weekly = useWeeklyLimit(engine, driver ?? limit?.driver);
   // #3552: "held" is read for the conversation shown, whichever thread it is.
-  const held = limitMessageHeld(messages ?? shownMessages(state.bots, botId, threadId));
+  // #3624: read as one answer, so another bot's frame renders nothing here
+  const held = useStoreSelector((state) => limitMessageHeld(messages ?? shownMessages(state.bots, botId, threadId)));
   const continueAt = useLimitResetContinue(botId, threadId, limit?.blocked && !held ? limit.resetsAt ?? undefined : undefined);
   const [open, setOpen] = useState(false);
   const near = Boolean(limit && nearLimit(limit));

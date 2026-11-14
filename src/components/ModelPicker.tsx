@@ -5,7 +5,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Monitor } from "lucide-react";
-import { useStore, type Bot, type ModelSelection } from "@/state/store";
+import { type Bot, type ModelSelection, type useStore } from "@/state/store";
+import { shallowEqual, useStoreCommands, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
 import { configuredModelInstances, isClaudeAccount } from "@/lib/engine-rail";
@@ -167,8 +168,19 @@ export function ModelPicker({
   fallbackAnchor?: () => HTMLElement | null;
   alsoApplyTo?: readonly string[];
 }) {
-  const { state, dispatch, refreshInstances, refreshModels: refreshInstanceModels } = useStore();
+  const dispatch = useStoreDispatch();
+  const { refreshInstances, refreshModels: refreshInstanceModels } = useStoreCommands();
+  const getState = useStoreGetter();
   const bot = botProp ?? CHOOSE_BOT;
+  // #3624: what the picker draws (the engines, the settings, this bot's own
+  // entry), so another bot's frame renders nothing here
+  const state = useStoreSelector((current) => ({
+    instances: current.instances,
+    config: current.config,
+    modelFallbacks: current.modelFallbacks,
+    modelVariantSessions: current.modelVariantSessions,
+    own: current.bots?.find((candidate) => candidate.id === bot.id),
+  }), shallowEqual);
   // #2050: the stars follow the person through /api/me/models
   useModelFavoritesServerSync();
   const [menu, setMenu] = useState(windowOnly);
@@ -202,7 +214,7 @@ export function ModelPicker({
     ? { instanceId: choose.value?.instanceId ?? "", model: choose.value?.model ?? "" }
     : bot.modelSelection;
   const autoOn = selection.auto === true && !viewerLocal && !choose;
-  const autoTask = state.bots?.find((candidate) => candidate.id === bot.id)?.tasks
+  const autoTask = state.own?.tasks
     ?.find((task) => task.threadId === (threadId ?? bot.threadId));
   const autoStatus = useAutoModelStatus(bot.id, threadId, (autoOn || anyOpen) && !choose, JSON.stringify([selection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]));
   const autoPreview = autoStatus?.auto ? autoStatus.pick : null;
@@ -254,7 +266,7 @@ export function ModelPicker({
   // own, so their chip and menu always carry the effort, as before.
   const showEffort = !choose && (advanced || listChip || contained || Boolean(alsoApplyTo?.length));
 
-  const profile = state.bots.find((candidate) => candidate.id === bot.id) ?? bot;
+  const profile = state.own ?? bot;
   const follows = threadId ? profile.tasks?.find((task) => task.threadId === threadId)?.followsBotModel : undefined;
   const botModelInstance = state.instances.find((instance) => instance.instanceId === profile.modelSelection.instanceId);
   const botModelName = botModelInstance
@@ -290,7 +302,7 @@ export function ModelPicker({
   };
 
   const { pick, setEffort, chooseAuto, setAutoOptimize } = makeModelPickerActions({
-    state, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll,
+    getState, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll,
   });
 
   const { menuSections } = buildModelPickerSections({

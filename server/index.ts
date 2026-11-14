@@ -16910,7 +16910,7 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
     };
   },
   words: (routine) => serverApprovalWords(languageOfPerson(routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }))),
-  ask: (routine, input) => {
+  ask: (routine, input, options) => {
     const place = routineProblemPlace(routine, !("retire" in input));
     if (!place) return false;
     const { bot, threadId, group } = place;
@@ -16921,10 +16921,19 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
       input: input as unknown as Record<string, unknown>,
       ...(group ? { room: { people: roomPeopleOf(group), name: group.name, fromRun: true }, notifyAddressee: notifyRoomAskAddressee } : {}),
       personLanguage: languageOfPerson(routine.runAs?.principalId),
-      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, group ? { ...choice, askerBotId: bot.id } : choice),
+      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, { ...choice, ...(group ? { askerBotId: bot.id } : {}), ...(options?.quiet ? { quiet: true as const } : {}) }),
       askKeys: askKeysFor(bot, threadId, threadId),
     });
     if (!posted.ok) console.warn(`routine ${routine.id} fix card: ${posted.error}`);
+  },
+  // #4316: the run's routine-failed notification (onRunFailed, told once per
+  // run and status) already told this failure
+  runFailureTold: (routine, need) => {
+    const run = need.runId ? routines?.runsOfRoutineAsStored(routine.id).find((entry) => entry.id === need.runId) : undefined;
+    if (!run || (run.status !== "failed" && run.status !== "blocked")) return false;
+    const bot = store.bot(run.botId);
+    const told = (routineSourceOwner(run)?.bot ?? bot)?.id;
+    return Boolean(told && signalLedger.find(told, signalKeys.runProblem(run.id, run.status)));
   },
   pending: (routine, key) => askKeyIndex.find(key, routineProblemCardIn(routineProblemPlace(routine, false))),
   latest: (routine, key) => {

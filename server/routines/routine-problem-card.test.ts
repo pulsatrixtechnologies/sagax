@@ -92,7 +92,7 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
     runs.push(entry);
     return entry;
   };
-  const cardsWith = (): RoutineProblemCards<Routine> => {
+  const cardsWith = (extra: Partial<RoutineProblemCardsDeps<Routine>> = {}): RoutineProblemCards<Routine> => {
     const deps: RoutineProblemCardsDeps<Routine> = {
       // the one rule, read without cards or items: a 5 minute routine is
       // told at its third problem run
@@ -104,10 +104,11 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
         return { summary: need.text, count: need.failures ?? last?.problemRepeat?.count ?? 1, ...(last?.readiness?.find((check) => !check.ok) ? { readiness: last.readiness.find((check) => !check.ok)!.line } : {}) };
       },
       words: () => ENGLISH_WORDS,
-      ask: (_target, input) => {
+      ask: (_target, input, options) => {
         const posted = createAgentCard({
           store, bot: BOT, threadId: conv, input: input as unknown as Record<string, unknown>,
-          raiseQuestion,
+          // a quiet card shows and waits, without a ring
+          raiseQuestion: options?.quiet ? (choice) => { const ring = raiseQuestion(choice); rings.splice(rings.indexOf(ring.messageId), 1); return ring; } : raiseQuestion,
           askKeys: {
             find: (key) => index.find(key, scope),
             remember: (key, threadId, messageId) => index.remember(key, threadId, messageId),
@@ -132,6 +133,7 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
         store.patchMessage(found.threadId, row.id, { card: { ...row.card!, remindedAt: clock } });
       },
       now: () => clock,
+      ...extra,
     };
     return new RoutineProblemCards(deps);
   };
@@ -142,6 +144,23 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
     later: (ms: number) => { clock += ms; },
   };
 }
+
+describe("one failure, one ring (#4316)", () => {
+  it("raises the card quiet when the run it names already rang its own failure, and rings it otherwise", () => {
+    const told = world();
+    const quiet = told.cardsWith({ runFailureTold: (_target, need) => need.runId === told.runs.at(-1)?.id });
+    const r = routine();
+    for (let n = 0; n < 3; n += 1) { told.run("failed", { error: "The mailbox refused the sign-in" }); quiet.sync(r); }
+    expect(told.open()).toHaveLength(1);
+    expect(told.rings).toEqual([]);
+
+    const untold = world();
+    const loud = untold.cardsWith({ runFailureTold: () => false });
+    for (let n = 0; n < 3; n += 1) { untold.run("failed", { error: "The mailbox refused the sign-in" }); loud.sync(r); }
+    expect(untold.open()).toHaveLength(1);
+    expect(untold.rings).toEqual([untold.open()[0]!.id]);
+  });
+});
 
 describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () => {
   it("three problem runs raise one card; ten more change nothing but the count; a good run retires it", () => {

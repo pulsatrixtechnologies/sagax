@@ -627,8 +627,9 @@ function gitSubcommand(words: readonly string[], at: number): string {
   return "";
 }
 
-/** The program a segment runs, past env assignments and wrappers. */
-function programOf(words: readonly string[]): { index: number; program: string; wrapped: boolean; privileged: boolean } {
+/** The program a segment runs, past env assignments and wrappers (and
+ * their flags). Exported for server/safety/sensitive-path.ts. */
+export function programOf(words: readonly string[]): { index: number; program: string; wrapped: boolean; privileged: boolean } {
   let index = 0;
   let wrapped = false;
   let privileged = false;

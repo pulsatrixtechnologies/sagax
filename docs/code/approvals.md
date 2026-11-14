@@ -276,7 +276,13 @@ The maintainer's GO on points 1 and 2 of the bot quality diagnostic. Rules:
   own work (`ownerLineageOrigin`: the owner's words signed in, their
   scheduled or manual routine, a hop from their own bot speaking for them;
   never the operator, a webhook, another person or a routine hop):
-  destructive calls, ask rules, security keys and holds keep their card.
+  destructive calls, ask rules, security keys and holds keep their card,
+  and so does a read of a credential file or folder or a process secret
+  (`credentialReadOf`: a file tool that only reads, or a shell command that
+  reads it, both judged by `credentialReadPath`; a write, a move, a test,
+  `tee`'s operands, a URL or an API route is not a read, and a standard
+  stream, a source file or an env example is not a credential, #3697), on
+  the person's own computer and environment too.
   Perspicax reads on Sagax's fixed `perspicax` mount (`perspicaxSelfAnswer`)
   run unasked for the owner's own work at Auto/Edits/Full; leases (`claim`,
   `claim_renew`, `claim_release`) never ask; the owner's deny and ask rules

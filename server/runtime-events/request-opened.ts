@@ -44,6 +44,7 @@ import {
   safetyPermissionEffect,
   stashSafetyNote,
 } from "../safety/safety-review.ts";
+import { shellCredentialPaths } from "../safety/sensitive-path.ts";
 import { confidentialCardAnswerable } from "../threads/confidential-threads.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 import { presentRequestOpened } from "./request-opened-present.ts";
@@ -331,6 +332,9 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
       const readOnlyCommand = Boolean(ownDestination && asker && !strictCard && !guestDriven && !foreignDestination && readOnlyTool
         && (readOnlyTool[1] === "sagax-environment" || destinationOrigin === "owner")
         && host.isReadOnlyCommand(readOnlyText)
+        // #3697: a read of a credential location goes on to the level's own
+        // answer (a card at Auto), the same rule as any other shell line
+        && !shellCredentialPaths(readOnlyText ?? "").length
         && !matchOwnerRule(host.ownerApprovals.rulesOf(cardAnswerer, asker.id).filter((rule) => rule.behavior !== "allow"), {
           ownerId: cardAnswerer, botId: asker.id, tool: event.mcpTool ?? event.tool,
           ...(typeof event.input === "string" ? { input: event.input } : {}),

@@ -213,8 +213,34 @@ only wakes a routine, like bot email. Covered by
   refuse it) and a required `body_sha256`. Order: 401 `unauthorized`, 400
   `invalid` (not the contract, over 64 KiB, `from` not masked for
   `pin_locked` and `call_rejected`), 404 `no_bot`, 403 `not_owner` (the
-  chosen `botId` is not the assertion `sub`'s own), 403 `owner_inactive`.
-  Every answer carries `X-Sagax-Telephony-Api: 1`.
+  chosen `botId` is not the assertion `sub`'s own, and, for a handed call
+  event, `sub` is not the person on the call or does not reach the bot),
+  403 `owner_inactive`. Every answer carries `X-Sagax-Telephony-Api: 1`.
+- A live call handed from one of the person's bots to another (#4236):
+  `call_handover` (with `handover: {fromBotId, toBotId, toName}`, `botId`
+  one of the two, `eventId` `call_handover:<CallSid>:<id>`) is sent once to
+  each bot. It is not a wake and not a turn: one row in the person's
+  unified conversation with that bot, `via: "call"`: "Call passed to
+  <toName>." for the bot that passes the call, "Call received from <name>."
+  for the bot that takes it, with what the person had just asked. The row's
+  text is plain, so every client (desktop, iOS, Android, released apps
+  included) shows it without marker lines; `callerData: true` marks the
+  caller's words after its first line, which the model reads inside the
+  untrusted markers (`callRowContext`, applied in the conversation context).
+  A handed bot's "Call summary." row is stored the same way. 202 `{..., delivered:
+  1, conversation: true}`; 503 `not_delivered` when the row could not be
+  written. The events of a handed call (`HANDED_CALL_EVENTS`:
+  `call_handover`, `call_request`, `call_summary`) may be signed as the
+  person on the call (`sub` = `person.id`) instead of the bot's owner:
+  accepted when that person reaches the bot under the list_agents reach
+  rule (`agentsReachedBy`: own or shared, active and not turned off), else
+  403. Never another person's bot. For such a bot, `call_request` is a turn
+  of the person's own conversation with it (`via: "call"`) and
+  `call_summary` a row "Call summary." of the same conversation; neither
+  ever wakes the owner's phone triggers (a request that could not start a
+  turn is 202 `ignored: 1`, reason `not_started`). get_agent gives each
+  bot the call reaches its `persona` and `speech` (voice, speed, persona
+  text) for the voice side.
 - `sms`, `call_request`, `call_summary` go through every ENABLED typed
   trigger of source `telephony` ("Bot phone", fr "Téléphone du bot",
   `secretMode: "relay"`) on that bot via `WebhookManager.ingest(id, event,

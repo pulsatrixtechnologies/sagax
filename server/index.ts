@@ -902,7 +902,7 @@ import { resolveMailSettings } from "./mail/mail-config.ts";
 import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts";
 import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
 import { createVoiceModeRoutes, isVoiceSocketPath, resolveVoiceKey, type VoiceModeDeps, type VoiceSpeaker } from "./voice/voice-mode.ts";
-import { VOICE_MODE_STORAGE_KEY, VOICE_SERVER_ENGINE } from "../shared/voice-mode.ts";
+import { botSpeech, VOICE_MODE_STORAGE_KEY, VOICE_SERVER_ENGINE } from "../shared/voice-mode.ts";
 import { keyLast4 } from "./voice/voice-keys.ts";
 import { IMAGE_SERVER_ENGINE } from "../shared/image-generation.ts";
 import { orgXaiKeyAllowed, orgXaiMediaStatusFor, orgXaiRefusal, type OrgXaiMedia } from "./org/org-xai-media.ts";
@@ -1343,7 +1343,7 @@ import { RevocationQueue } from "./auth/idp-revocations.ts";
 import { IDP_SWEEP_INTERVAL_MS, IdpGrantVault, IdpSessionManager, refreshAfterMs, resolveIdpVaultKey, settledWithin } from "./auth/idp-session.ts";
 import { acceptOpenInvitesForEmail, createPublicInviteRoutes, createSoloOrgRoutes, inviteMailMessage, type OrgState } from "./org/org-routes.ts";
 import { createDirectGrantRoutes } from "./auth/direct-grants.ts";
-import { directoryIntervalMs, directoryListsActive, PerspicaxDirectory, type ModelProvider } from "./perspicax/perspicax-link.ts";
+import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax/perspicax-link.ts";
 import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
 import { measureContextBuckets, toolDefinitionBytes } from "./context/context-buckets.ts";
@@ -2265,7 +2265,7 @@ import { createDataFrameAudience } from "./index-leaves/dataFrameAudience.ts";
 import { createStoppedTurnText } from "./index-leaves/stoppedTurnText.ts";
 import { createRoutineConversationOf } from "./index-leaves/routineConversationOf.ts";
 import { createDescribeGrantTarget } from "./index-leaves/describeGrantTarget.ts";
-import { createBotMailOwner } from "./index-leaves/botMailOwner.ts";
+import { createBotMailOwner, personActive } from "./index-leaves/botMailOwner.ts";
 import { createActiveGroupSpeaker } from "./index-leaves/activeGroupSpeaker.ts";
 import { createTurnToolEvidence } from "./index-leaves/turnToolEvidence.ts";
 import { createSubscriptionCli } from "./index-leaves/subscriptionCli.ts";
@@ -24427,16 +24427,29 @@ const inboundTelephony = createBotInboundTelephonyRoute({
       label, summary: text.slice(0, 140), detail: text, hops: 0
     });
   },
-  ownerNotice: ({ ownerPrincipalId, botId, text }) => {
+  ownerNotice: ({ ownerPrincipalId, botId, text, via, callerData }) => {
     try {
       const bot = store.bot(botId);
-      if (!bot) return;
+      if (!bot) return false;
       const threadId = conversationOrStart(bot, ownerPrincipalId);
-      if (!threadId || store.isConfidentialThread(threadId)) return;
-      store.appendMessage(threadId, { role: "bot", kind: "text", text });
+      if (!threadId || store.isConfidentialThread(threadId)) return false;
+      store.appendMessage(threadId, { role: "bot", kind: "text", text, ...(via ? { via } : {}), ...(callerData ? { callerData: true } : {}) });
+      return true;
     } catch (error) {
       console.warn(`[telephony-inbound] owner notice failed (${error instanceof Error ? error.name : "error"})`);
+      return false;
     }
+  },
+  // #4236: on a handed call, the person on the call reaches the bot under
+  // the list_agents rule (own or shared), active and not turned off.
+  reaches: async (sub, botId) => {
+    if (IDENTITY.kind !== "perspicax") return null;
+    const person = principals.bySubject(IDENTITY.issuer, sub);
+    if (!person) return null;
+    const caller: AgentCaller = { kind: "person", id: person.id, name: adminPerson(person.id).name, sub, admin: person.orgRole === "admin", scopes: new Set(), via: "perspicax-voice" };
+    const reached = (await agentsReachedBy(caller)).some((agent: { id: string }) => agent.id === botId);
+    if (!reached) return null;
+    return { principalId: person.id, active: personActive(perspicaxDirectory?.directory(), person, sub) };
   },
   record: (row) => appendAdminAction(DATA_DIR, {
     category: "webhook",
@@ -31707,8 +31720,7 @@ const orgLink = createOrgLinkRoutes({
     if (IDENTITY.kind !== "perspicax") return null;
     const person = principals.bySubject(IDENTITY.issuer, sub);
     if (!person) return null;
-    const listedActive = directoryListsActive(perspicaxDirectory?.directory(), sub);
-    return { principalId: person.id, active: listedActive && person.disabledAt === undefined && !person.consoleDisabled };
+    return { principalId: person.id, active: personActive(perspicaxDirectory?.directory(), person, sub) };
   },
   grokSignIn: async (principalId) => {
     if (!engineLogins) return { ok: false, error: "no_sign_in" };
@@ -32026,6 +32038,35 @@ function agentRoutineBody(patch: AgentRoutinePatch, requires: Parameters<typeof 
   if (patch.goal !== undefined) body.goal = patch.goal;
   return body;
 }
+/** Every agent a caller reaches: what list_agents lists, and (#4236) the
+ * reach rule a handed phone call is checked against. */
+async function agentsReachedBy(caller: AgentCaller, options?: { archived?: boolean }) {
+  const from = agentApiCallerBot(caller);
+  // #4172: archived ones on request, marked archived (GET /api/bots lists
+  // the person's archived bots too, as the app's archive does).
+  const withArchived = options?.archived === true;
+  if (caller.kind === "bot") {
+    if (!from) return [];
+    // A bot reaches the archived temporary agents it created, to restore
+    // or delete them for good (delete_agent offers both to it).
+    const archivedOwn = withArchived
+      ? store.bots.filter((bot) => bot.temporary?.archived && bot.temporary.createdBy.kind === "bot" && bot.temporary.createdBy.botId === from.id)
+        .map((bot) => ({ ...agentSummary(bot), archived: true }))
+      : [];
+    return [...agentPeersOf(from).map(agentSummary), ...archivedOwn];
+  }
+  const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/bots", query: { messages: "0" } });
+  if (listed.status < 200 || listed.status >= 300) return [];
+  const ids = new Set(((listed.body as { bots?: Array<{ id?: unknown }> })?.bots ?? []).map((bot) => String(bot.id ?? "")));
+  // The app does not list temporary agents (GET /api/bots leaves them
+  // out): a person reaches their own, those a bot they reach created, and
+  // an organization admin every one. An archived one only on request.
+  const person = caller.id.trim().toLowerCase();
+  const reachesTemporary = (temporary: TemporaryAgent) => (withArchived || !temporary.archived) && (caller.admin === true || temporary.ownerPrincipalId === person ||
+    (temporary.createdBy.kind === "bot" && ids.has(temporary.createdBy.botId)));
+  return store.bots.filter((bot) => (withArchived || !bot.hidden) && (bot.temporary ? reachesTemporary(bot.temporary) : ids.has(bot.id)))
+    .map((bot) => (bot.hidden || bot.temporary?.archived ? { ...agentSummary(bot), archived: true } : agentSummary(bot)));
+}
 const agentApi = createAgentApi({
   guardMode: toolGuardMode(process.env.SAGAX_TOOL_GUARD),
   guard: (caller, policy, target) => guardDecision(policy, { kind: caller.kind === "bot" ? "bot" : "user", id: caller.id },
@@ -32056,33 +32097,7 @@ const agentApi = createAgentApi({
     }),
   secret: agentApiSecret(),
   audit: agentApiAudit,
-  async agents(caller, options) {
-    const from = agentApiCallerBot(caller);
-    // #4172: archived ones on request, marked archived (GET /api/bots lists
-    // the person's archived bots too, as the app's archive does).
-    const withArchived = options?.archived === true;
-    if (caller.kind === "bot") {
-      if (!from) return [];
-      // A bot reaches the archived temporary agents it created, to restore
-      // or delete them for good (delete_agent offers both to it).
-      const archivedOwn = withArchived
-        ? store.bots.filter((bot) => bot.temporary?.archived && bot.temporary.createdBy.kind === "bot" && bot.temporary.createdBy.botId === from.id)
-          .map((bot) => ({ ...agentSummary(bot), archived: true }))
-        : [];
-      return [...agentPeersOf(from).map(agentSummary), ...archivedOwn];
-    }
-    const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/bots", query: { messages: "0" } });
-    if (listed.status < 200 || listed.status >= 300) return [];
-    const ids = new Set(((listed.body as { bots?: Array<{ id?: unknown }> })?.bots ?? []).map((bot) => String(bot.id ?? "")));
-    // The app does not list temporary agents (GET /api/bots leaves them
-    // out): a person reaches their own, those a bot they reach created, and
-    // an organization admin every one. An archived one only on request.
-    const person = caller.id.trim().toLowerCase();
-    const reachesTemporary = (temporary: TemporaryAgent) => (withArchived || !temporary.archived) && (caller.admin === true || temporary.ownerPrincipalId === person ||
-      (temporary.createdBy.kind === "bot" && ids.has(temporary.createdBy.botId)));
-    return store.bots.filter((bot) => (withArchived || !bot.hidden) && (bot.temporary ? reachesTemporary(bot.temporary) : ids.has(bot.id)))
-      .map((bot) => (bot.hidden || bot.temporary?.archived ? { ...agentSummary(bot), archived: true } : agentSummary(bot)));
-  },
+  agents: agentsReachedBy,
   async createAgent(caller, input) {
     const now = Date.now();
     if (input.kind === "lasting") {
@@ -32192,6 +32207,13 @@ const agentApi = createAgentApi({
       } : null,
       profile_url: IDENTITY.kind === "perspicax" ? `${IDENTITY.issuer.replace(/\/+$/, "")}/console/sagax/bots/${encodeURIComponent(bot.id)}` : null,
       model: agentModelSummary(bot),
+      // #4236: how the agent sounds and talks to this caller (a phone call
+      // handed to a bot shared with them speaks with it): the console's bot
+      // page persona, and its speech with the caller's own voice preference
+      persona: botPersona(bot),
+      ...(caller.kind === "person" ? {
+        speech: botSpeech(voiceModeDeps.preference?.({ principalId: caller.id.trim().toLowerCase() }), bot.id, bot.voiceLanguage, { voiceSpeed: bot.voiceSpeed, persona: bot.soul })
+      } : {}),
     };
   },
   async deleteAgent(caller, agentId, mode) {

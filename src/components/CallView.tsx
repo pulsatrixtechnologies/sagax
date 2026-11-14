@@ -8,7 +8,8 @@ import { AudioLines, PhoneOff } from "lucide-react";
 import { CTA_CIRCLE, CTA_DEFAULT, CTA_TONED, ctaStyle, type BotCtaColors } from "@/lib/voice-cta";
 
 import { useShowThreads } from "@/lib/thread-preferences";
-import { openBot, useStore, type Bot } from "@/state/store";
+import { openBot, type Bot } from "@/state/store";
+import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "./MenuMotion";
 import { endCall, startCall, useOnCall } from "@/lib/call";
@@ -28,9 +29,10 @@ import { LiveCall } from "./voice-mode/LiveCall";
  * the session's viewer is managed by Perspicax. There, voice mode is the
  * only call (VoiceModeCallButton) and the legacy gate never shows. */
 export function useOrganizationCall(botId?: string): boolean {
-  const { state } = useStore();
+  // #3624: the viewer only, so another bot's frame renders nothing here
+  const managed = useStoreSelector((state) => managedProfile(state.config?.viewer) !== null);
   const check = useVoiceModeCheck(botId ?? "");
-  return (check.state === "ready" && check.status.organization === true) || managedProfile(state.config?.viewer) !== null;
+  return (check.state === "ready" && check.status.organization === true) || managed;
 }
 
 /** The composer's Voice button. `tone`: the open bot's color (src/lib/voice-cta.ts). */
@@ -87,7 +89,10 @@ export function CallTargetButton({
   /** The open bot's color for the fill; absent: the skin's ink. */
   tone?: BotCtaColors | null;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  // #3624: the voice settings only, so another bot's frame renders nothing here
+  const tts = useStoreSelector((state) => state.config?.tts);
   const showThreads = useShowThreads();
   const { capabilities, ready: capabilitiesReady } = useDesktopCapabilities();
   const active = useOnCall() === targetId;
@@ -108,12 +113,12 @@ export function CallTargetButton({
         : nativeHelp;
   const supported = xaiVoice || (!realtimeOnly && capabilitiesReady && !capabilityHelp);
   const localVoice = localSystemVoiceActive();
-  const configured = xaiVoice || localVoice || Boolean(state.config?.tts?.configured);
+  const configured = xaiVoice || localVoice || Boolean(tts?.configured);
   const everyTargetHasVoice = voices.length > 0 && voices.every((voice) => Boolean(voice));
   const voiceReady =
     xaiVoice ||
     localVoice ||
-    (configured && (requireExplicitVoices ? everyTargetHasVoice : Boolean(state.config?.tts?.ready || everyTargetHasVoice)));
+    (configured && (requireExplicitVoices ? everyTargetHasVoice : Boolean(tts?.ready || everyTargetHasVoice)));
   const unavailable = !active && (realtimeOnly ? !xaiVoice : (!capabilitiesReady && !xaiVoice) || !supported || !voiceReady);
   const voiceSetupRequired = realtimeOnly ? !xaiVoice : capabilitiesReady && supported && !voiceReady;
   const [helpOpen, setHelpOpen] = useState(false);
@@ -224,7 +229,7 @@ export function CallTargetButton({
               onClick={() => {
                 setHelpOpen(false);
                 // A room's member opens on its main thread when threads are hidden.
-                const setupBot = setupBotId && setupBotId !== targetId ? state.bots.find((candidate) => candidate.id === setupBotId) : undefined;
+                const setupBot = setupBotId && setupBotId !== targetId ? getState().bots.find((candidate) => candidate.id === setupBotId) : undefined;
                 if (setupBot) openBot(dispatch, setupBot, showThreads);
                 dispatch({ type: "toggleSettings", open: true, section: "voice" });
               }}
@@ -244,9 +249,9 @@ export function CallTargetButton({
  * whoever started it (the app's call button or the desktop mascot). The
  * app's pill and the mascot's only show it (live-call-store.ts). */
 export function CallEngineHost() {
-  const { state } = useStore();
   const id = useOnCall();
-  const bot = id ? state.bots.find((candidate) => candidate.id === id) : undefined;
+  // #3624: the bot on the line only, so another bot's frame renders nothing here
+  const bot = useStoreSelector((state) => id ? state.bots.find((candidate) => candidate.id === id) : undefined);
   const voiceMode = useVoiceModeStatus(bot?.id ?? "");
   if (!bot || voiceMode?.available !== true) return null;
   // a call is a realtime voice session (the maintainer, 2026-11-02): never text to speech

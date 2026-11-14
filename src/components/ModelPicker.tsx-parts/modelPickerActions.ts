@@ -9,7 +9,9 @@ import { windowOnlyMenuPlace } from "./ModelPickerMenu";
 type Store = ReturnType<typeof useStore>;
 
 export interface ModelPickerActionsCtx {
-  state: Store["state"];
+  /** The latest state, read when a handler runs (#3624: the picker does not
+   * subscribe to every bot). */
+  getState: () => Pick<Store["state"], "bots">;
   dispatch: Store["dispatch"];
   bot: Bot;
   choose?: { onPick: (pick: { instanceId?: string; model: string }) => void };
@@ -25,18 +27,18 @@ export interface ModelPickerActionsCtx {
 
 /** The pick / effort / auto handlers of ModelPicker (plain closures, no hooks). */
 export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
-  const { state, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll } = ctx;
+  const { getState, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll } = ctx;
   const applyToOthers = (next: ModelSelection) => {
     if (!alsoApplyTo?.length) return;
     const others = alsoApplyTo.flatMap((id) => {
       if (id === bot.id) return [];
-      const candidate = state.bots.find((item) => item.id === id);
+      const candidate = getState().bots.find((item) => item.id === id);
       return candidate ? [{ id: candidate.id, threadId: candidate.threadId, busy: candidate.busy }] : [];
     });
     for (const action of batchModelActions(others, next)) dispatch(action);
   };
 
-  const pick = (instance: typeof state.instances[number], model: string, keepOpen = false) => {
+  const pick = (instance: InstanceInfo, model: string, keepOpen = false) => {
     if (choose) {
       if (instance.policy || notAllowed(instance)) return;
       choose.onPick({ instanceId: instance.instanceId, model });

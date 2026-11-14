@@ -33,7 +33,8 @@ import { t } from "@/lib/i18n";
 import type { PinnedItem } from "@/lib/pending-question";
 import { pinnedItemsFrom } from "@/lib/pinned-waiting";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { openThread, useStore, type Bot, type Message } from "@/state/store";
+import { openThread, type Bot, type Message, type useStore } from "@/state/store";
+import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
 import type { ServedWaitingItem } from "../../../shared/waiting-items";
 import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Stepper, type Pending } from "../PendingApproval";
 import { QuestionCard } from "../QuestionCard";
@@ -121,7 +122,9 @@ export function PinnedWaitingCard({
   onCancelTurn: () => void;
   locale?: string;
 }) {
-  const { dispatch, state } = useStore();
+  // #3624: the state is read when the person jumps, never subscribed to
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
   const showThreads = useShowThreads();
   const { items, index, current, go, collapsed, setCollapsed } = pinned;
   if (!current) return null;
@@ -150,7 +153,7 @@ export function PinnedWaitingCard({
   // #3543: an item this app cannot draw opens its conversation first (when
   // it sits in another one), then lands on its message
   const jump = () => {
-    if (current.kind === "other" && current.threadId && current.threadId !== threadId) openThread(dispatch, { botId: current.item.botId, threadId: current.threadId }, state, showThreads);
+    if (current.kind === "other" && current.threadId && current.threadId !== threadId) openThread(dispatch, { botId: current.item.botId, threadId: current.threadId }, getState(), showThreads);
     if (messageId) dispatch({ type: "focusMessage", threadId: askedIn, messageId });
   };
   const jumpButton = messageId || current.kind === "other" ? (

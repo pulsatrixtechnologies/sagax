@@ -9,7 +9,8 @@ import { openTeamBotFromThread, teamBotSourceAllowed } from "@/lib/teambot-from-
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronLeft, Layers, MessagesSquare, MoreHorizontal, Plus, Search } from "lucide-react";
 import { backgroundThreads, personThreads } from "../../shared/background-threads";
-import { api, useStore, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
+import { api, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
 import { moveFolder } from "@/lib/folder-order";
 import { folderUnreadThreadIds, markFolderRead, markGroupFolderRead } from "@/lib/folder-read";
@@ -559,11 +560,17 @@ function ConversationTaskPicker({
 /** The conversation a thread chip left behind. Shown in the chat column,
  * threads on or off, until that conversation is on screen again. */
 export function ThreadReturnLink({ ownerId, threadId }: { ownerId: string; threadId: string }) {
-  const { state, dispatch } = useStore();
-  const back = state.threadReturn;
+  const dispatch = useStoreDispatch();
+  // #3624: the way back and its owner only, not every store change
+  const { back, bot, group } = useStoreSelector((state) => {
+    const back = state.threadReturn;
+    return {
+      back,
+      bot: back ? state.bots.find((candidate) => candidate.id === back.ownerId) : undefined,
+      group: back ? state.groups?.find((candidate) => candidate.id === back.ownerId) : undefined,
+    };
+  }, shallowEqual);
   if (!back || (back.ownerId === ownerId && back.threadId === threadId)) return null;
-  const bot = state.bots.find((candidate) => candidate.id === back.ownerId);
-  const group = state.groups?.find((candidate) => candidate.id === back.ownerId);
   const title = (bot ?? group)?.tasks?.find((task) => task.threadId === back.threadId)?.title;
   return (
     <div className="flex shrink-0 items-center px-5 py-1" data-thread-return>
@@ -591,7 +598,7 @@ export function ThreadReturnLink({ ownerId, threadId }: { ownerId: string; threa
  * open thread is not their latest one (an untouched extra thread, or an
  * older sibling opened from the activity picker). Never creates a thread. */
 export function ThreadsOffReturnLink({ bot }: { bot: Bot }) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   const showThreads = useShowThreads();
   if (showThreads) return null;
   const target = threadsOffReturnTarget(bot);
@@ -627,7 +634,9 @@ export function botPickerBackground(bot: Pick<Bot, "tasks">): Task[] {
 }
 
 export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen?: boolean }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  // #3624: the settings it reads, not every store change
+  const config = useStoreSelector((state) => state.config);
   // In the chat header mode only (useThreadsMode): the sidebar mode lists a
   // bot's threads under its row instead, and one conversation has none.
   const threadsMode = useThreadsMode();
@@ -642,7 +651,7 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
       void copyText(threadRefUrl({ botId: bot.id, threadId }));
     },
     onMakeConfidential: (threadId) => dispatch({ type: "makeTaskConfidential", botId: bot.id, threadId }),
-    onRegenerateTitle: llmThreadTitlesEnabled(state.config)
+    onRegenerateTitle: llmThreadTitlesEnabled(config)
       ? (threadId, onSettled) => dispatch({ type: "regenerateTaskTitle", botId: bot.id, threadId, onSettled })
       : undefined,
     onArchive: (threadId, archivedAt) => dispatch({ type: "updateTask", botId: bot.id, threadId, patch: { archivedAt } }),
@@ -687,7 +696,7 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
       busy={false}
       folders={bot.projects ?? []}
       newButton={(close) => <div className="mt-1 border-t border-popover-hairline">
-        {newThreadChoices(state.config?.confidentialThreadsByDefault === true).map((kind) =>
+        {newThreadChoices(config?.confidentialThreadsByDefault === true).map((kind) =>
           <NewThreadButton key={kind.label} bot={bot} kind={kind} onCreated={close} className="w-full rounded-none" />)}
       </div>}
       onNew={() => dispatch({ type: "newTask", botId: bot.id })}
@@ -709,7 +718,7 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
  * transcript is the private bot-to-bot exchange rather than user work. Like
  * the bot's, it shows only while threads are on (Settings > Appearance). */
 export function GroupTaskPicker({ group }: { group: Group }) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   // each thread of a room works on its own: its row says so, not the room
   const tasks = useMemo(() => {
     return (group.tasks ?? []).map((task) => ({
@@ -745,7 +754,7 @@ export function GroupTaskPicker({ group }: { group: Group }) {
  * would send the pair's words to a model) and no approval refresh (there is
  * no bot). */
 export function PersonThreadPicker({ group, initialOpen = false }: { group: Group; initialOpen?: boolean }) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   const threadsMode = useThreadsMode();
   const [folderSaving, setFolderSaving] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);

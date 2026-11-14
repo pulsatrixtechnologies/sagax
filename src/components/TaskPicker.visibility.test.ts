@@ -172,8 +172,11 @@ describe("way back to the conversation while threads are hidden", () => {
     expect(markup).toContain("data-thread-return");
     expect(markup).toContain("Back to conversation");
     expect(markup).toContain('title="Quiet history"');
-    const link = ThreadReturnLink({ ownerId: "pepper", threadId: "current" });
-    const button = link?.props.children;
+    // read inside a render: the link reads the store through selector hooks
+    // since the idle cost fix (#3624), so it cannot be called bare
+    let link: ReturnType<typeof ThreadReturnLink> = null;
+    renderToStaticMarkup(createElement(() => { link = ThreadReturnLink({ ownerId: "pepper", threadId: "current" }); return link; }));
+    const button = (link as ReturnType<typeof ThreadReturnLink>)?.props.children;
     button.props.onClick();
     expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith({ type: "switchTask", botId: "pepper", threadId: "idle" });
     expect(renderToStaticMarkup(createElement(ThreadReturnLink, { ownerId: "pepper", threadId: "idle" }))).toBe("");

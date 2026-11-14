@@ -5,11 +5,13 @@
 //
 // The web view only ever loads this server's preview wrapper (and the frame
 // under it) with this phone's bearer, or, in the demo, a document drawn on
-// the phone. It has no bridge to the app: the one thing it may hand back is
-// how far down the reader is, read by a script in an isolated content world
-// (the page's own scripts cannot see it) from a `sagax-page-scroll` message
-// posted by the page's frame, checked again here as a whole number. Nothing
-// from the page is ever read as an instruction.
+// the phone. Scripts in isolated content worlds (the page's own scripts
+// cannot see them) hand back how far down the reader is (a
+// `sagax-page-scroll` message posted by the page's frame, checked again here
+// as a whole number) and, for a page that declares capabilities, the frame's
+// capability calls and links to its broker (#3413 lot 8, PageCapBridge),
+// which answers them with this phone's session. Nothing from the page is
+// ever read as an instruction.
 import CompanionCore
 import SwiftUI
 import WebKit
@@ -101,11 +103,15 @@ struct PageWebView: UIViewRepresentable {
     var dark = false
     /// The reader scrolled: the place, a whole number of pixels.
     var onPlace: ((Int) -> Void)?
+    /// The page's capability broker and the relay that posts its answers
+    /// (the server's preview wrapper only, never the demo's document).
+    var capabilities: PageCapabilityBroker?
+    var relay: PageCapRelay?
 
     static let placeWorld = "sagax-page-place"
     static let placeHandler = "sagaxPagePlace"
 
-    func makeCoordinator() -> Coordinator { Coordinator(apiBase: apiBase, onPlace: onPlace) }
+    func makeCoordinator() -> Coordinator { Coordinator(apiBase: apiBase, onPlace: onPlace, capabilities: capabilities) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -120,7 +126,15 @@ struct PageWebView: UIViewRepresentable {
             controller.add(WeakPlaceHandler(context.coordinator), contentWorld: world, name: Self.placeHandler)
             controller.addUserScript(WKUserScript(source: Self.placeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: world))
         }
+        if capabilities != nil, case .request = source {
+            // its own isolated world: the page's scripts never see the broker's handler
+            let world = WKContentWorld.world(name: PageCapBridge.world)
+            let controller = config.userContentController
+            controller.add(WeakCapsHandler(context.coordinator), contentWorld: world, name: PageCapBridge.handler)
+            controller.addUserScript(WKUserScript(source: PageCapBridge.script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: world))
+        }
         let view = WKWebView(frame: .zero, configuration: config)
+        relay?.webView = view
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
         view.isOpaque = false
@@ -135,6 +149,11 @@ struct PageWebView: UIViewRepresentable {
 
     func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.onPlace = onPlace
+        if context.coordinator.capabilities !== capabilities {
+            context.coordinator.capabilities = capabilities
+            capabilities?.start()
+        }
+        relay?.webView = view
         apply(view)
         context.coordinator.load(source, drawID: drawID, into: view)
     }
@@ -169,13 +188,15 @@ struct PageWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let apiBase: URL?
         var onPlace: ((Int) -> Void)?
+        var capabilities: PageCapabilityBroker?
         private var loaded: PageWebSource?
         private var loadedDraw = -1
         private var htmlPlace = 0
 
-        init(apiBase: URL?, onPlace: ((Int) -> Void)?) {
+        init(apiBase: URL?, onPlace: ((Int) -> Void)?, capabilities: PageCapabilityBroker?) {
             self.apiBase = apiBase
             self.onPlace = onPlace
+            self.capabilities = capabilities
         }
 
         func load(_ source: PageWebSource, drawID: Int, into view: WKWebView) {
@@ -196,7 +217,21 @@ struct PageWebView: UIViewRepresentable {
             onPlace?(y)
         }
 
+        /// A capability call, a hello or a link from the page's frame.
+        func receiveCapability(_ body: Any) {
+            guard let broker = capabilities, let (message, fromClick) = PageCapBridge.parse(body) else { return }
+            Task { @MainActor in
+                if PageCapRules.openMessage(message) != nil {
+                    await broker.receiveOpen(message)
+                } else {
+                    await broker.receive(message, fromClick: fromClick)
+                }
+            }
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // the broker listens: the frame's queued calls go now
+            if case .request = loaded { capabilities?.start() }
             // the demo's document keeps its place itself (no frame script)
             if case .html = loaded, htmlPlace > 0 {
                 webView.evaluateJavaScript("window.scrollTo(0,\(htmlPlace))", in: nil, in: .world(name: PageWebView.placeWorld))
@@ -216,6 +251,15 @@ struct PageWebView: UIViewRepresentable {
         /// No window the page opens (target=_blank, window.open).
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
             nil
+        }
+    }
+
+    /// The capability handler, weak like the place handler.
+    private final class WeakCapsHandler: NSObject, WKScriptMessageHandler {
+        weak var coordinator: Coordinator?
+        init(_ coordinator: Coordinator) { self.coordinator = coordinator }
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            coordinator?.receiveCapability(message.body)
         }
     }
 

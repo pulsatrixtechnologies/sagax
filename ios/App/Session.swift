@@ -1293,6 +1293,8 @@ final class Session: ObservableObject {
         if let longCount = LongTranscript.previewCount(in: ProcessInfo.processInfo.arguments) {
             applyLongTranscriptPreview(count: longCount)
         }
+        // -open-page and the capability strip captures (#3413): the conversation with the page card
+        if PageDebugLaunch.capsSample || ProcessInfo.processInfo.arguments.contains("-open-page") { openBot(id: "demo-atlas") }
 #endif
         status = .live
         // the demo asks for the terms too, and answers Report and Block

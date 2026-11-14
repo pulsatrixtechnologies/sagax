@@ -97,6 +97,9 @@ describe("held steers across restart", () => {
     expect(second.body.steered).toBe(true);
     await waitUntil("held journal", () => listHeldSteers(server.dataDir).some((row) => row.text.includes(marker)));
     await server.restart("SIGTERM");
+    // A graceful stop, on every platform: the server ended on its own, not
+    // killed after the grace (a SIGTERM is a kill on Windows, #3812).
+    expect(server.lastExit).toEqual({ code: 0, signal: null });
     await waitUntil("resume activity", async () => {
       const messages = await server.api("GET", `/api/threads/${bot.threadId}/messages?limit=100`);
       return (messages.body.messages as any[]).some((message) => message.kind === "activity" && message.tool?.name === "Resuming after a restart");

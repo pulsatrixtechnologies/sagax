@@ -4,6 +4,8 @@
 // startup failure (that behavior is what makes settings forward/backward
 // compatible — do not remove it); dispose tears an instance down without
 // touching its siblings.
+// The timers module's own function: a test's fake timers replace the global one only.
+import { setImmediate as nextLoopTurn } from "node:timers/promises";
 import { findCliCandidates } from "../env-path.ts";
 import { installNpmEngine, npmAvailable, serverInstallFor } from "../engines/engine-install.ts";
 import type {
@@ -445,6 +447,15 @@ export class ProviderRegistry {
       return found;
     };
     const npmPresent = this.npmPresent();
+    // #3598: a status read may start the engine's CLI. One stretch that starts a process per engine stops the
+    // loop for the sum of those starts, so each engine's read begins one loop turn after the one before it.
+    let started = 0;
+    let lastStart: Promise<unknown> | undefined;
+    const ownLoopTurn = (): Promise<unknown> | null => {
+      if (started++ === 0) return null;
+      lastStart = lastStart ? lastStart.then(() => nextLoopTurn()) : nextLoopTurn();
+      return lastStart;
+    };
     return Promise.all(
       this.entries().map(async (entry) => {
         const driver = this.driversByKind.get(entry.shadow?.driverKind ?? entry.live!.driverKind);
@@ -467,6 +478,8 @@ export class ProviderRegistry {
           };
         }
         const inst = entry.live;
+        const turn = ownLoopTurn();
+        if (turn) await turn;
         const snapshot = await statusOf(inst);
         return {
           instanceId: inst.instanceId,

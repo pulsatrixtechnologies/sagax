@@ -24,7 +24,8 @@
  * case=form (#4234): a routine run's form drawn at its row, see FORM.
  * case=problem-rows (#4161): every kind of a routine's problem row in one
  * chat, beside the bot's bubbles and a result that ran fine.
- * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|streak-failed|daily-first|proactive|watch-wake|form|problem-rows&state=before|after */
+ * case=row-kinds (#4275): every kind of a routine's row, see ROW_KINDS.
+ * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|streak-failed|daily-first|proactive|watch-wake|form|problem-rows|row-kinds&state=before|after */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -203,7 +204,22 @@ const PROBLEM_ROWS: Message[] = [
   // a result that ran fine, the conforming neighbour: the reference's line
   run("done", 50, { routineName: say("Morning brief", "Briefing du matin"), status: "completed", summary: say("Three meetings today, the first at nine.", "Trois réunions aujourd'hui, la première à neuf heures."), brief: say("Three meetings today, the first at nine.", "Trois réunions aujourd'hui, la première à neuf heures.") }),
 ];
-const messages = which === "form" ? FORM : which === "problem-rows" ? PROBLEM_ROWS : which === "chat" ? CHAT : which === "streak-failed" ? STREAK_FAILED : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
+/** #4275: every kind of a routine's row the chat draws, in one chat, so the
+ * way to open a run's details reads the same on each: a result that ran
+ * fine, a result that waits on the person, a run waiting on someone and a
+ * running run with a long name (at a narrow width its state word is whole
+ * or absent, never a stub). A single failure and a pass with nothing to
+ * report are not drawn in the chat (#3695, #3990: they stay in the run
+ * log); a failure reaches the chat as its streak's summary, case=problem-rows. */
+const ROW_KINDS: Message[] = [
+  person("u1", 0, say("What ran this morning?", "Qu'est-ce qui a roulé ce matin ?")),
+  run("k-done", 30, { routineName: say("Morning brief", "Briefing du matin"), status: "completed", summary: say("Three meetings today, the first at nine.", "Trois réunions aujourd'hui, la première à neuf heures."), brief: say("Three meetings today, the first at nine.", "Trois réunions aujourd'hui, la première à neuf heures.") }),
+  { ...run("k-needs", 40, { routineName: say("Invoice review", "Revue des factures"), status: "completed", summary: say("Two invoices wait for your approval.", "Deux factures attendent ton approbation."), brief: say("Two invoices wait for your approval.", "Deux factures attendent ton approbation.") }),
+    attention: { kind: "human", items: [{ text: say("Approve invoice 1042", "Approuver la facture 1042") }], botId: "atlas", botName: "Atlas", threadId: "t-atlas", sourceMessageId: "m-needs" } } as Message,
+  run("k-waiting", 50, { routineName: say("Supplier follow-up", "Suivi des fournisseurs"), status: "waiting", attention: say("Waits for your answer", "Attend ta réponse") }),
+  run("k-running", 80, { routineName: LONG_NAME, status: "running", startedAt: at + 79 * M }),
+];
+const messages = which === "form" ? FORM : which === "problem-rows" ? PROBLEM_ROWS : which === "row-kinds" ? ROW_KINDS : which === "chat" ? CHAT : which === "streak-failed" ? STREAK_FAILED : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
 
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {

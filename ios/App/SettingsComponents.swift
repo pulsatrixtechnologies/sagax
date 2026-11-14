@@ -3,38 +3,53 @@
 // shared tokens; these parts are specific to the sheet's pages: the page
 // frame with its glass header, the grouped card rows, and the safari and
 // mail sheets the link rows open.
+import CompanionCore
 import MessageUI
 import SafariServices
 import SwiftUI
 import UIKit
 
+/// The sheet's measures (#4103): the bot panel's card, row and type
+/// (`Theme.PhonePanel`, #4101) and the sheet's own (`PhoneSheetMetrics`),
+/// measured on the reference app's sheets.
 enum SettingsMetrics {
-    /// Glass circle: 17.33 pt in from the sheet's left and top edges.
-    static let headerInset: CGFloat = 17.33
-    /// Floating sticky header height: inset + sheet glass circle (measure-settings).
-    /// Content and the top scroll-edge fade clear this so the first card and
-    /// its labels are never covered by the title (Lot 8 display hygiene).
-    static let headerClearance: CGFloat = headerInset + GlassCircleButton.Size.sheet.rawValue
-    /// Top scroll-edge fade over the sticky header (123.67 → 201 ≈ 78 pt).
+    /// The round control: 17 pt in from the sheet's leading and top edges.
+    static let headerInset = CGFloat(PhonePanelMetrics.margin)
+    /// The floating header's height: content and the top scroll-edge fade
+    /// clear it, so no first row sits under the control.
+    static let headerClearance: CGFloat = headerInset + GlassCircleButton.Size.large.rawValue
     static let headerFadeHeight: CGFloat = 78
-    /// First card top, from the sheet top (213.84 - 123.67). Clears the sticky
-    /// header so Identity's "Name" (and every other first row) stays readable.
-    static let firstCardTop: CGFloat = 90.17
-    /// Title ink starts 16.67 pt after the circle (x 84 on screen).
-    static let titleGap: CGFloat = 15.67
-    static let cardMargin: CGFloat = 15.17
-    static let rowInset: CGFloat = 17.5
-    static let trailingInset: CGFloat = 17.2
-    /// Chevron ink ends 21.2 pt before the card's trailing edge.
-    static let chevronTrailing: CGFloat = 21.17
-    static let cardGap: CGFloat = 27
-    /// Previous card bottom to the next card top when a label sits between.
-    static let labelledGap: CGFloat = 48.67
+    /// The page's coordinate space: a view in the list reads where it sits
+    /// against the floating header (the root's search).
+    static let sheetSpace = "settings-sheet"
+    /// The first card's top, from the sheet's top.
+    static let firstCardTop = CGFloat(PhoneSheetMetrics.firstCard)
+    /// A title beside the control starts this far after it.
+    static let titleGap = CGFloat(PhoneSheetMetrics.appsTitleGap)
+    static let cardMargin = Theme.PhonePanel.margin
+    /// Text, values and switches sit 20 pt from the card's edges.
+    static let rowInset = Theme.PhonePanel.textInset
+    static let trailingInset = Theme.PhonePanel.textInset
+    /// The chevron's ink ends 24 pt before the card's trailing edge.
+    static let chevronTrailing = Theme.PhonePanel.chevronTrailing
+    static let cardGap = CGFloat(PhoneSheetMetrics.cardGap)
+    /// Previous card bottom to the next card top when a group title sits between.
+    static let labelledGap = CGFloat(PhoneSheetMetrics.titledGap) + 14.3 + Theme.PhonePanel.titleToCard
     static let footerGap: CGFloat = 30.3
-    /// The references set 13.5 pt text about 1% tighter than SwiftUI does.
-    static let tracking135: CGFloat = -0.05
-    /// The sheet's top corners (reference app's account sheet).
+    static let tracking135: CGFloat = 0
+    /// The sheet's top corners.
     static let sheetRadius: CGFloat = 38
+    /// A one-line row, the person's row, a two-line row's padding.
+    static let row = Theme.PhonePanel.row
+    static let personRow = CGFloat(PhoneSheetMetrics.personRow)
+    static let twoLinePadding = CGFloat(PhoneSheetMetrics.twoLinePadding)
+    static let lineGap = CGFloat(PhoneSheetMetrics.lineGap)
+    static let valueGap = CGFloat(PhoneSheetMetrics.valueGap)
+    /// A leading glyph (+, the bin) at the text inset, its words 50 pt in.
+    static let glyphColumn: CGFloat = 30
+
+    static var rowFont: Font { Theme.PhonePanel.rowFont }
+    static var subtitleFont: Font { Theme.font(CGFloat(PhoneSheetMetrics.subtitleSize)) }
 }
 
 // MARK: - Page
@@ -74,6 +89,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             .clipShape(SettingsSheetShape())
             header
         }
+        .coordinateSpace(name: SettingsMetrics.sheetSpace)
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -93,13 +109,14 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             HStack(spacing: 0) {
                 switch leading {
                 case let .close(action):
-                    GlassCircleButton(systemImage: "xmark", size: .sheet, accessibilityLabel: "Close", action: action)
+                    GlassCircleButton(systemImage: "xmark", size: .large, accessibilityLabel: "Close", action: action)
+                        .chatGlassRim(Circle())
                         .accessibilityIdentifier("settings-close")
                 case .back:
-                    GlassCircleButton(systemImage: "chevron.left", size: .sheet, accessibilityLabel: "Back", glyphOffset: CGSize(width: 1, height: 0)) {
+                    // the panel's back control: one round control for the phone
+                    ProfileBackButton(identifier: "settings-back") {
                         if let settingsPop { settingsPop() } else { dismiss() }
                     }
-                        .accessibilityIdentifier("settings-back")
                 }
                 if trailingFills {
                     trailing()
@@ -112,12 +129,11 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             }
             if let title {
                 Text(title)
-                    .font(Theme.Font.headerTitle)
-                    .tracking(SettingsMetrics.tracking135)
+                    .font(Theme.PhonePanel.titleBarFont)
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                    .padding(.horizontal, GlassCircleButton.Size.sheet.rawValue + 20)
+                    .padding(.horizontal, GlassCircleButton.Size.large.rawValue + 20)
                     .allowsHitTesting(false)
                     .accessibilityAddTraits(.isHeader)
             }
@@ -168,60 +184,48 @@ extension SettingsPage where Trailing == EmptyView {
 
 // MARK: - Cards
 
-/// A grouped card at the sheet's margins (x 23.17 to 378.5 on screen).
+/// A grouped card at the sheet's margin: the bot panel's card (#4101),
+/// with its faint outline, so the phone has one grouped card (#4103).
 struct SettingsCard<Content: View>: View {
-    @Environment(\.themePalette) var themePalette
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(spacing: 0, content: content)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-            // The reference app's cards carry a hairline edge (2026-11-01)
-            .overlay(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 1))
-            .padding(.horizontal, SettingsMetrics.cardMargin)
+        ProfileCard(margin: SettingsMetrics.cardMargin, content: content)
+            .environment(\.profileCardOutlined, true)
     }
 }
 
-/// The grey 11 pt label above a card ("Bot", "Switch Account"): card bottom
-/// to label cap top 30.2, label baseline to card top 10.5.
+/// The muted group title above a card ("Bot", "Switch Account"): the bot
+/// panel's group title (#4101) at the card's text inset, in the gap the
+/// sheet keeps between two cards.
 struct SettingsSectionLabel: View {
     @Environment(\.themePalette) var themePalette
     let text: LocalizedStringKey
 
     var body: some View {
-        Text(text)
-            .font(Theme.Font.label)
-            .foregroundStyle(Theme.textTertiary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 32.67)
-            .padding(.bottom, 7.85)
+        PanelGroupTitle(text: text)
+            .padding(.horizontal, SettingsMetrics.cardMargin)
             .frame(height: SettingsMetrics.labelledGap, alignment: .bottom)
     }
 }
 
-/// The grey explanation under a card: cap top 10.7 below it, 14 pt lines.
+/// The muted sentence under a card: the bot panel's footnote (#4101).
 struct SettingsFooter: View {
     @Environment(\.themePalette) var themePalette
     let text: LocalizedStringKey
 
     var body: some View {
-        Text(text)
-            .font(Theme.Font.label)
-            .foregroundStyle(Theme.textTertiary)
-            .lineSpacing(0.87)
+        PanelFootnote(text: text)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 32.67)
-            .padding(.trailing, 30)
-            .padding(.top, 8)
-            .padding(.bottom, 27.65)
+            .padding(.horizontal, SettingsMetrics.cardMargin)
+            .padding(.bottom, SettingsMetrics.cardGap - Theme.PhonePanel.footnoteTop)
     }
 }
 
-/// A row in a settings card. Heights are the measured ones; the title and
-/// subtitle sit at the reference's baselines, a toggle tops out at +13.8 in
-/// a two-line row and is centred otherwise.
+/// A row in a settings card, the bot panel's row (#4101): 16 pt words 20 pt
+/// from the card's edges, a one-line row 52 pt high, a two-line row 15.5 pt
+/// above its title and under its muted 13 pt line, the chevron's ink 24 pt
+/// from the trailing edge, a value 15 pt before it.
 struct SettingsRow: View {
     @Environment(\.themePalette) var themePalette
     enum Accessory {
@@ -246,12 +250,8 @@ struct SettingsRow: View {
     var systemImage: String?
     var accessory: Accessory = .none
     var style: Style = .normal
-    var height: CGFloat?
     var identifier: String?
-    /// Title top inside a two-line row (the references differ by a point
-    /// between rows).
-    var textTop: CGFloat = 14.37
-    /// A picture before the title (Switch Account: each account's photo).
+    /// A picture before the title (Switch Account: another account's photo).
     var leading: AnyView?
     /// What VoiceOver and UI tests read as the row's value.
     var accessibilityValueText: String?
@@ -265,11 +265,6 @@ struct SettingsRow: View {
         }
     }
 
-    private var isNone: Bool {
-        if case .none = accessory { return true }
-        return false
-    }
-
     private var isToggle: Bool {
         if case .toggle = accessory { return true }
         return false
@@ -278,13 +273,38 @@ struct SettingsRow: View {
     private var titleText: Text { verbatimTitle.map { Text(verbatim: $0) } ?? Text(title) }
 
     var body: some View {
-        let row = Group {
-            if let subtitle {
-                twoLine(subtitle)
-            } else {
-                oneLine
+        let row = HStack(alignment: subtitle == nil ? .center : .top, spacing: 0) {
+            if let leading {
+                leading.padding(.trailing, 10)
             }
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: systemImage == "trash" ? 17 : 19, weight: .light))
+                    .foregroundStyle(titleColor)
+                    .frame(width: SettingsMetrics.glyphColumn, alignment: .leading)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: SettingsMetrics.lineGap) {
+                titleText
+                    .font(SettingsMetrics.rowFont)
+                    .foregroundStyle(titleColor)
+                    .lineLimit(subtitle == nil ? 1 : 2)
+                if let subtitle {
+                    Text(verbatim: AppStrings.localized(subtitle))
+                        .font(SettingsMetrics.subtitleFont)
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 12)
+            trailing
+                .frame(maxHeight: subtitle == nil || !isToggle ? .infinity : nil)
         }
+        .padding(.leading, SettingsMetrics.rowInset)
+        .padding(.trailing, trailingPadding)
+        .padding(.vertical, subtitle == nil ? 0 : SettingsMetrics.twoLinePadding)
+        .frame(minHeight: SettingsMetrics.row)
         .contentShape(Rectangle())
 
         if let action, !isToggle {
@@ -305,78 +325,9 @@ struct SettingsRow: View {
         }
     }
 
-    private var oneLine: some View {
-        HStack(spacing: 0) {
-            if let leading {
-                leading.padding(.trailing, 10)
-            }
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: systemImage == "trash" ? 15.5 : 17.8, weight: .regular))
-                    .foregroundStyle(titleColor)
-                    .frame(width: 18, alignment: .leading)
-                    .padding(.trailing, 9)
-            }
-            titleText
-                .font(Theme.Font.rowTitle)
-                .tracking(SettingsMetrics.tracking135)
-                .foregroundStyle(titleColor)
-                .lineLimit(1)
-            Spacer(minLength: 12)
-            trailing
-        }
-        // Centred text sits a pixel low against the references.
-        .offset(y: isToggle ? 0 : -0.33)
-        .padding(.leading, SettingsMetrics.rowInset)
-        .padding(.trailing, trailingPadding)
-        .frame(height: height ?? (isToggle ? Theme.Metric.toggleRowHeight : 43.5))
-    }
-
-    private func twoLine(_ subtitle: String) -> some View {
-        // The text column runs to a fixed gap before the control, whatever
-        // the control's own sizing says, so lines wrap where the
-        // reference's do.
-        VStack(alignment: .leading, spacing: 2.3) {
-            titleText
-                .font(Theme.Font.rowTitle)
-                .tracking(SettingsMetrics.tracking135)
-                .foregroundStyle(titleColor)
-            WrappingLabel(text: AppStrings.localized(subtitle), size: 11, color: UIColor(Theme.textSecondary), lineHeight: 14)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, textTop)
-        .padding(.bottom, 14)
-        .padding(.leading, SettingsMetrics.rowInset)
-        .padding(.trailing, trailingPadding + trailingReserve)
-        .frame(height: height, alignment: .top)
-        .frame(minHeight: height == nil ? Theme.Metric.subtitleRowHeight : nil, alignment: .top)
-        .overlay(alignment: isToggle ? .topTrailing : .trailing) {
-            trailing
-                .padding(.top, isToggle ? 13.8 : 0)
-                .padding(.trailing, trailingPadding)
-        }
-    }
-
-    /// Room kept for the trailing control beside two-line text.
-    private var trailingReserve: CGFloat {
-        switch accessory {
-        case .none: 0
-        case .toggle: 60.33 + 4
-        case .progress: 28
-        // The value's own width plus the chevron, so a subtitle wraps
-        // before "5 min" instead of running under it.
-        case let .valueChevron(text):
-            40 + ceil((text as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 13.5)]).width) + 11.67
-        default: 40
-        }
-    }
-
     private var trailingPadding: CGFloat {
         switch accessory {
-        case .chevron, .valueChevron, .external: SettingsMetrics.chevronTrailing - 4
-        case .check: 16.5
-        case .value: 17.83
-        case .none: 16
+        case .chevron, .valueChevron, .external: SettingsMetrics.chevronTrailing
         default: SettingsMetrics.trailingInset
         }
     }
@@ -388,43 +339,36 @@ struct SettingsRow: View {
         case .chevron:
             SettingsChevron()
         case let .value(text):
-            Text(verbatim: text).font(Theme.Font.rowTitle).tracking(SettingsMetrics.tracking135).foregroundStyle(Theme.textSecondary).lineLimit(1)
+            Text(verbatim: text).font(SettingsMetrics.rowFont).foregroundStyle(Theme.textSecondary).lineLimit(1)
         case let .valueChevron(text):
-            HStack(spacing: 11.67) {
-                Text(verbatim: text).font(Theme.Font.rowTitle).tracking(SettingsMetrics.tracking135).foregroundStyle(Theme.textSecondary).lineLimit(1)
+            HStack(spacing: SettingsMetrics.valueGap) {
+                Text(verbatim: text).font(SettingsMetrics.rowFont).foregroundStyle(Theme.textSecondary).lineLimit(1)
                 SettingsChevron()
             }
         case let .toggle(binding):
             Toggle("", isOn: binding)
                 .labelsHidden()
-                .toggleStyle(ParityToggleStyle())
+                .toggleStyle(ParityToggleStyle(width: Theme.PhonePanel.switchSize.width, height: Theme.PhonePanel.switchSize.height))
                 .accessibilityLabel(titleText)
                 .accessibilityIdentifier((identifier ?? "") + ".toggle")
         case .check:
             Image(systemName: "checkmark")
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(Theme.textPrimary)
         case .progress:
             ProgressView().controlSize(.small).tint(Theme.textSecondary)
         case .external:
             Image(systemName: "arrow.up.right")
-                .font(.system(size: 14, weight: .regular))
+                .font(.system(size: 17, weight: .light))
                 .foregroundStyle(Theme.chevron)
-                .padding(.trailing, 1)
                 .accessibilityHidden(true)
         }
     }
 }
 
-/// `chevron.right` in #6B6A6D: ink 6.67 x 11.67.
+/// The row's chevron: the bot panel's (#4101).
 struct SettingsChevron: View {
-    @Environment(\.themePalette) var themePalette
-    var body: some View {
-        Image(systemName: "chevron.right")
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Theme.chevron)
-            .padding(.trailing, 3.67)
-    }
+    var body: some View { ProfileChevron() }
 }
 
 /// A row press shows as a faint lift instead of the system's grey flash.
@@ -449,7 +393,9 @@ struct AccountPhoto: View {
             if let photo {
                 Image(uiImage: photo).resizable().scaledToFill()
             } else {
-                ProfileAvatar(name: name, size: size)
+                // the app's one initials avatar, muted as the reference
+                // draws it (#4103)
+                PersonAvatar(initials: People.initials(name), size: size, muted: true)
             }
         }
         .frame(width: size, height: size)
@@ -458,7 +404,9 @@ struct AccountPhoto: View {
     }
 }
 
-/// The profile row (65.33): photo, name over email, optional chevron.
+/// The person's row (#4103): an 89 pt row, the 42 pt round photo or
+/// initials 20 pt into the card, the name in 16 pt and the lines under it
+/// (mail, organization) in muted 13 pt, an optional chevron.
 struct AccountCardRow: View {
     @Environment(\.themePalette) var themePalette
     let name: String
@@ -469,27 +417,26 @@ struct AccountCardRow: View {
 
     var body: some View {
         let row = HStack(spacing: 0) {
-            AccountPhoto(photo: photo, name: name)
-            VStack(alignment: .leading, spacing: 1.2) {
+            AccountPhoto(photo: photo, name: name, size: CGFloat(PhoneSheetMetrics.avatar))
+            VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: name)
-                    .font(Theme.Font.rowTitle)
-                    .tracking(SettingsMetrics.tracking135)
+                    .font(SettingsMetrics.rowFont)
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                 if let detail {
                     Text(verbatim: detail)
-                        .font(Theme.Font.label)
+                        .font(SettingsMetrics.subtitleFont)
                         .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
-            .padding(.leading, 9.8)
+            .padding(.leading, CGFloat(PhoneSheetMetrics.avatarGap))
             Spacer(minLength: 12)
             if chevron { SettingsChevron() }
         }
         .padding(.leading, SettingsMetrics.rowInset)
-        .padding(.trailing, SettingsMetrics.chevronTrailing - 4)
-        .frame(height: 65.33)
+        .padding(.trailing, chevron ? SettingsMetrics.chevronTrailing : SettingsMetrics.trailingInset)
+        .frame(minHeight: SettingsMetrics.personRow)
         .contentShape(Rectangle())
 
         if let action {
@@ -594,6 +541,44 @@ struct ScrollOffsetSetter: UIViewRepresentable {
     func updateUIView(_ view: UIView, context: Context) {}
 }
 
+/// Tells when the person starts dragging the scroll view it sits in, so a
+/// list that settles itself while it opens stops as soon as it is theirs.
+/// It watches the scroll view's own pan: no gesture of its own competes
+/// with the scroll.
+struct ScrollDragProbe: UIViewRepresentable {
+    let onDrag: () -> Void
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.isUserInteractionEnabled = false
+        view.onDrag = onDrag
+        return view
+    }
+
+    func updateUIView(_ view: ProbeView, context: Context) {
+        view.onDrag = onDrag
+    }
+
+    final class ProbeView: UIView {
+        var onDrag: (() -> Void)?
+        private weak var scroll: UIScrollView?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            var view = superview
+            while let current = view, !(current is UIScrollView) { view = current.superview }
+            guard let found = view as? UIScrollView, found !== scroll else { return }
+            scroll?.panGestureRecognizer.removeTarget(self, action: #selector(panned(_:)))
+            found.panGestureRecognizer.addTarget(self, action: #selector(panned(_:)))
+            scroll = found
+        }
+
+        @objc private func panned(_ pan: UIPanGestureRecognizer) {
+            if pan.state == .began { onDrag?() }
+        }
+    }
+}
+
 // MARK: - Text
 
 /// The app's own strings in the language chosen in Settings (or the
@@ -607,48 +592,6 @@ enum AppStrings {
             return bundle.localizedString(forKey: key, value: key, table: nil)
         }
         return Bundle.main.localizedString(forKey: key, value: key, table: nil)
-    }
-}
-
-/// Multi-line text that wraps greedily, as UIKit labels do. SwiftUI's
-/// `Text` moves a word down to avoid a one-word last line, which the
-/// references do not.
-struct WrappingLabel: UIViewRepresentable {
-    let text: String
-    let size: CGFloat
-    let color: UIColor
-    /// Baseline to baseline.
-    let lineHeight: CGFloat
-
-    func makeUIView(context: Context) -> UILabel {
-        let label = UILabel()
-        label.numberOfLines = 0
-        label.lineBreakMode = .byWordWrapping
-        label.lineBreakStrategy = []
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        label.adjustsFontForContentSizeCategory = false
-        return label
-    }
-
-    func updateUIView(_ label: UILabel, context: Context) {
-        let style = NSMutableParagraphStyle()
-        style.lineBreakMode = .byWordWrapping
-        style.lineBreakStrategy = []
-        style.minimumLineHeight = lineHeight
-        style.maximumLineHeight = lineHeight
-        let font = UIFont.systemFont(ofSize: size)
-        // Keep the first baseline where a plain label puts it.
-        let shift = (lineHeight - font.lineHeight) / 2
-        label.attributedText = NSAttributedString(string: text, attributes: [
-            .font: font, .foregroundColor: color, .paragraphStyle: style, .baselineOffset: shift > 0 ? 0 : 0,
-        ])
-        label.accessibilityLabel = text
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView label: UILabel, context: Context) -> CGSize? {
-        let width = proposal.width ?? 300
-        let fitted = label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: width, height: ceil(fitted.height * 3) / 3)
     }
 }
 

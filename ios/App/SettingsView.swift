@@ -124,6 +124,12 @@ extension EnvironmentValues {
 
 // MARK: - Root
 
+/// The root list's height, to keep its resting point as rows arrive.
+private struct SettingsRootHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 private struct SettingsRootPage: View {
     @Environment(\.themePalette) var themePalette
     let close: (() -> Void)?
@@ -133,40 +139,71 @@ private struct SettingsRootPage: View {
     @EnvironmentObject private var model: SettingsModel
     @EnvironmentObject private var navigator: SettingsNavigator
     @State private var query = ""
-    @State private var searching = false
+    /// The search field and the gap under it, scrolled out of sight.
+    private static let searchBlock: CGFloat = 44 + SettingsMetrics.cardGap
+    private static let restingPoint = "settings-root-resting-point"
+    /// How long after opening the list follows its growing rows.
+    private static let settleWindow: TimeInterval = 4
+    @State private var openedAt = Date()
+    /// The person moved the list: it is theirs, no longer pulled back.
+    @State private var dragged = false
 
     var body: some View {
-        // The search shares the header row with the X: same height (the
-        // button's 42), centred on one line.
-        SettingsPage(
-            leading: close.map { .close($0) } ?? .back,
-            contentTop: SettingsMetrics.headerClearance + 37,
-            trailingFills: searching,
-            trailing: {
-                // The reference app's sheet has the X alone (2026-11-01): search waits
-                // behind a round button at the other corner, then takes the row.
-                if searching {
-                    SettingsSearchField(prompt: "Search", text: $query, identifier: "settings-search",
-                                        rowHeight: GlassCircleButton.Size.sheet.rawValue, autoFocus: true) {
-                        withAnimation(.snappy(duration: 0.2)) { searching = false }
+        // The reference's sheet (#4103): the round X alone at the top left,
+        // nothing at the right. The search waits above the first card,
+        // scrolled out of sight: pulling the list down shows it.
+        SettingsPage(leading: close.map { .close($0) } ?? .back, contentTop: 0) {
+            ScrollViewReader { proxy in
+                VStack(spacing: 0) {
+                    // The page's top space, cut where the list opens:
+                    // `searchBlock` into the content, so the first card lands
+                    // at its place under the X and the search waits above it.
+                    Color.clear.frame(height: Self.searchBlock)
+                    Color.clear.frame(height: SettingsMetrics.firstCardTop - Self.searchBlock)
+                        .id(Self.restingPoint)
+                    // Shown only once the list is pulled below the X: at rest
+                    // it sits under the round control, out of sight and out
+                    // of reach.
+                    GeometryReader { geo in
+                        let top = geo.frame(in: .named(SettingsMetrics.sheetSpace)).minY
+                        let shown = min(1, max(0, (top - SettingsMetrics.headerClearance) / 16))
+                        SettingsSearchField(prompt: "Search", text: $query, identifier: "settings-search")
+                            .opacity(query.isEmpty ? shown : 1)
+                            .allowsHitTesting(shown > 0.5 || !query.isEmpty)
                     }
-                } else {
-                    GlassCircleButton(systemImage: "magnifyingglass", size: .sheet, accessibilityLabel: "Search") {
-                        withAnimation(.snappy(duration: 0.2)) { searching = true }
+                    .padding(.horizontal, SettingsMetrics.cardMargin)
+                    .frame(height: Self.searchBlock - SettingsMetrics.cardGap)
+                    .padding(.bottom, SettingsMetrics.cardGap)
+                    if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        groupedRoot
+                        footer
+                    } else {
+                        SettingsSearchResults(query: query, open: open)
                     }
-                    .accessibilityIdentifier("settings-search-open")
                 }
-            }
-        ) {
-            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                groupedRoot
-                footer
-            } else {
-                SettingsSearchResults(query: query, open: open)
+                // The rows arrive as the sheet's reads finish: a list still
+                // shorter than the resting point clamps the scroll, so it is
+                // set again each time the list grows, while it opens.
+                .background {
+                    GeometryReader { geo in
+                        Color.clear.preference(key: SettingsRootHeightKey.self, value: geo.size.height)
+                    }
+                }
+                .overlay { ScrollDragProbe { dragged = true }.frame(width: 0, height: 0) }
+                .onPreferenceChange(SettingsRootHeightKey.self) { _ in
+                    guard query.isEmpty, !dragged, Date().timeIntervalSince(openedAt) < Self.settleWindow else { return }
+                    proxy.scrollTo(Self.restingPoint, anchor: .top)
+                }
+                .onAppear {
+                    openedAt = Date()
+                    dragged = false
+                    proxy.scrollTo(Self.restingPoint, anchor: .top)
+                }
             }
 #if DEBUG
             if ParityLaunch.current?.screen == .settingsBottom {
-                ScrollOffsetSetter(offset: 100_000)  // clamped to the end.frame(width: 0, height: 0)
+                ScrollOffsetSetter(offset: 100_000)  // clamped to the end
+                    .frame(width: 0, height: 0)
             }
 #endif
         }
@@ -222,7 +259,8 @@ private struct SettingsRootPage: View {
     // MARK: Search
 
     /// Opens a result through the pages that lead to it, so Back walks
-    /// up the tree.
+    /// up the tree. The Bot card's rows sit on the root (#4103); only the
+    /// approvals are one level in, under Permissions.
     private func open(_ destination: SettingsDestination) {
         let bots: [SettingsRoute] = [.bots]
         let privacy: [SettingsRoute] = [.privacySecurity]
@@ -233,24 +271,24 @@ private struct SettingsRootPage: View {
         case .achievements: navigator.sheet = .achievements
         case .notifications: navigator.routes = [.notifications]
         case .privacy, .privacySecurity: navigator.routes = privacy
-        case .experimental: navigator.routes = bots + [.experimental]
+        case .experimental: navigator.routes = [.experimental]
         case .plugins: navigator.routes = [.plugins]
         case .account: navigator.routes = [.account]
-        case .botComputer: navigator.routes = bots + [.botComputer]
+        case .botComputer: navigator.routes = [.botComputer]
         case .pages: navigator.routes = [.pages]
         case .usage: navigator.routes = [.usage]
         case .rules: navigator.routes = bots + [.rules]
         case .approvalGrants: navigator.routes = bots + [.approvalGrants]
-        case .timeZone: navigator.routes = bots + [.timeZone]
+        case .timeZone: navigator.routes = [.timeZone]
         case .language: navigator.routes = [.language]
         case .haptics: navigator.routes = [.haptics]
-        case .quickReplies: navigator.routes = bots; navigator.sheet = .quickReplies
-        case .walkieVoice: navigator.routes = bots; navigator.sheet = .walkieVoice
+        case .quickReplies: navigator.routes = []; navigator.sheet = .quickReplies
+        case .walkieVoice: navigator.routes = []; navigator.sheet = .walkieVoice
         case .about: navigator.routes = [.about]
         case .credentials: navigator.routes = [.vault]
         case .securityKeys: navigator.routes = privacy + [.securityKeys]
         case .bots: navigator.routes = bots
-        case .myEngines: navigator.routes = bots + [.myEngines]
+        case .myEngines: navigator.routes = [.myEngines]
         }
     }
 }

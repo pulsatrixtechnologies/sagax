@@ -132,9 +132,15 @@ final class ConnectAppsModel: ObservableObject {
         await load(session)
     }
 
-    /// Add or Connect on a row. Tailscale opens its own page (caller pushes).
+    /// The pill of a row or of a plugin's sheet: Add, Connect, or Authorize
+    /// (an installed server whose sign-in lapsed signs in again). Tailscale
+    /// opens its own page (caller pushes).
     func act(_ item: ConnectAppItem, alias: String?, session: Session) async {
         if item.key == tailscaleConnectAppKey { return }
+        if ConnectAppPill.of(item) == .authorize {
+            if let server = server(item.id) { await signIn(server, session: session) }
+            return
+        }
         switch item.kind {
         case .featured:
             await run(item.key, session) { client in
@@ -248,6 +254,12 @@ extension EnvironmentValues {
     }
 }
 
+/// The plugin a half sheet shows.
+struct ConnectAppSheetKey: Identifiable, Hashable {
+    let key: String
+    var id: String { key }
+}
+
 /// The whole panel: the main view and what it pushes.
 struct ConnectAppsPage: View {
     /// the tab to open on (Settings > My connections' links); nil: Discover
@@ -275,25 +287,21 @@ struct ConnectAppsPage: View {
         BotTemplatesEntry.destination(gate: session.surfaceGate) != nil
     }
 
+    /// The plugin whose half sheet is open (the phone, #4103).
+    @State private var sheetKey: ConnectAppSheetKey?
+
     var body: some View {
         NavigationStack(path: $path) {
-            ConnectAppsMain(model: model, bots: bots, botsShown: botsShown, initialTab: initialTab, openBot: openBot) { path.append($0) }
+            ConnectAppsMain(model: model, bots: bots, botsShown: botsShown, initialTab: initialTab, openBot: openBot, close: close, push: open)
                 // the desktop window's body: the app's colour, not the stack's black
                 .background { if embedded { desktopTheme.app.ignoresSafeArea() } }
-                .navigationTitle(String(localized: "Plugins"))
+                .navigationTitle(String(localized: "Connect apps"))
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar(embedded ? .hidden : .automatic, for: .navigationBar)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "Done")) {
-                            if let settingsPop { settingsPop() } else { dismiss() }
-                        }
-                        .accessibilityIdentifier("connect-apps-done")
-                    }
-                }
+                // the window has its title; the phone draws the reference's bar
+                .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: ConnectAppsRoute.self) { route in
                     switch route {
-                    case let .detail(key): ConnectAppDetail(model: model, key: key) { path.append($0) }
+                    case let .detail(key): ConnectAppDetail(model: model, key: key, push: open)
                     case let .skill(name): LibrarySkillPage(model: model, name: name)
                     case .mac: MacAppsPage { path.append($0) }
                     case .macMessages: MacMessagesSetupView()
@@ -307,22 +315,60 @@ struct ConnectAppsPage: View {
                 // the Bots tab's cards, View all, publish, the imports
                 .modifier(BrowseBotsPresenters(model: bots, open: openBot))
         }
+        // A plugin opens as the reference's half sheet over the list; what it
+        // pushes (a skill, the Mac hub) lands on the list's stack.
+        .sheet(item: $sheetKey) { sheet in
+            ConnectAppDetail(model: model, key: sheet.key, close: { sheetKey = nil }, push: open)
+                .environmentObject(session)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.hidden)
+                .sheetChromeCompat(Theme.bg, cornerRadius: CGFloat(PhoneSheetMetrics.sheetRadius))
+        }
         .tint(Theme.textPrimary)
         .environment(\.capabilitiesDesktop, embedded)
         .onValueChange(of: embeddedQuery?.wrappedValue ?? "") { value in
             if embedded { model.query = value }
         }
-        .task { model.personalScope = personalScope; await model.load(session) }
+        .task {
+            model.personalScope = personalScope
+            await model.load(session)
+            #if DEBUG
+            // `-parityConnectAppsDetail YES`: a plugin's half sheet, for the captures
+            if UserDefaults.standard.bool(forKey: "parityConnectAppsDetail"),
+               let item = model.items.first(where: { $0.installed && $0.kind != .skill }) ?? model.items.first(where: { $0.kind != .skill }) {
+                open(.detail(item.key))
+            }
+            #endif
+        }
         .onValueChange(of: personalScope) { model.personalScope = $0 }
         .task { if botsShown { await bots.load(session) } }
         // back from an authorization page in the browser
         .onValueChange(of: scenePhase) { phase in
             if phase == .active { Task { await model.load(session) } }
         }
-        .alert(String(localized: "Plugins"), isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
+        .alert(String(localized: "Connect apps"), isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
             Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(verbatim: model.message ?? "")
+        }
+    }
+
+    private func close() {
+        if let settingsPop { settingsPop() } else { dismiss() }
+    }
+
+    /// A plugin's page is a half sheet on the phone, a pushed page in the
+    /// iPad's window; every other route is pushed on the list's stack.
+    private func open(_ route: ConnectAppsRoute) {
+        if case let .detail(key) = route, !embedded {
+            sheetKey = ConnectAppSheetKey(key: key)
+            return
+        }
+        if sheetKey != nil {
+            sheetKey = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { path.append(route) }
+        } else {
+            path.append(route)
         }
     }
 
@@ -504,40 +550,92 @@ struct ConnectAppRow: View {
         .accessibilityIdentifier("connect-apps-row.\(item.key)")
     }
 
+    /// The reference's row (#4103): the 42 pt icon, the name over a muted
+    /// line of two lines at most, the pill at the trailing margin.
     private var phoneBody: some View {
-        HStack(spacing: 12) {
-            ConnectAppIcon(item: item)
+        HStack(spacing: 0) {
+            ConnectAppIcon(item: item, size: CGFloat(PhoneSheetMetrics.icon))
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: item.name)
-                    .font(.body.weight(.medium))
+                    .font(Theme.font(CGFloat(PhoneSheetMetrics.nameSize)))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                 if !item.description.isEmpty {
                     Text(verbatim: item.description)
-                        .font(.footnote)
+                        .font(Theme.font(CGFloat(PhoneSheetMetrics.lineSize)))
                         .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(PhoneSheetMetrics.lineLimit)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 8)
+            .padding(.leading, CGFloat(PhoneSheetMetrics.iconGap))
+            Spacer(minLength: 12)
             if busy {
                 ProgressView().controlSize(.small)
-            } else if let action = item.action {
-                Button(action: act) {
-                    Text(action == .add ? String(localized: "Add") : String(localized: "Connect"))
-                        .font(.footnote.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("connect-apps-action.\(item.key)")
             } else {
-                Text(verbatim: ConnectAppsWords.status(item.status))
-                    .font(.footnote)
-                    .foregroundStyle(item.status == .connected ? Theme.accentText : Theme.textSecondary)
+                ConnectAppPillButton(pill: ConnectAppPill.of(item), action: act)
+                    .accessibilityIdentifier(ConnectAppPill.of(item).acts ? "connect-apps-action.\(item.key)" : "connect-apps-status.\(item.key)")
             }
         }
+        .padding(.vertical, CGFloat(PhoneSheetMetrics.rowPadding))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("connect-apps-row.\(item.key)")
+    }
+}
+
+/// The pill of a Connect apps row and of a plugin's sheet (#4103): Add or
+/// Connect on the raised colour, Authorize in blue, a state muted.
+struct ConnectAppPillButton: View {
+    @Environment(\.themePalette) var themePalette
+    let pill: ConnectAppPill
+    var height = CGFloat(PhoneSheetMetrics.pillHeight)
+    var minWidth: CGFloat = 0
+    var textSize = CGFloat(PhoneSheetMetrics.pillTextSize)
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            Text(verbatim: title)
+                .font(Theme.font(textSize, .medium))
+                .foregroundStyle(ink)
+                .lineLimit(1)
+                .padding(.horizontal, CGFloat(PhoneSheetMetrics.pillPadding))
+                .frame(minWidth: minWidth, minHeight: height)
+                .background(fill, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        // a state is shown, not pressed
+        .allowsHitTesting(pill.acts)
+    }
+
+    private var title: String {
+        switch pill {
+        case .add: String(localized: "Add")
+        case .connect: String(localized: "Connect")
+        case .authorize: String(localized: "Authorize")
+        case let .status(status): ConnectAppsWords.status(status)
+        }
+    }
+
+    private var ink: Color {
+        switch pill {
+        case .authorize: Theme.accentInk
+        case .status: Theme.textTertiary
+        default: Theme.textPrimary
+        }
+    }
+
+    private var fill: Color {
+        switch pill {
+        case .authorize: Theme.accent
+        case .status: Theme.cardRaised.opacity(0.6)
+        default: Theme.cardRaised
+        }
     }
 }
 
@@ -553,19 +651,22 @@ struct ConnectAppsMain: View {
     let botsShown: Bool
     /// A bot opened from Bots: Connect apps closes, its chat opens.
     let openBot: (Bot) -> Void
+    /// The round X of the phone's bar.
+    let close: () -> Void
     let push: (ConnectAppsRoute) -> Void
-    @State private var expanded: Set<ConnectApps.SectionID> = []
     /// The search's groups showing every hit.
     @State private var expandedResults: Set<ConnectAppsSearchGroup> = []
     @State private var tab: ConnectAppsTab
     @Environment(\.capabilitiesDesktop) private var desktop
     @Environment(\.desktopTheme) private var theme
 
-    init(model: ConnectAppsModel, bots: BrowseBotsModel, botsShown: Bool, initialTab: ConnectAppsTab? = nil, openBot: @escaping (Bot) -> Void, push: @escaping (ConnectAppsRoute) -> Void) {
+    init(model: ConnectAppsModel, bots: BrowseBotsModel, botsShown: Bool, initialTab: ConnectAppsTab? = nil, openBot: @escaping (Bot) -> Void,
+         close: @escaping () -> Void, push: @escaping (ConnectAppsRoute) -> Void) {
         _model = ObservedObject(wrappedValue: model)
         _bots = ObservedObject(wrappedValue: bots)
         self.botsShown = botsShown
         self.openBot = openBot
+        self.close = close
         self.push = push
         _tab = State(initialValue: initialTab ?? ConnectAppsTab.launch)
     }
@@ -586,9 +687,7 @@ struct ConnectAppsMain: View {
     var body: some View {
         // one search on every tab: it looks everywhere (ConnectAppsSearch)
         Group {
-            if desktop { list } else {
-                list.searchable(text: $model.query, prompt: Text(String(localized: "Search plugins, skills, MCP servers, bots, templates and sources")))
-            }
+            if desktop { list } else { phone }
         }
             .onValueChange(of: model.query) { _ in expandedResults = [] }
             #if DEBUG
@@ -604,7 +703,7 @@ struct ConnectAppsMain: View {
             if desktop {
                 if model.marketplaces.isEmpty {
                     // `mt-2 rounded-lg bg-inset px-3 py-2 text-[12px]` (18 line)
-                    Text("No marketplace yet. Add one in Plugins > Sources.")
+                    Text("No marketplace yet. Add one in Connect Apps > Sources.")
                         .font(theme.font(12))
                         .foregroundStyle(theme.inkSecondary)
                         .frame(minHeight: 18)
@@ -618,21 +717,12 @@ struct ConnectAppsMain: View {
                         .padding(.bottom, 6)
                 }
                 desktopTabs
-            } else {
-            Section {
-                connectedLink
-                Picker(String(localized: "Plugins"), selection: $tab) {
-                    ForEach(shownTabs, id: \.self) { Text(verbatim: $0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("connect-apps-tabs")
-            }
             }
             if searching {
                 // the tab's own filters stay above the results and narrow
-                // its groups
+                // its groups (Discover's are the phone's chips)
                 switch current {
-                case .discover: Section { filterBar }
+                case .discover: if desktop { Section { desktopChips } }
                 case .bots: BrowseBotsFilters(model: bots)
                 default: EmptyView()
                 }
@@ -782,9 +872,11 @@ struct ConnectAppsMain: View {
                         .accessibilityIdentifier("connect-apps-search-show-all.\(section.group.rawValue)")
                 }
             } header: {
+                // the id on the title only: on the section it replaced each
+                // result row's own id (connect-apps-row.<key>)
                 sectionTitle(Self.groupTitle(section.group))
+                    .accessibilityIdentifier("connect-apps-search.\(section.group.rawValue)")
             }
-            .accessibilityIdentifier("connect-apps-search.\(section.group.rawValue)")
         }
     }
 
@@ -851,15 +943,14 @@ struct ConnectAppsMain: View {
     @ViewBuilder
     private var discover: some View {
         Section {
-            if desktop { desktopChips } else { filterBar }
+            desktopChips
         }
         if model.loading && model.items.isEmpty {
             Section { HStack { Spacer(); ProgressView(); Spacer() } }
         }
         ForEach(model.sections) { section in
             Section {
-                let shown = expanded.contains(section.id) || section.viewAll == nil ? section.items : Array(section.items.prefix(ConnectApps.sectionPreview))
-                ForEach(shown) { item in
+                ForEach(section.items) { item in
                     Button { open(item) } label: {
                         ConnectAppRow(item: item, busy: model.busy == item.key) { act(item) }
                     }
@@ -888,88 +979,200 @@ struct ConnectAppsMain: View {
         }
     }
 
-    /// "N connected >" with up to four icons: Installed, where the Claude
-    /// account's connectors are listed too (Providers, #1194).
-    private var connectedLink: some View {
-        let summary = model.summary
-        return Button {
-            tab = .installed
+    // MARK: The phone (#4103)
+
+    /// The reference's Connect apps sheet: the bar (round X, the title, the
+    /// count pill that opens what is connected), the chips that scroll
+    /// sideways, the list, and the one search floating at the bottom.
+    private var phone: some View {
+        // one container, not a Group: a Group hands its insets to each
+        // branch, so the first letter typed (Discover to the results)
+        // rebuilt the search field and dropped the keyboard
+        ZStack {
+            if current == .discover && !searching { phoneDiscover } else { list }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: CGFloat(PhoneSheetMetrics.chipsTop)) {
+                phoneBar
+                phoneChips
+            }
+            .padding(.top, SettingsMetrics.headerInset)
+            .padding(.bottom, 4)
+            .background(Theme.bg.ignoresSafeArea(edges: .top))
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SettingsSearchField(prompt: "Search across apps and skills", text: $model.query, identifier: "connect-apps-search",
+                                height: CGFloat(PhoneSheetMetrics.searchHeight), textSize: CGFloat(PhoneSheetMetrics.searchTextSize))
+                .padding(.horizontal, CGFloat(PhoneSheetMetrics.searchMargin))
+                .padding(.bottom, CGFloat(PhoneSheetMetrics.searchBottom))
+        }
+        .background(Theme.bg.ignoresSafeArea())
+    }
+
+    private var phoneBar: some View {
+        HStack(spacing: 0) {
+            GlassCircleButton(systemImage: "xmark", size: .large, accessibilityLabel: "Close", action: close)
+                .accessibilityIdentifier("connect-apps-done")
+            // a narrow phone (and the longer French words) scales the
+            // title and the count down a little rather than cutting them
+            Text("Connect apps")
+                .font(SettingsMetrics.rowFont)
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .padding(.leading, SettingsMetrics.titleGap)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            // what is connected (Installed, the Claude account's connectors
+            // with them); pressed again, back to the catalog
+            Button {
+                Haptics.selection()
+                model.query = ""
+                tab = current == .installed ? .discover : .installed
+            } label: {
+                Text(String(localized: "\(model.summary.count) connected"))
+                    .font(Theme.font(CGFloat(PhoneSheetMetrics.countSize)))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .padding(.horizontal, CGFloat(PhoneSheetMetrics.countPadding))
+                    .frame(height: GlassCircleButton.Size.large.rawValue)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .themeGlass(Capsule())
+            .layoutPriority(1)
+            .accessibilityAddTraits(current == .installed ? [.isSelected, .isButton] : .isButton)
+            .accessibilityIdentifier("connect-apps-manage")
+        }
+        .padding(.horizontal, SettingsMetrics.headerInset)
+    }
+
+    /// All, the categories with apps, the types, then the lists that were
+    /// tabs (ConnectAppsChip).
+    private var phoneChips: some View {
+        let chips = ConnectAppsChip.chips(
+            items: model.items, marketplaces: model.marketplaces.map(\.name),
+            bots: botsShown, sources: shownTabs.contains(.sources)
+        )
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.PhonePanel.chipGap) {
+                ForEach(chips, id: \.self) { chip in
+                    PhoneChip(title: Text(verbatim: Self.chipTitle(chip)), selected: isSelected(chip), id: "connect-apps-chip.\(chip.key)") {
+                        choose(chip)
+                    }
+                }
+            }
+            .padding(.horizontal, CGFloat(PhoneSheetMetrics.appsMargin))
+        }
+        .accessibilityIdentifier("connect-apps-tabs")
+    }
+
+    static func chipTitle(_ chip: ConnectAppsChip) -> String {
+        switch chip {
+        case .all: String(localized: "All")
+        case let .category(category): ConnectAppsWords.category(category)
+        case let .type(type): ConnectAppsWords.type(type)
+        case .bots: ConnectAppsTab.bots.title
+        case .pages: ConnectAppsTab.pages.title
+        case .sources: ConnectAppsTab.sources.title
+        }
+    }
+
+    private func isSelected(_ chip: ConnectAppsChip) -> Bool {
+        switch chip {
+        case .all: current == .discover && model.filter == .all && model.type == .any
+        case let .category(category): current == .discover && model.filter == .category(category)
+        case let .type(type): current == .discover && model.type == type
+        case .bots: current == .bots
+        case .pages: current == .pages
+        case .sources: current == .sources
+        }
+    }
+
+    private func choose(_ chip: ConnectAppsChip) {
+        switch chip {
+        case .all:
+            tab = .discover
+            model.filter = .all
+            model.type = .any
+        case let .category(category):
+            tab = .discover
+            model.filter = model.filter == .category(category) ? .all : .category(category)
+        case let .type(type):
+            tab = .discover
+            model.type = model.type == type ? .any : type
+        case .bots: tab = .bots
+        case .pages: tab = .pages
+        case .sources: tab = .sources
+        }
+    }
+
+    /// Discover as the reference lists it: a title and a chevron over each
+    /// section, the rows on the page with no card.
+    private var phoneDiscover: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if model.loading && model.items.isEmpty {
+                    ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
+                }
+                ForEach(model.sections) { section in
+                    phoneSectionTitle(section)
+                    ForEach(section.items) { item in
+                        Button { open(item) } label: {
+                            ConnectAppRow(item: item, busy: model.busy == item.key) { act(item) }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if !model.loading, model.sections.isEmpty {
+                    Text(model.filter == .all && model.type == .any
+                        ? String(localized: "Everything in the catalog is already installed.")
+                        : String(localized: "Nothing matches"))
+                        .font(SettingsMetrics.rowFont)
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(.top, CGFloat(PhoneSheetMetrics.sectionTop))
+                }
+            }
+            .padding(.horizontal, CGFloat(PhoneSheetMetrics.appsMargin))
+            .padding(.bottom, 16)
+        }
+        .refreshable {
+            await model.load(session)
+            if botsShown { await bots.load(session) }
+        }
+        .accessibilityIdentifier("connect-apps")
+    }
+
+    /// "Recommended for you >": the chevron (View all) shows when the
+    /// section holds more than it lists.
+    @ViewBuilder
+    private func phoneSectionTitle(_ section: ConnectApps.Section) -> some View {
+        let more = section.viewAll.flatMap { section.total > section.items.count ? $0 : nil }
+        Button {
+            guard let more else { return }
+            Haptics.selection()
+            switch more {
+            case let .filter(filter): model.filter = filter
+            case let .type(type): model.type = type
+            }
         } label: {
             HStack(spacing: 8) {
-                HStack(spacing: -8) {
-                    ForEach(summary.icons) { ConnectAppIcon(item: $0, size: 24) }
-                }
-                Text(String(localized: "\(summary.count) connected"))
+                Text(verbatim: ConnectAppsWords.section(section.id))
+                    .font(Theme.font(CGFloat(PhoneSheetMetrics.sectionSize)))
                     .foregroundStyle(Theme.textPrimary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                if more != nil { ProfileChevron() }
             }
+            .padding(.top, CGFloat(PhoneSheetMetrics.sectionTop))
+            .padding(.bottom, 6)
+            .contentShape(Rectangle())
         }
-        .accessibilityIdentifier("connect-apps-manage")
-    }
-
-    /// One filter button, as the reference iOS app's marketplace has it: a menu
-    /// with All, every category in the desktop's order (main, then the
-    /// rest), then the type filter. The label names what is picked; All
-    /// clears both.
-    private var filterBar: some View {
-        HStack(spacing: 8) {
-            Menu {
-                filterButton(String(localized: "All"), selected: model.filter == .all && model.type == .any) {
-                    model.filter = .all
-                    model.type = .any
-                }
-                Section {
-                    ForEach(ConnectAppCategory.order, id: \.self) { category in
-                        filterButton(ConnectAppsWords.category(category), selected: model.filter == .category(category)) {
-                            model.filter = model.filter == .category(category) ? .all : .category(category)
-                        }
-                    }
-                }
-                Section(String(localized: "Filter by type")) {
-                    let types: [ConnectAppTypeFilter] = [.any, .mcp, .skills] + model.marketplaces.map { .source($0.name) }
-                    ForEach(types, id: \.self) { type in
-                        filterButton(ConnectAppsWords.type(type), selected: model.type == type) { model.type = type }
-                    }
-                }
-            } label: {
-                chipLabel(filterTitle, selected: model.filter != .all || model.type != .any, systemImage: "line.3.horizontal.decrease")
-            }
-            .accessibilityIdentifier("connect-apps-filter")
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 2)
-    }
-
-    /// "All", the category, the type, or both ("Design · MCP servers").
-    private var filterTitle: String {
-        var parts: [String] = []
-        if case let .category(category) = model.filter { parts.append(ConnectAppsWords.category(category)) }
-        if model.type != .any { parts.append(ConnectAppsWords.type(model.type)) }
-        return parts.isEmpty ? String(localized: "All") : parts.joined(separator: " · ")
-    }
-
-    private func filterButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.selection()
-            action()
-        } label: {
-            if selected { Label(title, systemImage: "checkmark") } else { Text(verbatim: title) }
-        }
-    }
-
-    private func chipLabel(_ title: String, selected: Bool, systemImage: String? = nil) -> some View {
-        HStack(spacing: 4) {
-            if let systemImage { Image(systemName: systemImage).font(.caption2) }
-            Text(verbatim: title).font(.footnote.weight(.medium)).lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 30)
-        .foregroundStyle(selected ? Theme.accentInk : Theme.textPrimary)
-        .background(selected ? Theme.accent : Theme.chip, in: Capsule())
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .buttonStyle(.plain)
+        // a title without more keeps its full ink (no disabled dimming)
+        .allowsHitTesting(more != nil)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier(more == nil ? "" : "connect-apps-view-all")
     }
 
     private func open(_ item: ConnectAppItem) {
@@ -1420,6 +1623,8 @@ struct ConnectAppDetail: View {
     @EnvironmentObject private var session: Session
     @ObservedObject var model: ConnectAppsModel
     let key: String
+    /// Set on the phone's half sheet: its round X.
+    var close: (() -> Void)? = nil
     let push: (ConnectAppsRoute) -> Void
     @State private var toolsOpen = false
     @State private var confirmingUninstall = false
@@ -1444,29 +1649,72 @@ struct ConnectAppDetail: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let close { sheetBar(close) }
+        }
     }
 
-    /// the reference iOS app's plugin sheet, on our pushed page: the icon, name
-    /// and description centred on top, the cards under it, Added or Add in a
-    /// floating capsule at the bottom and Uninstall in the "..." menu.
+    /// The half sheet's bar (#4103): the round X at the top left, the round
+    /// "..." at the top right when there is something in it.
+    private func sheetBar(_ close: @escaping () -> Void) -> some View {
+        HStack(spacing: 0) {
+            GlassCircleButton(systemImage: "xmark", size: .large, accessibilityLabel: "Close", action: close)
+                .accessibilityIdentifier("connect-apps-detail-close")
+            Spacer(minLength: 0)
+            if let item = current, canUninstall(item) {
+                Menu { moreMenu } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.textPrimary)
+                        .frame(width: GlassCircleButton.Size.large.rawValue, height: GlassCircleButton.Size.large.rawValue)
+                        .contentShape(Circle())
+                        .themeGlass(Circle())
+                        .accessibilityLabel(Text("More"))
+                }
+                .accessibilityIdentifier("connect-apps-detail-more")
+            }
+        }
+        .padding(.horizontal, CGFloat(PhoneSheetMetrics.sheetControlInset))
+        .padding(.top, CGFloat(PhoneSheetMetrics.sheetControlInset))
+    }
+
+    @ViewBuilder private var moreMenu: some View {
+        Button(role: .destructive) { confirmingUninstall = true } label: {
+            Label(String(localized: "Uninstall"), systemImage: "trash")
+        }
+        .accessibilityIdentifier("connect-apps-uninstall")
+    }
+
+    /// The reference's plugin sheet (#4103): the icon in a rounded tile
+    /// and the name centred, the description in muted ink, the state in
+    /// one pill centred at the foot; the plugin's accounts, tools and
+    /// details under the description, Uninstall in the "..." menu.
     private func content(_ item: ConnectAppItem) -> some View {
         ThemedList {
             Section {
-                VStack(spacing: 8) {
-                    ConnectAppIcon(item: item, size: 64)
+                VStack(spacing: 0) {
+                    // the icon is its own rounded tile: one tile, not one inside another
+                    ConnectAppIcon(item: item, size: CGFloat(PhoneSheetMetrics.tile))
+                        .padding(.top, close == nil ? 8 : CGFloat(PhoneSheetMetrics.tileTop) - CGFloat(PhoneSheetMetrics.sheetControlInset) - GlassCircleButton.Size.large.rawValue / 2)
                     Text(verbatim: item.name)
-                        .font(.title3.weight(.semibold))
+                        .font(Theme.font(CGFloat(PhoneSheetMetrics.sheetNameSize), .bold))
+                        .foregroundStyle(Theme.textPrimary)
                         .multilineTextAlignment(.center)
+                        .padding(.top, CGFloat(PhoneSheetMetrics.titleTop))
                     if !item.description.isEmpty {
                         Text(verbatim: item.description)
-                            .font(.footnote)
+                            .font(Theme.font(CGFloat(PhoneSheetMetrics.descriptionSize)))
+                            .lineSpacing(CGFloat(PhoneSheetMetrics.descriptionPitch - PhoneSheetMetrics.descriptionSize) - 1.4)
                             .foregroundStyle(Theme.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(4)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, CGFloat(PhoneSheetMetrics.descriptionTop))
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 4)
+                .padding(.horizontal, CGFloat(PhoneSheetMetrics.descriptionInset))
+                .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("connect-apps-detail-header")
@@ -1486,21 +1734,15 @@ struct ConnectAppDetail: View {
             } header: {
                 Text(String(localized: "Details"))
             }
-            if item.action != nil || item.installed {
-                // room for the floating capsule (50 + 8 below it)
-                Color.clear.frame(height: 62).listRowBackground(Color.clear)
-            }
         }
-        .overlay(alignment: .bottom) { capsule(item) }
+        // the pill sits at the foot and the list ends above it: no row runs
+        // under the pill
+        .safeAreaInset(edge: .bottom, spacing: 0) { statePill(item).frame(maxWidth: .infinity).padding(.top, 8).background(Theme.bg) }
         .toolbar {
-            if canUninstall(item) {
+            // the iPad's pushed page keeps the menu in its bar
+            if close == nil, canUninstall(item) {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button(role: .destructive) { confirmingUninstall = true } label: {
-                            Label(String(localized: "Uninstall"), systemImage: "trash")
-                        }
-                        .accessibilityIdentifier("connect-apps-uninstall")
-                    } label: {
+                    Menu { moreMenu } label: {
                         Image(systemName: "ellipsis")
                             .accessibilityLabel(Text("More"))
                     }
@@ -1515,6 +1757,26 @@ struct ConnectAppDetail: View {
         }
     }
 
+    /// One pill centred at the foot: Add, Connect or Authorize to press,
+    /// else where the plugin stands.
+    @ViewBuilder
+    private func statePill(_ item: ConnectAppItem) -> some View {
+        Group {
+            if model.busy == item.key {
+                ProgressView().controlSize(.small)
+                    .frame(minWidth: CGFloat(PhoneSheetMetrics.statePillWidth), minHeight: CGFloat(PhoneSheetMetrics.statePillHeight))
+                    .background(Theme.cardRaised, in: Capsule())
+            } else {
+                ConnectAppPillButton(pill: ConnectAppPill.of(item), height: CGFloat(PhoneSheetMetrics.statePillHeight),
+                                     minWidth: CGFloat(PhoneSheetMetrics.statePillWidth),
+                                     textSize: CGFloat(PhoneSheetMetrics.statePillTextSize)) { act(item) }
+            }
+        }
+        .padding(.bottom, CGFloat(PhoneSheetMetrics.statePillBottom) - 12)
+        // an Authorize pill acts too: it is the sheet's one sign-in
+        .accessibilityIdentifier(ConnectAppPill.of(item).acts ? "connect-apps-detail-action" : "connect-apps-detail-added")
+    }
+
     private func act(_ item: ConnectAppItem) {
         Task { await model.act(item, alias: nil, session: session) }
     }
@@ -1523,90 +1785,59 @@ struct ConnectAppDetail: View {
         item.installed && item.kind != .featured && session.canAdminister
     }
 
-    /// Added (installed, nothing to do) or the blue Add / Connect.
-    @ViewBuilder
-    private func capsule(_ item: ConnectAppItem) -> some View {
-        if let action = item.action {
-            Button {
-                Haptics.selection()
-                act(item)
-            } label: {
-                Group {
-                    if model.busy == item.key {
-                        ProgressView().controlSize(.small).tint(Theme.accentInk)
-                    } else {
-                        Text(action == .add ? String(localized: "Add") : String(localized: "Connect"))
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(Theme.accentInk)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Theme.accent, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(model.busy == item.key)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 8)
-            .accessibilityIdentifier("connect-apps-detail-action")
-        } else if item.installed {
-            Label(String(localized: "Added"), systemImage: "checkmark")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .themeGlass(Capsule())
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("connect-apps-detail-added")
-                // a status, not a button: taps reach the row under it
-                .allowsHitTesting(false)
-        }
-    }
-
+    /// The server's sections, each one container (#4103, the desktop's
+    /// #4154): Accounts only when an account applies (no "No sign-in
+    /// needed" line), Tools unless the server has none (no "0 of 0").
     @ViewBuilder
     private func mcpSections(_ item: ConnectAppItem) -> some View {
         if let server = model.server(item.id) {
-            Section {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: server.auth == "connected" ? (server.authIssuer ?? String(localized: "Signed in")) : String(localized: "default"))
-                        Text(verbatim: accountLine(server)).font(.footnote).foregroundStyle(Theme.textSecondary)
+            if PluginSheetSections.showsAccount(server) {
+                Section {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: server.auth == "connected" ? (server.authIssuer ?? String(localized: "Signed in")) : String(localized: "default"))
+                            Text(verbatim: accountLine(server)).font(.footnote).foregroundStyle(Theme.textSecondary)
+                        }
+                        Spacer()
+                        // one sign-in on the sheet: the foot pill's Authorize
+                        // when it has it, else this button (a server turned off)
+                        if PluginSheetSections.accountSignsIn(server, pill: ConnectAppPill.of(item)) {
+                            Button(String(localized: "Sign in")) { Task { await model.signIn(server, session: session) } }
+                                .buttonStyle(.bordered)
+                                .accessibilityIdentifier("connect-apps-sign-in")
+                        }
                     }
-                    Spacer()
-                    if ["required", "expired", "error"].contains(server.auth ?? "") {
-                        Button(String(localized: "Sign in")) { Task { await model.signIn(server, session: session) } }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("connect-apps-sign-in")
-                    }
+                } header: {
+                    Text(String(localized: "Accounts"))
                 }
-                if session.canAdminister {
+            }
+            if session.canAdminister {
+                Section {
                     Toggle(String(localized: "Turned on"), isOn: Binding(
                         get: { server.enabled ?? true },
                         set: { on in Task { await model.setServer(server.name, enabled: on, session: session) } }
                     ))
                     .disabled(server.managedBy != nil)
                 }
-            } header: {
-                Text(String(localized: "Accounts"))
             }
-            Section {
-                DisclosureGroup(isExpanded: $toolsOpen) {
-                    toolList(server.name)
-                } label: {
-                    HStack {
-                        Text(String(localized: "Tools"))
-                        Spacer()
-                        Text(verbatim: toolCount(server.name)).font(.footnote).foregroundStyle(Theme.textSecondary)
+            if PluginSheetSections.showsTools(model.probes[server.name]) {
+                Section {
+                    DisclosureGroup(isExpanded: $toolsOpen) {
+                        toolList(server.name)
+                    } label: {
+                        HStack {
+                            Text(String(localized: "Tools"))
+                            Spacer()
+                            Text(verbatim: toolCount(server.name)).font(.footnote).foregroundStyle(Theme.textSecondary)
+                        }
                     }
+                    .onValueChange(of: toolsOpen) { open in
+                        if open, model.probes[server.name] == nil { Task { await model.listTools(server.name, session: session) } }
+                    }
+                    .accessibilityIdentifier("connect-apps-tools")
+                } footer: {
+                    Text(String(localized: "A tool turned off here is hidden from every bot. Each bot's Access settings can narrow the rest."))
                 }
-                .onValueChange(of: toolsOpen) { open in
-                    if open, model.probes[server.name] == nil { Task { await model.listTools(server.name, session: session) } }
-                }
-                .accessibilityIdentifier("connect-apps-tools")
-            } footer: {
-                Text(String(localized: "A tool turned off here is hidden from every bot. Each bot's Access settings can narrow the rest."))
             }
         }
     }

@@ -687,7 +687,7 @@ struct HomeAppsMenu: View {
             }
             if !groups.isEmpty { HomeMenuDivider() }
             row(String(localized: "Templates"), symbol: "square.on.square", id: "home-apps.templates") { openApp(.templates) }
-            row(String(localized: "Plugins"), symbol: "puzzlepiece.extension", id: "home-apps.connectApps") { openApp(.connectApps) }
+            row(String(localized: "Connect apps"), symbol: "puzzlepiece.extension", id: "home-apps.connectApps") { openApp(.connectApps) }
             let count = session.state.updates.count
             row(count > 0 ? String(localized: "Updates (\(count))") : String(localized: "Updates"), symbol: "tray", id: "home-apps.updates") {
                 openApp(.updates)

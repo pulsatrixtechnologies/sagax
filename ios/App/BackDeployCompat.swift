@@ -205,11 +205,13 @@ extension View {
     /// The sheet's material background and rounded corners are iOS 16.4.
     /// Below that the sheet keeps the system's own chrome, which is the same
     /// shape, just opaque.
+    /// A sheet that sets its own ground (a plugin's half sheet, #4103)
+    /// passes it with its radius.
     @ViewBuilder
-    func sheetChromeCompat() -> some View {
+    func sheetChromeCompat(_ background: some ShapeStyle = .thinMaterial, cornerRadius: CGFloat = 28) -> some View {
         if #available(iOS 16.4, *) {
-            presentationBackground(.thinMaterial)
-                .presentationCornerRadius(28)
+            presentationBackground(background)
+                .presentationCornerRadius(cornerRadius)
         } else {
             self
         }

@@ -35,14 +35,13 @@ struct AccountOwnPhotoRows: View {
                     title: "Change Photo",
                     systemImage: "camera",
                     accessory: working ? .progress : .none,
-                    height: 44.33,
                     identifier: "account-photo-change"
                 ) {
                     if !working { choosing = true }
                 }
                 if session.accountPhoto != nil {
                     CardHairline(leadingInset: SettingsMetrics.rowInset)
-                    SettingsRow(title: "Remove Photo", systemImage: "trash", style: .destructive, height: 44.33, identifier: "account-photo-remove") {
+                    SettingsRow(title: "Remove Photo", systemImage: "trash", style: .destructive, identifier: "account-photo-remove") {
                         if !working { confirmingRemove = true }
                     }
                 }

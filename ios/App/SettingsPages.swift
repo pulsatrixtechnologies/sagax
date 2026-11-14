@@ -43,16 +43,16 @@ struct AccountSettingsView: View {
             }
             // Card bottom to the next card top: 49, the label between.
             SettingsSectionLabel(text: "Switch Account")
-                .padding(.top, 0.33)
             SettingsCard {
                 ForEach(session.connections) { connection in
                     let current = connection.id == session.connection?.id
                     SettingsRow(
                         title: LocalizedStringKey(stringLiteral: accountLabel(for: connection, current: current)),
                         accessory: current ? .check : .none,
-                        height: 44.33,
                         identifier: "account-switch.\(connection.id)",
-                        leading: AnyView(SwitchAccountPhoto(connection: connection, current: current, name: current ? model.displayName : connection.name)),
+                        // the account in use reads as the reference's row, its
+                        // mail alone; another account keeps its photo
+                        leading: current ? nil : AnyView(SwitchAccountPhoto(connection: connection, current: current, name: connection.name)),
                         accessibilityValueText: switchPhoto(for: connection, current: current) == nil ? nil : "photo"
                     ) {
                         guard !current else { return }
@@ -68,18 +68,18 @@ struct AccountSettingsView: View {
                     }
                     CardHairline(leadingInset: SettingsMetrics.rowInset)
                 }
-                SettingsRow(title: "Add Account", systemImage: "plus", height: 43.67, identifier: "account-add") {
+                SettingsRow(title: "Add Account", systemImage: "plus", identifier: "account-add") {
                     closeSheet?()
                     session.beginPairing()
                 }
             }
-            SettingsSpacer(26.67)
+            SettingsSpacer(SettingsMetrics.cardGap)
             SettingsCard {
-                SettingsRow(title: "Sign Out", style: .destructive, height: 44.67, identifier: "account-sign-out") { confirmingSignOut = true }
+                SettingsRow(title: "Sign Out", style: .destructive, identifier: "account-sign-out") { confirmingSignOut = true }
             }
             SettingsSpacer(SettingsMetrics.cardGap)
             SettingsCard {
-                SettingsRow(title: "Delete Account", systemImage: "trash", accessory: deleting ? .progress : .none, style: .destructive, height: 44.33, identifier: "account-delete") {
+                SettingsRow(title: "Delete Account", systemImage: "trash", accessory: deleting ? .progress : .none, style: .destructive, identifier: "account-delete") {
                     if !deleting { confirmingDelete = true }
                 }
             }
@@ -88,7 +88,7 @@ struct AccountSettingsView: View {
                 SettingsSpacer(SettingsMetrics.cardGap)
                 SettingsCard {
                     // the paired computer's address, refresh and forget
-                    SettingsRow(title: "Connection details", accessory: .chevron, height: 44.33, identifier: "account-connection") {
+                    SettingsRow(title: "Connection details", accessory: .chevron, identifier: "account-connection") {
                         navigator.sheet = .connection
                     }
                 }
@@ -238,7 +238,6 @@ struct BotComputerSettingsView: View {
                         subtitle: recoverDescription,
                         accessory: running == .recover ? .progress : .none,
                         style: .action,
-                        height: 89.33,
                         identifier: "computer-recover"
                     ) { if running == nil { confirming = .recover } }
                     CardHairline(leadingInset: SettingsMetrics.rowInset)
@@ -250,7 +249,6 @@ struct BotComputerSettingsView: View {
                             : "Moves your Bots' shared computer to the latest version. Files and logins stay, but installed apps and packages are removed.",
                         accessory: running == .update ? .progress : .none,
                         style: .action,
-                        height: busy ? 104 : 89.33,
                         identifier: "computer-update"
                     ) { if running == nil, !busy { confirming = .update } }
                     .opacity(busy ? 0.6 : 1)
@@ -267,15 +265,12 @@ struct BotComputerSettingsView: View {
                     subtitle: resetDescription,
                     accessory: running == .reset ? .progress : .none,
                     style: .destructive,
-                    height: 74,
-                    identifier: "computer-reset",
-                    textTop: 13.0
-                ) { if running == nil { confirming = .reset } }
+                    identifier: "computer-reset") { if running == nil { confirming = .reset } }
             }
             .disabled(running != nil)
             SettingsFooter(text: footerText)
             SettingsCard {
-                SettingsRow(title: "Disk space", accessory: .value(diskText), height: 45, identifier: "computer-disk")
+                SettingsRow(title: "Disk space", accessory: .value(diskText), identifier: "computer-disk")
             }
             ComputerMaintenanceSection()
             OtherComputersSection()
@@ -605,37 +600,29 @@ struct TimeZonePickerView: View {
     }
 }
 
-/// The glass search capsule: magnifier, field, measured at 40.67 pt.
+/// The glass search capsule: magnifier and field, 44 pt on a page; the
+/// Connect apps sheet floats it at the bottom at 50 pt with 17 pt words
+/// (#4103). One search field for the phone's sheets.
 struct SettingsSearchField: View {
     @Environment(\.themePalette) var themePalette
     let prompt: LocalizedStringKey
     @Binding var text: String
     var identifier: String
-    /// Set when the field shares a row with a round button: same height, no
-    /// optical nudge, so both centre on one line.
-    var rowHeight: CGFloat?
-    /// Focus the field as it appears; `onDismiss` runs when it loses focus
-    /// empty (the root's search folds back into its round button).
-    var autoFocus = false
-    var onDismiss: (() -> Void)?
-    @FocusState private var focused: Bool
+    var height: CGFloat = 44
+    var textSize: CGFloat = CGFloat(PhonePanelMetrics.rowSize)
 
     var body: some View {
-        HStack(spacing: 7.67) {
+        HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15.3, weight: .medium))
-                .foregroundStyle(Theme.parity(Color(hex: 0x6B6B6D), Theme.placeholder))
-            TextField("", text: $text, prompt: Text(prompt).foregroundColor(Theme.parity(Color(hex: 0x6C6B6F), Theme.placeholder)).tracking(SettingsMetrics.tracking135))
-                .font(Theme.Font.rowTitle)
+                .font(.system(size: textSize, weight: .regular))
+                .foregroundStyle(Theme.placeholder)
+                .accessibilityHidden(true)
+            TextField("", text: $text, prompt: Text(prompt).foregroundColor(Theme.placeholder))
+                .font(Theme.font(textSize))
                 .foregroundStyle(Theme.textPrimary)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
-                .focused($focused)
-                .onAppear { if autoFocus { focused = true } }
-                .onValueChange(of: focused) { now in
-                    if !now, text.isEmpty { onDismiss?() }
-                }
                 .accessibilityIdentifier(identifier)
             if !text.isEmpty {
                 Button {
@@ -647,10 +634,8 @@ struct SettingsSearchField: View {
                 .accessibilityLabel("Clear")
             }
         }
-        .offset(y: rowHeight == nil ? -0.33 : 0)
-        .padding(.leading, 12.67)
-        .padding(.trailing, 12)
-        .frame(height: rowHeight ?? 40.67)
+        .padding(.horizontal, 16)
+        .frame(height: height)
         .themeGlass(Capsule())
     }
 }

@@ -127,22 +127,7 @@ struct ThreadFilesView: View {
     }
 
     private func chipButton(_ item: PhoneLibraryChip) -> some View {
-        let selected = item == chip
-        return Button {
-            Haptics.selection()
-            withAnimation(.snappy(duration: 0.2)) { chip = item }
-        } label: {
-            Text(Self.chipName(item))
-                .font(Theme.PhonePanel.chipFont)
-                .foregroundStyle(selected ? Theme.bg : Theme.textPrimary)
-                .padding(.horizontal, Theme.PhonePanel.chipPadding)
-                .frame(height: Theme.PhonePanel.chipHeight)
-                .background(selected ? Theme.textPrimary : Theme.cardRaised, in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
-        .accessibilityIdentifier("thread-files-chip.\(item.rawValue)")
+        PhoneChip(title: Text(Self.chipName(item)), selected: item == chip, id: "thread-files-chip.\(item.rawValue)") { chip = item }
     }
 
     static func chipName(_ chip: PhoneLibraryChip) -> LocalizedStringKey {

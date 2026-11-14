@@ -58,11 +58,17 @@ final class SettingsAppearanceUITests: XCTestCase {
     /// The search field at the top of Settings.
     @MainActor
     private func search(_ text: String, _ app: XCUIApplication) -> XCUIElement {
-        // the round search button opens the field (reference app's sheet, 2026-11-01)
-        let open = app.buttons["settings-search-open"]
-        if open.waitForExistence(timeout: 5) { open.tap() }
+        // The reference's sheet (#4103): the search waits above the first
+        // card, out of sight and out of reach; pulling the list down a
+        // little shows it (a short slow drag, so the sheet stays open).
+        // (Hidden, it is out of the accessibility tree too.)
         let field = app.textFields["settings-search"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.element("settings-appearance").waitForExistence(timeout: 10))
+        for _ in 0..<3 where !(field.exists && field.isHittable) {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.47)))
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5) && field.isHittable, "the pulled list shows the search")
         field.tap()
         field.typeText(text)
         return field

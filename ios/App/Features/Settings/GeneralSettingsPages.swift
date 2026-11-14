@@ -19,9 +19,9 @@ struct GeneralSettingsView: View {
         SettingsPage(title: "General") {
             SettingsSectionLabel(text: "Chat")
             SettingsCard {
-                SettingsRow(title: "Quick Replies", accessory: .chevron, height: 43.67, identifier: "settings-quick-replies") { navigator.sheet = .quickReplies }
+                SettingsRow(title: "Quick Replies", accessory: .chevron, identifier: "settings-quick-replies") { navigator.sheet = .quickReplies }
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
-                SettingsRow(title: "Call voice", accessory: .chevron, height: 43.67, identifier: "settings-walkie-voice") { navigator.sheet = .walkieVoice }
+                SettingsRow(title: "Call voice", accessory: .chevron, identifier: "settings-walkie-voice") { navigator.sheet = .walkieVoice }
             }
             SettingsSpacer(40)
         }
@@ -35,7 +35,7 @@ struct SettingsFeedbackRow: View {
     @State private var composingMail = false
 
     var body: some View {
-        SettingsRow(title: "Send Feedback", accessory: .chevron, height: height, identifier: "settings-feedback") { sendFeedback() }
+        SettingsRow(title: "Send Feedback", accessory: .chevron, identifier: "settings-feedback") { sendFeedback() }
             .sheet(isPresented: $composingMail) {
                 MailComposeSheet(recipient: SettingsLinks.supportEmail, subject: feedbackSubject, body: feedbackBody) {
                     composingMail = false
@@ -80,7 +80,7 @@ struct SettingsLinkRow: View {
     }
 
     var body: some View {
-        SettingsRow(title: title, accessory: .external, height: 44, identifier: identifier) { link = url(french) }
+        SettingsRow(title: title, accessory: .external, identifier: identifier) { link = url(french) }
             .sheet(item: Binding(get: { link.map(IdentifiedURL.init) }, set: { link = $0?.url })) { item in
                 SafariSheet(url: item.url).ignoresSafeArea()
             }
@@ -98,7 +98,6 @@ struct SystemNotificationsRow: View {
         SettingsRow(
             title: "Allow notifications",
             accessory: .toggle(Binding(get: { Self.isOn(session) }, set: { setNotifications($0) })),
-            height: 53.67,
             identifier: "settings-notifications-system"
         )
         .task { await session.refreshNotificationAuthorization() }
@@ -577,7 +576,7 @@ struct DisplaySettingsCard: View {
                     }
                 } label: { EmptyView() }
             } label: {
-                SettingsRow(title: "List density", accessory: .valueChevron(String(localized: String.LocalizationValue(RosterDensity.shown(stored: rosterDensity).label))), height: 43.67)
+                SettingsRow(title: "List density", accessory: .valueChevron(String(localized: String.LocalizationValue(RosterDensity.shown(stored: rosterDensity).label))))
             }
             .accessibilityIdentifier("list-density")
             CardHairline(leadingInset: SettingsMetrics.rowInset)

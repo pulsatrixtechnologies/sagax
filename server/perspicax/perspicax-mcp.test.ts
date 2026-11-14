@@ -155,9 +155,14 @@ describe("Perspicax shared warm budget", () => {
       await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
       await h.mcp.prepareTurn({ threadId: "t2", generation: "g2", bot, speakerPrincipalId: ALICE, speakerOrigin: "person" });
       expect(budget.stats()).toMatchObject({ active: 2, evictions: 0, overBudget: true });
+      // #4228 (#4215): the caps bound idle retention only. While t2 still
+      // runs, t1's idle session is the only one retained and stays.
       await h.mcp.endGeneration("t1", "g1"); await budget.settled();
+      expect(h.revoked).toHaveLength(0);
+      expect(budget.stats()).toMatchObject({ active: 1, resources: 2, evictions: 0 });
+      await h.mcp.endGeneration("t2", "g2"); await budget.settled();
       expect(h.revoked).toHaveLength(1); expect(h.mcpCalls.some(c => c.method === "DELETE")).toBe(true);
-      expect(budget.stats()).toMatchObject({ active: 1, resources: 1, evictions: 1 });
+      expect(budget.stats()).toMatchObject({ active: 0, resources: 1, evictions: 1 });
       await h.mcp.prepareTurn({ threadId: "t1", generation: "g3", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
       expect(h.exchanges).toHaveLength(3);
     } finally { await h.mcp.endAll(); }

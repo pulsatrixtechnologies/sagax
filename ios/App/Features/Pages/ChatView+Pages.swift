@@ -59,6 +59,40 @@ enum PageDebugLaunch {
         return arguments[index + 1]
     }
     static var opensShare: Bool { ProcessInfo.processInfo.arguments.contains("-page-share") }
+    /// `-page-caps-sample`: the demo's open page shows the capability strip
+    /// with an Ask first card and a link card (headless captures, #3413).
+    static var capsSample: Bool { ProcessInfo.processInfo.arguments.contains("-page-caps-sample") }
+
+    @MainActor
+    static func sampleBroker(relay: PageCapRelay) -> PageCapabilityBroker {
+        let french = Locale.current.language.languageCode?.identifier == "fr"
+        let broker = PageCapabilityBroker(pageId: "demo_page", version: 1, lang: french ? "fr" : "en", deps: .init(
+            api: { method, path, _, _ in
+                if path.hasSuffix("/capabilities") {
+                    return PageCapHTTPAnswer(status: 200, body: ["capabilities": ["data": ["team-board"], "viewer": true, "open": true],
+                                                                 "reads": [["name": "team-board", "label": String(localized: "the work of your coding teams")]]])
+                }
+                if path.hasSuffix("/data/team-board") { return PageCapHTTPAnswer(status: 409, body: ["error": "", "code": "ask_first", "approvalId": "sample"]) }
+                if path.hasSuffix("/viewer") { return PageCapHTTPAnswer(status: 200, body: ["name": "", "role": "owner"]) }
+                if path.hasSuffix("/link-approvals"), method == "GET" { return PageCapHTTPAnswer(status: 200, body: ["allowed": false]) }
+                return PageCapHTTPAnswer(status: 200, body: ["ok": true])
+            },
+            post: { [weak relay] in relay?.post($0) },
+            openURL: { _ in },
+            openRef: { _, _ in false },
+            saveFile: { _, _, _ in }
+        ))
+        Task { @MainActor in
+            broker.start()
+            await broker.receive(["type": "sagax-cap", "v": 1, "id": 1, "cap": "viewer.get"], fromClick: false)
+            await broker.receive(["type": "sagax-cap", "v": 1, "id": 2, "cap": "open", "args": ["ref": "https://example.com/reports/weekly?team=core&range=30d"]], fromClick: true)
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            await broker.receive(["type": "sagax-cap", "v": 1, "id": 3, "cap": "data.read", "args": ["name": "team-board"]], fromClick: false)
+        }
+        return broker
+    }
 }
 
 extension ChatView {

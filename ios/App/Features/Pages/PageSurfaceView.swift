@@ -13,6 +13,9 @@
 // The page is the server's preview wrapper with `bare=1`, the app's theme
 // and the place to keep (`y`): its frame reports how far down the reader is
 // and a redraw (the bot's newer version, a new theme) starts there again.
+// A version that declares capabilities (#3413) gets its broker for each
+// drawing: the page's data.read, viewer.get, open and files.download are
+// answered with this phone's session, and its strip shows under the row.
 import CompanionCore
 import SwiftUI
 
@@ -29,10 +32,40 @@ extension Session {
     }
 
     var pageApiBase: URL? { settingsClient?.connection.baseURL }
+
+    /// The broker of one drawing of a page version (#3413 lot 8): the
+    /// server's preview wrapper only, never the demo's own document.
+    func pageCapabilityBroker(pageId: String, version: Int, relay: PageCapRelay,
+                              openURL: @escaping (URL) -> Void, opened: @escaping () -> Void,
+                              saveFile: @escaping (String, String, Data) -> Void) -> PageCapabilityBroker? {
+#if DEBUG
+        if isDemo, PageDebugLaunch.capsSample { return PageDebugLaunch.sampleBroker(relay: relay) }
+#endif
+        guard !isDemo, let client = settingsClient else { return nil }
+        let lang = Locale.current.language.languageCode?.identifier == "fr" ? "fr" : "en"
+        return PageCapabilityBroker(pageId: pageId, version: version, lang: lang, deps: .init(
+            api: { method, path, query, body in try await client.pageCapabilityCall(method, path, query: query, body: body) },
+            post: { [weak relay] message in relay?.post(message) },
+            openURL: openURL,
+            openRef: { [weak self] botId, threadId in
+                guard let self, self.state.bot(botId) != nil else { return false }
+                if let threadId {
+                    Task { _ = await self.openThread(ThreadRef(botId: botId, threadId: threadId, title: ""), shownBotId: nil) }
+                } else {
+                    self.openBot(id: botId)
+                }
+                opened()
+                return true
+            },
+            saveFile: saveFile
+        ))
+    }
 }
 
 struct PageSurfaceView: View {
     @Environment(\.themePalette) var themePalette
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var session: Session
     let pageId: String
     /// The version to show first; nil: the newest.
@@ -57,6 +90,9 @@ struct PageSurfaceView: View {
     @State private var draft: String?
     @State private var sharing = false
     @State private var showingVersions = false
+    @State private var capabilities: PageCapabilityBroker?
+    @State private var relay = PageCapRelay()
+    @State private var handedFile: ShareFile?
     @FocusState private var titleFocused: Bool
 
     private var theme: PageTheme { Theme.palette.isDark ? .dark : .light }
@@ -67,11 +103,14 @@ struct PageSurfaceView: View {
             Theme.bg.ignoresSafeArea()
             Group {
                 if let source {
-                    PageWebView(source: source, apiBase: session.pageApiBase, drawID: drawID, dark: theme == .dark) { y in
-                        PagePlaces.shared.remember(pageId, y: y)
+                    VStack(spacing: 0) {
+                        if let capabilities { PageCapabilityStrip(broker: capabilities) }
+                        PageWebView(source: source, apiBase: session.pageApiBase, drawID: drawID, dark: theme == .dark, onPlace: { y in
+                            PagePlaces.shared.remember(pageId, y: y)
+                        }, capabilities: capabilities, relay: relay)
+                        .accessibilityIdentifier("page-surface-web")
                     }
                     .padding(.top, 52)
-                    .accessibilityIdentifier("page-surface-web")
                 } else if error == nil {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -98,6 +137,13 @@ struct PageSurfaceView: View {
         }
         .task(id: "\(version ?? 0)") { await loadPreview() }
         .onValueChange(of: theme) { _ in redraw() }
+        .onValueChange(of: scenePhase) { phase in
+            // back in the app: the page reads again what it read (no timer)
+            if phase == .active { capabilities?.refocused() }
+        }
+        .sheet(item: $handedFile) { file in
+            ActivityShareSheet(items: [file.url])
+        }
         .sheet(isPresented: $sharing) {
             if let page, let version {
                 PageShareSheet(page: page, version: version, policy: policy) { next in
@@ -303,10 +349,32 @@ struct PageSurfaceView: View {
     private func redraw() {
         guard let previewPath else { return }
         drawID += 1
+        // one broker per drawing, like the desktop's: what the frame received starts over
+        capabilities = version.flatMap { shown in
+            session.pageCapabilityBroker(pageId: pageId, version: shown, relay: relay,
+                                         openURL: { url in openURL(url) },
+                                         opened: { onClose() },
+                                         saveFile: { name, _, bytes in hand(name: name, bytes: bytes) })
+        }
         source = session.pageWebSource(pageId: pageId, previewPath: previewPath, theme: theme, y: PagePlaces.shared.place(pageId))
     }
 
     // MARK: Actions
+
+    /// files.download: the file the page hands over, through the share sheet
+    /// (Save to Files, AirDrop, another app).
+    private func hand(name: String, bytes: Data) {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("page-files", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent(name)
+            try bytes.write(to: file, options: .atomic)
+            handedFile = ShareFile(url: file)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
 
     private func rename() async {
         guard let next = PageViewRules.renameTitle(draft: draft ?? "", current: title) else {

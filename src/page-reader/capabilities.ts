@@ -587,6 +587,12 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           if (question === null) answer(id, { ok: false, error: "bad_request", message: "A question needs a prompt." });
           else if (question === "too_large") answer(id, { ok: false, error: "too_large", message: "This question is too long for a page." });
           else answer(id, { ok: true, value: await withAskFirst("model", deps.lang === "fr" ? "Une question à un modèle, avec ton compte" : "A question to a model, with your account", () => deps.api(route("model"), { method: "POST", body: question })) });
+        } else if (request.cap === "page.propose") {
+          // lot 6: a new proposed version, for the page's person and editors
+          const content = request.args?.content;
+          const title = request.args?.title;
+          if (typeof content !== "string" || !content.trim() || (title !== undefined && title !== null && typeof title !== "string")) answer(id, { ok: false, error: "bad_request", message: "A version needs its content." });
+          else answer(id, { ok: true, value: await deps.api(route("proposals"), { method: "POST", body: { content, ...(typeof title === "string" ? { title } : {}) } }) });
         } else if (request.cap === "files.add" || request.cap === "files.list" || request.cap === "files.get" || request.cap === "files.remove") {
           answer(id, await filesCall(request, fromClick));
         } else if (request.cap === "files.download" && state.caps) {

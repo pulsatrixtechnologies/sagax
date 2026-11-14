@@ -267,3 +267,38 @@ describe("files added by readers (lot 5)", () => {
     expect(files.bytes("page-1")).toBe(0);
   });
 });
+
+describe("page.propose (lot 6): the page proposes a new version of itself", () => {
+  const PROPOSE = { propose: true as const };
+  function withPropose(options: Parameters<typeof world>[0] = {}) {
+    const propose = vi.fn((_pageId: string, input: { content: string; by: string }) => ({ ok: true as const, version: { n: 2 }, input }));
+    return { ...world({ caps: PROPOSE, ...options, extra: { propose, redact: (text: string) => text.replace(/sk-[a-z0-9]+/g, "[secret]"), ...options.extra } }), propose };
+  }
+
+  it("lets the page's person and its editors propose, as their own edit; any other reader gets not_allowed", async () => {
+    const { routes, propose } = withPropose({ record: page({ editors: ["person-e"] }) });
+    expect((await call(routes, A, "/api/pages/page-1/proposals", "POST", { content: "<p>v2</p>", title: "Board v2" })).body).toEqual({ version: 2 });
+    expect(propose.mock.calls[0]![1]).toEqual({ kind: "html", content: "<p>v2</p>", title: "Board v2", by: "person-a" });
+    expect((await call(routes, as("person-e"), "/api/pages/page-1/proposals", "POST", { content: "<p>v3</p>" })).status).toBe(200);
+    expect(propose.mock.calls[1]![1].by).toBe("person-e");
+    const b = await call(routes, B, "/api/pages/page-1/proposals", "POST", { content: "<p>B's</p>" });
+    expect(b.body.code).toBe("not_allowed");
+    expect(propose).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a proposal once the page reads personal data and is shared, and an undeclared one", async () => {
+    const shared = withPropose({ personalShared: true, caps: { propose: true, data: ["team-board"] } });
+    expect((await call(shared.routes, A, "/api/pages/page-1/proposals", "POST", { content: "<p>x</p>" })).body.code).toBe("shared_write_after_data");
+    expect(shared.propose).not.toHaveBeenCalled();
+    const none = world({ extra: { propose: vi.fn() } });
+    expect((await call(none.routes, A, "/api/pages/page-1/proposals", "POST", { content: "<p>x</p>" })).body.code).toBe("not_declared");
+  });
+
+  it("masks secret-shaped text, as a person's own edit, and refuses an empty or oversized version", async () => {
+    const { routes, propose } = withPropose();
+    await call(routes, A, "/api/pages/page-1/proposals", "POST", { content: "<p>key sk-abc123</p>" });
+    expect(propose.mock.calls[0]![1].content).toBe("<p>key [secret]</p>");
+    expect((await call(routes, A, "/api/pages/page-1/proposals", "POST", { content: "  " })).body.code).toBe("bad_request");
+    expect((await call(routes, A, "/api/pages/page-1/proposals", "POST", { content: "x".repeat(513 * 1024) })).body.code).toBe("too_large");
+  });
+});

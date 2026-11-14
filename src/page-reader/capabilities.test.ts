@@ -933,3 +933,15 @@ describe("files added by readers (#3413 lot 5)", () => {
     expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
   });
 });
+
+describe("page.propose (#3413 lot 6)", () => {
+  const base = "/api/pages/page_12345678";
+  it("posts the new version to the proposals route", async () => {
+    const { call, result, posts } = setup({}, { [`${base}/capabilities`]: { capabilities: { data: [], viewer: false, open: false, files: [], propose: true }, reads: [] }, [`${base}/proposals`]: { version: 3 } });
+    await call("page.propose", { content: "<p>v3</p>", title: "T" }, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: { version: 3 } });
+    expect(posts).toEqual([{ path: `${base}/proposals?lang=en`, body: { content: "<p>v3</p>", title: "T" } }]);
+    await call("page.propose", { content: "" }, 2);
+    expect(result(2)).toMatchObject({ ok: false, error: "bad_request" });
+  });
+});

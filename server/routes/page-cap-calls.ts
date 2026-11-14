@@ -15,6 +15,12 @@
 //   GET    /api/pages/:id/files/:fileId              PageFileData
 //   DELETE /api/pages/:id/files/:fileId              { ok: true }
 //
+//   POST   /api/pages/:id/proposals  PageProposal  { version } (lot 6)
+//
+// A version the page proposes is the edit of the reader who clicked, for
+// the page's person and its editors only (anyone else: not_allowed); it is a
+// write others read, refused after personal data on a shared page.
+//
 // A file a reader adds is read by that reader and by who manages the page
 // (its person, its editors), never by another reader. Adding one is a
 // write others read: refused after personal data on a shared page.
@@ -34,7 +40,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PAGE_CAP_FILE_MIMES, PAGE_CAP_LIMITS, pageCapFileName, pageModelJson, parsePageModelQuestion, parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageDataAskFirst, type PageModelAnswer, type PageFileData, type PageFileInfo, type PageModelQuestion, type PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { stateMayWrite, type StateRole } from "../../shared/page-state.ts";
-import { PAGE_LIMITS } from "../../shared/published-pages.ts";
+import { PAGE_LIMITS, parsePageTitle, type PageKind } from "../../shared/published-pages.ts";
 import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import type { PageFiles, StoredFile } from "../pages/page-files.ts";
 import type { PageStore, StoredDoc } from "../pages/page-store.ts";
@@ -45,6 +51,7 @@ import type { RouteContext } from "./table.ts";
 /** The routes of this module, one per line with its method. */
 export const PAGE_STORE_ROUTE = /^\/api\/pages\/([\w-]+)\/store\/([a-z][a-z0-9_-]{0,39})(?:\/([A-Za-z0-9_-]{1,64}))?$/;
 export const PAGE_MODEL_ROUTE = /^\/api\/pages\/([\w-]+)\/model$/;
+export const PAGE_PROPOSE_ROUTE = /^\/api\/pages\/([\w-]+)\/proposals$/;
 export const PAGE_FILES_ROUTE = /^\/api\/pages\/([\w-]+)\/files(?:\/([A-Za-z0-9_-]{16,40}))?$/;
 
 /** The bytes of an added file: one standard base64 string, decoded at once
@@ -87,6 +94,10 @@ export interface PageCapCallDeps {
   /** Ask first answers (server/pages/page-data-approvals.ts). */
   approvals?: PageDataApprovals;
   actRule?: PageActRule;
+  /** Lot 6: a new proposed version, as the person's own edit
+   * (PublishedPages.edit); `redact` masks secret-shaped text, as there. */
+  propose?(pageId: string, input: { kind: PageKind; content: string; title?: string; by: string }): { ok: true; version: { n: number } } | { ok: false; status: number; error: string; code: string };
+  redact?(text: string): string;
   /** Lot 5: the files readers add. */
   files?: PageFiles;
   /** Lot 4: one tool-free answer on the reader's own engine and account. */
@@ -219,8 +230,32 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
     return ctx.json(ctx.res, 200, fileInfo(ctx, added.file));
   };
 
+  const proposeCall = async (ctx: PageCapCallContext): Promise<void> => {
+    if (ctx.caps?.propose !== true || !deps.propose) return ctx.refuse(403, "not_declared");
+    // the page's person and its editors, as for their own edit
+    if (ctx.role !== "owner" && ctx.role !== "editor") return ctx.refuse(403, "not_allowed", { error: ctx.lang === "fr" ? "Seuls la personne de cette page et ses éditeurs proposent une version." : "Only this page's person and its editors propose a version." });
+    if (deps.pages.stateReadOnlyForData?.(ctx.page.id) === true) return ctx.refuse(409, "shared_write_after_data");
+    const body = await ctx.readBody(ctx.req) as Record<string, unknown> | null;
+    const content = body?.content;
+    if (typeof content !== "string" || !content.trim()) return ctx.refuse(400, "bad_request");
+    if (Buffer.byteLength(content) > PAGE_LIMITS.contentBytes) return ctx.refuse(413, "too_large", { error: ctx.lang === "fr" ? "Cette version est trop grande pour une page." : "This version is too large for a page." });
+    let title: string | undefined;
+    if (body!.title !== undefined && body!.title !== null) {
+      const parsed = parsePageTitle(body!.title);
+      if (parsed === null) return ctx.refuse(400, "bad_request");
+      title = parsed;
+    }
+    const clean = (text: string) => (deps.redact ? deps.redact(text) : text);
+    // the kind of the version the page runs in (a page that proposes is HTML)
+    const kind = ctx.page.versions.find((entry) => entry.n === ctx.version)?.kind ?? "html";
+    const result = deps.propose(ctx.page.id, { kind, content: clean(content), ...(title ? { title: clean(title) } : {}), by: ctx.who.by });
+    if (!result.ok) return ctx.refuse(result.status === 413 || result.code === "too_large" || result.code === "owner_full" || result.code === "server_full" ? 413 : 409, result.code === "not_found" ? "not_found" : "too_large", { error: result.error });
+    return ctx.json(ctx.res, 200, { version: result.version.n });
+  };
+
   return {
     async handle(ctx) {
+      if (PAGE_PROPOSE_ROUTE.test(ctx.path)) return proposeCall(ctx);
       if (PAGE_MODEL_ROUTE.test(ctx.path)) return modelCall(ctx);
       if (PAGE_FILES_ROUTE.test(ctx.path)) return filesCall(ctx);
       return pageStoreCall(deps, ctx);

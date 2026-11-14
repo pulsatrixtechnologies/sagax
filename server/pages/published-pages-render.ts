@@ -293,11 +293,12 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * and `open`, and `files.download` (gesture from userActivation), and
  * `store.collection(name)` (lot 3: get, list, put, delete, and subscribe,
  * read again on the wrapper's `store` event), `model.ask` (lot 4), and
- * `files.add` (from a click), `files.list`, `files.get`, `files.remove` (lot 5). Every call is one message to the parent, the wrapper, which
+ * `files.add` (from a click), `files.list`, `files.get`, `files.remove` (lot 5),
+ * and `page.propose` (lot 6, on `page`). Every call is one message to the parent, the wrapper, which
  * asks the server with the reader's own session; the server checks it
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
-  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [], ...(caps.store ? { store: caps.store } : {}), ...(caps.model ? { model: true } : {}) }).replace(/</g, "\\u003c");
+  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [], ...(caps.store ? { store: caps.store } : {}), ...(caps.model ? { model: true } : {}), ...(caps.propose ? { propose: true } : {}) }).replace(/</g, "\\u003c");
   // capPost forwards the frame's transient activation. Chrome leaves the parent's
   // MessageEvent.userActivation inactive unless postMessage opts in. A load has
   // no activation, so a download on load still is not a click.
@@ -326,7 +327,7 @@ list:function(q){return capCall("store.list",{collection:n,query:q&&typeof q==="
 put:function(i,v){return capCall("store.put",{collection:n,id:i===null||i===undefined?null:String(i),value:v===undefined?null:v})},
 delete:function(i){return capCall("store.delete",{collection:n,id:String(i)})},
 subscribe:function(f,q){if(typeof f!=="function")return function(){};var s={f:f,q:q&&typeof q==="object"?q:{}};(ssubs[n]=ssubs[n]||[]).push(s);return function(){ssubs[n]=(ssubs[n]||[]).filter(function(g){return g!==s})}}})}
-var caps={capabilities:Object.freeze(Object.assign({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open,files:Object.freeze(C.files.slice())},C.store?{store:Object.freeze(Object.keys(C.store))}:{},C.model?{model:true}:{})),
+var caps={capabilities:Object.freeze(Object.assign({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open,files:Object.freeze(C.files.slice())},C.store?{store:Object.freeze(Object.keys(C.store))}:{},C.model?{model:true}:{},C.propose?{propose:true}:{})),
 model:Object.freeze({ask:function(o){o=o&&typeof o==="object"?o:{};return capCall("model.ask",{prompt:o.prompt,system:o.system,schema:o.schema})}}),
 store:Object.freeze({collection:scol}),
 data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},
@@ -334,7 +335,8 @@ subscribe:function(n,f,q){n=String(n);if(typeof f!=="function")return function()
 viewer:Object.freeze({get:function(){return capCall("viewer.get",{})}}),
 open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({download:function(o){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}o=o&&typeof o==="object"?o:{};return capCall("files.download",{name:o.name,mime:o.mime,data:o.data},g)},
 add:function(){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}return capCall("files.add",{},g)},
-list:function(){return capCall("files.list",{})},get:function(i){return capCall("files.get",{id:String(i)})},remove:function(i){return capCall("files.remove",{id:String(i)})}})};`;
+list:function(){return capCall("files.list",{})},get:function(i){return capCall("files.get",{id:String(i)})},remove:function(i){return capCall("files.remove",{id:String(i)})}})};
+function cpropose(o){o=typeof o==="string"?{content:o}:o&&typeof o==="object"?o:{};return capCall("page.propose",{content:o.content,title:o.title})}`;
 }
 
 /** The app's preview wrapper (a server document between the app and the
@@ -358,14 +360,17 @@ const STATE_BRIDGE_DEFINE = `try{Object.defineProperty(W,"sagax",{value:Object.f
  * capability calls beside `page`. Pure. */
 export function stateBridgeSource(caps?: PageCapabilities | null): string {
   if (!pageCapabilitiesAny(caps)) return STATE_BRIDGE_SOURCE;
+  // lot 6: propose sits on `page`, beside the state's own calls
+  const page = caps.propose ? "Object.assign(page,{propose:cpropose})" : "page";
   return STATE_BRIDGE_SOURCE.replace(STATE_BRIDGE_DEFINE,
-    `${capabilityParts(caps)}\ntry{Object.defineProperty(W,"sagax",{value:Object.freeze(Object.assign({page:Object.freeze(page)},caps)),writable:false,configurable:false,enumerable:false})}catch(x){}`);
+    `${capabilityParts(caps)}\ntry{Object.defineProperty(W,"sagax",{value:Object.freeze(Object.assign({page:Object.freeze(${page})},caps)),writable:false,configurable:false,enumerable:false})}catch(x){}`);
 }
 
 /** The app's preview frame has no shared state bridge: a page that declares
  * capabilities gets them alone on window.sagax. Pure. */
 export function capabilityBridgeSource(caps: PageCapabilities): string {
-  return `(function(){"use strict";${capabilityParts(caps)}\ntry{Object.defineProperty(window,"sagax",{value:Object.freeze(caps),writable:false,configurable:false,enumerable:false})}catch(x){}})();`;
+  const value = caps.propose ? "Object.assign({page:Object.freeze({propose:cpropose})},caps)" : "caps";
+  return `(function(){"use strict";${capabilityParts(caps)}\ntry{Object.defineProperty(window,"sagax",{value:Object.freeze(${value}),writable:false,configurable:false,enumerable:false})}catch(x){}})();`;
 }
 
 /** A presentation prints one slide per sheet: each slide is this tall in

@@ -52,7 +52,8 @@
 // `store.collection(name)` (lot 3), `model.ask({ prompt, system?, schema? })`
 // (lot 4: PageModelAnswer; the organization's Ask first shows its card in
 // the wrapper's bar, as for a data read), `files.add()`, `files.list()`,
-// `files.get(id)`, `files.remove(id)` (lot 5, PageFileInfo). `params` (#3449): `fresh: true`
+// `files.get(id)`, `files.remove(id)` (lot 5, PageFileInfo), and on `page`
+// `propose({ content, title? })` (lot 6, PageProposal). `params` (#3449): `fresh: true`
 // skips the source's cache; other keys are the source's filter, string
 // values (PAGE_DATA_PARAMS). A `denied` refusal carries `reason`
 // (PageCapDenyReason) on the Error.
@@ -88,7 +89,7 @@ export const CAP_TAKEN_MESSAGE = "sagax-cap-taken";
 export const CAP_WAIT_MS = 10_000;
 
 /** The calls a page may make. */
-export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete", "model.ask", "files.add", "files.list", "files.get", "files.remove"] as const;
+export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete", "model.ask", "files.add", "files.list", "files.get", "files.remove", "page.propose"] as const;
 export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
 /** #3657: the calls whose answer may wait on the reader (an Ask first card,
  * a link card) in an app released before the wrapper said taken. Behind a
@@ -158,6 +159,18 @@ export interface PageCapabilities {
   store?: Record<string, PageStoreRule>;
   /** Lot 4: model.ask, one answer on the reader's own engine and account. */
   model?: true;
+  /** Lot 6: page.propose, a new proposed version from the page itself. */
+  propose?: true;
+}
+
+/** page.propose (lot 6): the page's script proposes a new version of itself
+ * (`sagax.page.propose({ content, title? })`, or the content alone), for the
+ * page's person and its editors; it is a proposed version like a person's
+ * own edit, and publishing it stays the person's act.
+ *   POST /api/pages/:id/proposals  { content, title? }  ->  { version } */
+export interface PageProposal {
+  content: string;
+  title?: string;
 }
 
 /** model.ask (lot 4): one question, no tool, on the reader's own engine and
@@ -469,7 +482,7 @@ export function parsePageCapabilities(value: unknown): PageCapabilities | null {
     ? [...new Set(record.files.filter((name): name is PageCapFile => typeof name === "string" && FILE_SET.has(name)))]
     : [];
   const store = parsePageStore(record.store);
-  return { data, viewer: record.viewer === true, open: record.open === true, files, ...(store ? { store } : {}), ...(record.model === true ? { model: true as const } : {}) };
+  return { data, viewer: record.viewer === true, open: record.open === true, files, ...(store ? { store } : {}), ...(record.model === true ? { model: true as const } : {}), ...(record.propose === true ? { propose: true as const } : {}) };
 }
 
 /** The declaration in a page's HTML: its first capabilities block, or null
@@ -486,7 +499,7 @@ export function pageCapabilitiesOf(html: string): PageCapabilities | null {
 
 /** Whether a declaration grants anything at all. Pure. */
 export function pageCapabilitiesAny(caps: PageCapabilities | null | undefined): caps is PageCapabilities {
-  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0 || caps.model === true));
+  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0 || caps.model === true || caps.propose === true));
 }
 
 /** Whether a declaration hands the page the reader's personal data (`data`
@@ -530,6 +543,7 @@ export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: P
   if (cap === "data.read") return typeof source === "string" && (caps.data as string[]).includes(source);
   if (cap.startsWith("store.")) return typeof source === "string" && Boolean(caps.store) && Object.prototype.hasOwnProperty.call(caps.store, source);
   if (cap === "model.ask") return caps.model === true;
+  if (cap === "page.propose") return caps.propose === true;
   if (cap === "viewer.get") return caps.viewer;
   if (cap === "files.download") return (caps.files ?? []).includes("download");
   if (cap === "files.add" || cap === "files.list" || cap === "files.get" || cap === "files.remove") return (caps.files ?? []).includes("add");

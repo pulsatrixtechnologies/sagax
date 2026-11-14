@@ -346,3 +346,25 @@ describe("files added by readers in the frame (#3413 lot 5)", () => {
     expect(bridge.posted.at(-1)).toMatchObject({ cap: "files.remove", args: { id: "abc" } });
   });
 });
+
+describe("page.propose in the frame (#3413 lot 6)", () => {
+  const caps = { data: [], viewer: false, open: false, files: [], propose: true as const };
+
+  it("puts propose on page, beside the state's own calls in a reading frame", () => {
+    expect(parsePageCapabilities({ propose: true })).toEqual({ data: [], viewer: false, open: false, files: [], propose: true });
+    expect(pageCapGranted(caps, "page.propose")).toBe(true);
+    expect(stateBridgeSource(caps)).toContain("Object.assign({page:Object.freeze(Object.assign(page,{propose:cpropose}))},caps)");
+    // a version that does not declare it keeps the state's page as it was
+    expect(stateBridgeSource({ ...caps, propose: undefined, viewer: true })).toContain("Object.assign({page:Object.freeze(page)},caps)");
+  });
+
+  it("gives the app's preview sagax.page.propose, which posts the content", () => {
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { page: { propose(input: unknown): Promise<unknown> } };
+    void sagax.page.propose("<p>v2</p>");
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "page.propose", args: { content: "<p>v2</p>" } });
+    void sagax.page.propose({ content: "<p>v3</p>", title: "T" });
+    expect(bridge.posted.at(-1)).toMatchObject({ cap: "page.propose", args: { content: "<p>v3</p>", title: "T" } });
+  });
+});

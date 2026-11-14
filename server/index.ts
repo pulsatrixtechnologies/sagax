@@ -12803,6 +12803,9 @@ ROUTES.push(createPageDataRoutes({
   watch: pageDataWatch,
   store: pageStore,
   files: pageFiles,
+  // #3413 lot 6: a version the page proposes is its reader's own edit
+  propose: (pageId, input) => publishedPages.edit(pageId, input),
+  redact: redactSecretsInText,
   live: pageLive,
   // #3413: the organization's Deny and Ask first for a call a page makes
   // (a model question, a connector call), in the reader's context

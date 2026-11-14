@@ -352,7 +352,9 @@ final class ChatPreferencesTests: XCTestCase {
         let messages = try JSONDecoder().decode([Message].self, from: Data(json.utf8))
         XCTAssertEqual(messages[0].voiceCall?.callId, "call-1")
         let rows = transcriptRows(messages, detail: .full)
-        XCTAssertEqual(rows.map(\.id), ["voice.call-1", "ask", "t"])
+        // #4120 (#4112): a line that came by a call request (`via` "call"
+        // without a Live call's id) is the Asked by row, outside the card
+        XCTAssertEqual(rows.map(\.id), ["voice.call-1", "ask", "incoming.t"])
         guard case let .voiceCall(card) = rows[0] else { return XCTFail("one card") }
         XCTAssertEqual(spokenLines(card.messages).map(\.text), ["hello there", "working on it", "hi back"])
         XCTAssertEqual(formatVoiceCallDuration(voiceCallDurationMs(card.messages, now: 0, clock: nil)), "00:34")

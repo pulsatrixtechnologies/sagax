@@ -2,7 +2,6 @@ import type { MutableRefObject, ReactNode } from "react";
 import { ScreenPermissionActions } from "../settings/OsPermissions";
 import { Hand, Loader2, Maximize2, Monitor, Power } from "lucide-react";
 import type { Action, Bot } from "@/state/store";
-import type { Routine, RoutineRun } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import type { AndroidDeviceStatus } from "@/types/ogb";
 import type { CloudBackend } from "../../../shared/wire";
@@ -13,7 +12,6 @@ import { LocalScreenPreview } from "../LocalScreenPreview";
 import { LinuxLocalControl } from "../LinuxLocalControl";
 import { MacLocalControl } from "../MacLocalControl";
 import { ComputerMoreMenu, type ComputerMoreItem } from "../computer/ComputerMoreMenu";
-import { RoutinesSection } from "../bot-settings/RoutinesSection";
 import { AndroidDevicePanel } from "../AndroidDevicePanel";
 import { SettingsText } from "../SettingsLink";
 import { panelErrorText } from "./errors";
@@ -33,7 +31,6 @@ export function placeActionButton(
 }
 
 export function ComputerDeviceBody(props: {
-  embedded: boolean;
   soloPicker: ReactNode;
   bot: Bot;
   phase: Phase;
@@ -82,26 +79,22 @@ export function ComputerDeviceBody(props: {
   primaryDesktop: boolean;
   moreItems: ComputerMoreItem[];
   vmViewerUrl: string | null;
-  botRoutines: Routine[];
-  routineRuns: RoutineRun[];
-  cloudRoutineReady: boolean;
   androidConnected: boolean;
   androidStatus: AndroidDeviceStatus;
 }) {
   const {
-    embedded, soloPicker, bot, phase, cloudBackend, computerStatusCurrent, currentTeamComputer,
+    soloPicker, bot, phase, cloudBackend, computerStatusCurrent, currentTeamComputer,
     autoView, cloudView, cloudPreviewReady, frameSrc, previewOpensDesktop, previewError,
     previewRefreshing, previewRetry, pending, controlPending, control, lastLiveAt,
     setPolledFrame, setPreviewError, setPreviewRefreshing, setPreviewRetry, openDesktop,
     busyBoat, isLinux, localMisses, vmResumable, emptyState, panelOffers, runPlaceAction,
     editComputer, dispatch, vmStatus, canManageVm, canManageCloud, runVmAction, openVmSettings,
     openConnectionSettings, vpsStatus, run, replaceVpsComputer, errorText, cloudRefused,
-    manageKeys, controlAction, primaryDesktop, moreItems, vmViewerUrl, botRoutines, routineRuns,
-    cloudRoutineReady, androidConnected, androidStatus,
+    manageKeys, controlAction, primaryDesktop, moreItems, vmViewerUrl, androidConnected, androidStatus,
   } = props;
 
   return (
-    <div className={embedded ? "pb-5" : "flex-1 overflow-y-auto px-5 pb-5"}>
+    <div className={"pb-5"}>
         {soloPicker}
         {/* Screen preview. Works on lives in Edit persona > Access. */}
         <div className="mb-1.5 mt-2 flex items-center justify-between text-[13px] text-ink-secondary">
@@ -394,9 +387,6 @@ export function ComputerDeviceBody(props: {
         <MacLocalControl />
       </>}
 
-      {!embedded && <div className="mt-6">
-        <RoutinesSection key={bot.id} bot={bot} routines={botRoutines} runs={routineRuns} defaultRunOn={cloudRoutineReady ? "cloud" : "maus"} />
-      </div>}
       {androidConnected && (
         <div className="mt-6">
           <AndroidDevicePanel status={androidStatus} />

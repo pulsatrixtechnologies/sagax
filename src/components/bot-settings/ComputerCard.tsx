@@ -2,15 +2,23 @@
 // computer" over Awake (or Working while the bot is busy), a recent capture
 // of the computer the bot works on now as a thumbnail on the right
 // (useComputerThumbnail: switching computers switches the picture at once;
-// an old or offline capture is greyed out; a click on it opens it larger). A click opens the live desktop
-// window at once (SandboxDesktopModal: Watching / You have control), never
-// the ComputerPanel in the right-hand column. The section label carries a
+// an old or offline capture is greyed out; a click on it opens it larger). A click opens the live
+// screen window at once (SandboxDesktopModal: Watching / You have control):
+// the desktop, or the bot's browser for a bot that works in its browser. It
+// is the one screen window of the bot's computer (#4208): every link that
+// opens the computer (the store's computerOpen) opens it here, with the
+// browser recording for Teach a task; the old side panel is gone. What the
+// row cannot hold (Start it now, Wake it now, Sleep, Replace, the Local VM's
+// Start, the cloud and team place actions, the Mac Screen Recording
+// recovery, Linux local control, a USB Android phone, an organization's
+// Screen | Browser chips and usage) is Computer details, the last row of the
+// "..." menu, in a window of its own (ComputerPanel). The section label carries a
 // PillSelect (Voice "Ara ⌄" style) listing the same computers as the chat
 // Computer menu / LocalComputerSection (`computerChoices`); picking one
 // changes the bot's Works on and refreshes the card.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Sparkles } from "lucide-react";
+import { Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Settings2, Sparkles } from "lucide-react";
 
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -43,6 +51,8 @@ import { api } from "@/state/store";
 import type { PillOption } from "../SettingsPrimitives";
 import { navigateThreadMenu } from "../BotProjects";
 import { SandboxDesktopModal } from "../computer/SandboxDesktopModal";
+import { BrowserWindow, type BrowserSignIn } from "../BrowserPanel";
+import type { ComputerWindowView } from "@/state/store/model";
 import { LocalLiveScreen } from "../computer/LocalLiveScreen";
 import { ComputerIdleBot } from "../computer/ComputerScreen";
 import { worksOnMode } from "../computer/WorksOnSetting";
@@ -55,7 +65,8 @@ import {
   thumbnailDesktop,
   useComputerThumbnail,
 } from "@/lib/computer-thumbnail";
-import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuDivider, useMenuInWindow } from "@/components/menu-look";
+import { MENU_ROW, MENU_SURFACE, MenuDivider, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
+import { ComputerPanel } from "../lazy-screens";
 
 type ComputerSelectValue = "auto" | "cloud" | "local" | "vm" | "browser";
 
@@ -208,17 +219,44 @@ function modeToPatch(mode: ComputerSelectValue): ComputerPatch {
   return { computer: mode };
 }
 
-export function ComputerCard({ bot, onPatch, readOnly = false }: {
+/** The screen window a link asked for (the store's computerOpen). */
+export type ComputerWindowRequest = { view: ComputerWindowView; signIn?: BrowserSignIn | undefined };
+
+/** The window the store asks the bot panel's Computer section for: the
+ * store's computerOpen (every "open the bot's computer" link, Teach a task
+ * included) with what it should show. */
+export function computerWindowRequest(state: { computerOpen: boolean; computerWindowView: ComputerWindowView }, signIn?: BrowserSignIn): ComputerWindowRequest | null {
+  return state.computerOpen ? { view: state.computerWindowView, signIn } : null;
+}
+
+/** What the screen window shows: null when there is none to show (no
+ * computer, a shell-only host, a VM that opens in its own workspace). */
+export function computerWindowKind(input: { request: ComputerWindowRequest | null; place: string; chosenHost: boolean }): "browser" | "teach" | "screen" | null {
+  if (input.request?.view === "teach") return "teach";
+  if (input.request?.view === "browser" || (!input.chosenHost && input.place === "browser")) return "browser";
+  if (input.chosenHost || input.place === "off" || input.place === "vm") return null;
+  return "screen";
+}
+
+export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = null, onWindowClose, onOpenVmWorkspace }: {
   bot: Bot;
   onPatch?: (patch: ComputerPatch) => void;
   readOnly?: boolean;
+  /** A link opened the bot's computer: the window opens at once. */
+  windowRequest?: ComputerWindowRequest | null;
+  /** The window a link opened closed (the link's state goes back). */
+  onWindowClose?: () => void;
+  /** A bot that works in a VM opens its workspace. */
+  onOpenVmWorkspace?: (botId: string) => void;
 }) {
   const organization = usePerspicaxOrg() !== null;
   const bridge = useDesktopBridgeStatus();
   const [broken, setBroken] = useState<string | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const thumbButton = useRef<HTMLButtonElement>(null);
+  const moreButton = useRef<HTMLButtonElement>(null);
   // Bot computers (#2726): a marked host the bot works on, chosen here.
   const hostComputer = useBotHostComputer(readOnly ? null : bot.id);
   const chosenHost = hostComputer.hostId ? hostComputer.hosts.find((host) => host.hostId === hostComputer.hostId) ?? null : null;
@@ -248,7 +286,20 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const liveIsLocal = active.source === "local";
   const desktopId = liveIsLocal ? currentDesktop(bridge)?.id : undefined;
   const caption = t("computer.screenOf", { name: bot.name });
-  const canOpenLive = !chosenHost && place !== "off" && place !== "browser";
+  const canOpenLive = !chosenHost && place !== "off" && (place !== "vm" || Boolean(onOpenVmWorkspace));
+  const openLive = () => {
+    if (!canOpenLive) return;
+    if (place === "vm") onOpenVmWorkspace?.(bot.id);
+    else setLiveOpen(true);
+  };
+  // The window a link opened, or the one this row opened (its own view).
+  const windowKind = computerWindowKind({ request: windowRequest ?? (liveOpen ? { view: "screen" } : null), place, chosenHost: chosenHost !== null });
+  const windowShown = (liveOpen || windowRequest !== null) && windowKind !== null;
+  // A link that opened nothing to show gives its state back at once.
+  useEffect(() => {
+    if (windowRequest && windowKind === null) onWindowClose?.();
+  }, [windowRequest, windowKind, onWindowClose]);
+  const closeWindow = () => { setLiveOpen(false); if (windowRequest) onWindowClose?.(); };
   // the thumbnail and the Awake / Asleep line follow the real
   // state: the screen, asleep (computer offline, cloud computer stopped), or
   // unavailable with its reason, never a wallpaper that looks fine.
@@ -281,6 +332,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
     : view.problem ? `${statusWord} \u00b7 ${t(SCREEN_PROBLEM_SHORT[view.problem])}` : statusWord;
   const reason = view.problem ? t(SCREEN_PROBLEM_LINE[view.problem]) : undefined;
   const menuEnabled = !readOnly && !!onPatch;
+  const moreLabel = t(menuEnabled ? "botPanel.computerCard.choose" : "botPanel.computerCard.details");
   const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number; right: boolean } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   useMenuInWindow(menuRef, menu && { left: menu.x, top: menu.y, right: menu.right });
@@ -302,9 +354,11 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
       <div className="flex items-center gap-2">
         <h3 id={`bot-computer-${bot.id}`} className={cn(PANEL_LABEL, "min-w-0 flex-1 truncate")}>{t("botPanel.tab.computer")}</h3>
         {/* JC 2026-11-06: the same bare "..." as Upcoming, on the section header row, always visible. */}
-        {menuEnabled && <button type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={t("botPanel.computerCard.choose")} title={t("botPanel.computerCard.choose")}
+        {/* Always there: Computer details is open to whoever sees the row;
+            the Works on choices only to whoever may change them. */}
+        <button ref={moreButton} type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={moreLabel} title={moreLabel}
           onClick={(event) => openMenu(event.currentTarget)}
-          className="ui-icon-button"><MoreHorizontal size={15} /></button>}
+          className="ui-icon-button"><MoreHorizontal size={15} /></button>
       </div>
       <div className={PANEL_CARD}>
         {/* JC 2026-11-06: same row as Upcoming (RoutineList): the thumbnail card
@@ -314,7 +368,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
           type="button"
           data-computer-card=""
           aria-disabled={!canOpenLive || undefined}
-          onClick={() => { if (canOpenLive) setLiveOpen(true); }}
+          onClick={openLive}
           onContextMenu={menuEnabled ? (event) => { event.preventDefault(); openMenu(event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
           onKeyDown={menuEnabled ? (event) => {
             if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMenu(event.currentTarget); }
@@ -339,7 +393,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
           aria-label={view.thumb === "screen" ? t("botPanel.computerCard.preview") : reason ? `${caption} \u00b7 ${reason}` : caption}
           title={view.thumb === "screen" ? capturedLabel : reason ?? (view.thumb === "asleep" ? t("place.view.ccAsleep.short") : undefined)}
           aria-disabled={view.thumb !== "screen" && !canOpenLive ? true : undefined}
-          onClick={() => { if (view.thumb === "screen") setPreviewOpen(true); else if (canOpenLive) setLiveOpen(true); }}
+          onClick={() => { if (view.thumb === "screen") setPreviewOpen(true); else openLive(); }}
           className={cn(
             "relative flex h-[29px] w-[46px] shrink-0 items-center justify-center overflow-hidden rounded-[5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 aria-disabled:cursor-default",
             view.thumb !== "screen" && "border-[0.5px] border-border bg-control",
@@ -359,7 +413,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
       </div>
       {menu && createPortal(
         <div className="fixed inset-0 z-40" onMouseDown={() => closeMenu(false)} onContextMenu={(event) => { event.preventDefault(); closeMenu(false); }}>
-          <div ref={menuRef} role="menu" data-computer-card-menu="" aria-label={t("botPanel.computerCard.choose")}
+          <div ref={menuRef} role="menu" data-computer-card-menu="" aria-label={moreLabel}
             style={{ left: menu.x, top: menu.y }}
             className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute")}
             onMouseDown={(event) => event.stopPropagation()}
@@ -367,7 +421,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
               if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeMenu(); return; }
               navigateThreadMenu(event);
             }}>
-            {options.map((option, index) => (
+            {menuEnabled && options.map((option, index) => (
               <ComputerMenuRow key={option.value} lead={option.lead} label={option.label} detail={option.detail}
                 checked={option.value === selectValue} data-computer-card-option={option.value} autoFocus={index === 0}
                 onPick={() => {
@@ -376,24 +430,41 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
                   if (option.value !== selectValue) onPatch?.(modeToPatch(option.value));
                 }} />
             ))}
-            {hostComputer.hosts.length > 0 && <MenuDivider />}
-            {hostComputer.hosts.map((host) => (
+            {menuEnabled && hostComputer.hosts.length > 0 && <MenuDivider />}
+            {menuEnabled && hostComputer.hosts.map((host) => (
               <HostChoiceItem key={host.hostId} host={host} checked={host.hostId === hostComputer.hostId}
                 onPick={() => { closeMenu(); if (host.hostId !== hostComputer.hostId) void hostComputer.select(host.hostId); }} />
             ))}
+            {menuEnabled && <MenuDivider />}
+            <button type="button" role="menuitem" data-computer-card-details="" autoFocus={!menuEnabled}
+              onClick={() => { closeMenu(false); setDetailsOpen(true); }} className={MENU_ROW}>
+              <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center text-ink-secondary"><Settings2 size={14} /></span>
+              <span className="min-w-0 flex-1 truncate">{t("botPanel.computerCard.details")}</span>
+            </button>
           </div>
         </div>, document.body)}
+      {detailsOpen && (
+        <ViewerDialog title={`${t("botPanel.computerCard.details")} \u00b7 ${bot.name}`} size="compact" onClose={() => setDetailsOpen(false)} returnFocus={moreButton.current}
+          bodyClassName="overflow-y-auto px-4 pt-3">
+          <div data-computer-details="">
+            <ComputerPanel bot={bot} onOpenVmWorkspace={onOpenVmWorkspace} />
+          </div>
+        </ViewerDialog>
+      )}
       {previewOpen && thumbnail.fullSrc && (
         <ViewerDialog title={capturedLabel ? `${caption} \u00b7 ${capturedLabel}` : caption} onClose={() => setPreviewOpen(false)} returnFocus={thumbButton.current}
           bodyClassName="flex items-center justify-center bg-black/80 p-4">
           <img data-computer-thumb-full="" src={thumbnail.fullSrc} alt={caption} className="max-h-full max-w-full object-contain" />
         </ViewerDialog>
       )}
-      {liveOpen && (
+      {windowShown && windowKind !== "screen" && (
+        <BrowserWindow bot={bot} teach={windowKind === "teach"} signIn={windowRequest?.signIn} onClose={closeWindow} />
+      )}
+      {windowShown && windowKind === "screen" && (
         <SandboxDesktopModal
           title={caption}
           state="running"
-          onClose={() => setLiveOpen(false)}
+          onClose={closeWindow}
           screen={liveIsLocal
             ? (control) => <LocalLiveScreen desktopId={desktopId} control={control} />
             : undefined}

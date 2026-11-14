@@ -52,6 +52,11 @@ vi.mock("../computer/SandboxDesktopModal", () => ({
       createElement("button", { type: "button", "data-takeover-close": "", onClick: props.onClose }, "close")),
 }));
 
+// Computer details (#4208): the old side panel's body, in its own window.
+vi.mock("../lazy-screens", () => ({
+  ComputerPanel: (props: { bot: { id: string } }) => createElement("div", { "data-computer-panel-stub": props.bot.id }),
+}));
+
 const bot = {
   id: "bot-1",
   name: "Scout",
@@ -218,9 +223,27 @@ describe("ComputerCard", () => {
     expect(more.className).not.toMatch(/hidden|group-hover/);
   });
 
-  it("has no ... button when read only", () => {
+  // #4208 changed this on purpose: read only still gets the "..." for
+  // Computer details (what the old side panel held), never the choices.
+  it("has a ... with only Computer details when read only", () => {
     act(() => root!.render(createElement(ComputerCard, { bot, readOnly: true })));
-    expect(host!.querySelector("[data-computer-card-more]")).toBeNull();
+    const more = host!.querySelector<HTMLButtonElement>("[data-computer-card-more]");
+    expect(more).toBeTruthy();
+    act(() => more!.click());
+    expect(document.querySelectorAll("[data-computer-card-menu] [role=\"menuitemradio\"]")).toHaveLength(0);
+    expect(document.querySelector("[data-computer-card-menu] [data-computer-card-details]")).toBeTruthy();
+  });
+
+  it("opens Computer details, the old side panel's body, in a window from the menu (#4208)", () => {
+    act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
+    act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
+    const details = document.querySelector<HTMLButtonElement>("[data-computer-card-menu] [data-computer-card-details]")!;
+    expect(details.textContent).toBe("Computer details");
+    act(() => details.click());
+    expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
+    const body = document.querySelector("dialog [data-computer-details] [data-computer-panel-stub]");
+    expect(body?.getAttribute("data-computer-panel-stub")).toBe("bot-1");
+    expect(document.querySelector("dialog h2")!.textContent).toContain("Scout");
   });
 
   it("has no menu when the viewer cannot change the computer", () => {

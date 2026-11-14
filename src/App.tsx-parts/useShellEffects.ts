@@ -21,6 +21,7 @@ import { openBot } from "@/state/store";
 import { navigate } from "@/lib/view-transitions";
 import { preloadScreens } from "@/components/lazy-screens";
 import type { ShellNavigation } from "./useShellNavigation";
+import { useSimplePanels } from "./useSimplePanels";
 
 /** Deep-link, hash, desktop settings, tray, viewer-close and related Shell effects. */
 export function useShellEffects(shell: ShellNavigation) {
@@ -117,16 +118,7 @@ export function useShellEffects(shell: ShellNavigation) {
   // Settings > Memory sets itself up and syncs on an organization server
   // signed in with Perspicax (desktop app only).
   useOrgMemoryAuto(org !== null);
-  // Simple does not offer the inspector or the computer panel. Closing them
-  // leaves their saved settings as they were. Connect apps stays open in
-  // Simple (2026-10-16): its pill is in every sidebar, and a person who
-  // chose Simple must still reach it. What they may change inside is the
-  // server's call.
-  useEffect(() => {
-    if (advanced) return;
-    if (state.inspectorOpen) dispatch({ type: "toggleInspector", open: false });
-    if (state.computerOpen) dispatch({ type: "toggleComputer", open: false });
-  }, [advanced, state.inspectorOpen, state.computerOpen, dispatch]);
+  useSimplePanels(advanced, state.inspectorOpen, dispatch);
 
   // the palette and the shortcuts sheet each teach a habit (achievements)
   useEffect(() => {
@@ -196,7 +188,7 @@ export function useShellEffects(shell: ShellNavigation) {
     });
   }, [dispatch]);
 
-  // The viewer outlives ComputerPanel and can target any bot, so release control
+  // The viewer outlives the bot panel and can target any bot, so release control
   // here (always mounted) when a bot's viewer closes. release() is idempotent.
   useEffect(() => {
     return window.ogb?.desktopViewer?.onState((viewer) => {

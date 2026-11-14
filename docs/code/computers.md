@@ -68,9 +68,6 @@ queued). `SAGAX_HEADLESS_TASK_WAIT_MS` (1 h) bounds one task's turn. Tests:
 
 ## Show a task in my Chrome (2026-10-29)
 
-Hidden for now with the rest of Teach a task (#4209, see Teach by
-demonstration below).
-
 The person shows a task once in their own Chrome and a bot replays it.
 Teach a task (composer +) offers "Show it in my Chrome" where the server
 offers My Chrome to this person (`src/components/MyChromeRecordDialog.tsx`).
@@ -693,7 +690,35 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 
 ## Computer tab and Local VM on an organization server
 
-The Computer tab (`src/components/computer/OrgComputerTab.tsx`) draws the
+Since #4208 the old computer side panel (the bot panel's "computer view"
+that replaced Activity, with a back arrow) is gone.
+Every link that opens a bot's computer (the store's `computerOpen`: the
+panel pill's restore, a sign-in card's Open, a place action, a branch's
+computer, the VM workspace's way back, Teach a task) opens the bot panel
+on Activity, where the Computer section (`bot-settings/ComputerCard.tsx`)
+opens its one screen window: the desktop (`SandboxDesktopModal`), the
+bot's browser (`BrowserWindow`) for a bot that works in its browser, a
+browser sign-in or a place action's browser, or nothing for a VM (its row
+opens the VM workspace) or a shell-only host. Closing the window leaves the
+panel on Activity. A desktop paired to another host keeps its own computer
+panel (`remote-desktop-panel.tsx`). Test: `src/components/teach-task.dom.test.ts`.
+
+What the side panel held and the row cannot is Computer details, the last
+row of the Computer section's "..." menu (open to whoever sees the row,
+read only included; the Works on choices above it only to whoever may
+change them). It opens `ComputerPanel` in a window (`ViewerDialog`): the
+cloud computer's preview with Start it now / Wake it now, Sleep and Replace
+(VPS), the Local VM's Start, Create, Replace and Delete, the cloud and team
+place actions, the Mac Screen Recording recovery (`MacLocalControl`,
+`ScreenPermissionActions`), Linux local control (`LinuxLocalControl`),
+an Android phone over USB (`AndroidDevicePanel`), the take control and hand
+back cards and, on an organization server, the Computer tab below. The
+place sentences a phone reads (`PLACE_WORDS` in `shared/place-view.ts`)
+name that menu. Tests: `src/components/bot-settings/ComputerCard.test.ts`,
+`src/components/teach-task.test.ts`.
+
+The Computer tab (`src/components/computer/OrgComputerTab.tsx`), drawn in
+Computer details on an organization server, draws the
 solo screen: one rounded screen (`ComputerScreen.tsx`) with Play / Pause /
 Stop on it and "<Bot>'s screen" below, and a usage panel that keeps
 polling while the environment is off. Works on is not on this tab. It is
@@ -717,7 +742,7 @@ control's last chip, Browser, where the server has the built-in browser
 (`builtInBrowserEnabled` or an installed engine; Screen | Browser on a solo
 server): `BrowserPanel` in the screen's frame (`BrowserScreen`, "<Bot>'s
 browser" below), opened first when the bot works on its browser. Tests:
-`OrgComputerTab.test.ts`, `ComputerPanel.browser.test.ts`,
+`OrgComputerTab.test.ts`,
 `server/desktop/desktop-bridge.test.ts`, `server/desktop/desktop-bridge-local-vm.test.ts`.
 States are words (Off, Starting, Running, Paused, Error); never show the desktop's raw
 answer. The server environment's live view is view-only with "Take control"
@@ -920,21 +945,64 @@ real tool path: cards for delete, payment and send, refusals, Stop.
 
 ## Teach by demonstration (2026-10-16)
 
-Hidden for now (2026-11-13, #4209; making it work: #4208): one switch,
-`TEACH_TASK_OFFERED` in `shared/teach-task.ts`, is off. The composer's + menu
-has no Teach a task, the "/" menu has no `/learn` (desktop, web app, and the
-phone app through `features.teachTask` of `GET /api/config`), and a `/learn`
-typed by hand is sent as plain text. The run card's Save as skill still works.
+Offered again (#4208, after #4209 hid it): one switch, `TEACH_TASK_OFFERED`
+in `shared/teach-task.ts`, is on. It drives the composer's + menu, the "/"
+menu's `/learn` (desktop, web app, and the phone app through
+`features.teachTask` of `GET /api/config`, where `/learn` is the way the
+phone teaches), and the server's `/learn` expansion. A desktop paired to
+another host offers only "Describe it in words": its computer panel does
+not record.
 
-The composer's + > Teach a task, when the bot has a browser, offers "Show it
-in the browser" beside "Describe it in words" (`/learn`, unchanged). Showing
-opens the bot's browser window (Computer tab) and starts a recording; the
-browser menu has the same Teach by demonstration / Stop recording entry.
+What it does, end to end: the person shows a task (or describes it), the
+bot records the steps and saves them as a skill it can replay.
+
+1. The + menu > Teach a task opens the chooser (`TeachChooserDialog`):
+   "Show it in the browser" when the bot has a browser this person can open,
+   "Show it in my Chrome" where My Chrome is offered, "Describe it in words".
+2. Show it in the browser opens the bot panel on Activity, whose Computer
+   section opens the one screen window on the bot's browser with teaching
+   on (`toggleComputer` with `view: "teach"`, `ComputerCard`,
+   `BrowserWindow teach`). The window starts the recording as soon as the
+   browser is ready (`record-start`), with the person in control.
+3. While it records, the bar at the top of the window says so, in the
+   reference's look (`TeachRecordingBar`): one rounded row (10px radius,
+   10px 10px 10px 12px padding, 16px gap, raised surface, 12px blur), the
+   sentence, Stop with a filled square and the elapsed time (m:ss, "Stop
+   and save recording") and a close mark that discards it
+   (`record-discard`); a 2px red frame (#aa122e) sits over the page. These
+   are the values the reference app's own teaching controls use (its
+   recording pill, Stop, Discard and recording frame).
+4. Stop (`record-stop`) opens the steps editor (`TeachStepsDialog`):
+   review, then Save as a skill.
+5. Describe it in words puts `/learn ` in the message bar. The bot asks
+   what only the person can settle as a question card (its native question
+   tool, else `ask_choice`), pinned over the message box like every
+   question (`src/lib/pinned-waiting.ts`), never as a question in its reply.
+
+What was broken before #4208, and how to see it on 0.8.103: (1) the + menu
+entry opened the old computer side panel (Cloud selector, back arrow,
+Details) instead of a window; (2) the recording was handed over through
+that panel (`src/lib/teach-request.ts`, removed): with the panel drawing the
+bot's screen instead of its browser (a bot that works on Cloud or a Local
+VM), nothing took the request and no recording started, so Stop never
+came; (3) the window's recording bar had no Discard and no elapsed time;
+(4) `/learn` told the bot to make its own choice and not stall, so what
+only the person could settle was guessed rather than asked in the pinned
+zone. Reproduce: pick a bot that works on
+Cloud, + > Teach a task > Show it in the browser: the side panel shows the
+cloud screen and no recording starts.
+
+Tests: `src/components/teach-task.dom.test.ts` (the chooser, the window on
+the bot's browser, `record-start`, the recording bar, one window per bot,
+the restore), `src/components/teach-task.test.ts` (the side panel and its
+hand-over are gone, its body lives on as Computer details), `server/skills/skill-learn.test.ts` (the pinned
+question). Captures: the gallery `src/gallery/teach-task.html`
+(`node scripts/capture/teach-task.mjs`).
 Pieces: `shared/teach-recording.ts` (masking rules, SKILL.md builder),
 `server/browser/browser-teach.ts` (recorder), the `record-start`, `record-stop` and
 `record-discard` actions of `server/browser/browser-live.ts`,
 `src/components/TeachStepsDialog.tsx` (editor and chooser),
-`src/lib/teach-request.ts`. Rules, covered by `shared/teach-recording.test.ts`
+`src/components/TeachRecordingBar.tsx` (the recording bar and frame). Rules, covered by `shared/teach-recording.test.ts`
 and `server/browser/browser-teach.test.ts`:
 
 - Only the person's own input through the live view is recorded (clicks,

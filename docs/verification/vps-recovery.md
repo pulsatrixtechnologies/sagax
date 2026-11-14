@@ -32,4 +32,3 @@ The other fixtures cover:
 
 These fixtures do not prove a customer's network, remote Docker daemon, or actual Cua
 desktop is healthy. They require no real VPS, Docker daemon, provider key, or live app data.
-The existing [cloud preview fixture](cloud-preview.md) covers renderer error/retry behavior.

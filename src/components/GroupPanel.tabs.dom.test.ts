@@ -32,7 +32,6 @@ vi.mock("./ExportTranscriptMenu", () => ({ ExportTranscriptMenu: () => null }));
 // Per-bot feeds read the server; their own tests cover them.
 vi.mock("./bot-settings/ActivitySection", () => ({ ActivitySection: ({ bot }: { bot: Bot }) => createElement("p", { "data-activity-of": bot.id }) }));
 vi.mock("./remote-session/RemoteSessionsSection", () => ({ RemoteSessionsSection: () => null }));
-vi.mock("./ComputerPanel", () => ({ ComputerPanel: ({ bot }: { bot: Bot }) => createElement("p", { "data-computer-of": bot.id }) }));
 
 const { setLocale } = await import("@/lib/i18n");
 const { setInterfaceMode } = await import("@/lib/interface-mode");

@@ -9,7 +9,7 @@ import { createBrowserControl, type BrowserInteraction } from "@/lib/browser-con
 import type { ScreenState } from "@/lib/desktop-local-vm";
 import { browserDot, reportScreenDot } from "@/lib/screen-status";
 import { ComputerScreen, type ScreenAction } from "./computer/ComputerScreen";
-import { SandboxDesktopModal } from "./computer/SandboxDesktopModal";import { onBrowserTeachRequest, takeBrowserTeach } from "@/lib/teach-request";
+import { SandboxDesktopModal } from "./computer/SandboxDesktopModal";
 import type { TeachStep } from "../../shared/teach-recording";
 import { readableError } from "@/lib/plain-error";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
@@ -91,6 +91,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const recordingViewer = useRef("");
   const autoTeach = useRef(teach);
   const startRecordingNow = useRef<() => void>(() => {});
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   // Whether the hold must outlast idle time, for a control created later.
   const keepNow = useRef(false);
   // The last sign-in Open acted on, and its site to open once the page is known.
@@ -316,6 +317,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       await action({ type: "record-start" });
       recordingNow.current = true; recordingViewer.current = viewer.current;
       recordedAt.current = new Date().toISOString();
+      setRecordingStartedAt(Date.now());
       setRecording(true);
       // the demonstration is the person's: keep control until they stop
       browserControl.current?.takeNow();
@@ -332,6 +334,14 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       if (result.expired) setTeachNote(t("teach.expired"));
       else if (!result.steps?.length) setTeachNote(t("teach.nothing"));
       else setTaught({ steps: result.steps, recordedAt: recordedAt.current });
+    } catch (cause) { setError(readableError(cause)); }
+  };
+  // Discard: the recording ends and nothing of it is kept (the server drops it).
+  const discardRecording = async () => {
+    try {
+      await action({ type: "record-discard" }, recordingViewer.current || viewer.current);
+      recordingNow.current = false; recordingViewer.current = "";
+      setRecording(false);
     } catch (cause) { setError(readableError(cause)); }
   };
 
@@ -399,6 +409,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     showNetwork={showNetwork}
     setShowNetwork={setShowNetwork}
     recording={recording}
+    recordingStartedAt={recordingStartedAt}
     taught={taught}
     setTaught={setTaught}
     teachNote={teachNote}
@@ -428,6 +439,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     execute={execute}
     startRecording={startRecording}
     stopRecording={stopRecording}
+    discardRecording={discardRecording}
     action={action}
     confirm={confirm}
     setError={setError}
@@ -535,13 +547,7 @@ const handledSignIns = new Set<number>();
  * server environment's (SandboxDesktopModal), where LiveBrowser connects.
  * While that window is open the square shows no second stream. */
 export function BrowserComputerScreen({ bot, signIn }: { bot: Bot; signIn?: BrowserSignIn | undefined }) {
-  const [takeover, setTakeover] = useState(() => takeBrowserTeach(bot.id));
-  // Opened from the composer's Teach a task: the window starts recording.
-  const [teach, setTeach] = useState(takeover);
-  useEffect(() => onBrowserTeachRequest((botId) => {
-    if (botId !== bot.id || !takeBrowserTeach(bot.id)) return;
-    setTeach(true); setTakeover(true);
-  }), [bot.id]);
+  const [takeover, setTakeover] = useState(false);
   // A sign-in card's Open: the window opens and takes the browser there,
   // once per Open (a screen drawn again later does not reopen it).
   const [openSignIn, setOpenSignIn] = useState<BrowserSignIn | undefined>(undefined);
@@ -599,9 +605,25 @@ export function BrowserComputerScreen({ bot, signIn }: { bot: Bot; signIn?: Brow
       openAlwaysShown={waiting}
       controls={screenState === "off" ? { play: open } : undefined}
     />
-    {takeover && <SandboxDesktopModal kind="browser" title={caption} state="running" onClose={() => { setTakeover(false); setTeach(false); setOpenSignIn(undefined); }}
-      screen={(control) => <LiveBrowser key={bot.id} bot={bot} control={control} placeholder={lastFrame.current} teach={teach} signIn={openSignIn} />} />}
+    {takeover && <BrowserWindow bot={bot} placeholder={lastFrame.current} signIn={openSignIn} onClose={() => { setTakeover(false); setOpenSignIn(undefined); }} />}
   </>;
+}
+
+/** The bot's browser in the screen window (SandboxDesktopModal), the one
+ * the Computer section opens (bot-settings/ComputerCard.tsx). `teach`: Teach
+ * a task, shown in the browser (#4208): the message bar's + menu opens the
+ * bot's Computer section on it and it starts recording at once. A paired
+ * desktop's computer panel (BrowserComputerScreen) opens it too; that app
+ * never offers Teach a task, so one bot never has two of them. */
+export function BrowserWindow({ bot, teach = false, signIn, placeholder, onClose }: {
+  bot: Bot;
+  teach?: boolean;
+  signIn?: BrowserSignIn | undefined;
+  placeholder?: string | undefined;
+  onClose: () => void;
+}) {
+  return <SandboxDesktopModal kind="browser" title={t("computer.browserOf", { name: bot.name })} state="running" onClose={onClose}
+    screen={(control) => <LiveBrowser key={bot.id} bot={bot} control={control} placeholder={placeholder} teach={teach} signIn={signIn} />} />;
 }
 
 /** What the browser tab says when it cannot show the browser, in the screen's frame. */

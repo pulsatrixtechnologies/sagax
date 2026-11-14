@@ -216,7 +216,7 @@ pnpm exec vitest run server/vps-routing.test.ts server/routines/routine-cron.e2e
 
 ```sh
 pnpm exec vitest run server/routines/routines.test.ts server/routines/routines-startup.test.ts server/routines/routine-results.e2e.test.ts server/routines/routine-delegation.e2e.test.ts server/drivers/agents-proxy.test.ts
-pnpm exec vitest run src/components/routines/RoutineViews.test.ts src/components/bot-settings/RoutinesSection.test.ts src/components/RoutineRunCard.test.ts src/components/BotProjects.test.ts src/lib/folder-read.test.ts src/lib/computer-panel-view.test.ts src/state/store.test.ts
+pnpm exec vitest run src/components/routines/RoutineViews.test.ts src/components/bot-settings/RoutinesSection.test.ts src/components/RoutineRunCard.test.ts src/components/BotProjects.test.ts src/lib/folder-read.test.ts src/state/store.test.ts
 ```
 
 The hand-off integration tests (`server/routines/routine-delegation.e2e.test.ts`,

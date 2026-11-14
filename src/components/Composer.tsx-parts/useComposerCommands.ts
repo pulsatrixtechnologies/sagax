@@ -6,7 +6,6 @@ import { activeLocale, t } from "@/lib/i18n";
 import { canTeachInBrowser } from "@/lib/bot-capabilities";
 import { browserAvailable, builtInBrowserEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
 import { TEACH_TASK_OFFERED } from "../../../shared/teach-task";
-import { requestBrowserTeach } from "@/lib/teach-request";
 import { myChromeCall, type MyChromeRecordingResult } from "@/lib/my-chrome";
 import { mentionChoicesForQuery } from "@/lib/mentions";
 import {
@@ -123,7 +122,9 @@ export function useComposerCommands({
     (group ? (members ?? []).some(supportsAgents) : supportsAgents(bot));
   // ...which can also be shown in the bot's browser (a recording) when this
   // person can open that browser (the Browser panel's own conditions).
-  const browserTeach = Boolean(TEACH_TASK_OFFERED && bot && !group && bot.browser !== false && canTeachInBrowser(config, bot, ownerOrAdmin)
+  // A desktop paired to another host draws that host's computer panel,
+  // which records nothing: there it is described in words only.
+  const browserTeach = Boolean(TEACH_TASK_OFFERED && bot && !group && !remoteClient && bot.browser !== false && canTeachInBrowser(config, bot, ownerOrAdmin)
     && (builtInBrowserEnabled(config) || browserAvailable(config)) && config?.browserEngine?.kind === "engine");
   const [teachChooser, setTeachChooser] = useState(false);
   // ...or shown in the person's own Chrome (My Chrome's recorder), where this
@@ -138,11 +139,12 @@ export function useComposerCommands({
     myChromeCall("status").then((status) => { if (live) setMyChromeOffered(status.offered); }, () => { if (live) setMyChromeOffered(false); });
     return () => { live = false; };
   }, [myChromeBotId]);
-  const showInBrowser = () => {
-    if (!bot) return;
-    requestBrowserTeach(bot.id);
-    dispatch({ type: "toggleComputer", open: true });
-  };
+  // Showing it in the browser opens the bot's panel on Activity, where its
+  // Computer section opens the screen window on the bot's browser, recording
+  // at once (#4208): the one window of the bot's computer, never a second
+  // one. It used to open the old computer side panel and hand the recording
+  // over through it, where a bot shown on its screen never started recording.
+  const showInBrowser = () => { if (bot) dispatch({ type: "toggleComputer", open: true, view: "teach" }); };
   // The room's latest goal run, its card in the transcript: what /goal
   // status, resume and stop act on.
   const latestGoalRun = useMemo(() => {

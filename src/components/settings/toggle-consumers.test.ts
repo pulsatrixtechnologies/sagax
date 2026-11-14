@@ -63,7 +63,7 @@ describe("other switches and their consumers", () => {
     ["Desktop mascot switches", "components/floating-bots/FloatingBots.tsx", "floatingBotPrefs"],
     ["Dev context pods", "components/dev-pods/DevPods.tsx", "useDevPodPrefs"],
     ["Skill authoring", "components/Composer.tsx-parts/useComposerCommands.ts", "skillAuthoringEnabled"],
-    ["Built-in browser", "components/ComputerPanel.tsx-parts/useComputerPanelSession.ts", "builtInBrowserEnabled"],
+    ["Built-in browser", "components/Composer.tsx-parts/useComposerCommands.ts", "builtInBrowserEnabled"],
     ["Data window", "components/DataWindowButton.tsx", "dataWindowEnabled"],
     ["Decision model", "components/DecisionModelSettings.tsx", "decider"],
     ["Show tool calls", "components/ChatView.tsx-parts/MessagesListItem.tsx", "showToolCallsEnabled"],

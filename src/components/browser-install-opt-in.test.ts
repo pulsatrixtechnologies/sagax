@@ -37,8 +37,6 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 
 import { ComputerBrowserSettings } from "./settings/ComputerBrowserSettings";
-import { ConfirmProvider } from "@/components/ConfirmProvider";
-import { ComputerPanel } from "./ComputerPanel";
 import { WorksOnSetting } from "./computer/WorksOnSetting";
 import { AccessSection } from "./bot-settings/AccessSection";
 import { useBotSettingsDerived } from "./bot-settings/useBotSettingsDerived";
@@ -56,7 +54,6 @@ const switchTag = (markup: string, label: string) => {
 // the workspace switch lives on Settings > Computer > Browser since #2080 L3 (#2225)
 const settings = () => renderToStaticMarkup(createElement(ComputerBrowserSettings));
 const access = () => renderToStaticMarkup(createElement(BotAccess, { bot }));
-const panel = (browser: boolean) => renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot: { ...bot, browser } })));
 
 beforeEach(() => {
   fixture.config = { features: { browser: false }, browserEngine: { kind: "unavailable", installable: true } };
@@ -70,7 +67,6 @@ describe("browser installation opt-in", () => {
     const toggle = switchTag(settings(), "Enable the built-in browser");
     expect(toggle).toContain('aria-checked="false"');
     expect(toggle).not.toContain("disabled=");
-    expect(panel(false)).not.toContain("Install the browser engine");
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
@@ -84,18 +80,15 @@ describe("browser installation opt-in", () => {
     const worksOn = renderToStaticMarkup(createElement(WorksOnSetting, { bot: { ...bot, browser: false } }));
     // Workspace is always Auto (owner 2026-10-18): Browser is not a choice
     expect(worksOn).not.toContain('data-works-on-choice="browser"');
-    expect(panel(false)).not.toContain("data-works-on-setting");
-    expect(panel(false)).not.toContain("Install the browser engine");
-    expect(panel(true)).not.toContain("Install the browser engine");
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
   it("keeps both opt-ins unavailable when the server cannot install the engine", () => {
     fixture.config.browserEngine = { kind: "unavailable", installable: false, reason: "Unsupported platform" };
-    expect(switchTag(settings(), "Enable the built-in browser")).toContain("disabled=");
+    // an impossible switch that is off is hidden (#2789, Sagax 0.8.65)
+    expect(settings()).not.toContain("Enable the built-in browser");
     fixture.config.features = { browser: true };
     expect(switchTag(access(), "Give this bot a built-in browser")).toContain("disabled=");
-    expect(panel(true)).not.toContain("Install the browser engine");
   });
 
   it("preserves the per-bot provider capability gate", () => {

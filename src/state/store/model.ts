@@ -1334,7 +1334,14 @@ export interface AppState {
   botWizard: { botId: string | null; redo?: boolean } | null;
   /** Creation continues even when the role picker is dismissed. */
   botCreationPending: boolean;
+  /** The bot's computer: the bot panel opens on Activity, and the Computer
+   * section opens its screen window (bot-settings/ComputerCard.tsx). A
+   * remote client draws its own computer panel for it instead. */
   computerOpen: boolean;
+  /** What that screen window shows (#4208): the computer the bot works on,
+   * its browser, or its browser recording a task the person shows it
+   * (Teach a task). Read only while computerOpen. */
+  computerWindowView: ComputerWindowView;
   /** the per-thread event inspector (runtime stream + native protocol tee) */
   inspectorOpen: boolean;
   activityOpen: boolean;
@@ -1823,7 +1830,7 @@ export type Action =
   | { type: "toggleNewBot"; open?: boolean }
   | { type: "openBotWizard"; botId?: string | null; redo?: boolean }
   | { type: "closeBotWizard" }
-  | { type: "toggleComputer"; open?: boolean }
+  | { type: "toggleComputer"; open?: boolean; view?: ComputerWindowView }
   /** #2149: the bot panel's Details or Library tab, picked by the person. */
   | { type: "pickBotPanelTab"; botId: string; tab: BotPanelPickedTab }
   /** #2149: the header pill closes the panel: note what it showed. */
@@ -2491,6 +2498,9 @@ export function closeBotCatalog(): Action {
  * (AppState.panelOwner). */
 /** The right panel as it was when the bot's profile page opened (#2271):
  * closing the page puts it back, open or closed, on the same bot. */
+/** What the Computer section's screen window shows (#4208). */
+export type ComputerWindowView = "screen" | "browser" | "teach";
+
 export type ProfilePanelSnapshot = Pick<AppState, "settingsOpen" | "panelOwner" | "computerOpen" | "inspectorOpen" | "activityOpen" | "personPanelId">;
 
 export type PanelOwner =
@@ -2560,6 +2570,7 @@ export const initialState: AppState = {
   botWizard: null,
   botCreationPending: false,
   computerOpen: false,
+  computerWindowView: "screen",
   inspectorOpen: false,
   activityOpen: false,
   appSettingsOpen: false,

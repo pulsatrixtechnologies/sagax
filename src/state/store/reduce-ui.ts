@@ -181,11 +181,16 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     case "unreadDividerDone":
       return state.unreadDivider?.threadId === action.threadId ? { ...state, unreadDivider: null } : state;
     case "toggleComputer": {
+      // The bot's computer opens in the Computer section's screen window,
+      // over the bot panel on Activity (#4208): no side panel of its own.
       const open = action.open ?? !state.computerOpen;
+      const botId = state.panelOwner?.botId ?? state.selectedId;
       return {
         ...state,
         botPanelRestored: false,
         computerOpen: open,
+        computerWindowView: open ? action.view ?? "screen" : "screen",
+        botPanelTab: open && botId ? { botId, tab: "activity" } : state.botPanelTab,
         personPanelId: open ? null : state.personPanelId,
         settingsOpen: open ? false : state.settingsOpen,
         inspectorOpen: open ? false : state.inspectorOpen,
@@ -221,8 +226,9 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         return reduce(state, { type: "toggleSettings", open: true, ...(action.botId ? { botId: action.botId } : {}) });
       }
       if (last.computer) {
+        // the screen window was open: the panel comes back on Activity with it
         const opened = reduce(state, { type: "toggleComputer", open: true });
-        return { ...opened, botPanelTab: { botId, tab: last.tab }, botPanelRestored: true };
+        return { ...opened, botPanelRestored: true };
       }
       const opened = reduce(state, { type: "toggleSettings", open: true, ...(action.botId ? { botId: action.botId } : {}) });
       if (opened === state) return state;

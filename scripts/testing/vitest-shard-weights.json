@@ -16,7 +16,6 @@
   "scripts/testing/cleared-bot-names.guard.test.ts": 8,
   "scripts/testing/cline-native.e2e.test.ts": 1,
   "scripts/testing/cline-ui.e2e.test.ts": 1,
-  "scripts/testing/cloud-preview.e2e.test.ts": 1,
   "scripts/testing/control-omb-ui.e2e.test.ts": 1,
   "scripts/testing/cron-routines-ui.e2e.test.ts": 1,
   "scripts/testing/direct-coordination-ui.e2e.test.ts": 1,

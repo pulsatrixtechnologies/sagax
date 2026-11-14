@@ -54,6 +54,13 @@ describe("expandLearnTurnText", () => {
         expect(expanded).toContain("exact SKILL.md path listed for that skill");
     });
 
+    it("asks what only the person can settle as a pinned question card, never in the reply text (#4208)", () => {
+        const expanded = expandLearnTurnText("/learn how I file the monthly report");
+        expect(expanded).toContain("ask it as a question card with your native question tool, else ask_choice");
+        expect(expanded).toContain("pins that card over the message box");
+        expect(expanded).toContain("Never ask it in your reply text");
+    });
+
     it("sends a typed /learn as plain text while Teach a task is hidden (#4209)", () => {
         teach.offered = false;
         expect(expandLearnTurnText("/learn the REST client in ~/sdk")).toBe("/learn the REST client in ~/sdk");

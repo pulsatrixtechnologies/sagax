@@ -11,7 +11,9 @@ describe("bot panel: remote hosts placement", () => {
     const details = read("./BotSettingsDialog.tsx");
     expect(details).toMatch(/RemoteSessionsSection/);
     expect(details).toMatch(/remote-session\/RemoteSessions/);
-    expect(details).toMatch(/ComputerPanel/);
+    // #4208: the old computer side panel is gone; the Computer section
+    // (ComputerCard) holds the hosts.
+    expect(details).toMatch(/<ComputerCard/);
     const remoteAt = details.indexOf("<RemoteSessionsSection");
     // #2624: the routines left the panel; Suggested now heads Activity.
     const routinesAt = details.indexOf("<SuggestionsSection");
@@ -19,16 +21,10 @@ describe("bot panel: remote hosts placement", () => {
     expect(routinesAt).toBeGreaterThan(-1);
     expect(routinesAt).toBeLessThan(remoteAt);
 
-    const computer = read("./ComputerPanel.tsx");
-    expect(computer).not.toMatch(/BotRemoteHostsSection/);
-    expect(computer).toMatch(/OrgComputerTab/);
-    expect(computer).toMatch(/remoteHosts=\{remoteHostRows\}/);
-    expect(computer).toMatch(/remoteCatalog=\{catalogHosts\}/);
-    expect(computer).toMatch(/onAttachRemoteHost/);
-    expect(computer).toMatch(/onDetachRemoteHost/);
-    expect(computer).toMatch(/activeRemoteSessions/);
-
-    const hostsHook = read("./ComputerPanel.tsx-parts/useRemoteHosts.ts");
-    expect(hostsHook).toMatch(/filter\(\(row\) => row\.state === "connected"\)/);
+    // #4208: the hosts a bot can work on are the Computer section's menu
+    // (ComputerCard), since the old computer side panel is gone.
+    const card = read("./bot-settings/ComputerCard.tsx");
+    expect(card).toMatch(/useBotHostComputer/);
+    expect(card).toMatch(/<HostChoiceItem/);
   });
 });

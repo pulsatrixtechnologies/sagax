@@ -380,6 +380,10 @@ function pendingKey(botId: string, person: string): string {
   return `${botId}\u0000${person}`;
 }
 
+function replayKey(botId: string, key: string): string {
+  return `${botId}\u0000${key}`;
+}
+
 /** Labels for the Events line: counted when repeated, never content. */
 export function eventLabels(events: readonly ProactiveEvent[], more = 0): string {
   const counts = new Map<string, number>();
@@ -425,6 +429,22 @@ export class ProactiveWaker {
     this.signals = deps.signals ?? new SignalLedger({ now: this.now });
   }
 
+  /** The keys of proactive-pending.json rows being offered again now. */
+  private readonly replaying = new Set<string>();
+
+  /** Offers the gathered events a restart cut before their wake
+   * (ProactivePendingFile.take): their keys were noted in the ledger when
+   * first offered (#4250), so during `offer` each of them passes the
+   * duplicate check once. A key offered twice, or after, stays a duplicate. */
+  replayPending(rows: ReadonlyArray<{ botId: string; key: string }>, offer: () => void): void {
+    for (const row of rows) this.replaying.add(replayKey(row.botId, row.key));
+    try {
+      offer();
+    } finally {
+      this.replaying.clear();
+    }
+  }
+
   /** One event for one bot. Cheap and synchronous: the filter, then the
    * event waits for its batch. Never throws. */
   offer(event: ProactiveEvent): ProactiveOfferVerdict {
@@ -447,7 +467,10 @@ export class ProactiveWaker {
     // 2026-11-03 (audit S-2): never one wake for two people's events
     const person = this.personOf(event);
     // #4250: the key is kept in the person's signal ledger, on disk
-    if (!this.signals.note(person, { key: event.key, kind: WAKE_EVENT_KIND, bot: event.botId, label: event.label }).fresh) return "duplicate";
+    // A row of proactive-pending.json was noted before the restart that cut
+    // its wake: its replay is its first wake, not a second one.
+    const replayed = this.replaying.delete(replayKey(event.botId, event.key));
+    if (!this.signals.note(person, { key: event.key, kind: WAKE_EVENT_KIND, bot: event.botId, label: event.label }).fresh && !replayed) return "duplicate";
     const group = pendingKey(event.botId, person);
     const pending = this.pending.get(group);
     if (pending) {

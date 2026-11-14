@@ -5,9 +5,19 @@
 // (server/messages/replies.ts). A key spans the bot's conversations with the
 // same person, so a routine that runs every few minutes, each run in its own
 // conversation, keeps one card per item instead of one per run.
+import { createHash } from "node:crypto";
 import type { Message } from "../store.ts";
 
 type Card = NonNullable<Message["card"]>;
+
+/** #4233: the stable key of an ask the bot did not key itself, taken from
+ * its normalized text (case, accents' composition, spacing, punctuation and
+ * markdown ignored), so the same ask in a repeating routine's next run
+ * replaces its pending card in place instead of raising a second one. */
+export function askTextKey(question: string): string {
+  const plain = question.normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return `ask-${createHash("sha256").update(plain).digest("hex").slice(0, 16)}`;
+}
 
 /** Row `message` is the pending card the bot raised with `key`. */
 function pendingWithKey(message: Message | undefined, key: string): message is Message {
@@ -131,6 +141,29 @@ export class AskKeyIndex {
  * a passive card in the chat is put away. */
 export function closedAskCard(card: Card): Card {
   return card.requestId ? { ...card, expired: true, options: [] } : { ...card, dismissed: true };
+}
+
+/** #4233: an ask a repeating routine's run wrote as text (routines.ts
+ * routineClaimedCardChoices) drawn holding nothing and keyed by its text
+ * (askTextKey): the same ask in a later run replaces its pending card in
+ * place (#4205 keys), never a second card nor a second ring. True when the
+ * ask has its card. */
+export function raiseTextKeyedAsk<C extends { question: string; options: string[] }>(
+  threadId: string,
+  choice: C,
+  deps: {
+    find(key: string): { threadId: string; message: Message } | null;
+    remember(key: string, threadId: string, messageId: string): void;
+    patch(threadId: string, messageId: string, card: Card): boolean;
+    raise(choice: C & { card: { askKey: string; noHold: true } }): { messageId: string } | null;
+  },
+): boolean {
+  const askKey = askTextKey(choice.question);
+  const found = deps.find(askKey);
+  if (found && deps.patch(found.threadId, found.message.id, replacedAskCard(found.message.card!, { question: choice.question, options: choice.options, noHold: true }))) return true;
+  const drawn = deps.raise({ ...choice, card: { askKey, noHold: true } });
+  if (drawn) deps.remember(askKey, threadId, drawn.messageId);
+  return Boolean(drawn);
 }
 
 /** The pending card's new words: same card, same request, same place. */

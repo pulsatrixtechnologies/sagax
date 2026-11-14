@@ -724,8 +724,10 @@ export interface RoutineManagerOptions {
    * that carries the bot's words) and answers the run's waiting line, or null
    * when no card could be drawn (the run then fails as before). #4205: the
    * same for final words that leave several items to decide as text: one
-   * card per item (routineClaimedCardChoices). */
-  raiseClaimedCard?: (threadId: string, claim: string) => string | null;
+   * card per item (routineClaimedCardChoices). #4233: `card.noHold`: the
+   * cards hold nothing (a repeating routine's run, asksHoldNothing); the run
+   * then ends normally and each answer arrives later as its own turn. */
+  raiseClaimedCard?: (threadId: string, claim: string, card?: { noHold: true }) => string | null;
   /** #4205: a run cancelled or superseded leaves none of its own question
    * cards open: each card drawn in its conversation since `since` (the
    * run's start) is closed (an answer to it starts nothing). A card drawn
@@ -2414,6 +2416,18 @@ export class RoutineManager {
     const routine = this.routines.find((candidate) => candidate.id === run.routineId);
     if (routine) return routineProblemToldAt(routine.schedule, this.now(), scheduleZone(undefined));
     return this.inBackground(run) ? ROUTINE_PROBLEM_STREAK_TOLD : 1;
+  }
+
+  /** #4233: a question card of this thread's active run holds nothing by
+   * default: the run reports by its streak (not one the person started) and
+   * its routine can run several times a day, so a card that held it would
+   * skip the next occurrences. Its asks stay pending, the run ends normally
+   * and each answer arrives later as its own turn. A native question tool
+   * and an approval card hold as before. */
+  asksHoldNothing(threadId: string): boolean {
+    const run = this.runs.find((candidate) => candidate.threadId === threadId && ["running", "waiting"].includes(candidate.status));
+    // its routine runs several times a day: problemToldAt's own verdict
+    return Boolean(run && routineReportsByStreak(run) && this.problemToldAt(run) === ROUTINE_PROBLEM_STREAK_TOLD);
   }
 
   /** #3695, #3990: the one rule for what a run that ended with a problem
@@ -4771,6 +4785,9 @@ export class RoutineManager {
     // The cards carry the bot's words whole, never the record's 2000 characters.
     const whole = noFinalMessage ? undefined : this.finalWords.get(run.id);
     const words = whole !== undefined && clipReadable(whole, 2_000) === run.output ? whole : run.output;
+    // #4233: the claimed asks have their cards (drawn, or an earlier run's
+    // pending card replaced in place by its text key), holding nothing
+    let asksDrawn = false;
     if ((this.claimsUndrawnCard(run) || this.endsOnUndrawnAsks(run, words)) && this.options.raiseClaimedCard
       && routineReportOutcome(run.output).declared?.status !== "failed"
       && !this.runTrouble.get(run.id)?.flowBlocked && !flowRunBlockedReason(run.output)) {
@@ -4778,8 +4795,11 @@ export class RoutineManager {
       // goal lines (GOAL_STATUS / NEXT_CHECK) or the report markers: the
       // turn that ends the run carries its own and settles the goal.
       const said = readGoalReport(routineReportOutcome(words).report, this.now()).report;
-      const waiting = this.options.raiseClaimedCard(run.threadId!, said);
-      if (waiting) {
+      // #4233: a repeating routine's run raises them holding nothing and
+      // ends normally below, so its next occurrence starts on time
+      const noHold = this.asksHoldNothing(run.threadId!);
+      const waiting = this.options.raiseClaimedCard(run.threadId!, said, noHold ? { noHold: true } : undefined);
+      if (waiting && !noHold) {
         this.finalWords.delete(run.id);
         run.output = said ? clipReadable(said, 2_000) : undefined;
         run.claimCardAt = this.now();
@@ -4787,6 +4807,7 @@ export class RoutineManager {
         run.error = undefined;
         return false;
       }
+      asksDrawn = Boolean(waiting);
     }
     const goalProblem = this.settleGoal(run);
     const outcome = this.settleReport(run);
@@ -4825,7 +4846,7 @@ export class RoutineManager {
     // 2026-11-03: "La carte est affichée" with no card anywhere is a failure
     // the person must hear, not a success that sends them looking for it
     // (when the host could not draw it above).
-    if (this.claimsUndrawnCard(run)) {
+    if (!asksDrawn && this.claimsUndrawnCard(run)) {
       this.failRun(run, ROUTINE_CARD_CLAIM_WITHOUT_CARD);
       queueMicrotask(() => this.tickInBackground());
       return true;

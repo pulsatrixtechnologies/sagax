@@ -35,7 +35,7 @@ import {
 } from "../../shared/page-targets.ts";
 import type { AskQuestionOption } from "../../shared/ask-question.ts";
 import type { Message } from "../store.ts";
-import { closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
+import { askTextKey, closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
 import { resolveAddressee, roomPeopleLine, type RoomPerson } from "../rooms/room-ask-cards.ts";
 import type { AskAddressee } from "../../shared/wire.ts";
 
@@ -179,6 +179,10 @@ export function createAgentCard(args: {
    * addressed to. `fromRun`: the card comes from a routine run whose
    * source is this room, and holds nothing. */
   room?: { people: RoomPerson[]; name?: string; fromRun?: boolean };
+  /** #4233: the card comes from a routine run that reports by its streak and
+   * whose routine can run several times a day (routines.ts
+   * asksHoldNothing): ask_choice without wait reads as wait false there. */
+  repeatingRun?: boolean;
   /** #4219: a pending card was re-addressed to another person of the room:
    * they get its notification. */
   notifyAddressee?(threadId: string, messageId: string): void;
@@ -280,7 +284,8 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // #4219: a keyed or addressed card of a room is a real question card in
   // the room, answered by its people; from a routine run it holds nothing
   const roomAsk = Boolean(args.room) && Boolean(value.key || askTo);
-  const holds = value.wait !== false && !(roomAsk && args.room?.fromRun);
+  // #4233: a repeating routine's run holds nothing unless wait is true
+  const holds = (value.wait ?? !args.repeatingRun) && !(roomAsk && args.room?.fromRun);
   // #2901: Yes/No on "A, or B?" answers neither path; offer the two paths.
   const given = value.options;
   value.options = choiceOptionsFor(value.subtitle, given);
@@ -290,7 +295,10 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // #4219: so is a card addressed to one person
   const decision = value.options !== given || value.decision === true || value.key !== undefined || askTo !== undefined;
   const from = inRoom ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
-  const keyed = { ...(value.key ? { askKey: value.key } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}) };
+  // #4233: an unkeyed card a repeating routine's run raises holding nothing
+  // is keyed by its text, so the next run's same ask replaces it in place
+  const askKey = value.key ?? (!holds && args.repeatingRun && !inRoom ? askTextKey(value.subtitle) : undefined);
+  const keyed = { ...(askKey ? { askKey } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}) };
   const addressed = askTo ? { addressedTo: askTo.name } : {};
   // #4219: in a room the bot reads whom it can address
   const roomPeopleResult = {
@@ -306,8 +314,8 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     : undefined;
   // #4205: the same key again replaces its pending card in place
   // #4219: in a room too, and a new `to` re-addresses it
-  if (value.key && (!from.from || roomAsk)) {
-    const found = findKeyed(value.key);
+  if (askKey && (!from.from || roomAsk)) {
+    const found = findKeyed(askKey);
     if (found) {
       const card = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(askTo ? { askTo } : {}) });
       const patched = args.store.patchMessage(found.threadId, found.message.id, { card });

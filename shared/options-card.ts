@@ -33,6 +33,7 @@ export interface OptionsCardInput {
 /** #4205: what ask_choice adds to its card. `key`: the bot's own stable
  * name for the card (same key again replaces it in place; the answer
  * carries it). `wait` false: the card holds no turn and no routine run.
+ * #4233: absent, it holds except in a repeating routine's run; true holds.
  * `decision`: a business decision of the person's, never answered for them
  * (a key counts as one). `retire`: with key, close that pending card.
  * #4219 `to`: in a room, the one person the card is addressed to (their
@@ -40,7 +41,7 @@ export interface OptionsCardInput {
  * the pending card. */
 export interface AskChoiceInput extends OptionsCardInput {
   key?: string;
-  wait?: false;
+  wait?: boolean;
   decision?: true;
   to?: string;
 }
@@ -119,7 +120,7 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
   const extra: Pick<AskChoiceInput, "key" | "wait" | "decision" | "to"> = {
     ...(key ? { key } : {}),
     ...(to ? { to } : {}),
-    ...(value.wait === false ? { wait: false as const } : {}),
+    ...(typeof value.wait === "boolean" ? { wait: value.wait } : {}),
     ...(value.decision === true ? { decision: true as const } : {}),
   };
   const question = boundedText(value.question, "question", ASK_CHOICE_LIMITS.question);

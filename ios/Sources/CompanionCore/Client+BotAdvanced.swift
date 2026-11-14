@@ -58,14 +58,20 @@ public extension CompanionClient {
         try await send(skillRequest("GET", botId: botId, name: name), as: SkillText.self).text
     }
 
-    /// `GET /api/bots/:id/skills/:name` as the person-UI editor payload.
-    func skillEditor(botId: String, name: String) async throws -> SkillEditorPayload {
-        try await send(skillRequest("GET", botId: botId, name: name), as: SkillEditorPayload.self)
+    /// The editor payload, read where the skill lives (the desktop's
+    /// `skillEditorApiPath`): the bot, the library or the person's shelf.
+    func skillEditorRequest(botId: String, name: String, origin: SkillOrigin? = nil) throws -> URLRequest {
+        try makeRequest("GET", skillOriginPath(botId: botId, name: name, origin: origin))
+    }
+
+    /// `GET {where it lives}` as the person-UI editor payload.
+    func skillEditor(botId: String, name: String, origin: SkillOrigin? = nil) async throws -> SkillEditorPayload {
+        try await send(skillEditorRequest(botId: botId, name: name, origin: origin), as: SkillEditorPayload.self)
     }
 
     /// `PUT /api/bots/:id/skills/:name`: person Save (re-signs the reviewed hash).
-    func saveSkill(botId: String, name: String, newName: String, description: String, instructions: String) async throws {
-        var request = try skillRequest("PUT", botId: botId, name: name)
+    func saveSkill(botId: String, name: String, newName: String, description: String, instructions: String, origin: SkillOrigin? = nil) async throws {
+        var request = try makeRequest("PUT", skillOriginPath(botId: botId, name: name, origin: origin))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "name": newName, "description": description, "instructions": instructions,
@@ -73,10 +79,14 @@ public extension CompanionClient {
         try await send(request)
     }
 
-    /// `POST /api/bots/:id/skills/:name/review {action}`: Accept or Revert.
-    func reviewSkill(botId: String, name: String, action: String) async throws {
-        guard Self.validRouteID(botId), SkillRules.validName(name) else { throw APIError.badURL }
-        try await send(makeRequest("POST", "/api/bots/\(botId)/skills/\(name)/review", body: ["action": action]))
+    /// `POST {where it lives}/review {action}`: Accept or Revert, for a
+    /// bot's own skill and a shared one alike (SkillEditorPage.tsx).
+    func reviewSkillRequest(botId: String, name: String, origin: SkillOrigin? = nil, action: String) throws -> URLRequest {
+        try makeRequest("POST", skillOriginPath(botId: botId, name: name, origin: origin) + "/review", body: ["action": action])
+    }
+
+    func reviewSkill(botId: String, name: String, origin: SkillOrigin? = nil, action: String) async throws {
+        try await send(reviewSkillRequest(botId: botId, name: name, origin: origin, action: action))
     }
 
     /// `PATCH /api/bots/:id/skills/:name {enabled}`.

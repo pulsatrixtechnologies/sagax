@@ -24,6 +24,11 @@ for key, desktop_key in mapping.items():
         if value is None:
             continue
         value = re.sub(r"\{\w+\}", "%@", value)
+        # The desktop's pt-br catalog still has a few em or en dashes; the
+        # iPad's own Portuguese drops them (colon or comma), so never copy
+        # one back over it.
+        if lang == "pt-BR" and re.search(r"[\u2013\u2014]", value):
+            continue
         localizations = entry.setdefault("localizations", {})
         if lang == "en" and value == key and "en" not in localizations:
             continue

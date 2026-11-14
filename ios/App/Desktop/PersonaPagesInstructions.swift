@@ -12,6 +12,15 @@ import UniformTypeIdentifiers
 
 // MARK: - Shared pieces
 
+/// The card's side inset (`px-3.5`). A row that runs edge to edge inside
+/// the card (the skill rows, Learn from use, the organization's skills)
+/// takes it back with `instructionsPaneFullWidth()`, so the two stay one value.
+private let instructionsPaneInset: CGFloat = 14
+
+private extension View {
+    func instructionsPaneFullWidth() -> some View { padding(.horizontal, -instructionsPaneInset) }
+}
+
 /// `PaneSection`: the grey heading (13/18, `min-h-6 px-1 gap-1.5`), its
 /// info button, then the card (or the plain body).
 private struct InstructionsPane<Content: View>: View {
@@ -39,7 +48,7 @@ private struct InstructionsPane<Content: View>: View {
                 VStack(alignment: .leading, spacing: 8, content: content)
             } else {
                 VStack(alignment: .leading, spacing: 0, content: content)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, instructionsPaneInset)
                     .padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -694,6 +703,14 @@ struct PersonaSkillsPage: View {
     @State private var removing: ManagedSkill?
     @State private var unsharing: ManagedSkill?
     @State private var picking = false
+    @State private var learningBusy = false
+    /// The fold (#4104): every row shown, and the skills added since the
+    /// page's first list, which stay in view (SkillsSection.tsx `addedSkills`).
+    @State private var showAll = false
+    @State private var seen: Set<String>?
+    @State private var added: Set<String> = []
+    /// An action asked from the opened skill, run once its sheet is gone.
+    @State private var afterClose: (() -> Void)?
 
     init(bot: Bot, slackURL: URL?) {
         self.bot = bot
@@ -728,16 +745,28 @@ struct PersonaSkillsPage: View {
             async let skills: Void = model.refresh(first: true)
             async let more: Void = extras.load(first: true)
             _ = await (skills, more)
+            #if DEBUG
+            // `panel-more-skills-open` (skills lab): one shared skill opened
+            if ParityLaunch.current?.iPadScreen == .panelMoreSkillsOpen,
+               let skill = model.skills.first(where: { $0.name == Self.parityOpenSkill }) {
+                await open(skill, editing: false)
+            }
+            #endif
+        }
+        .onChange(of: model.skills.map(\.name)) { names in
+            guard !model.loading else { return }
+            added.formUnion(SkillRowRules.freshlyAdded(seen: seen, now: names))
+            seen = Set(names)
         }
         .fileImporter(isPresented: $picking, allowedContentTypes: Self.uploadTypes, allowsMultipleSelection: true) { result in
             if case let .success(urls) = result { Task { await extras.choose(urls) } }
         }
         .sheet(item: $model.reviewing) { sheet in SkillReviewSheet(sheet: sheet, model: model) }
-        .sheet(item: $model.viewing) { sheet in SkillTextSheet(sheet: sheet, model: model) }
+        .sheet(item: $model.viewing, onDismiss: runAfterClose) { sheet in SkillTextSheet(sheet: sheet, model: model, details: details(sheet.skill)) }
         .sheet(isPresented: Binding(get: { extras.review != nil }, set: { if !$0 { extras.review = nil } })) {
             if let review = extras.review { reviewSheet(review.skill, review.text, reviewing: true) }
         }
-        .sheet(isPresented: Binding(get: { extras.reading != nil }, set: { if !$0 { extras.reading = nil } })) {
+        .sheet(isPresented: Binding(get: { extras.reading != nil }, set: { if !$0 { extras.reading = nil } }), onDismiss: runAfterClose) {
             if let reading = extras.reading { reviewSheet(reading.skill, reading.text, reviewing: false) }
         }
         .confirmationDialog(
@@ -768,12 +797,19 @@ struct PersonaSkillsPage: View {
         }
     }
 
+    /// The skill `panel-more-skills-open` opens (ios/parity/skills-lab.mjs):
+    /// shared with every bot of the person, a long description.
+    static let parityOpenSkill = "password-rotation-reminder"
+
     static let uploadTypes: [UTType] = [.zip, UTType(filenameExtension: "md") ?? .plainText, UTType(filenameExtension: "markdown") ?? .plainText, .plainText]
 
     // MARK: Learned skills
 
     @ViewBuilder
     private var learned: some View {
+        if model.authoring {
+            learnFromUse.padding(.bottom, 8)
+        }
         if canWrite && extras.libraryOn {
             VStack(alignment: .leading, spacing: 6) {
                 let pool = extras.listing.library
@@ -835,13 +871,28 @@ struct PersonaSkillsPage: View {
                 .padding(.top, 12)
                 .accessibilityIdentifier("desktop-skills.empty")
         } else {
+            let fold = SkillRowRules.fold(model.skills, added: added)
             VStack(spacing: 0) {
-                ForEach(model.skills) { skill in
+                ForEach(fold.head + (showAll ? fold.rest : [])) { skill in
                     Rectangle().fill(theme.hairline40).frame(height: 1)
                     row(skill)
                 }
+                if !fold.rest.isEmpty {
+                    // ShowMoreFold's line (SHOW_MORE_ROW): 13/18 grey, centred, py-2
+                    Rectangle().fill(theme.hairline40).frame(height: 1)
+                    Button { showAll.toggle() } label: {
+                        DesktopText(verbatim: showAll ? AppStrings.localized("Show less") : String(format: AppStrings.localized("Show %lld more"), fold.rest.count),
+                                    size: 13, line: 18, color: \.inkSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(Text(verbatim: showAll ? "less" : "more"))
+                    .accessibilityIdentifier("desktop-skills.fold")
+                }
             }
-            .padding(.horizontal, -14)
+            .instructionsPaneFullWidth()
             .padding(.top, 12)
         }
         if model.staged > 0 {
@@ -955,106 +1006,182 @@ struct PersonaSkillsPage: View {
         .accessibilityIdentifier("desktop-skills.upload-preview")
     }
 
+    /// A skill on the iPad Skills page (#4165), the desktop profile's compact
+    /// row (#4148, plainParts.tsx `renderPlainSkillRow`): the book glyph, the
+    /// name, one grey line ("Needs review" in orange, "Off", the description
+    /// cut to one line), at the right the shared glyph and the more menu.
+    /// A tap opens the skill, where everything else is.
     private func row(_ skill: ManagedSkill) -> some View {
         let info = extras.listing.origin(of: skill.name)
         let origin = info?.origin
-        let blocked = skill.warnings.contains { $0.contains("changed after review") }
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Button { Task { await open(skill, editing: false) } } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(verbatim: skill.name).font(Theme.mono(12.5)).foregroundStyle(theme.ink).lineLimit(1)
-                            if extras.libraryOn {
-                                Text(verbatim: origin == .me || origin == .library ? AppStrings.localized("shared") : AppStrings.localized("private"))
-                                    .font(Theme.mono(9.5))
-                                    .textCase(.uppercase)
-                                    .tracking(0.4)
-                                    .foregroundStyle(theme.inkSecondary)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(theme.control, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                            }
-                        }
-                        if !skill.description.isEmpty {
-                            DesktopText(verbatim: skill.description, size: 11.5, line: 16, color: \.inkSecondary).lineLimit(2)
-                        }
+        let state = SkillRowRules.state(skill, origin: origin)
+        let actions = SkillRowRules.actions(skill, origin: origin, libraryOn: extras.libraryOn, canWrite: canWrite)
+        return HStack(spacing: 12) {
+            Button { Task { await open(skill, editing: false) } } label: {
+                HStack(spacing: 12) {
+                    DesktopIconView(icon: .bookOpen, size: 20, strokeWidth: 1.5)
+                        .foregroundStyle(theme.inkSecondary)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(verbatim: skill.name)
+                            .font(theme.font(14))
+                            // ProfileRow `muted={off}`: an off skill's name is grey, needs review or not
+                            .foregroundStyle(SkillRowRules.off(skill, origin: origin) ? theme.inkSecondary : theme.ink)
+                            .lineLimit(1)
+                            .frame(height: 20)
+                        stateLine(skill, state)
+                            .font(theme.font(12))
+                            .foregroundStyle(theme.inkSecondary)
+                            .lineLimit(1)
+                            .frame(height: 16)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                }
+                .frame(minHeight: 56)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("desktop-skills.open.\(skill.name)")
+            if let bots = SkillRowRules.sharedBots(info, libraryOn: extras.libraryOn) {
+                PersonaSkillSharedGlyph(label: bots.isEmpty ? AppStrings.localized("Shared") : instructionsText("botPanel.skills.sharedWith", bots.joined(separator: ", ")))
+                    .accessibilityIdentifier("desktop-skills.shared.\(skill.name)")
+            }
+            if actions.count > 1 {
+                Menu {
+                    ForEach(actions, id: \.self) { action in
+                        Button(role: action == .remove ? .destructive : nil) { perform(action, skill) } label: {
+                            Label(Self.actionTitle(action), systemImage: Self.actionSymbol(action))
+                        }
+                        .disabled(busy && action != .open)
+                        .accessibilityIdentifier("desktop-skills.menu-item.\(action.rawValue)")
+                    }
+                } label: {
+                    DesktopIconView(icon: .ellipsis, size: 15)
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text(verbatim: instructionsText("Actions for %@", skill.name)))
+                .accessibilityIdentifier("desktop-skills.menu.\(skill.name)")
+            } else if origin == .native {
+                Button { Task { await open(skill, editing: false) } } label: {
+                    DesktopIconView(icon: .eye, size: 15)
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("desktop-skills.open.\(skill.name)")
-                if canWrite {
-                    PanelSwitch(
-                        label: LocalizedStringKey(instructionsText(skill.enabled ? "Disable %@" : "Enable %@", skill.name)),
-                        isOn: skill.enabled, disabled: busy, onColor: switchColor
-                    ) { _ in
-                        Task { if await toggle(skill) { await refresh() } }
-                    }
-                    .accessibilityIdentifier("desktop-skills.toggle.\(skill.name)")
-                    Menu {
-                        Button(AppStrings.localized("Open"), systemImage: "eye") { Task { await open(skill, editing: false) } }
-                        if origin == nil || origin == .private {
-                            Button(AppStrings.localized("Edit"), systemImage: "pencil") { Task { await open(skill, editing: true) } }
-                        }
-                        if extras.libraryOn && origin == .private {
-                            Button(AppStrings.localized("Share with my bots"), systemImage: "square.and.arrow.up") {
-                                Task { if await extras.run(skill.name, { try await $0.shareSkill(botId: bot.id, name: skill.name, scope: "me", stop: false) }) { await refresh() } }
-                            }
-                            .disabled(busy)
-                        }
-                        if extras.libraryOn && (origin == .me || origin == .library) {
-                            Button(AppStrings.localized("Stop sharing"), systemImage: "square.and.arrow.up.trianglebadge.exclamationmark") {
-                                unsharing = skill
-                            }
-                            .disabled(busy)
-                        }
-                        Button(AppStrings.localized("Remove skill"), systemImage: "trash", role: .destructive) { removing = skill }
-                            .disabled(busy)
-                    } label: {
-                        InstructionsIconView(icon: .ellipsis, size: 15)
-                            .foregroundStyle(theme.inkSecondary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel(Text(verbatim: instructionsText("Actions for %@", skill.name)))
-                    .accessibilityIdentifier("desktop-skills.menu.\(skill.name)")
-                }
-            }
-            if !skill.source.isEmpty {
-                DisclosureGroup {
-                    Text(verbatim: skill.source).font(Theme.mono(10)).foregroundStyle(theme.inkSecondary).textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } label: {
-                    DesktopText(verbatim: SkillSourceLabel.of(skill.source), size: 10.5, line: 14, color: \.inkSecondary)
-                }
-                .tint(theme.inkSecondary)
-                .padding(.top, 4)
-                .accessibilityIdentifier("desktop-skill-source.\(skill.name)")
-            }
-            if extras.libraryOn, origin == .me || origin == .library, let bots = info?.assignedBots, !bots.isEmpty {
-                DesktopText(verbatim: instructionsText("botPanel.skills.sharedWith", bots.map(\.name).joined(separator: ", ")), size: 10.5, line: 14, color: \.inkSecondary)
-                    .padding(.top, 4)
-            }
-            if blocked {
-                HStack(spacing: 0) {
-                    DesktopText("stored SKILL.md changed after review - enablement is blocked", size: 10.5, line: 14, color: \.warning)
-                    DesktopText(verbatim: " · ", size: 10.5, line: 14, color: \.warning)
-                    Button { Task { await open(skill, editing: false) } } label: {
-                        DesktopText("Review changes", size: 10.5, weight: .medium, line: 14, color: \.accentText)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 4)
-            } else if !skill.warnings.isEmpty {
-                DesktopText(verbatim: skill.warnings.joined(separator: " · "), size: 10.5, line: 14, color: \.warning).padding(.top, 4)
+                .accessibilityLabel(Text(verbatim: AppStrings.localized("Open")))
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .frame(minHeight: 56)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-skills.row.\(skill.name)")
+        .accessibilityValue(Text(verbatim: state.rawValue))
+    }
+
+    /// The grey line: "Needs review" (orange), "Off", then the description.
+    private func stateLine(_ skill: ManagedSkill, _ state: SkillRowRules.State) -> Text {
+        var parts: [Text] = []
+        if state == .needsPerson { parts.append(Text(verbatim: AppStrings.localized("Needs review")).foregroundColor(theme.warning)) }
+        if SkillRowRules.off(skill, origin: extras.origin(skill)) { parts.append(Text(verbatim: AppStrings.localized("Off"))) }
+        if !skill.description.isEmpty { parts.append(Text(verbatim: skill.description)) }
+        guard let first = parts.first else { return Text(verbatim: "") }
+        return parts.dropFirst().reduce(first) { $0 + Text(verbatim: " · ") + $1 }
+    }
+
+    static func actionTitle(_ action: SkillRowRules.Action) -> String {
+        switch action {
+        case .open: AppStrings.localized("Open")
+        case .review: AppStrings.localized("botPanel.skills.reviewChanges")
+        case .edit: AppStrings.localized("Edit")
+        case .turnOn: AppStrings.localized("Turn on")
+        case .turnOff: AppStrings.localized("Turn off")
+        case .share: AppStrings.localized("Share with my bots")
+        case .unshare: AppStrings.localized("Stop sharing")
+        case .remove: AppStrings.localized("Remove skill")
+        }
+    }
+
+    static func actionSymbol(_ action: SkillRowRules.Action) -> String {
+        switch action {
+        case .open: "eye"
+        case .review: "doc.text.magnifyingglass"
+        case .edit: "pencil"
+        case .turnOn, .turnOff: "power"
+        case .share: "square.and.arrow.up"
+        case .unshare: "square.and.arrow.up.trianglebadge.exclamationmark"
+        case .remove: "trash"
+        }
+    }
+
+    /// One action of the menu or of the opened skill. From the opened skill,
+    /// the sheet closes first and the action runs once it is gone, so its
+    /// review or its confirmation shows on the page.
+    private func perform(_ action: SkillRowRules.Action, _ skill: ManagedSkill, fromSheet: Bool = false) {
+        if fromSheet {
+            afterClose = { perform(action, skill) }
+            model.viewing = nil
+            extras.reading = nil
+            return
+        }
+        switch action {
+        case .open: Task { await open(skill, editing: false) }
+        case .edit: Task { await open(skill, editing: true) }
+        case .review:
+            // the review the desktop opens (SkillsSection.tsx `reviewSkill`),
+            // for a shared skill too, read and decided where it lives
+            Task { await model.view(skill, startReview: true, origin: extras.origin(skill)) }
+        case .turnOn, .turnOff: Task { if await toggle(skill) { await refresh() } }
+        case .share:
+            Task { if await extras.run(skill.name, { try await $0.shareSkill(botId: bot.id, name: skill.name, scope: "me", stop: false) }) { await refresh() } }
+        case .unshare: unsharing = skill
+        case .remove: removing = skill
+        }
+    }
+
+    /// The opened skill's part that the row no longer shows.
+    private func details(_ skill: ManagedSkill) -> AnyView {
+        AnyView(
+            PersonaSkillDetails(
+                skill: model.skills.first { $0.name == skill.name } ?? skill,
+                info: extras.listing.origin(of: skill.name),
+                libraryOn: extras.libraryOn, canWrite: canWrite, busy: busy
+            ) { action, current in perform(action, current, fromSheet: true) }
+            .environment(\.desktopTheme, theme)
+        )
+    }
+
+    /// Learn from use (#2610, #4148): the page's switch row, its glyph and
+    /// its help; a person who may not change it reads its state.
+    private var learnFromUse: some View {
+        let on = bot.skillLearning != false
+        return DesktopDescribedRow(
+            Text(verbatim: AppStrings.localized("Learn from use")),
+            description: canWrite ? nil : Text(verbatim: AppStrings.localized(on ? "On" : "Off")),
+            help: Text(verbatim: AppStrings.localized("After a failure or a correction while a skill is in use, the bot revises that skill. After a long task that went well, it offers a new skill you can keep in one click. Every change shows in the skill's history and can be undone.")),
+            icon: .graduationCap,
+            identifier: "skill-learning"
+        ) {
+            if canWrite {
+                DesktopSwitch(isOn: on, label: Text(verbatim: AppStrings.localized("Learn from use")), identifier: "desktop-skills.learning",
+                              disabled: learningBusy) {
+                    Task { await setLearning(!on) }
+                }
+            }
+        }
+        .instructionsPaneFullWidth()
+    }
+
+    private func setLearning(_ on: Bool) async {
+        guard let client = session.profileClient else { return }
+        learningBusy = true
+        defer { learningBusy = false }
+        do {
+            session.applyProfileBot(try await client.patchBotAccess(botId: bot.id, patch: BotAccessPatch(skillLearning: on)))
+        } catch {
+            extras.error = error.localizedDescription
+        }
     }
 
     private func orgSkills(_ organization: String) -> some View {
@@ -1094,7 +1221,7 @@ struct PersonaSkillsPage: View {
                     .padding(.vertical, 10)
                 }
             }
-            .padding(.horizontal, -14)
+            .instructionsPaneFullWidth()
             .padding(.vertical, -4)
         }
     }
@@ -1103,8 +1230,21 @@ struct PersonaSkillsPage: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    DesktopText(verbatim: instructionsText("Source: %@", skill.source), size: 12, line: 16, color: \.inkSecondary)
-                    if !skill.warnings.isEmpty {
+                    // the opened skill's details say its source and warnings once,
+                    // under the text; the review says them above it
+                    if reviewing {
+                        DesktopText(verbatim: instructionsText("Source: %@", skill.source), size: 12, line: 16, color: \.inkSecondary)
+                    }
+                    // a shared skill changed after its review says so here: the
+                    // details list leaves that line to the review
+                    if !reviewing, let changed = SkillRowRules.changedAfterReviewLine(skill) {
+                        DesktopText(verbatim: changed, size: 12, line: 16, color: \.warning)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(theme.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .accessibilityIdentifier("skill-changed-after-review")
+                    }
+                    if reviewing, !skill.warnings.isEmpty {
                         DesktopText(verbatim: skill.warnings.joined(separator: " · "), size: 12, line: 16, color: \.warning)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
@@ -1117,6 +1257,7 @@ struct PersonaSkillsPage: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
                         .background(theme.inset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    if !reviewing { details(skill) }
                     if !extras.error.isEmpty {
                         DesktopText(verbatim: extras.error, size: 12, line: 16, color: \.danger)
                     }
@@ -1142,6 +1283,12 @@ struct PersonaSkillsPage: View {
     }
 
     // MARK: Actions
+
+    private func runAfterClose() {
+        let next = afterClose
+        afterClose = nil
+        next?()
+    }
 
     private func refresh() async {
         async let skills: Void = model.refresh()
@@ -1186,6 +1333,100 @@ struct PersonaSkillsPage: View {
             await model.remove(skill)
             await extras.load(first: false)
         }
+    }
+}
+
+/// The shared glyph of a skill row (plainParts.tsx `SharedGlyph`): who it is
+/// shared with shows on a tap, and is its accessible name.
+private struct PersonaSkillSharedGlyph: View {
+    @Environment(\.desktopTheme) private var theme
+    let label: String
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing.toggle() } label: {
+            DesktopIconView(icon: .users, size: 15, strokeWidth: 1.75)
+                .foregroundStyle(theme.inkSecondary)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: label))
+        .popover(isPresented: $showing) {
+            DesktopText(verbatim: label, size: 12, line: 16)
+                .frame(maxWidth: 240, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .desktopPopoverOnCompact()
+        }
+    }
+}
+
+/// What the opened skill shows that its compact row no longer does (#4165,
+/// plainParts.tsx `SkillDetails` and `SkillDetailActions`): private or
+/// shared and with whom, where it came from, every warning in full, and its
+/// actions (Turn on or off, Share, Stop sharing, Remove).
+struct PersonaSkillDetails: View {
+    @Environment(\.desktopTheme) private var theme
+    let skill: ManagedSkill
+    let info: SkillOriginInfo?
+    let libraryOn: Bool
+    let canWrite: Bool
+    let busy: Bool
+    let perform: (SkillRowRules.Action, ManagedSkill) -> Void
+
+    private var originLine: String? {
+        if info?.origin == .native { return AppStrings.localized("The bot's engine loads this from the folder under Source. Edit or remove it there.") }
+        if let bots = SkillRowRules.sharedBots(info, libraryOn: libraryOn) {
+            return bots.isEmpty ? AppStrings.localized("Shared") : instructionsText("botPanel.skills.sharedWith", bots.joined(separator: ", "))
+        }
+        return libraryOn ? AppStrings.localized("Private to this bot") : nil
+    }
+
+    var body: some View {
+        let warnings = SkillRowRules.detailWarnings(skill)
+        let actions = SkillRowRules.detailActions(skill, origin: info?.origin, libraryOn: libraryOn, canWrite: canWrite)
+        VStack(alignment: .leading, spacing: 8) {
+            if let originLine {
+                HStack(spacing: 8) {
+                    if SkillRowRules.shared(origin: info?.origin, libraryOn: libraryOn) {
+                        DesktopIconView(icon: .users, size: 14).foregroundStyle(theme.inkSecondary)
+                    }
+                    DesktopText(verbatim: originLine, size: 12, line: 16, color: \.inkSecondary)
+                }
+                .accessibilityIdentifier("desktop-skills.detail-origin")
+            }
+            if !skill.source.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    DesktopText(verbatim: SkillSourceLabel.of(skill.source), size: 12, line: 16, color: \.inkSecondary)
+                    Text(verbatim: skill.source).font(Theme.mono(11)).foregroundStyle(theme.inkSecondary).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .accessibilityIdentifier("desktop-skill-source.\(skill.name)")
+            }
+            if !warnings.isEmpty {
+                DesktopText(verbatim: warnings.joined(separator: " · "), size: 12, line: 16, color: \.warning)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .accessibilityIdentifier("desktop-skills.detail-warnings")
+            }
+            if !actions.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(actions, id: \.self) { action in
+                        Button(PersonaSkillsPage.actionTitle(action)) { perform(action, skill) }
+                            .buttonStyle(pillStyle(primary: false))
+                            .disabled(busy)
+                            .accessibilityIdentifier("desktop-skills.detail-action.\(action.rawValue)")
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("desktop-skills.details.\(skill.name)")
     }
 }
 

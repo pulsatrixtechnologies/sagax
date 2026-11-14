@@ -267,6 +267,12 @@ enum IPadParityScreen: String, CaseIterable {
     case coding = "coding"
     /// The Edit bot page opened from the sidebar, the panel closed.
     case botEdit = "bot-edit"
+    /// The Skills page's compact row (#4165) with the skills lab
+    /// (PARITY_SKILLS=1): one row's more menu open (the iPad's is drawn by
+    /// DesktopPersonaSkillRowsUITests, a menu opens on a tap only), and one
+    /// shared skill opened.
+    case panelMoreSkillsMenu = "panel-more-skills-menu"
+    case panelMoreSkillsOpen = "panel-more-skills-open"
 
     /// Accepts the id, or a capture file stem ("03-main", "desktop-1366x1024-03-main").
     init?(argument: String) {
@@ -317,6 +323,7 @@ enum IPadParityScreen: String, CaseIterable {
     /// The persona editor section open on a `panel-more-<section>` surface
     /// (the section's id in kebab case: `panel-more-works-on` is worksOn).
     var panelSection: DesktopPanelSection? {
+        if self == .panelMoreSkillsMenu || self == .panelMoreSkillsOpen { return .skills }
         guard rawValue.hasPrefix("panel-more-") else { return nil }
         let id = String(rawValue.dropFirst("panel-more-".count))
         return DesktopPanelSection.allCases.first { section in

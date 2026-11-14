@@ -41,6 +41,8 @@ export const USER_PREFERENCE_KEYS = [
   // #2695: the person's daily push budget and quiet hours, across all their bots (shared/signal-levels.ts)
   "sagax.notifyBudget.v1",
   "sagax.quietHours.v1",
+  // #4250 (S2): the channels each level may use outside the app
+  "sagax.notifyChannels.v1",
   // which sound a notification plays (src/lib/notification-sound.ts)
   "sagax.notificationSound.v1",
   // Settings > Appearance > Accessibility (src/lib/accessibility-preferences.ts)

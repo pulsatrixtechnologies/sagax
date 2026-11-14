@@ -7,7 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { LevelChannels } from "../../shared/attention-policy.ts";
 import type { ReachMeSettings } from "../../shared/reach-me.ts";
+import type { QuietHours } from "../../shared/signal-levels.ts";
 import type { PushMessage } from "../push/payload.ts";
 import type { ReachChannel, ReachOutbound } from "./channel.ts";
 import { composeReachText } from "./channel.ts";
@@ -20,7 +22,7 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Nimbus", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
 const PUSH: PushMessage = { kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 };
 
-function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number } = {}) {
+function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number; quiet?: QuietHours | null; channels?: LevelChannels } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-reach-"));
   dirs.push(dir);
   let now = options.now ?? Date.parse("2026-10-26T13:00:00Z");
@@ -53,6 +55,8 @@ function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | n
     audit: (row) => audit.push(row),
     now: () => now,
     log: () => {},
+    // #4250 (S2): the person's one quiet-hours setting and channels per level
+    attention: () => ({ quiet: options.quiet ?? null, ...(options.channels ? { channels: options.channels } : {}) }),
   });
   return { reach, store, codes, sent, responses, pushed, audit, setCard: (next: ReachCard | null) => { card = next; }, setNow: (next: number) => { now = next; } };
 }
@@ -79,7 +83,7 @@ describe("Reach me: a card left open is recalled (#2645)", () => {
     expect([pushed.length, reach.openCardCount()]).toEqual([2, 0]);
   });
 
-  it("an answered card is forgotten; outside the hours it waits; push off for that bot sends nothing", () => {
+  it("an answered card is forgotten; push off for that bot sends nothing; per-bot hours no longer hold it (#4250 S2)", () => {
     const night: ReachMeSettings = { channels: ["push"], hours: { always: false, timeZone: "UTC", ranges: [{ days: [0, 1, 2, 3, 4, 5, 6], start: "09:00", end: "10:00" }] } } as ReachMeSettings;
     const a = setup(null, { now: 1_000 });
     a.reach.cardRaised(PUSH);
@@ -89,10 +93,17 @@ describe("Reach me: a card left open is recalled (#2645)", () => {
     b.reach.cardRaised(PUSH);
     b.setNow(1_000 + CARD_REMINDER_AFTER_MS[0]); b.reach.tick();
     expect(b.pushed).toEqual([]);
-    const c = setup(night, { now: Date.parse("2026-11-07T03:00:00Z") });
+    // the bot's old hours (09:00 to 10:00) are kept in the file, never read:
+    // the card is urgent, the person's quiet hours do not hold it either
+    const c = setup(night, { now: Date.parse("2026-11-07T03:00:00Z"), quiet: { start: "22:00", end: "07:00", timeZone: "UTC" } });
     c.reach.cardRaised(PUSH);
     c.setNow(Date.parse("2026-11-07T06:00:00Z")); c.reach.tick();
-    expect(c.pushed.filter((p) => p.title.startsWith("Toujours"))).toEqual([]);
+    expect(c.pushed.filter((p) => p.title.startsWith("Toujours"))).toHaveLength(1);
+    // the person allows no push for urgent: no reminder by push
+    const d = setup(null, { now: 1_000, channels: { card: ["push"], urgent: ["sms"] } });
+    d.reach.cardRaised(PUSH);
+    d.setNow(1_000 + CARD_REMINDER_AFTER_MS[0]); d.reach.tick();
+    expect(d.pushed).toEqual([]);
   });
 });
 
@@ -127,19 +138,26 @@ describe("Reach me: out", () => {
     expect(JSON.stringify(audit)).not.toContain("npm test");
   });
 
-  it("outside the person's hours: held, then sent (push included) when they start", async () => {
+  it("#4250 (S2): one quiet-hours setting per person: a bot's old hours hold nothing, and a card (urgent) passes the person's quiet hours", async () => {
+    // 09:00 local, outside the bot's old 10:00 to 12:00 range, inside the person's quiet hours
     const hours = { always: false as const, timeZone: "America/Toronto", ranges: [{ days: [1], start: "10:00", end: "12:00" }] };
-    const { reach, sent, pushed, setNow } = setup({ channels: ["push", "telegram"], hours });
-    expect(reach.allowsPush(PUSH)).toBe(false);
+    const { reach, sent } = setup({ channels: ["push", "telegram"], hours }, { quiet: { start: "08:00", end: "18:00", timeZone: "America/Toronto" } });
+    expect(reach.allowsPush(PUSH)).toBe(true);
     reach.cardRaised(PUSH);
     await reach.drain();
-    expect(sent).toEqual([]);
-    expect(reach.deferredCount("pr_a")).toBe(1);
-    setNow(Date.parse("2026-10-26T14:30:00Z")); // 10:30 local
-    reach.tick();
-    await reach.drain();
-    expect(pushed).toHaveLength(1);
     expect(sent.map((row) => row.channel)).toEqual(["telegram"]);
+  });
+
+  it("#4250 (S2): a level goes only by the bot's channels the person allows for it", async () => {
+    const { reach, sent } = setup({ ...SMS_AND_TELEGRAM, channels: ["push", "sms", "telegram"] }, { channels: { card: ["telegram"], urgent: ["push", "sms"] } });
+    expect(reach.allowsPush(PUSH)).toBe(true);
+    // a card level push (a bot's answer) and the person allows no push for cards
+    expect(reach.allowsPush({ ...PUSH, kind: "message" })).toBe(false);
+    expect(reach.allowsPush({ ...PUSH, kind: "message", level: "urgent" })).toBe(true);
+    expect(reach.channelsFor("pr_a", "b1", "card")).toEqual(["telegram"]);
+    reach.cardRaised(PUSH);
+    await reach.drain();
+    expect(sent.map((row) => row.channel)).toEqual(["sms"]);
   });
 
   it("a settled card's code goes", async () => {
@@ -264,9 +282,9 @@ describe("Reach me: a notice (the background brief)", () => {
     expect(audit.filter((row) => row.action === "send_failed").map((row) => row.channel)).toEqual(["teams"]);
   });
 
-  it("outside the person's hours it waits for the next range", async () => {
-    const night: ReachMeSettings = { channels: ["push", "sms"], smsNumber: "+15145550123", hours: { always: false, timeZone: "America/Toronto", ranges: [{ days: [0, 1, 2, 3, 4, 5, 6], start: "08:00", end: "18:00" }] } };
-    const { reach, sent, pushed, setNow } = setup(night, { now: Date.parse("2026-10-26T04:00:00Z") });
+  it("in the person's quiet hours it waits until they end (#4250 S2: the one setting, not the bot's)", async () => {
+    const bot: ReachMeSettings = { channels: ["push", "sms"], smsNumber: "+15145550123", hours: { always: true } };
+    const { reach, sent, pushed, setNow } = setup(bot, { now: Date.parse("2026-10-26T04:00:00Z"), quiet: { start: "22:00", end: "08:00", timeZone: "America/Toronto" } });
     reach.notice(NOTICE);
     await reach.drain();
     expect(sent).toEqual([]);

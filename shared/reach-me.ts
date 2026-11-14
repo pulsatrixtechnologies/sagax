@@ -9,11 +9,12 @@
 //   teams (the person's own Teams chat through their engine connector),
 //   telegram (the person's own bot from BotFather), whatsapp (the person's
 //   own WhatsApp Business number, WhatsApp Cloud API).
-// - Hours: always, or ranges of days and times in a time zone the person
-//   picks. Outside them nothing leaves the app for that bot's cards; a card
-//   still open when the next range starts is sent then.
-// - No setting saved for a bot: push only, at any hour (the behavior before
-//   this setting).
+// - Hours (#4250 S2): the person's ONE quiet-hours setting rules every bot
+//   and channel (Settings > Notifications, shared/attention-policy.ts); a bot
+//   keeps only its channels. The per-bot `hours` a previous version saved
+//   are still parsed and kept in the file, so that version reads them back,
+//   but nothing reads them any more.
+// - No setting saved for a bot: push only (the behavior before this setting).
 
 export const REACH_CHANNELS = ["push", "sms", "teams", "telegram", "whatsapp"] as const;
 export type ReachChannelId = (typeof REACH_CHANNELS)[number];
@@ -39,6 +40,7 @@ export interface ReachMeSettings {
   /** The person's own number for sms, E.164. Perspicax Voice sends to it only
    * when it is one of the person's verified numbers on their line. */
   smsNumber?: string;
+  /** Kept for the previous version only (#4250 S2): never read. */
   hours: ReachHours;
 }
 
@@ -129,8 +131,6 @@ function parseHours(value: unknown): ReachHours | { error: string } {
   return { always: false, timeZone, ranges };
 }
 
-const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
-
 const WEEKDAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
 /** The weekday (0 Sunday) and the minute of the day at `atMs` in `timeZone`. */
@@ -139,32 +139,6 @@ export function localClock(atMs: number, timeZone: string): { day: number; minut
   const read = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   const hour = Number(read("hour")) % 24;
   return { day: WEEKDAYS[read("weekday")] ?? 0, minute: hour * 60 + Number(read("minute")) };
-}
-
-/** Whether the bot may reach the person now. A range past midnight belongs
- * to the day it starts (Friday 22:00 to 07:00 covers Saturday 03:00). */
-export function withinReachHours(hours: ReachHours, atMs: number): boolean {
-  if (hours.always) return true;
-  let clock: { day: number; minute: number };
-  try {
-    clock = localClock(atMs, hours.timeZone);
-  } catch {
-    // an unknown zone was refused on save; a runtime without it reaches the person
-    return true;
-  }
-  const previousDay = (clock.day + 6) % 7;
-  return hours.ranges.some((range) => {
-    const start = minutesOf(range.start);
-    const end = minutesOf(range.end);
-    if (start < end) return range.days.includes(clock.day) && clock.minute >= start && clock.minute < end;
-    // past midnight: the evening part on its own day, the morning part on the next
-    return (range.days.includes(clock.day) && clock.minute >= start) || (range.days.includes(previousDay) && clock.minute < end);
-  });
-}
-
-/** Whether these settings send through this channel. */
-export function reachesBy(settings: ReachMeSettings, channel: ReachChannelId): boolean {
-  return settings.channels.includes(channel) && (REACH_WIRED as readonly string[]).includes(channel);
 }
 
 /** Reply codes: four letters and digits a person types back, with nothing

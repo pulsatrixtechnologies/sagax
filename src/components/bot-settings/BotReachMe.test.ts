@@ -1,6 +1,6 @@
 // "Me joindre" on the bot's Overview (2026-10-26): each channel with its
 // switch, the number field for a text, Telegram's link step, WhatsApp's
-// setup, the hours.
+// setup (#4250 S2: no hours of its own, the person's one setting rules).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -19,7 +19,7 @@ describe("Reach me card", () => {
     expect(html).toContain("On your 2 paired phones");
     expect(html).toMatch(/data-reach-channel="whatsapp"[\s\S]*your own WhatsApp Business number/);
     expect(html).not.toContain("Coming later");
-    expect(html).toContain("Any time.");
+    expect(html).toContain("data-reach-hours-one");
   });
   it("a text shows the person's own number; a channel not ready says why", () => {
     const html = render({ saved: true, settings: { channels: ["sms", "teams"], smsNumber: "+15145550123", hours: { always: true } }, channels: { sms: { ready: false, reason: "no line" }, teams: { ready: true } } });
@@ -70,12 +70,12 @@ describe("Reach me card", () => {
     expect(approved).toContain("Template sagax_card (fr) is approved at Meta.");
     expect(approved).not.toContain("Check again");
   });
-  it("hours: the zone and each range's days and times", () => {
+  it("#4250 (S2): a bot keeps only its channels; when is the person's one setting in Settings > Notifications", () => {
     const html = render({ saved: true, settings: { channels: ["push"], hours: { always: false, timeZone: "America/Toronto", ranges: [{ days: [1, 2, 3, 4, 5], start: "08:00", end: "18:00" }] } }, channels: {} });
-    expect(html).toContain('value="America/Toronto"');
-    expect(html).toContain('value="08:00"');
-    expect(html).toContain('value="18:00"');
-    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(5);
+    expect(html).not.toContain('value="America/Toronto"');
+    expect(html).not.toContain('value="08:00"');
+    expect(html).not.toContain("data-reach-hours=");
+    expect(html).toContain("When is set once for all your bots: quiet hours and channels per level in Settings &gt; Notifications.");
   });
   it("renders nothing while loading or on a bad answer", () => {
     expect(render(null)).toBe("");

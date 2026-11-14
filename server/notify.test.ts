@@ -1,10 +1,11 @@
 // What is worth interrupting someone for. The policy is small, so the
 // tests are mostly about the cases where the answer is "stay quiet".
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { PersonSignalGate, type QuietHours } from "../shared/signal-levels.ts";
 import type { Notification, NotifyKind } from "../shared/notification.ts";
 import { buildNotification, buildSpendNotification, CALL_QUIET_MS, notifyHeldFor, quietForCall, routineIncidentTitle, routineRunTitle, ruleNotifyFrame, summarize } from "./notify.ts";
+import { withItemLevel } from "./proactive/signal-ledger.ts";
 import { type FramePushDeps, pushesForFrame } from "./push/frames.ts";
 
 const bot = { id: "bot-1", name: "Scout", threadId: "thread-1" };
@@ -279,6 +280,30 @@ describe("the desktop obeys the person's quiet hours and day budget (#4233)", ()
   it("goes notify false for everyone when every person it is for is held", () => {
     const gate = new PersonSignalGate(() => ({ budget: 20, quiet: night }), () => at);
     expect(flag(ruled(gate, frameOf("proposal", { proposalId: "p4" }), ["person-1", "person-2"]))).toBe(false);
+  });
+
+  it("#4250 (S2): the writer's level rides the frame: an urgent wait passes quiet hours, a card one waits, and the one log line says why", () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: string) => { lines.push(line); });
+    try {
+      const gate = new PersonSignalGate(() => ({ budget: 20, quiet: night }), () => at);
+      const ruledWithReason = (frame: ReturnType<typeof frameOf>) => ruleNotifyFrame(frame, { signal: () => pushesForFrame(frame, deps()).map((message) => {
+        const decision = gate.verdict(message);
+        return { person: message.personId, decision: decision.verdict === "hold" ? "hold" as const : "push" as const, reason: decision.reason };
+      }) });
+      expect(flag(ruledWithReason(frameOf("wait", { level: "urgent" })))).toBeUndefined();
+      expect(flag(ruledWithReason(frameOf("wait")))).toBe(false);
+      expect(lines).toEqual([
+        "[notify] kind=wait bot=bot-1 thread=thread-1 audience=all interrupts=yes level=urgent reason=urgent",
+        "[notify] kind=wait bot=bot-1 thread=thread-1 audience=all interrupts=no level=card reason=allowed held=signal held_by=quiet_hours",
+      ]);
+      // a proactive item's level reaches its frame (tellPerson), FYI stays FYI
+      expect(withItemLevel(frameOf("needs-you").notification, "card").level).toBe("card");
+      expect(withItemLevel({ ...frameOf("done").notification, notify: false, level: "fyi" as const }, "urgent").level).toBe("fyi");
+      expect(withItemLevel(null, "urgent")).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("rings when nobody's gate was asked", () => {

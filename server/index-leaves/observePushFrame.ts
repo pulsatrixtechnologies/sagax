@@ -10,6 +10,8 @@ export type Host = Record<string, any>;
 export interface DecidedPushes {
   messages: Record<string, any>[];
   decisions: ("push" | "hold")[];
+  /** #4250 (S2): why each was held or let through (the one attention policy's reason). */
+  reasons?: string[];
 }
 
 function framePushDeps(host: Host, options: { adminOnly?: boolean }) {
@@ -56,8 +58,9 @@ function framePushDeps(host: Host, options: { adminOnly?: boolean }) {
  * the result instead of asking again. */
 export function decideNotifyPushes(host: Host, payload: Record<string, unknown>, options: { adminOnly?: boolean } = {}): DecidedPushes {
   const messages = host.pushesForFrame(payload, framePushDeps(host, options));
-  const decisions = messages.map((message) => (host.signalGate ? host.signalGate.decide(message) : "push"));
-  return { messages, decisions };
+  const verdicts = messages.map((message) => (host.signalGate ? host.signalGate.verdict(message) : null));
+  const decisions = verdicts.map((verdict) => (verdict?.verdict === "hold" ? "hold" : "push"));
+  return { messages, decisions, reasons: verdicts.map((verdict) => verdict?.reason ?? "allowed") };
 }
 
 export function createObservePushFrame(getHost: () => Host): any {
@@ -76,8 +79,8 @@ function observePushFrame(payload: Record<string, unknown>, options: { adminOnly
     // #4233: a frame the person's signal gate already ruled carries its pushes and verdicts
     const messages = decided ? decided.messages : host.pushesForFrame(payload, framePushDeps(host, options));
     for (const [index, message] of messages.entries()) {
-      // "Me joindre" (server/reach-me/): a card follows the person's choice
-      // for its bot (push or not, their hours) and goes out by their other channels
+      // "Me joindre" (server/reach-me/): it goes by the bot's channels the
+      // person allows for its level (#4250 S2: the one attention policy)
       // #2695: the person's signal level, daily budget and quiet hours come first
       // (an urgent card always goes); what waits is one line of the next brief
       // a bot that marked its message FYI (set_reply_notify fyi) waits for the brief too

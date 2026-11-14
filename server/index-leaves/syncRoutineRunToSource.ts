@@ -390,6 +390,8 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     host.tellPerson(host.routineRunPerson(run, runBotRecord), {
       key: signalKeys.runNeedsYou(run.id, cardId ?? sourceThreadId), kind: "needs-you", bot: runBotRecord.id,
       label: run.routineName, ref: { threadId: sourceThreadId },
+      // #4250 (S2): a wake's events' level, set by their writer
+      ...(run.proactive?.level ? { level: run.proactive.level } : {}),
       notification: { notification: host.deliverableNotification("needs-you", runBotRecord, sourceThreadId, words.line, {
         avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName,
         ...(words.question ? { question: words.question } : {}), context: words.context,

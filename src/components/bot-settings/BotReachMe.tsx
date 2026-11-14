@@ -1,24 +1,25 @@
 // "Me joindre" on the bot's Overview (2026-10-26): how THIS bot reaches
-// the person outside the app when a question or an approval waits on them,
-// and when. Each person chooses for themself, no admin. Channels: phone
+// the person outside the app when a question or an approval waits on them.
+// Each person chooses for themself, no admin. Channels: phone
 // notifications, a text message (their Perspicax Voice line, to their own
 // verified number), their own Teams chat, their own Telegram bot, their own
-// WhatsApp Business number (./BotReachMeWhatsApp.tsx). Hours: any time, or
-// ranges of days and times in a time zone. No id on screen: the Telegram bot
-// is named by its @username, the WhatsApp number by its display number.
+// WhatsApp Business number (./BotReachMeWhatsApp.tsx). No id on screen: the
+// Telegram bot is named by its @username, the WhatsApp number by its
+// display number.
+// #4250 (S2): a bot keeps only its channels. When is the person's ONE
+// quiet-hours setting (Settings > Notifications), with which channels each
+// level may use; the hours a previous version saved here ride along unchanged.
 import { useState } from "react";
 
-import { normalizePhone, type ReachChannelId, type ReachHoursRange, type ReachMeSettings } from "../../../shared/reach-me";
+import { normalizePhone, type ReachChannelId, type ReachMeSettings } from "../../../shared/reach-me";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { connectReachTelegram, disconnectReachTelegram, localTimeZone, reachWhatsApp, saveReachMe, useReachMe, type ReachMeView } from "@/lib/reach-me";
+import { connectReachTelegram, disconnectReachTelegram, reachWhatsApp, saveReachMe, useReachMe, type ReachMeView } from "@/lib/reach-me";
 import type { LocaleKey } from "@/locales";
 import { SettingsGroup, Switch } from "../SettingsPrimitives";
 import { ReachWhatsAppSetup, type ReachWhatsAppAction } from "./BotReachMeWhatsApp";
 
 const CHANNELS: ReachChannelId[] = ["push", "sms", "teams", "telegram", "whatsapp"];
-/** Monday first, as the week reads in French and English calendars here. */
-const DAYS = [1, 2, 3, 4, 5, 6, 0];
 
 const inputCls = "min-h-8 min-w-0 rounded-lg border border-hairline/40 bg-inset px-2.5 py-1.5 text-[13px] text-ink focus:border-focus";
 const buttonCls = "rounded-lg border border-hairline/50 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-raised disabled:opacity-40";
@@ -52,8 +53,6 @@ export function BotReachMeCard({ view, actions, initialTelegramLink }: { view: R
   const dirty = draft !== null || (number !== null && number !== (view.settings.smsNumber ?? ""));
   const change = (next: ReachMeSettings) => { setDraft(next); setError(undefined); };
   const toggle = (id: ReachChannelId, on: boolean) => change({ ...current, channels: on ? [...current.channels.filter((c) => c !== id), id] : current.channels.filter((c) => c !== id) });
-  const ranges = current.hours.always ? [] : current.hours.ranges;
-  const setRanges = (next: ReachHoursRange[]) => change({ ...current, hours: { always: false, timeZone: current.hours.always ? localTimeZone() : current.hours.timeZone, ranges: next } });
   const save = async () => {
     const smsNumber = phone.trim() ? normalizePhone(phone) : null;
     if (phone.trim() && !smsNumber) { setError(t("botPanel.reachMe.sms.invalid")); return; }
@@ -119,42 +118,7 @@ export function BotReachMeCard({ view, actions, initialTelegramLink }: { view: R
             </div>
           );
         })}
-        <div data-reach-hours="" className="flex flex-col gap-2 border-t-[0.5px] border-border px-3.5 py-2">
-          <label className="flex min-w-0 items-center justify-between gap-4 text-[13px] text-ink">
-            <span className="min-w-0">
-              <span className="block leading-[18px]">{t("botPanel.reachMe.hours.label")}</span>
-              <span className="mt-0.5 block text-[12px] leading-4 text-ink-secondary">{current.hours.always ? t("botPanel.reachMe.hours.always") : t("botPanel.reachMe.hours.ranges")}</span>
-            </span>
-            <Switch checked={!current.hours.always} disabled={busy} aria-label={t("botPanel.reachMe.hours.label")}
-              onClick={() => current.hours.always ? setRanges([{ days: [1, 2, 3, 4, 5], start: "08:00", end: "18:00" }]) : change({ ...current, hours: { always: true } })} />
-          </label>
-          {!current.hours.always && (
-            <>
-              <label className="flex items-center gap-2 text-[12px] text-ink-secondary">
-                <span className="shrink-0">{t("botPanel.reachMe.hours.timeZone")}</span>
-                <input className={cn(inputCls, "flex-1")} value={current.hours.timeZone} spellCheck={false} onChange={(event) => change({ ...current, hours: { ...(current.hours as { always: false; timeZone: string; ranges: ReachHoursRange[] }), timeZone: event.target.value } })} />
-              </label>
-              {ranges.map((range, index) => (
-                <div key={index} data-reach-range="" className="flex flex-wrap items-center gap-1.5">
-                  {DAYS.map((day) => {
-                    const on = range.days.includes(day);
-                    return (
-                      <button key={day} type="button" aria-pressed={on} disabled={busy}
-                        className={cn("size-7 rounded-md text-[11px] font-medium", on ? "bg-accent text-accent-ink" : "border border-hairline/50 text-ink-secondary hover:bg-raised")}
-                        onClick={() => setRanges(ranges.map((row, i) => i === index ? { ...row, days: on ? row.days.filter((d) => d !== day) : [...row.days, day].sort() } : row))}
-                      >{t(`botPanel.reachMe.day.${day}` as LocaleKey)}</button>
-                    );
-                  })}
-                  <input type="time" className={inputCls} value={range.start} aria-label={t("botPanel.reachMe.hours.start")} onChange={(event) => setRanges(ranges.map((row, i) => i === index ? { ...row, start: event.target.value } : row))} />
-                  <span className="text-[12px] text-ink-secondary">{t("botPanel.reachMe.hours.to")}</span>
-                  <input type="time" className={inputCls} value={range.end} aria-label={t("botPanel.reachMe.hours.end")} onChange={(event) => setRanges(ranges.map((row, i) => i === index ? { ...row, end: event.target.value } : row))} />
-                  {ranges.length > 1 && <button type="button" className="text-[12px] text-ink-secondary hover:text-ink" onClick={() => setRanges(ranges.filter((_, i) => i !== index))}>{t("botPanel.reachMe.hours.remove")}</button>}
-                </div>
-              ))}
-              <button type="button" className="self-start text-[12px] font-medium text-accent-text hover:underline" onClick={() => setRanges([...ranges, { days: [0, 6], start: "10:00", end: "16:00" }])}>{t("botPanel.reachMe.hours.add")}</button>
-            </>
-          )}
-        </div>
+        <p data-reach-hours-one="" className="border-t-[0.5px] border-border px-3.5 py-2 text-[12px] leading-4 text-ink-secondary">{t("botPanel.reachMe.hours.oneSetting")}</p>
         {error && <p role="alert" className="px-3.5 pb-1 text-[12px] leading-4 text-danger">{error}</p>}
         {dirty && (
           <div className="flex gap-2 px-3.5 py-2">

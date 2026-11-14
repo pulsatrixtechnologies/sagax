@@ -4,7 +4,7 @@
 // interrupt (an ask, or the answer to the person's own line, #3719), a
 // `nudge` frame and an `achievements` frame. This reads them
 // and returns the PushMessage of each person concerned; ./hub.ts decides when.
-import type { NotifyKind } from "../../shared/notification.ts";
+import { BLOCKED_ON_PERSON, isSignalLevel } from "../../shared/attention-policy.ts";
 import { NOTIFY_KIND_INTERRUPTS } from "../notify.ts";
 import { pushAvatarUrl, type PushKind, type PushMessage, type PushSenderLook } from "./payload.ts";
 
@@ -12,7 +12,7 @@ import { pushAvatarUrl, type PushKind, type PushMessage, type PushSenderLook } f
  * `approval`, so they wake at once (priority 10) and skip the rate limit.
  * Only `approval` and `question` carry a `prompt`; a takeover, a needs-you
  * (#2697) or a sign-in has no `requestId`, so the banner has no Allow or Deny. */
-const BLOCKED_ON_PERSON: ReadonlySet<string> = new Set<NotifyKind>(["approval", "question", "takeover", "needs-you", "sign-in"]);
+// (#4250 S2: BLOCKED_ON_PERSON lives with the one attention policy, where these kinds are urgent)
 
 /** #3719: the push kind a `notify` kind carries, or null when it never
  * reaches a phone. Which kinds may interrupt is the one rule of
@@ -134,6 +134,8 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
       ...(note.cardId ? { cardId: note.cardId } : {}),
       ...(note.kind === "needs-you" && !note.requestId ? { needsYou: true } : {}),
       ...(note.kind === "proposal" && note.proposalId ? { proposalId: note.proposalId } : {}),
+      // #4250 (S2): the writer's level, read by the person's signal gate
+      ...(isSignalLevel(raw.level) ? { level: raw.level } : {}),
       at,
     }));
   }

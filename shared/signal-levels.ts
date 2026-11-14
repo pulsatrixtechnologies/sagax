@@ -8,7 +8,11 @@
  * The budget and the quiet hours belong to the person (all their bots
  * together), not to one bot. Both are person preferences
  * (shared/user-preferences.ts), set in Settings > Notifications. */
-import { localClock, validTimeZone } from "./reach-me.ts";
+import { decideAttention, isSignalLevel, NOTIFY_CHANNELS_KEY, readLevelChannels, type AttentionDecision, type LevelChannels } from "./attention-policy.ts";
+import { validTimeZone } from "./reach-me.ts";
+
+// #4250 (S2): the quiet hours test lives with the one attention policy
+export { withinQuietHours } from "./attention-policy.ts";
 
 export type SignalLevel = "fyi" | "card" | "urgent";
 
@@ -44,27 +48,10 @@ export function readQuietHours(value: string | null | undefined): QuietHours | n
   }
 }
 
-function minutesOf(hhmm: string): number {
-  const [hours, minutes] = hhmm.split(":").map(Number);
-  return hours * 60 + minutes;
-}
-
-/** Whether `atMs` falls in the quiet hours (a range may cross midnight). */
-export function withinQuietHours(quiet: QuietHours | null, atMs: number): boolean {
-  if (!quiet) return false;
-  let minute: number;
-  try {
-    minute = localClock(atMs, quiet.timeZone).minute;
-  } catch {
-    return false;
-  }
-  const start = minutesOf(quiet.start);
-  const end = minutesOf(quiet.end);
-  return start < end ? minute >= start && minute < end : minute >= start || minute < end;
-}
-
-/** The level of one push. */
-export function signalLevelOfPush(message: { kind: string; fromId?: string; groupId?: string }): SignalLevel {
+/** The level of one push: its writer's (#4250 S2, carried by the frame),
+ * else its push kind's. */
+export function signalLevelOfPush(message: { kind: string; fromId?: string; groupId?: string; level?: unknown }): SignalLevel {
+  if (isSignalLevel(message.level)) return message.level;
   if (message.kind === "approval") return "urgent";
   if (message.fromId || message.groupId) return "urgent";
   if (message.kind === "achievement") return "fyi";
@@ -102,6 +89,8 @@ export interface SignalPrefs {
   quiet: QuietHours | null;
   /** The person's time zone: the budget day starts at their local midnight. */
   timeZone?: string;
+  /** #4250 (S2): the channels each level may use outside the app. */
+  channels?: LevelChannels;
 }
 
 /** #4233: the gate's preferences for one person, from their stored
@@ -111,6 +100,7 @@ export function readSignalPrefs(prefs: Record<string, string | undefined>, timeZ
   return {
     budget: readSignalBudget(prefs[SIGNAL_BUDGET_KEY]),
     quiet: readQuietHours(prefs[QUIET_HOURS_KEY]),
+    channels: readLevelChannels(prefs[NOTIFY_CHANNELS_KEY]),
     ...(timeZone && validTimeZone(timeZone) ? { timeZone } : {})
   };
 }
@@ -140,6 +130,20 @@ function clip(text: unknown): string {
   return value.length > HELD_TEXT_MAX ? `${value.slice(0, HELD_TEXT_MAX - 3)}...` : value;
 }
 
+/** One push as the gate reads it. */
+export interface SignalMessage {
+  personId: string;
+  kind: string;
+  title?: string;
+  body?: string;
+  botId?: string;
+  threadId?: string;
+  fromId?: string;
+  groupId?: string;
+  /** #4250 (S2): the writer's level, carried by the frame. */
+  level?: unknown;
+}
+
 /** The per-person gate: the cards pushed on the person's local day (their
  * budget), and what waited for the next brief, word for word. Kept through
  * `storage`, so a restart neither resets the day nor loses what waited. */
@@ -164,11 +168,26 @@ export class PersonSignalGate {
 
   /** A push: urgent always goes; FYI waits; a card goes inside the budget
    * of the person's local day and outside quiet hours, else waits. */
-  decide(message: { personId: string; kind: string; title?: string; body?: string; botId?: string; threadId?: string; fromId?: string; groupId?: string }, options: { fyi?: boolean } = {}): SignalDecision {
-    const level = options.fyi && signalLevelOfPush(message) !== "urgent" ? "fyi" : signalLevelOfPush(message);
-    if (level === "urgent") return "push";
-    if (level === "fyi") return this.hold(message);
-    return this.admit(message.personId) ? "push" : this.hold(message);
+  decide(message: SignalMessage, options: { fyi?: boolean } = {}): SignalDecision {
+    return this.verdict(message, options).verdict === "hold" ? "hold" : "push";
+  }
+
+  /** #4250 (S2): the same decision whole (the one attention policy): its
+   * level, verdict, reason and channels, for the one log line. A held one
+   * waits for Today and the brief; one that rings counts in the budget. */
+  verdict(message: SignalMessage, options: { fyi?: boolean } = {}): AttentionDecision {
+    const own = signalLevelOfPush(message);
+    const level = options.fyi && own !== "urgent" ? "fyi" : own;
+    const at = this.now();
+    const prefs = this.prefs(message.personId);
+    const row = this.today(message.personId, at, prefs);
+    const decision = decideAttention({ level, at, quiet: prefs.quiet, budget: prefs.budget, sentToday: row.sent, levelChannels: prefs.channels ?? null });
+    if (decision.verdict === "hold") this.hold(message);
+    else if (decision.counts) {
+      row.sent += 1;
+      this.persist();
+    }
+    return decision;
   }
 
   /** Whether one more card may reach the person now (quiet hours, the
@@ -177,12 +196,19 @@ export class PersonSignalGate {
   admit(person: string): boolean {
     const at = this.now();
     const prefs = this.prefs(person);
-    if (withinQuietHours(prefs.quiet, at)) return false;
     const row = this.today(person, at, prefs);
-    if (row.sent >= prefs.budget) return false;
+    const decision = decideAttention({ level: "card", at, quiet: prefs.quiet, budget: prefs.budget, sentToday: row.sent });
+    if (decision.verdict !== "ring") return false;
     row.sent += 1;
     this.persist();
     return true;
+  }
+
+  /** #4250 (S2): the person's quiet hours and channels per level, for the
+   * channels outside the app ("Me joindre"). */
+  attention(person: string): { quiet: QuietHours | null; channels: LevelChannels | undefined } {
+    const prefs = this.prefs(person);
+    return { quiet: prefs.quiet, channels: prefs.channels };
   }
 
   /** #4233: what waits, oldest first, without clearing it: Today shows it
@@ -241,7 +267,7 @@ export class PersonSignalGate {
     return row;
   }
 
-  private hold(message: { personId: string; title?: string; body?: string; botId?: string; threadId?: string }): SignalDecision {
+  private hold(message: SignalMessage): SignalDecision {
     const at = this.now();
     const row = this.today(message.personId, at, this.prefs(message.personId));
     row.held.push({

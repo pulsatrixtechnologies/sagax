@@ -237,7 +237,23 @@ export function personalEngineLine(mine: MyEngine): { ready: boolean; line: stri
 /** The technical block (CLI path, version, update, reset, Set CLI) is a
  * closed Settings fold (2026-11-05, Providers; #2080 everywhere), with
  * `advancedExtra` (Copy ID...) at its end. */
-export function EngineRow({ instance, mine, member = false, issuer = "", bare = false, keysManaged = false, advancedExtra }: { instance: InstanceInfo; mine?: MyEngine; member?: boolean; issuer?: string; bare?: boolean; keysManaged?: boolean; advancedExtra?: ReactNode }) {
+export function EngineRow({ instance, mine, member = false, issuer = "", bare = false, keysManaged = false, advancedExtra, part = "all", tool = true, connectors = true }: {
+  instance: InstanceInfo; mine?: MyEngine; member?: boolean; issuer?: string; bare?: boolean; keysManaged?: boolean; advancedExtra?: ReactNode;
+  /** #4329 lot 1, a provider's page: "access" draws the sign-in, the sign-out
+   * and the key of the account (its line's button opens it); "details" draws
+   * the rest (notices, connectors, another account, the tool's version and
+   * location) for the page's Advanced. "all": both, as before. */
+  part?: "all" | "access" | "details";
+  /** False when another account of the page already says what belongs to
+   * the same tool (its update notice and "CLI path and updates" fold, the
+   * same path and version): said once per tool; `advancedExtra` stays. */
+  tool?: boolean;
+  /** False when another account of the page already says the tool's
+   * connectors sentence (once per driver kind). */
+  connectors?: boolean;
+}) {
+  const access = part !== "details";
+  const details = part !== "access";
   const { refreshInstances } = useStore();
   const [open, setOpen] = useState(false);
   const cliMotion = useMenuMotion(open);
@@ -367,61 +383,77 @@ export function EngineRow({ instance, mine, member = false, issuer = "", bare = 
   );
   if (member && mine) return (
     <EngineCard instance={instance} personal={personalEngineLine(mine)} bare={bare}>
-      {policyNote}
-      {hostToolsNote}
-      <div data-member-engine={instance.instanceId}><EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} statusLine={false} keysManaged={keysManaged} /></div>
+      {details && policyNote}
+      {details && hostToolsNote}
+      {access && <div data-member-engine={instance.instanceId}><EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} statusLine={false} keysManaged={keysManaged} /></div>}
     </EngineCard>
   );
-  if (instance.readOnly) return <EngineCard instance={instance} bare={bare}>
+  if (instance.readOnly) return !details ? null : <EngineCard instance={instance} bare={bare}>
     {policyNote}
     <p className="text-[13px] leading-relaxed text-ink-secondary">{t("organization.managedEngine")}</p>
     {!engineReady(instance) && <p className="mt-2 text-[12px] text-ink-secondary">{t("organization.engineUnavailable")}</p>}
   </EngineCard>;
 
+  // The account's own part (its line's button opens it on a provider page).
+  const connectPart = mine && <EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} className="mb-3" statusLine={false} keysManaged={keysManaged} />;
+  const setupPart = !mine && !engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed keysManaged={keysManaged} />;
+  const keyPart = !mine && !keysManaged && engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />;
+  const claudePart = !mine && instance.claudeAccount && <ClaudeAccountSettings instance={instance} />;
+  const signedPart = !mine && engineReady(instance) && instance.snapshot.authenticated === true && (
+    (instance.authentication?.method === "device-code" || instance.authentication?.method === "browser-pkce") && deviceSignInProvider(instance.driverKind) === "codex"
+      ? <CodexAccountSettings instance={instance} />
+      : instance.authentication?.method === "device-code"
+      ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY[deviceSignInProvider(instance.driverKind)].connectedAccount)}</p>
+      : instance.authentication?.method === "open-link"
+      ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY.cursor.connectedAccount)}</p>
+      : instance.authentication?.method === "paste-code" && !instance.claudeAccount && (
+        <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
+      )
+  );
+  // #4329: the account part alone, with nothing to show, draws nothing (no empty block)
+  if (part === "access" && !connectPart && !setupPart && !keyPart && !claudePart && !signedPart) return null;
+
   return (
     <EngineCard instance={instance} personal={mine && personalEngineLine(mine)} bare={bare}>
-      {policyNote}
-      {hostToolsNote}
-      {mine && <EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} className="mb-3" statusLine={false} keysManaged={keysManaged} />}
-      {!mine && !engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed keysManaged={keysManaged} />}
-      {!mine && !keysManaged && engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
-      {instance.snapshot.update && <EngineUpdateNotice update={instance.snapshot.update} instance={instance} className="mt-3" />}
-      {instance.snapshot.warning && <EngineWarningNotice warning={instance.snapshot.warning} className="mt-3" />}
-      {engineReady(instance) && <EngineConnectorsLine driverKind={instance.driverKind} />}
-      {!mine && instance.claudeAccount && <ClaudeAccountSettings instance={instance} />}
-      {!mine && engineReady(instance) && instance.snapshot.authenticated === true && (
-        (instance.authentication?.method === "device-code" || instance.authentication?.method === "browser-pkce") && deviceSignInProvider(instance.driverKind) === "codex"
-          ? <CodexAccountSettings instance={instance} />
-          : instance.authentication?.method === "device-code"
-          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY[deviceSignInProvider(instance.driverKind)].connectedAccount)}</p>
-          : instance.authentication?.method === "open-link"
-          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY.cursor.connectedAccount)}</p>
-          : instance.authentication?.method === "paste-code" && !instance.claudeAccount && (
-            <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
-          )
-      )}
-      {instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
-      {!member && instance.driverKind === "antigravityAgent" && (
-        <div className="mt-3 space-y-3">
-          {instance.snapshot.authenticated && <p className="break-words text-[12px] text-ink-secondary">{instance.snapshot.account?.email ?? t("engineSetup.antigravity.emailUnavailable")}</p>}
-          <AddProviderAccount antigravityInstanceId={instance.instanceId} />
+      {details && policyNote}
+      {details && hostToolsNote}
+      {access && connectPart}
+      {access && setupPart}
+      {access && keyPart}
+      {details && tool && instance.snapshot.update && <EngineUpdateNotice update={instance.snapshot.update} instance={instance} className="mt-3" />}
+      {details && instance.snapshot.warning && <EngineWarningNotice warning={instance.snapshot.warning} className="mt-3" />}
+      {details && connectors && engineReady(instance) && <EngineConnectorsLine driverKind={instance.driverKind} />}
+      {access && claudePart}
+      {access && signedPart}
+      {details && instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
+      {part === "all" && !member && <AddAnotherAccount instance={instance} />}
+      {details && !tool && advancedExtra && <div className="mt-3 flex flex-col gap-2">{advancedExtra}</div>}
+      {details && tool && (
+        <div className="-mx-3.5 mt-3 border-t border-hairline/40">
+          <FoldRow cardId={`providers.advanced.${instance.instanceId}`} label={t("engines.library.advanced")} description={t("engines.footer")}>
+            <div data-engine-advanced={instance.instanceId} className="flex flex-col gap-2">{advanced}{advancedExtra}</div>
+          </FoldRow>
         </div>
       )}
-      {!member && instance.driverKind === "claudeAgent" && instance.access !== "custom" && (
-        <div className="mt-3"><AddClaudeAccount /></div>
-      )}
-      {!member && instance.snapshot.chatgptPlan && !instance.snapshot.authenticationUnavailableReason && (
-        <div className="mt-3"><AddProviderAccount /></div>
-      )}
-      <div className="-mx-3.5 mt-3 border-t border-hairline/40">
-        <FoldRow cardId={`providers.advanced.${instance.instanceId}`} label={t("engines.library.advanced")} description={t("engines.footer")}>
-          <div data-engine-advanced={instance.instanceId} className="flex flex-col gap-2">{advanced}{advancedExtra}</div>
-        </FoldRow>
-      </div>
     </EngineCard>
   );
 }
 
+
+/** "Add another account" of an engine (#4329 lot 1: under Accounts on a
+ * provider's page): another Claude account, another plan account, another
+ * Antigravity account. Nothing for an engine that has none. */
+export function AddAnotherAccount({ instance }: { instance: InstanceInfo }) {
+  if (instance.driverKind === "antigravityAgent") return (
+    <div className="mt-3 space-y-3">
+      {instance.snapshot.authenticated && <p className="break-words text-[12px] text-ink-secondary">{instance.snapshot.account?.email ?? t("engineSetup.antigravity.emailUnavailable")}</p>}
+      <AddProviderAccount antigravityInstanceId={instance.instanceId} />
+    </div>
+  );
+  if (instance.driverKind === "claudeAgent" && instance.access !== "custom") return <div className="mt-3"><AddClaudeAccount /></div>;
+  if (instance.snapshot.chatgptPlan && !instance.snapshot.authenticationUnavailableReason) return <div className="mt-3"><AddProviderAccount /></div>;
+  return null;
+}
 
 /** In an organization, keys are for an owner, an admin, the server's
  * operator, or a member whose profile includes engines.manage (the maintainer,

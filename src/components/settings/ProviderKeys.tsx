@@ -13,6 +13,7 @@ import {
   OpenAiCompatUrl,
   OpenCodeProviderKeys,
   credentialCopy,
+  saveCredential,
   type ConfigSection,
   type TestableProvider,
 } from "../ApiKeys";
@@ -55,6 +56,11 @@ export const MORE_KEY_ROWS = ["openrouter", "mistral", "deepseek", "azureFoundry
 
 export function keyRowSaved(id: KeyRowId, config: ConfigStatus | null | undefined): boolean {
   return config ? ROWS[id].saved(config) : false;
+}
+
+/** Removes a saved key (a provider line's Remove), by the key row's own path. */
+export function removeProviderKey(id: KeyRowId): Promise<ConfigStatus> {
+  return saveCredential(ROWS[id].section, "", true);
 }
 
 /** The rows of the main list and of "More providers" for this config. */

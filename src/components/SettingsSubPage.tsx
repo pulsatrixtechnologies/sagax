@@ -5,7 +5,7 @@
 // arrow, the section name in the breadcrumb and Escape return to the section.
 // Which page is open lives in the store (`appSettingsSubPage`), so a deep
 // link can open it: dispatch toggleAppSettings with `subPage`. To add a page,
-// register it in SUB_PAGES in SettingsModal.tsx.
+// register it in SUB_PAGES (settings/settings-sub-pages.tsx).
 import { useEffect } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { t } from "@/lib/i18n";
@@ -69,7 +69,7 @@ export function SettingsSubPage({
 }: {
   pageId: string;
   sectionLabel: string;
-  title: string;
+  title: React.ReactNode;
   onBack: () => void;
   children: React.ReactNode;
 }) {

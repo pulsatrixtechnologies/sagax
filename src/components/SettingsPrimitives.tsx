@@ -1137,7 +1137,7 @@ export function EditorField({ label, hint, menu, children }: {
 /** A destructive action asked twice, in place: a grey pill with red words,
  * then, once clicked, the reference design's filled red pill that does it. Leaving the
  * pill (Tab, a click elsewhere) or Escape disarms it. */
-export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, disabled, children }: {
+export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, disabled, children, pillClass }: {
   label: string;
   /** The armed pill's words ("Remove for good"). */
   confirmLabel: string;
@@ -1147,6 +1147,9 @@ export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, 
   disabled?: boolean;
   /** What the unarmed pill shows instead of `label` (an icon). */
   children?: React.ReactNode;
+  /** The pill of the row's other buttons (a list's grey pill): Remove is
+   * drawn as they are, and only its armed words turn red. */
+  pillClass?: string;
 }) {
   const [armed, setArmed] = useState(false);
   return (
@@ -1165,9 +1168,11 @@ export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, 
       onKeyDown={(event) => {
         if (event.key === "Escape" && armed) { event.preventDefault(); event.stopPropagation(); setArmed(false); }
       }}
-      className={armed
-        ? `${DANGER_PILL} min-h-[44px] shrink-0 md:min-h-0`
-        : `${PILL} shrink-0 bg-transparent text-danger enabled:hover:bg-danger/10`}
+      className={pillClass
+        ? cn(pillClass, armed && "text-danger")
+        : armed
+          ? `${DANGER_PILL} min-h-[44px] shrink-0 md:min-h-0`
+          : `${PILL} shrink-0 bg-transparent text-danger enabled:hover:bg-danger/10`}
     >
       {armed ? confirmLabel : children ?? label}
     </button>

@@ -14,7 +14,9 @@
 //
 // Pure: the page (src/components/settings/ProvidersSettings.tsx) draws the
 // words. Each engine the page offers lands in exactly one row, so nothing
-// the old Engines and Keys groups showed is lost.
+// the old Engines and Keys groups showed is lost. #4329 (lot 1): the rows
+// group under the providers of shared/model-provider.ts, the one grouping
+// the menu, Active models and the phone read too.
 import type { InstanceInfo } from "@/state/store";
 import type { MyEngine } from "@/lib/perspicax-org";
 import type { LocalModelSettings } from "@/lib/desktop-local-models";
@@ -23,7 +25,8 @@ import type { PersonalVoiceKeyProvider, PersonalVoiceKeysView } from "../../shar
 import { PERSONAL_VOICE_KEY_PROVIDERS } from "../../shared/person-voice-keys";
 import { PERSONAL_PROVIDER_NAMES, type ProviderAccountsView, type PersonalProviderServer } from "../../shared/provider-accounts";
 import { myTurnsReady } from "../../shared/org-engine-readiness";
-import { keyProvidersOfDriver } from "../../shared/harness-matrix";
+import { HARNESS_TOOL_NAME, keyProvidersOfDriver } from "../../shared/harness-matrix";
+import { compareProviders, COMPUTER_PROVIDER_ID, COMPUTER_PROVIDER_LABEL, providerOfInstance, vendorLabel, vendorOfEngineName } from "../../shared/model-provider";
 
 /** Who pays: the person, the organization, or nobody (a model of this computer). */
 export type ProviderPayer = "me" | "org" | "computer";
@@ -227,7 +230,7 @@ export function providerRows(input: ProviderInput): ProviderRow[] {
       if (explicit) return explicit;
       const driver = input.instances.find((instance) => row.instanceIds.includes(instance.instanceId))?.driverKind ?? "";
       if (driver === "piAgent") return ["anthropic", "openai", "xai", "google", "moonshot"].find((provider) => input.accounts!.keys.some((key) => key.provider === provider));
-      return billedProvider(driver);
+      return keyVendorOfDriver(driver);
     };
     for (const row of all) {
       const provider = providerOf(row);
@@ -290,41 +293,51 @@ export function providerReady(row: Pick<ProviderRow, "state">): boolean {
   return row.state === "connected";
 }
 
-/** The driver of an engine, as the provider it bills (one group per
- * provider): the first key that can pay it (shared/harness-matrix.ts). pi
- * is paid by many providers and bills none on its own. */
-function billedProvider(driver: string): string | undefined {
+
+/** The key provider that pays a driver (shared/harness-matrix.ts): pi is paid
+ * by many providers and names none on its own. */
+function keyVendorOfDriver(driver: string): string | undefined {
   return driver === "piAgent" ? undefined : keyProvidersOfDriver(driver)[0];
 }
-/** A key of the server's list, as the provider it bills. The custom image
- * key and an unnamed OpenAI-compatible key stay their own group. */
-const KEY_PROVIDER: Partial<Record<KeyRowId, string>> = {
-  anthropic: "anthropic", openai: "openai", xai: "xai", elevenlabs: "elevenlabs", fishAudio: "fish", openaiImage: "openai",
-  openrouter: "openrouter", mistral: "mistral", azureFoundry: "azure", opencodeGo: "opencode",
+
+/** A key of the server's list, by the provider id it pays for when that id
+ * is not the key's own (#4329: the provider ids are shared/model-provider.ts's).
+ * The custom image key and an unnamed OpenAI-compatible key stay their own. */
+const KEY_ROW_VENDOR: Partial<Record<KeyRowId, string | null>> = {
+  fishAudio: "fish", openaiImage: "openai", azureFoundry: "azure", opencodeGo: "opencode", customImage: null, openaiCompat: null,
 };
-/** The name a person knows the provider by: its models (Claude, Grok), else the company. */
-const GROUP_NAME: Record<string, string> = { ...PERSONAL_PROVIDER_NAMES, anthropic: "Claude", xai: "Grok", azure: "Azure AI Foundry" };
+function keyRowVendor(id: KeyRowId): string | undefined {
+  const alias = KEY_ROW_VENDOR[id];
+  return alias === null ? undefined : alias ?? id;
+}
+
+/** The kind of a provider of the list, which sets its place (#4329 B1):
+ * signed-in accounts first, then keys, servers added by address, this computer. */
+export type ProviderGroupKind = "account" | "key" | "server" | "other" | "computer";
+const GROUP_RANK: Record<ProviderGroupKind, number> = { account: 0, key: 1, server: 2, other: 3, computer: 4 };
 
 export interface ProviderGroup {
-  /** Stable, for tests and deep links; never shown. */
+  /** The provider's id, as shared/provider-catalog.ts names it ("openai",
+   * "server:<id>", "computer"); stable, for tests and deep links, never shown. */
   id: string;
   name: string;
+  kind: ProviderGroupKind;
   rows: ProviderRow[];
-  /** The worst state of its rows in use; "available" when none is connected
-   * yet, "adminOff" when all are turned off. */
+  /** Connected when one of its rows works, else the state to fix first. */
   state: ProviderState;
 }
 
-/** The group key of one row: its provider, or the row itself for a server
- * of the person's own (each home server is its own provider) and for a key
- * no provider claims. */
-export function providerGroupKey(row: ProviderRow, instances: ReadonlyArray<Pick<InstanceInfo, "instanceId" | "driverKind">>): string {
-  if (row.kind === "server" || row.kind === "local") return row.id;
-  const provider = row.accountProvider
-    ?? row.voiceKey
-    ?? (row.keyRow ? KEY_PROVIDER[row.keyRow] : undefined)
-    ?? billedProvider(instances.find((instance) => row.instanceIds.includes(instance.instanceId))?.driverKind ?? "");
-  return provider ? `provider:${provider}` : row.id;
+/** The provider one row belongs to (#4329): the same provider ids and the same
+ * labels as the menu and the catalog (shared/model-provider.ts). A server of
+ * the person's own is a provider of its own; this computer is one provider. */
+export function providerGroupKey(row: ProviderRow, instances: ReadonlyArray<Pick<InstanceInfo, "instanceId" | "driverKind" | "displayName" | "providerAccount">>): string {
+  if (row.kind === "local") return COMPUTER_PROVIDER_ID;
+  if (row.kind === "server") return `server:${row.accountServer?.instanceId ?? row.compatServerId ?? row.id}`;
+  const explicit = row.accountProvider ?? row.voiceKey ?? (row.keyRow ? keyRowVendor(row.keyRow) : undefined);
+  if (explicit) return vendorOfEngineName(explicit) ?? explicit;
+  const instance = instances.find((entry) => row.instanceIds.includes(entry.instanceId));
+  const home = instance ? providerOfInstance({ instanceId: instance.instanceId, driverKind: instance.driverKind, displayName: instance.displayName, ...(instance.providerAccount ? { providerAccount: instance.providerAccount } : {}) }) : null;
+  return home && home.kind !== "other" ? home.id : row.id;
 }
 
 const STATE_RANK: Record<ProviderState, number> = { reconnect: 0, keyMissing: 1, offline: 2, connected: 3, available: 4, adminOff: 5 };
@@ -338,24 +351,68 @@ export function visibleProviderRows(rows: readonly ProviderRow[]): ProviderRow[]
   return splitProviderRows(rows).active.filter((row) => row.payer !== "org");
 }
 
+/** The rows a provider's page lists: the visible ones and the accounts and
+ * keys still to connect (a second account signs in from there). */
+export function pageProviderRows(rows: readonly ProviderRow[]): ProviderRow[] {
+  return rows.filter((row) => row.state !== "adminOff" && row.payer !== "org");
+}
+
 /**
- * One group per provider, its accounts inside. Connected when at least one
- * account works, else the state to fix first.
+ * One provider per row of the list (#4329 B1), in the catalog's order, its
+ * accounts, keys and servers as its lines. Connected when one line works,
+ * else the state to fix first; the line to fix comes first.
  */
-export function providerGroups(rows: readonly ProviderRow[], instances: ReadonlyArray<Pick<InstanceInfo, "instanceId" | "driverKind">>): ProviderGroup[] {
+export function providerGroups(rows: readonly ProviderRow[], instances: ReadonlyArray<Pick<InstanceInfo, "instanceId" | "driverKind" | "displayName" | "providerAccount">>): ProviderGroup[] {
   const byKey = new Map<string, ProviderRow[]>();
   for (const row of rows) {
     const key = providerGroupKey(row, instances);
     byKey.set(key, [...(byKey.get(key) ?? []), row]);
   }
-  return [...byKey].map(([id, members]): ProviderGroup => {
+  const groups = [...byKey].map(([id, members]): ProviderGroup & { label: string; rank: number } => {
     const state: ProviderState = members.some((row) => row.state === "connected")
       ? "connected"
       : members.reduce<ProviderState>((worst, row) => (STATE_RANK[row.state] < STATE_RANK[worst] ? row.state : worst), "connected");
-    const provider = id.startsWith("provider:") ? id.slice("provider:".length) : "";
+    const kind: ProviderGroupKind = id === COMPUTER_PROVIDER_ID ? "computer"
+      : id.startsWith("server:") ? "server"
+        : members.some((row) => row.kind === "account") ? "account"
+          : members.some((row) => row.kind === "key") ? "key" : "other";
+    const label = vendorLabel(id);
+    const name = kind === "computer" ? COMPUTER_PROVIDER_LABEL : kind === "server" || label === id ? members[0]!.name : label;
     const ordered = [...members].sort((x, y) => STATE_RANK[x.state] - STATE_RANK[y.state]);
-    return { id, name: GROUP_NAME[provider] ?? members[0]!.name, rows: ordered, state };
+    return { id, name, kind, rows: ordered, state, label: name, rank: GROUP_RANK[kind] };
   });
+  return groups.sort(compareProviders).map(({ label: _label, rank: _rank, ...group }) => group);
+}
+
+/** The one button at the right of a line (#4329 B1, its words in C). Null:
+ * nothing to do from here (an option that cannot work is hidden). */
+export type ConnectionAction = "signIn" | "signInAgain" | "addKey" | "signOut" | "remove" | "turnOn" | "turnOff";
+export function connectionAction(row: Pick<ProviderRow, "kind" | "state" | "manage">, canSignOut: boolean): ConnectionAction | null {
+  if (row.state === "adminOff") return null;
+  if (row.kind === "local") return row.state === "connected" ? "turnOff" : "turnOn";
+  if (row.state === "reconnect") return "signInAgain";
+  if (row.kind === "server") return row.manage ? "remove" : null;
+  if (row.kind === "account") return row.state === "connected" ? (canSignOut ? "signOut" : null) : "signIn";
+  if (!row.manage) return null;
+  return row.state === "connected" ? "remove" : "addKey";
+}
+
+/** A tool's own name (Codex, Claude Code, the xAI tool) never names a line
+ * of the first level (#4329 C): the account's email, else the provider. */
+const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(HARNESS_TOOL_NAME).map((name) => name.toLowerCase()));
+export function isToolName(name: string): boolean {
+  return TOOL_NAMES.has(name.trim().toLowerCase());
+}
+
+/** The words of one line (#4329 B1): the account's email, a plan's own name
+ * ("ChatGPT plan"), else the provider's name; a server's own name. */
+export function connectionLabel(row: ProviderRow, group: Pick<ProviderGroup, "name">, instances: ReadonlyArray<Pick<InstanceInfo, "instanceId" | "displayName" | "snapshot">>): string {
+  if (row.kind === "server" || row.kind === "local") return row.name;
+  const instance = instances.find((entry) => row.instanceIds.includes(entry.instanceId));
+  const email = row.kind === "account" ? instance?.snapshot.account?.email?.trim() : undefined;
+  if (email) return email;
+  if (row.kind === "account" && row.name !== group.name && !isToolName(row.name)) return row.name;
+  return group.name;
 }
 
 export { VOICE_KEY_NAMES };

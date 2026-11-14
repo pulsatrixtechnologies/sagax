@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { osPermissionsAvailable } from "@/lib/os-permissions";
 
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -29,7 +29,7 @@ import {
   publishedPagesMatch,
   sectionMatches,
 } from "./settings-nav";
-import { SUB_PAGES } from "./settings-sub-pages";
+import { resolveSubPage } from "./settings-sub-pages";
 
 export function useSettingsModal() {
   const { state, dispatch } = useStore();
@@ -137,8 +137,9 @@ export function useSettingsModal() {
   // #2080: every page has its one sentence under the title, drawn by the modal.
   const sectionIntroKey = SECTIONS.find((entry) => entry.id === section)?.introKey;
   const subPageId = state.appSettingsSubPage;
-  const subPage = subPageId && SUB_PAGES[subPageId]?.section === section ? SUB_PAGES[subPageId] : null;
-  const openSubPage = (id: string) => dispatch({ type: "toggleAppSettings", open: true, section: SUB_PAGES[id].section, subPage: id });
+  const resolved = useMemo(() => resolveSubPage(subPageId), [subPageId]);
+  const subPage = subPageId && resolved?.section === section ? resolved : null;
+  const openSubPage = (id: string) => { const page = resolveSubPage(id); if (page) dispatch({ type: "toggleAppSettings", open: true, section: page.section, subPage: id }); };
   const closeSubPage = useCallback(() => {
     const from = state.appSettingsSubPage;
     dispatch({ type: "toggleAppSettings", open: true, section });

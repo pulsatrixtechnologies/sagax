@@ -313,6 +313,15 @@ function CredentialHelp({ section }: { section: ConfigSection }) {
   );
 }
 
+/** Saves a section's key, or removes it with an empty value (the key row and
+ * a provider line's Remove share this one path). */
+export function saveCredential(section: ConfigSection, value: string, configured: boolean): Promise<ConfigStatus> {
+  const electronSlot = ELECTRON_CREDENTIAL[section];
+  return window.ogb?.setCredential && electronSlot
+    ? window.ogb.setCredential(electronSlot, value)
+    : api("/api/config", { method: "PUT", body: JSON.stringify(SECTIONS[section].body(value, !configured)) });
+}
+
 /** A paste saves at once, so a clipboard holding a sentence instead of the
  * key would otherwise be stored and then "rejected". No provider key or
  * token has spaces in it. */
@@ -387,14 +396,7 @@ export function ApiKeyRow({
     setError(null);
     testGeneration.current++;
     setVerdict(null);
-    const electronSlot = ELECTRON_CREDENTIAL[section];
-    const request = window.ogb?.setCredential && electronSlot
-      ? window.ogb.setCredential(electronSlot, next)
-      : api("/api/config", {
-          method: "PUT",
-          body: JSON.stringify(SECTIONS[section].body(next, !configured)),
-        });
-    request
+    saveCredential(section, next, configured)
       .then((status: ConfigStatus) => {
         dispatch({ type: "configStatus", config: status });
         setValue("");

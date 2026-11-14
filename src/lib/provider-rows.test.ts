@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { InstanceInfo } from "@/state/store";
 import type { MyEngine } from "@/lib/perspicax-org";
-import { providerGroups, providerRows, splitProviderRows, visibleProviderRows, type ProviderInput } from "./provider-rows";
+import { connectionAction, connectionLabel, pageProviderRows, providerGroupKey, providerGroups, providerRows, splitProviderRows, visibleProviderRows, type ProviderInput } from "./provider-rows";
+import { XAI_GROUP_LABEL } from "../../shared/model-provider";
 
 const instance = (instanceId: string, driverKind: string, access: InstanceInfo["access"], extra: Partial<InstanceInfo> = {}): InstanceInfo => ({
   instanceId, driverKind, displayName: instanceId, access,
@@ -133,4 +134,63 @@ describe("providerRows", () => {
     const instances = [instance("codex", "codex", "subscription", { snapshot: { state: "available", authenticated: false } }), instance("claude", "claudeAgent", "subscription")];
     expect(visibleProviderRows(providerRows(base({ instances, allInstances: instances }))).map((row) => row.id)).toEqual(["account:claude"]);
   });
+
+  // #4329 lot 1: the list reads the shared grouping, one provider per row.
+  it("groups under the catalog's providers: OpenAI's two sign-ins are one provider, the xAI group under its label, in the catalog's order", () => {
+    const instances = [
+      instance("mistral", "mistral", "api"),
+      instance("lab", "openai-compat", "custom"),
+      instance("grok", "grokAgent", "subscription"),
+      instance("chatgpt", "codex", "subscription", { displayName: "ChatGPT plan" }),
+      instance("codex", "codex", "subscription", { displayName: "Codex", snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }),
+      instance("claude", "claudeAgent", "subscription", { displayName: "Claude Code" }),
+    ];
+    const rows = providerRows(base({
+      instances, allInstances: instances, savedKeys: ["mistral"],
+      keyRowOf: (driver) => (driver === "mistral" ? "mistral" : null),
+      compatServers: [{ instanceId: "lab", name: "Home server", configured: false }],
+      local: { expose: true, share: false, connected: true, endpoints: [{ id: "e1", baseUrl: "http://127.0.0.1:8000/v1", label: "" }], published: [{ id: "e1", label: "", models: ["a"] }], probes: [] },
+    }));
+    const groups = providerGroups(visibleProviderRows(rows), instances);
+    expect(groups.map((group) => [group.id, group.name, group.kind, group.rows.length])).toEqual([
+      ["anthropic", "Claude", "account", 1],
+      ["openai", "OpenAI", "account", 2],
+      ["xai", XAI_GROUP_LABEL, "account", 1],
+      ["mistral", "Mistral", "key", 1],
+      ["server:lab", "Home server", "server", 1],
+      ["computer", "This computer", "computer", 1],
+    ]);
+    // no nested group: every account is one line of its provider
+    const openai = groups.find((group) => group.id === "openai")!;
+    expect(openai.rows.map((row) => row.id).sort()).toEqual(["account:chatgpt", "account:codex"]);
+    // a line never names a tool: the email, a plan's own name, else the provider
+    const label = (id: string) => connectionLabel(rows.find((row) => row.id === id)!, openai, instances);
+    expect(label("account:codex")).toBe("ada@example.com");
+    expect(label("account:chatgpt")).toBe("ChatGPT plan");
+    const claude = groups[0]!;
+    expect(connectionLabel(claude.rows[0]!, claude, instances)).toBe("Claude");
+    expect(providerGroupKey(rows.find((row) => row.id === "account:grok")!, instances)).toBe("xai");
+  });
+
+  it("a provider's page also lists what waits to be connected, never what the organization pays or turned off", () => {
+    const instances = [instance("codex", "codex", "subscription", { snapshot: { state: "available", authenticated: false } }), instance("claude", "claudeAgent", "subscription")];
+    const rows = providerRows(base({ instances, allInstances: instances }));
+    expect(pageProviderRows(rows).map((row) => row.id).sort()).toEqual(["account:claude", "account:codex"]);
+    expect(pageProviderRows([{ ...rows[0]!, state: "adminOff" }, { ...rows[1]!, payer: "org" }])).toEqual([]);
+  });
+
+  it("one button per line, in the design's words; none when nothing can be done here", () => {
+    expect(connectionAction({ kind: "account", state: "connected", manage: true }, true)).toBe("signOut");
+    expect(connectionAction({ kind: "account", state: "connected", manage: true }, false)).toBeNull();
+    expect(connectionAction({ kind: "account", state: "available", manage: true }, false)).toBe("signIn");
+    expect(connectionAction({ kind: "account", state: "reconnect", manage: true }, true)).toBe("signInAgain");
+    expect(connectionAction({ kind: "key", state: "keyMissing", manage: true }, false)).toBe("addKey");
+    expect(connectionAction({ kind: "key", state: "connected", manage: true }, false)).toBe("remove");
+    expect(connectionAction({ kind: "key", state: "connected", manage: false }, false)).toBeNull();
+    expect(connectionAction({ kind: "server", state: "connected", manage: true }, false)).toBe("remove");
+    expect(connectionAction({ kind: "local", state: "connected", manage: true }, false)).toBe("turnOff");
+    expect(connectionAction({ kind: "local", state: "offline", manage: true }, false)).toBe("turnOn");
+    expect(connectionAction({ kind: "key", state: "adminOff", manage: true }, false)).toBeNull();
+  });
 });
+

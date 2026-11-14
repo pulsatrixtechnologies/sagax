@@ -12,6 +12,7 @@ export const LocalComputerSection = lazyScreen("LocalComputerSection", async () 
 export const NotificationSettings = lazyScreen("NotificationSettings", async () => (await import("./NotificationSettings")).NotificationSettings);
 export const OrganizationSettings = lazyScreen("OrganizationSettings", async () => (await import("./OrganizationSettings")).OrganizationSettings);
 export const OrgMemorySettings = lazyScreen("OrgMemorySettings", async () => (await import("./OrgMemorySettings")).OrgMemorySettings);
+export const ProviderPage = lazyScreen("ProviderPage", async () => (await import("./settings/ProviderPage")).ProviderPage);
 export const ProvidersSettings = lazyScreen("ProvidersSettings", async () => (await import("./settings/ProvidersSettings")).ProvidersSettings);
 export const SecurityKeySettings = lazyScreen("SecurityKeySettings", async () => (await import("./SecurityKeySettings")).SecurityKeySettings);
 export const UsageSection = lazyScreen("UsageSection", async () => (await import("./UsageSection")).UsageSection);

@@ -16,10 +16,9 @@ export function PersonalProviderKey({ provider, name, onDone }: { provider: stri
   const change = async (remove: boolean) => {
     setBusy(true); setNote(null);
     try {
-      await api<ProviderAccountsView>(`${PROVIDER_ACCOUNTS_PATH}/keys/${encodeURIComponent(provider)}`, {
-        method: remove ? "DELETE" : "PUT", ...(remove ? {} : { body: JSON.stringify({ key: value.trim() }) }),
-      });
-      setValue(""); providerAccountsChanged();
+      if (remove) await removePersonalKey(provider);
+      else { await api<ProviderAccountsView>(`${PROVIDER_ACCOUNTS_PATH}/keys/${encodeURIComponent(provider)}`, { method: "PUT", body: JSON.stringify({ key: value.trim() }) }); providerAccountsChanged(); }
+      setValue("");
       await Promise.resolve(refreshInstances()).catch(() => {});
       setNote(t(remove ? "voiceKeys.removed" : "voiceKeys.saved"));
       onDone?.();
@@ -44,6 +43,18 @@ export function PersonalProviderKey({ provider, name, onDone }: { provider: stri
   </div>;
 }
 
+/** Remove one of the person's own keys (its form and its line's Remove). */
+export async function removePersonalKey(provider: string): Promise<void> {
+  await api<ProviderAccountsView>(`${PROVIDER_ACCOUNTS_PATH}/keys/${encodeURIComponent(provider)}`, { method: "DELETE" });
+  providerAccountsChanged();
+}
+
+/** Remove a server the person added (its line's button and its form). */
+export async function removePersonalServer(instanceId: string): Promise<void> {
+  try { await api(`${PROVIDER_ACCOUNTS_PATH}/servers/${encodeURIComponent(instanceId)}`, { method: "DELETE" }); }
+  finally { providerAccountsChanged(); }
+}
+
 export function PersonalProviderServerForm({ server, onDone }: { server?: PersonalProviderServer; onDone(): void }) {
   const { refreshInstances } = useStore();
   const { unavailable } = useProviderAccounts();
@@ -64,7 +75,8 @@ export function PersonalProviderServerForm({ server, onDone }: { server?: Person
           const at = line.indexOf("|"); const id = (at < 0 ? line : line.slice(0, at)).trim();
           return { id, label: at < 0 ? id : line.slice(at + 1).trim() || id };
         }) };
-      await api(path, { method: remove ? "DELETE" : "PUT", ...(remove ? {} : { body: JSON.stringify(value) }) });
+      if (remove) await removePersonalServer(instanceId);
+      else await api(path, { method: "PUT", body: JSON.stringify(value) });
       if (!remove && key.trim()) await api(`${PROVIDER_ACCOUNTS_PATH}/keys/${encodeURIComponent(`compat:${instanceId}`)}`, { method: "PUT", body: JSON.stringify({ key: key.trim() }) });
       setKey(""); providerAccountsChanged(); await Promise.resolve(refreshInstances()).catch(() => {}); onDone();
     } catch (failure) { providerAccountsChanged(); setError(failure instanceof Error ? failure.message : t("voiceKeys.error")); }
@@ -76,7 +88,7 @@ export function PersonalProviderServerForm({ server, onDone }: { server?: Person
     <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("compatServers.url")}<input type="url" className={FIELD} value={url} onChange={(event) => setUrl(event.target.value)} disabled={busy} placeholder="https://api.example.com/v1" /></label>
     <div className="flex flex-col items-start gap-1 text-[12px] text-ink-secondary">{t("providers.server.protocol")}<PillSelect<PersonalProviderServer["protocol"]> value={protocol} onChange={setProtocol} disabled={busy} ariaLabel={t("providers.server.protocol")} options={[{ value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} /></div>
     <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("providers.server.models")}<textarea className={FIELD} rows={3} value={models} onChange={(event) => setModels(event.target.value)} disabled={busy} /></label>
-    <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("voiceKeys.key", { provider: name || t("providers.add.server") })}<input type="password" autoComplete="off" className={FIELD} value={key} onChange={(event) => setKey(event.target.value)} disabled={busy} /></label>
+    <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{name.trim() ? t("voiceKeys.key", { provider: name }) : t("webSearch.key.optional")}<input type="password" autoComplete="off" className={FIELD} value={key} onChange={(event) => setKey(event.target.value)} disabled={busy} /></label>
     <div className="flex flex-wrap gap-2"><button type="submit" className={PILL} disabled={busy || !name.trim() || !url.trim()}>{t("voiceKeys.save")}</button>{server && <button type="button" className={PILL} disabled={busy} onClick={() => void save(true)}>{t("compatServers.remove")}</button>}<button type="button" className={PILL} onClick={onDone}>{t("common.cancel")}</button></div>
     {server && <PersonalProviderKey provider={`compat:${instanceId}`} name={server.name} />}
     {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}

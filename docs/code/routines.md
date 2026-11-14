@@ -242,7 +242,15 @@ server never reads the bot's closing words or a tool's error text to decide
 that a run had nothing to do. Instead the run contract
 (`ROUTINE_REPORT_CONTRACT`, read by every routine run and every proactive
 wake) carries `ROUTINE_NOTHING_TO_DO_RULE`: a run that found nothing to do
-ends with `NOTHING_TO_REPORT`, never a partial status.
+ends with `NOTHING_TO_REPORT`, never a partial status. That line is the
+bot's word that the run had nothing to do: a read of an item that is gone
+(a mail already moved out of the inbox, read twice with a 404 or "not
+found": `routineItemGone`) is then the run's outcome, not "Completed with
+problems" (`RoutineReportOutcome.nothingToDo`). Any other failure stays a
+problem whatever the bot says (a refused send, a missing tool), and so do a
+connector sign-in to renew, the loop guard, failed steps with no final
+message, a teammate's failed work, an unanswered approval and an engine
+error.
 
 The chat (desktop `MessagesList`, a group's `Transcript`, receipts) leaves
 out the rows of runs stored before (`routineRunRowOutOfChat`); they stay in

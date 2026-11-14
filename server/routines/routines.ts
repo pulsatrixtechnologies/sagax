@@ -1097,6 +1097,16 @@ const ROUTINE_NO_WORK_DECISION = new RegExp([
 
 /** #3990: "let me know if…", "laisse-moi savoir si…": the bot asks the
  * person to say something, it announces no work of its own. */
+/** #3990: a tool failure that says the item it read is gone (an HTTP 404,
+ * "not found", "no longer exists"), never a missing tool ("Tool not found",
+ * "unknown tool"). With the bot's own NOTHING_TO_REPORT line, that is the
+ * "is gone" of ROUTINE_NOTHING_TO_DO_RULE, not a problem. */
+export function routineItemGone(output: string | undefined): boolean {
+  if (!output) return false;
+  if (/\b(?:tool|function|command|method|server|connector|integration)\s+(?:not found|does not exist|doesn't exist)\b|\b(?:unknown|no such)\s+(?:tool|function|command)\b/i.test(output)) return false;
+  return /\b404\b|\bnot[\s_-]?found\b|\bno longer exists?\b|\bdoes not exist\b|\bn'existe plus\b|\bintrouvable\b/i.test(output);
+}
+
 const ROUTINE_ASKS_PERSON_TO_SAY = /^(?:ok(?:ay)?[,.!]?\s+|d'accord[,.!]?\s+|parfait[,.!]?\s+)?(?:let me know|laisse-moi savoir|laissez-moi savoir)\b/i;
 
 export const routineAnnouncementProblem = (output: string) =>
@@ -5023,6 +5033,11 @@ export class RoutineManager {
       // declare (RUN_STATUS, the report contract).
       // #3009: with no final message, nobody reported it: every failure counts.
       if (failure.count < 2 && !noFinalMessage) continue;
+      // #3990: a bot that ended with the nothing-to-report line found the
+      // item gone (a mail already moved out of the inbox, read twice with a
+      // 404): that is the run's outcome, never a problem. A refusal (403) or
+      // any other failure stays one, whatever the bot says (#4030).
+      if (outcome.nothingToDo && !noFinalMessage && routineItemGone(failure.output)) continue;
       // the tool in words, as its card names it (shared/tool-display-name.ts)
       problems.push(failure.count < 2
         ? `${humanizeToolIds(title)} failed${failure.output ? `: ${failure.output}` : ""}`

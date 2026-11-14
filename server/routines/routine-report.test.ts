@@ -19,8 +19,10 @@ describe("routineReportOutcome", () => {
 
   it("is quiet when the bot ends with the marker, and keeps the note for the logs", () => {
     expect(routineReportOutcome(`Checked 12 invoices, all have a PO.\n\n${ROUTINE_QUIET_MARKER}`))
-      .toEqual({ quiet: true, report: "Checked 12 invoices, all have a PO." });
-    expect(routineReportOutcome("NOTHING_TO_REPORT")).toEqual({ quiet: true, report: "" });
+      .toEqual({ quiet: true, report: "Checked 12 invoices, all have a PO.", nothingToDo: true });
+    expect(routineReportOutcome("NOTHING_TO_REPORT")).toEqual({ quiet: true, report: "", nothingToDo: true });
+    // #3990: only the bot's own line says the run had nothing to do
+    expect(routineReportOutcome("Rien à signaler.").nothingToDo).toBeUndefined();
     // the shapes a model actually writes it in
     for (const marker of ["`NOTHING_TO_REPORT`", "**nothing_to_report**", "[NOTHING_TO_REPORT]", "nothing_to_report."]) {
       expect(routineReportOutcome(`Done.\n${marker}`).quiet, marker).toBe(true);

@@ -56,8 +56,8 @@ shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space
 # catalogs as text (SOURCE_TEXT_TESTS in scripts/verify/release/guard-tests.mjs)
 # are linked to nothing by the import graph, so eight of them went red on the
 # 0.8.100 release commit unseen (a renamed window, a restyled round button).
-# They read src/, the catalogs, the model providers docs page and two
-# scripts/testing files, so a lot that touches one of those runs them all. They are static scans and rendered markup with no server,
+# They read src/, the catalogs, the iPad wording map, the model providers
+# docs page and two scripts/testing files, so a lot that touches one of those runs them all. They are static scans and rendered markup with no server,
 # so they run two files at a time: about 75 s on a busy machine (240 s one
 # at a time).
-source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Localizable\.xcstrings$|apps/docs/content/docs/providers/model-providers\.mdx$|scripts/testing/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)'; then G="$(node scripts/verify/release/guard-tests.mjs --source-text)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; fi; fi
+source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Localizable\.xcstrings$|ios/parity/desktop-wording\.json$|apps/docs/content/docs/providers/model-providers\.mdx$|scripts/testing/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)'; then G="$(node scripts/verify/release/guard-tests.mjs --source-text)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; fi; fi

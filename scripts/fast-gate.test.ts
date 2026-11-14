@@ -399,6 +399,8 @@ describe("fast-gate.sh", () => {
     // the guard-tests line leaves the source-text tests to their own line
     expect(ui).toContain("vitest run --reporter=dot --testTimeout=60000 src/locales/unused-keys.test.ts\n");
     expect(runs("ios/App/Localizable.xcstrings")).toContain("--fileParallelism --maxWorkers=2");
+    // the iPad wording map that src/components/ios-desktop-wording.test.ts reads (#4184)
+    expect(runs("ios/parity/desktop-wording.json")).toContain("--fileParallelism --maxWorkers=2");
     // the other files a listed test reads as text
     expect(runs("apps/docs/content/docs/providers/model-providers.mdx")).toContain("--fileParallelism --maxWorkers=2");
     expect(runs("scripts/testing/compose-flow.ts")).toContain("--fileParallelism --maxWorkers=2");

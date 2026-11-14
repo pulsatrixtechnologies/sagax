@@ -491,7 +491,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ vous pose les questions et remplit chaque étape en direct, à côté de la conversation. Vous pouvez corriger chaque champ."
+            "value": "%@ te pose les questions et remplit chaque étape en direct, à côté de la conversation. Tu peux corriger chaque champ."
           }
         }
       }
@@ -1237,7 +1237,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ est prêt. Écrivez votre premier message et appuyez sur Entrée."
+            "value": "%@ est prêt. Écris ton premier message et appuie sur Entrée."
           }
         }
       }
@@ -1333,7 +1333,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ attend votre réponse"
+            "value": "%@ attend ta réponse"
           }
         }
       }
@@ -5742,7 +5742,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un bot a modifié la mémoire du groupe pendant votre édition. Rien n'a été enregistré."
+            "value": "Un bot a modifié la mémoire du groupe pendant ton édition. Rien n'a été enregistré."
           }
         },
         "pt-BR": {
@@ -5820,7 +5820,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un groupe intégré de la mémoire d’équipe : supprimez ses notes une à une"
+            "value": "Un groupe intégré de la mémoire d’équipe : supprime ses notes une à une"
           }
         }
       }
@@ -5830,7 +5830,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un calendrier. Déposez un bot sur une heure et il s'exécute tout seul ; le résultat arrive dans sa conversation. Suivant vous ramène à la conversation."
+            "value": "Un calendrier. Dépose un bot sur une heure et il s'exécute tout seul ; le résultat arrive dans sa conversation. Suivant te ramène à la conversation."
           }
         }
       }
@@ -5840,7 +5840,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un appel passe par la voix en temps réel, jamais par la synthèse vocale. Ajoutez ou corrigez la clé xAI dans Réglages > Voix."
+            "value": "Un appel passe par la voix en temps réel, jamais par la synthèse vocale. Ajoute ou corrige la clé xAI dans Réglages > Voix."
           }
         }
       }
@@ -5976,7 +5976,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Une conversation attend votre réponse"
+            "value": "Une conversation attend ta réponse"
           }
         }
       }
@@ -6582,7 +6582,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Une règle qui permet, ou un mode de permission plus large pour un robot."
+            "value": "Une règle qui permet, ou un mode de permission plus large pour un bot."
           }
         }
       }
@@ -6668,7 +6668,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un brief partagé que chaque membre voit à chaque tour. Vous pourrez le modifier plus tard."
+            "value": "Un brief partagé que chaque membre voit à chaque tour. Tu pourras le modifier plus tard."
           }
         },
         "pt-BR": {
@@ -7918,7 +7918,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajoutez d'abord une clé, puis choisissez les approbations qui la demandent."
+            "value": "Ajoute d'abord une clé, puis choisis les approbations qui la demandent."
           }
         }
       }
@@ -7928,7 +7928,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajoutez une clé dans Fournisseurs, ou utilisez une voix installée, pour choisir qui parle et qui écoute."
+            "value": "Ajoute une clé dans Fournisseurs, ou utilise une voix installée, pour choisir qui parle et qui écoute."
           }
         }
       }
@@ -11380,7 +11380,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Une copie chiffrée de vos bots, conversations et fichiers, à restaurer ici ou sur un autre ordinateur."
+            "value": "Une copie chiffrée de tes bots, conversations et fichiers, à restaurer ici ou sur un autre ordinateur."
           }
         }
       }
@@ -13016,7 +13016,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Demandez à un bot de faire quelque chose plus tard."
+            "value": "Demande à un bot de faire quelque chose plus tard."
           }
         },
         "pt-BR": {
@@ -13876,7 +13876,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le mode Auto laisse ce bot cliquer, taper et lancer des outils sur cet ordinateur sans demander d'abord. Les actions destructrices et sensibles s'arrêtent encore. Continuez seulement si vous regardez."
+            "value": "Le mode Auto laisse ce bot cliquer, taper et lancer des outils sur cet ordinateur sans demander d'abord. Les actions destructrices et sensibles s'arrêtent encore. Continue seulement si tu regardes."
           }
         },
         "pt-BR": {
@@ -15526,7 +15526,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les bots ont des mains. Ce bouton ouvre le panneau Ordinateur, où vous regardez le bot travailler. Ouvrons-le."
+            "value": "Les bots ont des mains. Ce bouton ouvre le panneau Ordinateur, où tu regardes le bot travailler. Ouvrons-le."
           }
         }
       }
@@ -15762,7 +15762,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Faites entrer un Grok Bot partagé dans Sagax : ses instructions, ses compétences (désactivées), ses routines à heure fixe (en pause) et les applications qu'il utilisait. Le modèle, l'ordinateur, les connexions et les clés ne suivent jamais ; le bot utilise votre propre moteur et vos applications."
+            "value": "Fais entrer un Grok Bot partagé dans Sagax : ses instructions, ses compétences (désactivées), ses routines à heure fixe (en pause) et les applications qu'il utilisait. Le modèle, l'ordinateur, les connexions et les clés ne suivent jamais ; le bot utilise ton propre moteur et tes applications."
           }
         }
       }
@@ -17692,7 +17692,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les chats, brouillons et fichiers ne sont pas masqués et peuvent contenir des secrets collés. Gardez cette sauvegarde privée et son mot de passe en lieu sûr : il est irrécupérable."
+            "value": "Les chats, brouillons et fichiers ne sont pas masqués et peuvent contenir des secrets collés. Garde cette sauvegarde privée et son mot de passe en lieu sûr : il est irrécupérable."
           }
         },
         "pt-BR": {
@@ -21840,7 +21840,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connectez un abonnement (Claude, ChatGPT, Grok) pour voir ses limites de 5 heures et de la semaine."
+            "value": "Connecte un abonnement (Claude, ChatGPT, Grok) pour voir ses limites de 5 heures et de la semaine."
           }
         }
       }
@@ -21876,7 +21876,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connectez d'abord un moteur pour donner à votre bot de quoi fonctionner."
+            "value": "Connecte d'abord un moteur pour donner à ton bot de quoi fonctionner."
           }
         }
       }
@@ -23602,7 +23602,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copiez la demande d'export et envoyez-la à votre propre Grok Bot."
+            "value": "Copie la demande d'export et envoie-la à ton propre Grok Bot."
           }
         }
       }
@@ -23716,7 +23716,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copiez vos propres bots dans le Sagax de votre organisation. Ils y arrivent privés et à vous, et ils restent aussi ici."
+            "value": "Copie tes propres bots dans le Sagax de ton organisation. Ils y arrivent privés et à toi, et ils restent aussi ici."
           }
         }
       }
@@ -24062,7 +24062,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Impossible de vérifier vos connexions d'IA. Réessayez."
+            "value": "Impossible de vérifier tes connexions d'IA. Réessaie."
           }
         }
       }
@@ -24352,7 +24352,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Impossible d'enregistrer votre progression. Réessayez ou passez la visite."
+            "value": "Impossible d'enregistrer ta progression. Réessaie ou passe la visite."
           }
         }
       }
@@ -25110,7 +25110,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Créez votre premier bot"
+            "value": "Crée ton premier bot"
           }
         }
       }
@@ -26842,7 +26842,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supprimer le dossier %@ et ses %@ notes ? Elles vont à la corbeille, d’où vous pourrez les restaurer."
+            "value": "Supprimer le dossier %@ et ses %@ notes ? Elles vont à la corbeille, d’où tu pourras les restaurer."
           }
         }
       }
@@ -26878,7 +26878,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supprimer les caches et vieux fichiers choisis (%@) ? Votre dossier de travail n'est pas touché."
+            "value": "Supprimer les caches et vieux fichiers choisis (%@) ? Ton dossier de travail n'est pas touché."
           }
         }
       }
@@ -28682,7 +28682,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Glissez pour déplacer, défilez ou pincez pour zoomer, touchez une note pour l'ouvrir."
+            "value": "Glisse pour déplacer, défile ou pince pour zoomer, touche une note pour l'ouvrir."
           }
         }
       }
@@ -28724,7 +28724,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Glissez dans une équipe pour organiser · Déposez dans une autre équipe pour déplacer · Molette pour zoomer · Pavé ou Maj+molette pour défiler"
+            "value": "Glisse dans une équipe pour organiser · Dépose dans une autre équipe pour déplacer · Molette pour zoomer · Pavé ou Maj+molette pour défiler"
           }
         }
       }
@@ -28902,7 +28902,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chaque Bot est changé à tour de rôle, comme si vous le modifiiez seul : le changement paraît dans son historique, et un Bot qui refuse dit pourquoi."
+            "value": "Chaque Bot est changé à tour de rôle, comme si tu le modifiais seul : le changement paraît dans son historique, et un Bot qui refuse dit pourquoi."
           }
         }
       }
@@ -30968,7 +30968,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chaque bot a son propre modèle. Ouvrez le menu +, puis Modèle, pour en changer, même en pleine conversation."
+            "value": "Chaque bot a son propre modèle. Ouvre le menu +, puis Modèle, pour en changer, même en pleine conversation."
           }
         }
       }
@@ -31192,7 +31192,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chaque réglage reste tel quel tant que vous ne le changez pas. Ouvrez une section pour la changer sur tous les Bots sélectionnés."
+            "value": "Chaque réglage reste tel quel tant que tu ne le changes pas. Ouvre une section pour la changer sur tous les Bots sélectionnés."
           }
         }
       }
@@ -31460,7 +31460,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tout est prêt. Vos bots peuvent commencer tout de suite."
+            "value": "Tout est prêt. Tes bots peuvent commencer tout de suite."
           }
         }
       }
@@ -31486,7 +31486,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tout ce que vous pouvez lire, tous paliers confondus."
+            "value": "Tout ce que tu peux lire, tous paliers confondus."
           }
         }
       }
@@ -33220,7 +33220,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fixé pour ce fil après son premier tour. Démarrez un nouveau fil pour travailler ailleurs."
+            "value": "Fixé pour ce fil après son premier tour. Démarre un nouveau fil pour travailler ailleurs."
           }
         },
         "pt-BR": {
@@ -33698,7 +33698,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Par sécurité, la première clé demande une connexion Pulsatrix de moins de 15 minutes, avec votre mot de passe ou votre clé d'accès. Un code courriel ne compte pas. Vous revenez ensuite à cette page."
+            "value": "Par sécurité, la première clé demande une connexion Pulsatrix de moins de 15 minutes, avec ton mot de passe ou ta clé d'accès. Un code courriel ne compte pas. Tu reviens ensuite à cette page."
           }
         }
       }
@@ -35088,7 +35088,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Donnez une voix à chaque membre du groupe avant de lancer un appel de groupe."
+            "value": "Donne une voix à chaque membre du groupe avant de lancer un appel de groupe."
           }
         }
       }
@@ -37288,7 +37288,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Comment voulez-vous configurer votre nouveau bot? Vous pouvez changer en tout temps sans rien perdre."
+            "value": "Comment veux-tu configurer ton nouveau bot? Tu peux changer en tout temps sans rien perdre."
           }
         }
       }
@@ -37508,7 +37508,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le temps de pause qui termine ce que vous dites. Une phrase inachevée a toujours plus de temps."
+            "value": "Le temps de pause qui termine ce que tu dis. Une phrase inachevée a toujours plus de temps."
           }
         }
       }
@@ -37744,7 +37744,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Je n'ai plus accès à mon moteur : il faut se reconnecter. Ouvrez l'application pour vous reconnecter."
+            "value": "Je n'ai plus accès à mon moteur : il faut se reconnecter. Ouvre l'application pour te reconnecter."
           }
         },
         "pt-BR": {
@@ -37776,7 +37776,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Je n'ai pas pu enregistrer cette décision. Réessayez."
+            "value": "Je n'ai pas pu enregistrer cette décision. Réessaye."
           }
         }
       }
@@ -39952,7 +39952,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Il ne répond pas. Récupérer le reconstruit à partir de l'image actuelle : vos fichiers restent, les apps et paquets installés sont retirés."
+            "value": "Il ne répond pas. Récupérer le reconstruit à partir de l'image actuelle : tes fichiers restent, les apps et paquets installés sont retirés."
           }
         }
       }
@@ -40602,7 +40602,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rejoignez-le et, si vous le voulez, copiez-y vos bots."
+            "value": "Rejoins-le et, si tu le veux, copies-y tes bots."
           }
         }
       }
@@ -41022,7 +41022,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gardez ce fichier comme copie ou sauvegarde de ces bots. La copie de bots dans une organisation se fait seulement depuis le Sagax local d'une app de bureau Sagax, dans Réglages > Organisation > Rejoindre et copier."
+            "value": "Garde ce fichier comme copie ou sauvegarde de ces bots. La copie de bots dans une organisation se fait seulement depuis le Sagax local d'une app de bureau Sagax, dans Réglages > Organisation > Rejoindre et copier."
           }
         }
       }
@@ -41330,7 +41330,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les clés enregistrées ici sont chiffrées sur ce serveur et servent lorsque vous lancez des agents cloud (Cursor, Claude Code, Codex). Elles ne sont plus affichées après l'enregistrement."
+            "value": "Les clés enregistrées ici sont chiffrées sur ce serveur et servent lorsque tu lances des agents cloud (Cursor, Claude Code, Codex). Elles ne sont plus affichées après l'enregistrement."
           }
         }
       }
@@ -42290,7 +42290,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Laissez vos Bots vous prévenir lorsqu'un élément requiert votre attention"
+            "value": "Laisse tes Bots te prévenir lorsqu'un élément requiert ton attention"
           }
         }
       }
@@ -42708,7 +42708,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Liée à %@ ; retirez ou archivez d’abord le bot"
+            "value": "Liée à %@ ; retire ou archive d’abord le bot"
           }
         }
       }
@@ -42860,7 +42860,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Je vous écoute"
+            "value": "Je t'écoute"
           }
         }
       }
@@ -43456,7 +43456,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chargement de votre coffre…"
+            "value": "Chargement de ton coffre…"
           }
         }
       }
@@ -43584,7 +43584,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le contrôle de l'ordinateur local n'est pas prêt. Sagax a besoin d'Accessibilité et d'Enregistrement de l'écran pour utiliser ce Mac. Vérifiez le détail du pilote ou les Réglages Système, puis cliquez sur Réessayer."
+            "value": "Le contrôle de l'ordinateur local n'est pas prêt. Sagax a besoin d'Accessibilité et d'Enregistrement de l'écran pour utiliser ce Mac. Vérifie le détail du pilote ou les Réglages Système, puis clique sur Réessayer."
           }
         }
       }
@@ -45142,7 +45142,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mesure les caches et les vieux fichiers de l'ordinateur du bot et montre ce qu'un nettoyage libérerait. Rien n'est supprimé avant que vous choisissiez."
+            "value": "Mesure les caches et les vieux fichiers de l'ordinateur du bot et montre ce qu'un nettoyage libérerait. Rien n'est supprimé avant que tu choisisses."
           }
         }
       }
@@ -46888,7 +46888,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bougez le pointeur et cliquez ici pour l’essayer."
+            "value": "Bouge le pointeur et clique ici pour l’essayer."
           }
         }
       }
@@ -47362,7 +47362,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mon moteur a atteint sa limite d'utilisation. Réessayez plus tard."
+            "value": "Mon moteur a atteint sa limite d'utilisation. Réessaye plus tard."
           }
         },
         "pt-BR": {
@@ -47378,7 +47378,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mon moteur n'a plus de crédits. Vérifiez son forfait dans l'application."
+            "value": "Mon moteur n'a plus de crédits. Vérifie son forfait dans l'application."
           }
         },
         "pt-BR": {
@@ -47640,7 +47640,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nommez votre bot"
+            "value": "Nomme ton bot"
           }
         }
       }
@@ -49196,7 +49196,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun compte %@ n'est connecté. Connectez-en un pour utiliser ses connecteurs (courriel, calendrier, Teams) dans vos bots."
+            "value": "Aucun compte %@ n'est connecté. Connecte-en un pour utiliser ses connecteurs (courriel, calendrier, Teams) dans tes bots."
           }
         }
       }
@@ -49206,7 +49206,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun moteur %@ n'est encore configuré. Ajoutez-en un pour utiliser les connecteurs de votre compte %@."
+            "value": "Aucun moteur %@ n'est encore configuré. Ajoute-en un pour utiliser les connecteurs de ton compte %@."
           }
         }
       }
@@ -50688,7 +50688,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune note sur la carte pour l'instant. Écrivez la première."
+            "value": "Aucune note sur la carte pour l'instant. Écris la première."
           }
         }
       }
@@ -51232,7 +51232,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun fournisseur connecté pour l'instant. Ajoutez-en un pour commencer."
+            "value": "Aucun fournisseur connecté pour l'instant. Ajoute-en un pour commencer."
           }
         }
       }
@@ -52256,7 +52256,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune de vos clés ne fonctionne à cette adresse : ces approbations y seront refusées. Ajoutez une clé depuis cette adresse."
+            "value": "Aucune de tes clés ne fonctionne à cette adresse : ces approbations y seront refusées. Ajoute une clé depuis cette adresse."
           }
         }
       }
@@ -52576,7 +52576,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pas assez de parole entendue. Réessayez dans un endroit plus calme."
+            "value": "Pas assez de parole entendue. Réessaye dans un endroit plus calme."
           }
         }
       }
@@ -53588,7 +53588,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rien d'installé pour l'instant. Trouvez des apps, des plugins et des compétences dans Découvrir."
+            "value": "Rien d'installé pour l'instant. Trouve des apps, des plugins et des compétences dans Découvrir."
           }
         }
       }
@@ -53852,7 +53852,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rien de partagé pour l'instant. Révisez ce que les bots proposent à mesure qu'ils apprennent qui est qui et où se trouvent les choses, ou ajoutez une entrée vous-même."
+            "value": "Rien de partagé pour l'instant. Révise ce que les bots proposent à mesure qu'ils apprennent qui est qui et où se trouvent les choses, ou ajoute une entrée toi-même."
           }
         }
       }
@@ -55229,7 +55229,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Désactivée. Mettez l'ordinateur à jour vous-même depuis son menu."
+            "value": "Désactivée. Mets l'ordinateur à jour toi-même depuis son menu."
           }
         }
       }
@@ -55545,7 +55545,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sur un serveur d'organisation, le mode vocal parle à un bot à la fois : ouvrez la conversation d'un bot pour l'appeler."
+            "value": "Sur un serveur d'organisation, le mode vocal parle à un bot à la fois : ouvre le chat d'un bot pour l'appeler."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On an organization server, voice mode talks with one bot at a time: open a bot's chat to call it."
           }
         }
       }
@@ -56053,7 +56059,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un bot, configuré pour vous : il choisit lui-même le bon moteur et le bon modèle, et vous demande avant toute action qui sort de cet ordinateur. Vous pourrez tout changer plus tard."
+            "value": "Un bot, configuré pour toi : il choisit lui-même le bon moteur et le bon modèle, et te demande avant toute action qui sort de cet ordinateur. Tu pourras tout changer plus tard."
           }
         }
       }
@@ -56493,7 +56499,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ne restaurez que des sauvegardes de confiance : instructions, compétences et permissions des bots sont aussi restaurées. Routines, webhooks et appels arrivent en pause."
+            "value": "Ne restaure que des sauvegardes de confiance : instructions, compétences et permissions des bots sont aussi restaurées. Routines, webhooks et appels arrivent en pause."
           }
         }
       }
@@ -56569,7 +56575,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Seuls les fournisseurs dont vous avez une clé sont proposés. Si l'un échoue ou atteint sa limite, un autre que vous avez prend le relais tout seul, et l'onglet Événements de la conversation l'indique."
+            "value": "Seuls les fournisseurs dont tu as une clé sont proposés. Si l'un échoue ou atteint sa limite, un autre que tu as prend le relais tout seul, et l'onglet Événements de la conversation l'indique."
           }
         }
       }
@@ -57813,7 +57819,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ouvrez cette conversation pour lire la compétence complète avant de l'activer. Vous pouvez dire non maintenant pour la refuser."
+            "value": "Ouvre cette conversation pour lire la compétence complète avant de l'activer. Tu peux dire non maintenant pour la refuser."
           }
         }
       }
@@ -58443,7 +58449,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ou configurez avec de l'aide ci-dessous."
+            "value": "Ou configure avec de l'aide ci-dessous."
           }
         }
       }
@@ -59963,7 +59969,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Collez un lien de Grok Bot, comme https://x.ai/bot/... ou une page du marketplace Grok Bot."
+            "value": "Colle un lien de Grok Bot, comme https://x.ai/bot/... ou une page du marketplace Grok Bot."
           }
         }
       }
@@ -60005,7 +60011,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Collez une clé ou un jeton API"
+            "value": "Colle une clé ou un jeton API"
           }
         }
       }
@@ -60069,7 +60075,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Collez sa réponse ci-dessous, ou choisissez le fichier .json où vous l'avez enregistrée."
+            "value": "Colle sa réponse ci-dessous, ou choisis le fichier .json où tu l'as enregistrée."
           }
         }
       }
@@ -60089,7 +60095,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Collez la réponse JSON ici"
+            "value": "Colle la réponse JSON ici"
           }
         }
       }
@@ -60741,7 +60747,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les personnes, lieux, décisions et termes que partagent tous les bots de cette section. Chaque proposition d'un bot attend la révision d'un membre de cette équipe, ou d'un admin, avant d'être partagée. Vos propres ajouts sont partagés tout de suite. Vous pouvez tout modifier ou retirer."
+            "value": "Les personnes, lieux, décisions et termes que partagent tous les bots de cette section. Chaque proposition d'un bot attend la révision d'un membre de cette équipe, ou d'un admin, avant d'être partagée. Tes propres ajouts sont partagés tout de suite. Tu peux tout modifier ou retirer."
           }
         }
       }
@@ -61461,7 +61467,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choisissez une voix dans un profil d'agent pour passer des appels"
+            "value": "Choisis une voix dans un profil d'agent pour passer des appels"
           }
         }
       }
@@ -61503,7 +61509,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le modèle couvert par votre forfait Fish Audio, pour tous les agents de cette installation."
+            "value": "Le modèle couvert par ton forfait Fish Audio, pour tous les agents de cette installation."
           }
         }
       }
@@ -61545,7 +61551,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choisissez à quoi connecter l'app, puis suivez les étapes."
+            "value": "Choisis à quoi connecter l'app, puis suis les étapes."
           }
         }
       }
@@ -62533,7 +62539,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Appuyez sur"
+            "value": "Appuie sur"
           }
         }
       }
@@ -64999,7 +65005,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lecture des connecteurs de votre compte %@…"
+            "value": "Lecture des connecteurs de ton compte %@…"
           }
         }
       }
@@ -65401,13 +65407,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recent saved runs across your bots. Open a run for its result, error, and execution thread."
+            "value": "Recent saved runs across your bots. Open a run for its result, its error and its logs."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Exécutions enregistrées récentes de tous vos bots. Ouvrez-en une pour son résultat, son erreur et son fil d'exécution."
+            "value": "Exécutions enregistrées récentes de tous tes bots. Ouvre-en une pour son résultat, son erreur et son journal."
           }
         },
         "pt-BR": {
@@ -65653,7 +65659,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Récupérer l'ordinateur de vos bots ? Il est reconstruit à partir de l'image actuelle : vos fichiers et connexions restent, les apps et paquets installés sont retirés. Cela attend qu'aucun bot n'y travaille."
+            "value": "Récupérer l'ordinateur de tes bots ? Il est reconstruit à partir de l'image actuelle : tes fichiers et connexions restent, les apps et paquets installés sont retirés. Cela attend qu'aucun bot n'y travaille."
           }
         }
       }
@@ -66309,7 +66315,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retenir une approbation pour que le robot ne demande plus."
+            "value": "Retenir une approbation pour que le bot ne demande plus."
           }
         }
       }
@@ -68005,7 +68011,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Réinitialiser l'ordinateur de vos bots ? Il est reconstruit à partir du dernier instantané. C'est plus qu'une mise à jour : tout ce qui a été configuré depuis est perdu, et c'est irréversible."
+            "value": "Réinitialiser l'ordinateur de tes bots ? Il est reconstruit à partir du dernier instantané. C'est plus qu'une mise à jour : tout ce qui a été configuré depuis est perdu, et c'est irréversible."
           }
         }
       }
@@ -70779,7 +70785,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le même brouillon dans les deux modes : changez en haut de l'assistant quand vous voulez."
+            "value": "Le même brouillon dans les deux modes : change en haut de l'assistant quand tu veux."
           }
         }
       }
@@ -71187,7 +71193,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les identifiants de comptes et les connexions ne sont pas inclus : reconnectez vos comptes sur la nouvelle machine. Les connexions CLI externes et les disques de VM distantes ne sont pas inclus."
+            "value": "Les identifiants de comptes et les connexions ne sont pas inclus : reconnecte tes comptes sur la nouvelle machine. Les connexions CLI externes et les disques de VM distantes ne sont pas inclus."
           }
         },
         "pt-BR": {
@@ -73405,7 +73411,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Envoyez votre premier message"
+            "value": "Envoie ton premier message"
           }
         }
       }
@@ -73979,7 +73985,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Configurez ElevenLabs, Fish Audio, Chatterbox ou une voix Mac intégrée pour que le bot puisse parler pendant les appels."
+            "value": "Configure ElevenLabs, Fish Audio, Chatterbox ou une voix Mac intégrée pour que le bot puisse parler pendant les appels."
           }
         }
       }
@@ -74005,7 +74011,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Configurez une voix dans un profil d'agent pour passer des appels"
+            "value": "Configure une voix dans un profil d'agent pour passer des appels"
           }
         }
       }
@@ -74463,7 +74469,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Instructions partagées montrées à chaque bot de cette équipe au début de chaque tour. Vous seul pouvez les modifier."
+            "value": "Instructions partagées montrées à chaque bot de cette équipe au début de chaque tour. Toi seul peux les modifier."
           }
         }
       }
@@ -76367,7 +76373,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reconnectez-vous pour ajouter votre première clé"
+            "value": "Reconnecte-toi pour ajouter ta première clé"
           }
         }
       }
@@ -76459,7 +76465,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connectez-vous pour faire cela."
+            "value": "Connecte-toi pour faire cela."
           }
         }
       }
@@ -79593,7 +79599,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Arrêtée après %@ sur %@. Relancez-la pour finir : ce qui est déjà là est ignoré."
+            "value": "Arrêtée après %@ sur %@. Relance-la pour finir : ce qui est déjà là est ignoré."
           }
         }
       }
@@ -81880,7 +81886,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ça n'a pas passé. Pouvez-vous le redire?"
+            "value": "Ça n'a pas passé. Peux-tu le redire?"
           }
         }
       }
@@ -81906,7 +81912,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ça n'a pas fonctionné. Vérifiez la clé et réessayez."
+            "value": "Ça n'a pas fonctionné. Vérifie la clé et réessaie."
           }
         }
       }
@@ -82090,7 +82096,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Voilà pour la visite, et vous êtes de retour dans la conversation. Votre téléphone, le terminal et tout le reste sont dans Réglages. Revoyez cette visite quand vous voulez depuis Réglages → Général."
+            "value": "Voilà pour la visite, et tu es de retour dans la conversation. Ton téléphone, le terminal et tout le reste sont dans Réglages. Revois cette visite quand tu veux depuis Réglages → Général."
           }
         }
       }
@@ -82498,7 +82504,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le bot n'a pas pu être créé. Réessayez."
+            "value": "Le bot n'a pas pu être créé. Réessaye."
           }
         }
       }
@@ -82578,7 +82584,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le bot continue d'utiliser la version enregistrée tant que vous ne choisissez pas. Fichier :"
+            "value": "Le bot continue d'utiliser la version enregistrée tant que tu ne choisis pas. Fichier :"
           }
         },
         "pt-BR": {
@@ -82680,7 +82686,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'ordinateur du bot n'est pas démarré : seuls les fichiers de ce serveur ont été mesurés. Démarrez-le pour mesurer ses caches."
+            "value": "L'ordinateur du bot n'est pas démarré : seuls les fichiers de ce serveur ont été mesurés. Démarre-le pour mesurer ses caches."
           }
         }
       }
@@ -82690,7 +82696,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'ordinateur du bot. Basculez ici entre son bureau et son propre navigateur ; Navigateur, c'est là qu'il lit le web et remplit des formulaires pour vous."
+            "value": "L'ordinateur du bot. Bascule ici entre son bureau et son propre navigateur ; Navigateur, c'est là qu'il lit le web et remplit des formulaires pour toi."
           }
         }
       }
@@ -83094,7 +83100,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'ordinateur n'a pas pu être récupéré. Réessayez."
+            "value": "L'ordinateur n'a pas pu être récupéré. Réessaie."
           }
         }
       }
@@ -83104,7 +83110,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'ordinateur n'a pas pu être réinitialisé. Réessayez."
+            "value": "L'ordinateur n'a pas pu être réinitialisé. Réessaie."
           }
         }
       }
@@ -83114,7 +83120,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'ordinateur n'a pas pu être mis à jour. Réessayez."
+            "value": "L'ordinateur n'a pas pu être mis à jour. Réessaie."
           }
         }
       }
@@ -83858,7 +83864,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le marché d'applications. Connectez-vous une fois à une application et tous les bots peuvent l'utiliser comme outil. Nous allons fermer ceci et continuer."
+            "value": "Le marché d'applications. Connecte-toi une fois à une application et tous les bots peuvent l'utiliser comme outil. Nous allons fermer ceci et continuer."
           }
         }
       }
@@ -83890,7 +83896,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le modèle est surchargé en ce moment. Réessayez dans une minute."
+            "value": "Le modèle est surchargé en ce moment. Réessaye dans une minute."
           }
         },
         "pt-BR": {
@@ -83928,7 +83934,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le modèle, l'effort et les autres choix de départ de chaque nouveau bot à vous."
+            "value": "Le modèle, l'effort et les autres choix de départ de chaque nouveau bot à toi."
           }
         }
       }
@@ -84280,7 +84286,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La demande n'a pas pu être copiée. Sélectionnez-la plutôt dans la documentation."
+            "value": "La demande n'a pas pu être copiée. Sélectionne-la plutôt dans la documentation."
           }
         }
       }
@@ -85024,7 +85030,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les étiquettes de vos notes, les plus utilisées et celles à ranger."
+            "value": "Les étiquettes de tes notes, les plus utilisées et celles à ranger."
           }
         }
       }
@@ -85446,7 +85452,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installez ensuite le moteur depuis Ordinateur du bot > Navigateur."
+            "value": "Installe ensuite le moteur depuis Ordinateur du bot > Navigateur."
           }
         }
       }
@@ -85576,7 +85582,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ces plugins servent tous vos bots. Vous les gérez ici."
+            "value": "Ces plugins servent tous tes bots. Tu les gères ici."
           }
         }
       }
@@ -85614,7 +85620,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ils quittent la barre latérale et gardent tout. Restaurez-les quand vous voulez depuis les Bots archivés."
+            "value": "Ils quittent la barre latérale et gardent tout. Restaure-les quand tu veux depuis les Bots archivés."
           }
         },
         "pt-BR": {
@@ -87042,7 +87048,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "C'est ici que vous parlez à vos bots. Écrivez ce que vous voulez et appuyez sur %@. Chaque conversation est un vrai agent sur votre machine."
+            "value": "C'est ici que tu parles à tes bots. Écris ce que tu veux et appuie sur %@. Chaque conversation est un vrai agent sur ta machine."
           }
         }
       }
@@ -87308,7 +87314,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cela supprime définitivement toutes les exécutions enregistrées que vous pouvez voir. Les exécutions en cours sont conservées."
+            "value": "Cela supprime définitivement toutes les exécutions enregistrées que tu peux voir. Les exécutions en cours sont conservées."
           }
         },
         "pt-BR": {
@@ -88090,7 +88096,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce serveur n'offre pas la connexion Pulsatrix, et un code courriel ne compte pas. Ajoutez votre première clé depuis l'app de bureau Sagax."
+            "value": "Ce serveur n'offre pas la connexion Pulsatrix, et un code courriel ne compte pas. Ajoute ta première clé depuis l'app de bureau Sagax."
           }
         }
       }
@@ -90190,7 +90196,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Essayez un nom de bot, une conversation ou une commande comme Réglages."
+            "value": "Essaie un nom de bot, une conversation ou une commande comme Réglages."
           }
         }
       }
@@ -90724,7 +90730,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tapez REPLACE pour confirmer"
+            "value": "Tape REPLACE pour confirmer"
           }
         }
       }
@@ -91880,7 +91886,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mettre à jour l'ordinateur de vos bots maintenant ? Il passe à la dernière version : vos fichiers et connexions restent, les apps et paquets installés sont retirés. Cela attend qu'aucun bot n'y travaille."
+            "value": "Mettre à jour l'ordinateur de tes bots maintenant ? Il passe à la dernière version : tes fichiers et connexions restent, les apps et paquets installés sont retirés. Cela attend qu'aucun bot n'y travaille."
           }
         }
       }
@@ -92372,7 +92378,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utilisez un nom fait de lettres, chiffres, espaces, points, tirets ou traits de soulignement."
+            "value": "Utilise un nom fait de lettres, chiffres, espaces, points, tirets ou traits de soulignement."
           }
         },
         "pt-BR": {
@@ -92394,7 +92400,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Au moins 12 caractères. Il vous faudra ce mot de passe pour l'importer."
+            "value": "Au moins 12 caractères. Il te faudra ce mot de passe pour l'importer."
           }
         },
         "pt-BR": {
@@ -95792,7 +95798,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Où chacun de vos jobs a passé son temps et son argent, depuis le registre d’utilisation. Seulement des compteurs, du temps et un coût; aucun contenu de message."
+            "value": "Où chacun de tes jobs a passé son temps et son argent, depuis le registre d’utilisation. Seulement des compteurs, du temps et un coût; aucun contenu de message."
           }
         }
       }
@@ -96341,7 +96347,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qui est ce bot et les règles qu'il ne brise jamais. Restez bref. Mettez la procédure étape par étape dans une compétence."
+            "value": "Qui est ce bot et les règles qu'il ne brise jamais. Reste bref. Mets la procédure étape par étape dans une compétence."
           }
         },
         "pt-BR": {
@@ -96357,7 +96363,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qui transforme ce que vous dites en texte pendant un appel et en dictée."
+            "value": "Qui transforme ce que tu dis en texte pendant un appel et en dictée."
           }
         }
       }
@@ -97103,7 +97109,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Écrivez un message…"
+            "value": "Écris un message…"
           }
         },
         "pt-BR": {
@@ -97553,7 +97559,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vous avez déjà un bot : %@."
+            "value": "Tu as déjà un bot : %@."
           }
         }
       }
@@ -97667,7 +97673,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vous n'êtes pas connecté à %@ avec votre propre compte ici. Connectez-vous pour voir et utiliser ses connecteurs."
+            "value": "Tu n'es pas connecté à %@ avec ton propre compte ici. Connecte-toi pour voir et utiliser ses connecteurs."
           }
         }
       }
@@ -97747,7 +97753,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vous pouvez lire ce dossier, pas le modifier"
+            "value": "Tu peux lire ce dossier, pas le modifier"
           }
         }
       }
@@ -97871,7 +97877,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vous avez le contrôle"
+            "value": "Tu as le contrôle"
           }
         },
         "pt-BR": {
@@ -97909,7 +97915,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vous n'avez aucun bot à vous à copier."
+            "value": "Tu n'as aucun bot à toi à copier."
           }
         }
       }
@@ -97919,7 +97925,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vous n'avez pas encore de bot."
+            "value": "Tu n'as pas encore de bot."
           }
         }
       }
@@ -98173,7 +98179,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre compte %@ n'a encore aucun connecteur. Ajoutez-en un sur %@."
+            "value": "Ton compte %@ n'a encore aucun connecteur. Ajoute-en un sur %@."
           }
         }
       }
@@ -98189,7 +98195,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre Concepteur de bots vous pose les questions et remplit chaque étape en direct. Il est créé pour vous, comme votre propre bot, dès que vous choisissez ceci."
+            "value": "Ton Concepteur de bots te pose les questions et remplit chaque étape en direct. Il est créé pour toi, comme ton propre bot, dès que tu choisis ceci."
           }
         }
       }
@@ -98431,7 +98437,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos règles d'approbation"
+            "value": "Tes règles d'approbation"
           }
         }
       }
@@ -98489,7 +98495,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre bot est prêt. Écrivez votre premier message et appuyez sur Entrée."
+            "value": "Ton bot est prêt. Écris ton premier message et appuie sur Entrée."
           }
         }
       }
@@ -98499,7 +98505,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos bots"
+            "value": "Tes bots"
           }
         }
       }
@@ -98579,7 +98585,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les moteurs et modèles de vos bots au même endroit. Changez-les ici sans lancer de tour, même quand un moteur n'a plus de crédit."
+            "value": "Les moteurs et modèles de tes bots au même endroit. Change-les ici sans lancer de tour, même quand un moteur n'a plus de crédit."
           }
         }
       }
@@ -98693,7 +98699,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos clés d'agents cloud n'ont pas pu être chargées. Réessayez dans un instant."
+            "value": "Tes clés d'agents cloud n'ont pas pu être chargées. Réessaie dans un instant."
           }
         }
       }
@@ -98875,7 +98881,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos clés"
+            "value": "Tes clés"
           }
         }
       }
@@ -98895,7 +98901,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos fournisseurs de modèles"
+            "value": "Tes fournisseurs de modèles"
           }
         },
         "pt-BR": {
@@ -99057,7 +99063,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre organisation restreint les serveurs MCP sur cet ordinateur : vos connecteurs %@ n'y sont pas utilisés."
+            "value": "Ton organisation restreint les serveurs MCP sur cet ordinateur : tes connecteurs %@ n'y sont pas utilisés."
           }
         }
       }
@@ -99125,7 +99131,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le serveur Perspicax de votre organisation"
+            "value": "Le serveur Perspicax de ton organisation"
           }
         }
       }
@@ -99390,7 +99396,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos exécutions enregistrées de cette routine sont supprimées définitivement. Les exécutions en cours sont conservées."
+            "value": "Tes exécutions enregistrées de cette routine sont supprimées définitivement. Les exécutions en cours sont conservées."
           }
         },
         "pt-BR": {
@@ -99406,7 +99412,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos clés de sécurité enregistrées n'ont pas pu être lues sur le serveur : les approbations sensibles sont refusées jusqu'à sa réparation."
+            "value": "Tes clés de sécurité enregistrées n'ont pas pu être lues sur le serveur : les approbations sensibles sont refusées jusqu'à sa réparation."
           }
         }
       }
@@ -99626,7 +99632,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre coffre est vide. Ajoutez un identifiant ici, ou enregistrez-en un quand un bot le demande."
+            "value": "Ton coffre est vide. Ajoute un identifiant ici, ou enregistres-en un quand un bot le demande."
           }
         }
       }
@@ -99636,7 +99642,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre voix est enregistrée."
+            "value": "Ta voix est enregistrée."
           }
         }
       }
@@ -99646,7 +99652,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les vôtres"
+            "value": "Les tiennes"
           }
         }
       }
@@ -101816,7 +101822,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "facturé sur votre clé API"
+            "value": "facturé sur ta clé API"
           }
         },
         "pt-BR": {
@@ -103482,7 +103488,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "équivalent, compris dans votre abonnement, non facturé"
+            "value": "équivalent, compris dans ton abonnement, non facturé"
           }
         },
         "pt-BR": {
@@ -106099,7 +106105,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bulle"
+            "value": "Dialogue"
           }
         }
       }
@@ -115146,7 +115152,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "vos fichiers"
+            "value": "tes fichiers"
           }
         }
       }

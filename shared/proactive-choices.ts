@@ -48,6 +48,11 @@ export interface ReceiveBot {
   brief: boolean;
   screen?: boolean;
   checklist?: boolean;
+  /** #4250 (S8): the person's end of day review, on the bot that holds it
+   * (else their main bot); absent on the others. */
+  endOfDay?: boolean;
+  /** #4250 (S8): the person's weekly review, drawn as `endOfDay`. */
+  weekly?: boolean;
 }
 
 export interface ReceiveView {

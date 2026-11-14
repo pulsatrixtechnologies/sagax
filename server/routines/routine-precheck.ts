@@ -99,8 +99,11 @@ const watchSchema = z.object({
  * (options.evaluateCode in routines.ts). No LLM call per tick: the turn
  * starts only when the check finds work. `daily_brief` (#3456) is the
  * bot's brief: the check reads and delivers it itself and never starts a
- * turn (server/proactive/brief-routine.ts). */
-export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments", "daily_brief"] as const;
+ * turn (server/proactive/brief-routine.ts). `end_of_day_review` and
+ * `weekly_review` (#4250 S8) are the person's reviews: the check reads the
+ * run log and the person's waiting items, posts the review and never starts a turn
+ * (server/proactive/review-routines.ts). */
+export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments", "daily_brief", "end_of_day_review", "weekly_review"] as const;
 export const ROUTINE_CODE_CHECK_TIMEOUT_MS = 180_000;
 const codeSchema = z.object({
   kind: z.literal("code"),

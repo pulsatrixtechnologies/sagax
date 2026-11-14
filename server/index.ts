@@ -231,6 +231,7 @@ import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, briefRunReason, runBrief, type BriefDelivery } from "./proactive/background-brief-schedule.ts";
 import { BriefRoutines } from "./proactive/brief-routine.ts";
+import { personReviewData, REVIEW_KINDS, reviewCheckKind, reviewNoPersonReason, ReviewRoutines, runReview, type ReviewKind } from "./proactive/review-routines.ts";
 import { DAILY_SUGGESTIONS_WINDOW_MS, dailySuggestionCard, dailySuggestionEvent, pickDailySuggestions, suggestionsPostedSince } from "./proactive/daily-suggestions.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
 import { createSkillReview, looksLikeStop, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
@@ -20391,7 +20392,12 @@ routines = new RoutineManager({
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
   // #2018: "Commentaires des artefacts" (server/claude-artifacts/comments-routine.ts)
   // #3456: the bot's daily brief (server/proactive/brief-routine.ts)
-  evaluateCode: (routine, precheck) => precheck.check === "daily_brief" ? briefRoutineCheck(routine) : claudeArtifactCommentsCheck(routine),
+  // #4250 (S8): the end of day and weekly reviews (server/proactive/review-routines.ts)
+  evaluateCode: (routine, precheck) => {
+    if (precheck.check === "daily_brief") return briefRoutineCheck(routine);
+    const review = reviewCheckKind(precheck.check);
+    return review ? reviewRoutineCheck(routine, review) : claudeArtifactCommentsCheck(routine);
+  },
   languageFor: (routine) => {
     const person = IDENTITY.kind === "perspicax" && routine.botId
       ? effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) })
@@ -25624,6 +25630,21 @@ const briefRoutines = new BriefRoutines({
     return owner || undefined;
   }
 });
+/** #4250 (S8): the end of day and weekly reviews, routines of a bot created
+ * on the person's yes (server/proactive/review-routines.ts). */
+const reviewRoutines = new ReviewRoutines({
+  routines: () => routines ? {
+    list: () => routines!.listRoutines(),
+    create: (input, runAs) => routines!.create(input, undefined, runAs ? { runAs } : undefined),
+    update: (id, patch) => routines!.update(id, patch)
+  } : null,
+  language: briefLanguage,
+  runAs: (botId) => {
+    const bot = store.bot(botId);
+    const owner = bot && IDENTITY.kind === "perspicax" ? (effectiveBotOwner(bot) || "").trim().toLowerCase() : "";
+    return owner || undefined;
+  }
+});
 /** The apps a bot reads for its brief: its own connected servers, a GitHub
  * one as the bot's owner. */
 function backgroundBriefConnected(botId: string): readonly string[] {
@@ -25716,10 +25737,13 @@ ROUTES.push(createProactiveChoicesRoutes({
   // #3432: the person's bots, main bot first, with the ambient rows each
   // can draw (screen context on the desktop app only, the checklist only
   // when HEARTBEAT.md has items)
-  bots: (person) => store.bots
-    .filter((bot) => watchCarrierOf(person, bot.id))
-    .sort((a, b) => Number(b.chiefOfStaff === true) - Number(a.chiefOfStaff === true))
-    .map((bot) => {
+  bots: (person) => {
+    const mine = store.bots
+      .filter((bot) => watchCarrierOf(person, bot.id))
+      .sort((a, b) => Number(b.chiefOfStaff === true) - Number(a.chiefOfStaff === true));
+    const ids = mine.map((bot) => bot.id);
+    const holders = Object.fromEntries(REVIEW_KINDS.map((kind) => [kind, reviewHolder(ids, kind)])) as Record<ReviewKind, string | undefined>;
+    return mine.map((bot) => {
       const settings = backgroundBriefs.view(bot.id).settings;
       let checklist: boolean | undefined;
       try {
@@ -25731,8 +25755,12 @@ ROUTES.push(createProactiveChoicesRoutes({
         id: bot.id, brief: briefRoutines.on(bot.id),
         ...(SCREEN_CONTEXT_AVAILABLE ? { screen: settings.screenContext === true } : {}),
         ...(checklist === undefined ? {} : { checklist }),
+        // #4250 (S8): the person's two reviews, on the bot that holds them
+        ...(holders.end_of_day === bot.id ? { endOfDay: reviewRoutines.on(bot.id, "end_of_day") } : {}),
+        ...(holders.weekly === bot.id ? { weekly: reviewRoutines.on(bot.id, "weekly") } : {}),
       };
-    }),
+    });
+  },
   lastAlert: (person, watchId) => flowWatchLoop.lastAlert(person, watchId)
 }));
 /** 2026-11-09, walked from the person's choices since #3423: the Pulsatrix
@@ -25961,6 +25989,52 @@ async function briefRoutineCheck(routine: { botId: string }): Promise<{ wake: fa
   });
   return { wake: false, reason: briefRunReason(outcome, language) };
 }
+/** #4250 (S8): a review routine's code check (routine-precheck.ts
+ * `end_of_day_review`, `weekly_review`): the person's own runs and waiting
+ * items, one message in the bot's conversation with them, never a turn
+ * and never a ring (what waits already rang on its own). */
+async function reviewRoutineCheck(routine: { botId: string }, kind: ReviewKind): Promise<{ wake: false; reason: string }> {
+  const bot = store.bot(routine.botId);
+  const person = bot && !bot.hidden && !bot.temporary ? briefPerson(bot) : "";
+  if (!bot || !person) return { wake: false, reason: reviewNoPersonReason(briefLanguage(routine.botId)) };
+  const language = personLanguageCode(languageOfPerson(person || null));
+  const bots = new Set(store.bots.filter((row) => !row.hidden && !row.temporary && briefPerson(row) === person).map((row) => row.id));
+  const data = personReviewData({
+    person,
+    bots,
+    runs: routines?.listRuns(Date.now() - 8 * 24 * 60 * 60_000) ?? [],
+    waiting: reviewWaitingItems(person),
+    singlePerson: IDENTITY.kind !== "perspicax",
+  });
+  const reason = runReview({
+    kind, language, now: Date.now(), ...data,
+    botName: (botId) => store.bot(botId)?.name ?? botId,
+    deliver: (text) => {
+      const threadId = serverCardThread(bot, person);
+      if (!threadId || store.isConfidentialThread(threadId)) return false;
+      store.appendMessage(threadId, { role: "bot", kind: "text", text });
+      return true;
+    }
+  });
+  return { wake: false, reason };
+}
+/** #4250 (S8): what waits on the person, the one list their Today, pinned
+ * row and connector read (shared/waiting-items.ts): read with their own
+ * request auth on an organization server, as the local person on a desktop. */
+function reviewWaitingItems(person: string): WaitingItem[] {
+  if (IDENTITY.kind !== "perspicax") {
+    return waitingEntriesFrom(inboxPending({ kind: "loopback", scopes: ["admin", "client"] }, { principalId: person }), Date.now()).map(({ item }) => item);
+  }
+  const principal = principals.byId(person) ?? principals.list().find((row) => row.id.trim().toLowerCase() === person);
+  if (!principal || principal.disabledAt !== undefined) return [];
+  const member: MemberPerson = { principalId: principal.id, sub: principal.subject?.sub ?? "", name: personDisplayName(principal) || "", admin: false, actor: "console" };
+  return memberWaitingItems(member)?.map(({ item }) => item) ?? [];
+}
+/** #4250 (S8): the person's review switches are drawn on the bot that holds
+ * that review's routine, else on their main bot (the first of `mine`). */
+function reviewHolder(mine: readonly string[], kind: ReviewKind): string | undefined {
+  return mine.find((botId) => reviewRoutines.of(botId, kind)) ?? mine[0];
+}
 /** #3456: a main bot that had the brief only by default owes its person one
  * card « Garder le brief du jour ? », inside the ask ledger's bounds; it
  * waits while another card is open or the person was asked today. */
@@ -26079,6 +26153,10 @@ ROUTES.push(createBackgroundBriefRoutes({
   routine: {
     view: (botId) => briefRoutines.view(botId),
     sync: (botId, patch, settings) => { briefRoutines.sync(botId, patch, settings); }
+  },
+  reviews: {
+    set: (botId, kind, on, timeZone) => reviewRoutines.set(botId, kind, on, timeZone),
+    on: (botId, kind) => reviewRoutines.on(botId, kind)
   }
 }));
 ROUTES.push(createCustomRuleRoutes({

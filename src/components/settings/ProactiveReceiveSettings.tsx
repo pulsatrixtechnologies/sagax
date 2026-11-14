@@ -175,7 +175,14 @@ export function useProactiveReceive(): {
       receive: { ...current.receive, bots: current.receive.bots.map((bot) => (bot.id === botId ? { ...bot, ...change } : bot)) },
     }));
     const path = `/api/bots/${encodeURIComponent(botId)}/background-brief`;
-    const send = change.checklist !== undefined
+    const reviews = {
+      ...(change.endOfDay !== undefined ? { endOfDay: change.endOfDay } : {}),
+      ...(change.weekly !== undefined ? { weekly: change.weekly } : {}),
+    };
+    // #4250 (S8): a review switch is the person's yes (or a pause) of that review's routine
+    const send = Object.keys(reviews).length
+      ? api(path, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ reviews, timeZone: localTimeZone() }) })
+      : change.checklist !== undefined
       // a plain switch of the checklist wakes: no vote, no memory line
       ? api(path, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ checklist: change.checklist }) })
       : api(path, {
@@ -239,11 +246,25 @@ export function DomainRows({ row, bots, onDomain, onWatch, botPage = false, note
   );
 }
 
-function BotSwitchRows({ bots, rows, field, onChange }: {
+type ReceiveSwitch = "brief" | "screen" | "checklist" | "endOfDay" | "weekly";
+/** The switch's accessible name, one key per row kind, written out so each
+ * key is found where it is used. */
+const SWITCH_LABEL_KEYS = {
+  brief: "settings.receive.brief.switch",
+  screen: "settings.receive.screen.switch",
+  checklist: "settings.receive.checklist.switch",
+  endOfDay: "settings.receive.endOfDay.switch",
+  weekly: "settings.receive.weekly.switch",
+} as const satisfies Record<ReceiveSwitch, string>;
+
+function BotSwitchRows({ bots, rows, field, onChange, label }: {
   bots: readonly Bot[];
   rows: readonly ReceiveBot[];
-  field: "brief" | "screen" | "checklist";
+  field: ReceiveSwitch;
   onChange: (botId: string, on: boolean) => void;
+  /** #4250 (S8): a row of the person (a review) is named by what it is,
+   * the bot that holds it in its description. Absent: named by the bot. */
+  label?: string;
 }) {
   return (
     <>
@@ -252,8 +273,8 @@ function BotSwitchRows({ bots, rows, field, onChange }: {
         const on = row[field];
         if (!bot || on === undefined) return [];
         return [(
-          <DescribedRow key={row.id} label={bot.name} rowId={`receive.${field}.${row.id}`}>
-            <Switch checked={on} aria-label={t(`settings.receive.${field}.switch`, { name: bot.name })} onClick={() => onChange(row.id, !on)} />
+          <DescribedRow key={row.id} label={label ?? bot.name} description={label ? t("settings.receive.carriedBy", { name: bot.name }) : undefined} rowId={`receive.${field}.${row.id}`}>
+            <Switch checked={on} aria-label={t(SWITCH_LABEL_KEYS[field], { name: bot.name })} onClick={() => onChange(row.id, !on)} />
           </DescribedRow>
         )];
       })}
@@ -274,7 +295,7 @@ export function ProactiveReceiveSettings() {
   const mine = state ? state.receive.bots.filter((row) => bots.some((bot) => bot.id === row.id)) : [];
   const rows = state ? domainRows(state) : [];
   const title = t("settings.receive.title");
-  const has = (field: "brief" | "screen" | "checklist") => mine.some((row) => row[field] !== undefined);
+  const has = (field: ReceiveSwitch) => mine.some((row) => row[field] !== undefined);
   return (
     <div data-settings-card="notifications.receive" className="flex flex-col gap-3">
       {rows.length > 0 && (
@@ -289,6 +310,12 @@ export function ProactiveReceiveSettings() {
       {has("brief") && (
         <SettingsGroup title={title} groupId="receiveBrief" accessory={<Heading part={t("settings.receive.group.brief")} />}>
           <BotSwitchRows bots={bots} rows={mine} field="brief" onChange={(botId, on) => setBot(botId, { brief: on })} />
+        </SettingsGroup>
+      )}
+      {(has("endOfDay") || has("weekly")) && (
+        <SettingsGroup title={title} groupId="receiveReviews" accessory={<Heading part={t("settings.receive.group.reviews")} />}>
+          <BotSwitchRows bots={bots} rows={mine} field="endOfDay" label={t("review.endOfDay.title")} onChange={(botId, on) => setBot(botId, { endOfDay: on })} />
+          <BotSwitchRows bots={bots} rows={mine} field="weekly" label={t("review.weekly.title")} onChange={(botId, on) => setBot(botId, { weekly: on })} />
         </SettingsGroup>
       )}
       {has("screen") && (

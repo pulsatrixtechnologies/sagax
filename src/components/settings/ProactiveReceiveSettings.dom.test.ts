@@ -125,6 +125,38 @@ describe("« Ce que je reçois » (#3432)", () => {
     expect(document.querySelector('[role="dialog"], [role="alertdialog"]')).toBeNull();
   });
 
+  it("#4250 S8: the two reviews are switches on the bot that holds them; a yes sends the routine's switch with the zone", async () => {
+    fixture.receive = { ...receive, bots: [{ ...receive.bots[0]!, endOfDay: false, weekly: true }, receive.bots[1]!] };
+    await render(createElement(ProactiveReceiveSettings));
+    expect(host.textContent).toContain("Reviews");
+    // each row is named by its review, the bot that holds it in its description
+    expect(row("receive.endOfDay.main-7f3a")?.textContent).toContain("End of day");
+    expect(row("receive.endOfDay.main-7f3a")?.textContent).toContain("Followed by Mélodie");
+    expect(row("receive.weekly.main-7f3a")?.textContent).toContain("Weekly review");
+    expect(switchOf("receive.endOfDay.main-7f3a")?.getAttribute("aria-checked")).toBe("false");
+    expect(switchOf("receive.weekly.main-7f3a")?.getAttribute("aria-checked")).toBe("true");
+    // each review switch has its own accessible name (settings.receive.<review>.switch)
+    expect(switchOf("receive.endOfDay.main-7f3a")?.getAttribute("aria-label")).toBe("End of day review from Mélodie");
+    expect(switchOf("receive.weekly.main-7f3a")?.getAttribute("aria-label")).toBe("Weekly review from Mélodie");
+    // the other bot draws none: one review per person
+    expect(row("receive.endOfDay.b1-9c2e")).toBeNull();
+    expect(row("receive.weekly.b1-9c2e")).toBeNull();
+    await act(async () => { switchOf("receive.endOfDay.main-7f3a")!.click(); });
+    const sent = fixture.calls.at(-1)!;
+    expect(sent).toMatchObject({ path: "/api/bots/main-7f3a/background-brief", method: "PUT", body: { reviews: { endOfDay: true } } });
+    expect(typeof (sent.body as { timeZone?: unknown }).timeZone).toBe("string");
+    expect(switchOf("receive.endOfDay.main-7f3a")?.getAttribute("aria-checked")).toBe("true");
+    await act(async () => { switchOf("receive.weekly.main-7f3a")!.click(); });
+    expect(fixture.calls.at(-1)).toMatchObject({ body: { reviews: { weekly: false } } });
+    expect(document.querySelector('[role="dialog"], [role="alertdialog"]')).toBeNull();
+  });
+
+  it("no review row without the server's fields", async () => {
+    await render(createElement(ProactiveReceiveSettings));
+    expect(host.textContent).not.toContain("Reviews");
+    expect(row("receive.endOfDay.main-7f3a")).toBeNull();
+  });
+
   it("draws nothing on a server without the view", async () => {
     fixture.receive = null;
     await render(createElement(ProactiveReceiveSettings));

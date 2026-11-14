@@ -13,6 +13,10 @@
 //        person may pause or move it in the routines list). `checklist` (#3432):
 //        a plain switch of the checklist wakes (heartbeat): false blocks
 //        them, true clears the block and its votes; no memory line.
+//        `reviews` (#4250 S8): `{ endOfDay?, weekly? }`, the person's switch
+//        of each review routine (server/proactive/review-routines.ts): true is
+//        their yes and creates or resumes it, in `timeZone`; false pauses it.
+//        The answer carries `reviews`, what runs now.
 //   POST /api/bots/:id/background-brief/pass { costUsd? }
 //        Reads the apps already connected. No app: an empty queue.
 //   POST /api/bots/:id/background-brief/:suggestionId/reject
@@ -30,6 +34,7 @@
 // stamped for the person.
 
 import { PASS, type RouteHandler } from "./table.ts";
+import type { ReviewKind } from "../proactive/review-routines.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   isBriefFeedback,
@@ -68,6 +73,21 @@ export interface BackgroundBriefRouteDeps {
     view(botId: string): BriefSettings;
     sync(botId: string, patch: Partial<BriefSettings>, settings: BriefSettings): void;
   };
+  /** #4250 (S8): the bot's end of day and weekly review routines. */
+  reviews?: {
+    set(botId: string, kind: ReviewKind, on: boolean, timeZone?: string): unknown;
+    on(botId: string, kind: ReviewKind): boolean;
+  };
+}
+
+/** The review switches of a PUT body, by routine kind. */
+function reviewSwitches(value: unknown): Array<[ReviewKind, boolean]> {
+  if (!value || typeof value !== "object") return [];
+  const body = value as { endOfDay?: unknown; weekly?: unknown };
+  return [
+    ...(typeof body.endOfDay === "boolean" ? [["end_of_day", body.endOfDay] as [ReviewKind, boolean]] : []),
+    ...(typeof body.weekly === "boolean" ? [["weekly", body.weekly] as [ReviewKind, boolean]] : []),
+  ];
 }
 
 export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): RouteHandler {
@@ -87,7 +107,20 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
       return json(res, 200, { ...view, ...(deps.routine ? { settings: deps.routine.view(botId) } : {}), apps, screenContextAvailable, ...(apps ? {} : { notice: "no_apps" as const }) });
     }
     if (!suggestionId && method === "PUT") {
-      const body = await readBody(req) as Partial<BriefSettings> & { checklist?: unknown };
+      const body = await readBody(req) as Partial<BriefSettings> & { checklist?: unknown; reviews?: unknown };
+      const switches = deps.reviews ? reviewSwitches(body.reviews) : [];
+      if (switches.length) {
+        const timeZone = typeof body.timeZone === "string" ? body.timeZone : undefined;
+        try {
+          for (const [kind, on] of switches) deps.reviews!.set(botId, kind, on, timeZone);
+        } catch (error) {
+          return json(res, 409, { error: `The review's routine could not be saved: ${error instanceof Error ? error.message : String(error)}` });
+        }
+        const reviews = { endOfDay: deps.reviews!.on(botId, "end_of_day"), weekly: deps.reviews!.on(botId, "weekly") };
+        // a plain switch of a review: the brief's settings stay as they are
+        if (body.enabled === undefined && body.at === undefined && body.subjects === undefined && body.everyHours === undefined
+          && body.screenContext === undefined && body.checklist === undefined) return json(res, 200, { reviews });
+      }
       const subjects = Array.isArray(body.subjects) ? body.subjects.filter((item): item is string => typeof item === "string") : undefined;
       const patch: Partial<BriefSettings> = {
         ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),

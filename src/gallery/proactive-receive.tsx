@@ -29,7 +29,7 @@ const bots = [
   { id: "bot-atlas", name: "Atlas", color: "blue", proactiveMode: "off", approvalMode: "ask", threadId: "t2" },
 ] as unknown as Bot[];
 const receive = view === "empty" ? { bots: [], domains: [], unavailable: "you have no bot that can carry a watch" } : {
-  bots: [{ id: "bot-main", brief: true, checklist: true }, { id: "bot-atlas", brief: false, screen: false }],
+  bots: [{ id: "bot-main", brief: true, checklist: true, endOfDay: true, weekly: false }, { id: "bot-atlas", brief: false, screen: false }],
   domains: [
     { domain: "backups", label: { fr: "Sauvegardes", en: "Backups" }, carriers: ["bot-atlas"],
       watches: [{ id: "backup-failed", summary: fr ? "Sauvegardes en échec" : "Failed backups", cadence: "1h", runsOn: ["bot-atlas"] }] },

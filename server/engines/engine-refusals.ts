@@ -29,6 +29,21 @@ type Kept = EngineRefusal & { told?: string[] };
 const refusals = new Map<string, Kept>();
 const key = (engine: string, account?: string) => JSON.stringify([engine, account ?? ""]);
 let holdsFile: string | null = null;
+/** #4233: told when an engine account works again (a completed turn, a
+ * verified sign-in), so what was said about its refusal can be taken back.
+ * `signedInOnly`: only a sign-in was seen (a credit refusal still stands). */
+type WorksAgain = (engine: string, account: string | undefined, signedInOnly: boolean) => void;
+const worksAgain = new Set<WorksAgain>();
+/** Listen for an engine account working again; returns the unsubscribe. */
+export function onEngineWorksAgain(listener: WorksAgain): () => void {
+  worksAgain.add(listener);
+  return () => { worksAgain.delete(listener); };
+}
+function tellWorksAgain(engine: string, account: string | undefined, signedInOnly: boolean): void {
+  for (const listener of worksAgain) {
+    try { listener(engine, account, signedInOnly); } catch (error) { reportBackgroundError(error); }
+  }
+}
 
 function save(): void {
   if (!holdsFile) return;
@@ -92,6 +107,9 @@ export function clearEngineRefusal(engine: string, account?: string, at = Date.n
     refusals.delete(id);
     if (refusal.cause === "signed_out") save();
   }
+  // A refusal past its time is already gone from memory: the card it left
+  // still closes on the first turn that works (#4233).
+  if (!refusal || at >= refusal.at) tellWorksAgain(engine, account, signedInOnly);
 }
 /** The engine is signed in again (a sign-in finished in the app, or its
  * status read turned from signed out to signed in): every sign-out kept for
@@ -103,6 +121,7 @@ export function clearSignedOut(engine: string, accounts: (account: string | unde
     if (refusal.engine !== engine || refusal.cause !== "signed_out" || !accounts(refusal.account)) continue;
     refusals.delete(id);
     ended += 1;
+    tellWorksAgain(engine, refusal.account, true);
   }
   if (ended) save();
   return ended;

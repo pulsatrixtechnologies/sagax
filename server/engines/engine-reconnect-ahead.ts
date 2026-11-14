@@ -111,6 +111,9 @@ export interface EngineReconnectAheadNotify {
   engineName: string;
   driver: string;
   routineNames: string[];
+  /** #4233: the bots whose due routines wait, first due first: the card
+   * names the engine instance they run on. */
+  botIds: string[];
 }
 
 export interface EngineReconnectAheadResult {
@@ -150,12 +153,14 @@ export function engineReconnectAhead(input: EngineReconnectAheadInput): EngineRe
     const existing = byPersonEngine.get(key);
     if (existing) {
       existing.routineNames.push(routine.name);
+      if (!existing.botIds.includes(routine.botId)) existing.botIds.push(routine.botId);
     } else {
       byPersonEngine.set(key, {
         principalId: payer,
         engineName,
         driver,
         routineNames: [routine.name],
+        botIds: [routine.botId],
       });
     }
   }

@@ -386,13 +386,13 @@ describe("an unattended run only its owner can fix", () => {
   });
 
   it("pauses a due Claude run ahead when the sign-in is already expired", async () => {
-    const notified: Array<{ person: string; detail: string; names: string[]; engine?: string }> = [];
+    const notified: Array<{ person: string; detail: string; names: string[]; engine?: string; botIds?: string[] }> = [];
     const h = harness({
       engineReconnect: {
         botDriver: () => "claudeAgent",
         payer: () => "pr_alice",
         expired: () => true,
-        onAheadNotify: (person, detail, names, engine) => notified.push({ person, detail, names, engine }),
+        onAheadNotify: (person, detail, names, engine, botIds) => notified.push({ person, detail, names, engine, botIds }),
       },
     });
     const routine = h.manager.create({
@@ -407,6 +407,8 @@ describe("an unattended run only its owner can fix", () => {
       person: "pr_alice",
       names: ["Morning brief"],
       engine: "Claude",
+      // #4233: the bot the card names its engine from
+      botIds: ["maus-1"],
     })]);
     // Advance past due so the run is queued, then paused for reconnect.
     await h.advance(31 * MINUTE);
@@ -414,6 +416,32 @@ describe("an unattended run only its owner can fix", () => {
     expect(run).toMatchObject({ status: "waiting", attention: CLAUDE_NEEDS_RECONNECTING });
     expect(h.started).toEqual([]);
     expect(h.failed).toEqual([]);
+  });
+
+  it("does not ring the expired sign-in again after a restart (#4233)", async () => {
+    const notified: string[] = [];
+    let expired = true;
+    const h = harness({
+      engineReconnect: {
+        botDriver: () => "claudeAgent",
+        payer: () => "pr_alice",
+        expired: () => expired,
+        onAheadNotify: (person) => notified.push(person),
+      },
+    });
+    h.manager.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", schedule: { type: "daily", time: "08:30", weekdays: [1] } });
+    await h.manager.tick();
+    expect(notified).toEqual(["pr_alice"]);
+    h.restart();
+    await h.manager.tick();
+    expect(notified).toEqual(["pr_alice"]);
+    // signed in again, then expired again: a new spell is told once more
+    expired = false;
+    await h.manager.tick();
+    expired = true;
+    h.restart();
+    await h.manager.tick();
+    expect(notified).toEqual(["pr_alice", "pr_alice"]);
   });
 
   it("tells a streak of failed proactive wakes once, at its telling run, even when each fails with the same words (#3990)", async () => {

@@ -6,7 +6,11 @@
  *   open: the person's message got no answer, the notice under it;
  *   reconnected: the same after the person connected their subscription again
  *     (GET /api/me/engines now says it runs their turns), before any new message;
- *   two: two messages that got no answer: the one notice covers both. */
+ *   two: two messages that got no answer: the one notice covers both;
+ *   fallback, credit (#4233): Claude signed out or out of credit, Codex answers
+ *     meanwhile: the bot's answer, then the one fix card for the engine;
+ *   server-credit (#4233): the server's Claude account out of credit, read by
+ *     an administrator: the organization's account, not theirs. */
 import { StrictMode, useCallback, useMemo, useReducer } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -49,13 +53,21 @@ const access: WireAccessCard = {
   reason: "no_access", cause: "no_credentials", engine: "Claude", botId: "scout", botName: "Scout",
   ownerPrincipalId: ME, payer: "speaker", payerPrincipalId: ME, subscriptionSignIn: true, keysUrl: "https://px.example.test/console/credentials?kind=model",
 };
-const card = (id: string, minute: number, parentId: string): Message => ({ id, role: "bot", kind: "access", access, at: at + minute * 60_000 + 3_000, parentId }) as Message;
+const serverCard = view === "server-credit";
+const credit = view === "credit" || serverCard;
+const fallback = view === "fallback" || credit;
+const fixCard: WireAccessCard = {
+  reason: "no_access", cause: credit ? "out_of_credit" : "sign_in_expired", engine: "Claude", instanceId: "claude", botId: "scout", botName: "Scout",
+  ownerPrincipalId: ME, ...(serverCard ? { audiencePrincipalIds: [ME] } : { payerPrincipalId: ME }), ...(credit ? {} : { subscriptionSignIn: true as const }), key: "engine-sign-in:claude", meanwhile: "Codex",
+};
+const card = (id: string, minute: number, parentId: string): Message => ({ id, role: "bot", kind: "access", access: fallback ? fixCard : access, at: at + minute * 60_000 + 3_000, parentId }) as Message;
 
 const messages: Message[] = [
   line("u0", "user", fr ? "Résume les billets ouverts de la semaine." : "Summarize this week's open tickets.", 0),
   line("b0", "bot", fr ? "Douze billets ouverts, trois en attente du client." : "Twelve open tickets, three waiting on the customer.", 1, "u0"),
   line("u1", "user", fr ? "Prépare un brouillon de réponse pour le plus ancien." : "Draft a reply for the oldest one.", 32, "b0"),
-  card("a1", 32, "u1"),
+  ...(fallback ? [line("b1", "bot", fr ? "Voici un brouillon pour le billet le plus ancien." : "Here is a draft for the oldest ticket.", 33, "u1")] : []),
+  card("a1", fallback ? 33 : 32, fallback ? "b1" : "u1"),
   ...(view === "two" ? [
     // the server writes the card once until the bot answers (shared/failure-dedup.ts)
     line("u2", "user", fr ? "Et donne-moi la liste par priorité." : "And list them by priority.", 47, "a1"),
@@ -70,7 +82,7 @@ const scout: Bot = {
 const start: AppState = {
   ...initialState,
   connected: true,
-  config: { viewer: { principalId: ME, role: "member" } } as AppState["config"],
+  config: { viewer: { principalId: ME, role: serverCard ? "admin" : "member" } } as AppState["config"],
   selectedId: "scout",
   bots: [scout],
   instances: [{ instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude", snapshot: { state: "available" }, models: { options: [{ id: "m", label: fr ? "Modèle de la galerie" : "Gallery model" }] } } as unknown as InstanceInfo],

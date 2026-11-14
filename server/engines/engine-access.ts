@@ -470,7 +470,7 @@ export function accessCardForViewer<T extends { access?: { ownerPrincipalId: str
  * private only when the refused key was a person's own (`payerPrincipalId`);
  * the organization's key concerns everyone, so that card stays shared (its
  * provider words still go to the owner and admins only). Null: shared. */
-export function accessCardAudience(access: { reason: string; ownerPrincipalId: string; payerPrincipalId?: string; runAsPrincipalId?: string; ownerPays?: boolean; speakerPrincipalId?: string }): string[] | null {
+export function accessCardAudience(access: { reason: string; ownerPrincipalId: string; payerPrincipalId?: string; runAsPrincipalId?: string; ownerPays?: boolean; speakerPrincipalId?: string; audiencePrincipalIds?: string[] }): string[] | null {
   const ids = (list: Array<string | undefined>) => {
     const out: string[] = [];
     for (const id of list) {
@@ -479,6 +479,8 @@ export function accessCardAudience(access: { reason: string; ownerPrincipalId: s
     }
     return out;
   };
+  // #4233: a server engine's fix card is for the administrators who reconnect it
+  if (access.audiencePrincipalIds?.length) return ids(access.audiencePrincipalIds);
   if (access.reason === "routine_delegation") return ids([access.runAsPrincipalId, access.ownerPrincipalId]);
   if (access.reason === "key_refused") return access.payerPrincipalId?.trim() ? ids([access.payerPrincipalId]) : null;
   // #1137: the owner pays, so the person who wrote learns why too.
@@ -511,7 +513,7 @@ export function routineAccessNotifications<N extends { threadId: string; audienc
 /** Whether a stored row reaches this viewer: an access card only reaches its
  * audience (accessCardAudience); every other row is unchanged. An empty
  * audience reaches nobody. */
-export function accessCardVisibleTo(message: { kind?: unknown; access?: { reason: string; ownerPrincipalId: string; payerPrincipalId?: string; runAsPrincipalId?: string; ownerPays?: boolean; speakerPrincipalId?: string } }, viewerId: string | undefined | null): boolean {
+export function accessCardVisibleTo(message: { kind?: unknown; access?: { reason: string; ownerPrincipalId: string; payerPrincipalId?: string; runAsPrincipalId?: string; ownerPays?: boolean; speakerPrincipalId?: string; audiencePrincipalIds?: string[] } }, viewerId: string | undefined | null): boolean {
   if (message.kind !== "access" || !message.access) return true;
   const audience = accessCardAudience(message.access);
   if (!audience) return true;

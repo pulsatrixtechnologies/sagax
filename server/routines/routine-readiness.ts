@@ -9,7 +9,7 @@ export const ROUTINE_READINESS_PROBE_TIMEOUT_MS = ROUTINE_READINESS_TIMEOUT_MS -
 export const ROUTINE_READINESS_CACHE_MS = 60_000;
 export const ROUTINE_FLOW_READINESS_TIMEOUT_MS = 45_000;
 export interface ReadinessRoutine { id?: string; botId: string; prompt: string; requires?: RoutineRequirements; runAs?: string; runOn?: string }
-export interface ReadinessRun { botId: string; prompt?: string; runAs?: string; runOn?: string; threadId?: string }
+export interface ReadinessRun { id?: string; botId: string; prompt?: string; runAs?: string; runOn?: string; threadId?: string }
 export interface ReadinessEngine { engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string;
   /** Resolved routing facts, not credentials. Absent means unknown. */
   driver?: string; accessVia?: string; keyBacked?: boolean;
@@ -47,6 +47,10 @@ export interface RoutineReadinessDeps {
   engine(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): ReadinessEngine | undefined | Promise<ReadinessEngine | undefined>;
   /** The failover host picks with the run's payer, order and access rules. Never cache its refusal decision. */
   backup?(routine: ReadinessRoutine, run: ReadinessRun, primary: ReadinessEngine, signal: AbortSignal): ReadinessEngine | undefined | Promise<ReadinessEngine | undefined>;
+  /** #4233: a run starts on `backup` because `primary` is signed out or out
+   * of credit: the person who can fix it is told once (engine-fallback-card.ts).
+   * Called for a run, never for a check. */
+  fallback?(routine: ReadinessRoutine, run: ReadinessRun, primary: ReadinessEngine, backup: ReadinessEngine, cause: "signed_out" | "credits"): void;
   skills(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): string[] | undefined | Promise<string[] | undefined>;
   /** Organization declaration present: the active pack serves product skills remotely. */
   flowSkills?(routine: ReadinessRoutine, run: ReadinessRun): ReadinessFlowSkills | undefined;
@@ -163,6 +167,9 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
           if (onBackup) {
             if (checks.length === start) {
               checks.push(ready(kind, `${engine.name} cannot run this turn; ${candidate!.name} is ready and will run it.`));
+              if (mode === "run" && (refusal!.cause === "signed_out" || refusal!.cause === "credits")) {
+                try { deps.fallback?.(routine, run, engine, candidate!, refusal!.cause); } catch { /* the run still starts on the backup */ }
+              }
             }
             continue;
           }

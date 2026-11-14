@@ -91,8 +91,9 @@ spec:
             # addresses: resolved at start and every minute, each address is
             # denied as a /32 in every person's policy. The public API IP of a
             # managed cluster changes at each start, and the kubernetes
-            # Service IP is translated to it before the policy is evaluated
-            #. Empty: off.
+            # Service IP is translated to it before the policy is evaluated.
+            # Empty here: the Azure adapter sets it to the API FQDN
+            # (sandboxd-deny-hosts.yaml, OpenTofu output api_server_fqdn).
             - name: SAGAX_SANDBOX_K8S_DENY_HOSTS
               value: ""
           readinessProbe:

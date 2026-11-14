@@ -129,7 +129,7 @@ emptyDir, because that policy allows no other egress.
 | `SAGAX_SANDBOX_K8S_RUNTIME_CLASS` | no | optional RuntimeClass |
 | `SAGAX_SANDBOX_K8S_PULL_SECRET` | no | name of a pull Secret, never the token |
 | `SAGAX_SANDBOX_K8S_DNS` | no | 1 to 3 public IPv4 resolvers |
-| `SAGAX_SANDBOX_K8S_DENY_HOSTS` | no | the cluster API's name (AKS: `az aks show --query fqdn`) or IPv4 addresses, at most 8: resolved at start (the provisioner refuses to start if it cannot) and every minute, each address denied as a `/32` in every person's policy, existing ones patched when it moves |
+| `SAGAX_SANDBOX_K8S_DENY_HOSTS` | no | the cluster API's name (AKS: `az aks show --query fqdn`) or IPv4 addresses, at most 8; unset or empty, off (`KUBERNETES_SERVICE_HOST` is the `kubernetes` Service IP, never used); the Azure adapter sets it from the OpenTofu output `api_server_fqdn`: resolved at start (the provisioner refuses to start if it cannot) and every minute, each address denied as a `/32` in every person's policy, existing ones patched when it moves |
 | `SAGAX_SANDBOX_K8S_QUOTA_NAME` | no | default `sagax-sandbox-quota` |
 | `SAGAX_SANDBOX_K8S_NODE_SELECTOR` | no | `key=value[,key=value]`, Kubernetes label syntax, for example `sagax.io/pool=sandboxes`; becomes the Pod `nodeSelector` |
 | `SAGAX_SANDBOX_K8S_TOLERATION` | no | `key=value:Effect` (operator Equal) or `key:Effect` (operator Exists), comma separated, for example `sagax.io/pool=sandboxes:NoSchedule`; becomes the Pod `tolerations` |
@@ -655,14 +655,18 @@ Two paths stay open to a sandbox whatever the deny list says:
 
 - The API server. On AKS its public IP changes at each cluster start, and
   the `kubernetes` Service IP is translated to that public IP before Azure
-  NPM evaluates the policy, so `10.0.0.0/8` does not cover it. Set
-  `SAGAX_SANDBOX_K8S_DENY_HOSTS` to the API's FQDN: the provisioner denies
-  its current addresses and follows them. The stable fix is API Server VNet
-  Integration with the NAT address taken out of the authorized ranges.
+  NPM evaluates the policy, so `10.0.0.0/8` does not cover it.
+  `SAGAX_SANDBOX_K8S_DENY_HOSTS` names the API's FQDN: the provisioner
+  denies its current addresses and follows them. The Azure adapter sets it
+  (`sandboxd-deny-hosts.yaml`) from the OpenTofu output `api_server_fqdn`;
+  left as the placeholder, the provisioner refuses to start. The stable fix is API Server VNet Integration with the
+  NAT address taken out of the authorized ranges, on by default in the Azure
+  adapter (`api_server_vnet_integration`). It closes the public endpoint only
+  with `api_server_authorized_ip_ranges` set (required in production).
 - The node itself (kubelet `10250`, `sshd`, host ports): a pod reaches its
   own node's addresses without the policy being consulted. The chart's
   `nodeGuard` (a privileged DaemonSet on the sandbox nodes, digest-pinned
-  busybox) adds an iptables chain `SAGAX-NODE-GUARD` that drops new
+  busybox, on by default) adds an iptables chain `SAGAX-NODE-GUARD` that drops new
   connections from pod interfaces (`azv+`) to the node; replies to what the
   node opened, such as kubelet probes, pass. To take it off: disable it,
   then on each node `iptables -D INPUT -i azv+ -j SAGAX-NODE-GUARD`,

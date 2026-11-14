@@ -50,8 +50,8 @@ variable "api_server_authorized_ip_ranges" {
 
 variable "api_server_vnet_integration" {
   type        = bool
-  description = "API Server VNet Integration: the API server gets a private address in a delegated /28 (10.214.0.0/28) and the sandbox NAT address leaves the authorized ranges, so a sandbox cannot reach the API. One way: it restarts the API server and cannot be turned off."
-  default     = false
+  description = "API Server VNet Integration: the API server gets a private address in a delegated /28 (10.214.0.0/28) and the sandbox NAT address leaves the authorized ranges, so a sandbox cannot reach the API once api_server_authorized_ip_ranges is set (required in production; empty, the public endpoint stays open to everyone). One way: it restarts the API server and cannot be turned off. On by default (issue 503): it is the live setting, so a rebuild keeps the API off the sandboxes."
+  default     = true
 }
 
 variable "system_vm_size" {

@@ -46,3 +46,7 @@ output "sku_tier" {
 output "sandbox_vm_size" {
   value = module.azure.sandbox_vm_size
 }
+
+output "api_server_fqdn" {
+  value = module.azure.api_server_fqdn
+}

@@ -23,3 +23,8 @@ output "sku_tier" {
 output "sandbox_vm_size" {
   value = var.pool.azure_vm_size
 }
+
+output "api_server_fqdn" {
+  description = "Set SAGAX_SANDBOX_K8S_DENY_HOSTS on the provisioner to this (sandboxes/adapters/azure/sandboxd-deny-hosts.yaml): the API's public address, which changes at each cluster start."
+  value       = one(azurerm_kubernetes_cluster.this[*].fqdn)
+}

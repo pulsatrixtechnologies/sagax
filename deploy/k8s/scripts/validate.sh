@@ -198,6 +198,29 @@ if grep -q "name: sandboxes-provisioner-guard" "$tmp/default.yaml"; then
   exit 1
 fi
 
+# Issue 503: the live protections are the defaults, so a rebuild keeps them.
+if ! awk 'BEGIN{RS="\n---\n"} /kind: DaemonSet/ && /sagax-node-guard/' "$tmp/default.yaml" | grep -q 'image: "busybox:[^"]*@sha256:[0-9a-f]\{64\}"'; then
+  echo "the node guard must be on by default with a digest-pinned image" >&2
+  exit 1
+fi
+if ! awk '/variable "api_server_vnet_integration"/,/^}/' "$root/deploy/k8s/tofu/adapters/azure/variables.tf" | grep -Eq '^ *default *= *true$'; then
+  echo "api_server_vnet_integration must default to true" >&2
+  exit 1
+fi
+# The Azure path carries the API FQDN to the provisioner's deny list (a
+# placeholder the provisioner refuses at start until the tofu output
+# api_server_fqdn fills it), never an empty value.
+kubectl kustomize --load-restrictor LoadRestrictionsNone "$root/deploy/k8s/sandboxes/adapters/azure" > "$tmp/azure-kustomize.yaml"
+deny_value=$(awk '/- name: SAGAX_SANDBOX_K8S_DENY_HOSTS$/ { getline; sub(/^ *value: */, ""); gsub(/"/, ""); print; exit }' "$tmp/azure-kustomize.yaml")
+if [ -z "$deny_value" ]; then
+  echo "the Azure adapter renders SAGAX_SANDBOX_K8S_DENY_HOSTS empty" >&2
+  exit 1
+fi
+if ! grep -q 'output "api_server_fqdn"' "$root/deploy/k8s/tofu/stacks/azure/main.tf"; then
+  echo "the Azure stack does not output api_server_fqdn" >&2
+  exit 1
+fi
+
 # The node guard must tolerate the sandbox pool taint by default.
 helm template sandboxes "$chart" --set nodeGuard.enabled=true --set nodeGuard.image=registry.example.com/busybox@sha256:$(printf 'ab%.0s' $(seq 1 32)) > "$tmp/node-guard.yaml"
 guard_ds="$(awk 'BEGIN{RS="\n---\n"} /kind: DaemonSet/ && /sagax-node-guard/' "$tmp/node-guard.yaml")"

@@ -153,7 +153,6 @@ import { personAttention, type PersonAttentionItem } from "../shared/person-atte
 import { answeredItemKeys, PEER_ITEM_SCOPE, releasedItemCards, syncPersonItemCards } from "./turns/person-item-cards.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
-import { skillEditorApiPath } from "../src/lib/skills-ui.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
 import { credentialIsConfigured } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
@@ -1335,7 +1334,7 @@ import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
 import { activeCount as temporaryActiveCount, archiveMark, capInstructions, defaultIdleHours, mayDelete as mayDeleteTemporary, profileSections, quotaKey as temporaryQuotaKey, TEMP_AGENT_QUOTA, TEMP_AGENT_SWEEP_MS, temporaryOwner, type TemporaryAgent, type TemporaryCreator } from "./temporary-agents.ts";
 import { createTemporaryAgentRoutes } from "./routes/temporary-agents.ts";
 import { botCreationOffered } from "./bots/bot-creation.ts";
-import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, isRefusal as isAgentRefusal, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, routeRefusal as agentRouteRefusal, SEND_RECEIPT_TTL_MS, type AgentCaller, type AgentRoutinePatch, type AgentWorkspace, type CreateAgentInput, type Refusal as AgentRefusal, type SendReceipt } from "./agent-api.ts";
+import { agentPromptWithFiles, applySkillAndPluginSwitches, createAgentApi, formatEngineCandidates, isRefusal as isAgentRefusal, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, routeRefusal as agentRouteRefusal, SEND_RECEIPT_TTL_MS, type AgentCaller, type AgentRoutinePatch, type AgentWorkspace, type CreateAgentInput, type Refusal as AgentRefusal, type SendReceipt } from "./agent-api.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
 import { backgroundIdleMs, planBackgroundSweep, RESERVED_RUN_PREFIX } from "./threads/background-sweep.ts";
 import { MemberLiveText } from "./people/member-live-text.ts";
@@ -32657,20 +32656,10 @@ const agentApi = createAgentApi({
       if (done.status >= 200 && done.status < 300) changed.push(field);
       else refuseOne(field, done.body);
     };
-    if (switches.skills) {
-      // A skill from a shared library (the installation's or the person's
-      // own) switches there, as the page does (skillEditorApiPath).
-      const listed = await performAsMember(member, { method: "GET", path: `${botPath}/skills` });
-      const origins = new Map(((listed.body as { skills?: Array<{ name?: unknown; origin?: unknown }> } | null)?.skills ?? [])
-        .map((skill) => [String(skill.name ?? ""), String(skill.origin ?? "")]));
-      for (const [name, enabled] of Object.entries(switches.skills)) {
-        const origin = origins.get(name);
-        const path = skillEditorApiPath(agentId, name, origin === "library" || origin === "me" ? origin : undefined);
-        await switchOne(`skills.${name}`, { method: "PATCH", path, body: { enabled } });
-      }
-    }
-    for (const [key, enabled] of Object.entries(switches.plugins ?? {})) {
-      await switchOne(`plugins.${key}`, { method: "PATCH", path: `${botPath}/plugins/${encodeURIComponent(key)}`, body: { enabled } });
+    if (switches.skills || switches.plugins) {
+      const switched = await applySkillAndPluginSwitches((request) => performAsMember(member, request), agentId, switches);
+      changed.push(...switched.changed);
+      refused.push(...switched.refused);
     }
     for (const [target, level] of Object.entries(switches.grants ?? {})) {
       await switchOne(`grants.${target}`, level === null

@@ -58,6 +58,7 @@ import type { BotSpeech } from "../shared/voice-mode.ts";
 export {
   AGENT_PRIMARY_FIELD,
   AGENT_SETTINGS_FIELDS,
+  applySkillAndPluginSwitches,
   RUNTIME_SETTINGS_FIELDS,
   formatEngineCandidates,
   isAgentSettingsField,

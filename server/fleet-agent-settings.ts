@@ -4,6 +4,7 @@
 // so a second hand allowlist cannot drift from the server's PATCH gates.
 import { BOT_FIELD_PERMISSIONS } from "../shared/permissions.ts";
 import { MEMBER_BOT_FIELDS } from "../shared/viewer-capabilities.ts";
+import { skillEditorApiPath } from "../src/lib/skills-ui.ts";
 
 /** PATCH /api/bots/:id/runtime-settings fields (Edit bot runtime panel). */
 export const RUNTIME_SETTINGS_FIELDS = [
@@ -251,4 +252,133 @@ function parseSwitchMap(field: AgentSwitchField, value: unknown): Record<string,
     }
   }
   return out;
+}
+
+/** One request as the person, the way the bot page sends it. */
+export type MemberRequestFn = (request: { method: string; path: string; body?: unknown }) => Promise<{ status: number; body: unknown }>;
+
+/** #4172: the bot page's skill and plugin switches, each through the route
+ * the page calls, as the person, one entry at a time: a skill where the page
+ * switches it (skillEditorApiPath: the organization's library, the person's
+ * own, or the bot's imports), a library skill not yet on the bot through the
+ * page's Add to bot and a library skill on the bot turned off through its
+ * Remove from bot, for this bot only (PUT /api/bots/:id/skills-library with
+ * the assigned list read just before, plus or minus the name); true on a
+ * library skill already on and live answers changed with no request, and one
+ * turned off in the library goes to the library's own switch, a member's
+ * scope refusal saying plainly who can turn it back on; a plugin through PATCH
+ * /api/bots/:id/plugins/:key. The route's answer is the verdict, in its own
+ * words. A name neither the bot's listing nor its library holds is refused as
+ * unknown (the route would only say its path is not a member's); a skill the
+ * engine loads by itself is not switched here, and says so; a plugin's bare
+ * name finds its one installed key. Each entry answers `skills.<name>` or
+ * `plugins.<key as sent>` in changed, or in refused with why. */
+export async function applySkillAndPluginSwitches(
+  perform: MemberRequestFn,
+  agentId: string,
+  switches: Pick<AgentSwitches, "skills" | "plugins">,
+): Promise<{ changed: string[]; refused: Array<{ field: string; reason: string }> }> {
+  const changed: string[] = [];
+  const refused: Array<{ field: string; reason: string }> = [];
+  const botPath = `/api/bots/${encodeURIComponent(agentId)}`;
+  type Refusal = { error?: unknown; message?: unknown; permission?: unknown };
+  const switchOne = async (field: string, request: Parameters<MemberRequestFn>[0], reasonFor?: (status: number, record: Refusal) => string | undefined) => {
+    const done = await perform(request);
+    if (done.status >= 200 && done.status < 300) {
+      changed.push(field);
+      return;
+    }
+    const record: Refusal = done.body && typeof done.body === "object" ? done.body as Refusal : {};
+    refused.push({ field, reason: reasonFor?.(done.status, record) ?? plainFieldRefusalReason(field, record) });
+  };
+  const read = async (path: string): Promise<Record<string, unknown> | null> => {
+    const listed = await perform({ method: "GET", path });
+    return listed.status >= 200 && listed.status < 300 && listed.body && typeof listed.body === "object" ? listed.body as Record<string, unknown> : null;
+  };
+  const rowsOf = <T>(body: Record<string, unknown> | null, key: string): T[] | null => Array.isArray(body?.[key]) ? body![key] as T[] : null;
+  const named = (names: readonly string[]) => {
+    if (!names.length) return "none";
+    const shown = names.slice(0, 20).join(", ");
+    return names.length > 20 ? `${shown} and ${names.length - 20} more` : shown;
+  };
+
+  if (switches.skills) {
+    const listed = await read(`${botPath}/skills`);
+    const skills = rowsOf<{ name?: unknown; origin?: unknown; enabled?: unknown }>(listed, "skills");
+    const origins = new Map((skills ?? []).map((skill) => [String(skill.name ?? ""), String(skill.origin ?? "")]));
+    const live = new Set((skills ?? []).filter((skill) => skill.enabled === true).map((skill) => String(skill.name ?? "")));
+    const library = new Set((rowsOf<{ name?: unknown }>(listed, "library") ?? []).map((skill) => String(skill.name ?? "")));
+    // The page's Add to bot and Remove from bot: the assigned list read just
+    // before, with the name added or taken out (PUT /api/bots/:id/skills-library).
+    const assign = async (field: string, name: string, add: boolean) => {
+      const current = (rowsOf<unknown>(await read(`${botPath}/skills`), "assignedSkills") ?? rowsOf<unknown>(listed, "assignedSkills") ?? []).map(String);
+      const next = add ? [...new Set([...current, name])] : current.filter((entry) => entry !== name);
+      await switchOne(field, { method: "PUT", path: `${botPath}/skills-library`, body: { skills: next } });
+    };
+    for (const [name, enabled] of Object.entries(switches.skills)) {
+      const field = `skills.${name}`;
+      if (skills && !origins.has(name) && library.has(name)) {
+        // In the organization's library, not on this bot yet: on is the
+        // page's Add to bot; off is where it already is.
+        if (!enabled) {
+          refused.push({ field, reason: `the library skill "${name}" is already off for this bot (it is not added to it), nothing to do` });
+          continue;
+        }
+        await assign(field, name, true);
+        continue;
+      }
+      if (skills && !origins.has(name)) {
+        const offered = library.size ? `; the library also offers: ${named([...library])}` : "";
+        refused.push({ field, reason: `this bot has no skill named "${name}" (its skills: ${named([...origins.keys()])}${offered})` });
+        continue;
+      }
+      const origin = origins.get(name);
+      if (origin === "native") {
+        refused.push({ field, reason: `the engine loads the skill "${name}" by itself, so it is not switched here` });
+        continue;
+      }
+      if (origin === "library" && !enabled) {
+        // An organization's library skill on this bot: off is the page's
+        // Remove from bot, for this bot only; the library's own switch
+        // would turn it off for every bot that uses it.
+        await assign(field, name, false);
+        continue;
+      }
+      if (origin === "library" && live.has(name)) {
+        // On this bot and live in the organization's library: already on,
+        // nothing to send (the library's switch is not a member's route).
+        changed.push(field);
+        continue;
+      }
+      const path = skillEditorApiPath(agentId, name, origin === "library" || origin === "me" ? origin : undefined);
+      // Turned off in the organization's library: its shared switch is the
+      // verdict; a member's scope refusal says plainly who can turn it on.
+      await switchOne(field, { method: "PATCH", path, body: { enabled } }, origin === "library"
+        ? (status, record) => status === 403 && /lacks the \w+ scope/i.test(`${String(record.error ?? "")} ${String(record.message ?? "")}`)
+          ? `the skill "${name}" is turned off in the organization's library, and only someone who manages the library can turn it back on`
+          : undefined
+        : undefined);
+    }
+  }
+  if (switches.plugins) {
+    const plugins = rowsOf<{ key?: unknown; name?: unknown }>(await read(`${botPath}/plugins`), "plugins");
+    const keys = (plugins ?? []).map((plugin) => ({ key: String(plugin.key ?? ""), name: String(plugin.name ?? "") }));
+    for (const [sent, enabled] of Object.entries(switches.plugins)) {
+      const missing = `the plugin "${sent}" is not installed on this bot (installed: ${named(keys.map((plugin) => plugin.key))})`;
+      let key: string | undefined = sent;
+      if (plugins && !keys.some((plugin) => plugin.key === sent)) {
+        const byName = keys.filter((plugin) => plugin.name === sent || plugin.key.toLowerCase() === sent.toLowerCase());
+        key = byName.length === 1 ? byName[0]!.key : undefined;
+        if (!key) {
+          refused.push({
+            field: `plugins.${sent}`,
+            reason: byName.length > 1 ? `several plugins are named "${sent}": ${named(byName.map((plugin) => plugin.key))}; pass its full key` : missing,
+          });
+          continue;
+        }
+      }
+      await switchOne(`plugins.${sent}`, { method: "PATCH", path: `${botPath}/plugins/${encodeURIComponent(key)}`, body: { enabled } });
+    }
+  }
+  return { changed, refused };
 }

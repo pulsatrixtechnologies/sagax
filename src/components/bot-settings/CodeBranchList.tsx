@@ -13,7 +13,7 @@
 // bot to do it instead, in the conversation the branch came from. Where
 // reading it again can help (the computer was off or busy, its OS not known
 // yet), "Try again" reads it again: the row then acts, or says why not.
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Archive, ArchiveRestore, EyeOff, ExternalLink, FileDiff, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest,
@@ -26,7 +26,6 @@ import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
 import { openExternalLink } from "@/lib/app-links";
 import { copyText } from "@/lib/copy-text";
-import { writeComputerPanelView } from "@/lib/computer-panel-view";
 import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
 import {
   branchAction, branchActions, branchAskText, branchAway, branchCanReadAgain, branchCounts, branchStatus, branchUnavailable, branchWhere, codingBranchKey, deleteNeedsSecondConfirm, loadBranchDiff, loadBranchInfo, loadBranchPull, remoteActionNeedsConfirm,
@@ -41,6 +40,7 @@ import { ConfirmDialog } from "../ConfirmDialog";
 import { DialogFrame, DialogLayer, FIELD, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { DiffView } from "../code/DiffView";
 import { readableError } from "@/lib/plain-error";
+import { MENU_SURFACE, MenuDivider, MenuGlyph, menuRow, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
 
 const ERROR_KEYS: Record<string, LocaleKey> = {
   auth: "botPanel.branch.error.auth",
@@ -211,13 +211,7 @@ export function BranchMenu({ branch, info, pull, archived, botName, readFailed =
   const menuRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setAnchor(null), []);
 
-  useLayoutEffect(() => {
-    const element = menuRef.current;
-    if (!element || !shown) return;
-    const { width, height } = element.getBoundingClientRect();
-    element.style.top = `${Math.max(8, Math.min(shown.y, window.innerHeight - height - 8))}px`;
-    element.style.left = `${Math.max(8, Math.min(shown.x - width, window.innerWidth - width - 8))}px`;
-  });
+  useMenuInWindow(menuRef, shown && { left: shown.x, top: shown.y, right: true });
   useEffect(() => {
     if (!anchor) return;
     menuRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
@@ -263,7 +257,7 @@ export function BranchMenu({ branch, info, pull, archived, botName, readFailed =
           ref={menuRef}
           data-branch-menu={branch.name}
           style={{ top: shown.y, left: shown.x }}
-          className={cn("fixed z-[60] flex max-h-[calc(100dvh-16px)] w-[260px] max-w-[calc(100vw-16px)] flex-col overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)}
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-[60] max-h-[calc(100dvh-16px)] overflow-y-auto overscroll-contain", motion.className)}
           {...motion.exitProps}
         >
           <BranchMenuPanel branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} details={details} canIgnore={canIgnore} onPick={(action) => { close(); onAct(action); }} />
@@ -367,13 +361,9 @@ export function BranchMenuItems({ branch, info, pull, archived, botName, readFai
       disabled={opts?.disabled}
       title={opts?.disabled ? opts.hint : undefined}
       onClick={() => onPick(id)}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px]",
-        opts?.danger ? "text-danger" : "text-ink",
-        opts?.disabled ? "cursor-default opacity-40" : "hover:bg-hover",
-      )}
+      className={cn(menuRow(opts?.danger ? "danger" : "idle"), ((opts?.disabled && opts.hint) || opts?.ask) && "h-auto py-1.5")}
     >
-      <span className="shrink-0 [&>svg]:size-4">{icon}</span>
+      <MenuGlyph danger={opts?.danger}>{icon}</MenuGlyph>
       {(opts?.disabled && opts.hint) || opts?.ask ? (
         <span className="flex min-w-0 flex-col">
           <span>{label}</span>
@@ -382,7 +372,7 @@ export function BranchMenuItems({ branch, info, pull, archived, botName, readFai
       ) : <span className="min-w-0 flex-1 truncate">{label}</span>}
     </button>
   );
-  const divider = (key: string) => <div key={key} className="mx-2 my-1 h-[0.5px] bg-border" aria-hidden="true" />;
+  const divider = (key: string) => <MenuDivider key={key} />;
   const away = awayKey !== null;
   const act = (enabled: boolean, hint: string | undefined) => (away ? { ask: true } : { disabled: !enabled, hint });
   const readAgain = away && branchCanReadAgain(info, readFailed);
@@ -587,7 +577,6 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
         return;
       }
       case "computer":
-        writeComputerPanelView(botId, "computer");
         dispatch({ type: "toggleComputer", open: true });
         return;
       case "push":

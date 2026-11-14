@@ -17,7 +17,8 @@ import type { MemoryBrowse, MemoryManagerSource, MemoryNoteDetail, MemoryNoteRow
 import { canDecideRow, type PageRow } from "@/lib/memory-page";
 import type { LinkBot } from "@/lib/memory-folders";
 import { useCaptionChrome } from "../DesktopCapabilities";
-import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
+import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PAGE_MENU, PAGE_MENU_ITEM, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
+import { MENU_FIT_ROW } from "../menu-look";
 import { fetchCollections, MemoryCollections, type CollectionItem, type CollectionSummary } from "./MemoryCollections";
 import { MemoryMapView } from "./MemoryMapView";
 import { MemoryNotesList } from "./MemoryNotesList";
@@ -232,7 +233,7 @@ export function MemoryManagerPanel() {
             <summary aria-label={t("memoryManager.more")} title={t("memoryManager.more")} className={PAGE_HEADER_BUTTON}>
               <span aria-hidden="true" className="text-[16px] leading-none">⋯</span>
             </summary>
-            <div role="menu" className={cn(PAGE_POPOVER, "w-[240px] gap-0.5 p-1.5")}>
+            <div role="menu" className={cn(PAGE_MENU, MENU_FIT_ROW)}>
               <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); refresh(); }} data-memory-refresh="">
                 <RefreshCw size={16} />{t("memoryManager.refresh")}
               </button>

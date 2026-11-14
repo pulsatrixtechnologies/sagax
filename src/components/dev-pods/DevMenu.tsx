@@ -7,9 +7,9 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/cn";
 import { AnchoredPopover } from "../AnchoredPopover";
 import { useMenuMotion } from "../MenuMotion";
+import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 
-export const DEV_MENU_ITEM =
-  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent";
+export const DEV_MENU_ITEM = MENU_ROW;
 
 export function DevMenu({ open, anchorRef, label, onClose, width = 210, children }: {
   open: boolean;
@@ -49,7 +49,7 @@ export function DevMenu({ open, anchorRef, label, onClose, width = 210, children
       {...(label ? { "aria-label": label } : {})}
       side="bottom"
       align="end"
-      className={cn("flex flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 shadow-lg", motion.className)}
+      className={cn(MENU_SURFACE, motion.className)}
       style={{ width }}
     >
       {/* a closing menu is only a picture of one (useMenuMotion exitProps) */}

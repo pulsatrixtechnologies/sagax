@@ -33,6 +33,7 @@ import { buttonCls, iconButtonCls, type Creating } from "./WorkspaceFilesSection
 import { WorkspaceFileList } from "./WorkspaceFilesSection.tsx-parts/WorkspaceFileList";
 import { WorkspaceOverlays } from "./WorkspaceFilesSection.tsx-parts/WorkspaceOverlays";
 import { useWorkspaceFiles } from "./WorkspaceFilesSection.tsx-parts/useWorkspaceFiles";
+import { MENU_SURFACE, MENU_FIT_ROW } from "@/components/menu-look";
 
 export { LoadBadge, entryDetails } from "./WorkspaceFilesSection.tsx-parts/helpers";
 
@@ -297,7 +298,7 @@ function NewMenu({ memoryEditable, busy, onPick }: { memoryEditable: boolean; bu
           role="menu"
           aria-label={t("persona.files.newKindLabel")}
           align="start"
-          className="flex w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg popover-surface"
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "")}
         >
           <MenuItem icon={<FileIcon size={14} />} label={t("persona.files.newKind.file")} data-files-kind="file" onClick={() => { setOpen(false); onPick("file"); }} />
           <MenuItem icon={<Folder size={14} />} label={t("persona.files.newKind.folder")} data-files-kind="folder" onClick={() => { setOpen(false); onPick("folder"); }} />

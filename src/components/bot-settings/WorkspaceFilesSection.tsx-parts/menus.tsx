@@ -6,6 +6,8 @@ import { t } from "@/lib/i18n";
 import { entryName, type WorkspaceEntry } from "@/lib/workspace-files";
 import { MenuItem, PopoverMenu } from "../FilesSection";
 import { iconButtonCls } from "./helpers";
+import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { cn } from "@/lib/cn";
 
 export function RowMenu({
   entry,
@@ -68,19 +70,19 @@ export function MovePopover({ folders, onPick, onClose }: { folders: string[]; o
         popoverRef={popoverRef}
         align="center"
         side="top"
-        className="flex max-h-72 min-w-[220px] flex-col gap-0.5 overflow-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] shadow-2xl"
+        className={cn(MENU_SURFACE, "max-h-72 min-w-[220px] overflow-auto")}
         data-files-move-menu=""
       >
         <div className="px-2 py-1 text-[11.5px] text-ink-tertiary">{t("persona.files.moveTo")}</div>
-        <button type="button" className="rounded-md px-2 py-1.5 text-left hover:bg-hover" onClick={() => onPick(null)} data-files-move-root="">
+        <button type="button" className={MENU_ROW} onClick={() => onPick(null)} data-files-move-root="">
           {t("persona.files.root")}
         </button>
         {folders.map((folder) => (
-          <button key={folder} type="button" className="rounded-md px-2 py-1.5 text-left hover:bg-hover" onClick={() => onPick(folder)} data-files-move-to={folder}>
+          <button key={folder} type="button" className={MENU_ROW} onClick={() => onPick(folder)} data-files-move-to={folder}>
             {folder}/
           </button>
         ))}
-        <button type="button" className="mt-1 rounded-md px-2 py-1.5 text-left text-ink-secondary hover:bg-hover" onClick={onClose}>
+        <button type="button" className={cn(MENU_ROW, "text-ink-secondary")} onClick={onClose}>
           {t("common.cancel")}
         </button>
       </AnchoredPopover>

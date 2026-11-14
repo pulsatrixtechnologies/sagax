@@ -5,15 +5,17 @@ import { t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
 import { threadLinkUrl } from "../../shared/thread-link";
 import { navigateThreadMenu } from "./BotProjects";
+import { cn } from "@/lib/cn";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, useMenuInWindow } from "./menu-look";
 
 export const ThreadLinkContext = createContext<{ link?: string; assign: (link: string | null) => void } | null>(null);
 
-const ITEM_CLASS = "flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised";
 
 export function useThreadLinkMenu(href: string | undefined) {
   const thread = useContext(ThreadLinkContext);
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  useMenuInWindow(menuRef, at);
   useEffect(() => {
     if (!at) return;
     menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
@@ -29,18 +31,18 @@ export function useThreadLinkMenu(href: string | undefined) {
   return {
     onContextMenu: (event: MouseEvent<HTMLElement>) => {
       event.preventDefault();
-      setAt({ left: Math.max(8, Math.min(event.clientX, window.innerWidth - 228)), top: Math.max(8, Math.min(event.clientY, window.innerHeight - 100)) });
+      setAt({ left: event.clientX, top: event.clientY });
     },
-    // A menu like the thread menu's: Copy link first, then the thread's own
+    // The thread menu's look (menu-look.tsx): Copy link first, then the thread's own
     // link (2026-10-16), with the arrows moving between them.
     menu: at && createPortal(<div ref={menuRef} role="menu" aria-label={url} style={at} data-thread-link-menu=""
-      className="fixed z-50 w-[220px] rounded-lg border border-hairline/50 bg-card p-1 shadow-xl"
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-50")}
       onKeyDown={(event) => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setAt(null); }
         else navigateThreadMenu(event);
       }}>
-      <button type="button" role="menuitem" onClick={run(() => void copyText(url))} className={ITEM_CLASS}><Link2 size={12} />{t("task.copyLink")}</button>
-      <button type="button" role="menuitem" onClick={run(() => thread.assign(assigned ? null : url))} className={ITEM_CLASS}>
+      <button type="button" role="menuitem" onClick={run(() => void copyText(url))} className={MENU_ROW}><Link2 size={12} />{t("task.copyLink")}</button>
+      <button type="button" role="menuitem" onClick={run(() => thread.assign(assigned ? null : url))} className={MENU_ROW}>
         {assigned ? <Link2Off size={12} /> : <Pin size={12} />}{t(assigned ? "task.unassignLink" : "task.assignLink")}
       </button>
     </div>, document.body),

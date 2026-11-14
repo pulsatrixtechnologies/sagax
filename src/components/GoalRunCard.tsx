@@ -38,6 +38,7 @@ import type { Message } from "@/state/store";
 import type { GroupGoalRunCardData, GroupGoalRunStatus } from "../../shared/group-goal-run";
 import { HOVER_ACTION_BUTTON, HOVER_ICON } from "./MessageHoverActions";
 import { useMenuMotion } from "./MenuMotion";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "@/components/menu-look";
 
 const DETAIL_LIMIT = 280;
 
@@ -130,8 +131,6 @@ export interface GoalRunActions {
   onRunAgain?: () => void;
 }
 
-const MENU_ROW =
-  "flex min-h-[30px] w-full items-center gap-2 rounded-[6px] border-0 bg-transparent px-2 py-1.5 text-start text-[13px] leading-[18px] text-ink hover:bg-ink/[0.06] focus-visible:bg-ink/[0.06] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent";
 
 type MenuEntry = { key: string; label: string; icon: ReactNode; onSelect: () => void; danger?: boolean; separatorBefore?: boolean };
 
@@ -192,7 +191,9 @@ function GoalRunMenu({ entries }: { entries: MenuEntry[] }) {
           data-goal-run-menu
           onKeyDown={onKey}
           className={cn(
-            "absolute right-0 z-40 flex w-max min-w-[200px] flex-col gap-0.5 rounded-[12px] border-[0.5px] border-border bg-elevated p-1.5 popover-surface",
+            MENU_SURFACE,
+            MENU_FIT_ROW,
+            "absolute right-0 z-40",
             above ? "bottom-full mb-1" : "top-full mt-1",
             motion.className,
           )}
@@ -200,7 +201,7 @@ function GoalRunMenu({ entries }: { entries: MenuEntry[] }) {
         >
           {entries.map((entry) => (
             <div key={entry.key} className="contents">
-              {entry.separatorBefore && <div role="separator" className="-mx-1.5 my-1 border-t-[0.5px] border-border" />}
+              {entry.separatorBefore && <MenuDivider />}
               <button
                 type="button"
                 role="menuitem"
@@ -209,11 +210,9 @@ function GoalRunMenu({ entries }: { entries: MenuEntry[] }) {
                   close();
                   entry.onSelect();
                 }}
-                className={cn(MENU_ROW, entry.danger && "text-danger")}
+                className={menuRow(entry.danger ? "danger" : "idle")}
               >
-                <span className={cn("flex size-[18px] shrink-0 items-center justify-center", entry.danger ? "text-danger" : "text-ink-secondary")} aria-hidden="true">
-                  {entry.icon}
-                </span>
+                <MenuGlyph danger={entry.danger}>{entry.icon}</MenuGlyph>
                 <span className="min-w-0 flex-1 truncate">{entry.label}</span>
               </button>
             </div>

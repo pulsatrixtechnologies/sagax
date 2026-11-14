@@ -55,6 +55,7 @@ import {
   thumbnailDesktop,
   useComputerThumbnail,
 } from "@/lib/computer-thumbnail";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuDivider, useMenuInWindow } from "@/components/menu-look";
 
 type ComputerSelectValue = "auto" | "cloud" | "local" | "vm" | "browser";
 
@@ -178,7 +179,7 @@ function ComputerMenuRow({ lead, label, detail, checked, dim = false, onPick, au
   return (
     <button type="button" role="menuitemradio" aria-checked={checked} autoFocus={autoFocus} {...data}
       data-computer-menu-row={lead}
-      onClick={onPick} className={cn(MENU_ITEM, dim && "text-ink-tertiary")}>
+      onClick={onPick} className={cn(MENU_ROW, "h-auto py-1.5", dim && "text-ink-tertiary")}>
       <span aria-hidden="true" data-computer-menu-lead={lead} className="flex size-4 shrink-0 items-center justify-center text-ink-secondary">
         {LeadIcon
           ? <LeadIcon size={14} />
@@ -280,10 +281,13 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
     : view.problem ? `${statusWord} \u00b7 ${t(SCREEN_PROBLEM_SHORT[view.problem])}` : statusWord;
   const reason = view.problem ? t(SCREEN_PROBLEM_LINE[view.problem]) : undefined;
   const menuEnabled = !readOnly && !!onPatch;
-  const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number; right: boolean } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useMenuInWindow(menuRef, menu && { left: menu.x, top: menu.y, right: menu.right });
   const openMenu = (trigger: HTMLElement, at?: { x: number; y: number }) => {
     const rect = trigger.getBoundingClientRect();
-    setMenu({ trigger, x: at?.x ?? rect.right - 220, y: at?.y ?? rect.bottom + 4 });
+    // under the "...", its right edge on the trigger's; at the pointer, from it
+    setMenu({ trigger, x: at?.x ?? rect.right, y: at?.y ?? rect.bottom + 4, right: !at });
   };
   const closeMenu = (focusTrigger = true) => {
     const trigger = menu?.trigger;
@@ -355,9 +359,9 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
       </div>
       {menu && createPortal(
         <div className="fixed inset-0 z-40" onMouseDown={() => closeMenu(false)} onContextMenu={(event) => { event.preventDefault(); closeMenu(false); }}>
-          <div role="menu" data-computer-card-menu="" aria-label={t("botPanel.computerCard.choose")}
-            style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 228)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 200)) }}
-            className="absolute flex w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-ink shadow-lg"
+          <div ref={menuRef} role="menu" data-computer-card-menu="" aria-label={t("botPanel.computerCard.choose")}
+            style={{ left: menu.x, top: menu.y }}
+            className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute")}
             onMouseDown={(event) => event.stopPropagation()}
             onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
               if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeMenu(); return; }
@@ -372,7 +376,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
                   if (option.value !== selectValue) onPatch?.(modeToPatch(option.value));
                 }} />
             ))}
-            {hostComputer.hosts.length > 0 && <div role="separator" className="my-1 h-px bg-hairline/50" />}
+            {hostComputer.hosts.length > 0 && <MenuDivider />}
             {hostComputer.hosts.map((host) => (
               <HostChoiceItem key={host.hostId} host={host} checked={host.hostId === hostComputer.hostId}
                 onPick={() => { closeMenu(); if (host.hostId !== hostComputer.hostId) void hostComputer.select(host.hostId); }} />
@@ -398,8 +402,5 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
     </section>
   );
 }
-
-/** Same item as the bot panel's other row menus (BotTaskSection). */
-const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
 export type { ComputerSelectValue, ComputerPatch };

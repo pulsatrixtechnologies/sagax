@@ -5,6 +5,7 @@ import { Check, FolderMinus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useHeldMenuMotion } from "../MenuMotion";
+import { MENU_ROW_DANGER, MENU_SURFACE, MenuDivider, menuRow, MENU_FIT_ROW, useMenuInWindow } from "../menu-look";
 
 /** Move-to-section popover: existing sections as chips (checkmark on the
  * target's current one), a create field, and a remove action. Serves bots
@@ -31,6 +32,8 @@ export function SectionPicker({
   const motion = useHeldMenuMotion(anchor);
   const shown = motion.value;
   const heldCurrent = useRef(current);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  useMenuInWindow(pickerRef, shown && { left: shown.x, top: shown.y });
   if (anchor) heldCurrent.current = current;
   const trimmed = name.trim();
 
@@ -63,14 +66,13 @@ export function SectionPicker({
 
   if (!motion.shown || !shown) return null;
   const sectionCurrent = heldCurrent.current;
-  const top = Math.max(8, Math.min(shown.y, window.innerHeight - 300));
-  const left = Math.min(shown.x, window.innerWidth - 260);
 
   return (
     <div
+      ref={pickerRef}
       data-section-picker
-      style={{ top, left }}
-      className={cn("fixed z-40 w-[236px] min-w-[200px] overflow-hidden rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px]", motion.className)} {...motion.exitProps}
+      style={{ top: shown.y, left: shown.x }}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-40 overflow-hidden", motion.className)} {...motion.exitProps}
     >
       <div className="px-2 pb-1 pt-0.5 text-[12px] leading-4 text-ink-secondary">
         {t("sidebar.section.moveToContext")}
@@ -82,8 +84,8 @@ export function SectionPicker({
               key={section}
               onClick={() => assign(section)}
               className={cn(
-                "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px]",
-                section === sectionCurrent ? "bg-selected text-ink" : "text-ink hover:bg-hover",
+                menuRow(section === sectionCurrent ? "active" : "idle"),
+                "justify-between",
               )}
             >
               <span className="truncate">{section}</span>
@@ -122,10 +124,10 @@ export function SectionPicker({
       </form>
       {sectionCurrent && (
         <>
-          <div className="mx-2 my-1 h-[0.5px] bg-border" />
+          <MenuDivider />
           <button
             onClick={() => assign("")}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-danger hover:bg-hover"
+            className={MENU_ROW_DANGER}
           >
             <FolderMinus size={15} />
             {t("sidebar.section.removeFromContext")}

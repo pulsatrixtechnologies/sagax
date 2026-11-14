@@ -7,12 +7,12 @@ import type { TeamMapSection } from "@/lib/team-map";
 import { orderBots, type Point } from "@/lib/team-canvas";
 import { BotCard } from "./BotCard";
 import { VirtualRow } from "../VirtualRow";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuGlyph, menuRow } from "../menu-look";
 
 /** A bot card's fixed height (BotCard: h-[126px]). */
 const BOT_CARD_HEIGHT = 126;
 
 const iconButton = "flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent";
-const menuButton = "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] text-ink-secondary hover:bg-control hover:text-ink";
 
 export function TeamSectionsLayer(props: {
   sections: TeamMapSection<Bot>[];
@@ -98,16 +98,16 @@ export function TeamSectionsLayer(props: {
               }
             }}>
               <summary aria-label={t("canvas.manageTeam", { name: label })} className={cn(iconButton, "cursor-pointer list-none [&::-webkit-details-marker]:hidden")}><MoreHorizontal size={17} /></summary>
-              <div className={cn("absolute right-0 z-30 w-[220px] animate-pop-in rounded-xl border border-hairline popover-surface bg-panel p-1.5 shadow-xl", menuAbove === section.key ? "bottom-10" : "top-10")} onClick={(event) => {
+              <div role="menu" aria-label={t("canvas.manageTeam", { name: label })} className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 z-30 animate-pop-in", menuAbove === section.key ? "bottom-10" : "top-10")} onClick={(event) => {
                 const menu = event.currentTarget.closest("details");
                 menu?.querySelector("summary")?.focus();
                 menu?.removeAttribute("open");
               }}>
-                <button className={menuButton} onClick={() => onEditTeam(section.key)} aria-label={t("team.moveTo", { name: label })}><Users size={14} />{t("team.moveTo", { name: label })}</button>
-                <button className={menuButton} onClick={() => onInstructions(section.key, label)} aria-label={t("team.instructionsEdit", { name: label })}><BookOpen size={14} />{t("team.instructions")}</button>
-                {onMemory && <button className={menuButton} onClick={() => onMemory(section.key, label)} aria-label={t("teamCanvas.memoryAria", { name: label })}><Brain size={14} />{t("botPanel.teamMemorySharing")}</button>}
-                {section.key && <button className={menuButton} onClick={() => onEditTeam(section.key, true)} aria-label={t("team.renameAria", { name: label })}><Pencil size={14} />{t("team.rename")}</button>}
-                {section.key && <button className={cn(menuButton, "hover:text-danger")} onClick={() => onDeleteTeam(section.key)} aria-label={t("team.deleteAria", { name: label })}><Trash2 size={14} />{t("team.delete")}</button>}
+                <button type="button" role="menuitem" className={menuRow()} onClick={() => onEditTeam(section.key)} aria-label={t("team.moveTo", { name: label })}><MenuGlyph><Users /></MenuGlyph><span className="min-w-0 flex-1 truncate">{t("team.moveTo", { name: label })}</span></button>
+                <button type="button" role="menuitem" className={menuRow()} onClick={() => onInstructions(section.key, label)} aria-label={t("team.instructionsEdit", { name: label })}><MenuGlyph><BookOpen /></MenuGlyph><span className="min-w-0 flex-1 truncate">{t("team.instructions")}</span></button>
+                {onMemory && <button type="button" role="menuitem" className={menuRow()} onClick={() => onMemory(section.key, label)} aria-label={t("teamCanvas.memoryAria", { name: label })}><MenuGlyph><Brain /></MenuGlyph><span className="min-w-0 flex-1 truncate">{t("botPanel.teamMemorySharing")}</span></button>}
+                {section.key && <button type="button" role="menuitem" className={menuRow()} onClick={() => onEditTeam(section.key, true)} aria-label={t("team.renameAria", { name: label })}><MenuGlyph><Pencil /></MenuGlyph><span className="min-w-0 flex-1 truncate">{t("team.rename")}</span></button>}
+                {section.key && <button type="button" role="menuitem" className={menuRow("danger")} onClick={() => onDeleteTeam(section.key)} aria-label={t("team.deleteAria", { name: label })}><MenuGlyph danger><Trash2 /></MenuGlyph><span className="min-w-0 flex-1 truncate">{t("team.delete")}</span></button>}
               </div>
             </details>}
           </header>

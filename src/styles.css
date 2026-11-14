@@ -594,10 +594,12 @@
     --color-raised-hover: var(--color-popover-hover);
     color: var(--color-popover-ink);
   }
-  /* The menu family's surface (SidebarPopoverMenu: the sidebar's menus, the
-     account menu and its side cards; the other menus join it in #4183), worn with
-     `popover-surface`: the reference's fill, hairline and shadow. Its rows
-     take the reference's fills through `bg-menu-hover` and `bg-menu-active`. */
+  /* The menu family's surface (every menu of the app since #4183: the
+     account menu and its side cards, the conversation menu, the rows' and
+     cards' three dots menus, through src/components/menu-look.tsx), worn
+     with `popover-surface`: the reference's fill, hairline and shadow. Its
+     rows take the reference's fills through `bg-menu-hover` and
+     `bg-menu-active`. */
   .menu-surface {
     background-color: var(--menu-fill);
     border: 0.5px solid var(--menu-hairline);
@@ -630,6 +632,29 @@
     height: 16px;
     stroke-width: 1.5;
   }
+  /* A row's leading icon drawn bare (no `MenuGlyph` around it) takes the
+     same glyph: 16px centred in the 18px slot, the glyph ink. */
+  .menu-surface :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) > svg:first-child {
+    width: 16px;
+    height: 16px;
+    margin-inline: 1px;
+    flex-shrink: 0;
+    stroke-width: 1.5;
+    color: var(--menu-glyph);
+  }
+  .menu-surface :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]).text-danger > svg:first-child {
+    color: inherit;
+  }
+}
+
+/* A menu row that cannot be picked now: dimmed, and no hover fill. Here,
+   unlayered, rather than as `disabled:` classes on the row: it wins over the
+   row's hover utility, and a row's markup names `disabled` only when it is. */
+.menu-surface :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):disabled {
+  opacity: 0.6;
+}
+.menu-surface :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):disabled:hover {
+  background-color: transparent;
 }
 
 /* ── Pulsatrix ─────────────────────────────────────────────────────────────

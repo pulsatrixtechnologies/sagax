@@ -25,6 +25,7 @@ import { useStoreSelector } from "@/state/store-selector";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { readableErrorMessage } from "@/lib/readable-error";
+import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 
 type Tab = "changes" | "desktop" | "terminal" | "files";
 type SubTab = "diff" | "review" | "commits";
@@ -92,7 +93,7 @@ function RunMenu({ run, consoleUrl, onStop, onArchive }: { run: CodeRun; console
   }, [open]);
   const pr = runPrOf(run);
   const link = pr?.url ?? (consoleUrl ? `${consoleUrl.replace(/\/$/, "")}/runs/${encodeURIComponent(run.id)}` : "");
-  const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-popover-ink hover:bg-popover-hover disabled:opacity-50";
+  const item = MENU_ROW;
   const terminal = ["finished", "failed", "stopped", "expired", "archived"].includes(run.state);
   return (
     <div ref={ref} className="relative">
@@ -100,7 +101,7 @@ function RunMenu({ run, consoleUrl, onStop, onArchive }: { run: CodeRun; console
         <MoreHorizontal size={16} aria-hidden />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-9 z-30 w-56 rounded-lg border border-popover-border bg-popover p-1 shadow-lg">
+        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-30 w-56")}>
           <button type="button" role="menuitem" className={item} disabled={terminal} onClick={() => { setOpen(false); onStop(); }}><Square size={13} aria-hidden />{t("code.action.stop")}</button>
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onArchive(); }}><Archive size={13} aria-hidden />{t("code.action.archive")}</button>
           {consoleUrl && <a role="menuitem" className={item} href={`${consoleUrl.replace(/\/$/, "")}/runs/${encodeURIComponent(run.id)}`} target="_blank" rel="noreferrer" onClick={() => setOpen(false)}><ExternalLink size={13} aria-hidden />{t("code.action.console")}</a>}
@@ -151,7 +152,7 @@ function FollowUpComposer({ run, onSend }: { run: CodeRun; onSend: (text: string
         </button>
       </div>
       {menu && (
-        <div role="menu" className="absolute bottom-11 left-1 z-20 w-64 rounded-lg border border-popover-border bg-popover p-1 shadow-lg">
+        <div role="menu" className={cn(MENU_SURFACE, "absolute bottom-11 left-1 z-20 w-64")}>
           {(["queue", "steer", "interrupt"] as const).map((value) => (
             <button key={value} type="button" role="menuitemradio" aria-checked={mode === value} onClick={() => { setMode(value); setMenu(false); }} className={cn("flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-popover-hover", mode === value && "bg-popover-hover")}>
               <span className="text-[12.5px] text-popover-ink">{t(`code.followup.mode.${value}`)}</span>

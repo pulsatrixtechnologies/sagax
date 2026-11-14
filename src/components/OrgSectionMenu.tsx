@@ -9,6 +9,7 @@ import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Pencil, Trash2 } fr
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { MENU_ROW, MenuDivider } from "./menu-look";
 
 export interface OrgSectionMenuActions {
   onRename?: () => void;
@@ -50,7 +51,7 @@ const ITEM_SECTION: Record<keyof OrgSectionMenuActions, number> = {
 };
 
 export function OrgSectionMenuItems({ items, actions }: { items: Array<keyof OrgSectionMenuActions>; actions: OrgSectionMenuActions }) {
-  const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover";
+  const item = MENU_ROW;
   const shown = items.filter((key) => Boolean(actions[key]));
   return (
     <>
@@ -60,7 +61,7 @@ export function OrgSectionMenuItems({ items, actions }: { items: Array<keyof Org
         const divided = index > 0 && ITEM_SECTION[shown[index - 1]!] !== ITEM_SECTION[key];
         return (
           <Fragment key={key}>
-            {divided && <div role="separator" data-section-menu-divider="" className="mx-2 my-1 h-[0.5px] bg-border" />}
+            {divided && <MenuDivider data-section-menu-divider="" />}
             <button type="button" role="menuitem" autoFocus={index === 0} className={cn(item, key === "onDelete" && "text-danger")} onClick={action}>
               <Icon size={14} aria-hidden="true" />{t(label)}
             </button>

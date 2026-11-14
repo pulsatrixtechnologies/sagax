@@ -142,7 +142,7 @@ export function useSidebarSections({
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX || rect.left + 16;
     const y = event.clientY || rect.bottom;
-    setOrgMenu({ name, id, x: Math.max(8, Math.min(x, window.innerWidth - 230)), y: Math.max(8, Math.min(y, window.innerHeight - 280)) });
+    setOrgMenu({ name, id, x, y });
   };
   const closeOrgMenu = () => {
     (teamMenuReturn.current?.isConnected ? teamMenuReturn.current : sidebarRef.current)?.focus();

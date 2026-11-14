@@ -4,7 +4,6 @@ import { useThreadPrefetch, type ThreadPrefetchIntent } from "@/state/thread-pre
 import {
   memo,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -192,6 +191,7 @@ import { SidebarOverlays } from "./Sidebar.tsx-parts/SidebarOverlays";
 import { SidebarResizeHandle } from "./Sidebar.tsx-parts/SidebarResizeHandle";
 import { SidebarUnreadPillAbove, SidebarUnreadPillBelow } from "./Sidebar.tsx-parts/SidebarUnreadPills";
 import { routineRunsWaiting } from "./parallel-approvals";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider, menuRow, useMenuInWindow } from "./menu-look";
 
 export type { MenuState, BotConfirmKind };
 export { parseItemDrag, currentArchivableBot, botConfirmCopy, roomDeleteCopy, sidebarListedBots, TeamMenuItems };
@@ -554,6 +554,8 @@ export function RoomContextMenu({
   const bulk = useBulkThreadActions();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(group?.name ?? "");
+  const roomMenuRef = useRef<HTMLDivElement>(null);
+  useMenuInWindow(roomMenuRef, shown && { left: shown.x, top: shown.y });
 
   useEffect(() => {
     if (!menu) return;
@@ -591,15 +593,14 @@ export function RoomContextMenu({
     if (name) dispatch({ type: "patchGroup", groupId: group.id, patch: { name } });
     onClose();
   };
-  const top = Math.min(shown.y, window.innerHeight - (group.peopleDm ? 280 : 240));
-  const left = Math.min(shown.x, window.innerWidth - 240);
   return createPortal(
     <div
+      ref={roomMenuRef}
       data-room-menu
       data-sidebar
       data-member-menu={group.peopleDm ? "" : undefined}
-      style={{ top, left }}
-      className={cn("fixed z-40 w-[228px] min-w-[200px] overflow-hidden rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px]", motion.className)} {...motion.exitProps}
+      style={{ top: shown.y, left: shown.x }}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-40 overflow-hidden", motion.className)} {...motion.exitProps}
     >
       {peerId && (
         <button
@@ -607,9 +608,9 @@ export function RoomContextMenu({
             onClose();
             dispatch({ type: "openPersonPanel", personId: peerId });
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+          className={MENU_ROW}
         >
-          <UserRound size={16} className="text-ink" />
+          <UserRound size={16} />
           {t("personPanel.view")}
         </button>
       )}
@@ -659,9 +660,9 @@ export function RoomContextMenu({
             setDraft(group.name);
             setRenaming(true);
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+          className={MENU_ROW}
         >
-          <Pencil size={16} className="text-ink" />
+          <Pencil size={16} />
           {isBotChat ? t("sidebar.room.renameChat") : t("sidebar.room.renameChannel")}
         </button>
       ))}
@@ -671,23 +672,23 @@ export function RoomContextMenu({
             onClose();
             onMoveToSection(group.id);
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+          className={MENU_ROW}
         >
-          <FolderPlus size={16} className="text-ink" />
+          <FolderPlus size={16} />
           {t("sidebar.section.moveToContext")}
         </button>
       )}
       {threadsOwner && <>
         <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.count(threadsOwner, "archive") === 0}
           onClick={() => { onClose(); void bulk.archiveAll(threadsOwner); }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent">
-          <Archive size={16} className="text-ink" />
+          className={MENU_ROW}>
+          <Archive size={16} />
           {t("task.archiveAll")}
         </button>
         <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.count(threadsOwner, "delete") === 0}
           onClick={() => { onClose(); void bulk.deleteAll(threadsOwner); }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-danger hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent">
-          <Trash2 size={16} className="text-danger" />
+          className={MENU_ROW_DANGER}>
+          <Trash2 size={16} />
           {t("task.deleteAll")}
         </button>
       </>}
@@ -696,9 +697,9 @@ export function RoomContextMenu({
           void copyText(group.threadId);
           onClose();
         }}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+        className={MENU_ROW}
       >
-        <ClipboardCopy size={16} className="text-ink" />
+        <ClipboardCopy size={16} />
         {t("sidebar.copyConversationId")}
       </button>
       <button
@@ -707,9 +708,9 @@ export function RoomContextMenu({
           else hideFromSidebar("group", group.id);
           onClose();
         }}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+        className={MENU_ROW}
       >
-        <EyeOff size={16} className="text-ink" />
+        <EyeOff size={16} />
         {peerId ? t("sidebar.hidden.close") : t("sidebar.hidden.hide")}
       </button>
       {memberHas("unpin") && (
@@ -719,9 +720,9 @@ export function RoomContextMenu({
             dispatch({ type: "patchGroup", groupId: group.id, patch: { pinned: false } });
             onClose();
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+          className={MENU_ROW}
         >
-          <PinOff size={16} className="text-ink" />
+          <PinOff size={16} />
           {t("sidebar.bot.unpin")}
         </button>
       )}
@@ -748,9 +749,9 @@ export function RoomContextMenu({
             dispatch({ type: "patchGroup", groupId: group.id, patch: { unread: true } });
             onClose();
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+          className={MENU_ROW}
         >
-          <BellDot size={16} className="text-ink" />
+          <BellDot size={16} />
           {t("sidebar.bot.markUnread")}
         </button>
       )}
@@ -762,7 +763,7 @@ export function RoomContextMenu({
             onClose();
             onLeave(group.id);
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-danger hover:bg-hover"
+          className={MENU_ROW_DANGER}
         >
           <LogOut size={16} />
           {t("groupPanel.leave")}
@@ -773,7 +774,7 @@ export function RoomContextMenu({
           onClose();
           onDelete(group.id);
         }}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-danger hover:bg-hover"
+        className={MENU_ROW_DANGER}
       >
         <Trash2 size={16} />
         {isBotChat ? t("sidebar.room.deleteChat") : t("sidebar.room.deleteChannel")}
@@ -806,7 +807,7 @@ export function MoveToTeamList({
     if (!name || name.length > 60) return;
     onAssign(name);
   };
-  const row = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover";
+  const row = MENU_ROW;
   return (
     <>
       {sections.map((section) => (
@@ -819,9 +820,9 @@ export function MoveToTeamList({
           onClick={() => onAssign(section)}
           className={row}
         >
-          <Folder size={16} className="shrink-0 text-ink" />
+          <Folder size={16} />
           <span className="min-w-0 flex-1 truncate">{section}</span>
-          {section === current && <Check size={14} className="shrink-0 text-ink" />}
+          {section === current && <Check size={14} />}
         </button>
       ))}
       <button
@@ -832,11 +833,11 @@ export function MoveToTeamList({
         onClick={() => onAssign("")}
         className={row}
       >
-        <FolderMinus size={16} className="shrink-0 text-ink" />
+        <FolderMinus size={16} />
         <span className="min-w-0 flex-1">{t("sidebar.bot.noTeam")}</span>
-        {!current && <Check size={14} className="shrink-0 text-ink" />}
+        {!current && <Check size={14} />}
       </button>
-      <div className="mx-2 my-1 h-[0.5px] bg-border" />
+      <MenuDivider />
       {creating ? (
         <form
           data-move-new-form=""
@@ -867,7 +868,7 @@ export function MoveToTeamList({
           onClick={() => setCreating(true)}
           className={row}
         >
-          <FolderPlus size={16} className="shrink-0 text-ink" />
+          <FolderPlus size={16} />
           {t("sidebar.section.newContext")}
         </button>
       )}
@@ -945,9 +946,9 @@ function MoveToSectionItem({
         onKeyDown={(event) => {
           if (event.key === "ArrowRight") { event.preventDefault(); show(); }
         }}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+        className={MENU_ROW}
       >
-        <FolderInput size={16} className="text-ink" />
+        <FolderInput size={16} />
         <span className="min-w-0 flex-1">{label}</span>
         <ChevronRight size={14} className="text-ink-tertiary" />
       </button>
@@ -959,7 +960,7 @@ function MoveToSectionItem({
           onMouseEnter={show}
           onMouseLeave={hide}
           style={{ top: submenuStyle.top, left: submenuStyle.left }}
-          className="fixed z-50 max-h-[calc(100dvh-16px)] w-[240px] min-w-[200px] overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px]"
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-50 max-h-[calc(100dvh-16px)] overflow-y-auto overscroll-contain")}
         >
           <MoveToTeamList sections={sections} current={current} onAssign={onAssign} />
         </div>,
@@ -1070,20 +1071,9 @@ export function BotContextMenu({
   const bot = shown ? state.bots.find((b) => b.id === shown.botId) : undefined;
   const floating = useSyncExternalStore(subscribeFloatingBots, () => (shown ? isBotFloating(shown.botId) : false), () => false);
   const menuRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const element = menuRef.current;
-    if (!element || !shown) return;
-    const place = () => {
-      const { width, height } = element.getBoundingClientRect();
-      element.style.top = `${Math.max(8, Math.min(shown.y, window.innerHeight - height - 8))}px`;
-      element.style.left = `${Math.max(8, Math.min(shown.x, window.innerWidth - width - 8))}px`;
-    };
-    // Menu length changes with thread settings, permissions, and locale.
-    // Measure after every render; the viewport cap handles short windows.
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  });
+  // Menu length changes with thread settings, permissions, and locale:
+  // measured after every render; the viewport cap handles short windows.
+  useMenuInWindow(menuRef, shown && { left: shown.x, top: shown.y });
   // Focus moves in once per open and back out on close. It stays apart from
   // the listeners below: Sidebar passes a fresh onClose every render, and
   // re-running this with them would pull focus back to the first item.
@@ -1148,9 +1138,8 @@ export function BotContextMenu({
       }}
       title={opts?.hint}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px]",
-        opts?.danger ? "text-danger" : "text-ink",
-        opts?.disabled ? "cursor-default opacity-40" : "hover:bg-hover",
+        menuRow(opts?.danger ? "danger" : "idle"),
+        opts?.showHint && opts.hint && "h-auto py-1.5",
       )}
     >
       {icon}
@@ -1162,10 +1151,10 @@ export function BotContextMenu({
       ) : label}
     </button>
   );
-  const divider = (key: string) => <div key={key} className="mx-2 my-1 h-[0.5px] bg-border" />;
+  const divider = (key: string) => <MenuDivider key={key} />;
   // Put the bot on the desktop (or back): a floating character to chat with.
   const floatItem = item(
-    <PictureInPicture2 size={16} className="text-ink" />,
+    <PictureInPicture2 size={16} />,
     floating ? t("floatingBots.menu.unfloat") : t("floatingBots.menu.float"),
     () => toggleFloatingBot(bot.id),
     { id: floating ? "remove-from-desktop" : "put-on-desktop" },
@@ -1175,9 +1164,9 @@ export function BotContextMenu({
   // it. Someone else's bot shared with the viewer offers neither.
   const viewerId = orgViewerId(state);
   const primaryItem = isViewersPrimaryBot(bot, viewerId)
-    ? onReplacePrimary && item(<ArrowLeftRight size={16} className="text-ink" />, t("sidebar.bot.replacePrimary"), () => onReplacePrimary(bot))
+    ? onReplacePrimary && item(<ArrowLeftRight size={16} />, t("sidebar.bot.replacePrimary"), () => onReplacePrimary(bot))
     : viewerOwnsBot(bot, viewerId) && !bot.hidden
-      ? onMakePrimary && item(<Star size={16} className="text-ink" />, t("sidebar.bot.makePrimary"), () => onMakePrimary(bot))
+      ? onMakePrimary && item(<Star size={16} />, t("sidebar.bot.makePrimary"), () => onMakePrimary(bot))
       : null;
 
   // Share opens the bot editor on its Sharing page, the flow the bot panel
@@ -1185,7 +1174,7 @@ export function BotContextMenu({
   // has an organization to share in; every member shares their own bots, the
   // server keeps its own rules about other people's.
   const shareItem = state.config?.viewer?.principalId
-    ? item(<Share2 size={16} className="text-ink" />, t("sidebar.bot.share"), () => dispatch({ type: "toggleSettings", open: true, botId: bot.id, section: "sharing" }), { id: "share" })
+    ? item(<Share2 size={16} />, t("sidebar.bot.share"), () => dispatch({ type: "toggleSettings", open: true, botId: bot.id, section: "sharing" }), { id: "share" })
     : null;
 
   const menuFrame = (children: React.ReactNode) => createPortal(
@@ -1198,7 +1187,7 @@ export function BotContextMenu({
       aria-label={t("sidebar.bot.actions", { name: bot.name })}
       onKeyDown={navigateThreadMenu}
       style={{ top: shown.y, left: shown.x }}
-      className={cn("fixed z-[60] max-h-[calc(100dvh-16px)] w-[248px] min-w-[200px] max-w-[calc(100vw-16px)] overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px]", motion.className)} {...motion.exitProps}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-[60] max-h-[calc(100dvh-16px)] overflow-y-auto overscroll-contain", motion.className)} {...motion.exitProps}
     >
       {children}
     </div>,
@@ -1208,9 +1197,9 @@ export function BotContextMenu({
     // Rename stays where the name shows (the panel), and Make primary bot in
     // the sidebar menu's More: this menu keeps the two avatar actions.
     return menuFrame([
-      item(<UserRoundPen size={16} className="text-ink" />, t("botPanel.editBot"), () => onEditPersona?.(bot), { id: "edit-persona" }),
+      item(<UserRoundPen size={16} />, t("botPanel.editBot"), () => onEditPersona?.(bot), { id: "edit-persona" }),
       item(
-        <PictureInPicture2 size={16} className="text-ink" />,
+        <PictureInPicture2 size={16} />,
         floating ? t("floatingBots.menu.unfloat") : t("floatingBots.menu.float"),
         () => toggleFloatingBot(bot.id),
         { id: floating ? "remove-from-desktop" : "put-on-desktop" },
@@ -1219,14 +1208,14 @@ export function BotContextMenu({
   }
 
   const archiveItem = canArchive ? item(
-    <Archive size={16} className="text-ink" />,
+    <Archive size={16} />,
     t("sidebar.bot.archive"),
     () => onArchive?.(bot),
     { id: "archive", disabled: archiveBlocked, hint: archiveHint },
   ) : null;
   // One label for the bot editor everywhere: "Edit bot". Without the
   // editor (the companion connection) it opens the bot's panel.
-  const editItem = item(<UserRoundPen size={16} className="text-ink" />, t("botPanel.editBot"), () => {
+  const editItem = item(<UserRoundPen size={16} />, t("botPanel.editBot"), () => {
     if (onEditPersona && !remoteClient) { onEditPersona(bot); return; }
     openForSettings();
     if (!state.settingsOpen) dispatch({ type: "toggleSettings", open: true });
@@ -1257,9 +1246,9 @@ export function BotContextMenu({
   // the same conversation (docs/single-stream-orchestration.md).
   // Threads on: Archive all threads and Delete all threads of this bot.
   const threadsOwner: BulkThreadOwner | null = showThreads ? { kind: "bot", id: bot.id, tasks: botListedThreads(bot) } : null;
-  const newThreadItem = showThreads ? item(<Plus size={16} className="text-ink" />, t("task.newShort"), () => {
+  const newThreadItem = showThreads ? item(<Plus size={16} />, t("task.newShort"), () => {
     dispatch({ type: "newTask", botId: bot.id });
-  }, { id: "new-thread" }) : item(<Plus size={16} className="text-ink" />, t("stream.newTopic"), () => {
+  }, { id: "new-thread" }) : item(<Plus size={16} />, t("stream.newTopic"), () => {
     // a draft over the conversation, created with its first message
     startNewTopic(dispatch, bot);
   }, { id: "new-topic" });
@@ -1271,7 +1260,7 @@ export function BotContextMenu({
   const entries = remoteClient ? [
     ...(newThreadItem ? [newThreadItem] : []),
     floatItem,
-    ...(canMoveSection ? [item(<FolderInput size={16} className="text-ink" />, t("sidebar.bot.moveTo"), () => {
+    ...(canMoveSection ? [item(<FolderInput size={16} />, t("sidebar.bot.moveTo"), () => {
       onClose();
       onMoveToSection?.(bot.id);
     }, { id: "move" })] : []),
@@ -1280,30 +1269,30 @@ export function BotContextMenu({
   ] : [
     ...(newThreadItem ? [newThreadItem, divider("d-new")] : []),
     item(
-      bot.pinned ? <PinOff size={16} className="text-ink" /> : <Pin size={16} className="text-ink" />,
+      bot.pinned ? <PinOff size={16} /> : <Pin size={16} />,
       bot.pinned ? t("sidebar.bot.unpin") : t("sidebar.bot.pin"),
       () => dispatch({ type: "updateBot", botId: bot.id, patch: { pinned: !bot.pinned } }),
       { id: "pin" },
     ),
     ...(moveItem ? [moveItem] : []),
-    ...(onSelect && variant === "sidebar" ? [item(<ListChecks size={16} className="text-ink" />, t("sidebar.select.start"), () => onSelect(bot.id), { id: "select" })] : []),
+    ...(onSelect && variant === "sidebar" ? [item(<ListChecks size={16} />, t("sidebar.select.start"), () => onSelect(bot.id), { id: "select" })] : []),
     divider("d-name"),
-    ...(canRename ? [item(<Pencil size={16} className="text-ink" />, t("persona.menu.rename"), () => onRename(bot.id), { id: "rename" })] : []),
+    ...(canRename ? [item(<Pencil size={16} />, t("persona.menu.rename"), () => onRename(bot.id), { id: "rename" })] : []),
     editItem,
     ...(shareItem ? [shareItem] : []),
     ...(primaryItem ? [primaryItem] : []),
     floatItem,
     ...(threadsOwner ? [
       divider("d-threads"),
-      item(<Archive size={16} className="text-ink" />, t("task.archiveAll"), () => { void bulk.archiveAll(threadsOwner); },
+      item(<Archive size={16} />, t("task.archiveAll"), () => { void bulk.archiveAll(threadsOwner); },
         { id: "archive-all-threads", disabled: bulk.count(threadsOwner, "archive") === 0 }),
-      item(<Trash2 size={16} className="text-danger" />, t("task.deleteAll"), () => { void bulk.deleteAll(threadsOwner); },
+      item(<Trash2 size={16} />, t("task.deleteAll"), () => { void bulk.deleteAll(threadsOwner); },
         { id: "delete-all-threads", danger: true, disabled: bulk.count(threadsOwner, "delete") === 0 }),
     ] : []),
     divider("d-place"),
     // Only this person's sidebar: the bot, its owner and everyone else
     // keep it; Archive is the bot-wide action.
-    item(<EyeOff size={16} className="text-ink" />, t("sidebar.hidden.hide"), () => hideFromSidebar("bot", bot.id), { id: "hide" }),
+    item(<EyeOff size={16} />, t("sidebar.hidden.hide"), () => hideFromSidebar("bot", bot.id), { id: "hide" }),
     ...(archiveItem ? [archiveItem] : []),
     ...(canDelete ? [<BotDeleteMenuItem
       key="delete"
@@ -1324,7 +1313,7 @@ export function BotContextMenu({
       aria-label={t("sidebar.bot.actions", { name: bot.name })}
       onKeyDown={navigateThreadMenu}
       style={{ top: shown.y, left: shown.x }}
-      className={cn("fixed z-40 max-h-[calc(100dvh-16px)] w-[228px] min-w-[200px] max-w-[calc(100vw-16px)] overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px]", motion.className)} {...motion.exitProps}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-40 max-h-[calc(100dvh-16px)] overflow-y-auto overscroll-contain", motion.className)} {...motion.exitProps}
     >
       {entries}
     </div>,
@@ -1352,8 +1341,8 @@ export function BotDeleteMenuItem({ deleting, onClick }: { deleting: boolean; on
       onClick={onClick}
       title={deleting ? t("sidebar.bot.deleteCheckingTitle") : undefined}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-danger",
-        deleting ? "cursor-default opacity-40" : "hover:bg-hover",
+        MENU_ROW_DANGER,
+        deleting && "cursor-default",
       )}
     >
       {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
@@ -1541,10 +1530,8 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
       window.removeEventListener("keydown", onKey);
     };
   }, [listMenu]);
-  const listMenuPosition = listMenuMotion.value && {
-    left: Math.max(8, Math.min(listMenuMotion.value.left, window.innerWidth - 228)),
-    top: Math.max(8, Math.min(listMenuMotion.value.top, window.innerHeight - 120)),
-  };
+  const listMenuPosition = listMenuMotion.value && { left: listMenuMotion.value.left, top: listMenuMotion.value.top };
+  useMenuInWindow(listMenuRef, listMenuPosition);
   return (
     <div hidden={hidden} role="group" aria-label={t("task.namedList", { name: ownerName })}
       onContextMenu={(event) => {
@@ -1668,22 +1655,22 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
       {!query && !showAll && !backgroundShown && tasks.length > visibleTasks.length && <button type="button" onClick={() => setShowAll(true)} className="pl-6 pr-3 py-1.5 text-[11px] text-sidebar-ink-secondary hover:text-sidebar-ink">{t("task.showAll", { count: tasks.length })}</button>}
       {children}
       {listMenuMotion.shown && listMenuPosition && createPortal(<div ref={listMenuRef} data-sidebar-thread-list-actions role="menu" aria-label={t("task.namedList", { name: ownerName })}
-        style={listMenuPosition} className={cn("fixed z-50 w-[220px] rounded-lg border border-hairline/50 popover-surface bg-card p-1 shadow-xl", listMenuMotion.className)} {...listMenuMotion.exitProps}
+        style={listMenuPosition} className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-50", listMenuMotion.className)} {...listMenuMotion.exitProps}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setListMenu(null); } else navigateThreadMenu(event); }}>
-        {onNewKind ? onNewKind.choices.map((choice) => <button key={choice.label} type="button" role="menuitem" data-new-thread-kind={choice.confidential ? "confidential" : "ordinary"} onClick={() => { setListMenu(null); onNewKind.create(choice.confidential); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised">{choice.lock ? <Lock size={12} /> : <Plus size={12} />}{t(choice.label)}</button>)
-          : <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNew(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Plus size={12} />{t("task.newShort")}</button>}
-        {onNewInFolder && <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNewInFolder(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderOpen size={12} />{t("task.folder.new")}</button>}
-        <button type="button" role="menuitem" onClick={() => { setListMenu(null); setCreatingProject(true); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderPlus size={12} />{t("folder.new")}</button>
+        {onNewKind ? onNewKind.choices.map((choice) => <button key={choice.label} type="button" role="menuitem" data-new-thread-kind={choice.confidential ? "confidential" : "ordinary"} onClick={() => { setListMenu(null); onNewKind.create(choice.confidential); }} className={MENU_ROW}>{choice.lock ? <Lock size={12} /> : <Plus size={12} />}{t(choice.label)}</button>)
+          : <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNew(); }} className={MENU_ROW}><Plus size={12} />{t("task.newShort")}</button>}
+        {onNewInFolder && <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNewInFolder(); }} className={MENU_ROW}><FolderOpen size={12} />{t("task.folder.new")}</button>}
+        <button type="button" role="menuitem" onClick={() => { setListMenu(null); setCreatingProject(true); }} className={MENU_ROW}><FolderPlus size={12} />{t("folder.new")}</button>
         {background && <button type="button" role="menuitemcheckbox" aria-checked={backgroundShown} data-menu-item="show-background-threads" disabled={!background.length}
           onClick={() => { setListMenu(null); setShowBackground(!backgroundShown); }}
-          className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent">
+          className={MENU_ROW}>
           <Layers size={12} /><span className="min-w-0 flex-1 truncate">{backgroundShown ? t("task.background.hide") : t("task.background.show")}</span>
           <span className="shrink-0 tabular-nums text-ink-secondary">{background.length}</span></button>}
         {bulk && !backgroundShown && <>
-          <div className="mx-1.5 my-1 h-px bg-hairline/50" />
-          <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.archive === 0} onClick={() => { setListMenu(null); bulk.onArchiveAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Archive size={12} />{t("task.archiveAll")}</button>
-          <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.delete === 0} onClick={() => { setListMenu(null); bulk.onDeleteAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-danger hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Trash2 size={12} />{t("task.deleteAll")}</button>
+          <MenuDivider />
+          <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.archive === 0} onClick={() => { setListMenu(null); bulk.onArchiveAll(); }} className={MENU_ROW}><Archive size={12} />{t("task.archiveAll")}</button>
+          <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.delete === 0} onClick={() => { setListMenu(null); bulk.onDeleteAll(); }} className={MENU_ROW_DANGER}><Trash2 size={12} />{t("task.deleteAll")}</button>
         </>}
       </div>, document.body)}
       <div ref={createAnchorRef} className="pointer-events-none absolute left-2 top-2 size-0" aria-hidden="true" />

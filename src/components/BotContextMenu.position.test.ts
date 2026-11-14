@@ -84,7 +84,10 @@ describe("bot actions menu viewport placement", () => {
     layoutEffects();
     expect(element.style).toEqual({ top: "8px", left: "8px" });
     expect(html).toContain("max-h-[calc(100dvh-16px)]");
-    expect(html).toContain("max-w-[calc(100vw-16px)]");
+    // #4183: the menu family's width (MENU_FIT_ROW), capped at the window's
+    // 8px gutters, its 228px floor giving way in a narrower window
+    expect(html).toContain("max-w-[min(400px,calc(100vw-16px))]");
+    expect(html).toContain("min-w-[min(228px,calc(100vw-16px))]");
     expect(html).toContain("overflow-y-auto");
     expect(html).toContain("overscroll-contain");
     expect(html).not.toContain("overflow-hidden");

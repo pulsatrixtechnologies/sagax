@@ -46,6 +46,7 @@ import { t } from "@/lib/i18n";
 import { BAR_REACTIONS } from "../../shared/reactions";
 import { useMenuMotion } from "./MenuMotion";
 import { ReactionPicker } from "./Reactions";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuDivider, MenuGlyph } from "@/components/menu-look";
 
 /** One size and stroke for every icon in the row and its menu. */
 export const HOVER_ICON = { size: 16, strokeWidth: 1.5 } as const;
@@ -54,15 +55,17 @@ export const HOVER_ICON = { size: 16, strokeWidth: 1.5 } as const;
 export const HOVER_ACTION_BUTTON =
   "inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] border-0 bg-transparent p-0 text-ink-secondary transition-colors duration-[120ms] hover:bg-ink/[0.06] active:bg-ink/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-expanded:bg-ink/[0.06] disabled:cursor-not-allowed disabled:opacity-50";
 
-/** The floating surface both popups sit on: elevated, a half-pixel edge and
- * the skin's popover shadow. Fixed in a portal, placed by useAnchoredPopover. */
-const POPUP_SURFACE = "fixed left-0 top-0 z-50 border-[0.5px] border-border bg-elevated popover-surface";
+/** Where both popups sit: fixed in a portal, placed by useAnchoredPopover. */
+const POPUP_PLACE = "fixed left-0 top-0 z-50";
+
+/** The reaction pill's floating surface: elevated, a half-pixel edge and the
+ * skin's popover shadow. The "…" menu takes the menu family's surface
+ * (menu-look.tsx) instead. */
+const POPUP_SURFACE = cn(POPUP_PLACE, "border-[0.5px] border-border bg-elevated popover-surface");
 
 const EMOJI_CELL =
   "inline-flex size-8 shrink-0 items-center justify-center rounded-full border-0 p-0 text-[20px] leading-none text-ink transition-colors duration-[120ms] hover:bg-ink/[0.06] active:bg-ink/10 focus-visible:bg-ink/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
-const MENU_ROW =
-  "flex min-h-[30px] w-full items-center gap-2 rounded-[6px] border-0 bg-transparent px-2 py-1.5 text-start text-[13px] leading-[18px] text-ink hover:bg-ink/[0.06] focus-visible:bg-ink/[0.06] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent";
 
 const CloseMenu = createContext<() => void>(() => {});
 
@@ -105,7 +108,7 @@ export function MessageMenuItem({
       }}
       className={cn(MENU_ROW, active && "text-accent", hidden && "hidden")}
     >
-      <span className={cn("flex size-[18px] shrink-0 items-center justify-center", active ? "text-accent" : "text-ink-secondary")} aria-hidden="true">{icon}</span>
+      <MenuGlyph active={active}>{icon}</MenuGlyph>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {shortcut && <kbd className="shrink-0 font-sans text-[11px] text-ink-tertiary">{shortcut.toUpperCase()}</kbd>}
     </button>
@@ -117,7 +120,7 @@ export function MessageMenuItem({
 function MenuSection({ extra = false, children }: { extra?: boolean; children: ReactNode }) {
   return (
     <div className="hidden flex-col gap-0.5 has-[>[role=menuitem]:not(.hidden)]:flex" data-menu-extra={extra ? "" : undefined} data-menu-view={extra ? undefined : ""}>
-      <div role="separator" className="-mx-1.5 my-1 border-t-[0.5px] border-border" />
+      <MenuDivider />
       {children}
     </div>
   );
@@ -391,8 +394,10 @@ export function MessageHoverActions({
             data-message-menu
             onKeyDown={(event) => onPopupKey(event, menuRef, moreRef)}
             className={cn(
-              POPUP_SURFACE,
-              "flex w-max min-w-[200px] max-w-[min(18rem,calc(100vw-2rem))] flex-col gap-0.5 overflow-y-auto rounded-[12px] p-1.5",
+              POPUP_PLACE,
+              MENU_SURFACE,
+              MENU_FIT_ROW,
+              "overflow-y-auto",
               menuMotion.className,
             )}
             {...menuMotion.exitProps}
@@ -400,7 +405,7 @@ export function MessageHoverActions({
             {react && (
               <>
                 <QuickReactionRow mine={react.mine} onPick={(emoji) => pick(emoji, moreRef)} onMore={() => setPopup("picker")} />
-                <div role="separator" className="-mx-1.5 my-1 border-t-[0.5px] border-border" />
+                <MenuDivider />
               </>
             )}
             {onReply && <MessageMenuItem label={t("chat.reply")} icon={replyIcon} onSelect={onReply} />}

@@ -21,6 +21,7 @@ import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
+import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
 
 /** What an entry brings, in one short line: "app + 2 connectors",
  * "plugin (claude-plugins-official) · 3 skills", "1 connector". */
@@ -140,11 +141,11 @@ export function AddMenu({ actions }: { actions: AddAction[] }) {
         <Plus size={14} /> {t("connectApps.add")}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-10 z-20 min-w-52 rounded-xl border border-border bg-raised p-1 shadow-lg">
+        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-10 z-20 min-w-52")}>
           {actions.map((action) => (
             <button key={action.id} type="button" role="menuitem" data-plugins-add-action={action.id} disabled={action.disabled}
               onClick={() => { setOpen(false); action.onPick(); }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[13px] text-ink hover:bg-hover disabled:opacity-40">
+              className={MENU_ROW}>
               {action.icon}
               {action.label}
             </button>
@@ -379,7 +380,7 @@ export function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: {
         {updateWaiting && actions.update && <span data-entry-update-dot className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-8 z-20 min-w-44 rounded-xl border border-border bg-raised p-1 shadow-lg">
+        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-44")}>
           {items.map((item) => (
             <button
               key={item.id}
@@ -387,7 +388,7 @@ export function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: {
               role="menuitem"
               data-entry-action={item.id}
               onClick={() => { setOpen(false); item.run(); }}
-              className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[13px] hover:bg-hover", item.danger ? "text-danger" : "text-ink")}
+              className={item.danger ? MENU_ROW_DANGER : MENU_ROW}
             >
               {item.icon}
               {item.label}

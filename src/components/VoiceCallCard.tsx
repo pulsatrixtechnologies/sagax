@@ -3,11 +3,12 @@
 // on the first real person line of the call (one choice: up or down).
 import { copyText } from "@/lib/copy-text";
 import { useEffect, useState } from "react";
-import { AudioLines, MoreHorizontal, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { AudioLines, Check, Copy, MoreHorizontal, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, useStore, type Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { myReactions, reactionSelfIds } from "@/lib/reactions";
 import { cn } from "@/lib/cn";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
 import { useLiveCall } from "@/lib/voice-mode/live-call-store";
 import { useVoiceCallClock } from "@/lib/voice-call-clock";
 import {
@@ -178,9 +179,10 @@ export function VoiceCallCard({
           >
             <MoreHorizontal size={16} />
           </summary>
-          <div className="absolute left-0 top-full z-20 mt-1 w-max rounded-lg border border-hairline/50 bg-card p-1 shadow-lg">
-            <button type="button" onClick={copy} className="block w-full rounded px-2 py-1 text-left text-[12.5px] text-ink hover:bg-raised">
-              {copied ? t("chat.voiceCall.copied") : t("chat.voiceCall.copy")}
+          <div role="menu" aria-label={t("chat.voiceCall.menu")} className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute left-0 top-full z-20 mt-1")}>
+            <button type="button" role="menuitem" onClick={copy} className={menuRow()}>
+              <MenuGlyph>{copied ? <Check /> : <Copy />}</MenuGlyph>
+              <span className="min-w-0 flex-1 truncate">{copied ? t("chat.voiceCall.copied") : t("chat.voiceCall.copy")}</span>
             </button>
           </div>
         </details>

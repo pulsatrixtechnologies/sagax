@@ -14,8 +14,9 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { navigateThreadMenu } from "../BotProjects";
+import { MENU_ROW, MENU_SURFACE, MenuDivider, menuRow, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
 
-export const ROUTINE_MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
+export const ROUTINE_MENU_ITEM = MENU_ROW;
 
 /** The run of this routine still in flight (queued, running or waiting). */
 export function routineLiveRun(runs: readonly RoutineRun[], routineId: string): RoutineRun | undefined {
@@ -73,8 +74,8 @@ export function RoutineRowMenuItems({ routine, actions }: { routine: Routine; ac
     ...(actions.onDelete ? [{ key: "delete", label: t("common.delete"), icon: <Trash2 size={14} />, onSelect: actions.onDelete, group: 2, danger: true }] : []),
   ];
   return <>{items.map((item, index) => <Fragment key={item.key}>
-    {index > 0 && items[index - 1]!.group !== item.group && <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />}
-    <button type="button" role="menuitem" autoFocus={index === 0} data-routine-action={item.key} className={cn(ROUTINE_MENU_ITEM, item.danger && "text-danger")} onClick={item.onSelect}>
+    {index > 0 && items[index - 1]!.group !== item.group && <MenuDivider />}
+    <button type="button" role="menuitem" autoFocus={index === 0} data-routine-action={item.key} className={menuRow(item.danger ? "danger" : "idle")} onClick={item.onSelect}>
       <span aria-hidden="true" className="flex size-3.5 items-center justify-center">{item.icon}</span>{item.label}
     </button>
   </Fragment>)}</>;
@@ -86,10 +87,11 @@ export function RoutineRowMenuItems({ routine, actions }: { routine: Routine; ac
 export function RoutineMenuPortal({ x, y, label, kind, onClose, children }: { x: number; y: number; label: string; kind: string; onClose: (focus?: boolean) => void; children: ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null);
   usePopoverDismiss(true, menuRef, () => onClose(false));
+  useMenuInWindow(menuRef, { left: x, top: y });
   return createPortal(
     <div ref={menuRef} role="menu" data-routine-folder-menu={kind} aria-label={label}
-      style={{ left: Math.max(8, Math.min(x, window.innerWidth - 248)), top: Math.max(8, Math.min(y, window.innerHeight - 320)) }}
-      className="popover-surface fixed z-40 flex max-h-[min(420px,80vh)] w-[240px] flex-col gap-0.5 overflow-y-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] text-ink shadow-lg"
+      style={{ left: x, top: y }}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-40 max-h-[min(420px,80vh)] overflow-y-auto")}
       onContextMenu={(event) => event.preventDefault()}
       onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); onClose(); return; }

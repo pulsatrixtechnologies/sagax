@@ -216,14 +216,14 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   // ([HUMAIN], needs_human, a question) always posts, as a card with them.
   const attentionLevel = run.status === "completed" && !run.quiet ? routineAttentionLevel(host, run) : "normal";
   // #2694: "never" (or votes under the mute line) on these cards: none at all.
-  const attentionFound = run.status === "completed" && !run.quiet && attentionLevel !== "muted" ? host.personAttention(host.routineFullReport(run) ?? run.output) : undefined;
+  let attentionFound = run.status === "completed" && !run.quiet && attentionLevel !== "muted" ? host.personAttention(host.routineFullReport(run) ?? run.output) : undefined;
   // Thumbs-down or "less": the card still comes, without ringing or unread.
   const attentionRings = attentionLevel === "normal";
   // #3581: what the run posts is the shared rule (routineRunReportable)
   const reportableRun = reportFacts(host, run);
-  const reportable = host.routineRunReportable({ ...reportableRun, attention: Boolean(attentionFound) });
+  let reportable = host.routineRunReportable({ ...reportableRun, attention: Boolean(attentionFound) });
   // A card posted only for quieted attention items: in the chat, never unread.
-  const reportableUnread = attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
+  let reportableUnread = attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
   // #3990: a completed result of a routine the person set to post each one
   // (a clock routine that runs once a day or less often, a wake they chose)
   const postsResult = run.status === "completed" && !run.quiet && !run.problems && reportableRun.postResults;
@@ -274,6 +274,26 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   }
   const source = target;
   const sourceThreadId = source.threadId;
+  // #4233: the items only the person can do of a completed run (a routine's
+  // or a wake's) are keyed cards in the bot's conversations with the person,
+  // one per item: the same item of the next run replaces its card, an item
+  // this run no longer lists is retired (a run that lists none retires them
+  // all). Only what no card could carry stays on the run's attention card.
+  // A person who asked for these less (quiet) or never (muted) keeps what
+  // their feedback gave.
+  if (run.status === "completed" && attentionLevel === "normal" && run.target !== "room-goal" && host.personItemCards) {
+    const human = attentionFound?.kind === "human" ? attentionFound : undefined;
+    const items = (human?.items ?? []).map((item: any) => {
+      const url = item.ticketId && run.threadId ? host.attentionTicketUrl?.(run.threadId, item.ticketId) : undefined;
+      return url ? { ...item, ticketUrl: url } : item;
+    });
+    const left = host.personItemCards(run, sourceThreadId, items);
+    if (left && human) {
+      attentionFound = left.length ? { ...human, items: left } : undefined;
+      reportable = host.routineRunReportable({ ...reportableRun, attention: Boolean(attentionFound) });
+      reportableUnread = reportable;
+    }
+  }
   const existing = host.store.messagesFor(sourceThreadId).find(
     (message) => message.kind === "routine.run" && message.routineRun?.runId === run.id,
   );

@@ -23,7 +23,7 @@
 // resumed the bot after the run closed) is read by nobody. The bot's answer
 // there is mirrored into its conversation, linked to the run's task.
 
-import { personAttention, personAttentionText, type PersonAttention, type PersonAttentionCard, type RunStatusNote } from "../../shared/person-attention.ts";
+import { personAttention, personAttentionText, type PersonAttention, type PersonAttentionCard, type PersonAttentionItem, type RunStatusNote } from "../../shared/person-attention.ts";
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
 import { withoutRoutineMarkers, withRunMarkers } from "../../shared/routine-result.ts";
 import { routineRowLogLine } from "../routines/routine-report.ts";
@@ -77,6 +77,14 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
   /** #3503: whether two bots belong to the same person. What a bot says in
    * a thread another bot of the same person opened stays between them. */
   sameOwner?(botId: string, otherBotId: string): boolean;
+  /** #4233: the items only the person can do of a routine run or a wake,
+   * each as its keyed card in the bot's conversations with the person
+   * (person-item-cards.ts syncPersonItemCards). The items no card could
+   * carry, which stay for the attention card; undefined when this run raises
+   * no card (a later run of its routine already listed its own). The relay
+   * passes retire false: a late answer is not a later run, so the cards of
+   * the run's items it does not mention stay open. */
+  itemCards?(runThreadId: string, target: string, items: readonly PersonAttentionItem[], options: { retire: boolean }): PersonAttentionItem[] | undefined;
   now?(): number;
 }
 
@@ -190,7 +198,7 @@ export function turnAsk(messages: readonly WireMessage[], turnId: string | undef
 
 /** What happened (for tests and the log): the card's thread, or why not. */
 export type AttentionRelayOutcome =
-  | { posted: true; threadId: string; card: PersonAttentionCard; onRunCard?: true }
+  | { posted: true; threadId: string; card: PersonAttentionCard; onRunCard?: true; keyed?: true }
   | { posted: false; reason: "failed" | "no-task" | "confidential" | "agent" | "no-signal" | "run-reports" | "own-conversation" | "no-conversation" | "already" | "muted" | "for-opener" };
 
 export function relayPersonAttention<B extends AttentionBot>(
@@ -220,7 +228,7 @@ export function relayPersonAttention<B extends AttentionBot>(
   if (target === threadId) return { posted: false, reason: "own-conversation" };
   const rows = deps.messages(target);
   if (rows.some((message) => message.attention?.sourceMessageId === last.id)) return { posted: false, reason: "already" };
-  const card = attentionCard(bot, threadId, task, last.id, found, run, deps);
+  let card = attentionCard(bot, threadId, task, last.id, found, run, deps);
   // 2026-11-05 (review: the same items twice): a run whose card is already
   // in the person's chat gets the items on that card, never a second card.
   // It rings once: only when the card had none yet.
@@ -229,6 +237,17 @@ export function relayPersonAttention<B extends AttentionBot>(
   const level = deps.feedback?.(bot.id, runCard?.routineRun?.wakeTopic ?? "attention") ?? "normal";
   if (level === "muted") return { posted: false, reason: "muted" };
   const ring = level === "normal";
+  // #4233: a run's or a wake's items are keyed cards (one per item, the same
+  // item of the next run replaces its card); only what no card could carry
+  // stays on the attention card. A late answer only raises or replaces: it
+  // retires nothing, since only the run's own end (syncRoutineRunToSource)
+  // speaks for the whole list. A person who asked for these less keeps the
+  // quiet attention card.
+  if (found.kind === "human" && run && ring && deps.itemCards) {
+    const left = deps.itemCards(threadId, target, card.items, { retire: false });
+    if (left && !left.length) return { posted: true, threadId: target, card, keyed: true };
+    if (left) card = { ...card, items: left };
+  }
   if (runCard) {
     if (runCard.attention) return { posted: false, reason: "already" };
     deps.patch(target, runCard.id, { attention: card });

@@ -9,7 +9,7 @@ type Row = { id: string; kind: string; text?: string; routineRun?: { runId: stri
 
 /** #2694 review: the attention a finished routine puts on its own card reads
  * the person's feedback (thumbs-down, "less", "never") like a relayed card. */
-function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown> = {}, guest = false) {
+function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown> = {}, guest = false, extra: Record<string, unknown> = {}) {
   const rows: Row[] = [];
   const asked: string[] = [];
   const unread: string[] = [];
@@ -43,11 +43,56 @@ function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown>
     attentionTicketUrl: undefined,
     deliverableNotification: (kind: string) => kind,
     notify: (kind: string) => { rang.push(kind); },
+    ...extra,
   };
   const sync = createSyncRoutineRunToSource(() => host);
   const theRun = { id: "run-1", botId: bot.id, routineName: "Hourly pass", status: "completed", target: "bot", threadId: "run", output: "- [HUMAIN] **100201** : decide.", ...run };
   return { rows, asked, unread, rang, promoted, sync: () => sync(theRun) };
 }
+
+describe("#4233 (Q4): a completed run's [HUMAIN] items go to their keyed cards", () => {
+  const human = (text: string) => text.includes("[HUMAIN]") ? { kind: "human", items: [{ text: "decide", ticketId: 100201 }, { text: "call back" }] } : undefined;
+  function keyed(level: "normal" | "quiet" | "muted", run: Record<string, unknown> = {}, left: (items: unknown[]) => unknown[] | undefined = () => []) {
+    const calls: Array<{ threadId: string; items: unknown[] }> = [];
+    const w = world(level, run, false, {
+      personAttention: human,
+      attentionTicketUrl: (_threadId: string, id: number) => `https://tickets.example.com/${id}`,
+      personItemCards: (_run: unknown, threadId: string, items: unknown[]) => { calls.push({ threadId, items }); return left(items); },
+    });
+    return { ...w, calls };
+  }
+
+  it("each item is its card in the person's conversation: no list card, no needs-you ring", () => {
+    const w = keyed("normal");
+    w.sync();
+    expect(w.calls).toEqual([{ threadId: "main", items: [{ text: "decide", ticketId: 100201, ticketUrl: "https://tickets.example.com/100201" }, { text: "call back" }] }]);
+    expect(w.rows.some((row) => row.attention)).toBe(false);
+    expect(w.rang).toEqual([]);
+  });
+
+  it("a run that lists no item retires the routine's item cards", () => {
+    const w = keyed("normal", { output: "All clear." });
+    w.sync();
+    expect(w.calls).toEqual([{ threadId: "main", items: [] }]);
+  });
+
+  it("an item no card could carry stays on the run's attention card", () => {
+    const w = keyed("normal", {}, (items) => items.slice(1));
+    w.sync();
+    expect(w.rows[0]?.attention).toBeTruthy();
+    expect(w.rang).toEqual(["needs-you"]);
+  });
+
+  it("less or never keeps what the person's feedback gave", () => {
+    const quiet = keyed("quiet");
+    quiet.sync();
+    expect(quiet.calls).toEqual([]);
+    expect(quiet.rows[0]?.attention).toBeTruthy();
+    const muted = keyed("muted");
+    muted.sync();
+    expect(muted.calls).toEqual([]);
+  });
+});
 
 describe("syncRoutineRunToSource and the person's feedback (#2694)", () => {
   it("rings and marks unread when nothing was said", () => {

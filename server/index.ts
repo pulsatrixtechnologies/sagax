@@ -149,7 +149,8 @@ import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions
 import { cwRecordLink, cwSite } from "../shared/cw-widgets/links.ts";
 import { BOT_QUESTION_SWEEP } from "./turns/bot-to-bot.ts";
 import { attentionCard, mirrorBackgroundReply, mirrorLateRunReply, openCardIn, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
-import { personAttention } from "../shared/person-attention.ts";
+import { personAttention, type PersonAttentionItem } from "../shared/person-attention.ts";
+import { answeredItemKeys, releasedItemCards, syncPersonItemCards } from "./turns/person-item-cards.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { skillEditorApiPath } from "../src/lib/skills-ui.ts";
@@ -3378,6 +3379,7 @@ bindLeafHost({
   get attachmentIsTheirs() { return attachmentIsTheirs; },
   get attachmentsInText() { return attachmentsInText; },
   get attentionCard() { return attentionCard; },
+  get personItemCards() { return personItemCards; },
   get attributeEntries() { return attributeEntries; },
   get attributionFragments() { return attributionFragments; },
   get audienceEquals() { return audienceEquals; },
@@ -16494,26 +16496,69 @@ function noteAskReplaced(threadId: string): void {
   if (askReplacedAt.size > 1_000) askReplacedAt.delete(askReplacedAt.keys().next().value!);
 }
 
-/** #4205: the ask_choice keys of a card `owning` raises in `cardThread` for
- * a call made in `threadId`: a key spans this bot's conversations with the
- * same person (a routine's every run), never another person's, and in a
- * room only the room itself. */
+/** #4205: the conversations an ask_choice key of `owning` spans from
+ * `threadId` (its card drawn in `cardThread`): the bot's conversations with
+ * the same person, never another person's; a room's card only in the room. */
+function askKeyScope(owning: { id: string; ownerUserId?: unknown }, threadId: string, cardThread: string): (cardThreadId: string) => boolean {
+  const group = Boolean(store.groupByThread(cardThread));
+  const botOwner = effectiveBotOwner(owning);
+  const whose = pageOwnerFor(store.taskByThread(owning.id, threadId), botOwner);
+  return (cardThreadId) => {
+    if (cardThreadId === cardThread) return true;
+    if (group) return false;
+    const task = store.taskByThread(owning.id, cardThreadId);
+    return Boolean(task) && pageOwnerFor(task, botOwner) === whose;
+  };
+}
+
+/** #4205: the ask_choice keys of `owning` from `threadId` (chat-widgets.ts
+ * createAgentCard askKeys), through the one key index. */
 function askKeysFor(owning: { id: string; ownerUserId?: unknown }, threadId: string, cardThread: string) {
   return {
-    find: (key: string, accepts: (message: Message) => boolean) => {
-      const group = Boolean(store.groupByThread(cardThread));
-      const botOwner = effectiveBotOwner(owning);
-      const whose = pageOwnerFor(store.taskByThread(owning.id, threadId), botOwner);
-      return askKeyIndex.find(key, (cardThreadId) => {
-        if (cardThreadId === cardThread) return true;
-        if (group) return false;
-        const task = store.taskByThread(owning.id, cardThreadId);
-        return Boolean(task) && pageOwnerFor(task, botOwner) === whose;
-      }, accepts);
-    },
+    find: (key: string, accepts: (message: Message) => boolean) => askKeyIndex.find(key, askKeyScope(owning, threadId, cardThread), accepts),
     remember: (key: string, cardThreadId: string, messageId: string) => askKeyIndex.remember(key, cardThreadId, messageId),
     retire: (cardThreadId: string, message: Message) => { retireThreadQuestions(cardThreadId, { messageId: message.id }); },
   };
+}
+
+/** #4233: a routine run's or a wake's items only the person can do, each as
+ * its keyed card in `threadId` (the bot's conversation with the person),
+ * raised through the bot's own ask_choice path (createAgentCard) as a
+ * question card that holds nothing (server/turns/person-item-cards.ts).
+ * `retire: false` for a run's late answer (raise or replace only). The
+ * items no card could carry; undefined when a later finished run of the
+ * same routine already speaks for its list. */
+function personItemCards(run: Pick<RoutineRun, "id" | "routineId" | "routineName" | "botId" | "runAs" | "finishedAt" | "scheduledFor">, threadId: string, items: readonly PersonAttentionItem[], options: { retire?: boolean } = {}): PersonAttentionItem[] | undefined {
+  const bot = store.bot(run.botId);
+  if (!bot || bot.hidden || !run.routineId) return undefined;
+  const at = (one: Pick<RoutineRun, "finishedAt" | "scheduledFor">) => one.finishedAt ?? one.scheduledFor ?? 0;
+  if (routines?.runsOfRoutineAsStored(run.routineId).some((other) => other.id !== run.id && other.status === "completed" && at(other) > at(run))) return undefined;
+  const group = store.groupByThread(threadId);
+  const room = group && !group.dm && !group.peopleDm ? group : null;
+  const keys = askKeysFor(bot, threadId, threadId);
+  const own = (message: Message) => !message.from || message.from.botId === bot.id;
+  const person = run.runAs ?? attentionPerson(bot, threadId);
+  const personLanguage = languageOfPerson(person);
+  return syncPersonItemCards(run, items, {
+    pending: (key) => {
+      const card = keys.find(key, own)?.message.card;
+      return card ? { question: card.subtitle ?? "", options: card.options ?? [] } : null;
+    },
+    pendingKeys: (prefix) => askKeyIndex.keysWith(prefix, askKeyScope(bot, threadId, threadId), own),
+    // the item cards are raised in `threadId`: the person's answers are there
+    answeredKeys: (prefix) => answeredItemKeys(store.messagesFor(threadId), prefix, own),
+    release: (key) => {
+      for (const { messageId, card } of releasedItemCards(store.messagesFor(threadId), key, own)) store.patchMessage(threadId, messageId, { card });
+    },
+    ask: (input) => createAgentCard({
+      store, bot, threadId, input,
+      approvalLevel: sourceApprovalMode(bot.id, threadId),
+      personLanguage,
+      raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, room ? { ...choice, askerBotId: bot.id } : choice, "output"),
+      askKeys: keys,
+      ...(room ? { room: { people: roomPeopleOf(room), name: room.name, fromRun: true }, notifyAddressee: notifyRoomAskAddressee } : {}),
+    }).ok,
+  }, personLanguageCode(personLanguage), options).left;
 }
 
 /** The bot's ask_choice as a question request: the same path as an engine's
@@ -18418,6 +18463,11 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   routineRun: (threadId) => {
     const run = routines?.runForThread(threadId);
     return run && run.target === "bot" ? { id: run.id, routineName: run.routineName, status: run.status } : null;
+  },
+  // #4233: a run's or a wake's items as keyed cards
+  itemCards: (runThreadId, target, items, options) => {
+    const run = routines?.runForThread(runThreadId);
+    return run ? personItemCards(run, target, items, options) : undefined;
   },
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),

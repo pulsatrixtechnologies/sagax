@@ -1449,9 +1449,9 @@ struct ConnectAppsManage: View {
         if brings.connectors > 0 { counts.append(brings.connectors == 1 ? String(localized: "1 connector") : String(localized: "\(brings.connectors) connectors")) }
         if brings.skills > 0 { counts.append(brings.skills == 1 ? String(localized: "1 skill") : String(localized: "\(brings.skills) skills")) }
         if let plugin = brings.plugin {
-            return ([String(localized: "plugin (\(plugin))")] + (brings.app ? ["app"] : []) + counts).joined(separator: " · ")
+            return ([String(localized: "plugin (\(plugin))")] + (brings.app ? [String(localized: "app")] : []) + counts).joined(separator: " · ")
         }
-        if brings.app { return (["app"] + counts).joined(separator: " + ") }
+        if brings.app { return ([String(localized: "app")] + counts).joined(separator: " + ") }
         return counts.isEmpty ? String(localized: "1 connector") : counts.joined(separator: " · ")
     }
 

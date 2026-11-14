@@ -6074,7 +6074,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un jeton d'accès personnel (fin ou classique) de github.com/settings/tokens. Il est chiffré et réservé à vous."
+            "value": "Un jeton d'accès personnel (fin ou classique) de github.com/settings/tokens. Il est chiffré et réservé à toi."
           }
         },
         "pt-BR": {
@@ -6474,7 +6474,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un serveur distant (adresse https) ou une commande qui s'exécute dans votre environnement serveur, jamais sur le serveur Sagax."
+            "value": "Un serveur distant (adresse https) ou une commande qui s'exécute dans ton environnement serveur, jamais sur le serveur Sagax."
           }
         },
         "pt-BR": {
@@ -7796,7 +7796,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajoutez une marketplace de plugins Claude Code : un dépôt GitHub (owner/repo, une branche au besoin), une adresse git https ou l'adresse de son marketplace.json."
+            "value": "Ajoute une marketplace de plugins Claude Code : un dépôt GitHub (owner/repo, une branche au besoin), une adresse git https ou l'adresse de son marketplace.json."
           }
         }
       }
@@ -9560,7 +9560,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Après l'ajout, cliquez sur Se connecter : la page du fournisseur s'ouvre et revient sur ce serveur."
+            "value": "Après l'ajout, clique sur Se connecter : la page du fournisseur s'ouvre et revient sur ce serveur."
           }
         },
         "pt-BR": {
@@ -12618,7 +12618,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Des apps qui utilisent ce Mac directement. Elles restent sur votre ordinateur et ne tournent jamais sur une machine partagée ou dans le nuage."
+            "value": "Des apps qui utilisent ce Mac directement. Elles restent sur ton ordinateur et ne tournent jamais sur une machine partagée ou dans le nuage."
           }
         }
       }
@@ -15612,7 +15612,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Os bots rodam em ferramentas de IA instaladas neste computador: veja o que encontramos."
+            "value": "Os bots rodam em ferramentas de IA instaladas neste computador — veja o que encontramos."
           }
         }
       }
@@ -19082,7 +19082,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choisissez ce que Sagax peut faire avec Messages sur ce Mac. macOS vous demande de confirmer chaque permission, et vous pouvez changer ça en tout temps."
+            "value": "Choisis ce que Sagax peut faire avec Messages sur ce Mac. macOS te demande de confirmer chaque permission, et tu peux changer ça en tout temps."
           }
         }
       }
@@ -19756,7 +19756,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clonez des dépôts privés, utilisez gh, le serveur MCP de GitHub et les marketplaces de plugins privées en votre nom."
+            "value": "Clone des dépôts privés, utilise gh, le serveur MCP de GitHub et les marketplaces de plugins privées en ton nom."
           }
         },
         "pt-BR": {
@@ -21786,7 +21786,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connectez GitHub avec un lien et un code : Plugins > Sources."
+            "value": "Connecte GitHub avec un lien et un code : Plugins > Sources."
           }
         },
         "pt-BR": {
@@ -22658,7 +22658,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connecteurs de votre compte %@"
+            "value": "Connecteurs de ton compte %@"
           }
         }
       }
@@ -28962,7 +28962,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "A pasta de cada bot, ou um caminho absoluto"
+            "value": "A pasta de cada bot — ou um caminho absoluto"
           }
         }
       }
@@ -40078,7 +40078,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Elle s'exécute dans votre propre environnement serveur quand un de vos tours l'utilise (npx, uvx ou l'outil requis doivent y être disponibles)."
+            "value": "Elle s'exécute dans ton propre environnement serveur quand un de tes tours l'utilise (npx, uvx ou l'outil requis doivent y être disponibles)."
           }
         },
         "pt-BR": {
@@ -40206,7 +40206,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ses serveurs MCP et ses compétences sont offerts à tous les bots. Un serveur qui lance une commande commence désactivé : testez-le, puis activez-le. Les compétences restent désactivées tant que vous ne les avez pas lues."
+            "value": "Ses serveurs MCP et ses compétences sont offerts à tous les bots. Un serveur qui lance une commande commence désactivé : teste-le, puis active-le. Les compétences restent désactivées tant que tu ne les as pas lues."
           }
         },
         "pt-BR": {
@@ -42348,7 +42348,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permet à vos bots de rattraper des conversations, de retrouver un ancien message ou de regarder une photo reçue. Demande l'accès complet au disque pour que Sagax lise chat.db sur ce Mac."
+            "value": "Permet à tes bots de rattraper des conversations, de retrouver un ancien message ou de regarder une photo reçue. Demande l'accès complet au disque pour que Sagax lise chat.db sur ce Mac."
           }
         }
       }
@@ -42364,7 +42364,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permet à vos bots de répondre ou d'écrire à quelqu'un quand on le leur demande. Chaque envoi suit votre niveau d'approbation et les destinataires permis du bot. Demande l'automatisation de Messages."
+            "value": "Permet à tes bots de répondre ou d'écrire à quelqu'un quand on le leur demande. Chaque envoi suit ton niveau d'approbation et les destinataires permis du bot. Demande l'automatisation de Messages."
           }
         }
       }
@@ -43440,7 +43440,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chargement de vos connexions…"
+            "value": "Chargement de tes connexions…"
           }
         },
         "pt-BR": {
@@ -45574,7 +45574,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mensagem para %@: %@"
+            "value": "Mensagem para %@ — %@"
           }
         }
       }
@@ -45786,7 +45786,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La configuration de Messages est seulement sur le Mac où Sagax tourne pour vous."
+            "value": "La configuration de Messages est seulement sur le Mac où Sagax tourne pour toi."
           }
         }
       }
@@ -45818,7 +45818,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Messages reste dans votre app Mac. Un serveur d'organisation n'ouvre jamais votre chat.db."
+            "value": "Messages reste dans ton app Mac. Un serveur d'organisation n'ouvre jamais ton chat.db."
           }
         }
       }
@@ -55187,7 +55187,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Désactivé tant que vous ne l'activez pas"
+            "value": "Désactivé tant que tu ne l'actives pas"
           }
         }
       }
@@ -55203,7 +55203,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Désactivé tant que vous ne l'activez pas. Après ça, vos bots ont read_messages et send_message seulement sur ce Mac."
+            "value": "Désactivé tant que tu ne l'actives pas. Après ça, tes bots ont read_messages et send_message seulement sur ce Mac."
           }
         }
       }
@@ -55665,7 +55665,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activé pour vos bots sur ce Mac"
+            "value": "Activé pour tes bots sur ce Mac"
           }
         }
       }
@@ -56939,7 +56939,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ouvrez Sagax sur votre Mac, puis allez dans Connecter des apps, Mac, Messages."
+            "value": "Ouvre Sagax sur ton Mac, puis va dans Connecter des apps, Mac, Messages."
           }
         }
       }
@@ -59415,7 +59415,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pages qu'un bot a proposées et que vous avez publiées"
+            "value": "Pages qu'un bot a proposées et que tu as publiées"
           }
         }
       }
@@ -64589,7 +64589,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lisez-la avant de l'activer : une fois activée, les bots auxquels elle est assignée la suivent."
+            "value": "Lis-la avant de l'activer : une fois activée, les bots auxquels elle est assignée la suivent."
           }
         },
         "pt-BR": {
@@ -71507,7 +71507,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scanner une carte pour votre ordinateur"
+            "value": "Scanner une carte pour ton ordinateur"
           }
         }
       }
@@ -73443,7 +73443,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les envois passent par l'app Messages sur ce Mac. Activez Messages sous Sagax dans Confidentialité et sécurité, Automatisation."
+            "value": "Les envois passent par l'app Messages sur ce Mac. Active Messages sous Sagax dans Confidentialité et sécurité, Automatisation."
           }
         }
       }
@@ -73513,7 +73513,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les envois suivent encore vos règles d'approbation et les destinataires permis de chaque bot. Vous pouvez désactiver ça en tout temps."
+            "value": "Les envois suivent encore tes règles d'approbation et les destinataires permis de chaque bot. Tu peux désactiver ça en tout temps."
           }
         }
       }
@@ -74001,7 +74001,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Configurer Messages sur votre Mac"
+            "value": "Configurer Messages sur ton Mac"
           }
         }
       }
@@ -74027,7 +74027,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "À configurer dans l'app Sagax sur votre Mac"
+            "value": "À configurer dans l'app Sagax sur ton Mac"
           }
         }
       }
@@ -90746,7 +90746,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Entrez ce code sur GitHub pour connecter votre compte :"
+            "value": "Entre ce code sur GitHub pour connecter ton compte :"
           }
         },
         "pt-BR": {
@@ -98233,7 +98233,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos serveurs MCP"
+            "value": "Tes serveurs MCP"
           }
         },
         "pt-BR": {
@@ -98255,7 +98255,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre Mac vous demande de confirmer chaque permission. Ouvrez Réglages système, accordez l'accès à Sagax, puis revenez ici."
+            "value": "Ton Mac te demande de confirmer chaque permission. Ouvre Réglages système, accorde l'accès à Sagax, puis reviens ici."
           }
         }
       }
@@ -98569,7 +98569,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos robots l'utilisent pour le serveur MCP de GitHub et les dépôts privés."
+            "value": "Tes bots l'utilisent pour le serveur MCP de GitHub et les dépôts privés."
           }
         },
         "pt-BR": {
@@ -98601,7 +98601,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le gh et le git de vos robots l'utilisent dans votre environnement serveur."
+            "value": "Le gh et le git de tes bots l'utilisent dans ton environnement serveur."
           }
         },
         "pt-BR": {
@@ -99174,7 +99174,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos propres comptes et serveurs MCP. Seules vos conversations et vos routines les utilisent; aucun tour d'une autre personne ne les reçoit."
+            "value": "Tes propres comptes et serveurs MCP. Seules tes conversations et tes routines les utilisent ; aucun tour d'une autre personne ne les reçoit."
           }
         },
         "pt-BR": {
@@ -99266,7 +99266,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos comptes de fournisseurs servent tous vos bots, quelle que soit la portée d'installation."
+            "value": "Tes comptes de fournisseurs servent tous tes bots, quelle que soit la portée d'installation."
           }
         }
       }
@@ -103494,7 +103494,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "equivalente: está na sua assinatura, não é cobrado"
+            "value": "equivalente — está na sua assinatura, não é cobrado"
           }
         }
       }
@@ -117764,6 +117764,67 @@
           "stringUnit": {
             "state": "translated",
             "value": "Afficher l'adresse complète"
+          }
+        }
+      }
+    },
+    "Alarms": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alarmes"
+          }
+        }
+      }
+    },
+    "iOS does not let an app read or send iMessage. That connection stays in the Sagax app on your Mac.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS ne permet pas à une app de lire ou d'envoyer des iMessage. Cette connexion reste dans l'app Sagax sur ton Mac."
+          }
+        }
+      }
+    },
+    "This iPhone": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet iPhone"
+          }
+        }
+      }
+    },
+    "Turn on what your bots may ask this iPhone for. You still approve each request in the app.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active ce que tes bots peuvent demander à cet iPhone. Tu approuves quand même chaque demande dans l'app."
+          }
+        }
+      }
+    },
+    "app": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "app"
+          }
+        }
+      }
+    },
+    "Home": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maison"
           }
         }
       }

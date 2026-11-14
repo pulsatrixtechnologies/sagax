@@ -511,6 +511,11 @@ enum MacMessagesCopy {
 /// offer a bot. "This Mac" stays in the Mac app. iOS does not let an app
 /// read or send iMessage, so Messages is explained and not a switch.
 struct PhoneIntegrationsSection: View {
+    /// In the iPad desktop window (a plain stack, no list rows) the tools are
+    /// the window's settings rows: a list Toggle there has no row to sit in
+    /// and the switches pile up (#4213).
+    @Environment(\.capabilitiesDesktop) private var desktop
+    @Environment(\.desktopTheme) private var theme
     @State private var disabled = PhoneToolCenter.disabled
 
     private var tools: [PhoneTool] {
@@ -521,6 +526,63 @@ struct PhoneIntegrationsSection: View {
     }
 
     var body: some View {
+        if desktop { desktopBody } else { phoneBody }
+    }
+
+    /// The window's settings group (`SettingsGroup`): the Messages line, then
+    /// one compact row per tool, its glyph and name at the left and the
+    /// window's switch at the right, the note under the card.
+    private var desktopBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            DesktopSettingsGroup(Text("This iPhone"), identifier: "connect-apps-phone") {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(width: 18, height: 18)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        DesktopText(Text("Messages"))
+                        DesktopText(Text("iOS does not let an app read or send iMessage. That connection stays in the Sagax app on your Mac."),
+                                    size: 12, line: 16, color: \.inkSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("connect-apps-phone-messages")
+                ForEach(tools) { tool in
+                    let on = !disabled.contains(tool.rawValue)
+                    HStack(spacing: 20) {
+                        HStack(spacing: 10) {
+                            Image(systemName: PhoneToolWords.symbol(tool))
+                                .font(.system(size: 13))
+                                .foregroundStyle(theme.inkSecondary)
+                                .frame(width: 18, height: 18)
+                                .accessibilityHidden(true)
+                            DesktopText(verbatim: PhoneToolWords.name(tool))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        DesktopSwitch(isOn: on, label: Text(verbatim: PhoneToolWords.name(tool)),
+                                      identifier: "connect-apps-phone-\(tool.rawValue)") {
+                            binding(tool).wrappedValue = !on
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 44)
+                }
+            }
+            DesktopText(Text("Turn on what your bots may ask this iPhone for. You still approve each request in the app."),
+                        size: 12, line: 16, color: \.inkSecondary)
+                .padding(.horizontal, 4)
+        }
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var phoneBody: some View {
         Section {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "message.fill")

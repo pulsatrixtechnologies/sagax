@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cleanDisabledModels, cleanFavoriteModels, MAX_FAVORITE_MODELS, modelKey, modelOffer, offeredModels, parseModelKey } from "./offered-models.ts";
+import { cleanDisabledModels, cleanFavoriteModels, MAX_FAVORITE_MODELS, modelKey, modelKeys, modelOffer, modelOfferAcross, offeredModels, parseModelKey, switchedModelKeys } from "./offered-models.ts";
 
 const engine = (instanceId: string, ids: string[], def = ids[0] ?? "") => ({ instanceId, models: { default: def, options: ids.map((id) => ({ id })) } });
 const solo = { organization: false, allowedEngines: null };
@@ -46,5 +46,32 @@ describe("model switches", () => {
   it("applies the organization's engine list first", () => {
     const instances = [engine("claude", ["opus"]), engine("grok", ["fast"])];
     expect(offeredModels(instances, { organization: true, allowedEngines: ["grok"] }, null).map((row) => row.instanceId)).toEqual(["grok"]);
+  });
+});
+
+// #4329 lot 4: one model offered by several engines is one switch
+describe("one switch per model, whatever engine runs it", () => {
+  const engines = [{ instanceId: "claude", model: "claude-opus-5" }, { instanceId: "pi", model: "anthropic/claude-opus-5" }];
+
+  it("lists every stored key of the model, once each", () => {
+    expect(modelKeys([...engines, engines[0]!])).toEqual(["claude/claude-opus-5", "pi/anthropic/claude-opus-5"]);
+  });
+
+  it("is on while one engine still runs it, greyed only when the organization turned it off everywhere", () => {
+    expect(modelOfferAcross(null, engines)).toBe("on");
+    expect(modelOfferAcross({ mine: ["claude/claude-opus-5"] }, engines)).toBe("on");
+    expect(modelOfferAcross({ mine: ["claude/claude-opus-5", "pi/anthropic/claude-opus-5"] }, engines)).toBe("personOff");
+    expect(modelOfferAcross({ org: ["claude/claude-opus-5"], mine: ["pi/anthropic/claude-opus-5"] }, engines)).toBe("personOff");
+    expect(modelOfferAcross({ org: ["claude/claude-opus-5"] }, engines)).toBe("on");
+    expect(modelOfferAcross({ org: ["claude/claude-opus-5", "pi/anthropic/claude-opus-5"] }, engines)).toBe("adminOff");
+    expect(modelOfferAcross(null, [])).toBe("on");
+  });
+
+  it("writes every key of the model at once, the storage format unchanged", () => {
+    const keys = modelKeys(engines);
+    const off = switchedModelKeys(["codex/gpt-6", "claude/claude-opus-5"], keys, false);
+    expect(off).toEqual(["codex/gpt-6", "claude/claude-opus-5", "pi/anthropic/claude-opus-5"]);
+    expect(cleanDisabledModels(off)).toEqual(off);
+    expect(switchedModelKeys(off, keys, true)).toEqual(["codex/gpt-6"]);
   });
 });

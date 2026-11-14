@@ -83,6 +83,30 @@ export function modelOn(switches: ModelSwitches | null | undefined, instanceId: 
   return modelOffer(switches, instanceId, model) === "on";
 }
 
+/** #4329 lot 4: every stored key of one model, whatever engine runs it
+ * (shared/provider-catalog.ts lists the engines of a canonical model), once
+ * each, in the engines' order. */
+export function modelKeys(engines: ReadonlyArray<{ instanceId: string; model: string }>): string[] {
+  return [...new Set(engines.map((engine) => modelKey(engine.instanceId, engine.model)))];
+}
+
+/** Whether one model is on across the engines that run it: on while one
+ * engine still offers it, greyed only when the organization turned it off
+ * on every one of them. */
+export function modelOfferAcross(switches: ModelSwitches | null | undefined, engines: ReadonlyArray<{ instanceId: string; model: string }>): ModelOffer {
+  const offers = engines.map((engine) => modelOffer(switches, engine.instanceId, engine.model));
+  if (!offers.length || offers.includes("on")) return "on";
+  return offers.every((offer) => offer === "adminOff") ? "adminOff" : "personOff";
+}
+
+/** The person's list after one switch of a model: all its keys at once,
+ * the storage format unchanged (an older app still reads each key). */
+export function switchedModelKeys(mine: readonly string[], keys: readonly string[], on: boolean): string[] {
+  const drop = new Set(keys);
+  const rest = mine.filter((entry) => !drop.has(entry));
+  return on ? rest : [...rest, ...drop];
+}
+
 interface ModelsOf { default: string; options: ReadonlyArray<{ id: string }> }
 
 /**

@@ -64,7 +64,11 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       ] : []),
       // &pi=1 (#2983): the pi engine, so Providers shows Model servers for pi
       ...(params.get("pi") ? [
-        { instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "", options: [{ id: "px-own-sx-0a1b2c3d4e/qwen-3.8-27b", label: "qwen-3.8-27b" }] } },
+        { instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "", options: [
+          { id: "anthropic/opus", label: "Claude Opus 4.1" }, { id: "xai/grok-4", label: "Grok 4" }, { id: "mistral/mistral-large", label: "Mistral Large" },
+          // a model server's row as pi names it (server/drivers/pi-model-servers.ts modelServerOptions)
+          { id: "px-own-sx-0a1b2c3d4e/qwen-3.8-27b", label: "qwen-3.8-27b", custom: true, provider: "px-own-sx-0a1b2c3d4e", server: "oMLX on this Mac" },
+        ] } },
       ] : []),
     ] },
     ...(params.get("pi") ? { "/api/me/pi-model-servers": { servers: [

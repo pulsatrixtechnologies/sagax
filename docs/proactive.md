@@ -289,9 +289,11 @@ neither wakes twice, rings twice nor starts a reminder clock over:
 and a run's own needs-you card (key `needs-you:run:<runId>:<cardId>`), a
 routine paused (key `routine-suspended:<routineId>:<reason>:<at>`, once per
 pause), a daily suggestion (key `proposal:<proposalId>`), an engine's fix
-card, the fix card's reminder. The fix card's first ring still goes through
-the question card path (lot S2 folds it in). It rings once per key and step,
-records the item as told, and ends in one `[signal]` log line.
+card, the fix card's reminder. The fix card's first ring goes through the
+question card path, whose frame the one attention policy rules like every
+other (next section). It rings once per key and step, records the item as
+told, and ends in one `[signal]` log line. An item's `level` rides its
+frame (`withItemLevel`).
 
 The routines file still carries `ownerNotices` and `engineReconnectNotified`,
 written from the ledger, so the previous version reads them for one release;
@@ -299,3 +301,44 @@ a file of the previous version moves into the ledger at load.
 
 Tests: `server/proactive/signal-ledger.test.ts` (one restart test per moved
 memory).
+
+## One attention policy (`shared/attention-policy.ts`, #4250 S2)
+
+Whether something reaches the person now, and by which channels, is ONE
+decision (`decideAttention`), in this order:
+
+1. the writer: `notify: false` never rings; a frame marked FYI waits for
+   "While you were quiet" and the brief;
+2. the kind rule (`NOTIFY_KIND_INTERRUPTS`, #3719): an ask rings, an answer
+   only for the person's own line, a quiet kind never (even urgent);
+3. the level: the writer's (`Notification.level`: `fyi`, `card`, `urgent`;
+   a proactive event's `level` rides its wake to what the wake tells), else
+   the kind's (a bot blocked on the person, or a person's own message, is
+   urgent; the rest is a card). Urgent passes the next two steps;
+4. the person's ONE quiet-hours setting, obeyed by the desktop, the phones
+   and every "Me joindre" channel (a bot keeps only its channels; the
+   per-bot hours a previous version saved stay in its file, unread);
+5. the person's day budget;
+6. presence: the person looks at that conversation in a focused window
+   (the desktop), or a client of theirs marked it read during the push
+   hub's grace;
+7. the channels: the bot's own ("Me joindre", none saved: a push) that the
+   person allows for that level (`sagax.notifyChannels.v1`, every channel
+   by default; FYI never leaves the app).
+
+The server applies steps 1 to 3 to every notify frame (`ruleNotifyFrame`),
+asks each person's signal gate for 4 and 5 (`PersonSignalGate.verdict`),
+and writes one `[notify]` line with the level, the reason and, when held,
+`held_by=`. The desktop follows the frame's verdict and adds its focus; the
+push hub adds its grace; "Me joindre" reads the person's quiet hours and
+channels (`ReachMe.channelsFor`). A card (urgent) goes out at once, its
+reminders too; a notice (card level) waits for the end of quiet hours.
+
+Settings > Notifications shows it on one page: quiet hours, the day budget,
+and the channels for urgent and for the other signals. On a personal
+computer they are saved through `/api/me/signals`; on an organization server
+they are person preferences.
+
+Tests: one table of cases, `shared/attention-policy.vectors.json`, run by
+the server (`shared/attention-policy.test.ts`) and the desktop
+(`src/lib/attention.vectors.test.ts`); the phone reads the same file next.

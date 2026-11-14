@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LEVEL_CHANNELS } from "./attention-policy.ts";
 import { heldSignalsSection, localDayKey, PersonSignalGate, QUIET_HOURS_KEY, readQuietHours, readSignalBudget, readSignalPrefs, SIGNAL_BUDGET_KEY, signalLevelOfPush, withinQuietHours, type PersonSignalState, type SignalGateStorage } from "./signal-levels.ts";
 
 const NIGHT = JSON.stringify({ start: "22:00", end: "07:00", timeZone: "UTC" });
@@ -10,6 +11,18 @@ describe("signal levels (#2695)", () => {
     expect(signalLevelOfPush({ kind: "achievement" })).toBe("fyi");
     expect(signalLevelOfPush({ kind: "message" })).toBe("card");
     expect(signalLevelOfPush({ kind: "routine" })).toBe("card");
+  });
+
+  it("#4250 (S2): the writer's level wins over the push kind's: an urgent event passes quiet hours, an FYI one waits", () => {
+    expect(signalLevelOfPush({ kind: "message", level: "urgent" })).toBe("urgent");
+    expect(signalLevelOfPush({ kind: "approval", level: "card" })).toBe("card");
+    const night = Date.UTC(2026, 10, 8, 23, 30);
+    const gate = new PersonSignalGate(() => ({ budget: 20, quiet: readQuietHours(NIGHT) }), () => night);
+    expect(gate.decide({ personId: "p1", kind: "message", title: "A card" })).toBe("hold");
+    expect(gate.decide({ personId: "p1", kind: "message", title: "Urgent", level: "urgent" })).toBe("push");
+    const decision = gate.verdict({ personId: "p1", kind: "message", title: "Held" });
+    expect([decision.verdict, decision.reason, decision.level]).toEqual(["hold", "quiet_hours", "card"]);
+    expect(gate.peekHeld("p1").map((held) => held.title)).toEqual(["A card", "Held"]);
   });
 
   it("reads the person's preferences, defaults otherwise", () => {
@@ -87,8 +100,8 @@ describe("signal levels (#2695)", () => {
     // 03:00 UTC on Nov 9 is still Nov 8 in Toronto
     let now = Date.UTC(2026, 10, 9, 2, 0);
     const prefs = readSignalPrefs({ [SIGNAL_BUDGET_KEY]: "5", [QUIET_HOURS_KEY]: NIGHT }, "America/Toronto");
-    expect(prefs).toEqual({ budget: 5, quiet: { start: "22:00", end: "07:00", timeZone: "UTC" }, timeZone: "America/Toronto" });
-    expect(readSignalPrefs({}, undefined)).toEqual({ budget: 20, quiet: null });
+    expect(prefs).toEqual({ budget: 5, quiet: { start: "22:00", end: "07:00", timeZone: "UTC" }, channels: DEFAULT_LEVEL_CHANNELS, timeZone: "America/Toronto" });
+    expect(readSignalPrefs({}, undefined)).toEqual({ budget: 20, quiet: null, channels: DEFAULT_LEVEL_CHANNELS });
     const gate = new PersonSignalGate(() => ({ ...readSignalPrefs({}, "America/Toronto"), budget: 1 }), () => now);
     expect(gate.decide({ personId: "p1", kind: "routine" })).toBe("push");
     now = Date.UTC(2026, 10, 9, 4, 0);

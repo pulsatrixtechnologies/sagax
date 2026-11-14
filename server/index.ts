@@ -786,7 +786,7 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
 import { RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
-import { createTellPerson, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage } from "./proactive/signal-ledger.ts";
+import { createTellPerson, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
 import { clipReadable } from "../shared/routine-result.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
@@ -8856,9 +8856,11 @@ interface ProactiveNotice {
  * step, in the person's ledger, with one log line. */
 const tellPerson = createTellPerson<ProactiveNotice>({
   ledger: signalLedger,
-  notify: ({ notification, access, routineRunId }) => {
-    if (access) notifyAccess(notification, access, routineRunId);
-    else notify(notification);
+  notify: ({ notification, access, routineRunId }, item) => {
+    // #4250 (S2): the writer's level rides the frame, read by the one attention policy
+    const leveled = withItemLevel(notification, item.level);
+    if (access) notifyAccess(leveled, access, routineRunId);
+    else notify(leveled);
   },
 });
 /** #4250: the ledger kind of a run's own notice (failed, waiting, skipped). */
@@ -29096,7 +29098,9 @@ reachMeService = new ReachMe({
   language: reachMeLanguage,
   audit: reachMeAudit,
   // #4250: reminder clocks and notices sent, in the person's signal ledger
-  signals: signalLedger
+  signals: signalLedger,
+  // #4250 (S2): the person's one quiet-hours setting and channels per level
+  attention: (person) => signalGate.attention(person)
 });
 setReachMeSmsHandler((input) => reachMeService!.handleReply({ channel: "sms", person: reachMePerson(input.ownerPrincipalId), text: input.text, from: input.from }));
 setInterval(() => {

@@ -37,6 +37,7 @@
 // - trace: one line in the conversation's Events tab per wake, with its
 //   reason and the events' labels, never their content.
 
+import type { SignalLevel } from "../../shared/signal-levels.ts";
 import { runFailureIsProviderLimit } from "../peers/ops-incidents.ts";
 import { SignalLedger } from "./signal-ledger.ts";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -85,6 +86,15 @@ export interface WatchWakeFacts {
   chosen?: true;
 }
 
+/** #4250 (S2): the loudest level its events' writers set, or undefined
+ * when none set one. */
+export function wakeLevel(events: readonly Pick<ProactiveEvent, "level">[]): SignalLevel | undefined {
+  const order: readonly SignalLevel[] = ["fyi", "card", "urgent"];
+  let loudest: SignalLevel | undefined;
+  for (const event of events) if (event.level && (!loudest || order.indexOf(event.level) > order.indexOf(loudest))) loudest = event.level;
+  return loudest;
+}
+
 /** #3423: a watch the person chose for this bot (it passes the switch). */
 export function chosenWatchEvent(event: Pick<ProactiveEvent, "source" | "watch">): boolean {
   return event.source === "watch" && event.watch?.chosen === true;
@@ -93,6 +103,10 @@ export function chosenWatchEvent(event: Pick<ProactiveEvent, "source" | "watch">
 export interface ProactiveEvent {
   botId: string;
   source: ProactiveSource;
+  /** #4250 (S2): how loud it is for the person (fyi, card, urgent), set by
+   * the writer: what the wake tells them carries it to the one attention
+   * policy (shared/attention-policy.ts). Absent: the kind's own level. */
+  level?: SignalLevel;
   /** Stable per event: a second offer of the same key is a duplicate. */
   key: string;
   /** A short label for the Events tab and the card, never content: "Email

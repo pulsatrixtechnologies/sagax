@@ -8,6 +8,7 @@
 // bot sender also carries its look (`senderLook`, `senderLookVersion`): the
 // extension draws the bot's mascot as the banner's face.
 import { createHash } from "node:crypto";
+import type { SignalLevel } from "../../shared/signal-levels.ts";
 import { CHOICE_BUTTONS_MAX, CHOICE_LABEL_MAX } from "../../shared/notification-context.ts";
 
 import { botAvatarCropSchema, botAvatarUrlSchema, type BotAvatarCrop } from "../../shared/bot-avatar.ts";
@@ -77,6 +78,9 @@ export interface PushMessage {
   needsYou?: boolean;
   /** #2697: the proactive proposal card this is about: Do it / Not now answer it. */
   proposalId?: string;
+  /** #4250 (S2): the level the frame's writer set (shared/attention-policy.ts);
+   * absent: the push kind's. Read by the signal gate, never sent to a phone. */
+  level?: SignalLevel;
   /** When it happened, milliseconds since 1970. */
   at: number;
   /** A string of the app's own catalog (ios/App/Localizable.xcstrings) the

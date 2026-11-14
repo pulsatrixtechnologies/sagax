@@ -22,6 +22,7 @@
 // listening decides what to do with it — desktop and paired-phone local
 // notifications today, and closed-app APNs delivery once a relay exists.
 
+import { decideAttention, isSignalLevel, type AttentionDecision } from "../shared/attention-policy.ts";
 import type { Notification, NotifyKind } from "../shared/notification.ts";
 import { buildNotificationContext, notificationChoiceLabels } from "../shared/notification-context.ts";
 import { plainPreviewLine } from "../shared/plain-text.ts";
@@ -278,38 +279,9 @@ export function deliverableNotification(
   return buildNotification(kind, { ...bot, notifications: undefined }, threadId, detail, extra);
 }
 
-/** #3719: what each kind is, for the one rule below. Typed over every kind,
- * so a new kind cannot be added without saying whether it is an ask.
- * - "ask": the person has something to do, or asked to be told (an
- *   approval, a question, a sign-in, a takeover, needs-you, a proposal
- *   within its budget, a wait they set, an admin action on their bot, a
- *   report to an admin, a person's words to them).
- * - "answer": interrupts only as the answer to a line the person wrote in
- *   that conversation (`personTurn`).
- * - "quiet": never interrupts. It keeps its place in the conversation,
- *   Today, the run log and the unread badge, told once. */
-export const NOTIFY_KIND_INTERRUPTS: Readonly<Record<NotifyKind, "ask" | "answer" | "quiet">> = {
-  approval: "ask",
-  question: "ask",
-  "sign-in": "ask",
-  takeover: "ask",
-  "needs-you": "ask",
-  proposal: "ask",
-  wait: "ask",
-  "admin-action": "ask",
-  report: "ask",
-  "page-comment": "ask",
-  // a person's direct message is an ask; a bot's is answered below
-  message: "answer",
-  done: "answer",
-  "turn-failed": "answer",
-  "routine-failed": "quiet",
-  "routine-deferred": "quiet",
-  incident: "quiet",
-  "delegation-settled": "quiet",
-  notice: "quiet",
-  spend: "quiet",
-};
+/** #3719: what each kind is, for the one rule below; #4250 (S2): it lives
+ * with the one attention policy (shared/attention-policy.ts). */
+export { NOTIFY_KIND_INTERRUPTS } from "../shared/attention-policy.ts";
 
 /** #3719, the one rule: whether a notification sounds, shows a banner,
  * bounces the Dock or reaches a phone. An ask always does; an answer only
@@ -317,17 +289,30 @@ export const NOTIFY_KIND_INTERRUPTS: Readonly<Record<NotifyKind, "ask" | "answer
  * restart cuts announces nothing; a resumed turn has no person's line in
  * memory, so it is silent too). A message from a person (no bot) is an ask. */
 export function notificationInterrupts(note: Pick<Notification, "kind" | "botId" | "notify" | "personTurn">): boolean {
-  if (note.notify === false) return false;
-  const rule = note.kind === "message" && !note.botId ? "ask" : NOTIFY_KIND_INTERRUPTS[note.kind];
-  if (rule === "ask") return true;
-  return rule === "answer" && note.personTurn === true && !isShuttingDown();
+  return frameAttention(note).verdict === "ring";
+}
+
+/** #4250 (S2): the frame's part of the one attention policy: the writer,
+ * the kind rule and the level (the person's quiet hours, budget and
+ * channels are their signal gate's, asked per person below). */
+export function frameAttention(note: Pick<Notification, "kind" | "botId" | "notify" | "personTurn" | "level">): AttentionDecision {
+  return decideAttention({
+    kind: note.kind,
+    botId: note.botId,
+    ...(isSignalLevel(note.level) ? { level: note.level } : {}),
+    ...(note.notify === false ? { notify: false } : {}),
+    ...(note.personTurn ? { personTurn: true } : {}),
+    shuttingDown: isShuttingDown(),
+    at: Date.now(),
+  });
 }
 
 /** One line per notification frame, never its words: enough to read back
  * an hour's noise (#3719). */
-export function notifyLogLine(note: Pick<Notification, "kind" | "botId" | "threadId" | "audience">, options: { adminOnly?: boolean }, interrupts: boolean): string {
+export function notifyLogLine(note: Pick<Notification, "kind" | "botId" | "threadId" | "audience">, options: { adminOnly?: boolean }, interrupts: boolean, decision?: Pick<AttentionDecision, "level" | "reason">): string {
   const audience = options.adminOnly ? "admins" : Array.isArray(note.audience) ? String(note.audience.length) : "all";
-  return `[notify] kind=${note.kind} bot=${note.botId || "-"} thread=${note.threadId || "-"} audience=${audience} interrupts=${interrupts ? "yes" : "no"}`;
+  const policy = decision ? ` level=${decision.level} reason=${decision.reason}` : "";
+  return `[notify] kind=${note.kind} bot=${note.botId || "-"} thread=${note.threadId || "-"} audience=${audience} interrupts=${interrupts ? "yes" : "no"}${policy}`;
 }
 
 /** #4233: one person's verdict from their signal gate (shared/signal-levels.ts:
@@ -335,6 +320,8 @@ export function notifyLogLine(note: Pick<Notification, "kind" | "botId" | "threa
 export interface SignalVerdict {
   person: string;
   decision: "push" | "hold";
+  /** #4250 (S2): why the gate held it (quiet_hours, budget, fyi). */
+  reason?: string;
 }
 
 /** #4233: the people a frame was held for, each one by their own gate. A
@@ -386,14 +373,20 @@ export interface RuleNotifyOptions {
 export function ruleNotifyFrame<T extends Record<string, unknown>>(payload: T, options: RuleNotifyOptions = {}): T {
   if (payload.kind !== "notify" || !payload.notification || typeof payload.notification !== "object") return payload;
   const note = payload.notification as Notification;
-  const asks = notificationInterrupts(note);
+  // #4250 (S2): the one attention policy, in its order: the writer, the
+  // kind rule and the level here; each person's quiet hours, budget and
+  // channels in their own gate (options.signal); one log line for it all
+  const decision = frameAttention(note);
+  const asks = decision.verdict === "ring";
   const verdicts = asks && options.signal ? options.signal(note) : [];
   const heldPeople = heldBySignal(verdicts);
   const asked = new Set(verdicts.map((verdict) => verdict.person.trim().toLowerCase()).filter(Boolean));
   const everyone = heldPeople.size > 0 && heldPeople.size === asked.size;
   const interrupts = asks && !everyone;
+  const heldReasons = [...new Set(verdicts.filter((verdict) => verdict.decision === "hold" && verdict.reason).map((verdict) => verdict.reason))];
   const heldLog = everyone ? " held=signal" : heldPeople.size > 0 ? ` held=signal:${heldPeople.size}` : "";
-  console.log(`${notifyLogLine(note, options, interrupts)}${heldLog}`);
+  const reasons = heldLog && heldReasons.length ? ` held_by=${heldReasons.join(",")}` : "";
+  console.log(`${notifyLogLine(note, options, interrupts, decision)}${heldLog}${reasons}`);
   const { personTurn: _personTurn, ...wire } = note;
   const out = { ...payload, notification: interrupts ? wire : { ...wire, notify: false } };
   if (interrupts && heldPeople.size > 0) heldPeopleOfFrame.set(out, heldPeople);

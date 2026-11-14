@@ -9,7 +9,7 @@
  * does not hold in that language: not ready, with the reason).
  * The script answers /api itself; nothing is sent anywhere. Headless
  * Chromium only: no window opens.
- * Usage: node scripts/capture/reach-me.mjs [--out DIR] [--port N]
+ * Usage: node scripts/capture/reach-me.mjs [--out DIR] [--port N] [--lang fr|en]
  *   (SAGAX_VERIFY_BROWSER_CHROME=<chromium> to use an installed browser)
  */
 import { spawn } from "node:child_process";
@@ -21,6 +21,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "reach-me"));
 const port = Number(arg("--port") ?? 5293);
+const lang = arg("--lang") ?? "fr";
 const skins = [{ id: "daylight", label: "light" }, { id: "pulsatrix", label: "dark" }];
 
 async function waitForServer(url, ms = 120_000) {
@@ -67,10 +68,10 @@ try {
   for (const { id, label } of skins) {
     for (const name of Object.keys(states)) {
       state = name;
-      await page.goto(`${base}?skin=${id}&lang=fr`, { waitUntil: "load" });
+      await page.goto(`${base}?skin=${id}&lang=${lang}`, { waitUntil: "load" });
       await page.waitForSelector("[data-bot-reach-me]");
       await page.waitForTimeout(250);
-      await page.locator('[data-gallery-panel="overview"]').screenshot({ path: join(outDir, `reach-me-${name}-${label}.png`) });
+      await page.locator('[data-gallery-panel="overview"]').screenshot({ path: join(outDir, `reach-me-${name}-${lang}-${label}.png`) });
     }
   }
   await browser.close();

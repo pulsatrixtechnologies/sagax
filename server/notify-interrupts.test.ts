@@ -84,8 +84,8 @@ describe("the notify frame on the wire (#3719)", () => {
     ruleNotifyFrame({ kind: "notify", notification: note("approval", { audience: ["a", "b"] }) });
     ruleNotifyFrame({ kind: "notify", notification: note("incident") }, { adminOnly: true });
     expect(lines).toEqual([
-      "[notify] kind=approval bot=bot-1 thread=thread-1 audience=2 interrupts=yes",
-      "[notify] kind=incident bot=bot-1 thread=thread-1 audience=admins interrupts=no",
+      "[notify] kind=approval bot=bot-1 thread=thread-1 audience=2 interrupts=yes level=urgent reason=urgent",
+      "[notify] kind=incident bot=bot-1 thread=thread-1 audience=admins interrupts=no level=card reason=kind",
     ]);
     for (const line of lines) expect(line).not.toMatch(/Title words|Body words|Nova/);
   });

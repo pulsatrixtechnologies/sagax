@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** startProactiveWake (#1388). Pure move from server/index.ts. */
-import { proactiveWakePrompt, wakeAlwaysReports } from "../proactive/proactive-wake.ts";
+import { proactiveWakePrompt, wakeAlwaysReports, wakeLevel } from "../proactive/proactive-wake.ts";
 export type Host = Record<string, any>;
 
 export function createStartProactiveWake(getHost: () => Host): any {
@@ -18,6 +18,8 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   const person = runAs || host.effectiveBotOwner(bot) || undefined;
   const sources = [...new Set(batch.events.map((event) => event.source))];
   const alwaysReport = wakeAlwaysReports(batch.events);
+  // #4250 (S2): the events' writers' level rides the wake to what it tells the person
+  const level = wakeLevel(batch.events);
   // #3423: the chosen watches it reports, so the row's "never" stops them
   // #3431: with the reads the yes covers in this wake (decision 3)
   const watches = batch.events.flatMap((event) => event.source === "watch" && event.watch?.domain
@@ -33,7 +35,8 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
       ...(batch.confined ? { confined: true as const } : {}),
       ...(accepted ? { accepted: true as const } : {}),
       ...(alwaysReport ? { alwaysReport: true as const } : {}),
-      ...(watches.length ? { watches } : {})
+      ...(watches.length ? { watches } : {}),
+      ...(level ? { level } : {})
     },
     ...(person ? { runAs: person } : {})
   });

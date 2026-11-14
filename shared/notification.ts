@@ -2,6 +2,8 @@
  * interrupting someone for, emitted as the `notify` live frame. Single home
  * in shared/ so the server emitter and the client banner stack agree;
  * server/notify.ts re-exports under the historical name. */
+import type { SignalLevel } from "./signal-levels.ts";
+
 export type NotifyKind =
   | "approval"
   | "question"
@@ -121,8 +123,12 @@ export interface Notification {
   notify?: boolean;
   /** #2695: "fyi" when the bot marked it FYI (set_reply_notify fyi): no
    * notification anywhere now (notify is false too), and its words wait for
-   * the person's next brief. */
-  level?: "fyi";
+   * the person's next brief.
+   * #4250 (S2): the level its writer set (an event's, a proactive item's):
+   * "card" or "urgent" too. Absent: the kind's (levelOfNotification in
+   * shared/attention-policy.ts). Urgent passes the person's quiet hours and
+   * day budget; it never makes a quiet kind ring. */
+  level?: SignalLevel;
   /** #3719, server side only (the rule in server/notify.ts reads it, then
    * strips it): the turn this is about began with the person's own line in
    * this conversation (the request's personLine). Only then does a `done`,

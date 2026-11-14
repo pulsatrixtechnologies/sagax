@@ -404,6 +404,14 @@ export function createTellPerson<N>(deps: TellPersonDeps<N>): (person: string, i
   };
 }
 
+/** #4250 (S2): the item's level on the notification it rings with, so the
+ * one attention policy reads the writer's level, not one derived from the
+ * kind. A frame the bot marked FYI stays FYI. */
+export function withItemLevel<T extends { level?: unknown } | null | undefined>(note: T, level: SignalLevel | undefined): T {
+  if (!note || !level || note.level === "fyi") return note;
+  return { ...note, level };
+}
+
 /** #4250: the keys the server tells its proactive items under. Each names
  * the one occurrence the person is told about, so the next occurrence (a new
  * away period, a new message, another conversation) rings again. */

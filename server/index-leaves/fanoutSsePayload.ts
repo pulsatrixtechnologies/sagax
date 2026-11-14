@@ -26,7 +26,7 @@ function fanoutSsePayload(payload: Record<string, unknown>, options: { adminOnly
       }
       // each verdict names its person: a frame for several people goes quiet
       // only on the streams of those held (sseFrameFor)
-      return decided ? decided.messages.map((message, index) => ({ person: String(message.personId ?? ""), decision: decided.decisions[index] })) : [];
+      return decided ? decided.messages.map((message, index) => ({ person: String(message.personId ?? ""), decision: decided.decisions[index], reason: decided.reasons?.[index] })) : [];
     }
   });
 

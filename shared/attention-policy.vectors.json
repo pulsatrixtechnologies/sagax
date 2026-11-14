@@ -1,0 +1,28 @@
+{
+  "about": "The one attention policy (shared/attention-policy.ts, #4250 S2). The same cases run on the server, the desktop and the phone. Each case is a notification as its writer sent it, the person's quiet hours (UTC), day budget and channels per level, and where they are; expected is the verdict (ring, quiet, hold, seen), the level, the reason and the channels outside the app.",
+  "quiet": { "start": "22:00", "end": "07:00", "timeZone": "UTC" },
+  "night": "2026-11-14T03:00:00Z",
+  "day": "2026-11-14T15:00:00Z",
+  "cases": [
+    { "name": "an approval rings by push at any hour", "input": { "kind": "approval", "botId": "b1", "when": "night" }, "expected": { "verdict": "ring", "level": "urgent", "reason": "urgent", "channels": ["push"] } },
+    { "name": "a question in quiet hours still rings: urgent passes", "input": { "kind": "question", "botId": "b1", "when": "night", "quiet": true }, "expected": { "verdict": "ring", "level": "urgent", "reason": "urgent", "channels": ["push"] } },
+    { "name": "a person's direct message is urgent", "input": { "kind": "message", "botId": "", "when": "night", "quiet": true }, "expected": { "verdict": "ring", "level": "urgent", "reason": "urgent", "channels": ["push"] } },
+    { "name": "a proposal in quiet hours waits", "input": { "kind": "proposal", "botId": "b1", "when": "night", "quiet": true }, "expected": { "verdict": "hold", "level": "card", "reason": "quiet_hours", "channels": [] } },
+    { "name": "a proposal outside quiet hours rings and counts", "input": { "kind": "proposal", "botId": "b1", "when": "day", "quiet": true, "budget": 20, "sentToday": 3 }, "expected": { "verdict": "ring", "level": "card", "reason": "allowed", "channels": ["push"], "counts": true } },
+    { "name": "a card past the day budget waits", "input": { "kind": "proposal", "botId": "b1", "when": "day", "budget": 5, "sentToday": 5 }, "expected": { "verdict": "hold", "level": "card", "reason": "budget", "channels": [] } },
+    { "name": "an approval past the day budget still rings and does not count", "input": { "kind": "approval", "botId": "b1", "when": "day", "budget": 5, "sentToday": 5 }, "expected": { "verdict": "ring", "level": "urgent", "reason": "urgent", "channels": ["push"], "counts": false } },
+    { "name": "the writer's urgent level passes quiet hours", "input": { "kind": "wait", "botId": "b1", "level": "urgent", "when": "night", "quiet": true }, "expected": { "verdict": "ring", "level": "urgent", "reason": "urgent", "channels": ["push"] } },
+    { "name": "the writer's FYI waits for the brief", "input": { "kind": "wait", "botId": "b1", "level": "fyi", "when": "day" }, "expected": { "verdict": "hold", "level": "fyi", "reason": "fyi", "channels": [] } },
+    { "name": "a message the bot marked FYI waits, never rings", "input": { "kind": "done", "botId": "b1", "notify": false, "level": "fyi", "personTurn": true, "when": "day" }, "expected": { "verdict": "hold", "level": "fyi", "reason": "fyi", "channels": [] } },
+    { "name": "notify false from the writer is quiet", "input": { "kind": "done", "botId": "b1", "notify": false, "personTurn": true, "when": "day" }, "expected": { "verdict": "quiet", "level": "card", "reason": "writer", "channels": [] } },
+    { "name": "a quiet kind never rings, even urgent", "input": { "kind": "routine-failed", "botId": "b1", "level": "urgent", "when": "day" }, "expected": { "verdict": "quiet", "level": "urgent", "reason": "kind", "channels": [] } },
+    { "name": "a bot's finished turn the person did not start is quiet", "input": { "kind": "done", "botId": "b1", "when": "day" }, "expected": { "verdict": "quiet", "level": "card", "reason": "kind", "channels": [] } },
+    { "name": "the answer to the person's own line rings", "input": { "kind": "done", "botId": "b1", "personTurn": true, "when": "day" }, "expected": { "verdict": "ring", "level": "card", "reason": "allowed", "channels": ["push"] } },
+    { "name": "the answer to the person's own line waits in quiet hours", "input": { "kind": "done", "botId": "b1", "personTurn": true, "when": "night", "quiet": true }, "expected": { "verdict": "hold", "level": "card", "reason": "quiet_hours", "channels": [] } },
+    { "name": "the person looking at that conversation: nothing rings", "input": { "kind": "question", "botId": "b1", "when": "day", "looking": true }, "expected": { "verdict": "seen", "level": "urgent", "reason": "seen", "channels": [] } },
+    { "name": "a client of the person saw it during the grace: no push", "input": { "kind": "approval", "botId": "b1", "when": "day", "seen": true }, "expected": { "verdict": "seen", "level": "urgent", "reason": "seen", "channels": [] } },
+    { "name": "urgent goes by the bot's channels the person allows for urgent", "input": { "kind": "approval", "botId": "b1", "when": "day", "botChannels": ["push", "sms", "teams"], "levelChannels": { "card": ["push"], "urgent": ["push", "sms"] } }, "expected": { "verdict": "ring", "level": "urgent", "reason": "urgent", "channels": ["push", "sms"] } },
+    { "name": "a card goes only by the channels the person allows for cards", "input": { "kind": "proposal", "botId": "b1", "when": "day", "botChannels": ["push", "telegram"], "levelChannels": { "card": ["telegram"], "urgent": ["push", "telegram"] } }, "expected": { "verdict": "ring", "level": "card", "reason": "allowed", "channels": ["telegram"] } },
+    { "name": "no channel allowed for cards: it rings in the app only", "input": { "kind": "proposal", "botId": "b1", "when": "day", "levelChannels": { "card": [], "urgent": ["push"] } }, "expected": { "verdict": "ring", "level": "card", "reason": "allowed", "channels": [] } }
+  ]
+}

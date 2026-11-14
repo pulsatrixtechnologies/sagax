@@ -1,3 +1,4 @@
+import type { SignalLevel } from "../../shared/signal-levels.ts";
 import type { EffortLevel } from "../../shared/model-selection.ts";
 import type { RoutineRequirements, RoutineReadinessCheck } from "../../shared/routine-readiness.ts";
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
@@ -233,6 +234,9 @@ export interface RoutineRunProactive {
   alwaysReport?: true;
   /** #3423: the Pulsatrix watches this wake reports, with their domain. */
   watches?: Array<{ id: string; domain: string; reads?: string[] }>;
+  /** #4250 (S2): the level its events' writers set (the loudest of them):
+   * what the wake tells the person carries it to the one attention policy. */
+  level?: SignalLevel;
 }
 
 /** Similar work the organization memory knew of before a run (organization

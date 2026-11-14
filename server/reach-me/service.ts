@@ -1,13 +1,20 @@
 // "Me joindre" (Reach me, 2026-10-26): when a question or an approval card
-// waits on a person, the bot reaches them outside the app the way they
-// chose for THAT bot (shared/reach-me.ts), and the turn picks up when they
-// answer from that channel.
+// waits on a person, the bot reaches them outside the app by the channels
+// they chose for THAT bot (shared/reach-me.ts), and the turn picks up when
+// they answer from that channel.
 //
-// - Out: the push hub's approval pushes ask `allowsPush` (push chosen, and
-//   within the person's hours); `cardRaised` sends the card through every
-//   other channel chosen and ready, with ONE reply code for that card
-//   (./store.ts). Outside the person's hours nothing leaves; the card goes
-//   out when their next range starts if it is still open (`tick`).
+// #4250 (S2): when is the person's ONE quiet-hours setting, and which
+// channels a level may use is theirs too (Settings > Notifications), both
+// read through the one attention policy (shared/attention-policy.ts). A bot
+// keeps only its channels; the per-bot hours a previous version saved stay
+// in the file, unread.
+//
+// - Out: every push asks `allowsPush` (push among the bot's channels the
+//   level allows); `cardRaised` sends the card through every other channel
+//   the bot has, the level allows and is ready, with ONE reply code for that
+//   card (./store.ts). A card is urgent: it passes quiet hours. A notice is
+//   a card level signal: in the person's quiet hours it waits, and goes when
+//   they end (`tick`).
 // - Back: a channel hands `handleReply` the person it proved (their own
 //   number, their own chat) and the text. The text must start with a code
 //   still open for that person, sent through that channel (and for sms, to
@@ -25,7 +32,9 @@
 import { randomBytes } from "node:crypto";
 
 import { plainPreviewLine } from "../../shared/plain-text.ts";
-import { DEFAULT_REACH_ME, reachesBy, splitReachReply, readReachDecision, withinReachHours, type ReachChannelId, type ReachMeSettings, REACH_WIRED } from "../../shared/reach-me.ts";
+import { channelsForLevel, withinQuietHours, type LevelChannels } from "../../shared/attention-policy.ts";
+import { DEFAULT_REACH_ME, splitReachReply, readReachDecision, type ReachChannelId, type ReachMeSettings } from "../../shared/reach-me.ts";
+import { signalLevelOfPush, type QuietHours, type SignalLevel } from "../../shared/signal-levels.ts";
 import type { PushMessage } from "../push/payload.ts";
 import { defang } from "../triggers/webhooks.ts";
 import type { ReachChannel, ReachInbound, ReachOutbound } from "./channel.ts";
@@ -47,8 +56,8 @@ export interface ReachCard {
 }
 
 /** Something the bot tells the person without asking (2026-10-29: the
- * background brief). No code, no reply: it goes the way they chose for
- * that bot, within their hours. */
+ * background brief). No code, no reply: it goes by that bot's channels the
+ * person allows for a card, outside their quiet hours. */
 export interface ReachNotice {
   /** Stable id: the same notice heard twice goes once. */
   id: string;
@@ -97,6 +106,10 @@ export interface ReachMeDeps {
    * the notices sent, so a restart neither rings twice nor starts a clock
    * over. Absent: one in memory. */
   signals?: SignalLedger;
+  /** #4250 (S2): the person's one quiet-hours setting and the channels each
+   * level may use (their signal gate's preferences). Absent: no quiet hours,
+   * every channel. */
+  attention?(person: string): { quiet: QuietHours | null; channels?: LevelChannels | null };
 }
 
 /** #4250: the ledger kinds of a card followed for its reminders and of a
@@ -144,13 +157,11 @@ export class ReachMe {
   private readonly deps: ReachMeDeps;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
-  /** Cards that came outside the person's hours: sent when the next range starts. */
-  private readonly deferred = new Map<string, PushMessage>();
   private readonly failures = new Map<string, number[]>();
   private readonly inflight = new Set<Promise<unknown>>();
   /** Cards being sent right now. */
   private readonly sending = new Set<string>();
-  /** Notices that came outside the person's hours: sent when the next range starts. */
+  /** Notices that came in the person's quiet hours: sent when they end. */
   private readonly deferredNotices = new Map<string, ReachNotice>();
   /** #4250: notices sent (one send per id) and open cards with their
    * reminder clocks (#2645), in the person's signal ledger on disk. */
@@ -177,13 +188,30 @@ export class ReachMe {
     return status ?? { ready: false, reason: "Not available on this server." };
   }
 
-  /** Whether the hub may push this now. Anything but a card is unchanged; a
-   * card follows the person's choice for its bot (no choice: push). */
+  /** #4250 (S2): the person's quiet hours and channels per level. */
+  private attention(person: string): { quiet: QuietHours | null; channels?: LevelChannels | null } {
+    try {
+      return this.deps.attention?.(person) ?? { quiet: null };
+    } catch {
+      return { quiet: null };
+    }
+  }
+
+  /** The channels this bot reaches the person by at `level`: the bot's own
+   * (none saved: a push) the person allows for that level. */
+  channelsFor(person: string, botId: string, level: SignalLevel): ReachChannelId[] {
+    const settings = botId ? this.deps.settings.get(person, botId) : null;
+    return channelsForLevel(level, this.attention(person).channels, settings?.channels ?? null);
+  }
+
+  /** Whether the hub may push this (the last step of the one attention
+   * policy): the person allows a push for its level and, for a card, its
+   * bot reaches them by push. Anything else from a bot is the person's
+   * level choice alone. */
   allowsPush(message: PushMessage): boolean {
-    if (message.kind !== "approval" || !message.botId) return true;
-    const settings = this.deps.settings.get(message.personId, message.botId);
-    if (!settings) return true;
-    return reachesBy(settings, "push") && withinReachHours(settings.hours, this.now());
+    const level = signalLevelOfPush(message);
+    const settings = message.kind === "approval" && message.botId ? this.deps.settings.get(message.personId, message.botId) : null;
+    return channelsForLevel(level, this.attention(message.personId).channels, settings?.channels ?? null).includes("push");
   }
 
   /** A card waits on the person (the push hub's approval message, before
@@ -202,29 +230,26 @@ export class ReachMe {
       this.raised.set(`${message.personId}\u0000${signalKey}`, message);
       const settings = this.deps.settings.get(message.personId, message.botId);
       if (!settings) return;
-      if (!withinReachHours(settings.hours, this.now())) {
-        if (this.deferred.size > 2_000) this.deferred.delete(this.deferred.keys().next().value!);
-        this.deferred.set(cardKey(message.threadId, message.requestId), message);
-        return;
-      }
+      // a card is urgent: it passes the person's quiet hours
+      const channels = channelsForLevel(signalLevelOfPush(message), this.attention(message.personId).channels, settings.channels);
       const key = cardKey(message.threadId, message.requestId);
       // the same card heard twice (a notify replayed): one send per card
       if (this.sending.has(key) || this.deps.codes.forCard(message.threadId, message.requestId)?.channels.length) return;
       this.sending.add(key);
-      this.track(this.dispatch(message, settings).finally(() => this.sending.delete(key)));
+      this.track(this.dispatch(message, settings, channels).finally(() => this.sending.delete(key)));
     } catch (error) {
       this.log(`reach-me: a card could not go out (${error instanceof Error ? error.message : "error"})`);
     }
   }
 
-  /** The bot tells the person something (no code, no reply), the way they
-   * chose for that bot: no choice saved means a push, at any hour. Outside
-   * their hours it waits for the next range. Never throws. */
+  /** The bot tells the person something (no code, no reply), by that bot's
+   * channels (none saved: a push) the person allows for a card. In their
+   * quiet hours it waits until they end. Never throws. */
   notice(notice: ReachNotice): void {
     try {
       if (this.signals.get(notice.person, notice.botId, notice.id)) return;
       const settings = this.deps.settings.get(notice.person, notice.botId) ?? DEFAULT_REACH_ME;
-      if (!withinReachHours(settings.hours, this.now())) {
+      if (withinQuietHours(this.attention(notice.person).quiet, this.now())) {
         if (this.deferredNotices.size > 2_000) this.deferredNotices.delete(this.deferredNotices.keys().next().value!);
         this.deferredNotices.set(notice.id, notice);
         return;
@@ -241,9 +266,9 @@ export class ReachMe {
   }
 
   private sendNotice(notice: ReachNotice, settings: ReachMeSettings): void {
-    this.signals.told(notice.person, { key: notice.id, kind: REACH_NOTICE_KIND, level: "card", bot: notice.botId, label: notice.title, ref: { threadId: notice.threadId } },
-      settings.channels.filter((channel) => channel === "push" || (REACH_WIRED as readonly string[]).includes(channel)));
-    if (reachesBy(settings, "push")) {
+    const channels = channelsForLevel("card", this.attention(notice.person).channels, settings.channels);
+    this.signals.told(notice.person, { key: notice.id, kind: REACH_NOTICE_KIND, level: "card", bot: notice.botId, label: notice.title, ref: { threadId: notice.threadId } }, channels);
+    if (channels.includes("push")) {
       this.deps.push({
         kind: "message", personId: notice.person, title: notice.botName || notice.title,
         // a notice line can be a bot's Markdown: the phone reads it as words
@@ -251,11 +276,11 @@ export class ReachMe {
         threadId: notice.threadId, botId: notice.botId, id: notice.id, at: this.now(),
       });
     }
-    this.track(this.dispatchNotice(notice, settings));
+    this.track(this.dispatchNotice(notice, channels));
   }
 
-  private async dispatchNotice(notice: ReachNotice, settings: ReachMeSettings): Promise<void> {
-    const wanted = settings.channels.filter((channel): channel is ReachChannelId => channel !== "push" && (REACH_WIRED as readonly string[]).includes(channel));
+  private async dispatchNotice(notice: ReachNotice, channels: readonly ReachChannelId[]): Promise<void> {
+    const wanted = channels.filter((channel) => channel !== "push");
     // a tag the Teams send carries (its one self-send is matched on it); nobody answers it
     const tag = `N${randomBytes(4).toString("hex").toUpperCase()}`;
     for (const channel of wanted) {
@@ -276,31 +301,20 @@ export class ReachMe {
     }
   }
 
-  /** Every minute: cards held for the person's hours go out once a range opens, and a card left open is recalled. */
+  /** Every minute: notices held for the person's quiet hours go out once they end, and a card left open is recalled. */
   tick(): void {
     this.remind();
     for (const [id, notice] of this.deferredNotices) {
-      const settings = this.deps.settings.get(notice.person, notice.botId) ?? DEFAULT_REACH_ME;
-      if (!withinReachHours(settings.hours, this.now())) continue;
+      if (withinQuietHours(this.attention(notice.person).quiet, this.now())) continue;
       this.deferredNotices.delete(id);
-      this.sendNotice(notice, settings);
-    }
-    for (const [key, message] of this.deferred) {
-      const settings = this.deps.settings.get(message.personId, message.botId ?? "");
-      if (!settings) {
-        this.deferred.delete(key);
-        continue;
-      }
-      if (!withinReachHours(settings.hours, this.now())) continue;
-      this.deferred.delete(key);
-      if (!this.deps.card(message.threadId!, message.requestId!)) continue;
-      if (reachesBy(settings, "push")) this.deps.push(message);
-      this.track(this.dispatch(message, settings));
+      if (this.signals.get(notice.person, notice.botId, notice.id)) continue;
+      this.sendNotice(notice, this.deps.settings.get(notice.person, notice.botId) ?? DEFAULT_REACH_ME);
     }
   }
 
-  /** #2645: a card still open after each CARD_REMINDER_AFTER_MS step goes to the phone once more, within the person's
-   * hours and only where a push is their choice for that bot. The tap opens the card's own conversation. */
+  /** #2645: a card still open after each CARD_REMINDER_AFTER_MS step goes to the phone once more, where a push is among
+   * its bot's channels the person allows for its level (urgent: quiet hours do not hold it). The tap opens the card's
+   * own conversation. */
   private remind(): void {
     const now = this.now();
     for (const { person, entry } of this.followedCards()) {
@@ -314,9 +328,8 @@ export class ReachMe {
       const due = CARD_REMINDER_AFTER_MS[reminded];
       if (due === undefined || now - entry.firstAt < due) continue;
       const settings = this.deps.settings.get(person, entry.bot) ?? DEFAULT_REACH_ME;
-      if (!withinReachHours(settings.hours, now)) continue;
       const step = reminded + 1;
-      const pushes = reachesBy(settings, "push");
+      const pushes = channelsForLevel(entry.level, this.attention(person).channels, settings.channels).includes("push");
       // the step is on disk before it rings: a restart never rings it again
       this.signals.reminded(person, entry.bot, entry.key, step, pushes ? ["push"] : []);
       if (!pushes) continue;
@@ -354,18 +367,10 @@ export class ReachMe {
       this.raised.delete(`${person}\u0000${entry.key}`);
     }
     if (requestId) {
-      this.deferred.delete(cardKey(threadId, requestId));
       this.deps.codes.dropCard(threadId, requestId);
       return;
     }
-    for (const key of this.deferred.keys()) if (key.startsWith(`${threadId}\u0000`)) this.deferred.delete(key);
     for (const code of this.deps.codes.list()) if (code.threadId === threadId && !this.deps.card(code.threadId, code.requestId)) this.deps.codes.dropCard(code.threadId, code.requestId);
-  }
-
-  /** Cards held for later (the bot page's "waiting for your hours" count, tests). */
-  deferredCount(person?: string): number {
-    if (!person) return this.deferred.size;
-    return [...this.deferred.values()].filter((message) => message.personId === person).length;
   }
 
   /** Waits for every send started so far (tests, shutdown). */
@@ -379,11 +384,11 @@ export class ReachMe {
     void run.finally(() => this.inflight.delete(run)).catch(reportBackgroundError);
   }
 
-  private async dispatch(message: PushMessage, settings: ReachMeSettings): Promise<void> {
+  private async dispatch(message: PushMessage, settings: ReachMeSettings, channels: readonly ReachChannelId[]): Promise<void> {
     const card = this.deps.card(message.threadId!, message.requestId!);
     if (!card) return;
     const person = message.personId;
-    const wanted = settings.channels.filter((channel): channel is ReachChannelId => channel !== "push" && (REACH_WIRED as readonly string[]).includes(channel));
+    const wanted = channels.filter((channel) => channel !== "push");
     const ready = wanted.filter((channel) => {
       const status = this.deps.channels[channel]?.status(person, card.botId);
       if (status?.ready) return true;

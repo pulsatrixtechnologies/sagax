@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { proactiveWriteCanExecuteUnprompted } from "../../shared/proactive-mode.ts";
 import {
   FlowWatchLoop, WatchMemory, cadenceDue, evaluateWhen, observeCall, parseCadence, parseWatchListing, productsForApis,
-  proposeTool, readableName, watchesForProducts, watchReadTools, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchLoopDeps, type ObserveConnection,
+  proposeTool, readableName, watchesForBot, watchMissing, watchReadTools, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchLoopDeps, type ObserveConnection,
 } from "./flow-watches.ts";
 import { ProactiveBudget, ProactiveEngine, classifyProactiveActionKind } from "./proactive.ts";
 import { ProactivePendingFile, proactiveWakePrompt, type ProactiveEvent } from "./proactive-wake.ts";
@@ -285,8 +285,9 @@ describe("the loop", () => {
   });
 
   it("a watch runs only when the connection serves every product it names", async () => {
-    expect(watchesForProducts([watch({ products: ["connectwise", "sentinelone"] })], ["connectwise"])).toEqual([]);
-    expect(watchesForProducts([watch({ products: ["connectwise", "sentinelone"] })], ["connectwise", "sentinelone"])).toHaveLength(1);
+    const skills = () => new Set(["reporting-x"]);
+    expect(watchesForBot([watch({ products: ["connectwise", "sentinelone"] })], { products: ["connectwise"], skills })).toEqual([]);
+    expect(watchesForBot([watch({ products: ["connectwise", "sentinelone"] })], { products: ["connectwise", "sentinelone"], skills })).toHaveLength(1);
     const h = harness({ watches: [watch({ products: ["connectwise", "sentinelone"] })] });
     await h.loop.tick();
     expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
@@ -394,6 +395,37 @@ describe("the loop", () => {
     expect(h.sessions()).toBe(1);
   });
 
+  it("#3408: a chosen watch whose read the connection cannot run never reaches the bot: no call, no skip line, the domain pauses once", async () => {
+    const h = harness({ watches: [watch({ observe: { tool: "cw_psa_finance_query", args: {} } })] });
+    await h.loop.tick();
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    expect(h.calls).toEqual([]);
+    expect(h.offered).toEqual([]);
+    expect(h.logs.filter((line) => line.includes("skipped"))).toEqual([]);
+    expect(h.pauses).toEqual([{ botId: "b1", domain: "service", cause: "no-watch" }]);
+  });
+
+  it("#3408: the loop and the listing say the same of a watch: one filter, products, skill and read together", async () => {
+    const reads = { tools: new Set(["cw_psa_service_query"]), readOnly: new Set(["cw_psa_service_query"]) };
+    const skills = new Set(["reporting-x"]);
+    const run = (candidate: FlowWatch) => watchesForBot([candidate], { products: ["connectwise"], skills: () => skills, reads });
+    expect(run(watch())).toHaveLength(1);
+    expect(run(watch({ products: ["connectwise", "sentinelone"] }))).toEqual([]);
+    expect(run(watch({ skill: "dispatch-x" }))).toEqual([]);
+    expect(run(watch({ observe: { tool: "cw_psa_finance_query", args: {} } }))).toEqual([]);
+    expect(watchMissing(watch({ skill: "dispatch-x" }), { products: ["connectwise"], skills: () => skills, reads })).toEqual({ missing: "skill", lacking: ["dispatch-x"] });
+  });
+
+  it("two bots of one person both eligible for a domain: the one the person chose carries it, the other is never woken (#3394)", async () => {
+    const h = harness({
+      bots: [{ id: "b1", owner: "person-1" }, { id: "b2", owner: "person-1" }],
+      choices: [{ person: "person-1", domains: [{ domain: "service", botId: "b2" }] }],
+    });
+    await h.loop.tick();
+    expect(h.offered.map((event) => event.botId)).toEqual(["b2"]);
+  });
+
   it("the person's products are read once a day, not every hour", async () => {
     const h = harness({ observed: { items: [] } });
     await h.loop.tick();
@@ -498,11 +530,13 @@ describe("the loop", () => {
     expect(classifyProactiveActionKind({ tool: proposeTool(watch()) })).toBe("read");
   });
 
-  it("an observe that is not a read is skipped and logged", async () => {
+  // #3408 changed it on purpose: a watch whose observe is not a read never
+  // reaches the bot (it was a skip line each cadence); its domain pauses once
+  it("an observe that is not a read never runs: the domain pauses", async () => {
     const h = harness({ watches: [watch({ observe: { tool: "cw_psa_service_write", args: {} } })] });
     await h.loop.tick();
     expect(h.calls.map((call) => call.name)).not.toContain("cw_psa_service_write");
-    expect(h.logs.join("\n")).toContain("is not a read");
+    expect(h.pauses).toEqual([{ botId: "b1", domain: "service", cause: "no-watch" }]);
     expect(h.offered).toEqual([]);
   });
 

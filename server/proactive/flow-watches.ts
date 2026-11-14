@@ -414,12 +414,6 @@ export function productsForApis(apis: ReadonlyArray<{ id: string; name: string }
   return [...out].sort();
 }
 
-/** Watches a person's connection can run: every product a watch names is
- * served (all, not one), or it names none. */
-export function watchesForProducts(watches: readonly FlowWatch[], products: readonly string[]): FlowWatch[] {
-  const held = new Set(products);
-  return watches.filter((watch) => watch.products.every((product) => held.has(product)));
-}
 
 // ── the observe step ───────────────────────────────────────────────────────
 
@@ -452,6 +446,36 @@ function observeTool(observe: WatchObserve, session: Pick<ObserveSession, "tools
   if ("tool" in observe) return observe.tool;
   if ("recipe" in observe) return session.tools.has("flow") ? "flow" : "flow_run";
   return "flow_action";
+}
+
+/** What a bot and its person's connection can run of the organization's
+ * watches. */
+export interface WatchReach {
+  /** The Flow products the person's connection serves. */
+  products: readonly string[];
+  /** The bot's skills, read only when a watch names one. */
+  skills: () => ReadonlySet<string>;
+  /** The connection's tools and reads; absent when not read yet. */
+  reads?: Pick<ObserveSession, "tools" | "readOnly">;
+}
+
+/** #3408: why a watch cannot run on this bot for its person, or undefined
+ * when it can: every product it names is served (all, not one), the bot
+ * holds its skill, and the connection runs its observe as a read. The one
+ * rule for what is offered and what the loop observes. */
+export function watchMissing(watch: FlowWatch, reach: WatchReach): { missing: "product" | "skill" | "read"; lacking: string[] } | undefined {
+  const held = new Set(reach.products);
+  const absent = watch.products.filter((product) => !held.has(product));
+  if (absent.length) return { missing: "product", lacking: absent };
+  if (watch.skill && !reach.skills().has(watch.skill)) return { missing: "skill", lacking: [watch.skill] };
+  if (reach.reads && "refused" in observeCall(watch.observe, reach.reads)) return { missing: "read", lacking: [observeTool(watch.observe, reach.reads)] };
+  return undefined;
+}
+
+/** #3408: the watches that may reach this bot: never one whose product,
+ * skill or read it lacks. */
+export function watchesForBot(watches: readonly FlowWatch[], reach: WatchReach): FlowWatch[] {
+  return watches.filter((watch) => !watchMissing(watch, reach));
 }
 
 /** The tool name the proposed step is classified by. A declared read is a
@@ -876,18 +900,11 @@ export class FlowWatchLoop {
     if (universe.failed) return { ok: false, botId, cause: "flow-failed" };
     const products = await this.productsOf(person, botId, helper);
     if (products === null) return { ok: false, botId, cause: "no-access" };
-    const held = new Set(products);
-    const skills = this.skillsOnce(botId, person);
-    const reads = this.reads.get(person);
+    const reach: WatchReach = { products, skills: this.skillsOnce(botId, person), reads: this.reads.get(person) };
     const byDomain = new Map<string, OfferedWatch[]>();
     for (const watch of universe.watches) {
-      const absent = watch.products.filter((product) => !held.has(product));
-      const unread = !absent.length && reads && "refused" in observeCall(watch.observe, reads) ? observeTool(watch.observe, reads) : undefined;
-      const missing = absent.length ? "product" as const
-        : watch.skill && !skills().has(watch.skill) ? "skill" as const
-        : unread ? "read" as const : undefined;
-      const lacking = missing === "product" ? absent : missing === "skill" ? [watch.skill] : missing === "read" ? [unread!] : [];
-      const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing, lacking } : {}), tools: declaredTools(watch) };
+      const missing = watchMissing(watch, reach);
+      const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...missing, tools: declaredTools(watch) };
       byDomain.set(watch.domain, [...(byDomain.get(watch.domain) ?? []), row]);
     }
     const domains = [...byDomain].sort(([a], [b]) => a.localeCompare(b)).map(([domain, watches]): OfferedDomain => {
@@ -944,13 +961,11 @@ export class FlowWatchLoop {
       return;
     }
     const listing = products.length ? await this.listing(helper, products, botId) : { watches: [], rejected: 0 };
-    const served = watchesForProducts(listing.watches, products);
-    const skills = this.skillsOnce(botId, person);
+    const served = watchesForBot(listing.watches, { products, skills: this.skillsOnce(botId, person), reads: this.reads.get(person) });
     const mine: FlowWatch[] = [];
     for (const row of rows) {
       const off = new Set(row.watchesOff);
-      const runnable = served.filter((watch) => watch.domain === row.domain && !off.has(watch.id)
-        && (!watch.skill || skills().has(watch.skill)));
+      const runnable = served.filter((watch) => watch.domain === row.domain && !off.has(watch.id));
       if (!runnable.length) {
         // against every watch of the organization, not only the served ones:
         // a domain Flow does not have is said, never skipped in silence

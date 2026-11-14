@@ -201,7 +201,7 @@ export function watchPauseLine(domain: string, cause: WatchPauseCause, language:
     "no-flow": "le plugin Pulsatrix Flow de l'organisation n'est pas là",
     "flow-failed": "le plugin Pulsatrix Flow de l'organisation ne répond pas",
     "no-access": "ta connexion Pulsatrix ne répond pas pour toi",
-    "no-watch": "aucune veille de ce domaine ne peut rouler ici (un produit que ta connexion ne sert pas, ou un skill que ce bot n'a pas)",
+    "no-watch": "aucune veille de ce domaine ne peut rouler ici (un produit ou une lecture que ta connexion ne sert pas, ou un skill que ce bot n'a pas)",
     "unknown-domain": "l'organisation n'a aucune veille sous ce nom. Demande à un de tes bots les domaines que tu peux choisir",
   };
   const en: Record<WatchPauseCause, string> = {
@@ -210,7 +210,7 @@ export function watchPauseLine(domain: string, cause: WatchPauseCause, language:
     "no-flow": "the organization's Pulsatrix Flow plugin is missing",
     "flow-failed": "the organization's Pulsatrix Flow plugin does not answer",
     "no-access": "your Pulsatrix connection does not answer for you",
-    "no-watch": "no watch of this domain can run here (a product your connection does not serve, or a skill this bot lacks)",
+    "no-watch": "no watch of this domain can run here (a product or a read your connection does not serve, or a skill this bot lacks)",
     "unknown-domain": "the organization has no watch by that name. Ask any of your bots for the domains you can choose",
   };
   // an unknown name never comes back by itself: the line says what to do

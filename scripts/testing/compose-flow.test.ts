@@ -1,7 +1,10 @@
 // The catalogue no longer has a sidebar "Browse Bots" button. These cases
 // lock the snapshot decisions openTemplatesCatalog makes without a browser.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { catalogTemplateTools, nestedTemplatesCatalog, openTemplatesCatalog, type CatalogFlow } from "./compose-flow.ts";
+import { CONNECT_APPS_BUTTON, catalogTemplateTools, nestedTemplatesCatalog, openTemplatesCatalog, type CatalogFlow } from "./compose-flow.ts";
+
+const EN = JSON.parse(readFileSync(new URL("../../src/locales/en.json", import.meta.url), "utf8")) as Record<string, string>;
 
 const HOME = [
   'button "Back"',
@@ -27,7 +30,7 @@ function flow(pages: string[]): { flow: CatalogFlow; clicks: string[] } {
 }
 
 describe("openTemplatesCatalog", () => {
-  it("treats the hosted home as ready even though its Back returns to Plugins", () => {
+  it("treats the hosted home as ready even though its Back returns to Connect Apps", () => {
     expect(catalogTemplateTools(HOME)).toBe(true);
     expect(nestedTemplatesCatalog(HOME)).toBe(false);
   });
@@ -36,19 +39,24 @@ describe("openTemplatesCatalog", () => {
     const viewAll = ['button "Back"', 'heading "Templates"', "Browse Bots"].join("\n");
     expect(nestedTemplatesCatalog(viewAll)).toBe(true);
     expect(nestedTemplatesCatalog(HOME)).toBe(false);
-    expect(nestedTemplatesCatalog('heading "Plugins"\nbutton "Bot templates"')).toBe(false);
+    expect(nestedTemplatesCatalog('heading "Connect Apps"\nbutton "Bot templates"')).toBe(false);
   });
 
-  it("opens Plugins, then Bot templates, and stops once Import and Share a team show", async () => {
+  it("clicks the sidebar foot's button by the name the app shows, connectApps.title", () => {
+    // #4169 renamed the window from Plugins to Connect Apps; the smokes kept
+    // clicking "Plugins", which names nothing any more (#3568).
+    expect(CONNECT_APPS_BUTTON).toBe(EN["connectApps.title"]);
+    expect(CONNECT_APPS_BUTTON).toBe("Connect Apps");
+  });
+
+  it("opens Connect Apps, then Bot templates, and stops once Import and Share a team show", async () => {
     const { flow: catalog, clicks } = flow([
-      'button "Plugins"',
-      'heading "Plugins"\nbutton "Bot templates"',
+      'button "Connect Apps"',
+      'heading "Connect Apps"\nbutton "Bot templates"',
       HOME,
     ]);
     await openTemplatesCatalog(catalog);
-    // The sidebar foot's apps-grid button is named Plugins since 0.8.52
-    // (#2168); "Connect apps" names nothing in the app any more (#3568).
-    expect(clicks).toEqual(["Plugins", "Bot templates"]);
+    expect(clicks).toEqual(["Connect Apps", "Bot templates"]);
   });
 
   it("leaves the hosted home's Back alone", async () => {

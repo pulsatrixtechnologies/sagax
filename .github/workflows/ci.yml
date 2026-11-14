@@ -584,9 +584,8 @@ jobs:
     # docs/verification/chat-ui.md run by a machine. It downloads the pinned
     # agent-browser release (digest verified) and its Chrome, drives the real
     # <App/> against the isolated fake-engine fixture, and keeps the screenshot.
-    # The selectors still name the old header ("More", "New or share", Ctrl+N
-    # as New bot). That drift already fails on main and must not fail this run.
-    continue-on-error: true
+    # The selectors follow the names the app shows (the sidebar foot's button
+    # is read from connectApps.title), so a red run is a real break (#3568).
     name: renderer smoke (control-omb ui, Ubuntu 24.04)
     runs-on: ubuntu-latest
     timeout-minutes: 15

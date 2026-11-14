@@ -2,7 +2,8 @@
  * also rendered by the one-card-level guard (#2175,
  * src/components/SettingsModal.oneCardLevel.dom.test.ts) so a page is checked
  * on the same data it is shot with. Fictional data only, neutral names.
- * `params`: the gallery's query (`providers=1`, `org=1`, `auto=1`, `keys=unreadable`). */
+ * `params`: the gallery's query (`providers=1`, `org=1`, `auto=1`, `keys=unreadable`,
+ * `many=1` with providers=1: a realistic Providers list, eleven rows and more). */
 export function settingsPagesApi(params: URLSearchParams): Record<string, unknown> {
   const DAY = 86_400_000;
   const NOW = Date.UTC(2026, 9, 28, 14);
@@ -41,6 +42,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
         openaiCompatServers: [
           { instanceId: "compat-azure", name: "Azure Foundry", url: "https://example-resource.openai.azure.com/openai/v1", configured: true },
           { instanceId: "personal-lab", name: "Home lab", url: "http://127.0.0.1:8002/v1", configured: true },
+          ...(params.get("many") ? [{ instanceId: "compat-research", name: "Research cluster in the basement rack, second floor", url: "http://10.0.0.20:8080/v1", configured: true }] : []),
         ],
         // Server default recovery so Models shows a real Backup column (#2080).
         automaticRecovery: { enabled: true, backup: { instanceId: "grok", model: "grok-4" } },
@@ -61,6 +63,13 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
         { instanceId: "mistral", displayName: "Mistral", driverKind: "mistral", access: "api", snapshot: { state: "available", authenticated: false }, models: { default: "", options: [] } },
         { instanceId: "compat-azure", displayName: "Azure Foundry", driverKind: "openai-compat", access: "api", capabilities: { withholdsHostTools: true }, snapshot: { state: "available", authenticated: true }, models: { default: "gpt-4.1", options: [{ id: "gpt-4.1", label: "gpt-4.1", custom: true }, { id: "gpt-4.1-mini", label: "gpt-4.1-mini", custom: true }, { id: "o4-mini", label: "o4-mini", custom: true }, { id: "gpt-4o", label: "gpt-4o", custom: true }] } },
         { instanceId: "personal-lab", displayName: "Home lab", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "qwen-3.8-27b", options: [{ id: "qwen-3.8-27b", label: "Qwen 3.8 27B", custom: true }] }, capabilities: { effortLevels: [] } },
+      ] : []),
+      // &many=1 (#4329): a third Claude account with a long email, more keys and a long server name
+      ...(params.get("providers") && params.get("many") ? [
+        { instanceId: "claude-research", displayName: "Claude research", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "research.team.shared.account@example.com" } }, models: { default: "sonnet", options: [{ id: "sonnet", label: "Claude Sonnet 4.5" }] } },
+        { instanceId: "deepseek", displayName: "DeepSeek", driverKind: "deepseekAgent", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "deepseek-chat", options: [{ id: "deepseek-chat", label: "DeepSeek Chat" }] } },
+        { instanceId: "openrouter", displayName: "OpenRouter", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: false }, models: { default: "", options: [] } },
+        { instanceId: "compat-research", displayName: "Research cluster in the basement rack, second floor", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "llama-4-70b", options: [{ id: "llama-4-70b", label: "Llama 4 70B", custom: true }, { id: "llama-4-8b", label: "Llama 4 8B", custom: true }] } },
       ] : []),
       // &pi=1 (#2983): the pi engine, so Providers shows Model servers for pi
       ...(params.get("pi") ? [

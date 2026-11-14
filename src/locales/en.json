@@ -13541,6 +13541,7 @@
   "providers.brings.models": "{count} models",
   "providers.copyId": "Copy the identifier",
   "providers.copied": "Copied",
+  "providers.changeKey": "Change key",
   "providers.explain.me": "You pay: your subscription or your key.",
   "providers.explain.org": "The organization pays: a key an admin set.",
   "providers.explain.computer": "A model of this computer: no key, nobody pays.",

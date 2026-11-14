@@ -52,15 +52,16 @@ function ProviderListRow({ group, list, onOpen }: { group: ProviderGroup; list: 
           className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
           <ProviderLogo group={group} instances={list.instances} />
           <span className="min-w-0 flex-1">
-            <span className={PLUGINS.rowName}>{groupName(group)}</span>
-            <span className={PLUGINS.rowSub} data-provider-line={first.id}>{line(first)}</span>
+            {/* a long server name wraps, never cut (#4329: no name cut at any width) */}
+            <span className="block break-words text-[13px] font-medium leading-[18px] text-ink [overflow-wrap:anywhere]">{groupName(group)}</span>
+            <span className={cn(PLUGINS.rowSub, "[overflow-wrap:anywhere]")} data-provider-line={first.id}>{line(first)}</span>
           </span>
         </button>
         <LineButton row={first} group={group} list={list} onOpen={onOpen} />
       </div>
       {rest.map((row) => (
         <div key={row.id} data-provider-line-row={row.id} className="-mt-2 flex min-w-0 items-center gap-3 pb-2 pl-[64px] pr-3">
-          <button type="button" onClick={() => onOpen(row)} className={cn(PLUGINS.rowSub, "mt-0 min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70")} data-provider-line={row.id}>
+          <button type="button" onClick={() => onOpen(row)} className={cn(PLUGINS.rowSub, "mt-0 min-w-0 flex-1 [overflow-wrap:anywhere] rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70")} data-provider-line={row.id}>
             {line(row)}
           </button>
           <LineButton row={row} group={group} list={list} onOpen={onOpen} />

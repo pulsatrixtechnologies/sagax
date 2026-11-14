@@ -16,10 +16,9 @@ export function PersonalProviderKey({ provider, name, onDone }: { provider: stri
   const change = async (remove: boolean) => {
     setBusy(true); setNote(null);
     try {
-      await api<ProviderAccountsView>(`${PROVIDER_ACCOUNTS_PATH}/keys/${encodeURIComponent(provider)}`, {
-        method: remove ? "DELETE" : "PUT", ...(remove ? {} : { body: JSON.stringify({ key: value.trim() }) }),
-      });
-      setValue(""); providerAccountsChanged();
+      if (remove) await removePersonalKey(provider);
+      else { await api<ProviderAccountsView>(`${PROVIDER_ACCOUNTS_PATH}/keys/${encodeURIComponent(provider)}`, { method: "PUT", body: JSON.stringify({ key: value.trim() }) }); providerAccountsChanged(); }
+      setValue("");
       await Promise.resolve(refreshInstances()).catch(() => {});
       setNote(t(remove ? "voiceKeys.removed" : "voiceKeys.saved"));
       onDone?.();
@@ -42,6 +41,12 @@ export function PersonalProviderKey({ provider, name, onDone }: { provider: stri
     </div>
     {note && <p role="status" className="text-[12px] text-ink-secondary">{note}</p>}
   </div>;
+}
+
+/** Remove one of the person's own keys (its form and its line's Remove). */
+export async function removePersonalKey(provider: string): Promise<void> {
+  await api<ProviderAccountsView>(`${PROVIDER_ACCOUNTS_PATH}/keys/${encodeURIComponent(provider)}`, { method: "DELETE" });
+  providerAccountsChanged();
 }
 
 /** Remove a server the person added (its line's button and its form). */

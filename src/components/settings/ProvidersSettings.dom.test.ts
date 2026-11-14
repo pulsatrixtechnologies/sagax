@@ -31,6 +31,8 @@ const answers = (path: string): unknown => {
   if (path === "/api/me/providers") return { keys: [], servers: [] };
   if (path === "/api/me/local-models") return fixture.local;
   if (path === "/api/me/pi-model-servers") return { servers: fixture.piServers };
+  if (path.startsWith("/api/me/pi-model-servers/")) return {};
+  if (path.startsWith("/api/me/providers/")) return { keys: [], servers: [] };
   throw new Error(`no answer for ${path}`);
 };
 
@@ -57,6 +59,8 @@ vi.mock("../DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capa
 vi.mock("../HarnessConnectorsSection", () => ({ HarnessConnectorsSection: () => createElement("div", { "data-harness-connectors": "" }) }));
 
 const { ProvidersSettings, addChoices } = await import("./ProvidersSettings");
+const { api: apiMock } = await import("@/state/store");
+const apiCalls = (method: string) => vi.mocked(apiMock).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === method).map(([path, init]) => [path, (init as RequestInit).body ?? null]);
 const { ProviderPage } = await import("./ProviderPage");
 const { resetSettingsCards, requestSettingsCard } = await import("../SettingsPrimitives");
 
@@ -183,8 +187,42 @@ describe("Settings > Providers: the short list (#4329 B1)", () => {
     await render();
     await click(host.querySelector('[data-provider-open="mistral"]'));
     expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "toggleAppSettings", open: true, section: "providers", subPage: "providers.provider:mistral" });
-    await click(host.querySelector('[data-provider-action="remove"]'));
-    expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "toggleAppSettings", open: true, section: "providers", subPage: "providers.provider:mistral" });
+  });
+
+  it("never cuts a long server name or email: the row wraps instead", async () => {
+    fixture.instances = [instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "research.team.shared.account@example.com" } } })];
+    await render();
+    const row = host.querySelector<HTMLElement>('[data-provider="anthropic"]')!;
+    expect(row.querySelectorAll(".truncate")).toHaveLength(0);
+  });
+
+  it("a saved key's Remove removes the key after one confirm, as its word says, and never just opens the key", async () => {
+    fixture.instances = [instance("mistral", "mistral", "Mistral")];
+    await render();
+    vi.mocked(apiMock).mockClear();
+    fixture.dispatch.mockClear();
+    const remove = host.querySelector('[data-provider="mistral"] [data-provider-action="remove"] button')!;
+    expect(remove.textContent).toBe("Remove");
+    await click(remove);
+    expect(apiCalls("DELETE"), "the first click only asks to confirm").toHaveLength(0);
+    expect(remove.textContent).toBe("Confirm removal");
+    await click(remove);
+    expect(apiCalls("DELETE")).toEqual([["/api/me/providers/keys/mistral", null]]);
+    expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ subPage: "providers.provider:mistral" }));
+  });
+
+  it("a server's Remove on the list asks to confirm as the server's own page does, then removes it", async () => {
+    fixture.instances = [instance("pi", "piAgent", "pi", { access: "custom" })];
+    fixture.piServers = [{ id: "sx-1", name: "oMLX", url: "http://127.0.0.1:8000/v1", configured: false, models: [{ id: "qwen" }], provider: "px-own-sx-1" }];
+    await render();
+    vi.mocked(apiMock).mockClear();
+    const remove = host.querySelector('[data-provider="pi-server:sx-1"] [data-provider-action="remove"] button')!;
+    await click(remove);
+    expect(apiCalls("DELETE"), "one click never deletes").toHaveLength(0);
+    expect(remove.getAttribute("data-confirm-pill")).toBe("armed");
+    expect(remove.textContent).toBe("Remove the server");
+    await click(remove);
+    expect(apiCalls("DELETE")).toEqual([["/api/me/pi-model-servers/sx-1", null]]);
   });
 
   it("lists this computer when it is on, with Turn off; a server for pi as a provider of its own", async () => {
@@ -326,6 +364,28 @@ describe("One provider's page (#4329 B3)", () => {
     expect(advanced.textContent).toContain("Check account");
     await click([...advanced.querySelectorAll<HTMLElement>("[data-inline-fold] > button")].find((button) => button.textContent?.includes("Manage account")));
     expect([...advanced.querySelectorAll("button")].some((button) => button.textContent === "Remove account")).toBe(true);
+  });
+
+  it("draws no empty block in Advanced for an account with nothing of its own to show", async () => {
+    fixture.instances = [
+      instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }),
+      instance("claude-alex", "claudeAgent", "Claude alex", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "alex@example.com" } } }),
+    ];
+    await page("anthropic");
+    const advanced = host.querySelector<HTMLElement>("[data-provider-page-advanced]")!;
+    for (const block of advanced.querySelectorAll("[data-provider-advanced] > *")) {
+      expect(block.childNodes.length + (block.textContent ?? "").length, block.outerHTML.slice(0, 80)).toBeGreaterThan(0);
+    }
+    for (const card of advanced.querySelectorAll("[data-engine-card]")) expect(card.childNodes.length).toBeGreaterThan(0);
+  });
+
+  it("keeps a saved key's Change key in Advanced: it opens the line's key", async () => {
+    fixture.instances = [instance("mistral", "mistral", "Mistral")];
+    await page("mistral");
+    expect(host.querySelector("[data-personal-provider-key]")).toBeNull();
+    await click(host.querySelector('[data-settings-card="providers.page.advanced.mistral"] button[aria-expanded]'));
+    await click(host.querySelector("[data-provider-change-key]"));
+    expect(host.querySelector('[data-provider-panel] [data-personal-provider-key="mistral"]')).not.toBeNull();
   });
 
   it("says what belongs to the tool once per tool: one connectors sentence and one CLI path fold for two Claude accounts", async () => {

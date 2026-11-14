@@ -394,28 +394,37 @@ export function EngineRow({ instance, mine, member = false, issuer = "", bare = 
     {!engineReady(instance) && <p className="mt-2 text-[12px] text-ink-secondary">{t("organization.engineUnavailable")}</p>}
   </EngineCard>;
 
+  // The account's own part (its line's button opens it on a provider page).
+  const connectPart = mine && <EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} className="mb-3" statusLine={false} keysManaged={keysManaged} />;
+  const setupPart = !mine && !engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed keysManaged={keysManaged} />;
+  const keyPart = !mine && !keysManaged && engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />;
+  const claudePart = !mine && instance.claudeAccount && <ClaudeAccountSettings instance={instance} />;
+  const signedPart = !mine && engineReady(instance) && instance.snapshot.authenticated === true && (
+    (instance.authentication?.method === "device-code" || instance.authentication?.method === "browser-pkce") && deviceSignInProvider(instance.driverKind) === "codex"
+      ? <CodexAccountSettings instance={instance} />
+      : instance.authentication?.method === "device-code"
+      ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY[deviceSignInProvider(instance.driverKind)].connectedAccount)}</p>
+      : instance.authentication?.method === "open-link"
+      ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY.cursor.connectedAccount)}</p>
+      : instance.authentication?.method === "paste-code" && !instance.claudeAccount && (
+        <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
+      )
+  );
+  // #4329: the account part alone, with nothing to show, draws nothing (no empty block)
+  if (part === "access" && !connectPart && !setupPart && !keyPart && !claudePart && !signedPart) return null;
+
   return (
     <EngineCard instance={instance} personal={mine && personalEngineLine(mine)} bare={bare}>
       {details && policyNote}
       {details && hostToolsNote}
-      {access && mine && <EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} className="mb-3" statusLine={false} keysManaged={keysManaged} />}
-      {access && !mine && !engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed keysManaged={keysManaged} />}
-      {access && !mine && !keysManaged && engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
+      {access && connectPart}
+      {access && setupPart}
+      {access && keyPart}
       {details && tool && instance.snapshot.update && <EngineUpdateNotice update={instance.snapshot.update} instance={instance} className="mt-3" />}
       {details && instance.snapshot.warning && <EngineWarningNotice warning={instance.snapshot.warning} className="mt-3" />}
       {details && connectors && engineReady(instance) && <EngineConnectorsLine driverKind={instance.driverKind} />}
-      {access && !mine && instance.claudeAccount && <ClaudeAccountSettings instance={instance} />}
-      {access && !mine && engineReady(instance) && instance.snapshot.authenticated === true && (
-        (instance.authentication?.method === "device-code" || instance.authentication?.method === "browser-pkce") && deviceSignInProvider(instance.driverKind) === "codex"
-          ? <CodexAccountSettings instance={instance} />
-          : instance.authentication?.method === "device-code"
-          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY[deviceSignInProvider(instance.driverKind)].connectedAccount)}</p>
-          : instance.authentication?.method === "open-link"
-          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY.cursor.connectedAccount)}</p>
-          : instance.authentication?.method === "paste-code" && !instance.claudeAccount && (
-            <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
-          )
-      )}
+      {access && claudePart}
+      {access && signedPart}
       {details && instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
       {part === "all" && !member && <AddAnotherAccount instance={instance} />}
       {details && !tool && advancedExtra && <div className="mt-3 flex flex-col gap-2">{advancedExtra}</div>}

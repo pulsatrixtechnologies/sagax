@@ -32,12 +32,12 @@ import { AddAnotherAccount, EngineRow } from "../EnginesSettings";
 import { engineReady } from "../EngineLibrary";
 import { InstanceProviderMark, PresetProviderMark } from "../ProviderIcons";
 import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../../shared/provider-icon";
-import { CountPill, DescribedRow, HelpTip, LinkRow, PILL, SettingsGroup, peekRequestedSettingsCard, requestSettingsCard } from "../SettingsPrimitives";
+import { ConfirmPill, CountPill, DescribedRow, HelpTip, LinkRow, PILL, SettingsGroup, peekRequestedSettingsCard, requestSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { pluginActionClass } from "../plugins/plugins-style";
-import { ProviderKeyEditor, keyRowForEngine } from "./ProviderKeys";
+import { ProviderKeyEditor, keyRowForEngine, removeProviderKey } from "./ProviderKeys";
 import { ServerForm } from "./OpenAiCompatServers";
-import { PersonalProviderKey, PersonalProviderServerForm, removePersonalServer } from "./PersonalProviderAccount";
+import { PersonalProviderKey, PersonalProviderServerForm, removePersonalKey, removePersonalServer } from "./PersonalProviderAccount";
 import { LocalModelsSettings } from "./LocalModelsSettings";
 import { PiServerDetail, removePiServer } from "./PiModelServers";
 import {
@@ -121,7 +121,24 @@ export function ProviderLogo({ group, instances }: { group: ProviderGroup; insta
 /** The one action of a line, or none (a connected account its engine cannot
  * sign out of here: what it has, its Remove and its check, sit in Advanced). */
 export function lineAction(row: ProviderRow, list: Pick<ProviderList, "organization" | "mine" | "instances">): ConnectionAction | null {
-  return connectionAction(row, canSignOut(row, list));
+  const action = connectionAction(row, canSignOut(row, list));
+  // a saved key's Remove removes it; a voice key is managed in Voice (Advanced says where)
+  if (action === "remove" && row.kind === "key" && !row.keyRow && !row.accountProvider) return null;
+  return action;
+}
+
+/** What a line's Remove takes away, at once after its confirm: a server or a
+ * saved key, each by the path its own form uses. */
+function removeLine(row: ProviderRow, list: ProviderList, dispatch: ReturnType<typeof useStore>["dispatch"]): Promise<unknown> {
+  if (row.kind === "server" && row.id.startsWith(PI_SERVER_PREFIX)) {
+    const id = row.id.slice(PI_SERVER_PREFIX.length);
+    return removePiServer(id).then(() => list.piServers.removed(id));
+  }
+  if (row.kind === "server" && row.accountServer) return removePersonalServer(row.accountServer.instanceId);
+  if (row.kind === "server" && row.compatServerId) return api(`/api/instances/openai-compat-servers/${encodeURIComponent(row.compatServerId)}`, { method: "DELETE" });
+  if (row.kind === "key" && row.accountProvider) return removePersonalKey(row.accountProvider);
+  if (row.kind === "key" && row.keyRow) return removeProviderKey(row.keyRow).then((config) => dispatch({ type: "configStatus", config }));
+  return Promise.resolve();
 }
 
 /** Which instances of a page say what belongs to their tool: the first
@@ -145,44 +162,35 @@ export function toolSpeakers(rows: readonly ProviderRow[], list: Pick<ProviderLi
   return speakers;
 }
 
-/** The one button of a line. Turn on, Turn off and Remove (a server) act at
- * once; the others open what they do on the provider's page. */
+/** The one button of a line. Turn on and Turn off act at once; Remove (a
+ * server, a saved key) asks to confirm first, as on the server's own page;
+ * the others open what they do on the provider's page. */
 export function LineButton({ row, group, list, onOpen }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; onOpen: (row: ProviderRow) => void }) {
-  const { refreshInstances } = useStore();
+  const { dispatch, refreshInstances } = useStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const action = lineAction(row, list);
   if (!action) return null;
-  const run = (work: () => Promise<unknown>) => {
+  const label = `${t(ACTION_KEY[action])} · ${groupName(group)}`;
+  const remove = () => {
     setBusy(true);
     setError(null);
-    work().then(() => Promise.resolve(refreshInstances()).catch(() => {}))
+    removeLine(row, list, dispatch).then(() => Promise.resolve(refreshInstances()).catch(() => {}))
       .catch((failure: Error) => setError(failure.message))
       .finally(() => setBusy(false));
   };
   const click = () => {
     if (action === "turnOn" || action === "turnOff") { list.setLocal({ expose: action === "turnOn" }); return; }
-    if (action === "remove" && row.kind === "server") {
-      if (row.id.startsWith(PI_SERVER_PREFIX)) {
-        const id = row.id.slice(PI_SERVER_PREFIX.length);
-        run(() => removePiServer(id).then(() => list.piServers.removed(id)));
-      } else if (row.accountServer) {
-        const id = row.accountServer.instanceId;
-        run(() => removePersonalServer(id));
-      } else if (row.compatServerId) {
-        const id = row.compatServerId;
-        run(() => api(`/api/instances/openai-compat-servers/${encodeURIComponent(id)}`, { method: "DELETE" }));
-      }
-      return;
-    }
     onOpen(row);
   };
+  const pi = row.id.startsWith(PI_SERVER_PREFIX);
   return (
     <span className="flex shrink-0 flex-col items-end gap-1">
-      <button type="button" data-provider-action={action} data-provider-action-row={row.id} disabled={busy} onClick={click}
-        aria-label={`${t(ACTION_KEY[action])} · ${groupName(group)}`} className={pluginActionClass("fill")}>
-        {t(ACTION_KEY[action])}
-      </button>
+      {action === "remove"
+        ? <span data-provider-action="remove" data-provider-action-row={row.id} className="flex">
+            <ConfirmPill label={t(ACTION_KEY.remove)} confirmLabel={t(pi ? "piServers.removeConfirm" : "common.confirmRemove")} ariaLabel={label} onConfirm={remove} disabled={busy} />
+          </span>
+        : <button type="button" data-provider-action={action} data-provider-action-row={row.id} onClick={click} aria-label={label} className={pluginActionClass("fill")}>{t(ACTION_KEY[action])}</button>}
       {error && <span role="alert" className="max-w-[220px] text-right text-[12px] text-danger">{error}</span>}
     </span>
   );
@@ -237,7 +245,7 @@ function ConnectionPanel({ row, group, list, onClose }: { row: ProviderRow; grou
 /** Everything else a line had (#4329 B3 Advanced): who pays, the key in the
  * organization console, a server's address, the tool by its name with its
  * version, location and updates, the model list problem, the identifier. */
-function ConnectionAdvanced({ row, list, speakers }: { row: ProviderRow; list: ProviderList; speakers: ReturnType<typeof toolSpeakers> }) {
+function ConnectionAdvanced({ row, list, speakers, onEditKey }: { row: ProviderRow; list: ProviderList; speakers: ReturnType<typeof toolSpeakers>; onEditKey?: () => void }) {
   const { state, dispatch } = useStore();
   const [editing, setEditing] = useState(false);
   const instances = rowInstances(row, list.instances);
@@ -252,7 +260,7 @@ function ConnectionAdvanced({ row, list, speakers }: { row: ProviderRow; list: P
   // what it brings besides models (voice, images), said once here
   const brings = row.brings.map((item) => item === "voice" ? t("providers.brings.voice") : item === "images" ? t("providers.brings.images") : "").filter(Boolean).join(" · ");
   return (
-    <div data-provider-advanced={row.id} className="flex min-w-0 flex-col gap-2 px-3.5 py-2.5">
+    <div data-provider-advanced={row.id} className="flex min-w-0 flex-col gap-2 px-3.5 py-2.5 [&_[data-engine-card-bare]>*:first-child]:mt-0">
       <span className="text-[12px] font-medium text-ink">{title}</span>
       {row.state === "adminOff" && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("providers.adminOffHint")}</p>}
       {instances.map((instance) => instance.models.issue && (
@@ -286,11 +294,13 @@ function ConnectionAdvanced({ row, list, speakers }: { row: ProviderRow; list: P
       {/* a connected account with no button on its line (no sign-out here):
           its account part (check, manage, Remove) is reached here */}
       {row.kind === "account" && !lineAction(row, list) && instances.map((instance) => (
-        <div key={`access:${instance.instanceId}`} data-provider-account-access={instance.instanceId}>
-          <EngineRow instance={instance} mine={list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined}
-            member={list.member} issuer={list.issuer} bare keysManaged part="access" />
-        </div>
+        <EngineRow key={`access:${instance.instanceId}`} instance={instance} mine={list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined}
+          member={list.member} issuer={list.issuer} bare keysManaged part="access" />
       ))}
+      {/* a saved key: Remove sits on its line; Change key opens the line's key */}
+      {onEditKey && (
+        <button type="button" data-provider-change-key={row.id} className={cn(PILL, "self-start")} onClick={onEditKey}>{t("providers.changeKey")}</button>
+      )}
       {!row.accountServer && instances.map((instance) => (
         <EngineRow key={instance.instanceId} instance={instance} mine={list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined}
           member={list.member} issuer={list.issuer} bare keysManaged part="details" advancedExtra={<>{explain}{copyId}</>}
@@ -390,7 +400,7 @@ export function ProviderPage({ providerId }: { providerId: string }) {
               <li key={row.id} data-provider-line={row.id} data-open={shown ? "true" : "false"} className="min-w-0">
                 <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] leading-[18px] text-ink">{words.label}</span>
+                    <span className="block break-words text-[13px] leading-[18px] text-ink [overflow-wrap:anywhere]">{words.label}</span>
                     <span className="block text-[12px] leading-4">
                       {words.state
                         ? <StatusText tone={row.state === "reconnect" || row.state === "keyMissing" ? "warning" : "neutral"}>{words.state}</StatusText>
@@ -419,7 +429,10 @@ export function ProviderPage({ providerId }: { providerId: string }) {
       )}
       <ModelsRow group={group} list={list} />
       <PageAdvanced providerId={group.id}>
-        {group.rows.map((row) => <ConnectionAdvanced key={row.id} row={row} list={list} speakers={speakers} />)}
+        {group.rows.map((row) => (
+          <ConnectionAdvanced key={row.id} row={row} list={list} speakers={speakers}
+            onEditKey={row.kind === "key" && lineAction(row, list) === "remove" ? () => show(row.id) : undefined} />
+        ))}
       </PageAdvanced>
     </div>
   );

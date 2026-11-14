@@ -18794,7 +18794,8 @@
       "providers.runsWith.pi": "85b42e1702877c851eb7412fe958c8fb447c3207b4798fadab42ea8539046ce1",
       "providers.runsWith.opencode": "3af0e55ccc96d87ce0f167c9b1bdf63212d20aece6aa24eeac88ec438674dfb0",
       "providers.runsWith.tool": "c890036cad02aa1cd91651f6b0355fb8cd18636c2dbbb4fb3eb16c9453ddc62e",
-      "providers.listTitle": "9ddb3a56d022220e015f52b1641a5ae41178a6b6663998367782fb0230b19698"
+      "providers.listTitle": "9ddb3a56d022220e015f52b1641a5ae41178a6b6663998367782fb0230b19698",
+      "providers.changeKey": "1bc0f4da5f82b4e66d77dcecfb4a8f468718abeb9a0be4d465afb244ec322ea9"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

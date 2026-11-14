@@ -221,8 +221,9 @@ for pi as a provider of its own, "This computer" when its models are on).
 A row is a logo, the name, one grey line (the account's email, a plan's
 name, "Key", or "N models") and one button in plain words: Sign in, Sign
 out, Sign in again (the session expired), Add key, Remove, Turn on, Turn
-off. A second account is a second line with its own button; nothing
-unfolds. No tool name, address or identifier on the first level. What the
+off. Remove (a saved key or a server) asks to confirm once, as a pi
+server's own page does, then removes it at once. A second account is a
+second line with its own button; nothing unfolds. No tool name, address or identifier on the first level. What the
 organization pays for and a provider the admin turned off are hidden (they
 still apply). The rows come from the stores as they are
 (`src/lib/provider-rows.ts`, pure, tested in `provider-rows.test.ts`;
@@ -246,7 +247,8 @@ choice exists, hidden when only one engine can run that connection), the
 Models link ("N of M on", to Active models), and Advanced, folded each time
 the page opens. Advanced holds everything else: who pays and where the key
 lives, voice and images, the key in the organization console, a server's
-address and Edit, model list problems, the account part of a connected
+address and Edit, Change key for a saved key (it opens the line's key),
+model list problems, the account part of a connected
 account whose line has no button (check, manage, Remove of a second Claude
 account), Copy the identifier, and once per tool its update notice, its
 connectors sentence and its "CLI path and updates" fold. This computer's

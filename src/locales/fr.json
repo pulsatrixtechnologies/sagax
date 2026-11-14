@@ -13523,6 +13523,7 @@
   "providers.brings.models": "{count} modèles",
   "providers.copyId": "Copier l'identifiant",
   "providers.copied": "Copié",
+  "providers.changeKey": "Changer la clé",
   "providers.explain.me": "Tu paies : ton abonnement ou ta clé.",
   "providers.explain.org": "L'organisation paie : une clé posée par un admin.",
   "providers.explain.computer": "Un modèle de cet ordinateur : aucune clé, personne ne paie.",

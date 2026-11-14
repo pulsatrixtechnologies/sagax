@@ -8,6 +8,7 @@ import { handleRemoteSupportCall } from "../../remote-support/remote-support-loc
 import { hostCodeCall } from "../../remote-support/remote-host-agent-tools.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
+import { productKeyCardShownText } from "../../../shared/person-products.ts";
 
 // Perspicax gateway tools: the meta-tools and memory tools Perspicax 1.8.28
 // serves on /mcp, under their real names and input schemas (connector
@@ -151,7 +152,7 @@ export async function callPerspicaxTool(name: string, args: Json, context: ToolC
     const label = typeof body.label === "string" ? body.label : product;
     if (!ok) return { text: String(body.error ?? "The product key card could not be shown."), isError: true };
     if (body.alreadyConfigured) return { text: `${label} is already connected. Continue the task.` };
-    return { text: `A secure card for ${label} was shown to the person. End this turn now and say in one line that you are waiting for it; Sagax resumes you with the outcome. Never ask for the key in chat.` };
+    return { text: productKeyCardShownText(label) };
   }
   if (name === "remote_support_host_code") {
     const record = args && typeof args === "object" && !Array.isArray(args) ? args : {};

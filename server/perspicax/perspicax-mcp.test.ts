@@ -22,6 +22,7 @@ function harness(options: {
   maxPingedPerPerson?: number;
   guard?: PerspicaxMcpOptions["permissionGuard"];
   remoteSupport?: PerspicaxMcpOptions["onRemoteSupport"];
+  productKeyState?: PerspicaxMcpOptions["onProductKeyState"];
   askGo?: PerspicaxMcpOptions["askGo"];
 } = {}) {
   let clock = 1_000_000;
@@ -107,6 +108,7 @@ function harness(options: {
     version: "0.1.89",
     ...(options.guard ? { permissionGuard: options.guard } : {}),
     ...(options.remoteSupport ? { onRemoteSupport: options.remoteSupport } : {}),
+    ...(options.productKeyState ? { onProductKeyState: options.productKeyState } : {}),
     ...(options.askGo ? { askGo: options.askGo } : {}),
     fetch: fetcher,
     now: () => clock,
@@ -1071,6 +1073,46 @@ describe("PerspicaxMcp remote support answers", () => {
       args: { code: "BQDHS7" },
       result: { content: [{ type: "text", text: JSON.stringify({ state: "connected", fetch_ip_count: 1 }) }] },
     }]);
+  });
+});
+
+describe("PerspicaxMcp product key state (#4185)", () => {
+  const keyMissing = { code: "auth_unavailable", message: "no usable key", hint: "", details: { product: "acme_psa", key_state: "key_missing" } };
+  const mcpAnswering = (result: Record<string, unknown>) => ({ body }: { body: any }) => {
+    if (body.id === undefined) return new Response(null, { status: 202 });
+    const answer = body.method === "tools/call" ? result : { tools: [] };
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: answer }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
+  };
+
+  it("a product tool refused for a key state raises the card through the hook and tells the bot in one more sentence", async () => {
+    const seen: unknown[] = [];
+    const h = harness({
+      productKeyState: async (turnInfo, state) => { seen.push({ turnInfo, state }); return "A secure card for Acme PSA was shown to the person. End this turn now."; },
+      mcp: mcpAnswering({ isError: true, structuredContent: keyMissing, content: [{ type: "text", text: JSON.stringify(keyMissing) }] }),
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "cw_psa_query", arguments: {} } } });
+    expect(seen).toEqual([{ turnInfo: { threadId: "t1", botId: "x", principalId: "pr_bob", routine: false }, state: { product: "acme_psa", keyState: "key_missing" } }]);
+    const content = (answer.body as { result: { isError: boolean; content: Array<{ text: string }> } }).result;
+    expect(content.isError).toBe(true);
+    expect(content.content).toHaveLength(2);
+    expect(content.content[1]!.text).toMatch(/secure card for Acme PSA/);
+  });
+
+  it("leaves the answer unchanged when nothing was raised, the hook fails, or the error carries no key state", async () => {
+    let calls = 0;
+    const plain = { code: "upstream_error", message: "boom", details: {} };
+    for (const [result, hook] of [
+      [{ isError: true, structuredContent: keyMissing, content: [{ type: "text", text: "x" }] }, async () => { calls++; return null; }],
+      [{ isError: true, structuredContent: keyMissing, content: [{ type: "text", text: "x" }] }, async () => { calls++; throw new Error("never changes the answer"); }],
+      [{ isError: true, structuredContent: plain, content: [{ type: "text", text: "x" }] }, async () => { calls++; return "never"; }],
+    ] as const) {
+      const h = harness({ productKeyState: hook, mcp: mcpAnswering(result as Record<string, unknown>) });
+      await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+      const answer = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "cw_psa_query", arguments: {} } } });
+      expect((answer.body as { result: { content: unknown[] } }).result.content).toHaveLength(1);
+    }
+    expect(calls).toBe(2);
   });
 });
 

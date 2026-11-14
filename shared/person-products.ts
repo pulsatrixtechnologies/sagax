@@ -224,6 +224,11 @@ export function productCardReason(state: ProductState): ProductCardReason | null
   }
 }
 
+/** What the bot is told once a product key card is shown: end the turn. */
+export function productKeyCardShownText(name: string): string {
+  return `A secure card for ${name} was shown to the person. End this turn now and say in one line that you are waiting for it; Sagax resumes you with the outcome. Never ask for the key in chat.`;
+}
+
 /** What the bot is told once a product key card settled: never a value,
  * never an ending. */
 export function productKeyResumeText(name: string, outcome: { ok: boolean; status?: number; code?: string } | "declined"): string {

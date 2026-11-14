@@ -2,6 +2,7 @@ import type { ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 import {
   createInternalIntegrationsRoutes,
+  raiseProductKeyCard,
   type InternalIntegrationsBot,
   type InternalIntegrationsDeps,
 } from "./internal-integrations.ts";
@@ -351,6 +352,17 @@ describe("createInternalIntegrationsRoutes", () => {
     expect(card.secret).not.toHaveProperty("form");
     expect(patchMessage).toHaveBeenCalledOnce();
     expect(patchMessage).toHaveBeenCalledWith("t-1", "old", { secret: expect.objectContaining({ superseded: true }) });
+  });
+
+  it("raiseProductKeyCard is the one function the relay calls too: a card for the product, or connected, or the refusal", async () => {
+    const appendMessage = vi.fn((_threadId: string, _message: Record<string, unknown>) => ({ id: "sec-9" }));
+    const base = { appendMessage, activePath: () => [], patchMessage: vi.fn() };
+    const shown = await raiseProductKeyCard({ ...base, ownerProduct: async () => ({ ok: true as const, product: { ...product, state: "key_refused" as const }, for: "pr_ann" }) }, { bot: { id: "bot-1", name: "Ada" }, threadId: "t-1", group: false, productId: "psa" });
+    expect(shown).toEqual({ kind: "shown", messageId: "sec-9", label: "Acme PSA" });
+    expect((appendMessage.mock.calls[0]![1] as { secret: { product: { reason: string } } }).secret.product.reason).toBe("key_refused");
+    expect(await raiseProductKeyCard({ ...base, ownerProduct: async () => ({ ok: true as const, product: { ...product, state: "connected" as const, actions: [] }, for: "pr_ann" }) }, { bot: { id: "bot-1", name: "Ada" }, threadId: "t-1", group: false, productId: "psa" })).toEqual({ kind: "connected", label: "Acme PSA" });
+    expect(await raiseProductKeyCard(base, { bot: { id: "bot-1", name: "Ada" }, threadId: "t-1", group: false, productId: "psa" })).toMatchObject({ kind: "refused", status: 404 });
+    expect(appendMessage).toHaveBeenCalledOnce();
   });
 
   it("POST /request-credential raises no product card in a routine, and says a connected product with nothing to set is connected", async () => {

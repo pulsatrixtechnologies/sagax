@@ -1288,7 +1288,7 @@ import { awaySkipsDetail, LocalAwayTracker, verdictFromPresence, type AwayVerdic
 import { createPersonLabelRoutes } from "./routes/person-labels.ts";
 import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
 import { createPersonProductsRoutes, createSaveProductKeyCard, createSetProductKey } from "./routes/person-products.ts";
-import { productKeyResumeText } from "../shared/person-products.ts";
+import { productKeyCardShownText, productKeyResumeText } from "../shared/person-products.ts";
 import { createPersonProductsClient } from "./perspicax/person-products.ts";
 import { createMeEnginesRoutes } from "./routes/me-engines.ts";
 import { createOrgBotsRoutes } from "./routes/org-bots.ts";
@@ -1465,7 +1465,7 @@ import { createInternalRoomsRoutes } from "./routes/internal-rooms.ts";
 import { createInternalMessageUserRoutes } from "./routes/internal-message-user.ts";
 import type { ReachablePerson } from "./people/bot-message-user.ts";
 import { createInternalMessagePersonRoutes } from "./routes/internal-message-person.ts";
-import { createInternalIntegrationsRoutes, type OwnerProductRead } from "./routes/internal-integrations.ts";
+import { createInternalIntegrationsRoutes, raiseProductKeyCard, type OwnerProductRead } from "./routes/internal-integrations.ts";
 // IMPORT-ANCHOR:testing-routes
 // IMPORT-ANCHOR:team-map
 import { createTeamMapRoutes } from "./routes/team-map.ts";
@@ -24572,7 +24572,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   createInternalIntegrationsRoutes({
     bot: (id) => store.bot(id) ?? undefined,
     isPerspicax: () => IDENTITY.kind === "perspicax",
-    ownerProduct: (botId, productId) => ownerPerspicaxProduct(botId, productId),
+    ownerProduct: productKeyCardDeps.ownerProduct,
     ownsThread: (botId, threadId) => {
       const owner = connectorThread(botId, threadId);
       return owner ? { group: Boolean(owner.group) } : null;
@@ -29956,6 +29956,14 @@ async function ownerPerspicaxProduct(botId: string, productId: string): Promise<
   }
   return { ok: false, error: read.error === "subject" ? "sign_in" : read.error === "unavailable" ? "unavailable" : "unreachable" };
 }
+/** #4185: what raises a product key card (raiseProductKeyCard): the bot's
+ * request_product_key and the Perspicax relay share it. */
+const productKeyCardDeps: Parameters<typeof raiseProductKeyCard>[0] = {
+  ownerProduct: (botId, productId) => ownerPerspicaxProduct(botId, productId),
+  appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
+  activePath: (threadId) => store.activePath(threadId) as ReturnType<Parameters<typeof raiseProductKeyCard>[0]["activePath"]>,
+  patchMessage: (threadId, messageId, patch) => store.patchMessage(threadId, messageId, patch as never),
+};
 /** #4185: the product key card's Save (server/routes/person-products.ts). */
 const saveProductKeyCard = createSaveProductKeyCard({
   card: (botId, threadId, messageId) => secretMessage(botId, threadId, messageId) ?? null,
@@ -31269,6 +31277,20 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
         ...(go.ruleDescription ? { ruleDescription: go.ruleDescription } : {}),
         ...(hints ? { toolHints: hints } : {}),
       });
+    },
+    // #4185: a product tool refused for the person's key raises the product
+    // key card, in a person's own turn only (never a routine, an automation
+    // or another bot's hop), for the bot's owner when they are the speaker.
+    onProductKeyState: async (turn, state) => {
+      if (turn.routine || turnRoutineLineage.has(turn.threadId) || isInternalTurn(turn.threadId)
+        || directRequestOwners.get(turn.threadId)?.automation || isUnattended(turn.botId, turn.threadId)) return null;
+      const speaker = turnSpeakers.get(turn.threadId);
+      if (speaker?.origin !== "person" && speaker?.origin !== "operator") return null;
+      const bot = store.bot(turn.botId);
+      const owner = connectorThread(turn.botId, turn.threadId);
+      if (!bot || !owner || effectiveBotOwner(bot) !== turn.principalId) return null;
+      const raised = await raiseProductKeyCard(productKeyCardDeps, { bot, threadId: turn.threadId, group: Boolean(owner.group), productId: state.product });
+      return raised.kind === "shown" ? productKeyCardShownText(raised.label) : null;
     },
     // remote_support_open / status / close: the session shows in Sagax (server/remote-support/remote-session-register.ts)
     onRemoteSupport: (call) => {

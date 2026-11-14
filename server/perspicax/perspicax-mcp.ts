@@ -32,6 +32,7 @@ import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.t
 import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
+import { productKeyStateOf, withToolNote, type ProductKeyState } from "./product-key-state.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
 import { reportBackgroundError } from "../background-error.ts";
@@ -159,6 +160,12 @@ export interface PerspicaxMcpOptions {
    * a session the bot opened becomes a Sagax session row and chat card. It
    * never changes the answer and its failures are its own. */
   onRemoteSupport?(call: { threadId: string; botId: string; principalId?: string; name: string; args: unknown; result: unknown }): void;
+  /** #4185: a product tool refused for the person's key of that product
+   * (the error's details name the product and its key state): raise the
+   * product key card and answer the sentence the bot reads after the error,
+   * or null when no card was raised (a routine, another bot's turn, a server
+   * without product keys). Its failures never change the answer. */
+  onProductKeyState?(turn: { threadId: string; botId: string; principalId: string; routine: boolean }, state: ProductKeyState): Promise<string | null>;
   /** 2026-10-28: a bot's own voice_call (direct, call_tool or use_tool)
    * goes to place_phone_call with its arguments: the same card, AI
    * disclosure, pilot and do-not-call list. Absent: refused. */
@@ -1441,7 +1448,24 @@ export class PerspicaxMcp {
   async relay(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
     const answer = await this.relayKept(input);
     this.noteRemoteSupport(input, answer);
-    return answer;
+    return this.withProductKeyCard(input, answer);
+  }
+
+  /** #4185: a product tool refused for a key state raises the product key
+   * card (onProductKeyState) and the bot reads one more sentence. */
+  private async withProductKeyCard(input: { threadId: string; generation: string; botId: string; frame: unknown }, answer: PerspicaxRelayAnswer): Promise<PerspicaxRelayAnswer> {
+    const hook = this.options.onProductKeyState;
+    if (!hook || answer.status !== 200 || !isObject(input.frame) || input.frame.method !== "tools/call") return answer;
+    const state = productKeyStateOf(answer.body);
+    if (!state) return answer;
+    const entry = this.turnEntry(input.threadId, input.generation, input.botId);
+    if (!entry) return answer;
+    try {
+      const note = await hook({ threadId: input.threadId, botId: input.botId, principalId: entry.principalId, routine: entry.source === "delegation" }, state);
+      return note ? { ...answer, body: withToolNote(answer.body, note) } : answer;
+    } catch {
+      return answer;
+    }
   }
 
   /** Hand a remote_support_* answer to onRemoteSupport, without waiting for it. */

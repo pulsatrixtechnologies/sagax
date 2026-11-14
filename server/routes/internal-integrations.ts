@@ -76,6 +76,51 @@ function productKeyHandoff(botName: string, productName: string): string {
   return `${botName} needs your key for ${productName}. Enter it securely on this card in Sagax on your computer; never paste it in the chat.`;
 }
 
+export type ProductKeyCardRaised =
+  | { kind: "shown"; messageId: string; label: string }
+  | { kind: "connected"; label: string }
+  | { kind: "refused"; status: number; error: string };
+
+/** #4185: the product key card of one of the bot owner's Perspicax products,
+ * raised in that conversation; an older card of the same product there is
+ * superseded. One function for the bot's request_product_key and for the
+ * relay that saw a product tool answer a key state. The caller decides that
+ * the turn is a person's own. */
+export async function raiseProductKeyCard(
+  deps: Pick<InternalIntegrationsDeps, "ownerProduct" | "appendMessage" | "activePath" | "patchMessage">,
+  input: { bot: { id: string; name: string; color?: unknown }; threadId: string; group: boolean; productId: string },
+): Promise<ProductKeyCardRaised> {
+  const { bot: from, threadId, productId } = input;
+  const read: OwnerProductRead = deps.ownerProduct ? await deps.ownerProduct(from.id, productId) : { ok: false, error: "unavailable" };
+  if (!read.ok) return { kind: "refused", ...ownerProductRefusal(read.error, productId) };
+  const product = read.product;
+  const reason = productCardReason(product.state) ?? (product.actions.includes("set_own_key") || product.actions.includes("replace_key") ? "setup" : null);
+  if (!reason) return { kind: "connected", label: product.name };
+  const message = deps.appendMessage(threadId, {
+    role: "bot",
+    kind: PRODUCT_KEY_KIND,
+    text: productKeyHandoff(from.name, product.name),
+    ...(input.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
+    secret: {
+      target: PRODUCT_KEY_TARGET,
+      label: product.name,
+      description: `${from.name} needs your key for ${product.name}. It goes to Perspicax only; ${from.name} never sees it.`,
+      placeholder: "",
+      helpUrl: "",
+      requestKey: randomUUID(),
+      product: { id: product.id, name: product.name, ...(product.icon ? { icon: product.icon } : {}), reason, for: read.for },
+    },
+  });
+  for (const prior of deps.activePath(threadId)) {
+    if (prior.id === message.id) continue;
+    const secret = prior.secret as { target?: unknown; product?: { id?: unknown }; provided?: unknown; dismissed?: unknown; superseded?: unknown } | undefined;
+    if (prior.kind !== PRODUCT_KEY_KIND || secret?.target !== PRODUCT_KEY_TARGET || secret.product?.id !== product.id) continue;
+    if (secret.provided === true || secret.dismissed === true || secret.superseded === true) continue;
+    deps.patchMessage(threadId, prior.id, { secret: { ...secret, superseded: true } });
+  }
+  return { kind: "shown", messageId: message.id, label: product.name };
+}
+
 function credentialDesktopHandoff(label: string): string {
   return `Securely provide the ${label} from Sagax on your phone or computer. It is never added to chat.`;
 }
@@ -431,37 +476,10 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
         const productId = body.productId.trim().slice(0, 256);
         // a routine, or a bot asked by another bot, never raises a card for the person
         if ((capability.depth ?? 0) > 0 || deps.turnIsRoutine(fromThreadId)) return json(res, 409, { error: "A product key card is shown only in a person's own turn. Tell the person which product needs a key." });
-        const read: OwnerProductRead = deps.ownerProduct ? await deps.ownerProduct(from.id, productId) : { ok: false, error: "unavailable" };
-        if (!read.ok) {
-          const refusal = ownerProductRefusal(read.error, productId);
-          return json(res, refusal.status, { error: refusal.error });
-        }
-        const product = read.product;
-        const reason = productCardReason(product.state) ?? (product.actions.includes("set_own_key") || product.actions.includes("replace_key") ? "setup" : null);
-        if (!reason) return json(res, 200, { alreadyConfigured: true, label: product.name });
-        const message = deps.appendMessage(fromThreadId, {
-          role: "bot",
-          kind: PRODUCT_KEY_KIND,
-          text: productKeyHandoff(from.name, product.name),
-          ...(owner.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
-          secret: {
-            target: PRODUCT_KEY_TARGET,
-            label: product.name,
-            description: `${from.name} needs your key for ${product.name}. It goes to Perspicax only; ${from.name} never sees it.`,
-            placeholder: "",
-            helpUrl: "",
-            requestKey: randomUUID(),
-            product: { id: product.id, name: product.name, ...(product.icon ? { icon: product.icon } : {}), reason, for: read.for },
-          },
-        });
-        for (const prior of deps.activePath(fromThreadId)) {
-          if (prior.id === message.id) continue;
-          const secret = prior.secret as { target?: unknown; product?: { id?: unknown }; provided?: unknown; dismissed?: unknown; superseded?: unknown } | undefined;
-          if (prior.kind !== PRODUCT_KEY_KIND || secret?.target !== PRODUCT_KEY_TARGET || secret.product?.id !== product.id) continue;
-          if (secret.provided === true || secret.dismissed === true || secret.superseded === true) continue;
-          deps.patchMessage(fromThreadId, prior.id, { secret: { ...secret, superseded: true } });
-        }
-        return json(res, 201, { messageId: message.id, label: product.name });
+        const raised = await raiseProductKeyCard(deps, { bot: from, threadId: fromThreadId, group: owner.group, productId });
+        if (raised.kind === "refused") return json(res, raised.status, { error: raised.error });
+        if (raised.kind === "connected") return json(res, 200, { alreadyConfigured: true, label: raised.label });
+        return json(res, 201, { messageId: raised.messageId, label: raised.label });
       }
       // Custom secret: label + reason + delivery, kept off Settings.
       if (!isCredentialTargetId(body.credentialId)) {

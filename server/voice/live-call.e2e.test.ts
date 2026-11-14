@@ -260,10 +260,12 @@ posixOnly("Live call e2e", () => {
       const { call, session } = await startCall(bot.id);
       await live.waitForAttach(session.id);
 
-      live.emit(session.id, { type: "session.input_transcript.delta", delta: "spell the word banana", start_ms: 100, end_ms: 900 });
+      // #4216: a new request said while the bot works starts beside it; one
+      // that needs the running result ("then ...") waits in the queue
+      live.emit(session.id, { type: "session.input_transcript.delta", delta: "then spell the word banana", start_ms: 100, end_ms: 900 });
       live.emit(session.id, { type: "session.delegation.created", offset_ms: 950, delegation: { id: "del_q", target: "client", type: "delegation" } });
       await sse.until(
-        (frame) => frame.kind === "bot.queued" && (frame.queues?.[bot.threadId] ?? []).some((item: { text?: string }) => item.text === "spell the word banana"),
+        (frame) => frame.kind === "bot.queued" && (frame.queues?.[bot.threadId] ?? []).some((item: { text?: string }) => item.text === "then spell the word banana"),
         20_000,
       );
 
@@ -271,7 +273,7 @@ posixOnly("Live call e2e", () => {
       const logged = spokenTurnsLogged();
       await post(`/api/bots/${bot.id}/interrupt`, {});
       const drained = await sse.until(
-        (frame) => frame.kind === "message" && frame.threadId === bot.threadId && frame.message?.text === "spell the word banana",
+        (frame) => frame.kind === "message" && frame.threadId === bot.threadId && frame.message?.text === "then spell the word banana",
         20_000,
       );
       expect(drained.message).toMatchObject({ role: "user", via: "call", callId: call.callId });
@@ -296,14 +298,14 @@ posixOnly("Live call e2e", () => {
       live.emit(session.id, { type: "session.input_transcript.delta", delta: "check the build", start_ms: 100, end_ms: 900 });
       live.emit(session.id, { type: "session.delegation.created", offset_ms: 950, delegation: { id: "del_a", target: "client", type: "delegation" } });
       await expect.poll(() => isBusy(bot.id), { timeout: 20_000 }).toBe(true);
-      // the next one waits in the queue
-      live.emit(session.id, { type: "session.input_transcript.delta", delta: "and the tests", start_ms: 2_000, end_ms: 2_800 });
+      // the next one waits in the queue: it needs the running result (#4216)
+      live.emit(session.id, { type: "session.input_transcript.delta", delta: "then run the tests", start_ms: 2_000, end_ms: 2_800 });
       live.emit(session.id, { type: "session.delegation.created", offset_ms: 2_850, delegation: { id: "del_b", target: "client", type: "delegation" } });
       const waiting = await sse.until(
-        (frame) => frame.kind === "bot.queued" && (frame.queues?.[bot.threadId] ?? []).some((item: { text?: string }) => item.text === "and the tests"),
+        (frame) => frame.kind === "bot.queued" && (frame.queues?.[bot.threadId] ?? []).some((item: { text?: string }) => item.text === "then run the tests"),
         20_000,
       );
-      const { queueId } = (waiting.queues[bot.threadId] as Array<{ queueId: string; text: string }>).find((item) => item.text === "and the tests")!;
+      const { queueId } = (waiting.queues[bot.threadId] as Array<{ queueId: string; text: string }>).find((item) => item.text === "then run the tests")!;
 
       // cancelled in the chat (editing a queued line cancels it too), it never arrives
       const cancelled = await fetch(`${base}/api/bots/${bot.id}/queue/${queueId}`, {
@@ -334,13 +336,14 @@ posixOnly("Live call e2e", () => {
       expect((await post(`/api/bots/${bot.id}/messages`, { text: "start the report" })).status).toBe(202);
       // the fake holds its turn open after the tool result: a request said now is steered
       await sse.until((frame) => frame.kind === "message" && frame.threadId === bot.threadId && frame.message?.kind === "activity", 20_000);
-      live.emit(session.id, { type: "session.input_transcript.delta", delta: "and add the totals", start_ms: 100, end_ms: 900 });
+      // a correction of the running work steers it (#4216)
+      live.emit(session.id, { type: "session.input_transcript.delta", delta: "actually, add the totals", start_ms: 100, end_ms: 900 });
       live.emit(session.id, { type: "session.delegation.created", offset_ms: 950, delegation: { id: "del_steer", target: "client", type: "delegation" } });
       const steered = await sse.until(
         (frame) => frame.kind === "message" && frame.threadId === bot.threadId && frame.message?.role === "user" && frame.message?.steered === true,
         20_000,
       );
-      expect(steered.message).toMatchObject({ text: "and add the totals", via: "call", callId: call.callId });
+      expect(steered.message).toMatchObject({ text: "actually, add the totals", via: "call", callId: call.callId });
     } finally {
       writeFileSync(steerGate, "finish");
       await expect.poll(() => isBusy(bot.id), { timeout: 20_000 }).toBe(false);
@@ -369,22 +372,23 @@ posixOnly("Live call e2e", () => {
       callId = call.callId;
       await live.waitForAttach(session.id);
 
-      live.emit(session.id, { type: "session.input_transcript.delta", delta: "steer these queued words", start_ms: 100, end_ms: 900 });
+      // a correction steers (#4216); the engine refuses the live steer here
+      live.emit(session.id, { type: "session.input_transcript.delta", delta: "actually, steer these queued words", start_ms: 100, end_ms: 900 });
       live.emit(session.id, { type: "session.delegation.created", offset_ms: 950, delegation: { id: "del_queue_steer", target: "client", type: "delegation" } });
       const waiting = await sse.until(
-        (frame) => frame.kind === "bot.queued" && (frame.queues?.[bot.threadId] ?? []).some((item: { text?: string }) => item.text === "steer these queued words"),
+        (frame) => frame.kind === "bot.queued" && (frame.queues?.[bot.threadId] ?? []).some((item: { text?: string }) => item.text === "actually, steer these queued words"),
         20_000,
       );
-      const { queueId } = (waiting.queues[bot.threadId] as Array<{ queueId: string; text: string }>).find((item) => item.text === "steer these queued words")!;
+      const { queueId } = (waiting.queues[bot.threadId] as Array<{ queueId: string; text: string }>).find((item) => item.text === "actually, steer these queued words")!;
       // waiting in the queue, it is not in the transcript yet
-      expect((await lines()).some((line) => line.text === "steer these queued words")).toBe(false);
+      expect((await lines()).some((line) => line.text === "actually, steer these queued words")).toBe(false);
 
       rmSync(queueSteerGate, { force: true });
       const steered = await post(`/api/bots/${bot.id}/queue/${queueId}/steer`, { threadId: bot.threadId });
       expect(steered).toMatchObject({ status: 200, body: { ok: true, steered: true, queueIds: [queueId] } });
-      const line = { text: "steer these queued words", steered: true, via: "call", callId: call.callId };
+      const line = { text: "actually, steer these queued words", steered: true, via: "call", callId: call.callId };
       expect((steered.body as { messages: unknown[] }).messages).toEqual([expect.objectContaining(line)]);
-      expect((await lines()).find((m) => m.text === "steer these queued words")).toMatchObject(line);
+      expect((await lines()).find((m) => m.text === "actually, steer these queued words")).toMatchObject(line);
     } finally {
       await post(`/api/bots/${bot.id}/interrupt`, { threadId: bot.threadId });
       await expect.poll(() => isBusy(bot.id), { timeout: 20_000 }).toBe(false);

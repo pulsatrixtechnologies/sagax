@@ -57,11 +57,11 @@ import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import type { PageLinkApprovals } from "../pages/page-link-approvals.ts";
 import { PageSourceError, type PageDataWatch, type PageSources } from "../pages/page-sources.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
-import { PAGE_STORE_ROUTE, pageStoreCall, type PageCapCallDeps } from "./page-cap-calls.ts";
+import { createPageCapCalls, PAGE_MODEL_ROUTE, PAGE_STORE_ROUTE, type PageCapCallDeps } from "./page-cap-calls.ts";
 import { pageAnnotator, pageMayEdit, type PageViewer } from "./published-pages.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
-export interface PageDataRouteDeps extends Omit<PageCapCallDeps, "pages" | "names"> {
+export interface PageDataRouteDeps extends Omit<PageCapCallDeps, "pages" | "names" | "approvals" | "now"> {
   pages: PageCapCallDeps["pages"] & {
     get(id: string): PageRecord | null | undefined;
     capabilities(id: string, n?: number): PageCapabilities | null;
@@ -114,6 +114,7 @@ function langOf(url: URL, req: IncomingMessage): Lang {
 
 export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
   const now = () => deps.now?.() ?? Date.now();
+  const calls = createPageCapCalls(deps);
   const reads = new Map<string, number[]>();
   const allowRead = (key: string): boolean => {
     const at = now();
@@ -134,7 +135,8 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     const link = deps.links && (method === "GET" || method === "POST" || method === "DELETE") ? LINK_ROUTE.exec(path) : null;
     // #3413 lots 3 to 7 (server/routes/page-cap-calls.ts)
     const store = method === "GET" || method === "POST" || method === "PUT" || method === "DELETE" ? PAGE_STORE_ROUTE.exec(path) : null;
-    const call = store;
+    const model = method === "POST" ? PAGE_MODEL_ROUTE.exec(path) : null;
+    const call = store ?? model;
     if (!approval && !match && !link && !call) return PASS;
     res.setHeader?.("cache-control", "no-store");
     const lang = langOf(url, req);
@@ -192,8 +194,7 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
 
     if (call) {
       const role = who.owner ? "owner" : pageMayEdit(page, viewer) ? "editor" : "signed_in";
-      const ctx = { req, res, url, method, path, auth, json, readBody, refuse, page, viewer, who, role, caps, lang } as const;
-      return pageStoreCall(deps, ctx);
+      return calls.handle({ req, res, url, method, path, auth, json, readBody, refuse, page, viewer, who, role, caps, version, lang });
     }
 
     if (match![2] === "capabilities") {

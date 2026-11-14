@@ -145,3 +145,70 @@ describe("store (lot 3): collections a page keeps", () => {
     expect((await call(full.routes, A, "/api/pages/page-1/store/votes", "POST", { value: 1 })).body.code).toBe("too_large");
   });
 });
+
+describe("model.ask (lot 4): one answer on the reader's own account", () => {
+  const MODEL = { model: true as const };
+  function withModel(over: Partial<PageDataRouteDeps> = {}, options: Parameters<typeof world>[0] = {}) {
+    const ask = vi.fn(async ({ viewer, text }: { viewer: { principalId?: string }; text: string }) => `answer for ${viewer.principalId}: ${text.length}`);
+    const made = world({ caps: MODEL, ...options, extra: { model: { ask }, ...over } });
+    return { ...made, ask };
+  }
+
+  it("asks with the reader's own account, never the page owner's: B's answer is B's", async () => {
+    const { routes, ask } = withModel();
+    const b = await call(routes, B, "/api/pages/page-1/model", "POST", { prompt: "Summarize" });
+    expect(b.status).toBe(200);
+    expect(b.body).toEqual({ text: "answer for person-b: 9" });
+    expect(ask.mock.calls[0]![0].viewer.principalId).toBe("person-b");
+    expect(JSON.stringify(b.body)).not.toContain("person-a");
+  });
+
+  it("refuses an undeclared model and a reader not signed in, before asking", async () => {
+    const none = world({ extra: { model: { ask: vi.fn() } } });
+    expect((await call(none.routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).body.code).toBe("not_declared");
+    const { routes, ask } = withModel();
+    expect((await call(routes, as(null), "/api/pages/page-1/model", "POST", { prompt: "x" })).body.code).toBe("sign_in");
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it("puts the page's system words and schema before the question, and parses the JSON answer", async () => {
+    const ask = vi.fn(async () => "```json\n{\"ok\":true}\n```");
+    const { routes } = world({ caps: MODEL, extra: { model: { ask } } });
+    const answer = await call(routes, B, "/api/pages/page-1/model", "POST", { prompt: "Q?", system: "Be brief.", schema: { type: "object" } });
+    expect(answer.body).toEqual({ text: "```json\n{\"ok\":true}\n```", value: { ok: true } });
+    const sent = (ask.mock.calls[0] as unknown as [{ text: string }])[0].text;
+    expect(sent.startsWith("Be brief.")).toBe(true);
+    expect(sent).toContain(JSON.stringify({ type: "object" }));
+    expect(sent.endsWith("Q?")).toBe(true);
+  });
+
+  it("limits questions to 10 a minute per reader and page, and a prompt to 32 KB", async () => {
+    const { routes } = withModel();
+    for (let index = 0; index < 10; index++) expect((await call(routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).status).toBe(200);
+    expect((await call(routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).body.code).toBe("rate_limited");
+    expect((await call(routes, A, "/api/pages/page-1/model", "POST", { prompt: "x" })).status).toBe(200);
+    expect((await call(routes, A, "/api/pages/page-1/model", "POST", { prompt: "x".repeat(33 * 1024) })).body.code).toBe("too_large");
+    expect((await call(routes, A, "/api/pages/page-1/model", "POST", { prompt: "" })).body.code).toBe("bad_request");
+  });
+
+  it("applies the organization's Deny, and Ask first through the reader's own card", async () => {
+    const deny = withModel({ actRule: () => "deny" });
+    expect((await call(deny.routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).body).toMatchObject({ code: "denied", reason: "org_rule" });
+    expect(deny.ask).not.toHaveBeenCalled();
+    const first = withModel({ actRule: ({ tool }) => (tool === "page_model" ? "ask" : "none") });
+    const asked = await call(first.routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" });
+    expect(asked.status).toBe(409);
+    expect(asked.body).toMatchObject({ code: "ask_first", source: "model", version: 1 });
+    // a bot's act copy cannot answer, another person neither; the reader can
+    const id = String(asked.body.approvalId);
+    expect((await call(first.routes, as("person-b", true), `/api/pages/page-1/data-approvals/${id}`, "POST", { answer: "once" })).status).toBe(403);
+    expect((await call(first.routes, A, `/api/pages/page-1/data-approvals/${id}`, "POST", { answer: "once" })).status).toBe(404);
+    expect((await call(first.routes, B, `/api/pages/page-1/data-approvals/${id}`, "POST", { answer: "once" })).status).toBe(200);
+    expect((await call(first.routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).status).toBe(200);
+  });
+
+  it("says unavailable when no model of the reader can answer", async () => {
+    const { routes } = world({ caps: MODEL, extra: { model: { ask: vi.fn(async () => { throw new Error("none"); }) } } });
+    expect((await call(routes, B, "/api/pages/page-1/model", "POST", { prompt: "x" })).body.code).toBe("unavailable");
+  });
+});

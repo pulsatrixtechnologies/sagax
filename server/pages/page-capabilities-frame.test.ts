@@ -311,3 +311,18 @@ describe("store in the frame (#3413 lot 3)", () => {
     expect(seen).toEqual([[{ id: "d1" }]]);
   });
 });
+
+describe("model.ask in the frame (#3413 lot 4)", () => {
+  it("is declared by model: true only, and gives the page sagax.model.ask", () => {
+    expect(parsePageCapabilities({ model: true })).toEqual({ data: [], viewer: false, open: false, files: [], model: true });
+    expect(parsePageCapabilities({ model: "yes" })).toEqual({ data: [], viewer: false, open: false, files: [] });
+    const caps = { data: [], viewer: false, open: false, files: [], model: true as const };
+    expect(pageCapGranted(caps, "model.ask")).toBe(true);
+    expect(pageCapGranted({ ...caps, model: undefined }, "model.ask")).toBe(false);
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { model: { ask(question: unknown): Promise<unknown> } };
+    void sagax.model.ask({ prompt: "Hi", schema: { type: "string" } });
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "model.ask", args: { prompt: "Hi", schema: { type: "string" } } });
+  });
+});

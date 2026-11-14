@@ -760,6 +760,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/link-approvals$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/link-approvals$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/live$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":false},
+  {"method":"ANY","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/model$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/place$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/reader-comments\\/([\\w-]+)\\/approve$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/reader-comments\\/([\\w-]+)$","tier":"admin","readOnly":false,"scope":"pages:admin","defaultEnabled":false,"destructive":true},

@@ -49,7 +49,9 @@
 // In the page (window.sagax, beside `page`): `capabilities` (what this
 // version was granted), `data.read(name, params?)`, `data.subscribe(name,
 // fn, params?)`, `viewer.get()`, `open(ref)`, `files.download({ name, mime, data })`,
-// `store.collection(name)` (lot 3). `params` (#3449): `fresh: true`
+// `store.collection(name)` (lot 3), `model.ask({ prompt, system?, schema? })`
+// (lot 4: PageModelAnswer; the organization's Ask first shows its card in
+// the wrapper's bar, as for a data read). `params` (#3449): `fresh: true`
 // skips the source's cache; other keys are the source's filter, string
 // values (PAGE_DATA_PARAMS). A `denied` refusal carries `reason`
 // (PageCapDenyReason) on the Error.
@@ -85,7 +87,7 @@ export const CAP_TAKEN_MESSAGE = "sagax-cap-taken";
 export const CAP_WAIT_MS = 10_000;
 
 /** The calls a page may make. */
-export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete"] as const;
+export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download", "store.get", "store.list", "store.put", "store.delete", "model.ask"] as const;
 export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
 /** #3657: the calls whose answer may wait on the reader (an Ask first card,
  * a link card) in an app released before the wrapper said taken. Behind a
@@ -122,6 +124,54 @@ export interface PageCapabilities {
   files: PageCapFile[];
   /** Lot 3: the store collections, by name. */
   store?: Record<string, PageStoreRule>;
+  /** Lot 4: model.ask, one answer on the reader's own engine and account. */
+  model?: true;
+}
+
+/** model.ask (lot 4): one question, no tool, on the reader's own engine and
+ * account (their Primary Bot's). `schema`: a JSON Schema the answer follows;
+ * the answer's `value` is then the parsed JSON (absent when the model did
+ * not answer JSON). At most PAGE_CAP_LIMITS.modelPromptBytes for prompt,
+ * system and schema together, modelQuestionsPerMinute per reader and page. */
+export interface PageModelQuestion {
+  prompt: string;
+  system?: string;
+  schema?: Record<string, unknown>;
+}
+
+export interface PageModelAnswer {
+  text: string;
+  value?: unknown;
+}
+
+/** A question as the page passed it: checked, "too_large", or null. Pure. */
+export function parsePageModelQuestion(value: unknown): PageModelQuestion | "too_large" | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.prompt !== "string" || !record.prompt.trim()) return null;
+  if (record.system !== undefined && record.system !== null && typeof record.system !== "string") return null;
+  const schema = record.schema;
+  if (schema !== undefined && schema !== null && (typeof schema !== "object" || Array.isArray(schema))) return null;
+  const question: PageModelQuestion = {
+    prompt: record.prompt,
+    ...(typeof record.system === "string" && record.system.trim() ? { system: record.system } : {}),
+    ...(schema && typeof schema === "object" ? { schema: schema as Record<string, unknown> } : {}),
+  };
+  const size = new TextEncoder().encode(question.prompt + (question.system ?? "") + (question.schema ? JSON.stringify(question.schema) : "")).length;
+  return size > PAGE_CAP_LIMITS.modelPromptBytes ? "too_large" : question;
+}
+
+/** The JSON a model answered, read from its text (a fenced block or the
+ * whole text), or undefined. Pure. */
+export function pageModelJson(text: string): unknown {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  const body = (fenced ? fenced[1]! : text).trim();
+  if (!body) return undefined;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return undefined;
+  }
 }
 
 /** A collection name: lower case, a letter first. */
@@ -387,7 +437,7 @@ export function parsePageCapabilities(value: unknown): PageCapabilities | null {
     ? [...new Set(record.files.filter((name): name is PageCapFile => typeof name === "string" && FILE_SET.has(name)))]
     : [];
   const store = parsePageStore(record.store);
-  return { data, viewer: record.viewer === true, open: record.open === true, files, ...(store ? { store } : {}) };
+  return { data, viewer: record.viewer === true, open: record.open === true, files, ...(store ? { store } : {}), ...(record.model === true ? { model: true as const } : {}) };
 }
 
 /** The declaration in a page's HTML: its first capabilities block, or null
@@ -404,7 +454,7 @@ export function pageCapabilitiesOf(html: string): PageCapabilities | null {
 
 /** Whether a declaration grants anything at all. Pure. */
 export function pageCapabilitiesAny(caps: PageCapabilities | null | undefined): caps is PageCapabilities {
-  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0));
+  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0 || Object.keys(caps.store ?? {}).length > 0 || caps.model === true));
 }
 
 /** Whether a declaration hands the page the reader's personal data (`data`
@@ -447,6 +497,7 @@ export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: P
   if (!caps) return false;
   if (cap === "data.read") return typeof source === "string" && (caps.data as string[]).includes(source);
   if (cap.startsWith("store.")) return typeof source === "string" && Boolean(caps.store) && Object.prototype.hasOwnProperty.call(caps.store, source);
+  if (cap === "model.ask") return caps.model === true;
   if (cap === "viewer.get") return caps.viewer;
   if (cap === "files.download") return (caps.files ?? []).includes("download");
   return caps.open;

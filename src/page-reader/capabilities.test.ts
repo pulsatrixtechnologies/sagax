@@ -70,7 +70,7 @@ describe("the page's frame is the only one heard", () => {
 
   it("ignores a message that is not a well-formed call", async () => {
     const { broker, frame, sent } = setup({}, ROUTES);
-    for (const data of [null, "x", { type: CAP_MESSAGE, v: 2, id: 1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: -1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: 1.5, cap: "model.ask" }]) {
+    for (const data of [null, "x", { type: CAP_MESSAGE, v: 2, id: 1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: -1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: 1.5, cap: "later.call" }]) {
       expect(await broker.onMessage({ source: frame, origin: "null", data })).toBe(false);
     }
     expect(sent).toEqual([]);
@@ -78,7 +78,7 @@ describe("the page's frame is the only one heard", () => {
 
   it("#3657: answers unavailable to a call it does not know, never drops it, with no request", async () => {
     const { broker, frame, sent, api } = setup({}, ROUTES);
-    expect(await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "model.ask", args: {} } })).toBe(true);
+    expect(await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "later.call", args: {} } })).toBe(true);
     expect(sent).toEqual([expect.objectContaining({ type: CAP_RESULT_MESSAGE, v: 1, id: 7, ok: false, error: "unavailable" })]);
     expect(String(sent[0]!.message)).toMatch(/update/i);
     // a known call in a shape it does not take is answered the same way
@@ -89,7 +89,7 @@ describe("the page's frame is the only one heard", () => {
 
   it("#3657: says it in the reader's language", async () => {
     const { broker, frame, sent } = setup({ lang: "fr" }, ROUTES);
-    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "model.ask", args: {} } });
+    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "later.call", args: {} } });
     expect(sent).toEqual([expect.objectContaining({ id: 7, error: "unavailable", message: expect.stringMatching(/Mets l'app à jour/) })]);
   });
 
@@ -841,5 +841,50 @@ describe("store calls (#3413 lot 3)", () => {
     broker.storeChanged("votes");
     broker.storeChanged("other");
     expect(sent.filter((message) => message.type === CAP_EVENT_MESSAGE)).toEqual([{ v: 1, type: CAP_EVENT_MESSAGE, cap: "store", name: "votes" }]);
+  });
+});
+
+describe("model.ask (#3413 lot 4)", () => {
+  const MODEL_CAPS = { capabilities: { data: [], viewer: false, open: false, files: [], model: true }, reads: [] };
+  const base = "/api/pages/page_12345678";
+
+  it("posts the question to the model route and gives the page the answer", async () => {
+    const { call, result, posts } = setup({}, { [`${base}/capabilities`]: MODEL_CAPS, [`${base}/model`]: { text: "hi" } });
+    await call("model.ask", { prompt: "Hello?", schema: { type: "object" } }, 1);
+    expect(result(1)).toMatchObject({ ok: true, value: { text: "hi" } });
+    expect(posts).toEqual([{ path: `${base}/model?lang=en`, body: { prompt: "Hello?", schema: { type: "object" } } }]);
+  });
+
+  it("shows the organization's Ask first card, then asks again once the reader allowed it", async () => {
+    let first = true;
+    const { call, result, broker, posts } = setup({}, {
+      [`${base}/capabilities`]: MODEL_CAPS,
+      [`${base}/model`]: () => {
+        if (!first) return { text: "ok" };
+        first = false;
+        return new Refusal("ask", 409, "ask_first", { code: "ask_first", approvalId: "ap1" });
+      },
+      [`${base}/data-approvals/ap1`]: { ok: true },
+    });
+    const pending = call("model.ask", { prompt: "x" }, 1);
+    await flush();
+    await flush();
+    const card = broker.getState().approvals[0]!;
+    expect(card.name).toBe("model");
+    clock.t += CARD_GUARD_MS + 1;
+    broker.resolveApproval(card.id, "once");
+    await pending;
+    expect(result(1)).toMatchObject({ ok: true, value: { text: "ok" } });
+    expect(posts.map((entry) => entry.path)).toContain(`${base}/data-approvals/ap1?lang=en`);
+  });
+
+  it("refuses a question with no prompt, and an undeclared model, without a request", async () => {
+    const { call, result, calls } = setup({}, { [`${base}/capabilities`]: { capabilities: { data: [], viewer: false, open: false, files: [] }, reads: [] } });
+    await call("model.ask", { prompt: "x" }, 1);
+    expect(result(1)).toMatchObject({ ok: false, error: "not_declared" });
+    expect(calls.filter((path) => path.includes("/model"))).toEqual([]);
+    const declared = setup({}, { [`${base}/capabilities`]: MODEL_CAPS });
+    await declared.call("model.ask", {}, 2);
+    expect(declared.result(2)).toMatchObject({ ok: false, error: "bad_request" });
   });
 });

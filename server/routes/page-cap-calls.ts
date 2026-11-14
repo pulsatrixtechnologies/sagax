@@ -9,6 +9,12 @@
 //   POST   /api/pages/:id/store/:collection        { value }        PageStoreDoc (a new id)
 //   PUT    /api/pages/:id/store/:collection/:doc   { value }        PageStoreDoc
 //   DELETE /api/pages/:id/store/:collection/:doc                     { ok: true }
+//   POST   /api/pages/:id/model   PageModelQuestion   PageModelAnswer (lot 4)
+//
+// model.ask runs on the reader's own engine and account, never the page
+// owner's; the organization's Deny and Ask first apply to it (action
+// `page_model`), Ask first through the same card as a data read; at most
+// modelQuestionsPerMinute per reader and page.
 //
 // Isolation: a `reader` collection is read and written per reader, never
 // another's; a write to what other readers read (a `shared` collection) is
@@ -18,9 +24,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
-import { parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageStoreDoc } from "../../shared/page-capabilities.ts";
+import { PAGE_CAP_LIMITS, pageModelJson, parsePageModelQuestion, parsePageStoreQuery, type PageCapabilities, type PageCapError, type PageDataAskFirst, type PageModelAnswer, type PageModelQuestion, type PageStoreDoc } from "../../shared/page-capabilities.ts";
 import { stateMayWrite, type StateRole } from "../../shared/page-state.ts";
 import { PAGE_LIMITS } from "../../shared/published-pages.ts";
+import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
 import type { PageStore, StoredDoc } from "../pages/page-store.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
 import type { PageViewer } from "./published-pages.ts";
@@ -28,6 +35,21 @@ import type { RouteContext } from "./table.ts";
 
 /** The routes of this module, one per line with its method. */
 export const PAGE_STORE_ROUTE = /^\/api\/pages\/([\w-]+)\/store\/([a-z][a-z0-9_-]{0,39})(?:\/([A-Za-z0-9_-]{1,64}))?$/;
+export const PAGE_MODEL_ROUTE = /^\/api\/pages\/([\w-]+)\/model$/;
+
+/** The organization's Deny and Ask first for one call a page makes, in the
+ * reader's context (an organization rule applies to every person). */
+export type PageActRule = (input: { tool: string; mcpTool: string; summary: string; input: string; readOnly: boolean; auth: RequestAuth }) => "deny" | "ask" | "none";
+
+/** What a model is asked for a page: the page's system words and the
+ * schema its answer follows, before the question. Pure. */
+export function pageModelPrompt(question: PageModelQuestion): string {
+  const head = [
+    question.system?.trim(),
+    question.schema ? `Answer with JSON only, no other text, that follows this JSON Schema:\n${JSON.stringify(question.schema)}` : undefined,
+  ].filter(Boolean).join("\n\n");
+  return head ? `${head}\n\n${question.prompt}` : question.prompt;
+}
 
 export interface PageCapCallDeps {
   pages: {
@@ -43,6 +65,12 @@ export interface PageCapCallDeps {
   /** A collection changed: the open bars of who reads it (everyone, or that
    * reader alone for a `reader` collection) tell their page. */
   live?: { store(pageId: string, name: string, personId?: string): void };
+  /** Ask first answers (server/pages/page-data-approvals.ts). */
+  approvals?: PageDataApprovals;
+  actRule?: PageActRule;
+  /** Lot 4: one tool-free answer on the reader's own engine and account. */
+  model?: { ask(input: { auth: RequestAuth; viewer: NonNullable<PageViewer>; text: string; lang: "fr" | "en" }): Promise<string> };
+  now?(): number;
 }
 
 export interface PageCapCallContext {
@@ -61,6 +89,7 @@ export interface PageCapCallContext {
   who: { by: string; owner: boolean };
   role: StateRole;
   caps: PageCapabilities | null;
+  version: number | undefined;
   lang: "fr" | "en";
 }
 
@@ -80,8 +109,58 @@ function storeDoc(deps: PageCapCallDeps, ctx: PageCapCallContext, doc: StoredDoc
   };
 }
 
-/** Lot 3: the store. Null when the path is not a store route. */
-export async function pageStoreCall(deps: PageCapCallDeps, ctx: PageCapCallContext): Promise<void> {
+/** The handler of these calls, with its own per reader rate counts. */
+export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCapCallContext): Promise<void> } {
+  const now = () => deps.now?.() ?? Date.now();
+  const asked = new Map<string, number[]>();
+  const allowQuestion = (key: string): boolean => {
+    const at = now();
+    const recent = (asked.get(key) ?? []).filter((time) => at - time < 60_000);
+    if (recent.length >= PAGE_CAP_LIMITS.modelQuestionsPerMinute) {
+      asked.set(key, recent);
+      return false;
+    }
+    recent.push(at);
+    if (asked.size > 10_000) asked.clear();
+    asked.set(key, recent);
+    return true;
+  };
+
+  const modelCall = async (ctx: PageCapCallContext): Promise<void> => {
+    if (ctx.caps?.model !== true || ctx.version === undefined) return ctx.refuse(403, "not_declared");
+    const question = parsePageModelQuestion(await ctx.readBody(ctx.req));
+    if (question === "too_large") return ctx.refuse(413, "too_large", { error: ctx.lang === "fr" ? "Cette question est trop longue pour une page." : "This question is too long for a page." });
+    if (!question) return ctx.refuse(400, "bad_request");
+    const rule = deps.actRule?.({ tool: "page_model", mcpTool: "page_model", summary: "A page asks a model a question for the person reading it", input: JSON.stringify({ prompt: question.prompt.slice(0, 500) }), readOnly: true, auth: ctx.auth }) ?? "none";
+    if (rule === "deny") return ctx.refuse(403, "denied", { reason: "org_rule", error: ctx.lang === "fr" ? "Ton organisation refuse cette question." : "Your organization refuses this question." });
+    const ask = { person: ctx.who.by, pageId: ctx.page.id, version: ctx.version, source: "model" };
+    if (rule === "ask" && deps.approvals && !deps.approvals.allowed(ask)) {
+      const body: Omit<PageDataAskFirst, "source"> & { source: string } = { error: ctx.lang === "fr" ? "Ton organisation te demande d'abord ta permission avant que cette page pose une question à un modèle avec ton compte." : "Your organization asks you first before this page asks a model a question with your account.", code: "ask_first", approvalId: deps.approvals.open(ask), source: "model", version: ctx.version };
+      return ctx.json(ctx.res, 409, body);
+    }
+    if (!allowQuestion(`${ctx.page.id}\u0000${ctx.who.by.toLowerCase()}`)) return ctx.refuse(429, "rate_limited", { error: ctx.lang === "fr" ? "Cette page pose trop de questions. Réessaie dans une minute." : "This page asks too many questions. Try again in a minute." });
+    if (!deps.model) return ctx.refuse(503, "unavailable");
+    let text: string;
+    try {
+      text = await deps.model.ask({ auth: ctx.auth, viewer: ctx.viewer, text: pageModelPrompt(question), lang: ctx.lang });
+    } catch {
+      return ctx.refuse(503, "unavailable", { error: ctx.lang === "fr" ? "Aucun modèle de ton compte n'a pu répondre pour l'instant." : "No model of your account could answer now." });
+    }
+    const value = question.schema ? pageModelJson(text) : undefined;
+    const answer: PageModelAnswer = { text, ...(value !== undefined ? { value } : {}) };
+    return ctx.json(ctx.res, 200, answer);
+  };
+
+  return {
+    async handle(ctx) {
+      if (PAGE_MODEL_ROUTE.test(ctx.path)) return modelCall(ctx);
+      return pageStoreCall(deps, ctx);
+    },
+  };
+}
+
+/** Lot 3: the store. */
+async function pageStoreCall(deps: PageCapCallDeps, ctx: PageCapCallContext): Promise<void> {
   const match = PAGE_STORE_ROUTE.exec(ctx.path)!;
   const name = match[2]!;
   const id = match[3];

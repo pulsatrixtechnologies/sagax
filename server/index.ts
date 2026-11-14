@@ -12797,8 +12797,32 @@ ROUTES.push(createPageDataRoutes({
   links: pageLinkApprovals,
   watch: pageDataWatch,
   store: pageStore,
-  live: pageLive
+  live: pageLive,
+  // #3413: the organization's Deny and Ask first for a call a page makes
+  // (a model question, a connector call), in the reader's context
+  actRule: ({ tool, mcpTool, summary, input, readOnly }) => {
+    const rules = customRules.orgRules().filter((rule) => rule.enabled);
+    if (!rules.length) return "none";
+    const { decision } = reviewCustomRules(rules, { tool, mcpTool, summary, input, hints: { readOnly } }, "");
+    return decision.kind === "deny" ? "deny" : decision.kind === "ask" ? "ask" : "none";
+  },
+  // #3413 lot 4: one tool-free answer on the reader's own engine and account:
+  // their Primary Bot's (else their first visible bot's), never the page owner's
+  model: {
+    ask: async ({ viewer, text }) => {
+      const engine = pageReaderTextEngine(viewer);
+      if (!engine) throw new Error("no engine of the reader can answer");
+      return engine.generateText(text, { noThinking: true });
+    },
+  }
 }));
+/** The reader's own one-shot text engine (#3413 lot 4): their Primary Bot's. */
+function pageReaderTextEngine(viewer: { principalId?: string; computerOwner?: boolean }): ReturnType<typeof botTextEngine> {
+  const owner = viewer.computerOwner ? "" : (viewer.principalId ?? "").trim().toLowerCase();
+  if (!viewer.computerOwner && !owner) return null;
+  const bot = store.primaryBotOf(owner) ?? store.bots.find((candidate) => !candidate.hidden && effectiveBotOwner(candidate) === owner);
+  return bot ? botTextEngine(bot.id, "page-model") : null;
+}
 ROUTES.push(createPublishedPageRoutes({
   pages: publishedPages,
   owner: (auth) => IDENTITY.kind === "perspicax" && auth.kind === "session" ? auth.session.principalId?.trim() || undefined : undefined,

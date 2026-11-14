@@ -49,6 +49,7 @@ import {
   pageDataParams,
   parsePageCapRequest,
   parsePageOpenRef,
+  parsePageModelQuestion,
   parsePageStoreQuery,
   type PageCapabilities,
   type PageCapDenyReason,
@@ -305,11 +306,11 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     }
   };
 
-  const askFirst = (name: string): Promise<ApprovalChoice> => {
+  const askFirst = (name: string, shown?: string): Promise<ApprovalChoice> => {
     const open = asking.get(name);
     if (open) return open;
     const id = ++seq;
-    const label = state.reads.find((entry) => entry.name === name)?.label ?? name;
+    const label = shown ?? state.reads.find((entry) => entry.name === name)?.label ?? name;
     const pending = new Promise<ApprovalChoice>((resolve) => {
       approvals.set(id, (choice) => {
         approvals.delete(id);
@@ -323,28 +324,34 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     return pending;
   };
 
-  const readData = async (name: string, fresh: boolean, params: Record<string, string> = {}, asked = false): Promise<unknown> => {
+  /** One call the organization may ask first about: the card, outside the
+   * page; the reader's own answer goes to the server, which records it, and
+   * only then is the call made again (no flag in the request is ever
+   * trusted). `key` names the card (one per key at a time). */
+  const withAskFirst = async <T,>(key: string, label: string | undefined, run: () => Promise<T>, asked = false): Promise<T> => {
     try {
-      const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(route(`data/${encodeURIComponent(name)}`, { ...(fresh ? { fresh: "1" } : {}), ...params }));
-      receivedData = true;
-      readNames.add(name);
-      // the exits the source named, as the server sent them: nothing is computed here
-      if (Array.isArray(body.links)) boundedAdd(links, body.links as string[]);
-      if (Array.isArray(body.refs)) boundedAdd(refs, body.refs as string[]);
-      return body.value ?? null;
+      return await run();
     } catch (cause) {
       const failure = capFailure(cause);
       const approvalId = (cause as { body?: { approvalId?: unknown } }).body?.approvalId;
       if (failure.error !== "ask_first" || asked || typeof approvalId !== "string") throw cause;
-      // the organization asks first: the card, outside the page; the reader's
-      // own answer goes to the server, which records it, and only then is the
-      // data read again (no flag in the request is ever trusted)
-      const choice = await askFirst(name);
+      const choice = await askFirst(key, label);
       await deps.api(`/api/pages/${encodeURIComponent(deps.pageId!)}/data-approvals/${encodeURIComponent(approvalId)}?lang=${deps.lang}`, { method: "POST", body: { answer: choice === "decline" ? "deny" : choice } });
-      if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? "Tu as refusé cette lecture." : "You declined this read."), { code: "denied", reason: "declined", status: 403 });
-      return readData(name, fresh, params, true);
+      const read = !key.includes(":") && key !== "model";
+      if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? (read ? "Tu as refusé cette lecture." : "Tu as refusé cette demande.") : (read ? "You declined this read." : "You declined this request.")), { code: "denied", reason: "declined", status: 403 });
+      return withAskFirst(key, label, run, true);
     }
   };
+
+  const readData = (name: string, fresh: boolean, params: Record<string, string> = {}): Promise<unknown> => withAskFirst(name, undefined, async () => {
+    const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(route(`data/${encodeURIComponent(name)}`, { ...(fresh ? { fresh: "1" } : {}), ...params }));
+    receivedData = true;
+    readNames.add(name);
+    // the exits the source named, as the server sent them: nothing is computed here
+    if (Array.isArray(body.links)) boundedAdd(links, body.links as string[]);
+    if (Array.isArray(body.refs)) boundedAdd(refs, body.refs as string[]);
+    return body.value ?? null;
+  });
 
   const open = async (args: Record<string, unknown> | undefined): Promise<{ ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }> => {
     const ref = typeof args?.ref === "string" ? args.ref : "";
@@ -515,6 +522,12 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           answer(id, { ok: true, value: info });
         } else if (storeCap) {
           answer(id, await storeCall(request, source as string));
+        } else if (request.cap === "model.ask") {
+          // lot 4: one question on the reader's own account
+          const question = parsePageModelQuestion(request.args);
+          if (question === null) answer(id, { ok: false, error: "bad_request", message: "A question needs a prompt." });
+          else if (question === "too_large") answer(id, { ok: false, error: "too_large", message: "This question is too long for a page." });
+          else answer(id, { ok: true, value: await withAskFirst("model", deps.lang === "fr" ? "Une question à un modèle, avec ton compte" : "A question to a model, with your account", () => deps.api(route("model"), { method: "POST", body: question })) });
         } else if (request.cap === "files.download" && state.caps) {
           answer(id, downloadFile(request, fromClick));
         } else if (!state.caps) {

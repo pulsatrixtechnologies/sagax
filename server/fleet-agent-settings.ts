@@ -319,9 +319,10 @@ export async function applySkillAndPluginSwitches(
       const field = `skills.${name}`;
       if (skills && !origins.has(name) && library.has(name)) {
         // In the organization's library, not on this bot yet: on is the
-        // page's Add to bot; off is where it already is.
+        // page's Add to bot; off is already true, so it is answered changed
+        // with nothing sent, like on for one already on and live.
         if (!enabled) {
-          refused.push({ field, reason: `the library skill "${name}" is already off for this bot (it is not added to it), nothing to do` });
+          changed.push(field);
           continue;
         }
         await assign(field, name, true);

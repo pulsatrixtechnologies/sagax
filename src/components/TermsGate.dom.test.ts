@@ -1,23 +1,23 @@
 // @vitest-environment happy-dom
 // #4360: the first-run terms say nothing about reports, blocking or admins to
-// a person alone on a server with no organization; an organization server
-// keeps its wording.
+// a person alone on their server (src/lib/server-alone.ts); a server with
+// other people, organization or not, keeps its wording.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 
-const fixture = vi.hoisted(() => ({ org: null as unknown }));
+const fixture = vi.hoisted(() => ({ alone: true, asked: [] as boolean[] }));
 
 vi.mock("@/lib/moderation", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/moderation")>(),
   fetchTerms: async () => ({ accepted: false, current: "1", url: "https://example.test/terms" }),
   acceptTerms: vi.fn(),
 }));
-vi.mock("@/lib/perspicax-org", () => ({ loadPerspicaxOrg: async () => fixture.org }));
+vi.mock("@/lib/server-alone", () => ({ loadServerAlone: async (admin: boolean) => { fixture.asked.push(admin); return fixture.alone; } }));
 vi.mock("@/lib/app-links", () => ({ openExternalLink: vi.fn() }));
 vi.mock("@/state/store-selector", () => ({
-  useStoreSelector: (select: (state: { config: unknown }) => unknown) => select({ config: { viewer: { principalId: "p1", email: "a@example.test" } } }),
+  useStoreSelector: (select: (state: { config: unknown }) => unknown) => select({ config: { viewer: { principalId: "p1", email: "a@example.test", role: "owner" } } }),
 }));
 
 import { TermsGate } from "./TermsGate";
@@ -26,7 +26,8 @@ let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  fixture.org = null;
+  fixture.alone = true;
+  fixture.asked = [];
   setLocale("en");
   host = document.createElement("div");
   document.body.appendChild(host);
@@ -52,10 +53,11 @@ describe("TermsGate (#4360)", () => {
     expect(text).not.toContain("report");
     expect(text).not.toContain("block a person");
     expect(text).not.toContain("admins");
+    expect(fixture.asked).toEqual([true]);
   });
 
-  it("keeps the organization wording on an organization server", async () => {
-    fixture.org = { org: { identity: { kind: "perspicax" } } };
+  it("keeps the report wording on a server with other people (organization or not)", async () => {
+    fixture.alone = false;
     const text = await mount();
     expect(text).toContain("Anyone can report a message or block a person, and the admins review every report.");
   });

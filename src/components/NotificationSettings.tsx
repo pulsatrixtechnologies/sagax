@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { t } from "@/lib/i18n";
 import { useBlockedPeople } from "@/lib/moderation";
+import { useServerAlone } from "@/lib/server-alone";
 import {
   dockBadge,
   nudgeShake,
@@ -96,11 +97,13 @@ function NudgesRow() {
 
 /** `privacy` is the organization server's Privacy section. The per-person
  * daily budget and quiet hours (#2695) show everywhere (solo: /api/me/signals).
- * `organization`: the server is an organization's (#4360). A person alone
- * has nobody to block and no reports to review: the Privacy card shows only
- * when someone was blocked before, and no line names the organization. */
+ * `organization`: the server is an organization's (#4360): only then does a
+ * line name it. A person alone on their server (src/lib/server-alone.ts) has
+ * nobody to block and no reports to review: the Privacy card shows only when
+ * someone was blocked before. A server with other people keeps it all. */
 export function NotificationSettings({ privacy = false, organization = privacy }: { privacy?: boolean; organization?: boolean }) {
   const blocked = useBlockedPeople();
+  const alone = useServerAlone();
   const persistent = useLocalSwitch(persistentNotifications);
   const badge = useLocalSwitch(dockBadge);
   const chime = useLocalSwitch(approvalChime);
@@ -150,12 +153,12 @@ export function NotificationSettings({ privacy = false, organization = privacy }
       {/* Privacy always hosts blocked people; org read-receipts/presence only when
           the privacy section is allowed (organization server). ReportsRow hides
           itself when the viewer is not an admin (#2080). */}
-      {(organization || blocked.length > 0) && (
+      {(!alone || blocked.length > 0) && (
         <div data-settings-card="notifications.privacy">
           <SettingsGroup title={t("settings.section.privacy")} groupId="privacy">
             {privacy && <PrivacySettings />}
             <BlockedPeopleRow />
-            {organization && <ReportsRow />}
+            {!alone && <ReportsRow />}
           </SettingsGroup>
         </div>
       )}

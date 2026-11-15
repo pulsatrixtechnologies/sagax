@@ -382,11 +382,10 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(switches).toEqual([t("botPanel.voice.notifyHelp")]);
     expect(panel.textContent).not.toContain(t("botPanel.routines.collaboratorsCreate"));
     expect(panel.textContent).not.toContain(t("botSettings.sharing.empty"));
-    const sharing = panel.querySelector<HTMLElement>('[data-bot-profile-subpage-open="sharing"]');
-    if (sharing) {
-      expect(sharing.textContent).toContain(t("botSettings.visibility.title"));
-      expect(sharing.textContent).not.toContain(t("botProfile.v6.page.sharing.title"));
-    }
+    // one person signs in: the bot has nobody to be seen by, so neither
+    // Shared with nor Who can see it is listed
+    expect(panel.querySelector('[data-bot-profile-subpage-open="sharing"]')).toBeNull();
+    expect(panel.textContent).not.toContain(t("botProfile.v6.page.sharing.title"));
   });
 
   it("draws no team chat row where the server offers no Slack link, and keeps it where it does", async () => {

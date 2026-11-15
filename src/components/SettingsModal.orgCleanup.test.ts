@@ -30,6 +30,8 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/perspicax-org")>(),
   usePerspicaxOrg: () => fixture.org,
 }));
+// #4360: without an organization this fixture is a person alone on the server
+vi.mock("@/lib/server-alone", () => ({ useServerAlone: () => fixture.org === null }));
 vi.mock("./ServerModeSettings", async (importOriginal) => ({
   ...await importOriginal<typeof import("./ServerModeSettings")>(),
   useServerMode: () => null,

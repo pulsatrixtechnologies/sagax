@@ -16,6 +16,8 @@ import {
 } from "./lazy-settings-sections";
 
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
+// #4360: this fixture is a person alone on a server with no organization
+vi.mock("@/lib/server-alone", () => ({ useServerAlone: () => true }));
 
 const fixture = vi.hoisted(() => ({
   section: "appearance" as AppSettingsSection,

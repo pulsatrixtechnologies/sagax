@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { createDisplayMediaGuard, invokeDisplayMediaCallback, listenResponse, selectCaptureSource } = require(
+const { createDisplayMediaGuard, invokeDisplayMediaCallback, listenResponse, listensToComputer, selectCaptureSource } = require(
   "./screen-preview.cjs",
 );
 
@@ -96,6 +96,12 @@ describe("the listen intent (#4100)", () => {
     expect(listenResponse("darwin", source)).toEqual({ video: source, audio: "loopback" });
     expect(listenResponse("linux", source)).toEqual({});
     expect(listenResponse("win32", null)).toEqual({});
+  });
+
+  it("does not arm a listen intent on Linux, so the page listens on the microphone without a false permission message", () => {
+    expect(listensToComputer("win32")).toBe(true);
+    expect(listensToComputer("darwin")).toBe(true);
+    expect(listensToComputer("linux")).toBe(false);
   });
 });
 

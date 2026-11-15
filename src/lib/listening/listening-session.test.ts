@@ -8,9 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Heard } from "@/lib/voice-mode/stt-stream";
 
-import { currentListening, receiveListeningFrame, startListening, stopListening, type ListeningDeps } from "./listening-session";
+import { api } from "@/state/store";
 
-vi.mock("@/state/store", () => ({ api: vi.fn() }));
+import { currentListening, receiveListeningFrame, startListening, stopListening, stopListeningOnUnload, type ListeningDeps } from "./listening-session";
+
+vi.mock("@/state/store", () => ({ api: vi.fn(async () => ({})) }));
 
 const VOICED = 0.9;
 
@@ -135,6 +137,50 @@ describe("listening in a bot's chat (#4100)", () => {
     const sent = f.requests.filter((request) => request.path.endsWith("/lines")).flatMap((request) => (request.body as { lines: Array<{ text: string }> }).lines.map((line) => line.text));
     expect(sent).toEqual(["Last thing: ship Friday."]);
     expect(f.requests.at(-1)).toEqual({ path: "/api/listening/ls_aaaaaaaaaaaaaaaaaaaa/stop" });
+  });
+
+  it("waits at Stop for the batch still being sent, sends the lines heard after it, then stops", async () => {
+    const f = fakes();
+    const order: string[] = [];
+    let release: (() => void) | null = null;
+    const request = f.deps.request;
+    f.deps.request = async <T,>(path: string, init?: RequestInit) => {
+      const answer = await request<T>(path, init);
+      if (path.endsWith("/lines")) {
+        const texts = (JSON.parse(String(init!.body)) as { lines: Array<{ text: string }> }).lines.map((line) => line.text);
+        // the first batch hangs on the network until released
+        if (texts.includes("First.") && !release) await new Promise<void>((resolve) => { release = resolve; });
+        for (const text of texts) order.push(`line:${text}`);
+      }
+      if (path.endsWith("/stop")) order.push("stop");
+      return answer;
+    };
+    await startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps);
+    await f.frames(12, VOICED);
+    f.say("First.");
+    await f.frames(40, 0);
+    await f.runTimers(1_500);
+    expect(release).not.toBeNull();
+    await f.frames(12, VOICED);
+    f.say("Second.");
+    await f.frames(40, 0);
+    const stopped = stopListening();
+    for (let i = 0; i < 40; i++) await Promise.resolve();
+    release!();
+    await stopped;
+    expect(order).toEqual(["line:First.", "line:Second.", "stop"]);
+  });
+
+  it("sends the lines still waiting with the stop when the window closes", async () => {
+    const f = fakes();
+    await startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps);
+    await f.frames(12, VOICED);
+    f.say("Closing now.");
+    await f.frames(40, 0);
+    stopListeningOnUnload();
+    const stop = vi.mocked(api).mock.calls.find(([path]) => String(path).endsWith("/stop"));
+    expect(stop?.[1]).toMatchObject({ method: "POST", keepalive: true });
+    expect(JSON.parse(String(stop![1]!.body))).toMatchObject({ lines: [{ seq: 1, text: "Closing now." }], speakers: [{ key: "s1", label: "Speaker 1" }] });
   });
 
   it("sends a heartbeat when nothing was heard", async () => {

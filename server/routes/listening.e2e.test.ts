@@ -67,13 +67,15 @@ describe.skipIf(process.platform === "win32")("listening sessions on an organiza
     expect(transcript.status).toBe(200);
     expect(transcript.body.lines).toEqual([{ seq: 2, at: 2, speaker: "s1", text: "We ship Friday." }]);
 
-    const stopped = await api("POST", `/api/listening/${session.sessionId}/stop`, ADA);
+    // the last lines can come with the stop (a window that closes)
+    expect((await api("POST", `/api/listening/${session.sessionId}/stop`, ADA, { lines: [{ seq: "x" }] })).status).toBe(400);
+    const stopped = await api("POST", `/api/listening/${session.sessionId}/stop`, ADA, { lines: [{ seq: 3, at: 3, speaker: "s1", text: "Bye." }] });
     expect(stopped.status).toBe(200);
     expect(stopped.body.session.state).toBe("ended");
     const settled = (await rows(ADA)).filter((row) => row.listening);
     expect(settled).toHaveLength(1);
     expect(settled[0]!.text).toBe("Listened 1 min, 2 speakers");
     expect(settled[0]!.listening!.state).toBe("ended");
-    expect((await api("GET", `/api/listening/${session.sessionId}`, ADA)).body.lines.map((line: { text: string }) => line.text)).toEqual(["Hello", "We ship Friday."]);
+    expect((await api("GET", `/api/listening/${session.sessionId}`, ADA)).body.lines.map((line: { text: string }) => line.text)).toEqual(["Hello", "We ship Friday.", "Bye."]);
   }, 60_000);
 });

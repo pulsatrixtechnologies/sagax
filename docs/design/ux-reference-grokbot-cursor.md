@@ -1529,8 +1529,8 @@ finale. Le compositeur reste dessous et fonctionne. Sur un autre appareil de la 
 personne, la carte suit la session par sa ligne (dernière ligne, Arrêter), sans contrôle de chat.
 
 **Ligne dans la conversation.** Une seule ligne par session, mise à jour en place
-(`AskSettledLine`) : « Écoute d'une conversation » avec un point rouge pendant l'écoute,
-puis « Écouté 24 min, 3 interlocuteurs » avec « Transcription », qui déplie la transcription
+(`AskSettledLine`). Pendant l'écoute, la ligne ne dessine rien : la carte flottante le dit
+déjà, une seule fois. Une fois la session finie, elle montre « Écouté 24 min, 3 interlocuteurs » avec « Transcription », qui déplie la transcription
 complète en lecture seule (même boîte inset). Les apps publiées et le téléphone lisent le
 texte simple de la ligne.
 

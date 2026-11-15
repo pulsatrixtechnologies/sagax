@@ -18886,7 +18886,9 @@
       "providers.summary.reconnectOne": "a2eac45bc7189eedce9a8eb5c64447148b77d3c3305d64c79c6ad45222107506",
       "providers.summary.reconnectSome": "2867c817c9a1a88d3a48c33435c575955c43c957e0d16a88b660a9209201a314",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "moderation.terms.zeroToleranceSolo": "b1dfd8915e091560c134c60a36979aa92ffe0e3f4b7826dba36461e3eb30f3b5",
+      "settings.connectionNotices.descriptionSolo": "cebcaedd426a2886d9a0d00eb59eb97426fa22b8f9a53c90a8dd95b599119c69"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

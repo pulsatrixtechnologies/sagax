@@ -94,16 +94,19 @@ describe("Settings on an organization server", () => {
     expect(solo).not.toContain('<option value="mail"');
     expect(solo).not.toContain('<option value="activity"');
     fixture.section = "notifications";
-    // #2080: Privacy card always hosts blocked people; org rows only on org
+    // #4360: a person alone has nobody to block and no reports: no Privacy card
     const soloNotifications = await render();
-    expect(soloNotifications).toContain('data-settings-card="notifications.privacy"');
-    expect(soloNotifications).toContain(">Privacy<");
-    expect(soloNotifications).toContain(">Blocked people<");
+    expect(soloNotifications).not.toContain('data-settings-card="notifications.privacy"');
+    expect(soloNotifications).not.toContain(">Blocked people<");
     expect(soloNotifications).not.toContain("Send read receipts");
+    expect(soloNotifications).not.toContain("Perspicax is unreachable");
+    // #2080: on an organization server the card hosts blocked people
     fixture.org = ORG;
     const privacy = await render();
     expect(privacy).toContain('data-settings-card="notifications.privacy"');
     expect(privacy).toContain(">Privacy<");
+    expect(privacy).toContain(">Blocked people<");
+    expect(privacy).toContain("Perspicax is unreachable");
     expect(privacy).not.toContain('<option value="privacy"');
   });
 

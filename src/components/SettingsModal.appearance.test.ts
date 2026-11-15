@@ -499,17 +499,17 @@ describe("Settings → Notifications", () => {
     expect(html).toContain("On macOS, also choose Alerts in System Settings &gt; Notifications.");
   });
 
-  it("is laid out as Signals, Alerts plus Privacy, with nudges and blocked people folded (#2080, #2695)", () => {
+  it("is laid out as Signals and Alerts, with nudges folded; a person alone gets no Privacy card (#2080, #2695, #4360)", () => {
     fixture.section = "notifications";
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["notificationTypes", "signals", "alerts", "privacy"]);
+    expect(groups).toEqual(["notificationTypes", "signals", "alerts"]);
     expect(html).toContain(">Alerts</h3>");
-    expect(html).toContain(">Privacy</h3>");
+    expect(html).not.toContain(">Privacy</h3>");
     expect(html).toContain(">Nudges</div>");
     expect(html).toContain("Sound and window");
-    expect(html).toContain(">Blocked people</div>");
-    expect(html).toContain('data-settings-card="notifications.privacy"');
+    expect(html).not.toContain(">Blocked people</div>");
+    expect(html).not.toContain('data-settings-card="notifications.privacy"');
     // "On this computer" lives in the page intro, not as a repeated accessory
     expect(html).not.toContain("· On this computer");
     expect(html).toContain('aria-label="Notification sound"');

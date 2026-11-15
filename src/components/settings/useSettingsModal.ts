@@ -263,6 +263,7 @@ export function useSettingsModal() {
     q,
     editConfig,
     lockedServer,
+    organization,
     allowed,
     memoryShown,
     availableSections,

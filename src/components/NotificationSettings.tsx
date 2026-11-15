@@ -8,6 +8,7 @@
 // admin). The page intro carries "on this computer"; no accessory repeat.
 import { useState } from "react";
 import { t } from "@/lib/i18n";
+import { useBlockedPeople } from "@/lib/moderation";
 import {
   dockBadge,
   nudgeShake,
@@ -94,8 +95,12 @@ function NudgesRow() {
 }
 
 /** `privacy` is the organization server's Privacy section. The per-person
- * daily budget and quiet hours (#2695) show everywhere (solo: /api/me/signals). */
-export function NotificationSettings({ privacy = false }: { privacy?: boolean }) {
+ * daily budget and quiet hours (#2695) show everywhere (solo: /api/me/signals).
+ * `organization`: the server is an organization's (#4360). A person alone
+ * has nobody to block and no reports to review: the Privacy card shows only
+ * when someone was blocked before, and no line names the organization. */
+export function NotificationSettings({ privacy = false, organization = privacy }: { privacy?: boolean; organization?: boolean }) {
+  const blocked = useBlockedPeople();
   const persistent = useLocalSwitch(persistentNotifications);
   const badge = useLocalSwitch(dockBadge);
   const chime = useLocalSwitch(approvalChime);
@@ -137,7 +142,7 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
         <CompactRow label={t("settings.approvalChime.title")} rowId="approvalChime">
           <Switch checked={chime} aria-label={t("settings.approvalChime.title")} onClick={() => approvalChime.set(!chime)} />
         </CompactRow>
-        <DescribedRow label={t("settings.connectionNotices.title")} description={t("settings.connectionNotices.description")} rowId="connectionNotices">
+        <DescribedRow label={t("settings.connectionNotices.title")} description={t(organization ? "settings.connectionNotices.description" : "settings.connectionNotices.descriptionSolo")} rowId="connectionNotices">
           <Switch checked={connection} aria-label={t("settings.connectionNotices.title")} onClick={() => connectionNotices.set(!connection)} />
         </DescribedRow>
         <NudgesRow />
@@ -145,13 +150,15 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
       {/* Privacy always hosts blocked people; org read-receipts/presence only when
           the privacy section is allowed (organization server). ReportsRow hides
           itself when the viewer is not an admin (#2080). */}
-      <div data-settings-card="notifications.privacy">
-        <SettingsGroup title={t("settings.section.privacy")} groupId="privacy">
-          {privacy && <PrivacySettings />}
-          <BlockedPeopleRow />
-          <ReportsRow />
-        </SettingsGroup>
-      </div>
+      {(organization || blocked.length > 0) && (
+        <div data-settings-card="notifications.privacy">
+          <SettingsGroup title={t("settings.section.privacy")} groupId="privacy">
+            {privacy && <PrivacySettings />}
+            <BlockedPeopleRow />
+            {organization && <ReportsRow />}
+          </SettingsGroup>
+        </div>
+      )}
     </>
   );
 }

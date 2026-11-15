@@ -203,7 +203,7 @@ export function SettingsModal() {
     searchLabels, closeSettings, openAbout, query, setQuery, q,
     lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
     pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
-    editConfig,
+    editConfig, organization,
   } = useSettingsModal();
   // #4094: the header's action slot (the Vault's New item, top right)
   const [pageActions, setPageActions] = useState<HTMLDivElement | null>(null);
@@ -513,7 +513,7 @@ export function SettingsModal() {
               </>
             )}
             {/* Privacy (2026-10-14): a group of Notifications on an organization server. */}
-            {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} />}
+            {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} organization={organization} />}
             </SettingsAdvancedScope>
             </div>
           </div>

@@ -1860,5 +1860,7 @@
   "leftOut.reason.invalidYaml": "no es YAML válido",
   "model.step.model": "Modelo",
   "model.step.models": "{count} modelos",
-  "model.step.oneModel": "1 modelo"
+  "model.step.oneModel": "1 modelo",
+  "connectApps.scope.server": "Este servidor",
+  "connectApps.scope.serverNote": "Apps, servidores y plugins instalados en tu propio servidor, para todos tus bots."
 }

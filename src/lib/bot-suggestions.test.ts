@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { describe, expect, it } from "vitest";
 import { botSuggestions, serverCards } from "./bot-suggestions";
 
@@ -17,6 +18,15 @@ describe("botSuggestions", () => {
     expect(items[0]).toMatchObject({ subtitleKey: "botPanel.suggestions.approval.inThread", vars: { title: "Invoices" }, action: { kind: "openThread", threadId: "t1" } });
     expect(items[1]).toMatchObject({ subtitleKey: "botPanel.suggestions.approval.fromBot", vars: { name: "Scout" } });
     expect(items[2]).toMatchObject({ titleKey: "botPanel.suggestions.setup.soul.title", action: { kind: "openSection", section: "soul" } });
+  });
+
+  it("speaks to one person about the name and role when there is no organization (#4360)", () => {
+    const setup = [{ id: "identity" as const, label: "", done: false }];
+    expect(botSuggestions({ setup, alone: true })[0]).toMatchObject({ subtitleKey: "botPanel.suggestions.setup.identity.subtitleAlone" });
+    expect(t("botPanel.suggestions.setup.identity.subtitleAlone")).not.toMatch(/people/);
+    // linked: unchanged
+    expect(botSuggestions({ setup })[0]).toMatchObject({ subtitleKey: "botPanel.suggestions.setup.identity.subtitle" });
+    expect(botSuggestions({ setup, alone: false })[0]).toMatchObject({ subtitleKey: "botPanel.suggestions.setup.identity.subtitle" });
   });
 
   it("skips hidden conversations and unknown steps, and caps the list", () => {

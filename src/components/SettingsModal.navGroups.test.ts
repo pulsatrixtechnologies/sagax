@@ -63,7 +63,8 @@ describe("Settings nav groups", () => {
     const rail = nav(render());
     const headings = [...rail.matchAll(/data-settings-nav-group="([^"]+)"/g)].map((match) => match[1]);
     expect(headings).toEqual(["you", "ai", "workspace", "app"]);
-    for (const label of ["Personal", "AI", "Organization", "App"]) expect(rail, label).toContain(`>${label}</div>`);
+    // #4360: with no organization the third heading is the person's Installation
+    for (const label of ["Personal", "AI", "Installation", "App"]) expect(rail, label).toContain(`>${label}</div>`);
     const ai = rail.slice(rail.indexOf('data-settings-nav-group="ai"'), rail.indexOf('data-settings-nav-group="workspace"'));
     expect(ai).toContain(">Models</button>");
     expect(ai.indexOf(">Models</button>")).toBeLessThan(ai.indexOf(">Voice</button>"));
@@ -195,7 +196,7 @@ describe("Settings nav groups", () => {
     setLocale("fr");
     const html = render();
     const rail = nav(html);
-    for (const label of ["Personnel", "IA", "Espace de travail", "Application"]) expect(rail, label).toContain(`>${label}</div>`);
+    for (const label of ["Personnel", "IA", "Installation", "Application"]) expect(rail, label).toContain(`>${label}</div>`);
     expect(html).toContain('<optgroup label="Personnel">');
     expect(html).not.toMatch(/[\u2013\u2014]/);
   });

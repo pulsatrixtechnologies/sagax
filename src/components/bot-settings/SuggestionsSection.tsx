@@ -24,6 +24,7 @@ import { cn } from "@/lib/cn";
 import { setShowSuggestions, useShowSuggestions } from "@/lib/panel-visibility";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 
 const NO_ROUTINES: readonly Routine[] = [];
 const NO_THREADS: readonly string[] = [];
@@ -58,9 +59,10 @@ export function SuggestionsSection({ bot, routineCount, routines = NO_ROUTINES, 
   // the pinned row and Today read
   const waiting = useServerWaitingItems(shown ? bot.id : undefined, NO_THREADS, waitingStamp(bot));
   const cards = useMemo(() => serverCards(waiting), [waiting]);
+  const alone = usePerspicaxOrg() === null;
   const items = useMemo(
-    () => botSuggestions({ setup, tasks: bot.tasks, waitingApprovals: bot.waitingApprovals, routines, cards }),
-    [setup, bot.tasks, bot.waitingApprovals, routines, cards],
+    () => botSuggestions({ setup, tasks: bot.tasks, waitingApprovals: bot.waitingApprovals, routines, cards, alone }),
+    [setup, bot.tasks, bot.waitingApprovals, routines, cards, alone],
   );
   const extra: SuggestionRow[] = [
     // Add to Slack only where the server offers the Admin link (#3398: an

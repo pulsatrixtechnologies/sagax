@@ -16,6 +16,8 @@ import {
 } from "./lazy-settings-sections";
 
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
+// #4360: this fixture is a person alone on a server with no organization
+vi.mock("@/lib/server-alone", () => ({ useServerAlone: () => true }));
 
 const fixture = vi.hoisted(() => ({
   section: "appearance" as AppSettingsSection,
@@ -437,20 +439,21 @@ describe("Settings → Appearance", () => {
     fixture.section = "organization";
     vi.stubGlobal("window", { ogb: { organization: {} } });
     const local = render();
-    expect(local).toContain('<option value="organization" selected="">Organization</option>');
+    // #4360: with no organization the page reads Servers
+    expect(local).toContain('<option value="organization" selected="">Servers</option>');
     expect(local).not.toContain('<option value="desktopWorkspaces"');
     // The enterprise Admin connection stays hidden until it is in use.
     expect(local).not.toContain("personal and local models");
     vi.stubGlobal("window", {});
     const browser = render();
-    expect(browser).toContain('<option value="organization" selected="">Organization</option>');
+    expect(browser).toContain('<option value="organization" selected="">Servers</option>');
   });
 
   it("keeps Organisation reachable to a remote client instead of hiding it", () => {
     fixture.section = "organization";
     vi.stubGlobal("window", { ogb: { organization: {}, remoteClient: { active: true } } });
     const html = render();
-    expect(html).toContain('<option value="organization" selected="">Organization</option>');
+    expect(html).toContain('<option value="organization" selected="">Servers</option>');
     fixture.section = "appearance";
     expect(render()).toContain('data-skin-family="studio"');
   });
@@ -499,17 +502,17 @@ describe("Settings → Notifications", () => {
     expect(html).toContain("On macOS, also choose Alerts in System Settings &gt; Notifications.");
   });
 
-  it("is laid out as Signals, Alerts plus Privacy, with nudges and blocked people folded (#2080, #2695)", () => {
+  it("is laid out as Signals and Alerts, with nudges folded; a person alone gets no Privacy card (#2080, #2695, #4360)", () => {
     fixture.section = "notifications";
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["notificationTypes", "signals", "alerts", "privacy"]);
+    expect(groups).toEqual(["notificationTypes", "signals", "alerts"]);
     expect(html).toContain(">Alerts</h3>");
-    expect(html).toContain(">Privacy</h3>");
+    expect(html).not.toContain(">Privacy</h3>");
     expect(html).toContain(">Nudges</div>");
     expect(html).toContain("Sound and window");
-    expect(html).toContain(">Blocked people</div>");
-    expect(html).toContain('data-settings-card="notifications.privacy"');
+    expect(html).not.toContain(">Blocked people</div>");
+    expect(html).not.toContain('data-settings-card="notifications.privacy"');
     // "On this computer" lives in the page intro, not as a repeated accessory
     expect(html).not.toContain("· On this computer");
     expect(html).toContain('aria-label="Notification sound"');

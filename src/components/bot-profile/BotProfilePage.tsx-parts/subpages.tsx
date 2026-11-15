@@ -58,8 +58,8 @@ export const GROUP_LABEL: Record<string, LocaleKey> = {
 
 /** One row of a tab: icon, name, description under it, a value and a
  * chevron on the right. The whole row opens its sub-page. */
-export function SubPageRow({ page, value, onOpen }: { page: BotProfileSubPage; value?: string | null; onOpen: () => void }) {
-  const entry = SUBPAGE_META[page];
+export function SubPageRow({ page, value, onOpen, title }: { page: BotProfileSubPage; value?: string | null; onOpen: () => void; title?: LocaleKey }) {
+  const entry = { ...SUBPAGE_META[page], ...(title ? { title } : {}) };
   return (
     <button
       type="button"
@@ -103,8 +103,8 @@ export function SubPageBack({ tab, onBack }: { tab: BotProfileTab; onBack: () =>
  * row was, one line of intro, then its cards. Its link back is in the top
  * bar (SubPageBack). The scroll margin keeps the title clear of the sticky
  * bar when the page opens scrolled to it. */
-export function SubPage({ page, children }: { page: BotProfileSubPage; children: ReactNode }) {
-  const entry = SUBPAGE_META[page];
+export function SubPage({ page, children, title }: { page: BotProfileSubPage; children: ReactNode; title?: LocaleKey }) {
+  const entry = { ...SUBPAGE_META[page], ...(title ? { title } : {}) };
   return (
     <div data-bot-profile-subpage={page} className="mt-4 flex min-w-0 scroll-mt-16 flex-col">
       <h2 data-bot-profile-subpage-title="" className="text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink">{t(entry.title)}</h2>

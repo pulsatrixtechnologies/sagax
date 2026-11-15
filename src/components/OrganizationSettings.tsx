@@ -10,6 +10,7 @@ import { OrgDirectory, type OrgPersonView, type PendingInviteView } from "./OrgD
 import type { OrgRole } from "../../shared/org-role";
 import { isPerspicaxOrg, ORG_PROBE_INIT, type PerspicaxOrg } from "@/lib/perspicax-org";
 import { OrgMemorySettings } from "./OrgMemorySettings";
+import { directoryAlone } from "@/lib/server-alone";
 import { SettingsGroup } from "./SettingsPrimitives";
 import { OrganizationBotRows } from "./settings/OrganizationBotRules";
 
@@ -18,14 +19,15 @@ type ServerInvites = { org: { name: string }; people: OrgPersonView[]; pendingIn
 /** A solo server's invitations to its own sign-in list (GET /api/org/invites,
  * admin only): invite by email, the people who may sign in, and the
  * pending links. Not an organization: nothing to create or move. Renders
- * nothing where the route is refused (a member, an organization server). */
+ * nothing where the route is refused (a member, an organization server),
+ * nor for a person alone on the server. */
 function ServerInvitesDirectory() {
   const [data, setData] = useState<ServerInvites | null>(null);
   const [lastInvite, setLastInvite] = useState<{ email: string; link?: string } | null>(null);
   const [error, setError] = useState("");
   const load = async (alive = () => true) => {
     try {
-      const body = await api<ServerInvites>("/api/org/invites");
+      const body = await api<ServerInvites>("/api/org/invites", ORG_PROBE_INIT);
       if (alive()) setData({ org: { name: body.org?.name ?? "" }, people: body.people ?? [], pendingInvites: body.pendingInvites ?? [], viewerRole: body.viewerRole });
     } catch {
       if (alive()) setData(null);
@@ -39,6 +41,9 @@ function ServerInvitesDirectory() {
   if (!data) return null;
   const canManage = data.viewerRole === undefined || data.viewerRole === "owner" || data.viewerRole === "admin";
   if (!canManage) return null;
+  // #4360: a person alone (src/lib/server-alone.ts) is offered no people
+  // list and no invitation; a server that already has people keeps it.
+  if (directoryAlone(data)) return null;
   return (
     <>
       <OrgDirectory

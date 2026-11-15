@@ -44,7 +44,7 @@ import { cn } from "@/lib/cn";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/language-preference";
 import { focusSettingsSearchLabel } from "@/lib/settings-search";
 import { useSettingsModal } from "./settings/useSettingsModal";
-import { NAV_GROUPS } from "./settings/settings-nav";
+import { navGroupsFor } from "./settings/settings-nav";
 import { OsPermissionsSection } from "./settings/OsPermissions";
 
 // The threads choice moved with Appearance (0.5.6); old imports still work.
@@ -203,7 +203,7 @@ export function SettingsModal() {
     searchLabels, closeSettings, openAbout, query, setQuery, q,
     lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
     pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
-    editConfig,
+    editConfig, organization,
   } = useSettingsModal();
   // #4094: the header's action slot (the Vault's New item, top right)
   const [pageActions, setPageActions] = useState<HTMLDivElement | null>(null);
@@ -254,7 +254,7 @@ export function SettingsModal() {
           {/* 2026-10-16: the rail in headed groups, as Cursor Settings
               groups its own (you, AI, the workspace, this app last). A
               heading shows while one of its entries does, a search too. */}
-          {NAV_GROUPS.map((group) => {
+          {navGroupsFor(organization).map((group) => {
             // #2080 (L0): App (id "about") is a page of the rail; the About
             // window opens from its link. #2090: Updates is its own page too.
             const entries = visibleSections.filter((entry) => entry.group === group.id);
@@ -339,7 +339,7 @@ export function SettingsModal() {
               }}
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
-              {NAV_GROUPS.map((group) => {
+              {navGroupsFor(organization).map((group) => {
                 const entries = availableSections.filter((entry) => entry.group === group.id);
                 return entries.length === 0 ? null : (
                   <optgroup key={group.id} label={t(group.labelKey)}>
@@ -513,7 +513,7 @@ export function SettingsModal() {
               </>
             )}
             {/* Privacy (2026-10-14): a group of Notifications on an organization server. */}
-            {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} />}
+            {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} organization={organization} />}
             </SettingsAdvancedScope>
             </div>
           </div>

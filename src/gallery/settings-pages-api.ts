@@ -5,7 +5,8 @@
  * `params`: the gallery's query (`providers=1`, `org=1`, `auto=1`, `keys=unreadable`,
  * `many=1` with providers=1: a realistic Providers list, eleven rows and more,
  * `botslink=none|off|org|paused-delivery`: the bots link's states, `noxai=1`:
- * no xAI account). */
+ * no xAI account, `people=alone|others` (#4360): a server with no organization
+ * whose owner is alone on it, or that has let one more person in). */
 export function settingsPagesApi(params: URLSearchParams): Record<string, unknown> {
   const DAY = 86_400_000;
   const NOW = Date.UTC(2026, 9, 28, 14);
@@ -38,6 +39,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       imageGen: { configured: false },
       anthropic: { configured: !params.get("empty") },
       ...(params.get("org") ? { personalSettings: true, viewer: { role: "admin", operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true }, allowedEngines: ["claude", "codex", "grok", "compat-azure", ...(params.get("expired") ? ["grok-team"] : [])], disabledModels: ["compat-azure/gpt-4o"] } : {}),
+      ...(params.get("people") && !params.get("org") ? { viewer: { role: "owner", operator: true, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true } } : {}),
       ...(params.get("providers") ? { myDisabledModels: ["compat-azure/o4-mini"] } : {}),
       ...(params.get("providers") ? {
         openai: { configured: true },
@@ -120,6 +122,15 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
         ...(params.get("expired") ? [{ instanceId: "grok-team", driver: "grokAgent", displayName: "Grok team", installed: true, subscription: { supported: true, signedIn: true, expired: true }, myKey: false, orgKey: false, myTurns: "expired" }] : []),
       ] },
       "/api/me/voice-keys": { elevenlabs: { configured: true, last4: "9f3a" }, fish: { configured: false, last4: null }, xai: { configured: false, last4: null }, openai: { configured: false, last4: null } },
+    } : {}),
+    // &people=alone|others: the server's sign-in directory (#4360)
+    ...(params.get("people") && !params.get("org") ? {
+      "/api/org/invites": {
+        org: { name: "" },
+        people: [{ id: "p-1", role: "owner", email: "alex@example.com" }, ...(params.get("people") === "others" ? [{ id: "sam@example.com", role: "member", email: "sam@example.com" }] : [])],
+        pendingInvites: [],
+        viewerRole: "owner",
+      },
     } : {}),
     "/api/me/providers": { keys: params.get("empty") ? [] : [{ provider: "elevenlabs", last4: "demo" }, { provider: "openai", last4: "demo" }], servers: [] },
     "/api/voice/status": { provider: "xai", available: true, organization: params.has("org"), tts: "elevenlabs", stt: "openai", providers: { tts: ["openai", "elevenlabs", "system", "chatterbox"], stt: ["openai"] } },

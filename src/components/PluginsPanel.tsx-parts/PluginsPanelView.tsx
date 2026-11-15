@@ -123,10 +123,10 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // the view leaves it out on Bots and Pages, which do not depend on it
   const scopeNoteText = scope === "bot" && scopeBot
     ? [t("connectApps.scope.botNote", { name: scopeBot.name }), botView && !botView.canChange ? t("plugins.readOnly") : ""].filter(Boolean).join(" ")
-    : t(scope === "me" ? "connectApps.scope.meNote" : "connectApps.scope.workspaceNote");
+    : t(scope === "me" ? "connectApps.scope.meNote" : organization ? "connectApps.scope.workspaceNote" : "connectApps.scope.serverNote");
   const scopeToggle = (
     <div data-plugins-scope-bar>
-      <ScopeToggle quiet scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} describedBy="plugins-scope-note" title={scopeNoteText} />
+      <ScopeToggle quiet scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} solo={!organization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} describedBy="plugins-scope-note" title={scopeNoteText} />
     </div>
   );
   const scopeControl = (

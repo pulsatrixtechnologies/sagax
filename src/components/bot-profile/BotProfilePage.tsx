@@ -442,11 +442,18 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
 
   // The short value every row shows on its right (the canvas, #2621).
   const rowValue = useBotRowValues(bot, { tab, listing: page === null });
+  // #4360: with no organization the bot cannot be shared, only seen: the
+  // page reads Who can see it, and a bot nobody else sees is Private to you.
+  const pageTitle = (id: BotProfileSubPage): LocaleKey | undefined => id === "sharing" && !available("sharing") ? "botSettings.visibility.title" : undefined;
+  const sharingSummary = rowValue("sharing");
+  const sharingValue = !available("sharing") && sharingSummary === t("botSettings.sharing.empty") ? t("botProfile.privateToYou") : sharingSummary;
 
   // General > Settings starts with its two switches in place (#3398): who
   // may create routines on the bot (#2622, for whoever may change it) and
   // this person's own "Notify me" (with its per-person override).
-  const collaboratorsSwitch = canEditBotField(state.config, bot, "collaboratorsCreateRoutines") ? (
+  // #4360: collaborators exist only where the bot can be shared (an
+  // organization server); a person alone is offered no switch about them.
+  const collaboratorsSwitch = available("sharing") && canEditBotField(state.config, bot, "collaboratorsCreateRoutines") ? (
     <DescribedRow
       key="collaboratorsCreateRoutines"
       rowId="botCollaboratorsCreateRoutines"
@@ -485,7 +492,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     return (
       <ProfileCard key={group.id} title={t(GROUP_LABEL[group.id]!)} groupId={`bot-profile-group-${group.id}`}>
         {switches}
-        {rows.map((id) => <SubPageRow key={id} page={id} value={rowValue(id)} onOpen={() => openPage(id)} />)}
+        {rows.map((id) => <SubPageRow key={id} page={id} title={pageTitle(id)} value={id === "sharing" ? sharingValue : rowValue(id)} onOpen={() => openPage(id)} />)}
       </ProfileCard>
     );
   };
@@ -662,7 +669,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} attention={tabAttention} />}
 
           {page ? (
-            <SubPage key={page} page={page}>
+            <SubPage key={page} page={page} title={pageTitle(page)}>
               {subPageBody(page)}
             </SubPage>
           ) : (

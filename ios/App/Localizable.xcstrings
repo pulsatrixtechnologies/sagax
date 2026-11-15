@@ -5835,12 +5835,12 @@
         }
       }
     },
-    "A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.": {
+    "A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Providers.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un appel passe par la voix en temps réel, jamais par la synthèse vocale. Ajoute ou corrige la clé xAI dans Réglages > Voix."
+            "value": "Un appel passe par la voix en temps réel, jamais par la synthèse vocale. Ajoute ou corrige la clé xAI dans Réglages > Fournisseurs."
           }
         }
       }

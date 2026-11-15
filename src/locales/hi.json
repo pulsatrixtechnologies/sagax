@@ -1850,5 +1850,7 @@
   "leftOut.reason.invalidYaml": "यह मान्य YAML नहीं है",
   "model.step.model": "मॉडल",
   "model.step.models": "{count} मॉडल",
-  "model.step.oneModel": "1 मॉडल"
+  "model.step.oneModel": "1 मॉडल",
+  "connectApps.scope.server": "यह सर्वर",
+  "connectApps.scope.serverNote": "आपके अपने सर्वर पर इंस्टॉल किए गए ऐप, सर्वर और प्लगइन, आपके सभी बॉट के लिए।"
 }

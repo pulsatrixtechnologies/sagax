@@ -87,6 +87,59 @@ describe("Organization settings without the hosted Admin portal", () => {
   });
 });
 
+describe("Settings > Organization for a person alone (#4360)", () => {
+  const SOLO_ORG = { org: { id: "org_1", name: "Home", ownerUserId: "p_owner" } };
+  const owner = { id: "p_owner", email: "owner@example.test", role: "owner" };
+  async function settle(invites: unknown) {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/org/invites")) return jsonResponse(200, invites);
+      return jsonResponse(200, SOLO_ORG);
+    });
+    for (let round = 0; round < 3; round++) {
+      render();
+      for (const effect of fixture.effects) effect();
+      await flush();
+    }
+    return render().html;
+  }
+
+  it("offers no people list and no invitation to the owner alone", async () => {
+    const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
+    expect(html).toContain("Connect to a server");
+    expect(html).not.toContain("Invite someone");
+  });
+
+  // the folded header of the Connect to a server card, up to its chevron
+  const connectHeader = (html: string) => /data-settings-card="organization\.connect"[\s\S]*?<\/button>/.exec(html)?.[0] ?? "";
+
+  it("folds Connect to a server with no summary: the Server header already says the state", async () => {
+    const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
+    const header = connectHeader(html);
+    expect(header).toContain("Connect to a server");
+    expect(header).not.toContain("data-card-summary");
+    expect(header).not.toContain("Your organization's Perspicax server");
+    expect(html).toContain("· This computer only");
+    expect(html).not.toContain("Not connected");
+  });
+
+  it("folds Connect to a server with no organization words in French", async () => {
+    setLocale("fr");
+    const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
+    const header = connectHeader(html);
+    expect(header).toContain("Se connecter à un serveur");
+    expect(header).not.toContain("data-card-summary");
+    expect(header).not.toContain("organisation");
+    expect(html).not.toContain("Non connecté");
+  });
+
+  it("keeps the people and invitations once the server has someone else", async () => {
+    const html = await settle({ ...SOLO_ORG, people: [owner, { id: "zara@example.test", email: "zara@example.test", role: "member" }], pendingInvites: [], viewerRole: "owner" });
+    expect(html).toContain("Invite someone");
+    expect(html).toContain("zara@example.test");
+  });
+});
+
 describe("Connect to a server: one card for the ways in", () => {
   it("offers Perspicax, a Sagax server and another computer by what this window can do", async () => {
     const { connectTargets } = await import("./ConnectServerWizard");

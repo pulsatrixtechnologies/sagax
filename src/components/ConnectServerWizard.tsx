@@ -90,6 +90,10 @@ function ServerLinkForm() {
   );
 }
 
+/** The folded card carries no summary (#4360): the Server group header right
+ * above it already says whether this window reaches another server, and the
+ * label of the first way in names an organization a person alone does not
+ * have. */
 export function ConnectServerWizard({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const targets = connectTargets({
     environments: Boolean(window.ogb?.environments),
@@ -106,7 +110,6 @@ export function ConnectServerWizard({ defaultOpen = false }: { defaultOpen?: boo
       defaultOpen={defaultOpen}
       title={t("settings.connectWizard.title")}
       subtitle={t("settings.connectWizard.subtitle")}
-      summary={t(LABEL[target].title)}
     >
       <div className="flex flex-col gap-4" data-connect-wizard={target}>
         {targets.length > 1 && (

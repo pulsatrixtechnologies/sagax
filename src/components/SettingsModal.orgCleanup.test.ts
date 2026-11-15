@@ -30,6 +30,8 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/perspicax-org")>(),
   usePerspicaxOrg: () => fixture.org,
 }));
+// #4360: without an organization this fixture is a person alone on the server
+vi.mock("@/lib/server-alone", () => ({ useServerAlone: () => fixture.org === null }));
 vi.mock("./ServerModeSettings", async (importOriginal) => ({
   ...await importOriginal<typeof import("./ServerModeSettings")>(),
   useServerMode: () => null,
@@ -94,17 +96,51 @@ describe("Settings on an organization server", () => {
     expect(solo).not.toContain('<option value="mail"');
     expect(solo).not.toContain('<option value="activity"');
     fixture.section = "notifications";
-    // #2080: Privacy card always hosts blocked people; org rows only on org
+    // #4360: a person alone has nobody to block and no reports: no Privacy card
     const soloNotifications = await render();
-    expect(soloNotifications).toContain('data-settings-card="notifications.privacy"');
-    expect(soloNotifications).toContain(">Privacy<");
-    expect(soloNotifications).toContain(">Blocked people<");
+    expect(soloNotifications).not.toContain('data-settings-card="notifications.privacy"');
+    expect(soloNotifications).not.toContain(">Blocked people<");
     expect(soloNotifications).not.toContain("Send read receipts");
+    expect(soloNotifications).not.toContain("Perspicax is unreachable");
+    // #2080: on an organization server the card hosts blocked people
     fixture.org = ORG;
     const privacy = await render();
     expect(privacy).toContain('data-settings-card="notifications.privacy"');
     expect(privacy).toContain(">Privacy<");
+    expect(privacy).toContain(">Blocked people<");
+    expect(privacy).toContain("Perspicax is unreachable");
     expect(privacy).not.toContain('<option value="privacy"');
+  });
+
+  it("names no organization in the rail or the page title for a person alone (#4360)", async () => {
+    fixture.section = "organization";
+    const solo = await render();
+    const heading = (html: string) => /id="app-settings-nav-workspace"[^>]*>([^<]+)</.exec(html)?.[1];
+    expect(heading(solo)).toBe("Installation");
+    expect(solo).toContain('<optgroup label="Installation">');
+    expect(solo).toContain('<option value="organization" selected="">Servers</option>');
+    expect(solo).toContain("Your server, and the servers you connect to.");
+    expect(solo).not.toContain("Your organization&#x27;s server");
+    // the page's rail icon is a server, not the organization's building
+    const row = (html: string) => /data-settings-nav-row="organization"[\s\S]*?<\/button>/.exec(html)?.[0] ?? "";
+    expect(row(solo)).toContain("lucide-server");
+    expect(row(solo)).not.toContain("lucide-building");
+    // Computer and Backups and storage stay reachable under the same group
+    expect(solo).toContain('data-settings-nav-row="computer"');
+    expect(solo).toContain('data-settings-nav-row="backups"');
+    // linked: unchanged
+    fixture.org = ORG;
+    const linked = await render();
+    expect(heading(linked)).toBe("Organization");
+    expect(linked).toContain('<option value="organization" selected="">Organization</option>');
+    expect(linked).not.toContain('<optgroup label="Installation">');
+    expect(row(linked)).toContain("lucide-building");
+    // French, tu
+    fixture.org = null;
+    setLocale("fr");
+    const fr = await render();
+    expect(heading(fr)).toBe("Installation");
+    expect(fr).toContain("Ton serveur, et les serveurs auxquels tu te connectes.");
   });
 
   it("opens an old Email or Activity link on the nearest page, and Privacy on its card", async () => {

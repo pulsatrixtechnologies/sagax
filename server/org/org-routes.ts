@@ -531,6 +531,7 @@ export function createPublicInviteRoutes(deps: PublicInviteRouteDeps) {
 //   GET          /api/org                   404 no_organization
 //   POST, PATCH  /api/org                   410 interim_org_removed
 //   GET          /api/org/invites           this server's people and pending invitations
+//                                          (no directory yet: 404, or an empty 200 to the probe)
 //   POST         /api/org/invites[/...]     the invitation routes above
 //
 // An organization server refuses the email and invitation routes with 403
@@ -571,7 +572,12 @@ export function createSoloOrgRoutes(deps: OrgRouteDeps): RouteHandler {
     // while an interim organization existed.
     if (method === "GET" && path === "/api/org/invites") {
       const org = deps.state.org;
-      if (!org) return json(res, 404, { ...NO_ORGANIZATION });
+      if (!org) {
+        // #4360: the app's alone-on-the-server probe reads an empty
+        // directory, quietly (src/lib/server-alone.ts).
+        if (ctx.req.headers[ORG_PROBE_HEADER] === "1") return json(res, 200, { org: null, people: [], pendingInvites: [], code: NO_ORGANIZATION.code });
+        return json(res, 404, { ...NO_ORGANIZATION });
+      }
       const viewerRole = roleOf({ ownerUserId: org.ownerUserId, admins: deps.state.signIn.admins, members: deps.state.signIn.members, userId: deps.actorId(ctx.auth), email: deps.actorEmail(ctx.auth) });
       const linkBase = inviteLinkBase(deps.state, deps.publicUrl?.() ?? requestOrigin(ctx.req));
       const result = getOrgRoute(deps.state, (deps.now ?? Date.now)(), deps.ownerEmail?.(), { viewerRole, linkBase, emailOf: deps.emailOf });

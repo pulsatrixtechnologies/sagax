@@ -14,6 +14,11 @@ const fixture = vi.hoisted(() => ({
   play: vi.fn(),
   blocked: [] as Array<{ id: string; name: string }>,
   admin: false,
+  alone: false,
+}));
+
+vi.mock("@/lib/server-alone", () => ({
+  useServerAlone: () => fixture.alone,
 }));
 
 vi.mock("@/lib/notification-preferences", () => {
@@ -87,6 +92,7 @@ beforeEach(() => {
   fixture.soundChoice = "system";
   fixture.blocked = [];
   fixture.admin = false;
+  fixture.alone = false;
   fixture.setSounds.mockClear();
   fixture.setSoundChoice.mockClear();
   fixture.play.mockClear();
@@ -102,9 +108,9 @@ afterEach(() => {
   setLocale("en");
 });
 
-const mount = (privacy = false) => {
+const mount = (privacy = false, organization = privacy) => {
   act(() => {
-    root.render(createElement(NotificationSettings, { privacy }));
+    root.render(createElement(NotificationSettings, { privacy, organization }));
   });
 };
 
@@ -128,7 +134,7 @@ describe("NotificationSettings (#2080)", () => {
   });
 
   it("does not repeat On this computer (intro is outside this component)", () => {
-    mount();
+    mount(true);
     expect(host.textContent).not.toMatch(/On this computer/);
     expect(host.textContent).toContain("Alerts");
     expect(host.textContent).toContain("Privacy");
@@ -142,6 +148,54 @@ describe("NotificationSettings (#2080)", () => {
     expect(host.textContent).toContain("2 people");
     expect(host.textContent).not.toContain("Send read receipts");
     expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeNull();
+  });
+
+  it("shows a person alone no Privacy card, no reports and no organization wording (#4360)", () => {
+    fixture.admin = true;
+    fixture.alone = true;
+    mount(false, false);
+    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeNull();
+    expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeNull();
+    expect(host.textContent).not.toContain("Blocked people");
+    expect(host.textContent).not.toContain("Perspicax");
+    expect(host.textContent).toContain("A short notice while the server updates or can't be reached.");
+  });
+
+  it("keeps Privacy and reports for the owner of a server with other people, without an organization (#4360)", () => {
+    fixture.admin = true;
+    fixture.alone = false;
+    mount(false, false);
+    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeTruthy();
+    expect(host.textContent).toContain("Blocked people");
+    expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeTruthy();
+    expect(host.textContent).not.toContain("Perspicax");
+  });
+
+  it("keeps blocked people for a person alone who blocked someone before (#4360)", () => {
+    fixture.admin = true;
+    fixture.alone = true;
+    fixture.blocked = [{ id: "p2", name: "Former guest" }];
+    mount(false, false);
+    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeTruthy();
+    expect(host.textContent).toContain("Blocked people");
+    expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeNull();
+  });
+
+  it("keeps Privacy, reports and the organization wording on an organization server (#4360)", () => {
+    fixture.admin = true;
+    mount(true, true);
+    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeTruthy();
+    expect(host.textContent).toContain("Blocked people");
+    expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeTruthy();
+    expect(host.textContent).toContain("or while Perspicax is unreachable.");
+  });
+
+  it("speaks to a person alone in French (#4360)", () => {
+    setLocale("fr");
+    fixture.alone = true;
+    mount(false, false);
+    expect(host.textContent).toContain("Un court avis pendant une mise à jour du serveur ou quand il est injoignable.");
+    expect(host.textContent).not.toContain("Perspicax");
   });
 
   it("shows the daily budget and quiet hours in solo too (#2695)", () => {

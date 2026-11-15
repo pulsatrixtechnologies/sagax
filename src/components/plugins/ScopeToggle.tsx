@@ -1,5 +1,7 @@
 // Complete capabilities in This bot, Me and Organization. The parent
-// offers Organization only to its administrator or local owner.
+// offers Organization only to its administrator or local owner. On a
+// server with no organization (#4360) that scope is the person's own
+// server: it says "This server", never "Organization".
 import type { ReactNode } from "react";
 import { Bot, User, Users } from "lucide-react";
 
@@ -31,7 +33,9 @@ export function quietSegmentClass(active: boolean, disabled = false): string {
   );
 }
 
-export function ScopeToggle({ scope, botName, onScope, disabled = false, describedBy, organization = true, quiet = false, title }: {
+export function ScopeToggle({ scope, botName, onScope, disabled = false, describedBy, organization = true, solo = false, quiet = false, title }: {
+  /** no organization on this server: the installation scope is the person's own server */
+  solo?: boolean;
   /** Manage's title row: gray pills, no accent */
   quiet?: boolean;
   /** what the chosen scope means, on hover */
@@ -72,7 +76,7 @@ export function ScopeToggle({ scope, botName, onScope, disabled = false, describ
     >
       {botName && option("bot", t("connectApps.scope.bot", { name: botName }), <Bot size={13} aria-hidden="true" className={quiet ? "hidden" : undefined} />)}
       {option("me", t("connectApps.scope.me"), <User size={13} aria-hidden="true" className={quiet ? "hidden" : undefined} />)}
-      {organization && option("workspace", t("connectApps.scope.workspace"), <Users size={13} aria-hidden="true" className={quiet ? "hidden" : undefined} />)}
+      {organization && option("workspace", t(solo ? "connectApps.scope.server" : "connectApps.scope.workspace"), <Users size={13} aria-hidden="true" className={quiet ? "hidden" : undefined} />)}
     </div>
   );
 }

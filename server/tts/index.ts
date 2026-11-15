@@ -169,7 +169,7 @@ export function speak(cfg: AppConfig, text: string, voiceId?: string, run?: syst
     // Never a fallback to the organization's key for someone it was not given to.
     if (access?.xaiKeyGiven === false) throw new XaiVoiceNotGiven();
     const key = grokVoiceKey(cfg);
-    if (!key) throw new NoVoiceConfigured("key", "Add an xAI key in Settings > Models. Grok voice uses it.");
+    if (!key) throw new NoVoiceConfigured("key", "Add an xAI key in Settings > Providers. Grok voice uses it.");
     const voice = voiceId || cfg.tts?.voice;
     if (!voice) throw new NoVoiceConfigured("voice");
     return grok.synthesize(text, voice, key);

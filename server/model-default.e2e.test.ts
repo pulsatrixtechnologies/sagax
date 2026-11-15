@@ -17,13 +17,17 @@ it("a bot model PATCH silently moves every existing thread and keeps permissions
     const first = { instanceId: bot.modelSelection.instanceId, model: "claude-sonnet-5-5" };
     const next = { instanceId: first.instanceId, model: "claude-haiku-4-5" };
     const { task } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Older pinned conversation" });
-    await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { modelSelection: first, approvalMode: "ask" });
+    await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { modelSelection: first, approvalMode: "edits" });
     const before = (await api("GET", `/api/threads/${task.threadId}/messages`)).messages;
     await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: next });
     const saved = (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id);
     expect(saved.modelSelection).toEqual(next);
     expect(saved.tasks.every((entry: any) => entry.followsBotModel === true && entry.modelSelection.model === next.model)).toBe(true);
-    expect(saved.tasks.find((entry: any) => entry.threadId === task.threadId).approvalMode).toBe("ask");
+    // One approval level per bot (#4200): the level chosen in the
+    // conversation is the bot's, and the model move keeps it.
+    expect(bot.approvalMode).not.toBe("edits");
+    expect(saved.approvalMode).toBe("edits");
+    expect(saved.tasks.find((entry: any) => entry.threadId === task.threadId).approvalMode).toBeUndefined();
     expect((await api("GET", `/api/threads/${task.threadId}/messages`)).messages).toEqual(before);
     // Saving the same default again also clears a pin from an older client.
     await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { modelSelection: first });

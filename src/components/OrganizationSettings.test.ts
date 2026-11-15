@@ -110,17 +110,27 @@ describe("Settings > Organization for a person alone (#4360)", () => {
     expect(html).not.toContain("Invite someone");
   });
 
-  it("folds Connect to a server on a neutral value, not the organization's way in", async () => {
+  // the folded header of the Connect to a server card, up to its chevron
+  const connectHeader = (html: string) => /data-settings-card="organization\.connect"[\s\S]*?<\/button>/.exec(html)?.[0] ?? "";
+
+  it("folds Connect to a server with no summary: the Server header already says the state", async () => {
     const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
-    const summary = /data-card-summary[^>]*>([^<]*)</.exec(html)?.[1];
-    expect(summary).toBe("Not connected");
-    expect(html).not.toContain(">Your organization's Perspicax server</span></button>");
+    const header = connectHeader(html);
+    expect(header).toContain("Connect to a server");
+    expect(header).not.toContain("data-card-summary");
+    expect(header).not.toContain("Your organization's Perspicax server");
+    expect(html).toContain("· This computer only");
+    expect(html).not.toContain("Not connected");
   });
 
-  it("folds Connect to a server on a neutral value in French", async () => {
+  it("folds Connect to a server with no organization words in French", async () => {
     setLocale("fr");
     const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
-    expect(/data-card-summary[^>]*>([^<]*)</.exec(html)?.[1]).toBe("Non connecté");
+    const header = connectHeader(html);
+    expect(header).toContain("Se connecter à un serveur");
+    expect(header).not.toContain("data-card-summary");
+    expect(header).not.toContain("organisation");
+    expect(html).not.toContain("Non connecté");
   });
 
   it("keeps the people and invitations once the server has someone else", async () => {

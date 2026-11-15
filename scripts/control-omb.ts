@@ -4,9 +4,9 @@
 // Old names in the shell (OMB_PORT) become SAGAX_* first.
 import "../electron/legacy-env-boot.mjs";
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, mkdirSync, mkdtempSync, openSync, writeFileSync } from "node:fs";
+import { closeSync, constants, copyFileSync, linkSync, mkdirSync, mkdtempSync, openSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 
@@ -338,6 +338,32 @@ export interface VerificationLaunchOptions {
   prepareDataDir?: (dataDir: string) => void | Promise<void>;
 }
 
+/** A folder holding this Node and nothing else, for the fixture's PATH.
+ * Node's own folder also holds npx and npm: with them on PATH, every bot of
+ * the fixture mounts the built-in npx plugin (shared/builtin-plugins.ts),
+ * whose package npx fetches from the registry into the empty temporary home
+ * on each turn, and each reply then waits on that download or on the MCP
+ * startup timeout (#4370). Idempotent: a restarted fixture reuses it. */
+export function fixtureNodeDir(dataDir: string): string {
+  const dir = join(dataDir, "fixture-node");
+  const node = join(dir, basename(process.execPath));
+  mkdirSync(dir, { recursive: true });
+  const exists = (error: unknown) => (error as NodeJS.ErrnoException)?.code === "EEXIST";
+  try { symlinkSync(process.execPath, node); }
+  catch (error) {
+    if (exists(error)) return dir;
+    // Windows without the symlink privilege: a hard link, else a copy that
+    // never writes over an existing entry (it could point at this Node).
+    try { linkSync(process.execPath, node); }
+    catch (linkError) {
+      if (exists(linkError)) return dir;
+      try { copyFileSync(process.execPath, node, constants.COPYFILE_EXCL); }
+      catch (copyError) { if (!exists(copyError)) throw copyError; }
+    }
+  }
+  return dir;
+}
+
 /** The environment of a verification server child: a temporary home in
  * `dataDir`, the fake engine's knobs from `parentEnv`, node on PATH, and
  * nothing else from the parent shell or this machine's installed CLIs. A
@@ -376,8 +402,8 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     FAKE_CLAUDE_DUMP: join(dataDir, "fake-claude-dump.json"),
     // Keep the environment hermetic while allowing POSIX to resolve the
     // fake CLI's `#!/usr/bin/env node` shebang. Windows resolves that same
-    // fixture through spawnCli without a shell.
-    PATH: dirname(process.execPath),
+    // fixture through spawnCli without a shell. Only node: see fixtureNodeDir.
+    PATH: fixtureNodeDir(dataDir),
     // ...and keep engine discovery to that PATH and this home. Without it the
     // server also scans /opt/homebrew/bin, /usr/local/bin and the login
     // shell's PATH, so a developer's own `codex` (or any engine CLI) becomes

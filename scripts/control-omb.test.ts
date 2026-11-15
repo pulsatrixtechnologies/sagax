@@ -1,13 +1,31 @@
 // What crosses from the launching shell into a fixture server: only what a
 // test scripted on purpose. A real OpenAI key must never reach a fixture that
 // could send it to OpenAI.
-import { join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
+import { builtinPluginMcp, commandOnPath, createRuntimeCheck } from "../server/capabilities/builtin-plugin-mounts.ts";
 import { verificationServerEnvironment } from "./control-omb.ts";
 
-const childEnv = (parentEnv: NodeJS.ProcessEnv) => verificationServerEnvironment(parentEnv, join(tmpdir(), "omb-fixture-env"), 9100);
+// This run's own folder: the environment now places a node link in it.
+const dataDir = mkdtempSync(join(tmpdir(), "omb-fixture-env-"));
+afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
+const childEnv = (parentEnv: NodeJS.ProcessEnv) => verificationServerEnvironment(parentEnv, dataDir, 9100);
+
+describe("the fixture's PATH (#4370)", () => {
+  it("resolves node for the fake engines and nothing else from Node's folder, so no bot mounts a plugin npx would fetch from the registry", () => {
+    const env = childEnv({});
+    expect(commandOnPath(basename(process.execPath, ".exe"), env)).not.toBeNull();
+    for (const command of ["npx", "npm"]) expect(commandOnPath(command, env), command).toBeNull();
+    // The server's own check, against this PATH: no built-in plugin mounts.
+    const runtimeMissing = createRuntimeCheck((command) => commandOnPath(command, env));
+    expect(builtinPluginMcp({}, { runtimeMissing })).toEqual([]);
+    // A restarted fixture reuses the same folder.
+    expect(childEnv({}).PATH).toBe(env.PATH);
+  });
+});
 
 describe("the fixture's fake engine knobs", () => {
   it("lets the Claude fake's knobs and the Codex fake's background-call knobs cross, and nothing else", () => {

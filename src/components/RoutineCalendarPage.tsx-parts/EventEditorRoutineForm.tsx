@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
-  ChevronDown, ChevronRight, Copy, FileText, Plus,
+  ChevronDown, ChevronRight, Clock3, Copy, Eye, FileText, Mail, Plus, Repeat2,
 } from "lucide-react";
 import { AdvancedScheduleFields, HumanScheduleFields, scheduleTimeLabel, timeZoneLabel } from "@/components/routines/HumanScheduleFields";
 import { GithubTriggerFields } from "@/components/routines/GithubTriggerFields";
@@ -9,7 +10,8 @@ import { CronRunDates } from "@/components/routines/CronScheduleFields";
 import { PANEL_INPUT, PANEL_LABEL, PANEL_TEXT_ACTION, PanelChip, PanelRow, PanelRows, PanelSelect, PanelToggle, PanelValue } from "@/components/routines/PanelRows";
 import { RunAsField } from "@/components/routines/RunAsField";
 import { WatchFields } from "@/components/routines/WatchFields";
-import { RoutineWebhookPanel } from "@/components/routines/RoutineWebhookPanel";
+import { RoutineWebhookCopyButton, RoutineWebhookPanel, routineWebhookFor } from "@/components/routines/RoutineWebhookPanel";
+import { PillTabCount, PillTabs } from "@/components/PillTabs";
 import { RoutineTimingFields } from "@/components/routines/RoutineTimingFields";
 import { LimitResetFields } from "@/components/routines/LimitResetFields";
 import { RoutineActAsField } from "@/components/routines/RoutineActAsField";
@@ -31,6 +33,7 @@ import { viewerCanCreateBots } from "@/lib/viewer";
 import { personLabel } from "@/lib/human-label";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import type { LocaleKey } from "@/locales";
 import type { RoutineRunOn } from "@/lib/routines";
 import { EVENT_DURATION_OPTIONS, INTERVAL_PRESETS } from "./constants";
 import { intervalSpan } from "./helpers";
@@ -83,9 +86,11 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
       : recurrence === "pattern" || recurrence === "advanced" ? pattern?.schedule : null;
   const repeatsWithinDay = routineRunsSeveralTimesADay(draftSchedule);
   const [instructionEditing, setInstructionEditing] = useState(() => !existingRoutine || Boolean(page?.focusInstruction));
-  // 2026-11-06 (JC): on the panel's page the rarely used rows (required
-  // skills and MCP servers, the mail tag, Duplicate, the server note) sit
-  // under a folded More at the end of Advanced; nothing is lost.
+  const [tab, setTab] = useState<RoutinePageTab>("overview");
+  const settingsRef = useRef<HTMLDivElement>(null);
+  // The rows of the options, each once. Outside the page they sit in
+  // Advanced in their old order; on the side panel's page (#4357, the
+  // owner's design C) they sit in the Settings tab under short headings.
   const requiredRows = <>
             <PanelRow label={t("routineReadiness.requiresSkills")} help={t("routineReadiness.requiresHelp")}>
               {viewing ? <PanelValue>{requiredSkills || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresSkills")} className={cn(PANEL_INPUT, "w-full")} value={requiredSkills} onChange={event => setRequiredSkills(event.target.value)} />}
@@ -94,8 +99,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               {viewing ? <PanelValue>{requiredMcp || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresMcp")} className={cn(PANEL_INPUT, "w-full")} value={requiredMcp} onChange={event => setRequiredMcp(event.target.value)} />}
             </PanelRow>
   </>;
-  const moreRows = <>
-            {!isRoomGoal && (
+  const mailAliasRow = !isRoomGoal && (
               <PanelRow data-routine-mail-alias="" label={t("routines.mailAlias.label")} hint={t("routineEditor.hint.mailAlias")} help={t("routines.mailAlias.help")}>
                 {viewing
                   ? <PanelValue muted={!mailAlias.trim()}>{mailAlias.trim() ? `+${mailAlias.trim()}` : t("routineEditor.none")}</PanelValue>
@@ -110,26 +114,169 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                     className={cn(PANEL_INPUT, "w-[140px]")}
                   />}
               </PanelRow>
-            )}
-            {existingRoutine && onDuplicate && <PanelRow data-routine-duplicate-row="" label={t("routineEditor.copy")} hint={t("routineEditor.hint.duplicate")}>
+  );
+  const duplicateRow = existingRoutine && onDuplicate && <PanelRow data-routine-duplicate-row="" label={t("routineEditor.copy")} hint={t("routineEditor.hint.duplicate")}>
               <button type="button" data-routine-duplicate onClick={() => onDuplicate(existingRoutine)} className={PANEL_TEXT_ACTION}><Copy size={13} aria-hidden="true" />{t("routineDetail.duplicate")}</button>
-            </PanelRow>}
-            {!triggered && <div className="py-2"><RoutineScheduleNote /></div>}
+            </PanelRow>;
+  const scheduleNote = !triggered && <div className="py-2"><RoutineScheduleNote /></div>;
+  const moreRows = <>{mailAliasRow}{duplicateRow}{scheduleNote}</>;
+  const runAsRow = <>
+            {/* 2026-11-06 (JC): the page's Runs as, changed in place. */}
+            {onPage && existingRoutine && page?.runAs}
+            {!existingRoutine && runAsOptions && (runAsOptions.canChoose || runAsOptions.current) && <RunAsField compact viewing={viewing} options={runAsOptions} value={runAs} onChange={setRunAs} />}
   </>;
-  return (
-    <>
-          {(otherOwner || readOnly || existingRoutine?.redacted) && <div className="space-y-1.5 pb-3">
+  const runOnRow = isRoomGoal ? (
+              <PanelRow data-routine-run-on="" label={t("routineEditor.runsOn")} help={t("routineCalendar.runsHereHelp")}><PanelValue>{t("routineCalendar.runsHere")}</PanelValue></PanelRow>
+            ) : (boatComputerEnabled(state.config) || runOn === "cloud") && (
+              <PanelSelect<RoutineRunOn> data-routine-run-on="" label={t("routineEditor.runsOn")} hint={runOn === "cloud" ? t("routineCalendar.boatAgentHelp") : t("routineCalendar.botSetupHelp")} viewing={viewing} value={runOn} onChange={setRunOn}
+                options={[{ value: "maus", label: t("routineCalendar.botSetup") }, { value: "cloud", label: t("routineCalendar.boatAgent"), disabled: !cloudReady || attachments.length > 0 }]} />
+            );
+  const modelRows = !isRoomGoal && (() => {
+              // Only the bot's own engine's models apply (shared/routine-model.ts).
+              const engine = state.instances.find((instance) => instance.instanceId === bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId);
+              const choices = (engine?.models.options ?? []).map((option) => ({ value: option.id, label: option.label || option.id }));
+              if (routineModel && !choices.some((choice) => choice.value === routineModel)) choices.push({ value: routineModel, label: routineModel });
+              const botModel = bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection.model;
+              const option = engine?.models.options.find((option) => option.id === (routineModel || botModel));
+              const efforts = modelEffortLevels(option, engine?.capabilities?.effortLevels);
+              if (routineEffort && !efforts.includes(routineEffort)) efforts.push(routineEffort);
+              return <><PanelSelect data-routine-model="" label={t("routines.model.label")} hint={t("routineEditor.hint.model")} viewing={viewing} value={routineModel} onChange={setRoutineModel}
+                options={[{ value: "", label: t("routines.model.botDefault") }, ...choices]} />
+                {(engine?.driverKind === "claudeAgent" || routineSubagentModel) && <PanelSelect data-routine-subagent-model="" label={t("routines.subagentModel.label")} hint={t("routineEditor.hint.subagentModel")} viewing={viewing} value={routineSubagentModel} onChange={setRoutineSubagentModel}
+                  options={[{ value: "", label: t("routines.subagentModel.default") }, ...(routineSubagentModel && !choices.some((choice) => choice.value === routineSubagentModel) ? [{ value: routineSubagentModel, label: routineSubagentModel }] : []), ...choices]} />}
+                <PanelSelect<EffortLevel | ""> data-routine-effort="" label={t("routines.effort.label")} hint={t("routineEditor.hint.effort")} viewing={viewing} value={routineEffort} onChange={setRoutineEffort}
+                  options={[{ value: "", label: t("routines.effort.botDefault") }, ...efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))]} /></>;
+            })();
+  const actAsRow = !isRoomGoal && <RoutineActAsField coverage={roleCoverage} value={actAs ?? existingRoutine?.actAs} onChange={setActAs} viewing={viewing} savedOnly={existingRoutine?.actAs}
+              {...(existingRoutine && (existingRoutine.canEdit !== false) ? { readiness: roleReadiness } : {})} />;
+  const postResultsRow = !isRoomGoal && <PanelToggle data-routine-post-results="" label={t("routines.postResults.label")}
+              hint={repeatsWithinDay ? t("routines.postResults.hintRepeating") : t("routines.postResults.hint")}
+              help={repeatsWithinDay ? t("routines.postResults.helpRepeating", { count: ROUTINE_PROBLEM_STREAK_TOLD }) : t("routines.postResults.help")} viewing={viewing} checked={postResults} onChange={setPostResults} />;
+  const attachmentsRow = isRoomGoal ? (
+              <PanelRow data-routine-attachments="" label={t("routineEditor.attachments")} help={t("routineCalendar.noGoalAttachments")}><PanelValue muted>{t("routineCalendar.sharedContext")}</PanelValue></PanelRow>
+            ) : <PanelRow data-routine-attachments="" label={t("routineEditor.attachments")} hint={t("routineCalendar.attachRoutineHint")} help={t("routineCalendar.attachRoutineHelp")}
+              below={attachments.length > 0 || attachmentNotice ? <div className="space-y-1.5">
+                {attachments.length > 0 && <div className="flex flex-wrap gap-1.5">{attachments.map((attachment) => <PanelChip key={attachment.id} data-routine-attachment="" onRemove={viewing ? undefined : () => setAttachments((current) => current.filter((entry) => entry.id !== attachment.id))} removeLabel={t("botPanel.skills.removeAria", { name: attachment.name })}><span className="inline-flex items-center gap-1"><FileText size={12} aria-hidden="true" className="shrink-0 text-ink-tertiary" />{attachment.name}</span></PanelChip>)}</div>}
+                {attachmentNotice && <div className="text-[12px] text-warning">{attachmentNotice}</div>}
+              </div> : undefined}>
+              {viewing
+                ? attachments.length === 0 && <PanelValue muted>{t("routineEditor.none")}</PanelValue>
+                : <>
+                  <input ref={fileInput} type="file" multiple className="hidden" onChange={(event) => { void pickFiles(event.target.files); event.target.value = ""; }} />
+                  <button type="button" data-routine-attach onClick={() => fileInput.current?.click()} className={PANEL_TEXT_ACTION}><Plus size={13} aria-hidden="true" />{t("common.add")}</button>
+                </>}
+            </PanelRow>;
+  const scheduleMoreRow = !viewing && recurrence === "pattern" && pattern && (
+              <div data-routine-editor-more-schedule className="min-w-0">
+                <HumanScheduleFields mode="advanced" preview={!onPage} draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />
+              </div>
+            );
+  const timingRow = repeatsOnClock && (
+              <RoutineTimingFields
+                mode={timingMode}
+                earlyMinutes={earlyMinutes}
+                lateMinutes={lateMinutes}
+                onMode={setTimingMode}
+                onEarly={setEarlyMinutes}
+                onLate={setLateMinutes}
+                viewing={viewing}
+              />
+            );
+  const intervalRows = recurrence === "interval" && !viewing && <>
+              <PanelSelect<IntervalDayChoice> data-routine-interval-days="" label={t("routineCalendar.intervalOn")} ariaLabel={t("routineCalendar.intervalDaysAria")} value={intervalDays} onChange={selectIntervalDays}
+                options={[{ value: "every-day", label: t("routines.repeat.daily") }, { value: "weekdays", label: t("routines.repeat.weekdays") }, { value: "custom", label: t("room.turnLimit.custom") }]} />
+              {intervalDays === "custom" && (
+                <div role="group" aria-label={t("routineCalendar.customIntervalDays")} aria-invalid={intervalDaysInvalid} aria-describedby={intervalDaysInvalid ? "routine-interval-days-error" : undefined} className="flex flex-wrap gap-1.5 py-2">
+                  {dayNames().map((label, day) => (
+                    <button key={label} type="button" onClick={() => setIntervalWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort())} aria-label={t(intervalWeekdays.includes(day) ? "routineCalendar.daySelected" : "routineCalendar.dayNotSelected", { day: label })} aria-pressed={intervalWeekdays.includes(day)} className={cn("size-8 rounded-full text-[11px] font-semibold", intervalWeekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}>
+                      {dayNames()[day]?.slice(0, 2)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <PanelSelect<IntervalWindowChoice> data-routine-interval-hours="" label={t("routineCalendar.during")} ariaLabel={t("routineCalendar.intervalHoursAria")} value={intervalWindow} onChange={setIntervalWindow}
+                options={[{ value: "all-day", label: t("routineCalendar.allDay") }, { value: "custom", label: t("routineCalendar.customHours") }]} />
+              {intervalWindow === "custom" && (
+                <div className="flex flex-wrap items-center gap-2 py-2 text-[12.5px] text-ink">
+                  <span className="text-ink-secondary">{t("routineCalendar.runBetween")}</span>
+                  <input aria-label={t("routineCalendar.windowStart")} aria-invalid={intervalWindowInvalid} aria-describedby={intervalWindowInvalid ? "routine-interval-window-error" : undefined} type="time" step={CALENDAR_SLOT_MINUTES * 60} value={intervalWindowStart} onChange={(event) => setIntervalWindowStart(event.target.value)} className={cn(PANEL_INPUT, "[color-scheme:light_dark]", intervalWindowInvalid && "ring-1 ring-danger/70")} />
+                  <span className="text-ink-secondary">{t("routineCalendar.and")}</span>
+                  <input aria-label={t("routineCalendar.windowEnd")} aria-invalid={intervalWindowInvalid} aria-describedby={intervalWindowInvalid ? "routine-interval-window-error" : undefined} type="time" step={CALENDAR_SLOT_MINUTES * 60} value={intervalWindowEnd} onChange={(event) => setIntervalWindowEnd(event.target.value)} className={cn(PANEL_INPUT, "[color-scheme:light_dark]", intervalWindowInvalid && "ring-1 ring-danger/70")} />
+                </div>
+              )}
+              <PanelSelect<IntervalEndChoice> data-routine-interval-ends="" label={t("remoteSessionsAdmin.col.ends")} ariaLabel={t("routineCalendar.intervalEndsAria")} value={intervalEnd} onChange={setIntervalEnd}
+                options={[{ value: "never", label: t("pages.expiry.never") }, { value: "on-date", label: t("routineCalendar.onDateOption") }]} />
+              {intervalEnd === "on-date" && (
+                <label className="flex flex-wrap items-center justify-between gap-2 py-2 text-[12.5px] text-ink">
+                  <span className="text-ink-secondary">{t("routineCalendar.stopSchedulingAfter")}</span>
+                  <input aria-label={t("routineCalendar.intervalEndDate")} aria-invalid={intervalEndInvalid} aria-describedby={intervalEndInvalid ? "routine-interval-end-error" : undefined} type="date" min={toLocalDateInput(intervalEndMinimumAt)} value={intervalEndDate} onChange={(event) => setIntervalEndDate(event.target.value)} className={cn(PANEL_INPUT, "[color-scheme:light_dark]", intervalEndInvalid && "ring-1 ring-danger/70")} />
+                </label>
+              )}
+              {(intervalDaysInvalid || intervalWindowInvalid || intervalEndInvalid) && <div className="space-y-1 py-2">
+                {intervalDaysInvalid && <div id="routine-interval-days-error" className="text-[11px] text-danger">{t("routineCalendar.chooseOneDay")}</div>}
+                {intervalWindowInvalid && <div id="routine-interval-window-error" className="text-[11px] text-danger">{t("routineCalendar.sameDayWindow", { minutes: intervalMinutes || 5 })}</div>}
+                {intervalEndInvalid && <div id="routine-interval-end-error" className="text-[11px] text-danger">{t("routineCalendar.endAfterFirstRun")}</div>}
+              </div>}
+            </>;
+  const watchRow = watchAllowed && (
+              <WatchFields draft={watchDraft} viewing={viewing} onChange={setWatchDraft} botId={lockedBotId ?? botIds[0] ?? ""} routineId={existingRoutine?.id} runOn={runOn} />
+            );
+  const timeLimitRow = <PanelSelect data-routine-time-limit="" label={t("routineCalendar.stopIfStillRunning")} ariaLabel={t("routineCalendar.safetyLimit")} hint={t("routineEditor.hint.timeLimit")} help={t("routineCalendar.safetyLimitHelp")} viewing={viewing}
+              value={timeoutMinutes == null ? "" : String(timeoutMinutes)} onChange={(value) => setTimeoutMinutes(value ? Number(value) : null)}
+              options={[{ value: "", label: t("settings.card.noLimit") }, ...EVENT_DURATION_OPTIONS.map((minutes) => ({ value: String(minutes), label: durationLabel(minutes) })), ...(timeoutMinutes != null && !EVENT_DURATION_OPTIONS.includes(timeoutMinutes) ? [{ value: String(timeoutMinutes), label: durationLabel(timeoutMinutes) }] : [])]} />;
+  const overlapRow = repeatsOnClock && <PanelSelect<"skip" | "queue"> data-routine-overlap="" label={t("routines.overlapLabel")} hint={t("routineEditor.hint.overlap")} help={t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")} viewing={viewing} value={overlap} onChange={setOverlap}
+              options={[{ value: "skip", label: t("routines.overlapSkip") }, { value: "queue", label: t("routines.overlapQueue") }]} />;
+  const computerRow = <PanelToggle data-routine-requires-computer="" label={t("routineReadiness.requiresComputer")} viewing={viewing} checked={requiresComputer} onChange={setRequiresComputer} />;
+  const autoPauseRow = repeatsOnClock && <PanelSelect data-routine-auto-pause="" label={t("routines.autoPause.label")} hint={t("routineEditor.hint.autoPause")} help={t("routines.autoPause.help")} viewing={viewing} value={String(autoPauseAfter)} onChange={(value) => setAutoPauseAfter(Number(value))}
+              options={routineAutoPauseChoices(autoPauseAfter).map((count) => ({ value: String(count), label: routineAutoPauseOption(count) }))} />;
+  const continuityRow = !isRoomGoal && repeatsOnClock && <PanelToggle data-routine-continuity="" label={t("routines.continuityLabel")} hint={t("routineEditor.hint.continuity")} help={t("routines.continuityHelp")} viewing={viewing} checked={continuity} onChange={setContinuity} />;
+  const onlyPresentRow = <PanelToggle data-routine-only-present="" label={t("routines.away.onlyLabel")} hint={t("routineEditor.hint.onlyPresent")} help={t("routines.away.onlyHelp")} viewing={viewing} checked={onlyWhenPresent} onChange={setOnlyWhenPresent} />;
+  const deleteWhenFinishedRow = (recurrence === "none" || (recurrence === "interval" && intervalEnd === "on-date")) && <PanelToggle data-routine-delete-when-finished="" label={t("routines.deleteWhenFinished.label")} hint={t("routineEditor.hint.deleteWhenFinished")} help={t("routines.deleteWhenFinished.help")} viewing={viewing} checked={deleteWhenFinished} onChange={setDeleteWhenFinished} />;
+
+  const botSection = !lockedBotId && <section data-routine-editor-section="bot" className="min-w-0 space-y-1.5">
+            <h3 className={PANEL_LABEL}>{isRoomGoal ? t("routineCalendar.chooseGroup") : t("routineCalendar.assignBot")}</h3>
+            {viewing ? (
+              <p className="text-[13.5px] text-ink">{isRoomGoal ? `${selectedRoom?.name ?? t("routineCalendar.groupUnavailable")} · ` : ""}{selectedBots[0]?.name ?? existingRoutine?.bot?.name ?? t("routines.unavailableBot")}</p>
+            ) : isRoomGoal ? (
+              <div className="space-y-3">
+                {rooms.length > 0 ? (
+                  <PillSelect ariaLabel={t("routineCalendar.chooseGroup")} value={groupId} onChange={selectRoom} options={[{ value: "", label: t("routineCalendar.selectGroup"), disabled: true }, ...rooms.map((room) => ({ value: room.id, label: room.name }))]} />
+                ) : (
+                  <div className="rounded-xl border border-dashed border-hairline/60 px-3.5 py-3 text-[12px] leading-relaxed text-ink-secondary">{t("routineCalendar.createGroupFirst")}</div>
+                )}
+                {selectedRoom && (
+                  <div>
+                    <div className="mb-2 text-[12px] text-ink-tertiary">{t("routineCalendar.chooseLead")}</div>
+                    {roomMembers.length > 0 ? (
+                      <>
+                        <BotPicker bots={roomMembers} selected={botIds} multiple={false} onChange={selectBots} />
+                        <div className="mt-2 text-[12px] text-ink-secondary">{t("routineCalendar.leadCoordinates", { name: selectedRoom.name })}</div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-[12px] text-warning">{t("routineCalendar.noActiveMembers")}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : bots.length > 0 ? (
+              <BotPicker bots={bots} selected={botIds} multiple={false} locked={Boolean(lockedBotId)} onChange={selectBots} />
+            ) : viewerCanCreateBots(state.config) && (
+              <button type="button" onClick={() => { dispatch({ type: "openBotWizard" }); onClose(); }} className="w-full rounded-xl border border-dashed border-accent/45 bg-accent/[0.06] px-4 py-4 text-left hover:bg-accent/10">
+                <div className="text-[13px] font-medium text-accent">{t("onboarding.firstRun.bot.title")}</div>
+                <div className="mt-1 text-[12px] text-ink-secondary">{t("routineCalendar.needsOneBot")}</div>
+              </button>
+            )}
+          </section>;
+
+  const notes = (otherOwner || readOnly || existingRoutine?.redacted) && <div className="space-y-1.5 pb-3">
             {otherOwner && <p data-routine-editor-owner className="text-[12px] text-ink-secondary">{t("routineEditor.owner", { name: personLabel(otherOwner.name, otherOwner.id) })}</p>}
             {readOnly && <p data-routine-editor-readonly className="rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("routineEditor.readOnly")}</p>}
             {existingRoutine?.redacted && <p className="text-[12px] text-ink-secondary">{t("routineEditor.redacted")}</p>}
-          </div>}
-          {/* 2026-11-03 (JC, Grok Bot's routine panel): a muted label, then
-              the value: Instruction, When to run, the trigger's details,
-              then Advanced as rows. View mode shows the same layout read-only. */}
-          <div className="min-w-0 space-y-5">
-          {/* 2026-11-06 (JC): on the panel's page the Instruction takes at
-              least 45% of the panel's height and grows with the window. */}
-          <section data-routine-editor-section="what" data-routine-instruction-fill={onPage ? "" : undefined} className={cn("min-w-0 space-y-1", onPage && "flex min-h-[45cqh] flex-col")}>
+          </div>;
+
+  // 2026-11-06 (JC): on the panel's page the instruction reads folded and
+  // turns into its editor on a click (#4357: folded behind Show more).
+  const instructionSection = <section data-routine-editor-section="what" className="min-w-0 space-y-1">
             <div className="flex min-w-0 items-center justify-between gap-2">
               <h3 className={PANEL_LABEL}>{t("routineEditor.instruction")}</h3>
               {/* 2026-11-03 (audit N-1): view mode only. In edit mode the form
@@ -138,34 +285,45 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               {(viewing || (onPage && !dirty)) && existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
             </div>
             {viewing
-              ? <InstructionText text={description} fill={onPage} />
+              ? <InstructionText text={description} short={onPage} />
               : onPage && existingRoutine && !instructionEditing
-              ? <InstructionText text={description} short fill onEdit={() => setInstructionEditing(true)} />
+              ? <InstructionText text={description} short onEdit={() => setInstructionEditing(true)} />
               : <MarkdownEditor compact expandable toolbarOnFocus autoFocus={onPage && Boolean(existingRoutine)} value={description} onChange={setDescription} minHeight={onPage ? "45cqh" : panel ? 120 : 160} maxHeight={onPage ? "80cqh" : panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
-          </section>
+          </section>;
 
-          {!isRoomGoal && <RoutineGoalFields goal={existingRoutine?.goal} draft={goalDraft} onChange={setGoalDraft} viewing={viewing} />}
-
-          <section data-routine-editor-section="when" className="min-w-0 space-y-1">
-            <h3 className={PANEL_LABEL}>{t("routineEditor.whenToRun")}</h3>
-            {viewing
+  const webhookRoutine = existingRoutine?.schedule.type === "webhook" ? existingRoutine : undefined;
+  // #4357: on the page the webhook's panel folds into its When row only when
+  // there is an address to copy and the row can open. A missing webhook
+  // (its notice and Create) and a read-only page show the panel right away.
+  const pageWebhookPanel = recurrence === "webhook" && (viewing || whenOpen || !routineWebhookFor(state.webhooks, webhookRoutine?.id));
+  // #4357: on the page the watch has its own line in When, so the schedule's
+  // line keeps the clock (or its interval's repeat) instead of the eye.
+  const pageWatchLine = onPage && whenIconName === "eye";
+  const MainWhenIcon = pageWatchLine ? (recurrence === "interval" ? Repeat2 : Clock3) : WhenIcon;
+  const mainWhenIconName = pageWatchLine ? (recurrence === "interval" ? "repeat" : "clock") : whenIconName;
+  const whenRow = viewing
               ? <div data-routine-when-row className="flex min-w-0 items-center gap-2 py-0.5 text-[13.5px] leading-5 text-ink">
-                <WhenIcon size={15} strokeWidth={1.75} aria-hidden="true" data-when-icon={whenIconName} className="shrink-0 text-ink-secondary" />
-                <span data-routine-when-sentence className="min-w-0">{whenSentence}</span>
-              </div>
-              : <button
-                type="button"
-                data-routine-when-row
-                aria-expanded={whenOpen}
-                aria-label={`${whenSentence}. ${t("routineEditor.changeWhen")}`}
-                onClick={() => setWhenOpen((open) => !open)}
-                className="-mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13.5px] leading-5 text-ink hover:bg-hover"
-              >
-                <WhenIcon size={15} strokeWidth={1.75} aria-hidden="true" data-when-icon={whenIconName} className="shrink-0 text-ink-secondary" />
+                <MainWhenIcon size={15} strokeWidth={1.75} aria-hidden="true" data-when-icon={mainWhenIconName} className="shrink-0 text-ink-secondary" />
                 <span data-routine-when-sentence className="min-w-0 flex-1">{whenSentence}</span>
-                <ChevronDown size={15} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform", whenOpen && "rotate-180")} />
-              </button>}
-            {!viewing && whenOpen && <div data-routine-when-picker className="space-y-3 pt-1">
+              </div>
+              : <div className="-mx-2 flex min-w-0 items-center gap-1">
+                <button
+                  type="button"
+                  data-routine-when-row
+                  aria-expanded={whenOpen}
+                  aria-label={`${whenSentence}. ${t("routineEditor.changeWhen")}`}
+                  onClick={() => setWhenOpen((open) => !open)}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13.5px] leading-5 text-ink hover:bg-hover"
+                >
+                  <MainWhenIcon size={15} strokeWidth={1.75} aria-hidden="true" data-when-icon={mainWhenIconName} className="shrink-0 text-ink-secondary" />
+                  <span data-routine-when-sentence className="min-w-0 flex-1">{whenSentence}</span>
+                  <ChevronDown size={15} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform", whenOpen && "rotate-180")} />
+                </button>
+                {/* #4357: a webhook's address is one click away on its row;
+                    its whole panel (key, header, curl) opens with the row. */}
+                {onPage && webhookRoutine && !pageWebhookPanel && <RoutineWebhookCopyButton routine={webhookRoutine} className="mr-0.5" />}
+              </div>;
+  const whenPicker = !viewing && whenOpen && <div data-routine-when-picker className="space-y-3 pt-1">
               <div data-schedule-frequency={recurrence === "pattern" ? scheduleDraft.model.frequency : recurrence}>
                 <PillSelect
                   ariaLabel={t("routines.editor.repeat")}
@@ -232,7 +390,8 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                   {!INTERVAL_PRESETS.includes(intervalMinutes) && <span>{t("settings.mcpCalls.minutes")}</span>}
                 </div>
               )}
-            </div>}
+            </div>;
+  const whenDetails = <>
             {pattern?.error && (recurrence === "pattern" || recurrence === "advanced") && <p id="routine-schedule-error" role="alert" className="text-[11.5px] text-danger">{pattern.error}</p>}
             {intervalInvalid && <div id="routine-interval-error" className="text-[11px] text-danger">{t("routineCalendar.intervalWholeNumber")}</div>}
             {recurrence === "email" && <p className="text-[12px] leading-relaxed text-ink-tertiary">{t("routineEditor.emailTrigger")}</p>}
@@ -248,51 +407,103 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               <PanelRow label={t("routineCalendar.during")}><PanelValue>{intervalWindow === "all-day" ? t("routineCalendar.allDay") : `${scheduleTimeLabel(intervalWindowStart)} - ${scheduleTimeLabel(intervalWindowEnd)}`}</PanelValue></PanelRow>
               <PanelRow label={t("remoteSessionsAdmin.col.ends")}><PanelValue>{intervalEnd === "never" ? t("pages.expiry.never") : intervalEndDate}</PanelValue></PanelRow>
             </PanelRows>}
+  </>;
+  const webhookPanel = <RoutineWebhookPanel routine={webhookRoutine} bot={bots.find((bot) => bot.id === botIds[0])} />;
+
+  if (onPage) {
+    const tabs: RoutinePageTab[] = existingRoutine ? ["overview", "runs", "settings"] : ["overview", "settings"];
+    const current = tabs.includes(tab) ? tab : "overview";
+    /** A trigger that lives in Settings: its line in When opens its group. */
+    const openSettings = (group: string) => {
+      flushSync(() => setTab("settings"));
+      settingsRef.current?.querySelector<HTMLElement>(`[data-routine-settings-group="${group}"]`)?.scrollIntoView?.({ block: "start" });
+    };
+    const whenTrigger = (key: string, Icon: typeof Mail, text: string, group: string) => <button type="button" data-routine-when-trigger={key} onClick={() => openSettings(group)}
+      className="-mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13.5px] leading-5 text-ink hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+      <Icon size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-ink-secondary" />
+      <span className="min-w-0 flex-1">{text}</span>
+      <ChevronRight size={15} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
+    </button>;
+    const groups: { id: string; label: string; rows: ReactNode[] }[] = [
+      { id: "who", label: t("routinePage.group.who"), rows: [runAsRow, runOnRow, modelRows, actAsRow] },
+      { id: "conditions", label: t("routinePage.group.conditions"), rows: [watchRow, onlyPresentRow, computerRow, requiredRows] },
+      { id: "limits", label: t("routinePage.group.limits"), rows: [overlapRow, timeLimitRow, autoPauseRow] },
+      { id: "timing", label: t("routinePage.group.timing"), rows: [scheduleMoreRow, timingRow, intervalRows, deleteWhenFinishedRow] },
+      { id: "results", label: t("routinePage.group.results"), rows: [postResultsRow, continuityRow, attachmentsRow] },
+      { id: "more", label: t("routineEditor.more"), rows: [mailAliasRow, duplicateRow, scheduleNote] },
+    ];
+    return (
+      <>
+        {notes}
+        <div data-routine-page-tabs="" className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 bg-panel px-5 pb-2.5 pt-4">
+          <PillTabs
+            tabs={tabs}
+            tab={current}
+            onTab={setTab}
+            idPrefix="routine-page"
+            ariaLabel={t("routinePage.tabsAria")}
+            label={(id) => t(ROUTINE_PAGE_TAB_LABEL[id])}
+            tabAttributes={(id) => ({ "data-routine-page-tab": id })}
+            after={(id) => id === "runs" && (page?.runCount ?? 0) > 0 && <PillTabCount count={page!.runCount!} />}
+          />
+        </div>
+        <div role="tabpanel" id={`routine-page-panel-${current}`} aria-labelledby={`routine-page-tab-${current}`} data-routine-page-panel={current} className="min-w-0">
+          {current === "overview" && <div className="min-w-0 space-y-5">
+            {instructionSection}
+            {!isRoomGoal && <RoutineGoalFields goal={existingRoutine?.goal} draft={goalDraft} onChange={setGoalDraft} viewing={viewing} />}
+            <section data-routine-editor-section="when" className="min-w-0 space-y-1">
+              <h3 className={PANEL_LABEL}>{t("routineEditor.whenToRun")}</h3>
+              {whenRow}
+              {whenPicker}
+              {whenDetails}
+              {pageWebhookPanel && <div data-routine-editor-section="webhook" className="min-w-0 pt-1">{webhookPanel}</div>}
+              {!isRoomGoal && mailAlias.trim() && whenTrigger("mail", Mail, t("routinePage.mailTrigger", { tag: mailAlias.trim() }), "more")}
+              {watchAllowed && watchDraft.on && whenTrigger("watch", Eye, t("routineWatch.title"), "conditions")}
+              {page?.status}
+            </section>
+            {page?.lastRun}
+          </div>}
+          {current === "runs" && page?.runs}
+          {current === "settings" && <div ref={settingsRef} data-routine-settings="" className="min-w-0 space-y-5">
+            {botSection}
+            {groups.map((group) => {
+              const rows = group.rows.filter((row) => row !== false && row !== null && row !== undefined && row !== "");
+              if (rows.length === 0) return null;
+              return <section key={group.id} data-routine-settings-group={group.id} className="min-w-0 scroll-mt-14 space-y-1">
+                <h3 className={PANEL_LABEL}>{group.label}</h3>
+                <PanelRows>{rows.map((row, index) => <Fragment key={index}>{row}</Fragment>)}</PanelRows>
+              </section>;
+            })}
+          </div>}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+          {notes}
+          {/* 2026-11-03 (JC, Grok Bot's routine panel): a muted label, then
+              the value: Instruction, When to run, the trigger's details,
+              then Advanced as rows. View mode shows the same layout read-only. */}
+          <div className="min-w-0 space-y-5">
+          {instructionSection}
+
+          {!isRoomGoal && <RoutineGoalFields goal={existingRoutine?.goal} draft={goalDraft} onChange={setGoalDraft} viewing={viewing} />}
+
+          <section data-routine-editor-section="when" className="min-w-0 space-y-1">
+            <h3 className={PANEL_LABEL}>{t("routineEditor.whenToRun")}</h3>
+            {whenRow}
+            {whenPicker}
+            {whenDetails}
           </section>
 
           {recurrence === "webhook" && <section data-routine-editor-section="webhook" className="min-w-0 space-y-2">
             <h3 className={PANEL_LABEL}>{t("routineEditor.webhook")}</h3>
-            <RoutineWebhookPanel routine={existingRoutine?.schedule.type === "webhook" ? existingRoutine : undefined} bot={bots.find((bot) => bot.id === botIds[0])} />
+            {webhookPanel}
           </section>}
 
-          {onPage && page?.status}
-
-          {!lockedBotId && <section data-routine-editor-section="bot" className="min-w-0 space-y-1.5">
-            <h3 className={PANEL_LABEL}>{isRoomGoal ? t("routineCalendar.chooseGroup") : t("routineCalendar.assignBot")}</h3>
-            {viewing ? (
-              <p className="text-[13.5px] text-ink">{isRoomGoal ? `${selectedRoom?.name ?? t("routineCalendar.groupUnavailable")} · ` : ""}{selectedBots[0]?.name ?? existingRoutine?.bot?.name ?? t("routines.unavailableBot")}</p>
-            ) : isRoomGoal ? (
-              <div className="space-y-3">
-                {rooms.length > 0 ? (
-                  <PillSelect ariaLabel={t("routineCalendar.chooseGroup")} value={groupId} onChange={selectRoom} options={[{ value: "", label: t("routineCalendar.selectGroup"), disabled: true }, ...rooms.map((room) => ({ value: room.id, label: room.name }))]} />
-                ) : (
-                  <div className="rounded-xl border border-dashed border-hairline/60 px-3.5 py-3 text-[12px] leading-relaxed text-ink-secondary">{t("routineCalendar.createGroupFirst")}</div>
-                )}
-                {selectedRoom && (
-                  <div>
-                    <div className="mb-2 text-[12px] text-ink-tertiary">{t("routineCalendar.chooseLead")}</div>
-                    {roomMembers.length > 0 ? (
-                      <>
-                        <BotPicker bots={roomMembers} selected={botIds} multiple={false} onChange={selectBots} />
-                        <div className="mt-2 text-[12px] text-ink-secondary">{t("routineCalendar.leadCoordinates", { name: selectedRoom.name })}</div>
-                      </>
-                    ) : (
-                      <div className="rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-[12px] text-warning">{t("routineCalendar.noActiveMembers")}</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : bots.length > 0 ? (
-              <BotPicker bots={bots} selected={botIds} multiple={false} locked={Boolean(lockedBotId)} onChange={selectBots} />
-            ) : viewerCanCreateBots(state.config) && (
-              <button type="button" onClick={() => { dispatch({ type: "openBotWizard" }); onClose(); }} className="w-full rounded-xl border border-dashed border-accent/45 bg-accent/[0.06] px-4 py-4 text-left hover:bg-accent/10">
-                <div className="text-[13px] font-medium text-accent">{t("onboarding.firstRun.bot.title")}</div>
-                <div className="mt-1 text-[12px] text-ink-secondary">{t("routineCalendar.needsOneBot")}</div>
-              </button>
-            )}
-          </section>}
-
-          {onPage && page?.runs}
+          {botSection}
 
           <details data-routine-editor-more className="group min-w-0" open={moreOpen} onToggle={(event) => toggleMore((event.currentTarget as HTMLDetailsElement).open)}>
             <summary data-routine-editor-more-summary className="-mx-2 flex cursor-pointer select-none list-none items-start gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] text-ink-secondary hover:bg-hover hover:text-ink [&::-webkit-details-marker]:hidden">
@@ -300,130 +511,36 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               <span className="min-w-0"><span className="font-medium text-ink">{t("routineEditor.advanced")}</span><span data-routine-advanced-summary className="ml-1.5 text-ink-tertiary">· {advancedSummary}</span></span>
             </summary>
             <PanelRows data-routine-advanced-rows="" className="mt-1">
-            {/* 2026-11-06 (JC): the page's Runs as, changed in place, lives here. */}
-            {onPage && existingRoutine && page?.runAs}
-            {!existingRoutine && runAsOptions && (runAsOptions.canChoose || runAsOptions.current) && <RunAsField compact viewing={viewing} options={runAsOptions} value={runAs} onChange={setRunAs} />}
-            {isRoomGoal ? (
-              <PanelRow data-routine-run-on="" label={t("routineEditor.runsOn")} help={t("routineCalendar.runsHereHelp")}><PanelValue>{t("routineCalendar.runsHere")}</PanelValue></PanelRow>
-            ) : (boatComputerEnabled(state.config) || runOn === "cloud") && (
-              <PanelSelect<RoutineRunOn> data-routine-run-on="" label={t("routineEditor.runsOn")} hint={runOn === "cloud" ? t("routineCalendar.boatAgentHelp") : t("routineCalendar.botSetupHelp")} viewing={viewing} value={runOn} onChange={setRunOn}
-                options={[{ value: "maus", label: t("routineCalendar.botSetup") }, { value: "cloud", label: t("routineCalendar.boatAgent"), disabled: !cloudReady || attachments.length > 0 }]} />
-            )}
-            {!isRoomGoal && (() => {
-              // Only the bot's own engine's models apply (shared/routine-model.ts).
-              const engine = state.instances.find((instance) => instance.instanceId === bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId);
-              const choices = (engine?.models.options ?? []).map((option) => ({ value: option.id, label: option.label || option.id }));
-              if (routineModel && !choices.some((choice) => choice.value === routineModel)) choices.push({ value: routineModel, label: routineModel });
-              const botModel = bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection.model;
-              const option = engine?.models.options.find((option) => option.id === (routineModel || botModel));
-              const efforts = modelEffortLevels(option, engine?.capabilities?.effortLevels);
-              if (routineEffort && !efforts.includes(routineEffort)) efforts.push(routineEffort);
-              return <><PanelSelect data-routine-model="" label={t("routines.model.label")} hint={t("routineEditor.hint.model")} viewing={viewing} value={routineModel} onChange={setRoutineModel}
-                options={[{ value: "", label: t("routines.model.botDefault") }, ...choices]} />
-                {(engine?.driverKind === "claudeAgent" || routineSubagentModel) && <PanelSelect data-routine-subagent-model="" label={t("routines.subagentModel.label")} hint={t("routineEditor.hint.subagentModel")} viewing={viewing} value={routineSubagentModel} onChange={setRoutineSubagentModel}
-                  options={[{ value: "", label: t("routines.subagentModel.default") }, ...(routineSubagentModel && !choices.some((choice) => choice.value === routineSubagentModel) ? [{ value: routineSubagentModel, label: routineSubagentModel }] : []), ...choices]} />}
-                <PanelSelect<EffortLevel | ""> data-routine-effort="" label={t("routines.effort.label")} hint={t("routineEditor.hint.effort")} viewing={viewing} value={routineEffort} onChange={setRoutineEffort}
-                  options={[{ value: "", label: t("routines.effort.botDefault") }, ...efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))]} /></>;
-            })()}
-            {!isRoomGoal && <RoutineActAsField coverage={roleCoverage} value={actAs ?? existingRoutine?.actAs} onChange={setActAs} viewing={viewing} savedOnly={existingRoutine?.actAs}
-              {...(existingRoutine && (existingRoutine.canEdit !== false) ? { readiness: roleReadiness } : {})} />}
-            {!isRoomGoal && <PanelToggle data-routine-post-results="" label={t("routines.postResults.label")}
-              hint={repeatsWithinDay ? t("routines.postResults.hintRepeating") : t("routines.postResults.hint")}
-              help={repeatsWithinDay ? t("routines.postResults.helpRepeating", { count: ROUTINE_PROBLEM_STREAK_TOLD }) : t("routines.postResults.help")} viewing={viewing} checked={postResults} onChange={setPostResults} />}
-            {isRoomGoal ? (
-              <PanelRow data-routine-attachments="" label={t("routineEditor.attachments")} help={t("routineCalendar.noGoalAttachments")}><PanelValue muted>{t("routineCalendar.sharedContext")}</PanelValue></PanelRow>
-            ) : <PanelRow data-routine-attachments="" label={t("routineEditor.attachments")} hint={t("routineCalendar.attachRoutineHint")} help={t("routineCalendar.attachRoutineHelp")}
-              below={attachments.length > 0 || attachmentNotice ? <div className="space-y-1.5">
-                {attachments.length > 0 && <div className="flex flex-wrap gap-1.5">{attachments.map((attachment) => <PanelChip key={attachment.id} data-routine-attachment="" onRemove={viewing ? undefined : () => setAttachments((current) => current.filter((entry) => entry.id !== attachment.id))} removeLabel={t("botPanel.skills.removeAria", { name: attachment.name })}><span className="inline-flex items-center gap-1"><FileText size={12} aria-hidden="true" className="shrink-0 text-ink-tertiary" />{attachment.name}</span></PanelChip>)}</div>}
-                {attachmentNotice && <div className="text-[12px] text-warning">{attachmentNotice}</div>}
-              </div> : undefined}>
-              {viewing
-                ? attachments.length === 0 && <PanelValue muted>{t("routineEditor.none")}</PanelValue>
-                : <>
-                  <input ref={fileInput} type="file" multiple className="hidden" onChange={(event) => { void pickFiles(event.target.files); event.target.value = ""; }} />
-                  <button type="button" data-routine-attach onClick={() => fileInput.current?.click()} className={PANEL_TEXT_ACTION}><Plus size={13} aria-hidden="true" />{t("common.add")}</button>
-                </>}
-            </PanelRow>}
-            {!viewing && recurrence === "pattern" && pattern && (
-              <div data-routine-editor-more-schedule className="min-w-0">
-                <HumanScheduleFields mode="advanced" preview={!onPage} draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />
-              </div>
-            )}
-            {repeatsOnClock && (
-              <RoutineTimingFields
-                mode={timingMode}
-                earlyMinutes={earlyMinutes}
-                lateMinutes={lateMinutes}
-                onMode={setTimingMode}
-                onEarly={setEarlyMinutes}
-                onLate={setLateMinutes}
-                viewing={viewing}
-              />
-            )}
-            {recurrence === "interval" && !viewing && <>
-              <PanelSelect<IntervalDayChoice> data-routine-interval-days="" label={t("routineCalendar.intervalOn")} ariaLabel={t("routineCalendar.intervalDaysAria")} value={intervalDays} onChange={selectIntervalDays}
-                options={[{ value: "every-day", label: t("routines.repeat.daily") }, { value: "weekdays", label: t("routines.repeat.weekdays") }, { value: "custom", label: t("room.turnLimit.custom") }]} />
-              {intervalDays === "custom" && (
-                <div role="group" aria-label={t("routineCalendar.customIntervalDays")} aria-invalid={intervalDaysInvalid} aria-describedby={intervalDaysInvalid ? "routine-interval-days-error" : undefined} className="flex flex-wrap gap-1.5 py-2">
-                  {dayNames().map((label, day) => (
-                    <button key={label} type="button" onClick={() => setIntervalWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort())} aria-label={t(intervalWeekdays.includes(day) ? "routineCalendar.daySelected" : "routineCalendar.dayNotSelected", { day: label })} aria-pressed={intervalWeekdays.includes(day)} className={cn("size-8 rounded-full text-[11px] font-semibold", intervalWeekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}>
-                      {dayNames()[day]?.slice(0, 2)}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <PanelSelect<IntervalWindowChoice> data-routine-interval-hours="" label={t("routineCalendar.during")} ariaLabel={t("routineCalendar.intervalHoursAria")} value={intervalWindow} onChange={setIntervalWindow}
-                options={[{ value: "all-day", label: t("routineCalendar.allDay") }, { value: "custom", label: t("routineCalendar.customHours") }]} />
-              {intervalWindow === "custom" && (
-                <div className="flex flex-wrap items-center gap-2 py-2 text-[12.5px] text-ink">
-                  <span className="text-ink-secondary">{t("routineCalendar.runBetween")}</span>
-                  <input aria-label={t("routineCalendar.windowStart")} aria-invalid={intervalWindowInvalid} aria-describedby={intervalWindowInvalid ? "routine-interval-window-error" : undefined} type="time" step={CALENDAR_SLOT_MINUTES * 60} value={intervalWindowStart} onChange={(event) => setIntervalWindowStart(event.target.value)} className={cn(PANEL_INPUT, "[color-scheme:light_dark]", intervalWindowInvalid && "ring-1 ring-danger/70")} />
-                  <span className="text-ink-secondary">{t("routineCalendar.and")}</span>
-                  <input aria-label={t("routineCalendar.windowEnd")} aria-invalid={intervalWindowInvalid} aria-describedby={intervalWindowInvalid ? "routine-interval-window-error" : undefined} type="time" step={CALENDAR_SLOT_MINUTES * 60} value={intervalWindowEnd} onChange={(event) => setIntervalWindowEnd(event.target.value)} className={cn(PANEL_INPUT, "[color-scheme:light_dark]", intervalWindowInvalid && "ring-1 ring-danger/70")} />
-                </div>
-              )}
-              <PanelSelect<IntervalEndChoice> data-routine-interval-ends="" label={t("remoteSessionsAdmin.col.ends")} ariaLabel={t("routineCalendar.intervalEndsAria")} value={intervalEnd} onChange={setIntervalEnd}
-                options={[{ value: "never", label: t("pages.expiry.never") }, { value: "on-date", label: t("routineCalendar.onDateOption") }]} />
-              {intervalEnd === "on-date" && (
-                <label className="flex flex-wrap items-center justify-between gap-2 py-2 text-[12.5px] text-ink">
-                  <span className="text-ink-secondary">{t("routineCalendar.stopSchedulingAfter")}</span>
-                  <input aria-label={t("routineCalendar.intervalEndDate")} aria-invalid={intervalEndInvalid} aria-describedby={intervalEndInvalid ? "routine-interval-end-error" : undefined} type="date" min={toLocalDateInput(intervalEndMinimumAt)} value={intervalEndDate} onChange={(event) => setIntervalEndDate(event.target.value)} className={cn(PANEL_INPUT, "[color-scheme:light_dark]", intervalEndInvalid && "ring-1 ring-danger/70")} />
-                </label>
-              )}
-              {(intervalDaysInvalid || intervalWindowInvalid || intervalEndInvalid) && <div className="space-y-1 py-2">
-                {intervalDaysInvalid && <div id="routine-interval-days-error" className="text-[11px] text-danger">{t("routineCalendar.chooseOneDay")}</div>}
-                {intervalWindowInvalid && <div id="routine-interval-window-error" className="text-[11px] text-danger">{t("routineCalendar.sameDayWindow", { minutes: intervalMinutes || 5 })}</div>}
-                {intervalEndInvalid && <div id="routine-interval-end-error" className="text-[11px] text-danger">{t("routineCalendar.endAfterFirstRun")}</div>}
-              </div>}
-            </>}
-            {watchAllowed && (
-              <WatchFields draft={watchDraft} viewing={viewing} onChange={setWatchDraft} botId={lockedBotId ?? botIds[0] ?? ""} routineId={existingRoutine?.id} runOn={runOn} />
-            )}
-            <PanelSelect data-routine-time-limit="" label={t("routineCalendar.stopIfStillRunning")} ariaLabel={t("routineCalendar.safetyLimit")} hint={t("routineEditor.hint.timeLimit")} help={t("routineCalendar.safetyLimitHelp")} viewing={viewing}
-              value={timeoutMinutes == null ? "" : String(timeoutMinutes)} onChange={(value) => setTimeoutMinutes(value ? Number(value) : null)}
-              options={[{ value: "", label: t("settings.card.noLimit") }, ...EVENT_DURATION_OPTIONS.map((minutes) => ({ value: String(minutes), label: durationLabel(minutes) })), ...(timeoutMinutes != null && !EVENT_DURATION_OPTIONS.includes(timeoutMinutes) ? [{ value: String(timeoutMinutes), label: durationLabel(timeoutMinutes) }] : [])]} />
-            {repeatsOnClock && <PanelSelect<"skip" | "queue"> data-routine-overlap="" label={t("routines.overlapLabel")} hint={t("routineEditor.hint.overlap")} help={t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")} viewing={viewing} value={overlap} onChange={setOverlap}
-              options={[{ value: "skip", label: t("routines.overlapSkip") }, { value: "queue", label: t("routines.overlapQueue") }]} />}
-            {!onPage && requiredRows}
-            <PanelToggle label={t("routineReadiness.requiresComputer")} viewing={viewing} checked={requiresComputer} onChange={setRequiresComputer} />
-            {repeatsOnClock && <PanelSelect data-routine-auto-pause="" label={t("routines.autoPause.label")} hint={t("routineEditor.hint.autoPause")} help={t("routines.autoPause.help")} viewing={viewing} value={String(autoPauseAfter)} onChange={(value) => setAutoPauseAfter(Number(value))}
-              options={routineAutoPauseChoices(autoPauseAfter).map((count) => ({ value: String(count), label: routineAutoPauseOption(count) }))} />}
-            {!isRoomGoal && repeatsOnClock && <PanelToggle data-routine-continuity="" label={t("routines.continuityLabel")} hint={t("routineEditor.hint.continuity")} help={t("routines.continuityHelp")} viewing={viewing} checked={continuity} onChange={setContinuity} />}
-            <PanelToggle data-routine-only-present="" label={t("routines.away.onlyLabel")} hint={t("routineEditor.hint.onlyPresent")} help={t("routines.away.onlyHelp")} viewing={viewing} checked={onlyWhenPresent} onChange={setOnlyWhenPresent} />
-            {(recurrence === "none" || (recurrence === "interval" && intervalEnd === "on-date")) && <PanelToggle data-routine-delete-when-finished="" label={t("routines.deleteWhenFinished.label")} hint={t("routineEditor.hint.deleteWhenFinished")} help={t("routines.deleteWhenFinished.help")} viewing={viewing} checked={deleteWhenFinished} onChange={setDeleteWhenFinished} />}
-            {onPage ? <details data-routine-advanced-more="" className="group/more min-w-0 py-1">
-              <summary data-routine-advanced-more-summary className="-mx-2 flex cursor-pointer select-none list-none items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] text-ink-secondary hover:bg-hover hover:text-ink [&::-webkit-details-marker]:hidden">
-                <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-ink-tertiary transition-transform group-open/more:rotate-90" />
-                <span className="font-medium">{t("routineEditor.more")}</span>
-              </summary>
-              <PanelRows data-routine-advanced-more-rows="" className="mt-1">
-                {requiredRows}
-                {moreRows}
-              </PanelRows>
-            </details> : moreRows}
+            {runAsRow}
+            {runOnRow}
+            {modelRows}
+            {actAsRow}
+            {postResultsRow}
+            {attachmentsRow}
+            {scheduleMoreRow}
+            {timingRow}
+            {intervalRows}
+            {watchRow}
+            {timeLimitRow}
+            {overlapRow}
+            {requiredRows}
+            {computerRow}
+            {autoPauseRow}
+            {continuityRow}
+            {onlyPresentRow}
+            {deleteWhenFinishedRow}
+            {moreRows}
             </PanelRows>
           </details>
           </div>
     </>
   );
 }
+
+/** The routine page's tabs (#4357, the owner's design C). */
+export type RoutinePageTab = "overview" | "runs" | "settings";
+const ROUTINE_PAGE_TAB_LABEL: Record<RoutinePageTab, LocaleKey> = {
+  overview: "routinePage.tab.overview",
+  runs: "routineDetail.runs",
+  settings: "routinePage.tab.settings",
+};

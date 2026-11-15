@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
+import { PillTabs } from "@/components/PillTabs";
 import { personaPagesMatching } from "@/lib/persona-search";
 import { applySettingsSearch, clearSettingsSearch, settingsQuery } from "@/lib/settings-search";
 import type { BotProfileTab, PersonaCategory } from "@/lib/persona-sections";
@@ -115,10 +115,8 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategor
 
 export type BotProfileSearch = ReturnType<typeof useBotProfileSearch>;
 
-/** The pill tabs, wrapping when the window is narrow, and the search behind
- * the magnifier. Measured on the reference (docs/design, 2.4 ter, #4098):
- * 13 px labels on an 18 px line, 4 px by 8 px of padding (26 px high), 2 px
- * between tabs. A tab in `attention` carries the attention dot beside its
+/** The pill tabs (the shared PillTabs, measured on the reference), wrapping
+ * when the window is narrow, and the search behind the magnifier. A tab in `attention` carries the attention dot beside its
  * label (Outcomes while one of them needs the person). */
 export function BotProfileTabBar({ tabs, tab, onTab, search, attention }: {
   tabs: readonly BotProfileTab[];
@@ -131,51 +129,24 @@ export function BotProfileTabBar({ tabs, tab, onTab, search, attention }: {
   return (
     <>
       <div className="mt-4 flex items-start gap-1 px-1">
-        <div
-          role="tablist"
+        <PillTabs
+          tabs={tabs}
+          tab={tab}
+          onTab={onTab}
+          idPrefix="bot-profile"
+          ariaLabel={t("botProfile.tabsAria")}
           data-bot-profile-tabs=""
-          aria-label={t("botProfile.tabsAria")}
-          onKeyDown={(event) => {
-            const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-            if (!step) return;
-            event.preventDefault();
-            const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length]!;
-            onTab(next);
-            event.currentTarget.querySelector<HTMLElement>(`[data-bot-profile-tab="${next}"]`)?.focus();
-          }}
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5"
-        >
-          <TabIndicatorGroup>
-          {tabs.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`bot-profile-tab-${id}`}
-              aria-controls={`bot-profile-panel-${id}`}
-              data-bot-profile-tab={id}
-              data-bot-profile-tab-match={q && matching.has(id) ? "" : undefined}
-              aria-selected={tab === id}
-              tabIndex={tab === id ? 0 : -1}
-              onClick={() => onTab(id)}
-              className={cn(
-                "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
-                q && !matching.has(id) && "opacity-40",
-              )}
-            >
-              {tab === id && <TabIndicator />}
-              <span className="relative">{t(TAB_LABEL[id])}</span>
-              {attention?.has(id) && (
-                <>
-                  <span data-bot-profile-tab-dot="" aria-hidden="true" className="relative size-1.5 shrink-0 rounded-full bg-warning" />
-                  <span className="sr-only">{t("botTasks.waiting")}</span>
-                </>
-              )}
-            </button>
-          ))}
-          </TabIndicatorGroup>
-        </div>
+          className="flex-1"
+          label={(id) => t(TAB_LABEL[id])}
+          tabAttributes={(id) => ({ "data-bot-profile-tab": id, "data-bot-profile-tab-match": q && matching.has(id) ? "" : undefined })}
+          tabClassName={(id) => q && !matching.has(id) && "opacity-40"}
+          after={(id) => attention?.has(id) && (
+            <>
+              <span data-bot-profile-tab-dot="" aria-hidden="true" className="relative size-1.5 shrink-0 rounded-full bg-warning" />
+              <span className="sr-only">{t("botTasks.waiting")}</span>
+            </>
+          )}
+        />
         <button
           type="button"
           data-bot-profile-search-toggle=""

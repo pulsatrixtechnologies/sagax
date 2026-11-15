@@ -526,61 +526,180 @@ describe("the routine panel, edit mode", () => {
   });
 });
 
-describe("the routine panel page layout (2026-11-06, the owner)", () => {
-  const pageSlots = () => ({
-    status: createElement("div", { "data-test-status": "" }),
+describe("the routine page: three tabs, Overview, Runs, Settings (#4357, the owner's design C)", () => {
+  const pageSlots = (extra: Record<string, unknown> = {}) => ({
+    status: createElement("div", { "data-test-status": "" }, "Next run"),
+    lastRun: createElement("section", { "data-test-last-run": "" }, "Last run"),
     runs: createElement("section", { "data-routine-runs": "" }),
+    runCount: 9,
     runAs: createElement("div", { "data-test-run-as": "" }, "Runs as"),
     badge: createElement("span", { "data-routine-state-badge": "warning" }, "Failing"),
+    ...extra,
   });
-  const mountPage = () => mount(routine({ type: "cron", expression: "30 8 * * 1-5", timeZone: "America/Toronto" }), vi.fn(), { presentation: "panel", page: pageSlots(), onDuplicate: vi.fn() });
+  const cron = () => routine({ type: "cron", expression: "30 8 * * 1-5", timeZone: "America/Toronto" });
+  const mountPage = (value: Routine = cron(), extra: Record<string, unknown> = {}) => mount(value, vi.fn(), { presentation: "panel", page: pageSlots(extra), onDuplicate: vi.fn() });
+  const tabButton = (id: string) => host.querySelector<HTMLButtonElement>(`[data-routine-page-tab="${id}"]`)!;
+  const openTab = (id: string) => flushSync(() => tabButton(id).click());
+  const panel = () => host.querySelector<HTMLElement>("[data-routine-page-panel]")!;
 
-  it("puts Runs as inside Advanced only, Runs before Advanced, the state badge in the header", () => {
+  it("opens on Overview with the reference's text tabs: 13 px labels, 26 px pills, the selected one a soft pill, Runs with its count", () => {
     mountPage();
-    const advanced = host.querySelector("[data-routine-editor-more]")!;
-    const runAs = host.querySelectorAll("[data-test-run-as]");
-    expect(runAs.length).toBe(1);
-    expect(advanced.contains(runAs[0]!)).toBe(true);
-    const runs = host.querySelector("[data-routine-runs]")!;
-    expect(runs.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(advanced.contains(runs)).toBe(false);
+    const list = host.querySelector<HTMLElement>("[role=tablist][data-routine-page-tabs], [data-routine-page-tabs] [role=tablist]")!;
+    expect(list).not.toBeNull();
+    const tabs = [...list.querySelectorAll<HTMLButtonElement>("[role=tab]")];
+    expect(tabs.map((tab) => tab.getAttribute("data-routine-page-tab"))).toEqual(["overview", "runs", "settings"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Overview", "Runs9", "Settings"]);
+    for (const tab of tabs) for (const token of ["rounded-full", "px-2", "py-1", "text-[13px]", "leading-[18px]"]) expect(tab.className).toContain(token);
+    expect(tabButton("overview").getAttribute("aria-selected")).toBe("true");
+    expect(tabButton("overview").querySelector("[data-tab-indicator]")).not.toBeNull();
+    expect(tabButton("runs").querySelector("[data-pill-tab-count]")?.textContent).toBe("9");
+    expect(panel().getAttribute("role")).toBe("tabpanel");
+    expect(panel().getAttribute("aria-labelledby")).toBe("routine-page-tab-overview");
     expect(host.querySelector("[data-routine-state-badge]")?.textContent).toBe("Failing");
   });
 
-  it("gives Instruction at least 45% of the panel height, the scroll area being a size container", () => {
+  it("Overview: the instruction folded with Show more, When, Next run, Last run; no option row and no Advanced fold", () => {
     mountPage();
-    const instruction = host.querySelector("[data-routine-instruction-fill]")!;
-    expect(instruction.className).toContain("min-h-[45cqh]");
-    expect(host.querySelector("[data-routine-editor-scroll]")!.className).toContain("[container-type:size]");
+    const overview = panel();
+    expect(overview.getAttribute("data-routine-page-panel")).toBe("overview");
+    const text = overview.querySelector<HTMLElement>("[data-routine-editor-section=what] [data-routine-instruction-text]")!;
+    expect(text.className).toContain("max-h-[7.5rem]");
+    expect(overview.querySelector("[data-routine-editor-section=when] [data-routine-when-row]")).not.toBeNull();
+    expect(overview.querySelector("[data-routine-editor-section=when] [data-test-status]")).not.toBeNull();
+    expect(overview.querySelector("[data-test-last-run]")).not.toBeNull();
+    expect(host.querySelector("[data-routine-editor-more]")).toBeNull();
+    for (const option of ["[data-routine-model]", "[data-routine-effort]", "[data-routine-post-results]", "[data-routine-time-limit]", "[data-test-run-as]", "[data-routine-runs]"]) expect(host.querySelector(option), option).toBeNull();
   });
 
-  it("folds a long Instruction at half the panel height at most (#3154)", () => {
+  it("Runs: the run history slot only", () => {
     mountPage();
-    const text = host.querySelector<HTMLElement>("[data-routine-instruction-fill] [data-routine-instruction-text]")!;
-    expect(text.className).toContain("max-h-[50cqh]");
-    expect(text.className).not.toContain("max-h-[80cqh]");
+    openTab("runs");
+    expect(panel().getAttribute("data-routine-page-panel")).toBe("runs");
+    expect(panel().querySelector("[data-routine-runs]")).not.toBeNull();
+    expect(host.querySelector("[data-routine-editor-section=what]")).toBeNull();
   });
 
-  it("drops Next runs, folds Required skills, MCP, Mail tag, Duplicate and the server note under More in Advanced", () => {
-    mountPage();
-    expect(host.textContent).not.toContain("Next runs");
-    expect(host.textContent).not.toContain("Clock changes");
-    const advanced = openAdvanced();
-    const more = advanced.querySelector("[data-routine-advanced-more]")!;
-    expect(more).not.toBeNull();
-    expect(more.tagName).toBe("DETAILS");
-    expect(more.querySelector("[data-routine-mail-alias]")).not.toBeNull();
-    expect(more.querySelector("[data-routine-duplicate]")).not.toBeNull();
-    expect(more.textContent).toContain("Required skills");
-    expect(more.textContent).toContain("Required MCP servers");
-    expect(host.querySelectorAll("[data-routine-mail-alias]").length).toBe(1);
-    expect(host.querySelectorAll("[data-routine-duplicate]").length).toBe(1);
+  it("Settings: every option of the page is reachable, once, under short headings", () => {
+    mountPage(cron(), {});
+    openTab("settings");
+    const settings = panel();
+    const headings = [...settings.querySelectorAll("[data-routine-settings-group] > h3")].map((heading) => heading.textContent);
+    expect(headings).toEqual(["Who runs it", "Conditions", "Limits", "Timing", "Results", "More"]);
+    const options = ["[data-test-run-as]", "[data-routine-model]", "[data-routine-effort]", "[data-routine-only-present]", "[data-routine-requires-computer]", "[data-routine-overlap]", "[data-routine-time-limit]", "[data-routine-auto-pause]", "[data-routine-timing]", "[data-routine-post-results]", "[data-routine-continuity]", "[data-routine-attachments]", "[data-routine-mail-alias]", "[data-routine-duplicate]"];
+    for (const option of options) expect(host.querySelectorAll(option).length, option).toBe(1);
+    for (const option of options) expect(settings.contains(host.querySelector(option)), option).toBe(true);
+    expect(settings.textContent).toContain("Required skills");
+    expect(settings.textContent).toContain("Required MCP servers");
+    expect(settings.querySelector("[data-routine-settings-group=timing]")!.textContent).toContain(timeZoneLabel("America/Toronto"));
+    const group = (id: string) => settings.querySelector(`[data-routine-settings-group=${id}]`)!;
+    expect(group("who").contains(settings.querySelector("[data-routine-model]"))).toBe(true);
+    expect(group("conditions").contains(settings.querySelector("[data-routine-only-present]"))).toBe(true);
+    expect(group("limits").contains(settings.querySelector("[data-routine-auto-pause]"))).toBe(true);
+    expect(group("results").contains(settings.querySelector("[data-routine-continuity]"))).toBe(true);
+    expect(group("more").contains(settings.querySelector("[data-routine-mail-alias]"))).toBe(true);
+    // A change there is saved by the page's bar, as before.
+    flushSync(() => settings.querySelector<HTMLButtonElement>("[data-routine-only-present] button[role=switch]")!.click());
+    expect(host.querySelector("[data-editor-dirty]")).not.toBeNull();
   });
 
-  it("keeps the old layout outside the page (no More fold)", () => {
-    mount(routine({ type: "cron", expression: "30 8 * * 1-5", timeZone: "America/Toronto" }), vi.fn(), { presentation: "panel", onDuplicate: vi.fn() });
+  it("hides an option that cannot apply: a one-time routine has no overlap, no auto pause, no Remember the last run", () => {
+    mountPage(routine({ type: "once", at: Date.now() + 86_400_000 }));
+    openTab("settings");
+    for (const option of ["[data-routine-overlap]", "[data-routine-auto-pause]", "[data-routine-continuity]"]) expect(host.querySelector(option), option).toBeNull();
+    expect(host.querySelector("[data-routine-delete-when-finished]")).not.toBeNull();
+  });
+
+  it("When lists every trigger: a webhook with its Copy and the mail tag, whose line opens Settings", async () => {
+    fixture.webhooks = [{ id: "w1", endpointId: "ep1", routineId: "r1", botId: bot.id, name: "Weekly digest", enabled: true, deliveryCount: 0, tokenLast4: "y123", createdAt: 1, updatedAt: 1 }];
+    const copied: string[] = [];
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: async (text: string) => { copied.push(text); } } });
+    const value = { ...routine({ type: "webhook" }), mailAlias: "reports" } as Routine;
+    mountPage(value);
+    const when = host.querySelector<HTMLElement>("[data-routine-editor-section=when]")!;
+    expect(when.querySelector("[data-routine-when-sentence]")?.textContent).toBe("When a webhook fires");
+    const copy = when.querySelector<HTMLButtonElement>("[data-routine-webhook-copy]")!;
+    expect(copy.textContent).toBe("Copy");
+    await act(async () => { copy.click(); });
+    expect(copied).toEqual(["https://hooks.example.test/hooks/ep1"]);
+    expect(when.querySelector("[data-routine-when-trigger=mail]")?.textContent).toBe("When mail tagged +reports arrives");
+    flushSync(() => host.querySelector<HTMLButtonElement>("[data-routine-when-trigger=mail]")!.click());
+    expect(panel().getAttribute("data-routine-page-panel")).toBe("settings");
+    expect(panel().querySelector("[data-routine-settings-group=more] [data-routine-mail-alias]")).not.toBeNull();
+    // The webhook's whole panel (address, key, header) opens with its row.
+    openTab("overview");
+    expect(host.querySelector("[data-routine-webhook]")).toBeNull();
+    flushSync(() => host.querySelector<HTMLButtonElement>("button[data-routine-when-row]")!.click());
+    expect(host.querySelector("[data-routine-editor-section=when] [data-routine-webhook]")).not.toBeNull();
+    expect(host.querySelector("[data-routine-webhook-copy]")).toBeNull();
+  });
+
+  it("the webhook line's Copy uses the shared copy feedback: its mark clears after the shared delay", async () => {
+    const { COPY_FEEDBACK_MS } = await import("@/lib/copy-text");
+    fixture.webhooks = [{ id: "w1", endpointId: "ep1", routineId: "r1", botId: bot.id, name: "Weekly digest", enabled: true, deliveryCount: 0, tokenLast4: "y123", createdAt: 1, updatedAt: 1 }];
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: async () => {} } });
+    vi.useFakeTimers();
+    try {
+      mountPage(routine({ type: "webhook" }));
+      const copy = host.querySelector<HTMLButtonElement>("[data-routine-webhook-copy]")!;
+      await act(async () => { copy.click(); });
+      expect(copy.querySelector(".text-accent")).not.toBeNull();
+      await act(async () => { vi.advanceTimersByTime(COPY_FEEDBACK_MS); });
+      expect(copy.querySelector(".text-accent")).toBeNull();
+      expect(copy.textContent).toBe("Copy");
+      expect(copy.getAttribute("aria-label")).toBe("Copy the address");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a webhook routine whose webhook is missing says so in Overview, with Create, and no Copy", () => {
+    fixture.webhooks = [];
+    mountPage(routine({ type: "webhook" }));
+    const when = host.querySelector<HTMLElement>("[data-routine-editor-section=when]")!;
+    expect(panel().getAttribute("data-routine-page-panel")).toBe("overview");
+    const missing = when.querySelector<HTMLElement>("[data-routine-webhook=missing]")!;
+    expect(missing).not.toBeNull();
+    expect(missing.textContent).toContain("This routine has no webhook yet.");
+    expect(missing.textContent).toContain("Create its webhook");
+    expect(when.querySelector("[data-routine-webhook-copy]")).toBeNull();
+  });
+
+  it("a read-only routine page shows its webhook's whole panel in When (address, key, deliveries), with no second Copy", () => {
+    fixture.webhooks = [{ id: "w1", endpointId: "ep1", routineId: "r1", botId: bot.id, name: "Weekly digest", enabled: true, deliveryCount: 3, tokenLast4: "y123", createdAt: 1, updatedAt: 1 }];
+    mountPage({ ...routine({ type: "webhook" }), canEdit: false, owner: { id: "pr_other", name: "Alex" } } as Routine);
+    const when = host.querySelector<HTMLElement>("[data-routine-editor-section=when]")!;
+    expect(when.querySelector("button[data-routine-when-row]")).toBeNull();
+    const section = when.querySelector<HTMLElement>("[data-routine-webhook=w1]")!;
+    expect(section).not.toBeNull();
+    expect(section.querySelector("[data-webhook-url]")?.textContent).toBe("https://hooks.example.test/hooks/ep1");
+    expect(section.querySelector("[data-webhook-key]")?.textContent).toBe("whsec_••••y123");
+    expect(section.textContent).toContain("3 deliveries");
+    expect(host.querySelectorAll("[data-routine-webhook-copy]").length).toBe(0);
+  });
+
+  it("When lists a watch beside the schedule; its line opens Settings > Conditions, where the watch is set", () => {
+    const value = { ...cron(), precheck: { kind: "watch", source: { type: "files", path: "/tmp/inbox" } } } as unknown as Routine;
+    mountPage(value);
+    const when = host.querySelector<HTMLElement>("[data-routine-editor-section=when]")!;
+    expect(when.querySelector("[data-routine-when-sentence]")).not.toBeNull();
+    expect(when.querySelector("[data-routine-when-row] [data-when-icon]")?.getAttribute("data-when-icon")).toBe("clock");
+    const watch = when.querySelector<HTMLButtonElement>("[data-routine-when-trigger=watch]")!;
+    expect(watch.textContent).toBe("Only when something changes");
+    flushSync(() => watch.click());
+    expect(panel().getAttribute("data-routine-page-panel")).toBe("settings");
+    expect(panel().querySelector("[data-routine-settings-group=conditions]")!.textContent).toContain("Only when something changes");
+  });
+
+  it("a new routine on the page has Overview and Settings, no Runs", () => {
+    mount(undefined as unknown as Routine, vi.fn(), { presentation: "panel", page: pageSlots() });
+    expect([...host.querySelectorAll("[data-routine-page-tab]")].map((tab) => tab.getAttribute("data-routine-page-tab"))).toEqual(["overview", "settings"]);
+  });
+
+  it("keeps the old layout outside the page (Advanced fold, no tabs)", () => {
+    mount(cron(), vi.fn(), { presentation: "panel", onDuplicate: vi.fn() });
     openAdvanced();
+    expect(host.querySelector("[data-routine-page-tabs]")).toBeNull();
     expect(host.querySelector("[data-routine-advanced-more]")).toBeNull();
-    expect(host.querySelector("[data-routine-instruction-fill]")).toBeNull();
+    expect(host.querySelectorAll("[data-routine-mail-alias]").length).toBe(1);
   });
 });

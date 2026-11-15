@@ -19,13 +19,15 @@ import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { isRoutineProblemRun } from "@/lib/routines";
 import { routineDateTime, routineNextText, routineRunAgo, routineRunDuration, routineRunLabel, routineRunPreview, routineRunTime, routineRunTone, routineState, routineWeekRunsText, type RoutineStateTone } from "@/lib/routine-display";
-import { scheduleLabel } from "@/lib/schedule-label";
+import { niceTime, scheduleLabel } from "@/lib/schedule-label";
 import { formatUsd } from "@/lib/usage";
 import type { Bot, Group } from "@/state/store";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { runActivityStatus } from "./RoutineRunDetail";
-import { PANEL_TEXT_ACTION, PanelRow, PanelRows, PanelToggle, PanelValue } from "./PanelRows";
+import { PANEL_LABEL, PANEL_TEXT_ACTION, PanelRow, PanelRows, PanelToggle, PanelValue } from "./PanelRows";
+import { RoutineRunClock } from "./RoutineList";
+import { dayLabel, localDay } from "@/lib/transcript-derivations";
 import { RunAsField, useRunAsOptions } from "./RunAsField";
 import { RoutineActAsField, useRoutineRoleCoverage } from "./RoutineActAsField";
 import { TriggerPopover } from "./TriggerPopover";
@@ -42,30 +44,58 @@ export const STATE_TONES: Record<RoutineStateTone, string> = {
 };
 
 /** One run of the routine's history: its state, when, how long, what it
- * cost and its first line. */
-export function RunHistoryRow({ run, now, onOpen }: { run: RoutineRun; now: number; onOpen: (run: RoutineRun) => void }) {
+ * cost and its first line. With `when` (#4357, the routine page) the same
+ * run sits on one line: the coloured clock (its words the clock's tooltip),
+ * `when`, how long, what it cost, Manual, then the bot's words, truncated. */
+export function RunHistoryRow({ run, now, onOpen, when }: { run: RoutineRun; now: number; onOpen: (run: RoutineRun) => void; when?: string }) {
   const duration = routineRunDuration(run, now);
   const cost = run.cost != null && run.cost > 0 ? formatUsd(run.cost) : null;
   const preview = routineRunPreview(run);
   const unread = isRoutineProblemRun(run) && !run.seenAt && !run.redacted;
+  const status = routineRunLabel(run);
+  const line = when !== undefined;
+  const meta = line ? "shrink-0 whitespace-nowrap text-ink-tertiary" : "text-ink-secondary";
+  const time = <time dateTime={new Date(run.scheduledFor).toISOString()} title={routineDateTime(run.scheduledFor)} className={line ? "shrink-0 whitespace-nowrap text-ink" : "text-ink-secondary"}>{when ?? routineRunAgo(routineRunTime(run), now)}</time>;
+  const details = <>
+    {duration && <span className={meta}>· {duration}</span>}
+    {cost && <span className={meta}>· {cost}</span>}
+    {run.manual && <span className={meta}>· {t("routines.trigger.manual")}</span>}
+  </>;
+  const previewTone = run.error && run.status !== "waiting" ? "text-danger" : "text-ink-secondary";
+  const dot = unread && <span className={cn("size-1.5 rounded-full bg-danger", line ? "shrink-0" : "self-center")} title={t("routines.unread")} />;
   return (
     <li>
-      <button type="button" data-run-row={run.id} onClick={() => onOpen(run)} aria-label={t("routines.openRun", { name: run.routineName, status: routineRunLabel(run) }) + (unread ? ` · ${t("routines.unread")}` : "")} className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
-        <span className="mt-0.5"><ActivityStatusIcon status={runActivityStatus(run)} size={15} /></span>
-        <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-[12.5px]">
-            <span data-run-row-label className={cn("font-medium", routineRunTone(run))}>{routineRunLabel(run)}</span>
-            <time dateTime={new Date(run.scheduledFor).toISOString()} title={routineDateTime(run.scheduledFor)} className="text-ink-secondary">{routineRunAgo(routineRunTime(run), now)}</time>
-            {duration && <span className="text-ink-secondary">· {duration}</span>}
-            {cost && <span className="text-ink-secondary">· {cost}</span>}
-            {run.manual && <span className="text-ink-secondary">· {t("routines.trigger.manual")}</span>}
-            {unread && <span className="size-1.5 self-center rounded-full bg-danger" title={t("routines.unread")} />}
-          </span>
-          {preview && <span className={cn("mt-0.5 block truncate text-[12px]", run.error && run.status !== "waiting" ? "text-danger" : "text-ink-secondary")}>{preview}</span>}
-        </span>
+      <button type="button" data-run-row={run.id} onClick={() => onOpen(run)} aria-label={t("routines.openRun", { name: run.routineName, status }) + (unread ? ` · ${t("routines.unread")}` : "")} className={cn("flex w-full min-w-0 rounded-lg px-2 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", line ? "items-center gap-2 py-1.5" : "items-start gap-2.5 py-2")}>
+        {line
+          ? <>
+            <RoutineRunClock run={run} running={run.status === "running" ? run : undefined} label={status} runningLabel={status} />
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5 text-[13px] leading-[18px]">
+              {time}
+              {details}
+              {preview && <span data-run-row-preview="" title={preview} className={cn("min-w-0 flex-1 truncate pl-1", previewTone)}>{preview}</span>}
+            </span>
+            {dot}
+          </>
+          : <>
+            <span className="mt-0.5"><ActivityStatusIcon status={runActivityStatus(run)} size={15} /></span>
+            <span className="min-w-0 flex-1">
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-[12.5px]">
+                <span data-run-row-label className={cn("font-medium", routineRunTone(run))}>{status}</span>
+                {time}
+                {details}
+                {dot}
+              </span>
+              {preview && <span className={cn("mt-0.5 block truncate text-[12px]", previewTone)}>{preview}</span>}
+            </span>
+          </>}
       </button>
     </li>
   );
+}
+
+/** The routine's runs, newest first, the routine's own. */
+export function routineHistory(routine: Pick<Routine, "id">, runs: readonly RoutineRun[]): RoutineRun[] {
+  return runs.filter((run) => run.routineId === routine.id).sort((a, b) => routineRunTime(b) - routineRunTime(a));
 }
 
 /** Clear run logs of one routine (2026-11-03): asks first, then the person's
@@ -123,7 +153,7 @@ function TriggerRow({ routine, bot, editable, onPatch }: { routine: Routine; bot
  * notes under them (auto-paused, deleted when finished, the check's
  * answer). The Automations page puts its Trigger row first (`leading`); the
  * panel's single pane sets the trigger in its own When to run. */
-export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = true, working = false, error, canRun = false, readiness, onToggle, onPatch, leading, runAs = true, active = true, week = true }: {
+export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = true, working = false, error, canRun = false, readiness, onToggle, onPatch, leading, runAs = true, actAs = true, active = true, week = true }: {
   routine: Routine;
   runs: RoutineRun[];
   now?: number;
@@ -137,6 +167,8 @@ export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = 
   leading?: ReactNode;
   /** The Runs as row (the side panel's page sets it in Advanced). */
   runAs?: boolean;
+  /** The Au nom de row (the side panel's page sets it once, in Settings, #4357). */
+  actAs?: boolean;
   /** The Active toggle (the side panel's page has Pause in its bar and the
    * state as a badge by the title). */
   active?: boolean;
@@ -149,7 +181,7 @@ export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = 
     <PanelRows data-routine-summary="">
       {leading}
       {runAs && <RoutineRunAsRow routine={routine} editable={editable} onPatch={onPatch} />}
-      <ActAsRow routine={routine} editable={editable} onPatch={onPatch} {...(canRun ? { readiness } : {})} />
+      {actAs && <ActAsRow routine={routine} editable={editable} onPatch={onPatch} {...(canRun ? { readiness } : {})} />}
       {active && <PanelToggle data-routine-active="" label={t("routineDetail.active")} hint={state.tone === "info" ? state.label : state.tone === "warning" ? state.label : undefined} viewing={!editable || !onToggle} checked={routine.enabled} disabled={working} onChange={() => onToggle?.()} />}
       <PanelRow label={t("routineDetail.nextRun")}><PanelValue><span data-routine-next>{routineNextText(routine, now)}</span></PanelValue></PanelRow>
       {week && routine.weekRuns && <PanelRow label={t("routineDetail.week")}><PanelValue><span data-routine-week-runs>{routineWeekRunsText(routine.weekRuns)}</span></PanelValue></PanelRow>}
@@ -187,7 +219,7 @@ export function RoutineRunsSection({ routine, runs, now = Date.now(), onOpenRun,
   onOpenRun: (run: RoutineRun) => void;
   onClearRuns?: () => void;
 }) {
-  const history = [...runs].filter((run) => run.routineId === routine.id).sort((a, b) => routineRunTime(b) - routineRunTime(a));
+  const history = routineHistory(routine, runs);
   // 2026-11-09 : the last 3 runs, then Show more for the others.
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? history : history.slice(0, RUNS_SHOWN);
@@ -200,6 +232,47 @@ export function RoutineRunsSection({ routine, runs, now = Date.now(), onOpenRun,
       ? <p className="rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[12.5px] text-ink-secondary">{t("routines.drawer.noRuns")}</p>
       : <ol data-routine-history aria-label={t("routineDetail.runs")} className="flex flex-col gap-0.5">{shown.map((run) => <RunHistoryRow key={run.id} run={run} now={now} onOpen={onOpenRun} />)}</ol>}
     {history.length > RUNS_SHOWN && <button type="button" data-routine-runs-more aria-expanded={showAll} onClick={() => setShowAll((value) => !value)} className={cn(PANEL_TEXT_ACTION, "ml-0.5")}>{showAll ? t("routineEditor.showLess") : t("routineEditor.showMore")}</button>}
+  </section>;
+}
+
+/** The routine page's Last run (#4357): the newest run on one line. */
+export function RoutineLastRun({ routine, runs, now = Date.now(), onOpenRun }: { routine: Routine; runs: RoutineRun[]; now?: number; onOpenRun: (run: RoutineRun) => void }) {
+  const last = routineHistory(routine, runs)[0];
+  if (!last) return null;
+  return <section data-routine-last-run="" className="min-w-0 space-y-1">
+    <h3 className={PANEL_LABEL}>{t("routinePage.lastRun")}</h3>
+    <ol className="-mx-2 flex flex-col"><RunHistoryRow run={last} now={now} when={routineRunAgo(routineRunTime(last), now)} onOpen={onOpenRun} /></ol>
+  </section>;
+}
+
+/** The routine page's Runs tab (#4357): every run, one line each, grouped
+ * by day (Today, Yesterday, then the date), newest first; Clear run logs at
+ * the top right. The count is the tab's. */
+export function RoutineRunsByDay({ routine, runs, now = Date.now(), onOpenRun, onClearRuns }: {
+  routine: Routine;
+  runs: RoutineRun[];
+  now?: number;
+  onOpenRun: (run: RoutineRun) => void;
+  onClearRuns?: () => void;
+}) {
+  const history = routineHistory(routine, runs);
+  const today = localDay(now);
+  const days: { day: number; runs: RoutineRun[] }[] = [];
+  for (const run of history) {
+    const day = localDay(routineRunTime(run));
+    const last = days[days.length - 1];
+    if (last && last.day === day) last.runs.push(run);
+    else days.push({ day, runs: [run] });
+  }
+  if (history.length === 0) return <p data-routine-runs="" className="rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[12.5px] text-ink-secondary">{t("routines.drawer.noRuns")}</p>;
+  return <section data-routine-runs="" aria-label={t("routineDetail.runs")} className="min-w-0 space-y-4">
+    {days.map(({ day, runs: dayRuns }, index) => <div key={day} data-routine-runs-day={day} className="min-w-0 space-y-1">
+      <div className="flex min-h-7 items-center justify-between gap-2">
+        <h3 className={PANEL_LABEL}>{dayLabel(routineRunTime(dayRuns[0]!), today)}</h3>
+        {index === 0 && onClearRuns && <button type="button" data-routine-clear-runs onClick={onClearRuns} aria-label={t("routineDetail.clearRuns")} title={t("routineDetail.clearRuns")} className="flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><Eraser size={14} aria-hidden="true" /></button>}
+      </div>
+      <ol data-routine-history="" className="-mx-2 flex flex-col">{dayRuns.map((run) => <RunHistoryRow key={run.id} run={run} now={now} when={niceTime(routineRunTime(run))} onOpen={onOpenRun} />)}</ol>
+    </div>)}
   </section>;
 }
 

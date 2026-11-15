@@ -264,7 +264,7 @@ describe("fast-gate.sh", () => {
     expect(cut.related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts' 'src\/ui\/flow\.e2e\.test\.ts' 'tests\/light\.test\.ts'$/);
     expect(cut.out).toContain("fast-gate: related: 3 of 4 test file(s) that reach the touched sources through imports run here (about 32s of the 40s ceiling); the ceiling cut 1, listed in related-cut.txt of the logs: they run after the merge");
     expect(readFileSync(join(repo, ".gate-logs", "related-cut.txt"), "utf8")).toBe("src/ui/heavy.test.ts\n");
-  });
+  }, 60_000);
 
   it("runs the checks in parallel, never more than the cap, and is green", () => {
     write("src/a.ts", "export const a = 2;\n");
@@ -466,6 +466,40 @@ describe("fast-gate.sh", () => {
       expect(known.has(file), file).toBe(false);
     }
   });
+
+  // #4316: the summary said "ok" for an extra check whose files the lot did
+  // not touch, and nothing of the related tests the bound left out, so a
+  // green gate read as more than it ran.
+  it("names in its summary what it ran, with the test files of each, and what it skipped", () => {
+    write(".fast-gate", "never: if printf '%s\\n' \"$FAST_GATE_FILES\" | grep -q '^nowhere/'; then echo ran; else echo 'fast-gate: skip: no file of nowhere/ touched'; fi\nalways: echo checked\n");
+    write("src/ui/pill.tsx", "export const Pill = 1;\n");
+    write("src/ui/pill.test.ts", "// its own name\n");
+    write("src/ui/bar.tsx", 'import { Pill } from "./pill";\nexport const Bar = Pill;\n');
+    write("src/ui/bar.test.ts", 'import { Bar } from "./bar";\n');
+    write("src/ui/heavy.test.ts", 'import { Bar } from "./bar";\n');
+    write("scripts/testing/vitest-shard-weights.json", JSON.stringify({ "src/ui/heavy.test.ts": 900 }));
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/ui/pill.tsx", "export const Pill = 2;\n");
+    const { code, out } = gate("--base", "HEAD", "--only", "tests,related,extra-never,extra-always");
+    expect(code, out).toBe(0);
+    expect(out).toMatch(/ok\s+tests\s+\d+s\s+\(1 test files\)/);
+    expect(out).toMatch(/ok\s+related\s+\d+s\s+\(1 test files\)/);
+    expect(out).toMatch(/skip\s+extra-never\s+\d+s\s+\(no file of nowhere\/ touched\)/);
+    expect(out).toMatch(/ok\s+extra-always/);
+    expect(out).toContain("fast-gate: ran: tests related extra-always; skipped: extra-never");
+    expect(out).toMatch(/fast-gate: not run here: 1 related test file\(s\) past the time ceiling \(listed in .*related-cut\.txt\), they run after the merge/);
+  });
+
+  it("shows as skipped each extra check of the repository whose files a lot does not touch", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    write("docs/note.md", "a note\n");
+    const conditional = ["agents-proxy", "index-reach", "full-access-guard", "shared-cycles", "source-text", "phone-parity"];
+    const { code, out } = gate("--base", "main", "--only", conditional.map((name) => `extra-${name}`).join(","));
+    expect(code, out).toBe(0);
+    for (const name of conditional) expect(out, name).toMatch(new RegExp(`skip\\s+extra-${name}\\s`));
+    expect(out).toContain(`fast-gate: ran: nothing; skipped: ${conditional.map((name) => `extra-${name}`).join(" ")}`);
+  }, 60_000);
 
   it("has nothing to check on a clean branch", () => {
     const { code, out } = gate("--base", "main");

@@ -5,7 +5,7 @@
 # tools are defined and listed elsewhere (the catalog, agents-tools/, the
 # agents-*-tools.ts files, the reviewed read list), so a lot that adds or
 # rewords a tool there runs this file too.
-agents-proxy: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(drivers/(agents-catalog[^/]*|agents-[^/]*-tools|agents-tools/[^/]*|agents-call[^/]*|agents-merged)|tools/agent-tool-policy)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/drivers/agents-proxy.test.ts; fi
+agents-proxy: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(drivers/(agents-catalog[^/]*|agents-[^/]*-tools|agents-tools/[^/]*|agents-call[^/]*|agents-merged)|tools/agent-tool-policy)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/drivers/agents-proxy.test.ts; else echo "fast-gate: skip: no tool of the agents server touched"; fi
 
 # index-reach (#3477): the reach rule lives in server/peers/ and is enforced by
 # the routine, room and bot-chat routes, but its end-to-end cases sit in
@@ -14,7 +14,7 @@ agents-proxy: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(drivers/(
 # (the cases about teammates, sections, peers and Primary Bots, about 20 s),
 # not the whole file; when server/index.ts or its test is touched the tests
 # check already runs all of it.
-index-reach: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/index(\.test)?\.ts$'; then :; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(peers/[^/]*|routines/routine-requests[^/]*|routes/internal-(requests|rooms|bot-chat)[^/]*|index-leaves/[^/]*)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/index.test.ts -t 'teammate|targeted|section|peer|another person|Chief|Primary Bot|reach'; fi
+index-reach: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/index(\.test)?\.ts$'; then echo "fast-gate: skip: the tests check runs all of server/index.test.ts"; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(peers/[^/]*|routines/routine-requests[^/]*|routes/internal-(requests|rooms|bot-chat)[^/]*|index-leaves/[^/]*)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/index.test.ts -t 'teammate|targeted|section|peer|another person|Chief|Primary Bot|reach'; else echo "fast-gate: skip: no file of the reach rule touched"; fi
 
 # full-access-guard (#3508): server/approvals/full-access-gate.guard.test.ts
 # scans the whole server for the cards a person may have to answer and fails
@@ -23,7 +23,7 @@ index-reach: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/index(\.tes
 # server/harness/ or any server file that emits a card (an options row, a
 # permission request, a peer card, a safety hold, ask_choice, a browser held
 # card) runs it. It only reads files: a second or two.
-full-access-guard: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(approvals|harness)/[^[:space:]]*\.ts$' || printf '%s\n' "$FAST_GATE_FILES" | grep -E '^server/[^[:space:]]*\.ts$' | grep -vE '\.(test|e2e)\.ts$' | while IFS= read -r f; do [ -f "$f" ] && grep -lqE 'kind: "options",|requestType: "permission"|requestPeerApproval\(|safety(PermissionEffect|ToolHold)\(|createChoiceCard\(|deps\.confirm\(' "$f" && echo hit; done | grep -q hit; then ./node_modules/.bin/vitest run --reporter=dot server/approvals/full-access-gate.guard.test.ts; fi
+full-access-guard: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(approvals|harness)/[^[:space:]]*\.ts$' || printf '%s\n' "$FAST_GATE_FILES" | grep -E '^server/[^[:space:]]*\.ts$' | grep -vE '\.(test|e2e)\.ts$' | while IFS= read -r f; do [ -f "$f" ] && grep -lqE 'kind: "options",|requestType: "permission"|requestPeerApproval\(|safety(PermissionEffect|ToolHold)\(|createChoiceCard\(|deps\.confirm\(' "$f" && echo hit; done | grep -q hit; then ./node_modules/.bin/vitest run --reporter=dot server/approvals/full-access-gate.guard.test.ts; else echo "fast-gate: skip: no card emitter of the server touched"; fi
 
 # guard-tests (#3509): the guard tests of verify:merge (GUARD_TESTS in
 # scripts/verify/release/guard-tests.mjs: ratchets, goldens, source scans)
@@ -50,7 +50,7 @@ electron-unit: node --test "electron/*.node-test.mjs"
 # change in shared/ can add a cycle there, so a lot that touches a TypeScript
 # file of shared/ runs that one case: about 10 s on a busy machine. The src
 # and server cases wait on the cycles they still hold (known failures).
-shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space:]]*\.tsx?$'; then ./node_modules/.bin/vitest run --reporter=dot scripts/testing/madge-cycles.guard.test.ts -t 'shared stays at its ceiling'; fi
+shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space:]]*\.tsx?$'; then ./node_modules/.bin/vitest run --reporter=dot scripts/testing/madge-cycles.guard.test.ts -t 'shared stays at its ceiling'; else echo "fast-gate: skip: no TypeScript file of shared/ touched"; fi
 
 # source-text (#4186): the tests that read the app's sources or its locale
 # catalogs as text (SOURCE_TEXT_TESTS in scripts/verify/release/guard-tests.mjs)
@@ -60,7 +60,7 @@ shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space
 # docs page and two scripts/testing files, so a lot that touches one of those runs them all. They are static scans and rendered markup with no server,
 # so they run two files at a time: about 75 s on a busy machine (240 s one
 # at a time).
-source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Localizable\.xcstrings$|ios/parity/desktop-wording\.json$|apps/docs/content/docs/providers/model-providers\.mdx$|scripts/testing/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)'; then G="$(node scripts/verify/release/guard-tests.mjs --source-text)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; fi; fi
+source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Localizable\.xcstrings$|ios/parity/desktop-wording\.json$|apps/docs/content/docs/providers/model-providers\.mdx$|scripts/testing/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)'; then G="$(node scripts/verify/release/guard-tests.mjs --source-text)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; fi; else echo "fast-gate: skip: no file the source-text tests read touched"; fi
 
 # phone-parity (#4305): src/components/ios-trigger-parity.test.ts holds the
 # phone's trigger kinds and sources (ios/Sources/CompanionCore/DesktopBotPanel.swift)
@@ -68,4 +68,4 @@ source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Loca
 # the Swift package test ParityR1TriggersTests pins after a merge. A lot that
 # touches src/ runs it in source-text; a lot that touches only the source
 # types or the phone's copy runs it here, alone (well under a second).
-phone-parity: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^src/'; then :; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(shared/trigger-sources\.ts|ios/Sources/CompanionCore/DesktopBotPanel\.swift)$'; then ./node_modules/.bin/vitest run --reporter=dot src/components/ios-trigger-parity.test.ts; fi
+phone-parity: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^src/'; then echo "fast-gate: skip: source-text runs it for a lot that touches src/"; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(shared/trigger-sources\.ts|ios/Sources/CompanionCore/DesktopBotPanel\.swift)$'; then ./node_modules/.bin/vitest run --reporter=dot src/components/ios-trigger-parity.test.ts; else echo "fast-gate: skip: neither side of the trigger pair touched"; fi

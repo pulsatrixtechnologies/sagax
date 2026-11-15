@@ -35,7 +35,10 @@
 #   Makefile       terms also runs `make dash-check` when the target exists
 #   .fast-gate     extra checks of the repository, one per line,
 #                  "<name>: <command>" ("#" starts a comment); each runs as
-#                  extra-<name> with FAST_GATE_FILES (newline list) set
+#                  extra-<name> with FAST_GATE_FILES (newline list) set;
+#                  a check that does not apply to the lot prints a line
+#                  "fast-gate: skip: <why>" and exits 0, and the summary
+#                  shows it as skipped
 #
 # Exit 0 when every check passed or was skipped, 1 when one failed, 2 on a
 # usage error. The logs stay in $FAST_GATE_LOG_DIR (default a temporary
@@ -96,6 +99,8 @@ if [ -n "$BASE" ]; then
 fi
 
 TOUCHED="$LOG_DIR/touched.txt"
+# (a reused log folder keeps no cut list of an earlier run)
+rm -f "$LOG_DIR/related-cut.txt"
 {
   [ -n "$SINCE" ] && git diff --name-only --diff-filter=ACMR "$SINCE" HEAD
   git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null
@@ -400,16 +405,36 @@ for n in $NAMES; do
 done
 for p in $PIDS; do wait "$p" 2>/dev/null; done
 
+# The summary names what ran and what did not (#4316): the test files each
+# test check ran, an extra check whose files the lot does not touch as
+# skipped (it exits 0 after printing a line that starts with
+# "fast-gate: skip"), and the related tests the time ceiling cut.
 FAILED=""
+RAN=""
+SKIPPED=""
 for n in $NAMES; do
   read -r code secs < "$LOG_DIR/$n.status"
-  if [ "$code" = 0 ]; then
-    printf '  ok    %-14s %4ss\n' "$n" "$secs"
+  what=""
+  if [ "$n" = tests ] || [ "$n" = related ]; then
+    what="  ($(wc -l < "$LOG_DIR/$n.txt" | tr -d ' ') test files)"
+  fi
+  if [ "$code" = 0 ] && grep -q '^fast-gate: skip' "$LOG_DIR/$n.log" 2>/dev/null; then
+    printf '  skip  %-14s %4ss  (%s)\n' "$n" "$secs" "$(grep -m1 '^fast-gate: skip' "$LOG_DIR/$n.log" | sed 's/^fast-gate: skip[: ]*//')"
+    SKIPPED="$SKIPPED $n"
+  elif [ "$code" = 0 ]; then
+    printf '  ok    %-14s %4ss%s\n' "$n" "$secs" "$what"
+    RAN="$RAN $n"
   else
-    printf '  FAIL  %-14s %4ss  (exit %s, %s)\n' "$n" "$secs" "$code" "$LOG_DIR/$n.log"
+    printf '  FAIL  %-14s %4ss  (exit %s, %s)%s\n' "$n" "$secs" "$code" "$LOG_DIR/$n.log" "$what"
     FAILED="$FAILED $n"
+    RAN="$RAN $n"
   fi
 done
+echo "fast-gate: ran:${RAN:- nothing}; skipped:${SKIPPED:- nothing}"
+CUT="$LOG_DIR/related-cut.txt"
+if [ -s "$CUT" ]; then
+  echo "fast-gate: not run here: $(wc -l < "$CUT" | tr -d ' ') related test file(s) past the time ceiling (listed in $CUT), they run after the merge"
+fi
 for n in $FAILED; do
   echo "--- $n (last 40 lines) ---"
   tail -n 40 "$LOG_DIR/$n.log"

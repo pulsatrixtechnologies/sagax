@@ -27,7 +27,7 @@ function ServerInvitesDirectory() {
   const [error, setError] = useState("");
   const load = async (alive = () => true) => {
     try {
-      const body = await api<ServerInvites>("/api/org/invites");
+      const body = await api<ServerInvites>("/api/org/invites", ORG_PROBE_INIT);
       if (alive()) setData({ org: { name: body.org?.name ?? "" }, people: body.people ?? [], pendingInvites: body.pendingInvites ?? [], viewerRole: body.viewerRole });
     } catch {
       if (alive()) setData(null);
@@ -156,7 +156,7 @@ export function OrganizationSettings({ memoryShown = false }: { advanced?: boole
       <SettingsGroup plain title={t("organization.group.server")} groupId="servers" accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">· {serverState}</span>}>
         {!showJoinOnly && <ConnectedWorkspacesSettings />}
         {remoteActive && <RemoteComputerSection />}
-        <ConnectServerWizard defaultOpen={false} connected={connectedToAnotherServer} />
+        <ConnectServerWizard defaultOpen={false} />
         {!remoteActive && store.config?.viewer?.operator !== false && <CustomDomainSettings />}
       </SettingsGroup>
     )}

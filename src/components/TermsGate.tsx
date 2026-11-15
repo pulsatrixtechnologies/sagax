@@ -28,8 +28,11 @@ export function TermsGate() {
     if (who === null) return;
     let alive = true;
     setTerms(null);
-    // whether the person is alone first, so the wording never changes under the reader
-    void Promise.all([fetchTerms(), loadServerAlone(admin)]).then(([status, solo]) => {
+    // Asks whether the person is alone only when the gate will show (terms
+    // not accepted yet), and before showing it, so the wording never changes
+    // under the reader.
+    void fetchTerms().then(async (status) => {
+      const solo = status && !status.accepted ? await loadServerAlone(admin) : false;
       if (!alive) return;
       setAlone(solo);
       setTerms(status);

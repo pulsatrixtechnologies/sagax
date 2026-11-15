@@ -6,9 +6,10 @@ const fixture = vi.hoisted(() => ({
   invites: null as unknown,
   invitesStatus: 200,
   calls: [] as string[],
+  inits: [] as unknown[],
 }));
 
-vi.mock("@/lib/perspicax-org", () => ({ loadPerspicaxOrg: async () => fixture.org }));
+vi.mock("@/lib/perspicax-org", () => ({ loadPerspicaxOrg: async () => fixture.org, ORG_PROBE_INIT: { headers: { "x-sagax-org-probe": "1" } } }));
 vi.mock("@/state/store", async () => {
   class ApiError extends Error {
     status: number;
@@ -16,8 +17,9 @@ vi.mock("@/state/store", async () => {
   }
   return {
     ApiError,
-    api: async (path: string) => {
+    api: async (path: string, init?: unknown) => {
       fixture.calls.push(path);
+      fixture.inits.push(init);
       if (fixture.invitesStatus !== 200) throw new ApiError("refused", fixture.invitesStatus);
       return fixture.invites;
     },
@@ -34,6 +36,7 @@ beforeEach(() => {
   fixture.invites = { people: [owner], pendingInvites: [] };
   fixture.invitesStatus = 200;
   fixture.calls = [];
+  fixture.inits = [];
   resetServerAlone();
 });
 afterEach(() => resetServerAlone());
@@ -52,7 +55,13 @@ describe("server alone (#4360)", () => {
     expect(await loadServerAlone(true)).toBe(false);
   });
 
-  it("is alone on a server with no sign-in directory at all", async () => {
+  it("asks with the probe header, so a server with no directory answers a quiet 200", async () => {
+    fixture.invites = { org: null, people: [], pendingInvites: [], code: "no_organization" };
+    expect(await loadServerAlone(true)).toBe(true);
+    expect(fixture.inits).toEqual([{ headers: { "x-sagax-org-probe": "1" } }]);
+  });
+
+  it("is alone on an older server that answers 404 with no sign-in directory", async () => {
     fixture.invitesStatus = 404;
     expect(await loadServerAlone(true)).toBe(true);
   });

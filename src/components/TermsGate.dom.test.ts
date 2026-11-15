@@ -7,11 +7,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 
-const fixture = vi.hoisted(() => ({ alone: true, asked: [] as boolean[] }));
+const fixture = vi.hoisted(() => ({ alone: true, accepted: false, asked: [] as boolean[] }));
 
 vi.mock("@/lib/moderation", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/moderation")>(),
-  fetchTerms: async () => ({ accepted: false, current: "1", url: "https://example.test/terms" }),
+  fetchTerms: async () => ({ accepted: fixture.accepted, current: "1", url: "https://example.test/terms" }),
   acceptTerms: vi.fn(),
 }));
 vi.mock("@/lib/server-alone", () => ({ loadServerAlone: async (admin: boolean) => { fixture.asked.push(admin); return fixture.alone; } }));
@@ -27,6 +27,7 @@ let root: Root;
 
 beforeEach(() => {
   fixture.alone = true;
+  fixture.accepted = false;
   fixture.asked = [];
   setLocale("en");
   host = document.createElement("div");
@@ -60,6 +61,13 @@ describe("TermsGate (#4360)", () => {
     fixture.alone = false;
     const text = await mount();
     expect(text).toContain("Anyone can report a message or block a person, and the admins review every report.");
+  });
+
+  it("asks the server nothing more once the terms are accepted (no request on every launch)", async () => {
+    fixture.accepted = true;
+    const text = await mount();
+    expect(text).not.toContain("Terms of use");
+    expect(fixture.asked).toEqual([]);
   });
 
   it("speaks French to a person alone", async () => {

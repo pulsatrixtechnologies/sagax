@@ -6,15 +6,17 @@
 // - a person who does not run the server (not its owner or an admin) was let
 //   in by someone else, so is not alone;
 // - the server's sign-in directory (GET /api/org/invites, owner or admin):
-//   alone while it lists the owner only and no invitation waits; a server
-//   with no directory at all (404) has nobody else to sign in.
+//   alone while it lists the owner only and no invitation waits. Asked with
+//   the probe header, a server with no directory yet answers a quiet, empty
+//   200 (server/org/org-routes.ts), so a fresh install logs no failed
+//   request; an older server's 404 means the same: nobody else to sign in.
 // Any other answer (an older server, a network failure) keeps the wording of
 // a server with people, as before.
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/state/store";
 import { useStoreSelector } from "@/state/store-selector";
 import { viewerIsOrgAdmin } from "@/lib/group-owner";
-import { loadPerspicaxOrg } from "@/lib/perspicax-org";
+import { loadPerspicaxOrg, ORG_PROBE_INIT } from "@/lib/perspicax-org";
 
 /** The part of GET /api/org/invites the test reads. */
 export interface ServerDirectory {
@@ -35,7 +37,7 @@ export async function loadServerAlone(admin: boolean): Promise<boolean> {
   let alone = false;
   if (org === null && admin) {
     try {
-      const body = await api<Partial<ServerDirectory>>("/api/org/invites");
+      const body = await api<Partial<ServerDirectory>>("/api/org/invites", ORG_PROBE_INIT);
       alone = directoryAlone({ people: body.people ?? [], pendingInvites: body.pendingInvites ?? [] });
     } catch (failure) {
       alone = failure instanceof ApiError && failure.status === 404;

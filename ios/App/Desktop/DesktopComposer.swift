@@ -355,7 +355,7 @@ struct DesktopComposerPill: View {
         .hoverEffect(.highlight)
         .accessibilityLabel(voiceLabel)
         .accessibilityHint(realtimeReady != false ? Text(verbatim: "")
-            : room == nil ? Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.")
+            : room == nil ? Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Providers.")
             : roomSpeechConfigured ? Text("Give every group member a voice before starting a group call.")
             : Text("Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls."))
         .accessibilityIdentifier("desktop-composer-voice")
@@ -399,7 +399,7 @@ struct DesktopComposerPill: View {
 
     /// The help bubble's reason (CallView.tsx `reason`).
     private var callHelpReason: Text {
-        if room == nil { return Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.") }
+        if room == nil { return Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Providers.") }
         return roomSpeechConfigured ? Text("Give every group member a voice before starting a group call.")
             : Text("Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.")
     }

@@ -188,7 +188,7 @@
   "Runs": "routineDetail.runs",
   "Calls need a realtime voice": "voiceMode.realtimeNeededLabel",
   "Talk with %@ (voice mode)": "voiceMode.start",
-  "A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.": "voiceMode.realtimeNeededReason",
+  "A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Providers.": "voiceMode.realtimeNeededReason",
   "%@ has no screen. It can still chat and do anything that doesn't need one.": "place.view.off.line",
   "The tags your notes carry, the most used, and those to tidy up.": "memoryManager.tags.subtitle",
   "Namespaces": "memoryManager.tags.namespaces",

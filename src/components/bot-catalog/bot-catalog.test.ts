@@ -354,7 +354,7 @@ describe("the detail pane", () => {
       expect(fr).toContain("Morning digest");
       expect(fr).toContain("Du lundi au vendredi à 8 h 30");
       // the zone is said the way people say it (#2162), never the IANA id
-      expect(fr).toContain(plainTimeZone("America/Toronto"));
+      expect(fr).toContain(plainTimeZone("America/Toronto", "fr-CA"));
       expect(fr).not.toContain("America/Toronto");
       expect(fr).not.toMatch(/30 8 \* \* 1-5/);
       expect(fr).not.toMatch(/\bUTC\b/);

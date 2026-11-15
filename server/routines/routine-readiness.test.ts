@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkRoutineReadiness, routineFlowSkills, ROUTINE_READINESS_PROBE_TIMEOUT_MS, loadRoutineReadiness, routineNeededSkills, type RoutineReadinessDeps } from "./routine-readiness.ts";
+import { checkRoutineReadiness, routineFlowSkills, soloRoutineTriggers, ROUTINE_READINESS_PROBE_TIMEOUT_MS, loadRoutineReadiness, routineNeededSkills, type RoutineReadinessDeps } from "./routine-readiness.ts";
 import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
 import { clearEngineRefusal, clearSignedOut, noteEngineRefusal, onEngineWorksAgain, SIGNED_OUT_RECHECK_MS } from "../engines/engine-refusals.ts";
 import { adminCardHomes, createEngineFallbackCards } from "../engines/engine-fallback-card.ts";
@@ -93,7 +93,9 @@ describe("routine readiness", () => {
     expect(await checkRoutineReadiness(routine, run, deps())).toMatchObject({ ok: true, checks: expect.arrayContaining([
       { kind: "engine", ok: true, code: "ready", params: { kind: "engine" }, line: expect.any(String) },
     ]) });
-    expect((await checkRoutineReadiness(routine, run, deps())).checks).toHaveLength(5);
+    // #4360: the organization connection is a category only on a linked server.
+    expect((await checkRoutineReadiness(routine, run, deps())).checks).toHaveLength(4);
+    expect((await checkRoutineReadiness(routine, run, deps({ perspicax: async () => undefined }))).checks).toHaveLength(5);
   });
   it("infers Flow and backticked skill ids only near a skill reference", () => {
     for (const prompt of ["Pulsatrix Flow", "pulsatrix-flow", "px_flow", "flow_run", "using-px-flow", "running-px-flow", "routine Flow"]) {
@@ -243,6 +245,57 @@ describe("routine readiness", () => {
     const offline = await checkRoutineReadiness(routine, run, deps({ perspicax: async () => ({ detail: "unreachable" }) }));
     expect(offline.ok).toBe(true);
     expect(offline.checks.find(check => check.kind === "perspicax")).toMatchObject({ detail: "unreachable" });
+  });
+  describe("without an organization (#4360)", () => {
+    const engine = () => ({ engine: "fixture-engine", name: "Selected engine", signedIn: true });
+    it.each(["run", "check"] as const)("never claims an organization connection in %s mode", async (mode) => {
+      const answer = await checkRoutineReadiness(routine, run, deps({ engine }), mode);
+      expect(answer.ok).toBe(true);
+      expect(answer.checks.map(check => check.kind)).not.toContain("perspicax");
+      expect(answer.checks.find(check => check.kind === "engine")).toMatchObject({ ok: true, code: "ready" });
+    });
+    it("still checks the engine's sign-in and a required computer", async () => {
+      const signedOut = await checkRoutineReadiness(routine, run, deps({ engine: () => ({ engine: "fixture-engine", name: "Selected engine", signedIn: false }) }), "check");
+      expect(signedOut.checks[0]).toMatchObject({ kind: "engine", ok: false, code: "engine_signed_out" });
+      const offline = await checkRoutineReadiness({ ...routine, requires: { computer: true } }, run, deps({ engine, computers: () => [{ name: "Wren computer", online: false }] }), "check");
+      expect(offline.checks[0]).toMatchObject({ kind: "computer", ok: false, code: "computer_offline" });
+      expect(offline.checks.map(check => check.kind)).not.toContain("perspicax");
+    });
+    it("checks the routine's own triggers on « Check routine », in plain words", async () => {
+      const id = "routine-solo";
+      const hooks = [
+        { name: "Deploy hook", routineId: id },
+        { name: "Product watch", routineId: id, source: { type: "perspicax" } },
+        { name: "Someone else's", routineId: "other", source: { type: "botmail" } },
+      ];
+      expect(soloRoutineTriggers(hooks, id)).toEqual([
+        { name: "Deploy hook", source: "Webhook", reachable: true },
+        { name: "Product watch", source: "Perspicax", reachable: false },
+      ]);
+      const triggers = vi.fn(() => soloRoutineTriggers(hooks, id));
+      const answer = await checkRoutineReadiness({ ...routine, id }, run, deps({ engine, triggers }), "check");
+      expect(answer.ok).toBe(false);
+      const blocker = answer.checks[0]!;
+      expect(blocker).toMatchObject({ kind: "triggers", ok: false, code: "trigger_unreachable", params: { trigger: "Product watch", source: "Perspicax" } });
+      expect(blocker.line).toContain("organization server");
+      expect(loadRoutineReadiness([blocker])).toEqual([blocker]);
+      const fine = await checkRoutineReadiness({ ...routine, id: "routine-hook" }, run, deps({ engine, triggers: () => soloRoutineTriggers([{ name: "Deploy hook", routineId: "routine-hook" }], "routine-hook") }), "check");
+      expect(fine.ok).toBe(true);
+      expect(fine.checks.find(check => check.kind === "triggers")).toMatchObject({ ok: true, code: "ready" });
+    });
+    it("says nothing about triggers for a routine without one, and never refuses a run for them", async () => {
+      const none = await checkRoutineReadiness({ ...routine, id: "routine-clock" }, run, deps({ engine, triggers: () => [] }), "check");
+      expect(none.checks.map(check => check.kind)).not.toContain("triggers");
+      const triggers = vi.fn(() => [{ name: "Product watch", source: "Perspicax", reachable: false }]);
+      const started = await checkRoutineReadiness({ ...routine, id: "routine-run" }, run, deps({ engine, triggers }), "run");
+      expect(started.ok).toBe(true);
+      expect(triggers).not.toHaveBeenCalled();
+    });
+  });
+  it("keeps the organization connection line on a linked server, unchanged (#4360)", async () => {
+    const answer = await checkRoutineReadiness(routine, run, deps({ perspicax: async () => undefined }), "check");
+    expect(answer.checks.find(check => check.kind === "perspicax")).toMatchObject({ ok: true, code: "ready", params: { kind: "perspicax" } });
+    expect(answer.checks.map(check => check.kind)).not.toContain("triggers");
   });
   it("requires an offline host only when named, explicitly required or selected", async () => {
     const check = deps({ computers: () => [{ name: "Wren computer", online: false }] });

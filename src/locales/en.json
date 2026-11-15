@@ -14160,6 +14160,8 @@
   "routineReadiness.ready.mcp": "The MCP servers have no known blocker. Run the routine when ready.",
   "routineReadiness.ready.perspicax": "The main Perspicax connection has no known blocker. Run the routine when ready.",
   "routineReadiness.ready.computer": "The computer has no known blocker. Run the routine when ready.",
+  "routineReadiness.ready.triggers": "The triggers have no known blocker. Run the routine when ready.",
+  "routineReadiness.trigger_unreachable": "The trigger `{trigger}` ({source}) only arrives through an organization server, so it never starts this routine here. Choose a schedule or another trigger.",
   "routineReadiness.requiresSkills": "Required skills",
   "routineReadiness.requiresMcp": "Required MCP servers",
   "routineReadiness.requiresComputer": "Computer required",

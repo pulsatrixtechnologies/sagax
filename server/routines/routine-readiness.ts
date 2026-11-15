@@ -3,6 +3,7 @@ import { activeEngineRefusal, clearEngineRefusal, SIGNED_OUT_RECHECK_MS, type En
 import { redactSecretsInText } from "../redact.ts";
 import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
 import type { OrgFlowPluginsStatus } from "../org/org-flow-plugins.ts";
+import { isRelaySource, isTriggerSourceType, TRIGGER_SOURCES } from "../../shared/trigger-sources.ts";
 
 export const ROUTINE_READINESS_TIMEOUT_MS = 4_900;
 export const ROUTINE_READINESS_PROBE_TIMEOUT_MS = ROUTINE_READINESS_TIMEOUT_MS - 400;
@@ -31,6 +32,20 @@ export function routineEngineRefusal(engine: ReadinessEngine, now: number): Engi
 }
 export interface ReadinessMcp { known: string[]; enabled: string[]; toolPrefixes?: Record<string, string> }
 export interface ReadinessComputer { name: string; online?: boolean; needed?: boolean; detail?: string }
+/** #4360: one trigger that starts this routine. `reachable` false: its
+ * events can never arrive on this server (a relay source on a server
+ * without an organization). */
+export interface ReadinessTrigger { name: string; source: string; reachable: boolean }
+/** #4360: a routine's own triggers on a server without an organization. A
+ * relay source (bot email, bot phone, a product change) is delivered by the
+ * organization server only, so it can never start the routine here. */
+export function soloRoutineTriggers(webhooks: ReadonlyArray<{ name: string; routineId?: string; source?: { type: string } | null }>, routineId: string): ReadinessTrigger[] {
+  return webhooks.filter(webhook => webhook.routineId === routineId).map(webhook => {
+    const type = webhook.source?.type;
+    const typed = isTriggerSourceType(type) ? type : undefined;
+    return { name: webhook.name, source: typed ? TRIGGER_SOURCES[typed].label : "Webhook", reachable: !typed || !isRelaySource(typed) };
+  });
+}
 export interface ReadinessFlow { step?: string; error?: string; live?: boolean }
 interface ReadinessFlowSkills { installation: string }
 /** A held local install does not disable the pack's remote product documents (#1945). */
@@ -55,13 +70,18 @@ export interface RoutineReadinessDeps {
   /** Organization declaration present: the active pack serves product skills remotely. */
   flowSkills?(routine: ReadinessRoutine, run: ReadinessRun): ReadinessFlowSkills | undefined;
   mcp(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): ReadinessMcp | undefined | Promise<ReadinessMcp | undefined>;
+  /** Present only on a server linked to an organization: absent, no line
+   * about an organization connection is shown (#4360). */
   perspicax?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<{ refused?: boolean; detail?: string } | undefined>;
   computers?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<ReadinessComputer[] | undefined> | ReadinessComputer[] | undefined;
   flow?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<ReadinessFlow | undefined>;
+  /** #4360: the routine's own triggers, on a server without an organization.
+   * Checked by « Check routine » only: a run is never refused for them. */
+  triggers?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): ReadinessTrigger[] | undefined | Promise<ReadinessTrigger[] | undefined>;
 }
 interface Probe { value?: unknown; error?: string }
 const cache = new WeakMap<RoutineReadinessDeps, Map<string, { at: number; result: Promise<Probe> }>>();
-const kinds: RoutineReadinessKind[] = ["engine", "skills", "mcp", "perspicax", "computer", "flow"];
+const kinds: RoutineReadinessKind[] = ["engine", "skills", "mcp", "perspicax", "computer", "triggers", "flow"];
 const flow = /\b(?:px_flow|flow_run|[a-z-]*px-flow[a-z-]*)\b|Pulsatrix[ -]Flow|routine Flow/i;
 export const isFlowRoutine = (prompt: string): boolean => flow.test(prompt);
 export function routineNeededSkills(prompt: string, requires?: RoutineRequirements): string[] {
@@ -94,7 +114,7 @@ function boundedProbe(work: (signal: AbortSignal) => unknown, timeoutMs = ROUTIN
 /** Bound checks at persistence boundaries as well as at probe creation. */
 export function loadRoutineReadiness(value: unknown): RoutineReadinessCheck[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_plan", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
+  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_plan", "mcp_missing", "perspicax_profile", "computer_offline", "trigger_unreachable", "ready", "probe_error"]);
   return value.slice(0, 100).filter((check): check is RoutineReadinessCheck => Boolean(check && kinds.includes(check.kind) && codes.has(check.code) && typeof check.ok === "boolean" && typeof check.line === "string")).map(check => ({
     kind: check.kind, ok: check.ok, code: check.code, line: clean(check.line),
     ...(typeof check.detail === "string" ? { detail: clean(check.detail) } : {}),
@@ -114,7 +134,8 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
     // A routine run never takes a Flow shadow probe first (2026-11-04, « Tout simplifier »): a routine called
     // by name runs. The shadow check stays on the explicit « Check routine » button only.
     const probeFlow = needsFlow && mode === "check";
-    const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers, probeFlow ? deps.flow : undefined] as const;
+    const probeTriggers = mode === "check" && Boolean(deps.triggers);
+    const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers, probeTriggers ? deps.triggers : undefined, probeFlow ? deps.flow : undefined] as const;
     const pending = works.map((work, i) => {
       if (!work) return Promise.resolve({} as Probe);
       const key = `${context}:${kinds[i]}${kinds[i] === "flow" ? JSON.stringify([routine.id, run.prompt ?? routine.prompt, routine.requires]) : ""}`;
@@ -140,7 +161,11 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
     for (let i = 0; i < kinds.length; i++) {
       const kind = kinds[i]!;
       if (kind === "flow" && (!probeFlow || !deps.flow)) continue;
+      // #4360: no organization, no organization connection to vouch for.
+      if (kind === "perspicax" && !deps.perspicax) continue;
       const probe = probes[i]!;
+      // A routine with no trigger of its own has nothing to say about triggers.
+      if (kind === "triggers" && (!probeTriggers || (!probe.error && !(probe.value as ReadinessTrigger[] | undefined)?.length))) continue;
       const pack = kind === "skills" && needsFlow ? deps.flowSkills?.(routine, run) : undefined;
       if (pack) {
         // A Flow routine reads all its product skills from the active pack,
@@ -207,6 +232,11 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
         const connection = probe.value as { refused?: boolean; detail?: string } | undefined;
         if (connection?.refused) checks.push({ kind, ok: false, code: "perspicax_profile", params: { profile: "Perspicax" }, line: "Perspicax refused this person's account connection (401/403 invalid_token). Reconnect the account in Settings.", ...(connection.detail ? { detail: clean(connection.detail) } : {}) });
         else if (connection?.detail) checks.push(ready(kind, clean(connection.detail)));
+      } else if (kind === "triggers") {
+        for (const trigger of (probe.value as ReadinessTrigger[]).slice(0, 20)) if (!trigger.reachable) {
+          checks.push({ kind, ok: false, code: "trigger_unreachable", params: { trigger: trigger.name, source: trigger.source },
+            line: `The trigger \`${trigger.name}\` (${trigger.source}) only arrives through an organization server, so it never starts this routine here. Choose a schedule or another trigger.` });
+        }
       } else if (kind === "flow") {
         const result = probe.value as ReadinessFlow | undefined;
         if (result?.error) {

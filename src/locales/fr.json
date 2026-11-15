@@ -14138,6 +14138,8 @@
   "routineReadiness.ready.mcp": "Les serveurs MCP n’ont aucun blocage connu. Lance la routine quand tu es prêt.",
   "routineReadiness.ready.perspicax": "La connexion principale Perspicax n’a aucun blocage connu. Lance la routine quand tu es prêt.",
   "routineReadiness.ready.computer": "L’ordinateur n’a aucun blocage connu. Lance la routine quand tu es prêt.",
+  "routineReadiness.ready.triggers": "Les déclencheurs n’ont aucun blocage connu. Lance la routine quand tu es prêt.",
+  "routineReadiness.trigger_unreachable": "Le déclencheur `{trigger}` ({source}) arrive seulement par un serveur d’organisation, alors il ne lance jamais cette routine ici. Choisis un horaire ou un autre déclencheur.",
   "routineReadiness.requiresSkills": "Skills requis",
   "routineReadiness.requiresMcp": "Serveurs MCP requis",
   "routineReadiness.requiresComputer": "Ordinateur requis",

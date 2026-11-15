@@ -18864,7 +18864,9 @@
       "connectApps.mac.action.mac_notes_delete": "70376ae07a5beb2c5cc41112847bbe8bd8ff2a10cff12d5649218eb509f3d88b",
       "connectApps.mac.action.mac_notes_create_folder": "1eb7094d7b317f81746ec987a7812fd138f4c23870b6228ebea66f9fc9bc517f",
       "connectApps.mac.action.mac_notes_update_folder": "7f02355e4fe745bba7bd39b5d575d65e2885986a7b1b8e8057577e4e7479ef0b",
-      "connectApps.mac.action.mac_notes_delete_folder": "23ea98e3d44914656646f60a454766cf6cede9766b48cadf00abee05b19a6982"
+      "connectApps.mac.action.mac_notes_delete_folder": "23ea98e3d44914656646f60a454766cf6cede9766b48cadf00abee05b19a6982",
+      "routineReadiness.ready.triggers": "5e8867e9084696685afa3f12f445fb6efd071c2330b94d20f09ae55c8ae3d65d",
+      "routineReadiness.trigger_unreachable": "c67d5b8917c1ed8066ca581997d09ab17bdb32cca4dd71ddc603fb64ad6ba663"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

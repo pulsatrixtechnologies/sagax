@@ -437,20 +437,21 @@ describe("Settings → Appearance", () => {
     fixture.section = "organization";
     vi.stubGlobal("window", { ogb: { organization: {} } });
     const local = render();
-    expect(local).toContain('<option value="organization" selected="">Organization</option>');
+    // #4360: with no organization the page reads Servers
+    expect(local).toContain('<option value="organization" selected="">Servers</option>');
     expect(local).not.toContain('<option value="desktopWorkspaces"');
     // The enterprise Admin connection stays hidden until it is in use.
     expect(local).not.toContain("personal and local models");
     vi.stubGlobal("window", {});
     const browser = render();
-    expect(browser).toContain('<option value="organization" selected="">Organization</option>');
+    expect(browser).toContain('<option value="organization" selected="">Servers</option>');
   });
 
   it("keeps Organisation reachable to a remote client instead of hiding it", () => {
     fixture.section = "organization";
     vi.stubGlobal("window", { ogb: { organization: {}, remoteClient: { active: true } } });
     const html = render();
-    expect(html).toContain('<option value="organization" selected="">Organization</option>');
+    expect(html).toContain('<option value="organization" selected="">Servers</option>');
     fixture.section = "appearance";
     expect(render()).toContain('data-skin-family="studio"');
   });

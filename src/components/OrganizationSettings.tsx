@@ -18,7 +18,8 @@ type ServerInvites = { org: { name: string }; people: OrgPersonView[]; pendingIn
 /** A solo server's invitations to its own sign-in list (GET /api/org/invites,
  * admin only): invite by email, the people who may sign in, and the
  * pending links. Not an organization: nothing to create or move. Renders
- * nothing where the route is refused (a member, an organization server). */
+ * nothing where the route is refused (a member, an organization server),
+ * nor for a person alone on the server. */
 function ServerInvitesDirectory() {
   const [data, setData] = useState<ServerInvites | null>(null);
   const [lastInvite, setLastInvite] = useState<{ email: string; link?: string } | null>(null);
@@ -39,6 +40,10 @@ function ServerInvitesDirectory() {
   if (!data) return null;
   const canManage = data.viewerRole === undefined || data.viewerRole === "owner" || data.viewerRole === "admin";
   if (!canManage) return null;
+  // #4360: a person alone (only the owner, no invitation waiting) is offered
+  // no people list and no invitation; a server that already has people
+  // keeps its directory.
+  if (data.people.length <= 1 && data.pendingInvites.length === 0) return null;
   return (
     <>
       <OrgDirectory

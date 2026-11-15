@@ -110,6 +110,32 @@ describe("Settings on an organization server", () => {
     expect(privacy).not.toContain('<option value="privacy"');
   });
 
+  it("names no organization in the rail or the page title for a person alone (#4360)", async () => {
+    fixture.section = "organization";
+    const solo = await render();
+    const heading = (html: string) => /id="app-settings-nav-workspace"[^>]*>([^<]+)</.exec(html)?.[1];
+    expect(heading(solo)).toBe("Installation");
+    expect(solo).toContain('<optgroup label="Installation">');
+    expect(solo).toContain('<option value="organization" selected="">Servers</option>');
+    expect(solo).toContain("Your server, and the servers you connect to.");
+    expect(solo).not.toContain("Your organization&#x27;s server");
+    // Computer and Backups and storage stay reachable under the same group
+    expect(solo).toContain('data-settings-nav-row="computer"');
+    expect(solo).toContain('data-settings-nav-row="backups"');
+    // linked: unchanged
+    fixture.org = ORG;
+    const linked = await render();
+    expect(heading(linked)).toBe("Organization");
+    expect(linked).toContain('<option value="organization" selected="">Organization</option>');
+    expect(linked).not.toContain('<optgroup label="Installation">');
+    // French, tu
+    fixture.org = null;
+    setLocale("fr");
+    const fr = await render();
+    expect(heading(fr)).toBe("Installation");
+    expect(fr).toContain("Ton serveur, et les serveurs auxquels tu te connectes.");
+  });
+
   it("opens an old Email or Activity link on the nearest page, and Privacy on its card", async () => {
     for (const section of ["mail", "activity"] as const) {
       fixture.section = section;

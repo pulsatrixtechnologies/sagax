@@ -21,7 +21,7 @@ import { isSoloDesktop } from "./AdvancedSettings";
 import {
   HOSTED_CARDS,
   ORGANIZATION_ADVANCED_KEYWORDS,
-  SECTIONS,
+  sectionsFor,
   cardsMatching,
   memberHidesSection,
   organizationHidesSection,
@@ -126,16 +126,18 @@ export function useSettingsModal() {
     dispatch({ type: "toggleLaunch", open: true, mode: "server" });
   }, [soloDesktop, memoryShown, state.appSettingsSection, dispatch]);
   // A page shows when it is allowed, or when one of the cards it holds is.
-  const availableSections = SECTIONS.filter((entry) => allowed(entry.id) || (HOSTED_CARDS[entry.id] ?? []).some(allowed));
+  // #4360: a person alone reads no organization word in the rail or titles
+  const sections = sectionsFor(organization);
+  const availableSections = sections.filter((entry) => allowed(entry.id) || (HOSTED_CARDS[entry.id] ?? []).some(allowed));
   // A page this viewer cannot see (an old link to Email where People is not
   // shown, a hidden page) draws the first page they can, at once.
   const section: AppSettingsSection = availableSections.some((entry) => entry.id === requested) ? requested : availableSections[0]?.id ?? requested;
   // On a solo desktop the org-advanced rows live on General, so its search matches their words.
   const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "general" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
   const pagesHit = Boolean(q) && publishedPagesMatch(q);
-  const sectionLabelKey = SECTIONS.find((entry) => entry.id === section)?.labelKey;
+  const sectionLabelKey = sections.find((entry) => entry.id === section)?.labelKey;
   // #2080: every page has its one sentence under the title, drawn by the modal.
-  const sectionIntroKey = SECTIONS.find((entry) => entry.id === section)?.introKey;
+  const sectionIntroKey = sections.find((entry) => entry.id === section)?.introKey;
   const subPageId = state.appSettingsSubPage;
   const resolved = useMemo(() => resolveSubPage(subPageId), [subPageId]);
   const subPage = subPageId && resolved?.section === section ? resolved : null;

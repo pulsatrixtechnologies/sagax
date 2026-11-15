@@ -77,6 +77,20 @@ export const SECTIONS: Array<{
   { id: "about", group: "app", labelKey: "settings.section.about", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "tour", "tours", "visite", "welcome", "bienvenue", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"] },
 ];
 
+/** #4360: a server with no organization (the probe on GET /api/org, or no
+ * desktop locked to one) is one person's: no heading nor page says
+ * "Organization" there. The group is the person's own installation, and the
+ * page holds their server and the servers they connect to. */
+export function navGroupsFor(organization: boolean): typeof NAV_GROUPS {
+  if (organization) return NAV_GROUPS;
+  return NAV_GROUPS.map((group) => group.id === "workspace" ? { ...group, labelKey: "settings.nav.installation" } : group);
+}
+
+export function sectionsFor(organization: boolean): typeof SECTIONS {
+  if (organization) return SECTIONS;
+  return SECTIONS.map((entry) => entry.id === "organization" ? { ...entry, labelKey: "settings.section.servers", introKey: "settings.intro.servers" } : entry);
+}
+
 /** Former sections that are a card of another page now (2026-10-14), by the
  * page that holds them. Each keeps its own visibility rules: the card shows
  * where the section would have, and its page shows when the card does. */

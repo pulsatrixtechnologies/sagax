@@ -87,6 +87,36 @@ describe("Organization settings without the hosted Admin portal", () => {
   });
 });
 
+describe("Settings > Organization for a person alone (#4360)", () => {
+  const SOLO_ORG = { org: { id: "org_1", name: "Home", ownerUserId: "p_owner" } };
+  const owner = { id: "p_owner", email: "owner@example.test", role: "owner" };
+  async function settle(invites: unknown) {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/org/invites")) return jsonResponse(200, invites);
+      return jsonResponse(200, SOLO_ORG);
+    });
+    for (let round = 0; round < 3; round++) {
+      render();
+      for (const effect of fixture.effects) effect();
+      await flush();
+    }
+    return render().html;
+  }
+
+  it("offers no people list and no invitation to the owner alone", async () => {
+    const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
+    expect(html).toContain("Connect to a server");
+    expect(html).not.toContain("Invite someone");
+  });
+
+  it("keeps the people and invitations once the server has someone else", async () => {
+    const html = await settle({ ...SOLO_ORG, people: [owner, { id: "zara@example.test", email: "zara@example.test", role: "member" }], pendingInvites: [], viewerRole: "owner" });
+    expect(html).toContain("Invite someone");
+    expect(html).toContain("zara@example.test");
+  });
+});
+
 describe("Connect to a server: one card for the ways in", () => {
   it("offers Perspicax, a Sagax server and another computer by what this window can do", async () => {
     const { connectTargets } = await import("./ConnectServerWizard");

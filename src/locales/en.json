@@ -15135,5 +15135,8 @@
   "connectApps.scope.server": "This server",
   "connectApps.scope.serverNote": "Apps, servers and plugins installed on your own server, for all of your bots.",
   "moderation.terms.zeroToleranceSolo": "There is zero tolerance for objectionable or abusive content.",
-  "settings.connectionNotices.descriptionSolo": "A short notice while the server updates or can't be reached."
+  "settings.connectionNotices.descriptionSolo": "A short notice while the server updates or can't be reached.",
+  "settings.nav.installation": "Installation",
+  "settings.section.servers": "Servers",
+  "settings.intro.servers": "Your server, and the servers you connect to."
 }

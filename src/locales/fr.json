@@ -15135,5 +15135,8 @@
   "connectApps.scope.server": "Ce serveur",
   "connectApps.scope.serverNote": "Les apps, serveurs et plugins installés sur ton propre serveur, pour tous tes bots.",
   "moderation.terms.zeroToleranceSolo": "Il y a une tolérance zéro pour le contenu répréhensible ou abusif.",
-  "settings.connectionNotices.descriptionSolo": "Un court avis pendant une mise à jour du serveur ou quand il est injoignable."
+  "settings.connectionNotices.descriptionSolo": "Un court avis pendant une mise à jour du serveur ou quand il est injoignable.",
+  "settings.nav.installation": "Installation",
+  "settings.section.servers": "Serveurs",
+  "settings.intro.servers": "Ton serveur, et les serveurs auxquels tu te connectes."
 }

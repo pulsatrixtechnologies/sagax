@@ -10,6 +10,7 @@ import { OrgDirectory, type OrgPersonView, type PendingInviteView } from "./OrgD
 import type { OrgRole } from "../../shared/org-role";
 import { isPerspicaxOrg, ORG_PROBE_INIT, type PerspicaxOrg } from "@/lib/perspicax-org";
 import { OrgMemorySettings } from "./OrgMemorySettings";
+import { directoryAlone } from "@/lib/server-alone";
 import { SettingsGroup } from "./SettingsPrimitives";
 import { OrganizationBotRows } from "./settings/OrganizationBotRules";
 
@@ -40,10 +41,9 @@ function ServerInvitesDirectory() {
   if (!data) return null;
   const canManage = data.viewerRole === undefined || data.viewerRole === "owner" || data.viewerRole === "admin";
   if (!canManage) return null;
-  // #4360: a person alone (only the owner, no invitation waiting) is offered
-  // no people list and no invitation; a server that already has people
-  // keeps its directory.
-  if (data.people.length <= 1 && data.pendingInvites.length === 0) return null;
+  // #4360: a person alone (src/lib/server-alone.ts) is offered no people
+  // list and no invitation; a server that already has people keeps it.
+  if (directoryAlone(data)) return null;
   return (
     <>
       <OrgDirectory
@@ -156,7 +156,7 @@ export function OrganizationSettings({ memoryShown = false }: { advanced?: boole
       <SettingsGroup plain title={t("organization.group.server")} groupId="servers" accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">· {serverState}</span>}>
         {!showJoinOnly && <ConnectedWorkspacesSettings />}
         {remoteActive && <RemoteComputerSection />}
-        <ConnectServerWizard defaultOpen={false} />
+        <ConnectServerWizard defaultOpen={false} connected={connectedToAnotherServer} />
         {!remoteActive && store.config?.viewer?.operator !== false && <CustomDomainSettings />}
       </SettingsGroup>
     )}

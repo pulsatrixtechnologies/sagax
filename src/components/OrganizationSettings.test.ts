@@ -110,6 +110,19 @@ describe("Settings > Organization for a person alone (#4360)", () => {
     expect(html).not.toContain("Invite someone");
   });
 
+  it("folds Connect to a server on a neutral value, not the organization's way in", async () => {
+    const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
+    const summary = /data-card-summary[^>]*>([^<]*)</.exec(html)?.[1];
+    expect(summary).toBe("Not connected");
+    expect(html).not.toContain(">Your organization's Perspicax server</span></button>");
+  });
+
+  it("folds Connect to a server on a neutral value in French", async () => {
+    setLocale("fr");
+    const html = await settle({ ...SOLO_ORG, people: [owner], pendingInvites: [], viewerRole: "owner" });
+    expect(/data-card-summary[^>]*>([^<]*)</.exec(html)?.[1]).toBe("Non connecté");
+  });
+
   it("keeps the people and invitations once the server has someone else", async () => {
     const html = await settle({ ...SOLO_ORG, people: [owner, { id: "zara@example.test", email: "zara@example.test", role: "member" }], pendingInvites: [], viewerRole: "owner" });
     expect(html).toContain("Invite someone");

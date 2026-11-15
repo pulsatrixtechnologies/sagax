@@ -90,7 +90,10 @@ function ServerLinkForm() {
   );
 }
 
-export function ConnectServerWizard({ defaultOpen = false }: { defaultOpen?: boolean }) {
+/** `connected`: this window already reaches another server. The folded card
+ * says only whether it does (#4360), never the label of the first way in,
+ * which names an organization a person alone does not have. */
+export function ConnectServerWizard({ defaultOpen = false, connected = false }: { defaultOpen?: boolean; connected?: boolean }) {
   const targets = connectTargets({
     environments: Boolean(window.ogb?.environments),
     remoteClient: Boolean(window.ogb?.remoteClient),
@@ -106,7 +109,7 @@ export function ConnectServerWizard({ defaultOpen = false }: { defaultOpen?: boo
       defaultOpen={defaultOpen}
       title={t("settings.connectWizard.title")}
       subtitle={t("settings.connectWizard.subtitle")}
-      summary={t(LABEL[target].title)}
+      summary={t(connected ? "settings.card.connected" : "settings.card.notConnected")}
     >
       <div className="flex flex-col gap-4" data-connect-wizard={target}>
         {targets.length > 1 && (

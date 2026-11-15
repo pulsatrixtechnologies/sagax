@@ -831,8 +831,11 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
   const groupById = async (id: string) =>
     (await api("GET", "/api/bots?messages=0")).body.groups.find((g: any) => g.id === id);
 
+  // The fake engine echoes the whole prompt, which opens on a blank line (the
+  // security policy section): the reply keeps "echo:" and loses the space
+  // before that line break, so the match is on "echo:" and any white space.
   const echoes = (bot: any): any[] =>
-    bot.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && m.text?.startsWith("echo: "));
+    bot.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && /^echo:\s/.test(m.text ?? ""));
 
   const until = async (probe: () => Promise<boolean>, what: string, timeoutMs = 30_000) => {
     const deadline = Date.now() + timeoutMs;

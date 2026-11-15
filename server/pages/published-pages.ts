@@ -207,6 +207,19 @@ function sameOwner(a: string | undefined, b: string | undefined): boolean {
   return (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
 }
 
+/** Whose page a bot's proposal may revise (propose, and the passage a bot
+ * changes in place, #4099): a page of this conversation, one of this bot's
+ * pages for the same person, or (#3128) one this bot shares in its Library.
+ * Never another bot's page, never another person's. */
+export function botMayRevisePage(
+  page: { botId: string; threadId?: string; ownerId?: string; botShared?: boolean },
+  by: { botId: string; threadId: string; ownerId?: string },
+): boolean {
+  if (page.threadId === by.threadId) return true;
+  if (page.botShared === true && page.botId === by.botId) return true;
+  return page.botId === by.botId && sameOwner(page.ownerId, by.ownerId);
+}
+
 function refuse(status: 400 | 404 | 409, code: string, error: string): PageError {
   return { ok: false, status, error, code };
 }
@@ -618,8 +631,7 @@ export class PublishedPages {
     // another bot's page, never another person's.
     // #3128: a page shared in the bot's Library is also refreshed by whoever
     // uses that bot (the same bot, never another).
-    const sharedRefresh = Boolean(page && page.botShared === true && page.botId === input.botId);
-    if (input.pageId && (!page || (page.threadId !== input.threadId && !sharedRefresh && (page.botId !== input.botId || !sameOwner(page.ownerId, input.ownerId))))) {
+    if (input.pageId && (!page || !botMayRevisePage(page, input))) {
       return refuse(404, "not_found", "page_id: no page of this conversation has that id. Leave it out to propose a new page.");
     }
     const sizeOf = (entry: PageRecord) => entry.versions.reduce((inner, version) => inner + version.bytes, 0) + this.keptBytes(entry.id);

@@ -17,6 +17,13 @@ export const PAGE_TOOL_DEFINITIONS = [
         content: { type: "string", description: "The whole page, max 512 KB." },
         path: { type: "string", description: "A file written or reviewed, never retyped: in your workspace or plugins/<name>/, relative. Missing: retyping won't do; say so, stop." },
         page_id: { type: "string", description: "This conversation's page, for a new version." },
+        replace: {
+          type: "object",
+          additionalProperties: false,
+          description: "markdown or presentation, with page_id, no content: exact words found once, new words.",
+          properties: { quote: { type: "string" }, with: { type: "string" } },
+          required: ["quote", "with"],
+        },
         design_system: { type: "string", maxLength: 60, description: "kind design: sagax (default), minimal, editorial, clean, modern or a saved one; with design_tokens, its name." },
         design_tokens: { type: "string", description: "kind design: the person's CSS :root block from their code; saved and applied." },
       },

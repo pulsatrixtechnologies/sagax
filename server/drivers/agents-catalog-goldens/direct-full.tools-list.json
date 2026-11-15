@@ -942,6 +942,23 @@
             "type": "string",
             "description": "This conversation's page, for a new version."
           },
+          "replace": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "markdown or presentation, with page_id, no content: exact words found once, new words.",
+            "properties": {
+              "quote": {
+                "type": "string"
+              },
+              "with": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "quote",
+              "with"
+            ]
+          },
           "design_system": {
             "type": "string",
             "maxLength": 60,

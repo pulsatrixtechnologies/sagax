@@ -6,12 +6,12 @@
 // server/index.ts checks first. Capability gate and refusal checks stay there.
 import { relative, sep } from "node:path";
 import { z } from "zod";
-import { commentsForModel, parseThreadText } from "../../shared/page-threads.ts";
+import { applySuggestion, commentsForModel, parseThreadText, suggestable } from "../../shared/page-threads.ts";
 import type { MausColor } from "../../shared/wire.ts";
 import { sameAudience } from "../bots/bot-visibility.ts";
 import { deliverableNotification } from "../notify.ts";
-import { PAGE_LIMITS } from "../../shared/published-pages.ts";
-import { PAGE_SOURCE_READ_BYTES, pageOwnerFor, pageSourceDigest, pageSourceRange, type PageSourceChange, type PageSourceDigest, type PageSourceRead } from "../pages/published-pages.ts";
+import { PAGE_LIMITS, type PageReplace } from "../../shared/published-pages.ts";
+import { PAGE_SOURCE_READ_BYTES, botMayRevisePage, pageOwnerFor, pageSourceDigest, pageSourceRange, type PageSourceChange, type PageSourceDigest, type PageSourceRead } from "../pages/published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { sectionContextKey } from "../rooms/section-context.ts";
 import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";
@@ -50,6 +50,7 @@ export interface InternalMemoryPage {
   botId: string;
   threadId?: string;
   ownerId?: string;
+  botShared?: boolean;
   title?: string;
   botReadAt?: number;
   threads?: unknown[];
@@ -74,7 +75,7 @@ export interface InternalMemoryDeps {
     threadId: string;
     body: unknown;
     authored: (messageId: string) => void;
-    proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string; path?: string; designSystem?: string; designTokens?: unknown }) =>
+    proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string; path?: string; designSystem?: string; designTokens?: unknown; replace?: PageReplace }) =>
       { ok: true; pageId: string; version: number; bytes: number; sha256: string; masked?: boolean; given?: PageSourceDigest; changedBy?: PageSourceChange[] } | { ok: false; status: 400 | 404 | 409; error: string };
   }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; bytes?: number; sha256?: string; given?: PageSourceDigest; changedBy?: PageSourceChange[]; answered?: { choice: string; question: string }; waitsForPerson?: true } | { ok: false; status: number; error: string };
   authored(threadId: string, generation: string, messageId: string): void;
@@ -216,8 +217,27 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           }
           // #3488: a file of the calling bot's own workspace, read by the
           // server byte for byte (never another bot's, never out of it)
-          const { path: file, ...rest } = proposal;
+          const { path: file, replace, ...rest } = proposal;
+          const owning = deps.botByThread(capability.threadId) ?? sender;
+          const ownerId = deps.isPerspicax() ? pageOwnerFor(deps.taskByThread(owning.id, capability.threadId), deps.botOwner(owning)) : undefined;
           let raw = rest.content;
+          if (replace) {
+            // #4099: the words of a passage changed in a page this proposal
+            // may revise (the rule of propose, so another person's page is
+            // never read), found once in its latest version
+            const page = rest.pageId ? deps.getPage(rest.pageId) : null;
+            const latest = page && botMayRevisePage(page, { botId: sender.id, threadId: capability.threadId, ownerId }) ? page.versions.at(-1) : undefined;
+            const read = page && latest ? deps.pageSource(page.id, latest.n) : null;
+            if (!read) return { ok: false as const, status: 404 as const, error: "page_id: no page of this conversation has that id. Leave it out to propose a new page." };
+            if (!suggestable(read.version.kind)) return { ok: false as const, status: 400 as const, error: "replace: Markdown and presentation pages only; send the whole page in content." };
+            const applied = applySuggestion(read.content, { quote: replace.quote, prefix: "", suffix: "" }, replace.with);
+            if (!applied.ok) {
+              return { ok: false as const, status: 400 as const, error: applied.reason === "ambiguous"
+                ? "replace: these words are in the page more than once; quote more of them, or send the whole page in content."
+                : "replace: these words are not in the latest version as written (page_comments action source reads it); or send the whole page in content." };
+            }
+            raw = applied.content;
+          }
           if (file !== undefined) {
             try {
               // #3612: plugins/<name>/... as workspace_read reads it (the
@@ -230,14 +250,13 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
             if (!raw.trim()) return { ok: false as const, status: 400 as const, error: `path: ${file} is empty.` };
           }
           const content = redactSecretsInText(raw);
-          const owning = deps.botByThread(capability.threadId) ?? sender;
           const proposed = deps.proposePublishedPage({
             ...rest,
             title: redactSecretsInText(proposal.title),
             content,
             botId: sender.id,
             threadId: capability.threadId,
-            ...(deps.isPerspicax() ? { ownerId: pageOwnerFor(deps.taskByThread(owning.id, capability.threadId), deps.botOwner(owning)) } : {}),
+            ...(ownerId !== undefined ? { ownerId } : {}),
           });
           if (!proposed.ok) return proposed;
           // #3488: what was stored against what the bot gave (its file or

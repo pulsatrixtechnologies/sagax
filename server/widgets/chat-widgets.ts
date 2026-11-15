@@ -12,7 +12,7 @@ import {
   parseWidgetInput, resolveWidgetAction, widgetActions, widgetFields, widgetToText, WIDGET_LIMITS,
   type WidgetAction, type WidgetAppAction, type WidgetNode, type WidgetPayload, type WidgetRoot, type WidgetSettled,
 } from "../../shared/widget.ts";
-import { parsePageProposal, type PageKind } from "../../shared/published-pages.ts";
+import { parsePageProposal, type PageKind, type PageReplace } from "../../shared/published-pages.ts";
 import type { MausColor } from "../../shared/wire.ts";
 import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
@@ -150,7 +150,7 @@ export function createAgentCard(args: {
   authored?(messageId: string): void;
   /** propose_page (server/pages/published-pages.ts): stores a proposed version,
    * never a published one. Absent: the tool is refused. */
-  proposePage?(input: { pageId?: string; title: string; kind: PageKind; content: string; path?: string; designSystem?: string; designTokens?: unknown }):
+  proposePage?(input: { pageId?: string; title: string; kind: PageKind; content: string; path?: string; designSystem?: string; designTokens?: unknown; replace?: PageReplace }):
     { ok: true; pageId: string; version: number; bytes?: number; sha256?: string; given?: PageSourceDigest; changedBy?: PageSourceChange[] } | { ok: false; status: 400 | 404 | 409; error: string };
   /** #1905: the level the calling turn runs at (index.ts sourceApprovalMode),
    * so a may-I ask_choice under Full access is answered, not drawn. */

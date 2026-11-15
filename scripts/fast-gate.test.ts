@@ -442,11 +442,11 @@ describe("fast-gate.sh", () => {
     expect(runs("server/x.ts")).not.toContain("--fileParallelism");
   });
 
-  // #4316: the tablet's wording lost the provider keys the desktop renamed,
-  // and the renderer smoke lost three hooks of the provider page, each found a
-  // day later by the run after the merge. A lot that touches either side of a
-  // parity pair runs its text-level test; a lot that touches a file the
-  // source-text tests read leaves it to that line, which runs it already.
+  // #4316: a desktop change already runs the parity tests through the
+  // source-text line; the pairs add the other side, so a lot that touches only
+  // the phone's, the tablet's or a smoke's files runs the pair's test too
+  // (the renderer smokes' hooks have their own text-level test). A lot that
+  // touches a file the source-text tests read leaves it to that line.
   it("runs a parity pair's test on a lot that touches either side of it", () => {
     write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
     write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));

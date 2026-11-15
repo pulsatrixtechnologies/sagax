@@ -3,11 +3,11 @@
 // A real-renderer smoke (scripts/testing/*.e2e.test.ts that drives the built
 // app through control-omb or a browser) finds what it clicks by a data hook
 // ("[data-model-option]"). The smokes run only in the complete run after a
-// merge, so a lot that renamed or dropped a hook in src/ merged green and the
-// smoke went red a day later (the provider page of #4348 and #4356). This
-// reads both sides as text, in a second: every data hook a smoke selects must
-// still be written somewhere in src/ outside its tests (as `data-x`, or as
-// `dataset.x`). The fast gate runs it on a lot that touches src/ or a smoke
+// merge, and no check before a merge read their hooks: a lot that renames or
+// drops a hook in src/ only showed up there (the provider page lost three
+// hooks the smoke selects). This reads both sides as text, in a second:
+// every data hook a smoke selects must still be written somewhere in src/
+// outside its tests (as `data-x`, or as `dataset.x`). The fast gate runs it on a lot that touches src/ or a smoke
 // (SOURCE_TEXT_TESTS and PARITY_PAIRS in scripts/verify/release/guard-tests.mjs);
 // verify:merge runs it with the guards.
 import { readdirSync, readFileSync, statSync } from "node:fs";

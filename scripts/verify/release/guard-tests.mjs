@@ -177,11 +177,12 @@ export const SOURCE_TEXT_READS = /^(src\/|ios\/App\/Localizable\.xcstrings$|ios\
 /** The parity pairs: a text-level test that holds one side to the other, and
  * the files of both sides it reads. A lot that touches either side runs the
  * test (the "parity-pairs" line of .fast-gate; the source-text line runs it
- * instead when the lot touches a file the source-text tests read), so the
- * phone and tablet wording, the trigger lists and the renderer smokes' hooks
- * follow the desktop on the lot that moves it, not a day later in the run
- * after the merge (#4305, #4320, #4316: the tablet's wording lost the provider
- * keys the desktop renamed, the renderer smoke lost three hooks). */
+ * instead when the lot touches a file the source-text tests read). A desktop
+ * change already ran these tests through the source-text line; the pairs add
+ * the other side: a lot that touches only the phone's, the tablet's or a
+ * smoke's files runs the pair's test too (#4305, #4320, #4316), and the
+ * renderer smokes' hooks get a text-level test of their own (they had none
+ * before a merge). */
 export const PARITY_PAIRS = [
   // the phone's trigger kinds and sources against the desktop's (#4305, #4320)
   { test: "src/components/ios-trigger-parity.test.ts", reads: [/^src\/locales\/en\.json$/, /^shared\/trigger-sources\.ts$/, /^ios\/Sources\/CompanionCore\/DesktopBotPanel\.swift$/] },

@@ -91,7 +91,12 @@ export function activeModelProviders(instances: readonly InstanceInfo[], place: 
 
 const SEARCH_FROM = 12;
 
-function ProviderModels({ provider, instance, switches, mayEdit, onToggle, busy }: {
+/** One provider's models, one switch each, folded under its count. Active
+ * models draws one per provider; a provider's page draws its own in place
+ * (#4376: "confusing to go between two different pages"), the same rows on
+ * the same state (useModelSwitches). `inPage`: the fold's line is the count
+ * itself, under the page's Models heading. */
+export function ProviderModels({ provider, instance, switches, mayEdit, onToggle, busy, inPage = false }: {
   provider: ActiveProvider;
   /** The provider's own engine, for its mark. */
   instance?: InstanceInfo;
@@ -99,17 +104,18 @@ function ProviderModels({ provider, instance, switches, mayEdit, onToggle, busy 
   mayEdit: boolean;
   onToggle: (keys: readonly string[], on: boolean) => void;
   busy: boolean;
+  inPage?: boolean;
 }) {
   const { models } = provider;
   const [query, setQuery] = useState("");
   const shown = query.trim() ? models.filter((model) => `${model.label} ${model.id}`.toLowerCase().includes(query.trim().toLowerCase())) : models;
   const on = models.filter((model) => modelOfferAcross(switches, model.engines) === "on").length;
+  const count = t("modelSwitches.count", { on, total: models.length });
   return (
     <FoldRow
-      cardId={`models.provider.${provider.id}`}
-      label={provider.label}
-      icon={<SettingsIconTile>{instance ? <InstanceProviderMark instance={instance} size={16} /> : <Server size={14} />}</SettingsIconTile>}
-      description={t("modelSwitches.count", { on, total: models.length })}
+      cardId={inPage ? `providers.page.models.${provider.id}` : `models.provider.${provider.id}`}
+      label={inPage ? count : provider.label}
+      {...(inPage ? {} : { icon: <SettingsIconTile>{instance ? <InstanceProviderMark instance={instance} size={16} /> : <Server size={14} />}</SettingsIconTile>, description: count })}
       count={on}
       toggleLabel={t("modelSwitches.toggle", { name: provider.label })}
     >
@@ -142,12 +148,12 @@ function ProviderModels({ provider, instance, switches, mayEdit, onToggle, busy 
   );
 }
 
-export function ModelSwitchesSettings() {
-  const { state } = useStore();
+/** The person's model switches, read and written once for Active models and
+ * a provider's page (GET/PUT /api/me/models): a switch on one shows on the
+ * other, the store's config holding the answer. */
+export function useModelSwitches() {
+  const { state, dispatch } = useStore();
   const org = usePerspicaxOrg();
-  const instances = useOfferedInstances("settings");
-  const place: HarnessPlace = org !== null ? "organization" : "solo";
-  const providers = useMemo(() => activeModelProviders(instances, place), [instances, place]);
   const [mine, setMine] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,17 +162,28 @@ export function ModelSwitchesSettings() {
   const switches = useMemo<ModelSwitches>(() => ({ org: state.config?.disabledModels ?? null, mine: mine ?? configMine ?? null }), [state.config?.disabledModels, mine, configMine]);
   // the person's own on an organization server; the installation's on a solo one
   const mayEdit = org !== null || canEditConfig(state.config);
-  if (!providers.length) return null;
   const toggle = (keys: readonly string[], on: boolean) => {
     const next = toggledList(switches.mine ?? [], keys, on);
     setMine(next);
     setBusy(true);
     setError(null);
     api<{ mine: string[] }>("/api/me/models", { method: "PUT", body: JSON.stringify({ disabledModels: next }) })
-      .then((answer) => setMine(answer.mine))
+      .then((answer) => {
+        setMine(answer.mine);
+        if (state.config) dispatch({ type: "configStatus", config: { ...state.config, myDisabledModels: answer.mine } });
+      })
       .catch((failure: Error) => { setError(failure.message); setMine(configMine ? [...configMine] : null); })
       .finally(() => setBusy(false));
   };
+  return { switches, toggle, busy, error, mayEdit, place: (org !== null ? "organization" : "solo") as HarnessPlace };
+}
+
+export function ModelSwitchesSettings() {
+  const org = usePerspicaxOrg();
+  const instances = useOfferedInstances("settings");
+  const { switches, toggle, busy, error, mayEdit, place } = useModelSwitches();
+  const providers = useMemo(() => activeModelProviders(instances, place), [instances, place]);
+  if (!providers.length) return null;
   return (
     <div data-settings-card="models.switches" data-model-switches-page="">
       <SettingsGroup

@@ -91,4 +91,32 @@ describe("createMeEnginesRoutes", () => {
     expect(call.sent[0]?.status).toBe(200);
     expect((call.sent[0]?.body as { engines: unknown[] } | undefined)?.engines).toHaveLength(1);
   });
+
+  it("keeps a person's own name for one of their accounts, and only for an account they reach (#4376)", async () => {
+    const set = vi.fn();
+    const route = createMeEnginesRoutes({
+      localPrincipalId: () => "pr_1",
+      isPrincipalId: (id: string) => id === "pr_1",
+      principals: { byId: () => ({ id: "pr_1" }) },
+      IDENTITY: { issuer: "iss" },
+      orgOfferedEngines: () => [{ instanceId: "codex" }],
+      registry: { entries: () => [{ instanceId: "codex" }, { instanceId: "hidden" }] },
+      personalProviderInstances: { visible: () => true },
+      accountNames: { set },
+    });
+    const renamed = ctx("/api/me/engines/codex/name", "PUT", { name: "  Work plan " });
+    await route(renamed.context);
+    expect(renamed.sent[0]).toEqual({ status: 200, body: { ok: true, displayName: "Work plan" } });
+    expect(set).toHaveBeenCalledWith("pr_1", "codex", "Work plan");
+    const cleared = ctx("/api/me/engines/codex/name", "PUT", { name: "" });
+    await route(cleared.context);
+    expect(cleared.sent[0]).toEqual({ status: 200, body: { ok: true } });
+    const other = ctx("/api/me/engines/hidden/name", "PUT", { name: "Mine" });
+    await route(other.context);
+    expect(other.sent[0]).toEqual({ status: 404, body: { error: "unknown account" } });
+    const long = ctx("/api/me/engines/codex/name", "PUT", { name: "x".repeat(81) });
+    await route(long.context);
+    expect(long.sent[0]?.status).toBe(400);
+    expect(set).toHaveBeenCalledTimes(2);
+  });
 });

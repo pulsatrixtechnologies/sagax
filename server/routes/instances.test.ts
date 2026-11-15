@@ -196,6 +196,17 @@ describe("instances routes", () => {
     expect(deps.persistProviderInstance).toHaveBeenCalled();
   });
 
+  it("renames any account, not only Claude's (#4376); the folder stays a Claude setting", async () => {
+    const { call, cfg, deps } = harness({ adminOrDelegate: () => true });
+    const admin = { kind: "session", scopes: ["admin"], session: { id: "s1", principalId: "pr_1" } };
+    const renamed = await call("PATCH", "/api/instances/mistral", { body: { displayName: "Team plan" }, auth: admin });
+    expect(renamed.sent?.status).toBe(200);
+    expect(deps.persistProviderInstance).toHaveBeenCalledWith("mistral", expect.objectContaining({ mistral: expect.objectContaining({ displayName: "Team plan" }) }));
+    expect(cfg.instances?.mistral?.displayName).toBe("Team plan");
+    const folder = await call("PATCH", "/api/instances/mistral", { body: { configDir: "/tmp/x" }, auth: admin });
+    expect(folder.sent).toEqual({ status: 400, body: { error: "The configuration folder is a setting of Claude accounts only." } });
+  });
+
   it("refuses deleting the default Claude account", async () => {
     const { call } = harness();
     expect((await call("DELETE", "/api/instances/claude")).sent).toEqual({

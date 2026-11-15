@@ -28,7 +28,10 @@ const fixture = vi.hoisted(() => ({
   keys: [] as { provider: string; last4: string | null }[],
 }));
 
-const answers = (path: string): unknown => {
+const answers = (path: string, init?: RequestInit): unknown => {
+  if (path === "/api/me/models") return { mine: (JSON.parse(String(init?.body ?? "{}")) as { disabledModels?: string[] }).disabledModels ?? [] };
+  if (path.startsWith("/api/instances/")) return { instances: fixture.instances };
+  if (/^\/api\/me\/engines\/[^/]+\/name$/.test(path)) return { ok: true };
   if (path === "/api/me/providers") return { keys: fixture.keys, servers: [] };
   if (path === "/api/me/local-models") return fixture.local;
   if (path === "/api/me/pi-model-servers") return { servers: fixture.piServers };
@@ -42,7 +45,7 @@ vi.mock("@/state/store", async (importOriginal) => {
   const state = () => ({ instances: fixture.instances, bots: [], groups: [], config: fixture.config });
   return {
     ...actual,
-    api: vi.fn(async (path: string) => answers(path)),
+    api: vi.fn(async (path: string, init?: RequestInit) => answers(path, init)),
     useStore: () => ({ state: state(), dispatch: fixture.dispatch, refreshInstances: vi.fn(), refreshModels: vi.fn() }),
     useStoreOptional: () => ({ state: state(), dispatch: fixture.dispatch }),
   };
@@ -118,7 +121,7 @@ afterEach(() => {
 });
 
 describe("Settings > Providers: the short list (#4329 B1)", () => {
-  it("draws one row per provider, Other services and Advanced, and Add a provider as the card's last, primary action", async () => {
+  it("draws one row per provider, Other services and Advanced, and Add a provider as the list's last row, drawn as a row (#4376)", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
     await render();
     expect(host.querySelector("[data-settings-intro]")).toBeNull();
@@ -126,33 +129,44 @@ describe("Settings > Providers: the short list (#4329 B1)", () => {
     const row = host.querySelector<HTMLElement>('[data-provider="mistral"]')!;
     expect(row).not.toBeNull();
     expect(row.textContent).toContain("Mistral");
-    expect(row.querySelectorAll("[data-provider-action]")).toHaveLength(1);
+    expect(row.querySelector("[data-provider-summary]")!.textContent).toBe("Connected");
+    expect(row.querySelectorAll("[data-provider-action]"), "a connected provider carries no button").toHaveLength(0);
     const services = host.querySelector('[data-settings-card="providers.services"]')!;
     expect(services.textContent).toContain("Web search");
     expect(services.querySelector('[data-settings-card="connections.image"]'), "image generation editable in solo").not.toBeNull();
     expect(host.querySelector('[data-settings-card="providers.advanced"]')).not.toBeNull();
     const add = host.querySelector<HTMLElement>('[data-settings-card="providers.list"] [data-add-provider-row] [data-add-provider-open]')!;
-    expect(add.className).toContain("ui-button-primary");
+    expect(add.className, "a row of the list, not a pill of another kind").not.toContain("ui-button");
+    expect(add.className).toContain("rounded-2xl");
+    expect(add.className).toContain("min-h-16");
+    expect(add.textContent).toBe("Add a provider");
     expect(row.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // the old Model servers for pi card is gone from the page: each server is a row
     expect(host.querySelector('[data-settings-card="providers.modelServers"]')).toBeNull();
   });
 
-  it("puts a second account on a second line with its own button, never a group that unfolds", async () => {
+  it("draws a provider with two accounts as ONE row: one target, one summary, no second line, no Sign out (#4376)", async () => {
     fixture.instances = [
-      instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }),
-      instance("claude-work", "claudeAgent", "Claude work", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ada.work@example.com" } } }),
+      instance("claude", "claudeAgent", "Claude Code", { access: "subscription", authentication: { method: "browser" as const, signOut: true }, snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }),
+      instance("claude-work", "claudeAgent", "Claude work", { access: "subscription", authentication: { method: "browser" as const, signOut: true }, snapshot: { state: "available", authenticated: true, account: { email: "ada.work@example.com" } } }),
     ];
     await render();
     const rows = host.querySelectorAll<HTMLElement>("[data-provider]");
     expect(rows).toHaveLength(1);
     const claude = rows[0]!;
     expect(claude.textContent).toContain("Claude");
-    expect(claude.querySelectorAll("[data-provider-line]")).toHaveLength(2);
-    expect(claude.textContent).toContain("ada@example.com");
-    expect(claude.textContent).toContain("ada.work@example.com");
+    expect(claude.querySelector("[data-provider-summary]")!.textContent).toBe("2 accounts connected");
+    expect(claude.querySelectorAll("[data-provider-line], [data-provider-line-row]"), "no second line").toHaveLength(0);
+    expect(claude.querySelectorAll("[data-provider-action]"), "signing out is on the page").toHaveLength(0);
+    expect(claude.querySelectorAll("button"), "one target").toHaveLength(1);
+    expect(claude.textContent).not.toContain("ada@example.com");
+    // the target spans the whole row, under the words; the hover belongs to the whole row
+    const open = claude.querySelector<HTMLElement>("[data-provider-open]")!;
+    expect(open.className).toContain("absolute inset-0");
+    expect(open.getAttribute("aria-label")).toBe("Claude, 2 accounts connected");
+    expect(claude.querySelector<HTMLElement>("[data-provider-row-body]")!.className).toContain("pointer-events-none");
+    expect(claude.className).toContain("hover:bg-ink/[0.05]");
     expect(claude.querySelector("[aria-expanded]"), "no disclosure").toBeNull();
-    expect(host.querySelector("[data-provider-group-rows]")).toBeNull();
   });
 
   it("shows OpenAI once for its two sign-ins, the xAI group under the owner's label, and no tool name or address on the first level", async () => {
@@ -198,29 +212,28 @@ describe("Settings > Providers: the short list (#4329 B1)", () => {
     expect(row.querySelectorAll(".truncate")).toHaveLength(0);
   });
 
-  it("a saved key's Remove removes the key after one confirm, as its word says, and never just opens the key", async () => {
+  it("a saved key's Remove sits in the page's API key section and removes the key after one confirm (#4376)", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
     await render();
+    expect(host.querySelector('[data-provider="mistral"] [data-provider-action]'), "nothing to remove from the list").toBeNull();
+    await page("mistral");
     vi.mocked(apiMock).mockClear();
-    fixture.dispatch.mockClear();
-    const remove = host.querySelector('[data-provider="mistral"] [data-provider-action="remove"] button')!;
+    const remove = host.querySelector('[data-settings-group="provider-key"] [data-provider-action="remove"] button')!;
     expect(remove.textContent).toBe("Remove");
     await click(remove);
     expect(apiCalls("DELETE"), "the first click only asks to confirm").toHaveLength(0);
     expect(remove.textContent).toBe("Confirm removal");
     await click(remove);
     expect(apiCalls("DELETE")).toEqual([["/api/me/providers/keys/mistral", null]]);
-    expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ subPage: "providers.provider:mistral" }));
   });
 
-  it("draws Remove as the same grey pill as the row's other buttons; only its armed words turn red", async () => {
-    fixture.local = { expose: true, share: false, connected: true, endpoints: [{ id: "e1", label: "", baseUrl: "http://127.0.0.1:8000/v1" }], published: [{ id: "e1", label: "", models: ["a"] }], probes: [] };
+  it("draws Remove as the same grey pill as Replace beside it; only its armed words turn red", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
-    await render();
-    const remove = host.querySelector<HTMLElement>('[data-provider="mistral"] [data-provider-action="remove"] button')!;
-    const turnOff = host.querySelector<HTMLElement>('[data-provider="computer"] [data-provider-action="turnOff"]')!;
-    expect(turnOff).not.toBeNull();
-    expect(remove.className).toBe(turnOff.className);
+    await page("mistral");
+    const remove = host.querySelector<HTMLElement>('[data-settings-group="provider-key"] [data-provider-action="remove"] button')!;
+    const replace = host.querySelector<HTMLElement>('[data-settings-group="provider-key"] [data-provider-change-key]')!;
+    expect(replace.textContent).toBe("Replace");
+    expect(remove.className).toBe(replace.className);
     expect(remove.className).not.toContain("text-danger");
     await click(remove);
     expect(remove.getAttribute("data-confirm-pill")).toBe("armed");
@@ -228,29 +241,26 @@ describe("Settings > Providers: the short list (#4329 B1)", () => {
     expect(remove.className).toContain("text-danger");
   });
 
-  it("a server's Remove on the list asks to confirm as the server's own page does, then removes it", async () => {
+  it("a server for pi is one row with no button: its Remove is on its page (#4376)", async () => {
     fixture.instances = [instance("pi", "piAgent", "pi", { access: "custom" })];
     fixture.piServers = [{ id: "sx-1", name: "oMLX", url: "http://127.0.0.1:8000/v1", configured: false, models: [{ id: "qwen" }], provider: "px-own-sx-1" }];
     await render();
-    vi.mocked(apiMock).mockClear();
-    const remove = host.querySelector('[data-provider="pi-server:sx-1"] [data-provider-action="remove"] button')!;
-    await click(remove);
-    expect(apiCalls("DELETE"), "one click never deletes").toHaveLength(0);
-    expect(remove.getAttribute("data-confirm-pill")).toBe("armed");
-    expect(remove.textContent).toBe("Remove the server");
-    await click(remove);
-    expect(apiCalls("DELETE")).toEqual([["/api/me/pi-model-servers/sx-1", null]]);
+    const row = host.querySelector<HTMLElement>('[data-provider="pi-server:sx-1"]')!;
+    expect(row.querySelector("[data-provider-action]")).toBeNull();
+    expect(row.querySelector("[data-provider-summary]")!.textContent).toBe("1 model");
+    await click(row.querySelector("[data-provider-open]"));
+    expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "toggleAppSettings", open: true, section: "providers", subPage: "providers.provider:pi-server:sx-1" });
   });
 
-  it("lists this computer when it is on, with Turn off; a server for pi as a provider of its own", async () => {
+  it("lists this computer when it is on by its models, its switch on its page; a server for pi as a provider of its own", async () => {
     fixture.local = { expose: true, share: false, connected: true, endpoints: [{ id: "e1", label: "", baseUrl: "http://127.0.0.1:8000/v1" }], published: [{ id: "e1", label: "", models: ["a", "b", "c"] }], probes: [] };
     fixture.instances = [instance("pi", "piAgent", "pi", { access: "custom" })];
     fixture.piServers = [{ id: "sx-1", name: "oMLX", url: "http://127.0.0.1:8000/v1", configured: false, models: [{ id: "qwen" }], provider: "px-own-sx-1" }];
     await render();
     const computer = host.querySelector<HTMLElement>('[data-provider="computer"]')!;
     expect(computer.textContent).toContain("This computer");
-    expect(computer.textContent).toContain("3 models");
-    expect(computer.querySelector('[data-provider-action="turnOff"]')).not.toBeNull();
+    expect(computer.querySelector("[data-provider-summary]")!.textContent).toBe("3 models on this computer");
+    expect(computer.querySelector("[data-provider-action]"), "Turn off is on its page").toBeNull();
     const server = host.querySelector<HTMLElement>('[data-provider="pi-server:sx-1"]')!;
     expect(server.textContent).toContain("oMLX");
     expect(server.textContent).not.toContain("127.0.0.1");
@@ -325,21 +335,41 @@ describe("Add a provider (#4329 B2): one list, then one step", () => {
 });
 
 describe("One provider's page (#4329 B3)", () => {
-  it("draws Accounts, Models and Advanced folded; Advanced holds who pays, the tool by its name and the identifier", async () => {
+  it("a key-only provider: its API key section, its models in place, Advanced folded; no Accounts, no Runs with (#4376)", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
     await page("mistral");
     const root = host.querySelector<HTMLElement>('[data-provider-page="mistral"]')!;
-    expect(root.querySelector('[data-settings-group="provider-accounts"]')).not.toBeNull();
-    expect(root.querySelector('[data-link-row="providers.models.mistral"]')!.textContent).toContain("2 of 2 on");
+    expect(root.querySelector('[data-settings-group="provider-accounts"]'), "a key is not an account").toBeNull();
+    expect(root.querySelector('[data-settings-group="provider-key"]')!.textContent).toContain("A key is saved");
+    expect(root.querySelector("[data-provider-runs-with], [data-settings-group=\"provider-runs-with\"]"), "absent until the engine choice exists").toBeNull();
+    const models = root.querySelector<HTMLElement>('[data-settings-group="provider-models"]')!;
+    expect(models.querySelector("h3")!.textContent).toBe("Models");
+    expect(models.textContent).toContain("2 of 2 on");
+    expect(models.querySelector("[data-link-row]"), "never sent to another page").toBeNull();
     const advanced = root.querySelector<HTMLElement>("[data-provider-page-advanced]")!;
     expect(advanced.hidden, "folded each time it opens").toBe(true);
     await click(root.querySelector('[data-settings-card="providers.page.advanced.mistral"] button[aria-expanded]'));
     expect(advanced.hidden).toBe(false);
     expect(advanced.querySelector('[data-settings-row^="providers.whoPays."]')).not.toBeNull();
     expect(advanced.querySelector("[data-engine-advanced], [data-provider-copy-id]")).not.toBeNull();
-    // the models link goes to Models
-    await click(root.querySelector('[data-link-row="providers.models.mistral"]'));
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "engines" });
+  });
+
+  it("unfolds the models in place, one switch each, on the same state Active models reads (#4376)", async () => {
+    fixture.instances = [instance("mistral", "mistral", "Mistral")];
+    fixture.config = { viewer: { operator: true, role: "admin" }, myDisabledModels: [] };
+    await page("mistral");
+    const models = host.querySelector<HTMLElement>('[data-provider-models="mistral"]')!;
+    await click(models.querySelector("button[aria-expanded]"));
+    const switches = models.querySelectorAll<HTMLElement>("[data-model-switch] button[role=switch]");
+    expect(switches).toHaveLength(2);
+    vi.mocked(apiMock).mockClear();
+    await click(switches[0]);
+    const [[path, body]] = apiCalls("PUT") as [[string, string]];
+    expect(path).toBe("/api/me/models");
+    expect(JSON.parse(body).disabledModels).toHaveLength(1);
+    // the store's config now holds it: Settings > Models > Active models reads the same
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "configStatus", config: expect.objectContaining({ myDisabledModels: JSON.parse(body).disabledModels }) });
+    expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ section: "engines" }));
   });
 
   it("opens Advanced when an old link asked for a row's card", async () => {
@@ -396,21 +426,23 @@ describe("One provider's page (#4329 B3)", () => {
     for (const card of advanced.querySelectorAll("[data-engine-card]")) expect(card.childNodes.length).toBeGreaterThan(0);
   });
 
-  it("on a solo server, a signed-in account's Advanced adds the server's key for that vendor", async () => {
+  it("on a solo server, the API key section offers the server's key for a signed-in vendor (#4376: never a row of Accounts)", async () => {
     fixture.instances = [instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } })];
     await page("anthropic");
-    await click(host.querySelector('[data-settings-card="providers.page.advanced.anthropic"] button[aria-expanded]'));
-    await click(host.querySelector('[data-provider-add-key-open="account:claude"]'));
-    expect(host.querySelector('[data-provider-add-key] [data-provider-key-dialog="anthropic"]')).not.toBeNull();
+    const accounts = host.querySelector<HTMLElement>('[data-settings-group="provider-accounts"]')!;
+    expect(accounts.textContent).not.toContain("Key");
+    const key = host.querySelector<HTMLElement>('[data-settings-group="provider-key"]')!;
+    expect(key.textContent).toContain("No key saved");
+    await click(key.querySelector("[data-provider-add-key-open]"));
+    expect(key.querySelector('[data-provider-add-key] [data-provider-key-dialog="anthropic"]')).not.toBeNull();
   });
 
-  it("keeps a saved key's Change key in Advanced: it opens the line's key", async () => {
+  it("a saved key's Replace opens the key's form in place, in the API key section", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
     await page("mistral");
     expect(host.querySelector("[data-personal-provider-key]")).toBeNull();
-    await click(host.querySelector('[data-settings-card="providers.page.advanced.mistral"] button[aria-expanded]'));
-    await click(host.querySelector("[data-provider-change-key]"));
-    expect(host.querySelector('[data-provider-panel] [data-personal-provider-key="mistral"]')).not.toBeNull();
+    await click(host.querySelector('[data-settings-group="provider-key"] [data-provider-change-key]'));
+    expect(host.querySelector('[data-settings-group="provider-key"] [data-provider-panel] [data-personal-provider-key="mistral"]')).not.toBeNull();
   });
 
   it("says what belongs to the tool once per tool: one connectors sentence and one CLI path fold for two Claude accounts", async () => {
@@ -435,6 +467,77 @@ describe("One provider's page (#4329 B3)", () => {
   });
 });
 
+describe("A provider's accounts (#4376: named, renamed in place, the key never one of them)", () => {
+  const signedIn = (email: string) => ({ access: "subscription" as const, authentication: { method: "browser" as const, signOut: true }, snapshot: { state: "available" as const, authenticated: true, account: { email } } });
+
+  it("names each account, its sign-in address and state under the name, one button; a sensible default, never the provider's or the tool's name", async () => {
+    fixture.instances = [
+      instance("codex", "codex", "Codex", signedIn("ada@example.com")),
+      instance("codex-2", "codex", "OpenAI", signedIn("ada.work@example.com")),
+      instance("chatgpt", "codex", "ChatGPT plan", { access: "subscription", snapshot: { state: "available", authenticated: false } }),
+    ];
+    await page("openai");
+    const lines = [...host.querySelectorAll<HTMLElement>('[data-settings-group="provider-accounts"] [data-provider-account]')];
+    expect(lines.map((line) => line.querySelector("[data-account-name]")!.textContent)).toEqual(["Account 1", "Account 2", "ChatGPT plan"]);
+    const ada = host.querySelector<HTMLElement>('[data-provider-line="account:codex"]')!;
+    expect(ada.querySelector("[data-provider-account-line]")!.textContent).toBe("ada@example.com · Connected");
+    expect(ada.querySelectorAll("[data-provider-action]")).toHaveLength(1);
+    expect(ada.querySelector('[data-provider-action="signOut"]')!.getAttribute("aria-label")).toBe("Sign out · Account 1");
+    expect(host.querySelector('[data-provider-line="account:chatgpt"] [data-provider-action="signIn"]')).not.toBeNull();
+  });
+
+  it("calls a lone account 'Your account' when its own name is only the tool's", async () => {
+    fixture.instances = [instance("codex", "codex", "Codex", signedIn("ada@example.com"))];
+    await page("openai");
+    expect(host.querySelector('[data-account-name="account:codex"]')!.textContent).toBe("Your account");
+  });
+
+  it("renames an account on a solo server: a click on its name, type, Enter (PATCH /api/instances/:id)", async () => {
+    fixture.instances = [instance("codex", "codex", "Codex", signedIn("ada@example.com"))];
+    await page("openai");
+    await click(host.querySelector('[data-account-name="account:codex"]'));
+    const input = host.querySelector<HTMLInputElement>('[data-account-name-input="account:codex"]')!;
+    expect(input.value).toBe("Your account");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "  Work plan ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.mocked(apiMock).mockClear();
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await settle();
+    expect(apiCalls("PATCH")).toEqual([["/api/instances/codex", JSON.stringify({ displayName: "Work plan" })]]);
+    expect(host.querySelector("[data-account-name-input]"), "back to the name").toBeNull();
+  });
+
+  it("Escape leaves the name as it was, and saves nothing", async () => {
+    fixture.instances = [instance("codex", "codex", "Codex", signedIn("ada@example.com"))];
+    await page("openai");
+    await click(host.querySelector('[data-account-rename="account:codex"]'));
+    const input = host.querySelector<HTMLInputElement>('[data-account-name-input="account:codex"]')!;
+    vi.mocked(apiMock).mockClear();
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await settle();
+    expect(host.querySelector("[data-account-name-input]")).toBeNull();
+    expect(apiCalls("PATCH")).toEqual([]);
+  });
+
+  it("the xAI provider with its bots there: one row 'Connected · your bots there too', Disconnect on its page only", async () => {
+    fixture.instances = [instance("grok", "grokAgent", "Grok", signedIn("ada@example.com"))];
+    const bridge = { linked: true, enabled: true, orgAllowed: true, keySet: true, bots: ["Scout"], mayCallOwner: false, mayTextOwner: true, webhookUrl: "https://bots.example.test/hook" };
+    vi.mocked(apiMock).mockImplementation(async (path: string, init?: RequestInit) => (path === "/api/me/grok-bridge" ? bridge : answers(path, init)));
+    try {
+      await render();
+      const rows = host.querySelectorAll<HTMLElement>('[data-provider="xai"]');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.querySelector("[data-provider-summary]")!.textContent).toBe("Connected · your bots there too");
+      expect(rows[0]!.querySelector("[data-bots-link-action], [data-provider-action]")).toBeNull();
+      expect(rows[0]!.getAttribute("data-settings-row"), "a search still finds the link").toBe("providers.botsLink");
+    } finally {
+      vi.mocked(apiMock).mockImplementation(async (path: string, init?: RequestInit) => answers(path, init));
+    }
+  });
+});
+
 describe("Settings > Providers, in an organization", () => {
   beforeEach(() => {
     fixture.org = ORG;
@@ -455,12 +558,11 @@ describe("Settings > Providers, in an organization", () => {
     expect(host.querySelector("[data-view-as-member]"), "no View as a member").toBeNull();
   });
 
-  it("a member signed in with a vendor still adds their own key for it, in the page's Advanced (the key Grok voice uses, say)", async () => {
+  it("a member signed in with a vendor still adds their own key for it, in the page's API key section (the key Grok voice uses, say)", async () => {
     await page("openai");
     expect(host.querySelector('[data-provider-line="account:codex"] [data-provider-action="signOut"]')).not.toBeNull();
-    await click(host.querySelector('[data-settings-card="providers.page.advanced.openai"] button[aria-expanded]'));
-    const open = host.querySelector<HTMLElement>('[data-provider-add-key-open="account:codex"]')!;
-    expect(open, "Add key in Advanced of the signed-in account").not.toBeNull();
+    const open = host.querySelector<HTMLElement>('[data-settings-group="provider-key"] [data-provider-add-key-open]')!;
+    expect(open, "Add key in the API key section").not.toBeNull();
     expect(open.textContent).toBe("Add key");
     await click(open);
     const input = host.querySelector<HTMLInputElement>('[data-provider-add-key] [data-personal-provider-key-input="openai"]')!;
@@ -481,13 +583,33 @@ describe("Settings > Providers, in an organization", () => {
     expect(host.querySelector("[data-provider-add-key-open]")).toBeNull();
   });
 
-  it("keeps the person's own sign-in with Sign out, and image generation read-only", async () => {
+  it("keeps the person's own sign-in: Connected on the list, Sign out on the page; image generation read-only", async () => {
     await render();
     const openai = host.querySelector<HTMLElement>('[data-provider="openai"]')!;
     expect(openai).not.toBeNull();
-    expect(openai.querySelector('[data-provider-action="signOut"]')!.textContent).toBe("Sign out");
+    expect(openai.querySelector("[data-provider-summary]")!.textContent).toBe("Connected");
+    expect(openai.querySelector("[data-provider-action]")).toBeNull();
+    await page("openai");
+    expect(host.querySelector('[data-provider-line="account:codex"] [data-provider-action="signOut"]')!.textContent).toBe("Sign out");
+    await render();
     const services = host.querySelector('[data-settings-card="providers.services"]')!;
     expect(services.querySelector('[data-settings-card="connections.image"]')).toBeNull();
     expect(services.querySelector('[data-settings-row="providers.imageGen"]')).not.toBeNull();
+  });
+
+  it("renames an account for this person alone: PUT /api/me/engines/:id/name (#4376)", async () => {
+    await page("openai");
+    await click(host.querySelector('[data-account-rename="account:codex"]'));
+    const input = host.querySelector<HTMLInputElement>('[data-account-name-input="account:codex"]')!;
+    expect(input.closest("[data-keeps-escape]"), "Escape cancels the rename, not the page").not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Team plan");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.mocked(apiMock).mockClear();
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await settle();
+    expect(apiCalls("PUT")).toEqual([["/api/me/engines/codex/name", JSON.stringify({ name: "Team plan" })]]);
+    expect(apiCalls("PATCH"), "never the organization's engine").toEqual([]);
   });
 });

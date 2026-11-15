@@ -13,12 +13,13 @@ import { t } from "@/lib/i18n";
 type KeyLike = { key: string; defaultPrevented: boolean; isComposing?: boolean; target?: EventTarget | null };
 
 /** Escape on a sub-page goes back to its section, not out of Settings,
- * unless something else already took it (a child editor, an IME, or the
- * Settings search clearing its query). */
+ * unless something else already took it (a child editor, an IME, the
+ * Settings search clearing its query, or a field that cancels its own edit
+ * with it: `data-keeps-escape`, an account's name being renamed, #4376). */
 export function subPageKeyAction(event: KeyLike): "back" | null {
   if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return null;
   const target = event.target as { closest?: (selector: string) => unknown } | null | undefined;
-  if (typeof target?.closest === "function" && target.closest("[data-settings-search]")) return null;
+  if (typeof target?.closest === "function" && target.closest("[data-settings-search], [data-keeps-escape]")) return null;
   return "back";
 }
 

@@ -38,7 +38,11 @@ async function instancesForViewer(person: string | null) {
     ? { ...instance, models: filterPiCatalogByProviders(instance.models, host.piKeyProviders.forViewer(person, instance)) }
     : instance);
   const served = host.overlayModelServers(keyed, await host.piModelServersForViewer(person).catch(() => []));
-  return host.desktopLocalModels.overlay(served, person);
+  // #4376: the name the person gave one of their accounts, wherever it shows to them
+  return host.desktopLocalModels.overlay(served, person).map((instance) => {
+    const own = host.accountNames?.get(person, instance.instanceId);
+    return own ? { ...instance, displayName: own } : instance;
+  });
 
 }
   return instancesForViewer;

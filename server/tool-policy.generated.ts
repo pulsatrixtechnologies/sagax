@@ -722,6 +722,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/me\\/engines\\/([\\w.-]+)\\/login\\/(start|complete|cancel|sign-out)$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/me\\/engines\\/([\\w.-]+)\\/login\\/status$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/me\\/engines\\/([\\w.-]+)\\/models$","tier":"read","readOnly":true,"scope":"me:read","defaultEnabled":true},
+  {"method":"PUT","kind":"pattern","route":"^\\/api\\/me\\/engines\\/([\\w.-]+)\\/name$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/me\\/mcp\\/servers\\/([a-z][a-z0-9_-]{0,31})(?:\\/oauth\\/(start|disconnect))?$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/me\\/perspicax\\/products\\/([^/]{1,256})\\/key$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true,"destructive":true},
   {"method":"PUT","kind":"pattern","route":"^\\/api\\/me\\/perspicax\\/products\\/([^/]{1,256})\\/key$","tier":"write","readOnly":false,"scope":"me:write","defaultEnabled":true},

@@ -251,12 +251,17 @@ providers (`shared/model-provider.ts`, the same as the model menu and Active
 models: OpenAI's two sign-ins are one "OpenAI", the xAI group shows under
 `XAI_GROUP_LABEL`, a server added by address under its own name, a server
 for pi as a provider of its own, "This computer" when its models are on).
-A row is a logo, the name, one grey line (the account's email, a plan's
-name, "Key", or "N models") and one button in plain words: Sign in, Sign
-out, Sign in again (the session expired), Add key, Remove, Turn on, Turn
-off. Remove (a saved key or a server) asks to confirm once, as a pi
-server's own page does, then removes it at once. A second account is a
-second line with its own button; nothing unfolds. No tool name, address or identifier on the first level. What the
+A row is one click target the whole row wide (#4376: one button under
+the words, one hover, a chevron at the right) that opens the provider's
+page: the logo, the name and ONE line in plain words ("Connected", "2
+accounts connected", "Connected · your bots there too", "Sign in to use
+it", "6 models on this computer", "Session expired, sign in again"). A
+connected provider carries no button: signing out, disconnecting,
+removing and turning off are on its page. The one button a row may carry
+is the first step of a provider not connected yet (Sign in, Sign in
+again, Add key, Turn on), over the row and never overlapping another.
+"Add a provider" is the list's last row, drawn as a row. No second line,
+no tool name, address or identifier on the first level. What the
 organization pays for and a provider the admin turned off are hidden (they
 still apply). The rows come from the stores as they are
 (`src/lib/provider-rows.ts`, pure, tested in `provider-rows.test.ts`;
@@ -266,28 +271,38 @@ still apply). The rows come from the stores as they are
 your account, Paste a key, Something else (Another server, Another server
 for pi, This computer). A provider already connected is not in it. Pick,
 then one step: a sign-in opens the provider's page on that account (its
-sign-in card, with "Use a key instead"); a key is one field; Another server
+sign-in card); a key is one field; Another server
 is Name, Address, Key (optional), and on a solo server its Advanced holds
 the server's own address and an Azure resource. That is the only way to
 add a server.
 
 A click on a row opens the provider's page, a settings sub-page
-("Providers > OpenAI", `ProviderPage.tsx`, page id `providers.provider:<id>`):
-Accounts (one line per account, key or server; the line's button opens the
-sign-in, the sign-out or the key in place and keeps it mounted, so sign-in
-polling survives; Add another account), Runs with (read only until the
-choice exists, hidden when only one engine can run that connection), the
-Models link ("N of M on", to Active models), and Advanced, folded each time
-the page opens. Advanced holds everything else: who pays and where the key
-lives, voice and images, the key in the organization console, a server's
-address and Edit, Change key for a saved key (it opens the line's key),
-Add key on the first signed-in account (the vendor's key as the second way
-to pay: the person's own key, or the server's key row on a solo server;
-gone once a line of the page holds that key),
-model list problems, the account part of a connected
-account whose line has no button (check, manage, Remove of a second Claude
-account), Copy the identifier, and once per tool its update notice, its
-connectors sentence and its "CLI path and updates" fold. This computer's
+("Providers > OpenAI", `ProviderPage.tsx`, page id `providers.provider:<id>`),
+in sections, each absent when it has nothing to show (#4376): Accounts (the
+sign-ins only; each account is named, the person renames it in place, a
+click on the name or its pencil, type, Enter: on a solo server the
+engine's own name, `PATCH /api/instances/:id`, on an organization server
+the person's own name for it, `PUT /api/me/engines/:id/name`, kept in
+`account-names.json` and read by `instancesForViewer` and
+`engineNameForPerson`, so the model menu and a bot's settings say it too;
+its sign-in address and state under the name, one button, Sign in or Sign
+out, opening the sign-in in place and keeping it mounted so sign-in
+polling survives; Add another account at the end), Server (a server added
+by address, its Remove), API key (its own section, never a row of
+Accounts: whether a key is saved and its last four characters, Add,
+Replace, Remove with its confirm; on a signed-in provider with no key yet,
+the vendor's key as the second way to pay: the person's own key, or the
+server's key row on a solo server), Your bots there (the xAI provider),
+Runs with (absent until the engine choice exists, #4329 lot 5), Models
+(the count line unfolds in place into one switch per model, a search from
+12, the same switches and state as Active models, `useModelSwitches`), and
+Advanced, folded each time the page opens. Advanced holds everything else:
+who pays and where the key lives, voice and images, the key in the
+organization console, a server's address and Edit, model list problems,
+the account part of a connected account whose line has no button (check,
+manage, Remove of a second Claude account), Copy the identifier, and once
+per tool its update notice, its connectors sentence and its "CLI path and
+updates" fold. This computer's
 page holds its models settings; a pi server's page its models, Test, Edit
 and Remove. Old card links (an engine's Advanced, this computer's models)
 open the page that holds them now (`providerCardTarget` in

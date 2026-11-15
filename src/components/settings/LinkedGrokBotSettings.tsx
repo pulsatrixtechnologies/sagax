@@ -27,8 +27,7 @@ import { useCopyFeedback } from "@/lib/copy-text";
 import { cn } from "@/lib/cn";
 import { botsLinkShown, botsLinkState } from "../../../shared/provider-catalog";
 import { DescribedRow, FIELD, FieldRow, PILL, PRIMARY_PILL, SettingsGroup, SettingsTextRow, Switch } from "../SettingsPrimitives";
-import { PLUGINS, pluginActionClass } from "../plugins/plugins-style";
-import { StatusText } from "./SettingsPatterns";
+import { pluginActionClass } from "../plugins/plugins-style";
 
 export type BotsLinkState = ReturnType<typeof botsLinkState>;
 type BotsLinkPatch = Parameters<typeof saveGrokBridge>[0];
@@ -158,53 +157,28 @@ export function useBotsLink(initial?: GrokBridgeLinkView, active = true): BotsLi
   };
 }
 
-/** What the list says of the link: "Your bots there · Paused", in grey as
- * the other lines of the list (their state is coloured on the page only). */
-export function BotsLinkWords({ link }: { link: BotsLink }) {
-  if (!link.state) return null;
-  return <>{t("grokBridge.title")} · <span data-bots-link-state={link.state}><StatusText tone="neutral">{t(STATE_KEY[link.state])}</StatusText></span></>;
+/** What the list says of the link when it is the xAI provider's only
+ * thing (#4376: one line per row): "Your bots there · Paused". */
+export function botsLinkWords(link: Pick<BotsLink, "state">): string | null {
+  return link.state ? `${t("grokBridge.title")} · ${t(STATE_KEY[link.state])}` : null;
 }
 
 /** Words a search finds the link by (its old names included, design F). */
 export const BOTS_LINK_SEARCH_WORDS = "your bots there tes bots là-bas link with grok bot lier à grok bot linked grok bot grok bridge pont grok";
 
 /**
- * The link's one button on the list (#4329 B1): Disconnect pauses it,
- * Connect turns a paused link back on; not linked yet, Connect opens the
- * provider's page, whose Connect step asks the address and the key.
+ * The link's first step on the list (#4376: a row carries a button only
+ * until it is connected): not linked yet, Connect opens the provider's
+ * page, whose Connect step asks the address and the key. Once linked,
+ * Disconnect and Connect are on that page (BotsLinkBlock).
  */
 export function BotsLinkButton({ link, onOpen }: { link: BotsLink; onOpen: () => void }) {
-  if (!link.state) return null;
-  const action = botsLinkAction(link.state);
-  if (!action) return null;
-  const click = () => {
-    if (link.state === "signedOut") onOpen();
-    else void link.save({ enabled: action === "connect" });
-  };
+  if (link.state !== "signedOut") return null;
   return (
-    <button type="button" data-bots-link-action={action} className={pluginActionClass("fill")} disabled={link.busy} onClick={click}
-      aria-label={`${t(action === "connect" ? "grokBridge.connect" : "grokBridge.disconnect")} · ${t("grokBridge.title")}`}>
-      {t(action === "connect" ? "grokBridge.connect" : "grokBridge.disconnect")}
+    <button type="button" data-bots-link-action="connect" className={pluginActionClass("fill")} disabled={link.busy} onClick={onOpen}
+      aria-label={`${t("grokBridge.connect")} · ${t("grokBridge.title")}`}>
+      {t("grokBridge.connect")}
     </button>
-  );
-}
-
-/**
- * The line "Your bots there" in the xAI provider's row of the list, under
- * its accounts, as the row's other lines: its state in grey, one button.
- * A click on the words opens the provider's page, where its block is.
- */
-export function BotsLinkLine({ link, onOpen }: { link: BotsLink; onOpen: () => void }) {
-  if (!link.view || !link.state) return null;
-  return (
-    <div data-bots-link-row="" data-settings-row="providers.botsLink" data-settings-keywords={BOTS_LINK_SEARCH_WORDS}
-      className="-mt-2 flex min-w-0 items-center gap-3 pb-2 pl-[64px] pr-3">
-      <button type="button" data-bots-link-open="" onClick={onOpen}
-        className={cn(PLUGINS.rowSub, "mt-0 min-w-0 flex-1 [overflow-wrap:anywhere] rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70")}>
-        <BotsLinkWords link={link} />
-      </button>
-      <BotsLinkButton link={link} onOpen={onOpen} />
-    </div>
   );
 }
 

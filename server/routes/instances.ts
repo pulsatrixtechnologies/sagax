@@ -481,8 +481,10 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
         const instances = persistableInstanceConfigs(result.config);
         if (!result.ok || !Object.hasOwn(instances, instanceId)) return json(res, 404, { error: `unknown instance "${instanceId}"` });
         const entry = instances[instanceId];
-        if ((body.displayName !== undefined || body.configDir !== undefined) && entry.driver !== "claudeAgent") {
-          return json(res, 400, { error: "Account settings are currently available for Claude only." });
+        // #4376: every account can be renamed (Providers > a provider >
+        // Accounts); its configuration folder stays a Claude setting.
+        if (body.configDir !== undefined && entry.driver !== "claudeAgent") {
+          return json(res, 400, { error: "The configuration folder is a setting of Claude accounts only." });
         }
         if (body.tools !== undefined) {
           if (!["openai-compat", "grok", "minimax", "mistral", "cerebras", "groq", "meta"].includes(entry.driver)) {

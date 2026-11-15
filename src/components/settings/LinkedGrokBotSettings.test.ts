@@ -9,7 +9,7 @@ import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 
 import type { GrokBridgeLinkView } from "@/lib/grok-bridge";
 import { setLocale } from "@/lib/i18n";
-import { BotsLinkAdvanced, BotsLinkBlock, BotsLinkLine, botsLinkAction, useBotsLink } from "./LinkedGrokBotSettings";
+import { BotsLinkAdvanced, BotsLinkBlock, BotsLinkButton, botsLinkAction, botsLinkWords, useBotsLink } from "./LinkedGrokBotSettings";
 import { OrgGrokBridgePolicy } from "./OrgGrokBridgePolicy";
 
 afterEach(() => vi.restoreAllMocks());
@@ -40,12 +40,12 @@ function BlockAlone({ view }: { view: GrokBridgeLinkView }) {
   const link = useBotsLink(view);
   return createElement(BotsLinkBlock, { link });
 }
-function Line({ view }: { view: GrokBridgeLinkView }) {
+function Button({ view }: { view: GrokBridgeLinkView }) {
   const link = useBotsLink(view);
-  return createElement(BotsLinkLine, { link, onOpen: () => {} });
+  return createElement(BotsLinkButton, { link, onOpen: () => {} });
 }
 const block = (view: GrokBridgeLinkView) => renderToStaticMarkup(createElement(Block, { view }));
-const entry = (view: GrokBridgeLinkView) => renderToStaticMarkup(createElement(Line, { view }));
+const button = (view: GrokBridgeLinkView) => renderToStaticMarkup(createElement(Button, { view }));
 const count = (html: string, text: string) => html.split(text).length - 1;
 
 /** The block without its part of Advanced: what the person sees first. */
@@ -58,33 +58,22 @@ function advanced(html: string): string {
   return html.slice(html.indexOf("data-bots-link-advanced"));
 }
 
-describe("the bots link line of the xAI provider's row", () => {
-  it("reads 'Your bots there' with its state and one button", () => {
-    const on = entry(linked);
-    expect(on).toContain('data-bots-link-row=""');
-    expect(on).toContain('data-settings-row="providers.botsLink"');
-    expect(on).toContain("Your bots there");
-    expect(on).toContain('data-bots-link-state="connected"');
-    expect(on).toMatch(/data-bots-link-action="disconnect"[^>]*>Disconnect</);
-    expect(entry({ ...linked, enabled: false })).toMatch(/data-bots-link-action="connect"[^>]*>Connect</);
-    expect(entry(none)).toMatch(/data-bots-link-action="connect"[^>]*>Connect</);
+describe("the bots link on the xAI provider's row (#4376: one line, a button only before it is linked)", () => {
+  it("reads 'Your bots there' with its state, in one line", () => {
+    expect(botsLinkWords({ state: "connected" })).toBe("Your bots there · Connected");
+    expect(botsLinkWords({ state: "off" })).toBe("Your bots there · Paused");
+    expect(botsLinkWords({ state: "adminOff" })).toBe("Your bots there · Turned off by your organization");
+    expect(botsLinkWords({ state: null })).toBeNull();
   });
 
-  it("a search finds it by its words and its old names", () => {
-    const html = entry(linked);
-    expect(html).toMatch(/data-settings-keywords="[^"]*your bots there[^"]*"/);
-    expect(html).toMatch(/data-settings-keywords="[^"]*tes bots là-bas[^"]*"/);
-    expect(html).toMatch(/data-settings-keywords="[^"]*pont grok[^"]*"/);
+  it("carries Connect only while it is not linked: Disconnect and Connect again are on the provider's page", () => {
+    expect(button(none)).toMatch(/data-bots-link-action="connect"[^>]*>Connect</);
+    expect(button(linked)).toBe("");
+    expect(button({ ...linked, enabled: false })).toBe("");
+    expect(button({ ...linked, orgAllowed: false })).toBe("");
   });
 
-  it("organization off: 'Turned off by your organization', no button (hidden, never greyed)", () => {
-    const html = entry({ ...linked, orgAllowed: false });
-    expect(html).toContain('data-bots-link-state="adminOff"');
-    expect(html).toContain("Turned off by your organization");
-    expect(html).not.toContain("data-bots-link-action");
-  });
-
-  it("the button follows the state", () => {
+  it("the page's button follows the state", () => {
     expect(botsLinkAction("connected")).toBe("disconnect");
     expect(botsLinkAction("off")).toBe("connect");
     expect(botsLinkAction("signedOut")).toBe("connect");
@@ -199,7 +188,7 @@ describe("the bots link: its part of Advanced holds every technical field (B4)",
 
   it("French says tu and names no tool", () => {
     setLocale("fr");
-    expect(entry(linked)).toContain(">Tes bots là-bas · ");
+    expect(botsLinkWords({ state: "connected" })).toMatch(/^Tes bots là-bas · /);
     const html = block(linked);
     expect(html).toContain("tes bots là-bas peuvent se parler");
     expect(html).toContain("Ces bots peuvent m&#x27;appeler");

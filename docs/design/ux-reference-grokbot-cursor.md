@@ -2984,42 +2984,66 @@ Read on the installed reference app's bundle (2026-11-13), values only.
   columns and the borderless rows above. Settings and Window stay out (the
   iPad has neither chord).
 
-### 8.10 Settings > Providers: the list, Add and a provider's page (#4329 lot 1)
+### 8.10 Settings > Providers: the list, Add and a provider's page (#4329 lot 1, #4376)
 
 The reference app has no provider list of its own; its pattern for "pick
 one, connect, done" is the Connect Apps row of 8.9, and Providers follows it.
-Values measured on Sagax's headless render (2026-11-14) against 8.9:
+
+Measured on the installed reference app's bundle (2026-11-15, values only,
+#4376), its list row that opens a detail page (the "pane row"): the WHOLE
+row is one `<button>` (lead, title and meta inside it), `width: 100%`,
+`gap: 6px`, `padding: 6px 8px` (10px top and bottom when it is tall),
+`border-radius: 8px`, no border, transparent at rest, the secondary
+background on hover, `cursor: pointer`, the 24px lead in the secondary ink,
+the title 13px on 18px, then a `chevron-right` (`size: sm`) at the end in
+the tertiary ink that turns primary while the row is hovered or focused.
+A row with its own actions keeps them beside the button, inside the row's
+`<li>`, and moves the hover from the button to the whole `<li>`: the
+highlight always covers the whole row, never cut by an action. Its
+settings page with sections: a `<section>` per part, a heading row 24px
+high (12px from the left, 6px from the right, 12px between its words and
+its action) over the section's list, 10px between them.
+
+Sagax's values (`ProvidersSettings.tsx`, `ProviderPage.tsx`):
 
 - The list: one row per provider, in the order and under the names of
   `shared/model-provider.ts` (signed-in accounts first, Claude, OpenAI, then
   the xAI group under its one label, then keys, servers added by address,
-  This computer last). A row is 64px: 12px padding, 16px corners, a 5% ink
-  wash on hover, the logo in a 40px tile, the name 13px medium on an 18px
-  line, the grey line 13px on 18px (`PLUGINS.rowName`, `PLUGINS.rowSub`). At
-  the right one button, the 26px grey pill of Connect Apps
-  (`pluginActionClass`, 96px wide at least): Sign in, Sign in again, Sign
-  out, Add key, Remove, Turn on, Turn off. Remove is that same grey pill
-  (`ConfirmPill` with `pillClass`); only its armed words ("Confirm
-  removal") turn red. Nothing to do: no button.
-- A second account is a second line under the first, indented to the text,
-  with its own button; nothing folds. The grey line is the account's email,
-  a plan's own name, else the state ("Connected", "Session expired"); never a
-  tool's name, an address or an identifier.
+  This computer last). A row keeps the Connect Apps size of 8.9 (64px, 12px
+  padding, 16px corners, 12px between logo and words, the logo in a 40px
+  tile, the name 13px medium on 18px, the line 13px on 18px) and takes the
+  pane row's pattern: one button under the words, the whole row wide
+  (`absolute inset-0`), the 5% ink wash on the whole row's `<li>` on hover
+  and on keyboard focus, a 16px chevron at the right in the tertiary ink,
+  the ink on hover. ONE line sums the provider up: "Connected", "2 accounts
+  connected", "Connected · your bots there too", "Sign in to use it", "6
+  models on this computer"; a state to fix in amber ("Session expired, sign
+  in again", "Key missing", "Offline"). No second line. A connected
+  provider has no button; a provider not connected yet carries its first
+  step only (Sign in, Sign in again, Add key, Turn on: the 26px grey pill of
+  Connect Apps, `pluginActionClass`), sitting over the row, before the
+  chevron. "Add a provider" is the list's last row, drawn as a row: a 40px
+  tile with a +, its words 13px medium, the chevron.
 - Add a provider: in place of the list, the round search of Connect Apps and
   its two-column grid (8px between columns, 2px between rows, one column
   under 560px of list), in three groups with the 14px medium group title:
   Sign in with your account, Paste a key, Something else. A provider already
-  connected is not in it; a vendor offered as a sign-in gets its key from
-  "Use a key instead" on the sign-in. Pick, then one step.
+  connected is not in it. Pick, then one step.
 - A provider's page is a settings sub-page (8.5): "Providers > OpenAI", the
-  back arrow, Escape returns. Accounts (one line each, the button opens the
-  sign-in, the sign-out or the key in place, kept mounted while another line
-  opens), Runs with (read only, hidden with one possible engine), Models
-  ("6 of 6 on", opens Models), Advanced folded each time the page opens:
-  who pays, the tool by its name (version, location, updates), a server's
-  address, the model list problem, Copy the identifier, and on the first
-  signed-in account Add key: the vendor's key as the second way to pay,
-  until a line of the page holds it.
+  back arrow, Escape returns. Its sections, each a `SettingsGroup` (grey
+  13px heading, one card), each absent with nothing to show: Accounts (one
+  line per sign-in, 52px: its name 13px, which the person renames in place
+  with a click on it or on the 24px round pencil, Enter saves, Escape
+  cancels; under it in 12px grey the sign-in address and the state; one
+  button, Sign in or Sign out; "Add another account" at the end), Server (a
+  server added by address and its Remove), API key (whether a key is saved,
+  "ending in 1234", Replace and Remove as two equal grey pills, Remove
+  armed in red; or "No key saved" and Add key), Your bots there, Runs with
+  (absent until the engine choice exists), Models (a fold row whose line is
+  "75 of 75 on" and whose count pill unfolds the switches in place, a search
+  from 12 models) and Advanced folded each time the page opens: who pays,
+  the tool by its name (version, location, updates), a server's address,
+  the model list problem, Copy the identifier.
 
 Captures: `scripts/capture`-style headless Chrome of the gallery
 `src/gallery/settings-pages.html` (`&subPage=providers.provider:<id>`,

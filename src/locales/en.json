@@ -8929,7 +8929,7 @@
   "voiceMode.needsXaiKeyLabel": "Voice mode needs an xAI key",
   "voiceMode.needsXaiKeyReason": "Add an xAI key in Settings > Models. Grok voice uses it.",
   "voiceMode.realtimeNeededLabel": "Calls need a realtime voice",
-  "voiceMode.realtimeNeededReason": "A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.",
+  "voiceMode.realtimeNeededReason": "A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Providers.",
   "voiceMode.restInChat": "The rest is written in the chat.",
   "engineSetup.apiKey.remoteModelsVoice": "Enter the key in Settings > Models on the computer running Sagax.",
   "engineSetup.apiKey.configuredRemoteModelsVoice": "To change the key, open Settings > Models on the computer running Sagax.",

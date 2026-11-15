@@ -23,6 +23,15 @@ describe("voice mode call button on an organization server", () => {
     expect(view.actions).toEqual(["open-connections"]);
   });
 
+  // #4360: the xAI key lives in Settings > Providers, where the button opens
+  it("points to Settings > Providers for the xAI key, on a server with or without an organization", () => {
+    for (const organization of [true, false]) {
+      const view = voiceUnavailableView(ready({ available: true, via: "org-key", organization }))!;
+      expect(view.lines.join(" ")).toContain("Settings > Providers");
+      expect(view.lines.join(" ")).not.toContain("Settings > Voice");
+    }
+  });
+
   it("shows the speaker's private access card, never the legacy This computer gate", () => {
     const view = voiceUnavailableView(ready({ available: false, refusal: { cause: "no_credentials", keysUrl: "https://keys.example.test" } }))!;
     expect(view.lines).toEqual(["Voice mode needs an xAI key. Add one in Settings > Models."]);

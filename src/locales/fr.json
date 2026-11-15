@@ -6553,7 +6553,7 @@
   "voiceMode.needsXaiKeyLabel": "Le mode vocal a besoin d'une clé xAI",
   "voiceMode.needsXaiKeyReason": "Ajoute une clé xAI dans Réglages > Modèles. La voix Grok l'utilise.",
   "voiceMode.realtimeNeededLabel": "Les appels ont besoin d'une voix en temps réel",
-  "voiceMode.realtimeNeededReason": "Un appel passe par la voix en temps réel, jamais par la synthèse vocale. Ajoute ou corrige la clé xAI dans Réglages > Voix.",
+  "voiceMode.realtimeNeededReason": "Un appel passe par la voix en temps réel, jamais par la synthèse vocale. Ajoute ou corrige la clé xAI dans Réglages > Fournisseurs.",
   "voiceMode.restInChat": "Le reste est écrit dans la conversation.",
   "engineSetup.apiKey.remoteModelsVoice": "Entre la clé dans Réglages > Modèles sur l'ordinateur qui exécute Sagax.",
   "engineSetup.apiKey.configuredRemoteModelsVoice": "Pour changer la clé, ouvre Réglages > Modèles sur l'ordinateur qui exécute Sagax.",

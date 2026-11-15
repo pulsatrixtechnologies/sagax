@@ -213,7 +213,8 @@ it off on every engine (`modelOfferAcross`).
 keeps an optional `harness` (a driver kind) beside its model; a person keeps a
 default per provider, `harnessByProvider` on `GET/PUT /api/me/models` (person
 settings on an organization server, `config.json` on a solo one; a provider
-given `null` goes back to no default). One resolver,
+given `null` goes back to no default, and the owner's bots without a choice of
+their own still on the engine it named go back to the recommended one). One resolver,
 `server/models/resolve-harness.ts`, maps the connection in use and the chosen
 engine to the instance that runs, through the matrix of
 `shared/harness-matrix.ts` as the provider catalog states it: the bot's own

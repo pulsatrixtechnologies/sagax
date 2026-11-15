@@ -15,6 +15,8 @@
 // engine when the one in use cannot run that connection. With no choice at
 // all (every bot before this lot), the selection is returned as it is: an
 // existing bot keeps running on its vendor's own tool until someone chooses.
+// A default taken off puts the bots that followed it (no choice of their own,
+// still on that engine for that provider) back on the recommended engine.
 import {
   harnessPairs,
   HARNESS_TOOL_NAME,
@@ -24,7 +26,7 @@ import {
 import type { ModelSelection } from "../../shared/model-selection.ts";
 import { splitEngine } from "../../shared/model-provider.ts";
 import type { CatalogConnection, CatalogEngine, CatalogModel, CatalogProvider, ProviderCatalog } from "../../shared/provider-catalog.ts";
-import { harnessPairRefusal, harnessModelRefusal, harnessUnlistedRefusal } from "./model-access-refusals.ts";
+import { harnessPairRefusal, harnessModelRefusal, harnessUnknownProviderRefusal, harnessUnlistedRefusal } from "./model-access-refusals.ts";
 
 /** The person's default harness per provider id (shared/model-provider.ts). */
 export type HarnessDefaults = Readonly<Record<string, string>>;
@@ -38,6 +40,10 @@ export interface ResolveHarnessInput {
   bot?: string | null;
   /** The person's default per provider. */
   defaults?: HarnessDefaults;
+  /** Providers whose default was just taken off, with the engine it named:
+   * a bot with no choice of its own still on that engine for that provider
+   * followed the default, so it goes back to the recommended engine. */
+  cleared?: HarnessDefaults;
   /** The bot's own choice was just written: a pair the matrix does not offer
    * is refused with its sentence instead of skipped. */
   strict?: boolean;
@@ -149,8 +155,10 @@ export function resolveHarness(input: ResolveHarnessInput): ResolveHarnessResult
     return { ok: false, error: harnessModelRefusal(harnessName(choice.harness), model.label) };
   }
   // A choice exists but none can run here: the engine in use stays when the
-  // matrix allows it, else the recommended one.
-  if (choices.length && !offered.some((pair) => pair.harness === located.engine.harness)) {
+  // matrix allows it, else the recommended one. A cleared default the bot
+  // followed: the recommended one too.
+  const followedCleared = !choices.length && input.cleared?.[provider.id] === located.engine.harness;
+  if (followedCleared || (choices.length && !offered.some((pair) => pair.harness === located.engine.harness))) {
     const recommended = connection?.recommended ?? null;
     const engine = recommended ? engineFor(located, connection, recommended) : null;
     if (engine) return moved(engine);
@@ -162,7 +170,7 @@ export function resolveHarness(input: ResolveHarnessInput): ResolveHarnessResult
  * null when one of the provider's connections runs it. */
 export function harnessDefaultRefusal(catalog: ProviderCatalog, place: HarnessPlace, providerId: string, harness: string): string | null {
   const provider = catalog.providers.find((entry) => entry.id === providerId);
-  if (!provider) return harnessUnlistedRefusal(harnessName(harness));
+  if (!provider) return harnessUnknownProviderRefusal(harnessName(harness), providerId);
   const connections = modelConnections(provider);
   const pairs = connections.length
     ? connections.flatMap((connection) => connection.harnesses)
@@ -219,21 +227,23 @@ export function createHarnessChoice(deps: HarnessChoiceDeps) {
      * A bot's model as it will be saved: on the engine its own choice (or,
      * without one, the owner's default for the provider) names. `harness`
      * undefined keeps the bot's stored choice; a string or null is the choice
-     * being written now, and a string is checked strictly. With no choice at
-     * all the raw selection is returned untouched, without reading anything.
+     * being written now, and a string is checked strictly. `cleared`: the
+     * defaults just taken off (see resolveHarness). With no choice at all the
+     * raw selection is returned untouched, without reading anything.
      */
     async selectionFor(auth: unknown, owner: string | null | undefined, raw: unknown,
-      choice: { stored?: string | null; harness?: string | null; catalog?: Promise<ProviderCatalog> }): Promise<HarnessSelectionResult> {
+      choice: { stored?: string | null; harness?: string | null; cleared?: HarnessDefaults; catalog?: Promise<ProviderCatalog> }): Promise<HarnessSelectionResult> {
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: true, selection: raw };
       const value = raw as Record<string, unknown>;
       if (typeof value.instanceId !== "string" || !value.instanceId.trim() || typeof value.model !== "string" || !value.model.trim()) return { ok: true, selection: raw };
       const writing = choice.harness !== undefined;
       const harness = writing ? choice.harness ?? null : choice.stored ?? null;
       const defaults = deps.defaultsFor(owner);
-      if (!harness && !Object.keys(defaults).length) return { ok: true, selection: raw };
+      const cleared = harness ? undefined : choice.cleared;
+      if (!harness && !Object.keys(defaults).length && !Object.keys(cleared ?? {}).length) return { ok: true, selection: raw };
       const selection = { instanceId: value.instanceId.trim(), model: value.model.trim() };
       const resolved = resolveHarness({
-        catalog: await (choice.catalog ?? deps.catalog(auth)), place: deps.place(), selection, bot: harness, defaults, strict: writing && Boolean(harness),
+        catalog: await (choice.catalog ?? deps.catalog(auth)), place: deps.place(), selection, bot: harness, defaults, cleared, strict: writing && Boolean(harness),
       });
       if (!resolved.ok) return { ok: false, status: 400, error: resolved.error };
       if (resolved.selection.instanceId === selection.instanceId && resolved.selection.model === selection.model) return { ok: true, selection: raw };

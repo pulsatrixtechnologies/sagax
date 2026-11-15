@@ -29947,16 +29947,18 @@ ROUTES.push(createModelSwitchRoutes({
   },
   // #4329 lot 5: what runs the person's bots, per provider
   harnessDefaults: {
-    read: (owner) => (owner === "installation" ? cleanHarnessDefaults(cfg.harnessByProvider) : (personSettings.get(owner).harnessByProvider ?? {})),
+    read: (owner) => harnessDefaultsOf(owner),
     refusal: (auth, provider, harness) => harnessChoice.defaultRefusal(auth, provider, harness),
     save: async (owner, map, auth) => {
+      // a provider taken off: its bots that followed the default go back
+      const cleared = Object.fromEntries(Object.entries(harnessDefaultsOf(owner)).filter(([provider]) => !(provider in map)));
       if (owner === "installation") {
         saveConfig({ harnessByProvider: map });
         cfg.harnessByProvider = map;
       } else {
         personSettings.setHarnessDefaults(owner, map);
       }
-      await applyHarnessDefaults(owner, auth);
+      await applyHarnessDefaults(owner, auth, cleared);
     },
   },
 }));
@@ -32485,6 +32487,10 @@ function personHarnessDefaults(principalId: string | null | undefined): Record<s
   const owner = personSettingsOwner(principalId);
   return owner ? personSettings.get(owner).harnessByProvider ?? {} : {};
 }
+/** The default engine per provider kept for a settings owner. */
+function harnessDefaultsOf(owner: string | "installation"): Record<string, string> {
+  return owner === "installation" ? cleanHarnessDefaults(cfg.harnessByProvider) : { ...personSettings.get(owner).harnessByProvider };
+}
 /** The caller's provider catalog (GET /api/me/providers/catalog). */
 function harnessCatalogFor(auth: RequestAuth): Promise<ProviderCatalog> {
   const owner = providerAccountOwner(sessionPrincipal(auth)) ?? undefined;
@@ -32501,15 +32507,17 @@ const harnessChoice = createHarnessChoice({
 });
 /** A new default for a provider moves the owner's bots that have no engine
  * of their own and use that provider, as a model change does (every thread
- * follows the bot). `owner` "installation": every bot of a solo server. */
-async function applyHarnessDefaults(owner: string | "installation", auth: RequestAuth): Promise<void> {
+ * follows the bot). A default taken off (`cleared`, provider to the engine it
+ * named) puts the bots that followed it back on the recommended engine.
+ * `owner` "installation": every bot of a solo server. */
+async function applyHarnessDefaults(owner: string | "installation", auth: RequestAuth, cleared: Record<string, string> = {}): Promise<void> {
   const catalog = harnessCatalogFor(auth);
   for (const { id } of store.bots) {
     const bot = store.bot(id);
     if (!bot || bot.harness) continue;
     const botOwner = effectiveBotOwner(bot);
     if (owner !== "installation" && botOwner !== owner) continue;
-    const moved = await harnessChoice.selectionFor(auth, botOwner, bot.modelSelection, { stored: null, catalog });
+    const moved = await harnessChoice.selectionFor(auth, botOwner, bot.modelSelection, { stored: null, cleared, catalog });
     if (!moved.ok || moved.selection === bot.modelSelection) continue;
     const checked = checkedModelSelection(moved.selection, { selection: bot.modelSelection, busy: false }, false, botOwner);
     if (checked.ok) store.patchBot(bot.id, { modelSelection: checked.selection });
@@ -32521,13 +32529,14 @@ async function applyHarnessDefaults(owner: string | "installation", auth: Reques
 function autoHarnessesFor(bot: Pick<BotRecord, "harness" | "ownerUserId">): AutoHarnesses {
   return { bot: bot.harness ?? null, byProvider: personHarnessDefaults(effectiveBotOwner(bot)) };
 }
-/** A new bot made without the person's own request auth (a bot's create
- * call, an import): its model lands on the engine its owner's default for
- * the provider names, as a bot made from the app does (bots-core-create).
- * `harness` is the new bot's own choice when it brings one (an imported bot). */
-async function newBotSelection(owner: string | null | undefined, selection: ModelSelection, harness?: string | null): Promise<ModelSelection> {
+/** A new bot's model, on every create path (the app, a bot's create call,
+ * a Primary Bot's specialist, an import): on the engine its owner's default
+ * for the provider names. `harness` is the new bot's own choice when it
+ * brings one (an imported bot); `auth` is the person's own request when
+ * there is one, else the owner's. */
+async function newBotSelection(owner: string | null | undefined, selection: ModelSelection, harness?: string | null, requestAuth?: RequestAuth): Promise<ModelSelection> {
   const principal = effectiveBotOwner({ ownerUserId: owner ?? undefined });
-  const { auth } = botOwnerImportAuth({ ownerUserId: owner ?? undefined, name: "new bot" } as BotRecord);
+  const auth = requestAuth ?? botOwnerImportAuth({ ownerUserId: owner ?? undefined, name: "new bot" } as BotRecord).auth;
   const moved = await harnessChoice.selectionFor(auth, principal, selection, { stored: harness ?? null });
   if (!moved.ok || moved.selection === selection) return selection;
   const checked = checkedModelSelection(moved.selection, undefined, false, principal);
@@ -34825,6 +34834,7 @@ ROUTES.push(createGroupsHttpRoutes({
 /** #2045: resolve (and ensure) the caller's team channel id for a display name. */
 ROUTES.push(createBotsCoreRoutes({
   harnessChoice,
+  newBotSelection,
   store,
   resolveSectionId,
   teamDefaultsFor: teamDefaultsForAuth,

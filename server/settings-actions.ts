@@ -276,8 +276,6 @@ export function settingStepUpClasses(classes: readonly SettingClass[], route: { 
   return STEP_UP_CLASSES.filter((name) => out.has(name));
 }
 
-/** The names a person uses for a model selection: its instance id and
- * label, its model id. */
 /** #4329 lot 5: the words that name an engine choice: its kind, its tool's
  * name, and the first-level words for pi, OpenCode and built in. */
 const HARNESS_ROLE_WORDS: Partial<Record<HarnessRole, readonly string[]>> = {
@@ -288,6 +286,8 @@ function harnessNames(value: unknown): string[] {
   return [value, HARNESS_TOOL_NAME[value], ...(HARNESS_ROLE_WORDS[harnessRole(value)] ?? [])].filter((name): name is string => Boolean(name));
 }
 
+/** The names a person uses for a model selection: its instance id and
+ * label, its model id. */
 function modelNames(value: unknown, instanceName?: (id: string) => string | undefined): string[] {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const instance = typeof record.instanceId === "string" ? record.instanceId : "";

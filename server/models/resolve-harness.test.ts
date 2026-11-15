@@ -71,7 +71,30 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
   it("says why a default cannot be saved for a provider, by the matrix", () => {
     expect(harnessDefaultRefusal(catalog, "solo", "openai", "piAgent")).toBeNull();
     expect(harnessDefaultRefusal(catalog, "solo", "openai", "claudeAgent")).toMatch(/^Claude Code cannot run OpenAI here\./);
-    expect(harnessDefaultRefusal(catalog, "solo", "nowhere", "piAgent")).toMatch(/not in your providers' list/);
+    // a provider id the person does not have: a sentence about the provider, not a model
+    expect(harnessDefaultRefusal(catalog, "solo", "nowhere", "piAgent")).toBe("nowhere is not one of your providers, so pi cannot run it. Connect it first.");
+  });
+
+  it("a cleared default puts the bots that followed it back on the recommended engine, and leaves the others", () => {
+    // followed "OpenAI runs with pi": back on the connection's recommended engine
+    const back = resolveHarness({ catalog, place: "solo", selection: { instanceId: "pi", model: "openai/gpt-6" }, cleared: { openai: "piAgent" } });
+    expect(back.ok && back.selection).toEqual({ instanceId: "openai", model: "gpt-6" });
+    // never followed it (already on its own tool, or another provider's model): stays
+    const own = resolveHarness({ catalog, place: "solo", selection: { instanceId: "openai", model: "gpt-6" }, cleared: { openai: "piAgent" } });
+    expect(own.ok && own.selection).toEqual({ instanceId: "openai", model: "gpt-6" });
+    const other = resolveHarness({ catalog, place: "solo", selection: { instanceId: "pi", model: "anthropic/claude-opus-5" }, cleared: { openai: "piAgent" } });
+    expect(other.ok && other.selection).toEqual({ instanceId: "pi", model: "anthropic/claude-opus-5" });
+    // a bot with its own engine keeps it
+    const kept = resolveHarness({ catalog, place: "solo", selection: { instanceId: "pi", model: "openai/gpt-6" }, bot: "piAgent", cleared: { openai: "piAgent" } });
+    expect(kept.ok && kept.selection).toEqual({ instanceId: "pi", model: "openai/gpt-6" });
+  });
+
+  it("the write path moves a bot back when its provider's default is cleared, with no default left", async () => {
+    const choice = createHarnessChoice({
+      catalog: async () => catalog, place: () => "solo", defaultsFor: () => ({}), effortAccepted: () => true,
+    });
+    const back = await choice.selectionFor({}, "pr_a", { instanceId: "pi", model: "openai/gpt-6" }, { stored: null, cleared: { openai: "piAgent" } });
+    expect(back).toEqual({ ok: true, selection: { instanceId: "openai", model: "gpt-6" } });
   });
 
   it("lists the engines the bot may pick for its model, only where the engine lists it", () => {

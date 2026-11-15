@@ -7,7 +7,8 @@
 //   - choosing pi moves the bot's model to pi's own id for it, and the same
 //     conversation goes on there;
 //   - a pair the matrix does not offer is refused with its sentence;
-//   - the person's default for the provider moves a bot with no choice of its own.
+//   - the person's default for the provider moves a bot with no choice of its own,
+//     and clearing it puts that bot back on the recommended engine.
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -135,6 +136,15 @@ it("moves a bot to the engine it is told to run with, keeps the conversation, an
     const made = await api("POST", "/api/bots", { name: "Made after the default", modelSelection: BUILT_IN });
     expect(made.bot.harness).toBeUndefined();
     expect(made.bot.modelSelection).toMatchObject({ instanceId: "pi", model: "openrouter/fixture-model" });
+
+    // Clearing the default puts the bots that followed it back on the
+    // recommended engine; a bot with its own choice stays where it runs.
+    const pinned = await api("POST", "/api/bots", { name: "Its own choice", modelSelection: BUILT_IN });
+    expect((await api("PATCH", `/api/bots/${pinned.bot.id}`, { harness: "piAgent" })).bot.modelSelection).toMatchObject({ instanceId: "pi" });
+    expect((await api("PUT", "/api/me/models", { harnessByProvider: { openrouter: null } })).harnessByProvider).toEqual({});
+    expect((await botNow(made.bot.id)).modelSelection).toMatchObject(BUILT_IN);
+    expect((await botNow(bot.id)).modelSelection).toMatchObject(BUILT_IN);
+    expect((await botNow(pinned.bot.id)).modelSelection).toMatchObject({ instanceId: "pi", model: "openrouter/fixture-model" });
   } finally {
     await fixture.close();
     upstream.closeAllConnections();

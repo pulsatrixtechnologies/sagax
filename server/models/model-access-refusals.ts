@@ -79,3 +79,8 @@ export function harnessModelRefusal(tool: string, model: string): string {
 export function harnessUnlistedRefusal(tool: string): string {
   return `This model is not in your providers' list, so ${tool} cannot be checked for it. Pick a model from your providers first.`;
 }
+
+/** A default for a provider the person does not have. */
+export function harnessUnknownProviderRefusal(tool: string, provider: string): string {
+  return `${provider} is not one of your providers, so ${tool} cannot run it. Connect it first.`;
+}

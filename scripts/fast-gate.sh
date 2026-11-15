@@ -169,7 +169,10 @@ if [ -f package.json ]; then
     # (default 150): a file weighs its recorded seconds in
     # $FAST_GATE_TEST_WEIGHTS (default scripts/testing/vitest-shard-weights.json
     # when the repository has it), else 1 s, an e2e file the median e2e file.
-    # Measured on recent lots (#4316): an estimate of 126 s ran in 118 s.
+    # Measured on recent lots (#4316), replayed on their merge base on a busy
+    # machine: #4356 ran 144 of 488 related files in 145 s, #4354 67 of 934
+    # (server files) in 170 s; the estimates of #4348 (67 files, 86 s, no cut),
+    # #4226 (53 of 576) and #4260 (87 of 1086) fill the ceiling.
     # $FAST_GATE_RELATED_MAX, when set, also bounds the count. When the
     # ceiling cuts the list the gate says how many files it ran, how many it
     # cut, and writes the cut ones to related-cut.txt in its log folder: they

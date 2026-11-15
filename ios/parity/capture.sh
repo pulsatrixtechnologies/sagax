@@ -13,6 +13,11 @@
 #                                                Black/Black) does not keep the
 #                                                shot dark
 #   PARITY_OUT=/tmp/shots ios/parity/capture.sh  where the PNGs go
+#   PARITY_DEVICE=readme-iphone ...               the simulator (created when missing)
+#   PARITY_SESSION=/tmp/phone.json ...           a server already running instead of
+#                                                the fixture (JSON: endpoint, token,
+#                                                environmentId), e.g. the README
+#                                                fixture's paired phone
 #   PARITY_EXTRA_ARGS="-companion.prefs.rosterChromeAtTop YES" ...  more launch arguments
 #   PARITY_HOME=primary ios/parity/capture.sh 01-home  one centred Primary Bot,
 #                                                nothing else pinned ("none": no pin, "mixed": primary + pins)
@@ -120,24 +125,29 @@ xcrun simctl status_bar "$UDID" override --time "6:54" \
 xcrun simctl install "$UDID" "$APP"
 
 # ── fixture server ──────────────────────────────────────────────────────
-rm -f "$OUT/session.json"
-node "$HERE/fixture-server.mjs" > "$OUT/fixture.log" 2>&1 &
-SERVER_PID=$!
+SESSION="${PARITY_SESSION:-$OUT/session.json}"
+SERVER_PID=""
 cleanup() {
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+  [ -n "$SERVER_PID" ] || return 0
   kill "$SERVER_PID" 2>/dev/null || true
   wait "$SERVER_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
-for _ in $(seq 1 240); do
-  [ -f "$OUT/session.json" ] && break
-  kill -0 "$SERVER_PID" 2>/dev/null || { cat "$OUT/fixture.log"; log "fixture server died"; exit 1; }
-  sleep 0.5
-done
-[ -f "$OUT/session.json" ] || { cat "$OUT/fixture.log"; log "fixture server never became ready"; exit 1; }
+if [ -z "${PARITY_SESSION:-}" ]; then
+  rm -f "$OUT/session.json"
+  node "$HERE/fixture-server.mjs" > "$OUT/fixture.log" 2>&1 &
+  SERVER_PID=$!
+  for _ in $(seq 1 240); do
+    [ -f "$OUT/session.json" ] && break
+    kill -0 "$SERVER_PID" 2>/dev/null || { cat "$OUT/fixture.log"; log "fixture server died"; exit 1; }
+    sleep 0.5
+  done
+  [ -f "$OUT/session.json" ] || { cat "$OUT/fixture.log"; log "fixture server never became ready"; exit 1; }
+fi
 read -r ENDPOINT TOKEN ENVIRONMENT < <(python3 -c "
-import json; s = json.load(open('$OUT/session.json'))
-print(s['endpoint'], s['token'], s.get('environmentId') or '')")
+import json, sys; s = json.load(open(sys.argv[1]))
+print(s['endpoint'], s['token'], s.get('environmentId') or '')" "$SESSION")
 log "fixture at $ENDPOINT"
 
 # ── screens ──────────────────────────────────────────────────────────────

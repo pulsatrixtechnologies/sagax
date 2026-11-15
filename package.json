@@ -28,6 +28,8 @@
     "check:terms": "node scripts/check-source-terms.mjs",
     "check:contrast": "node scripts/check-skin-contrast.mjs",
     "check:unused": "node scripts/check-unused.mjs",
+    "check:readme": "node scripts/check-readme-images.mjs",
+    "readme:shots": "node scripts/capture/readme-shots.mjs && bash scripts/optimize-readme-shots.sh",
     "gen:switch": "node scripts/gen-switch-tokens.mjs",
     "gen:bubble": "node scripts/gen-bubble-tokens.mjs",
     "i18n:check": "node scripts/generate-locale.mjs --check",

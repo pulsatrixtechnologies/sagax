@@ -9,6 +9,9 @@
 #   ios/parity/desktop/capture-ipad.sh --device m5           iPad Pro 13/11-inch (M5) instead
 #   ios/parity/desktop/capture-ipad.sh --keep-sims           leave the simulators for the next run
 #   PARITY_WAIT=8 ios/parity/desktop/capture-ipad.sh         seconds per screen
+#   PARITY_SESSION=/tmp/phone.json ...                        a server already running instead
+#                                                             of the fixture (JSON: endpoint,
+#                                                             token, environmentId)
 #
 # Then: python3 ios/parity/desktop/diff-ipad.py [--gate]
 #
@@ -189,9 +192,13 @@ prepare_sim() { # name type -> udid
 # ── fixture server ──────────────────────────────────────────────────────
 FIXTURE_OUT="$OUT/ipad-fixture"
 mkdir -p "$FIXTURE_OUT"
-rm -f "$FIXTURE_OUT/session.json"
-PARITY_OUT="$FIXTURE_OUT" node "$PARITY/fixture-server.mjs" > "$FIXTURE_OUT/fixture.log" 2>&1 &
-SERVER_PID=$!
+SESSION="${PARITY_SESSION:-$FIXTURE_OUT/session.json}"
+SERVER_PID=""
+if [ -z "${PARITY_SESSION:-}" ]; then
+  rm -f "$FIXTURE_OUT/session.json"
+  PARITY_OUT="$FIXTURE_OUT" node "$PARITY/fixture-server.mjs" > "$FIXTURE_OUT/fixture.log" 2>&1 &
+  SERVER_PID=$!
+fi
 cleanup() {
   for name in "$SIM13" "$SIM11"; do
     local udid
@@ -203,19 +210,22 @@ cleanup() {
       xcrun simctl delete "$udid" >/dev/null 2>&1 || true
     fi
   done
+  [ -n "$SERVER_PID" ] || return 0
   kill "$SERVER_PID" 2>/dev/null || true
   wait "$SERVER_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
-for _ in $(seq 1 240); do
-  [ -f "$FIXTURE_OUT/session.json" ] && break
-  kill -0 "$SERVER_PID" 2>/dev/null || { cat "$FIXTURE_OUT/fixture.log"; log "fixture server died"; exit 1; }
-  sleep 0.5
-done
-[ -f "$FIXTURE_OUT/session.json" ] || { cat "$FIXTURE_OUT/fixture.log"; log "fixture server never became ready"; exit 1; }
+if [ -n "$SERVER_PID" ]; then
+  for _ in $(seq 1 240); do
+    [ -f "$FIXTURE_OUT/session.json" ] && break
+    kill -0 "$SERVER_PID" 2>/dev/null || { cat "$FIXTURE_OUT/fixture.log"; log "fixture server died"; exit 1; }
+    sleep 0.5
+  done
+  [ -f "$FIXTURE_OUT/session.json" ] || { cat "$FIXTURE_OUT/fixture.log"; log "fixture server never became ready"; exit 1; }
+fi
 read -r ENDPOINT TOKEN ENVIRONMENT < <(python3 -c "
-import json; s = json.load(open('$FIXTURE_OUT/session.json'))
-print(s['endpoint'], s['token'], s.get('environmentId') or '')")
+import json, sys; s = json.load(open(sys.argv[1]))
+print(s['endpoint'], s['token'], s.get('environmentId') or '')" "$SESSION")
 log "fixture at $ENDPOINT"
 
 # ── screens ──────────────────────────────────────────────────────────────

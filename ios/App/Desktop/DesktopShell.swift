@@ -913,12 +913,13 @@ private struct DesktopShellRouting: ViewModifier {
             if screen == .groupChat || screen == .groupPanel {
                 // the room chat (Peer Managers), as the reference selects it;
                 // group-panel: its header pill opened the panel
-                if let room = session.state.rooms.first(where: { $0.name == "Peer Managers" }) {
+                // `-parityChat NAME` (the README captures) picks another room or bot
+                if let room = session.state.rooms.first(where: { $0.name == (ParityLaunch.current?.chatName ?? "Peer Managers") }) {
                     model.open(.room(room))
                     if screen == .groupPanel { model.panelOpen = true }
                     return
                 }
-            } else if let ara = session.state.bots.first(where: { $0.name == "Ara" }) {
+            } else if let ara = session.state.bots.first(where: { $0.name == (ParityLaunch.current?.chatName ?? "Ara") }) {
                 model.open(.bot(ara))
                 model.panelOpen = screen.opensBotPanel
                 if let tab = screen.panelTab { model.panelTab = tab }

@@ -342,8 +342,9 @@ struct ParityLaunch {
     var iPadScreen: IPadParityScreen? = nil
     var orientation: String? = nil
     var skin: String? = nil
-    /// `-parityChat NAME`: the chat screens open this bot instead of Ara
-    /// (the card lab of the WP2 UI tests).
+    /// `-parityChat NAME`: the chat screens open this bot instead of Ara (the
+    /// card lab of the WP2 UI tests), and the iPad screens this bot or room
+    /// instead of Ara and Peer Managers (the README captures).
     var chatName: String? = nil
 
     static let current: ParityLaunch? = parse(ProcessInfo.processInfo.arguments)

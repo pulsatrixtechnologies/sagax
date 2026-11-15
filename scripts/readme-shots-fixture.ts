@@ -5,12 +5,13 @@
 // only that fixture. Every name, message and file in it is made up.
 // Prints {appUrl, ...} as JSON and serves until killed.
 //
-// Shots: a 1440x900 window at 2x, the app's skin set in localStorage
-// ("omb-skin": "pulsatrix" or "pulsatrix-light"), achievement toasts hidden.
-// Open Pixel (approval), Launch room (group), the profile menu's Automations
-// (next week), Connect apps, and Settings > Models and voice. The fake Codex
-// instance is named "Verification Codex" by the fixture; the README shot
-// shows it as "Codex", the name a real install shows.
+// Shots: scripts/capture/readme-shots.mjs drives a 1440x900 window at 2x in
+// the README's appearance (Studio, dark, tool calls off; README_SETUP there).
+// The scene of the next turn can be rewritten while the fixture runs: write
+// {reply, tools, mode, env} to the printed `scenePath` and send a message
+// (the capture script does that for its animated captures). The printed
+// `phone` is a paired phone session on the same server (endpoint, bearer,
+// environment), so the iPhone and iPad captures show this same fixture.
 //
 //   node --experimental-strip-types scripts/readme-shots-fixture.ts
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -40,11 +41,12 @@ writeFileSync(wrapper, [
   "process.env.FAKE_CLAUDE_REPLIES = JSON.stringify([scene.reply ?? 'Done.']);",
   "process.env.FAKE_CLAUDE_TOOL_CALLS = JSON.stringify(scene.tools ?? []);",
   "if (scene.mode) process.env.FAKE_CLAUDE_MODE = scene.mode;",
+  "if (scene.env) Object.assign(process.env, scene.env);",
   `await import(${JSON.stringify(pathToFileURL(join(root, "server/testing/fake-claude-cli.ts")).href)});`,
 ].join("\n"), { mode: 0o700 });
 writeFileSync(scenePath, JSON.stringify({ reply: "Hi! Ready when you are." }));
 await api("PATCH", "/api/instances/claude", { cli: wrapper, displayName: "Claude Code" }).catch((e) => console.error("[fixture] instance", String(e)));
-await api("PATCH", "/api/config", { features: { showToolCalls: true }, language: "en", profile: { name: "Alex Morgan", email: "alex@example.com" } }).catch((e) => console.error("[fixture] config", String(e)));
+await api("PATCH", "/api/config", { features: { showToolCalls: false }, language: "en", profile: { name: "Alex Morgan", email: "alex@example.com" } }).catch((e) => console.error("[fixture] config", String(e)));
 
 const BOTS = [
   { key: "atlas", name: "Atlas", title: "Team lead", color: "blue", look: { character: "owl" }, pinned: true },
@@ -146,18 +148,37 @@ if (groupId && groupThread) {
 }
 await api("PATCH", "/api/config", { onboarding: { completedAt: new Date().toISOString(), version: 999, reelSeen: true } }).catch((e) => console.error("[fixture] onboarding", String(e)));
 
+// The phone apps' captures pair with this same server, the way a phone pairs
+// with a computer: a code, then a bearer for that phone.
+const phone = await (async () => {
+  try {
+    const opened = await api("POST", "/api/auth/pairing", { label: "readme-phone", scopes: ["admin", "client"] });
+    const paired = await api("POST", "/api/auth/pair", { code: opened.code, label: "Readme phone" });
+    return { endpoint: url, token: paired.token as string, environmentId: (paired.environment?.environmentId ?? null) as string | null };
+  } catch (error) { console.error("[fixture] phone pairing", String(error)); return null; }
+})();
+
 const port = Number(new URL(url).port);
 const ui = await createServer({
   root,
   logLevel: "warn",
+  // its own dependency cache: node_modules/.vite is shared by every checkout
+  // that links the same node_modules, and another dev server re-optimizing it
+  // leaves this page blank ("Outdated Optimize Dep")
+  cacheDir: join(dataDir, "vite-cache"),
   // SAGAX_README_UI_PORT pins the UI to one port (an agent's 5176-5206 range); unset, any free port
   server: { host: "127.0.0.1", port: Number(process.env.SAGAX_README_UI_PORT) || 0, strictPort: Boolean(process.env.SAGAX_README_UI_PORT), proxy: {
     "/api": { ws: true, target: url },
     "/.well-known/openmausbot/environment": { target: url },
   } },
 });
-await ui.listen();
-console.log(JSON.stringify({ appUrl: ui.resolvedUrls?.local[0], url, port, dataDir, ids, groupId: group?.group?.id ?? group?.id ?? null }));
+try { await ui.listen(); } catch (error) {
+  // a taken UI port: stop the server too, or it outlives this process
+  socket?.destroy();
+  await fixture.close();
+  throw error;
+}
+console.log(JSON.stringify({ appUrl: ui.resolvedUrls?.local[0], url, port, serverPid: fixture.info.pid, dataDir, scenePath, ids, groupId: group?.group?.id ?? group?.id ?? null, phone }));
 await parkUntilSignal();
 socket?.destroy();
 await ui.close();

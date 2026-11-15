@@ -33,17 +33,13 @@
 ---
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/hero-light.png">
-    <img src="docs/readme/hero-dark.png" alt="Sagax on the desktop: a sidebar of bots with their mascots, and a conversation where the bot Pixel fixed a layout bug with four tools and now waits for approval to push its branch" width="900">
-  </picture>
+  <img src="docs/readme/chat.png" alt="Sagax on the desktop: a sidebar of bots wearing the owl and the shapes, and a conversation where the bot Pixel fixed a layout bug and now waits, on a card pinned above the composer, for approval to push its branch" width="900">
 </p>
 
 Sagax is a desktop and mobile app where your contacts are AI agents. Each
 bot runs a real agent engine, such as Claude Code, Codex or Grok, with its
 own name, personality, model, memory, routines and computer. Talk to one bot,
-put several in a group with your colleagues, call one on the phone, and watch
-them work.
+put several in a group with your colleagues, call one, and watch them work.
 
 Bots do real work: they run commands, edit files, browse the web, fill forms,
 shop, publish pages and use apps. Anything that matters waits for you on an
@@ -58,9 +54,7 @@ approval card in the chat, and you decide how much each bot may do on its own.
   a short question runs on a fast model, code and long reads keep the main
   one, and workers get the best model for their job.
 - **Your Grok and Claude connectors, in every bot.** Mail, calendar, Teams and
-  the rest reach your bots through the account that has them. When a request
-  needs a connector another engine holds, the turn moves there and the result
-  comes back, with no copy of your sign-in.
+  the rest reach your bots through the account that has them.
 - **A computer for every bot,** and a browser that works out of sight. The
   screen is used only when you ask, and it is always announced with a Stop
   button.
@@ -72,160 +66,171 @@ approval card in the chat, and you decide how much each bot may do on its own.
 
 ## What your bots can do
 
-### One conversation per bot, or several side by side
+Every capture below comes from the app itself, on invented bots and
+content, in the Studio theme (dark) with the owl and the shapes as mascots.
+
+### The chat and its cards
 
 Each bot keeps a single running conversation; **New topic** starts fresh
-context while earlier topics stay one scroll up. The composer stays free
-while the bot works, a message sent mid-turn gets its own reply once the
-current one is done, and "wait" stops it right away. The model picker sits
-in the chat bar and applies to every thread of the bot. Drag a bot, a group
-or a thread onto the conversation to open it beside the main chat.
+context while earlier topics stay one scroll up. Send a message and a
+working line shows what the bot is doing until its answer streams in. The
+composer stays free while the bot works: a message sent mid-turn gets its
+own reply once the current one is done, and "wait" stops it right away.
+Drag a bot, a group or a thread onto the conversation to open it beside the
+main chat.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/split-view-light.png">
-    <img src="docs/readme/split-view-dark.png" alt="Split view: the conversation with Pixel and its approval card on the left, the conversation with Ledger on the right, each with its own composer" width="900">
-  </picture>
+  <img src="docs/readme/send-message.webp" alt="Animated: a message to the bot Quill is typed and sent, a working line appears, then the reply streams in" width="900">
 </p>
 
-### Mascots, shapes and skins
+When a bot needs you, its question or approval is a card pinned above the
+composer, with the choices on it: **Deny**, **Always allow** or **Allow
+once**. Answer it and the card folds into one line of the conversation while
+the bot carries on. Questions, sign-in requests, purchases and phone calls
+are cards too.
 
-Every bot wears a character: the owl, the crab, the Shapes, and the ones your
-achievements unlock. Characters move while the bot thinks, works, waits or
-sleeps, on the desktop, on your phone and in your notifications. Pick a
-character, a shape, a color and a skin for each bot, and a skin for the app.
+<p align="center">
+  <img src="docs/readme/card-answer.webp" alt="Animated: the pinned card where Pixel asks to run a git push is answered with Allow once; it becomes an Allowed once line and the bot keeps working" width="900">
+</p>
+
+### Bots, their page and their mascot
+
+A bot's page fills the main area: its appearance on top (mascot, colour and
+skin, with a live preview), then rows that each open a sub-page:
+instructions, memory, skills, routines, library and sharing, and a Stats tab
+with usage by account, model, source and person. Every bot wears a
+character: the owl, the crab, the Shapes, and the ones your achievements
+unlock. Characters move while the bot thinks, works, waits or sleeps, on the
+desktop, on your phone and in your notifications.
 ([mascots](docs/mascots.md), [achievements](docs/achievements.md))
 
 <p align="center">
-  <img src="docs/readme/mascots.gif" alt="The Shapes, the mascots of a bot team, playing a move" width="720">
+  <img src="docs/readme/bot-page.png" alt="The page of the bot Pixel: its owl mascot and name on top, then the Appearance section with the Mascot, Color and Skin choices and the characters to pick from" width="900">
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/appearance-light.png">
-    <img src="docs/readme/appearance-dark.png" alt="The appearance of a bot on its page: the mascot editor with its Mascot, Shape, Color and Skin choices and a live preview" width="900">
-  </picture>
+  <img src="docs/readme/mascot.webp" alt="Animated: the owl mascot of the bot Quill reacts while it works on a message, then when it is done" width="420">
 </p>
 
-### Groups of people and bots
-
-Mention a bot with `@` and it joins in; `stop @Bot` halts it. Give the group
-a goal and the bots work toward it in the group's own conversation. A group
-can also hold people only, and you can leave a group you were added to. When
-a bot needs to write to someone, it does so in a group of you, that person
-and the bot, never from nowhere.
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/group-light.png">
-    <img src="docs/readme/group-dark.png" alt="A group chat named Launch room: the team lead bot Atlas reports the launch status, the QA bot Scout answers when mentioned" width="900">
-  </picture>
-</p>
-
-### Routines, the daily brief and your phone
+### Routines and their runs
 
 Run work once, on weekdays, every few minutes, when a webhook or an email
 arrives, when a GitHub issue is opened or labeled or a review is requested,
 or only when a file or a command's output changes. Sort routines into
 folders; a routine that fails several times pauses itself. A fixed-time
-reminder costs nothing: no model turn, just the message. Every run lands on
-the Automations calendar. A **daily brief** runs in the background
-and reaches you where you are. With **Reach me**, a bot asks its questions
-outside the app: push notification, text message, Teams or Telegram. With a
-phone line, people can call your bot or text it, and a text becomes a turn of
-your conversation. ([schedules](docs/routine-schedules.md),
-[folders](docs/routine-folders.md), [Reach me](docs/reach-me.md))
+reminder costs nothing: no model turn, just the message. Run one now from its
+page and the run lands under **Runs**, with its result in the conversation.
+Every run is on the Automations calendar.
+([schedules](docs/routine-schedules.md), [folders](docs/routine-folders.md))
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/automations-light.png">
-    <img src="docs/readme/automations-dark.png" alt="Automations calendar: a week of routines from six bots, such as a morning briefing, a docs link check, dependency updates and a weekly spend report, with the upcoming list on the right" width="900">
-  </picture>
+  <img src="docs/readme/routine-run.webp" alt="Animated: the page of the routine Invoice reminders of the bot Ledger; Run now starts a run, which is listed under Runs while its result arrives in the conversation" width="600">
 </p>
 
-### Voice
+<p align="center">
+  <img src="docs/readme/automations.png" alt="The Automations calendar: a week of routines from six bots, such as a morning briefing, a docs link check, dependency updates and a weekly spend report, with the upcoming list on the right" width="900">
+</p>
 
-Call a bot and talk. xAI does the listening and the speaking; the bot stays
-the brain, with its tools, memory and approvals, and every sentence lands in
-the thread as a normal message. Dictation and read-aloud work on the desktop
-and on iOS. ([voice](docs/voice-mode-xai.md))
+### Models, providers and Connect apps
 
-### Engines, models and connectors
-
-Settings > Providers shows what is signed in and what needs setup; an
-engine signs in from the app with a one-time code, GitHub too, from any
-chat. Settings > Models sets the model of every bot in one table, and
-**Auto model** picks the model for each turn, by task. A **team** sets the
-model and the computer for all its bots, with a per-bot override, and a
-Claude Code plugin imports as a whole team. The Plugins panel brings your
-Claude and Grok connectors, MCP servers, plugins and skills to your bots,
-for everyone or for one bot, and `run_with_engine` hands part of a task to
-another engine. Skills revise themselves and propose their changes in one
-click. Other AI clients can send work to your bots through Sagax's own MCP
-server. ([engines](docs/custom-engines.md), [your MCP servers](docs/custom-mcp-servers.md),
+The model menu in the chat bar goes in two steps: **Auto** (the best model
+per task) or the bot's own model, then a provider and its models. Settings >
+Providers shows the accounts your bots use, what is signed in and what needs
+setup; an engine signs in from the app. Settings > Models sets the model of
+every bot in one table. **Connect Apps** brings your Claude and Grok
+connectors, MCP servers, plugins and skills to your bots, for everyone or
+for one bot. Other AI clients can send work to your bots through Sagax's own
+MCP server. ([engines](docs/custom-engines.md), [your MCP servers](docs/custom-mcp-servers.md),
 [Sagax as an MCP server](docs/mcp-server.md), [teams](docs/team-sharing.md))
+
+<p align="center">
+  <img src="docs/readme/model-menu.webp" alt="Animated: the model menu opens on Auto, the bot's model and the providers Claude and OpenAI, then lists the Claude models" width="560">
+</p>
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/models-light.png">
-  <img src="docs/readme/models-dark.png" alt="Settings, Models: the model and the backup of every bot in one table, and the defaults for new bots" width="100%">
-</picture>
-<p align="center"><sub>One table for every bot's model, with Auto model and the engines you already pay for.</sub></p>
+<img src="docs/readme/providers.png" alt="Settings, Providers: the Claude and OpenAI accounts the bots use, Add a provider, and other services such as web search and images" width="100%">
+<p align="center"><sub>Settings > Providers: the accounts your bots use.</sub></p>
 </td>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/connect-apps-light.png">
-  <img src="docs/readme/connect-apps-dark.png" alt="The Plugins panel: the connectors of your Claude account and of your Grok account, then the plugins recommended for you" width="100%">
-</picture>
-<p align="center"><sub>Your Claude and Grok connectors, served to every bot.</sub></p>
+<img src="docs/readme/connect-apps.png" alt="Connect Apps: apps recommended for you, then the connectors of your Claude account and of your Grok account" width="100%">
+<p align="center"><sub>Connect Apps: connectors, MCP servers, plugins and skills.</sub></p>
 </td>
 </tr>
 </table>
 
-### Pages, published by your bots
+### Pages and the Library
 
 A bot proposes a page in the conversation; you publish it or decline. A
 published page opens with a reading bar, Share and Download PDF, and a public
-link that needs no sign-in. Readers comment right in the page, in real time,
-suggest edits on Markdown pages, and the bot reads the comments and answers
-them. Files and artifacts live in each bot's Library, with earlier versions
-kept.
+link that needs no sign-in. Readers comment right in the page, and the bot
+reads the comments and answers them. Files, images, archives and pages live
+in each bot's Library, sorted by date, with earlier versions kept.
+
+<table>
+<tr>
+<td width="72%" valign="top">
+<img src="docs/readme/page.png" alt="A published page, a monthly report, with its reading bar: download, more, full screen and Share" width="100%">
+</td>
+<td width="28%" valign="top">
+<img src="docs/readme/library.png" alt="A bot's Library: files and pages of today, this week and older" width="100%">
+</td>
+</tr>
+</table>
+
+### Skills and memory
+
+Skills are instructions a bot loads when the task calls for them; they
+revise themselves and propose their changes in one click, and the slash
+menu of the composer lists them. Memory keeps what your bots learn as notes,
+by bot and by tier, with a map, tags and a quality view, and recalls by
+meaning, not only by words. ([memory](docs/memory.md))
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/page-light.png">
-    <img src="docs/readme/page-dark.png" alt="A published page, a monthly report, with its reading bar and a comment anchored in the text" width="900">
-  </picture>
+  <img src="docs/readme/memory.png" alt="Tools, Memory: all the notes the bots keep, with their bot, tier and date, and the lists and tiers on the right" width="900">
 </p>
 
-### Every bot gets a page, a panel and a computer
+### Voice and phone calls
 
-A bot's page fills the main area: its appearance on top, then clear rows
-that each open a sub-page (instructions, memory, skills, routines, library,
-sharing) and a Stats tab with usage by account, model, source and person
-over 7, 30 or 90 days. The panel beside the conversation keeps the live
-view: suggestions, the Coding tab with its pull requests, branches and
-connectors, routines, files and the screen. A bot's computer is an isolated
-Linux desktop on your machine (Local VM), your own computer through computer
-use, or an isolated server environment; idle environments hibernate on
-their own. Watch the screen live and take control at any time. Memory
-recalls by meaning, not only by words. ([computer use](docs/computer-use-integration.md),
-[server environments](docs/user-sandbox.md), [memory](docs/memory.md))
+Call a bot and talk: the bot stays the brain, with its tools, memory and
+approvals, and every sentence lands in the thread as a normal message.
+Settings > Voice picks who speaks and who listens, the microphone, and the
+key for live calls. Dictation and read-aloud work on the desktop and on iOS.
+With a phone line, people can call your bot or text it, and a text becomes a
+turn of your conversation; with **Reach me**, a bot asks its questions
+outside the app. ([voice](docs/voice-mode-xai.md), [Reach me](docs/reach-me.md))
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/bot-page-light.png">
-    <img src="docs/readme/bot-page-dark.png" alt="The page of the bot Pixel in the main area: its mascot and name on top, the General tab with rows for instructions, memory, skills and routines, and the Knowledge and Stats tabs" width="900">
-  </picture>
+  <img src="docs/readme/voice.png" alt="Settings, Voice: the bot's voice, speech to text, the microphone, and the advanced voice choices" width="900">
 </p>
 
+### The computer and unattended access
+
+A bot's computer is an isolated Linux desktop on your machine (Local VM),
+your own computer through computer use, or an isolated server environment;
+idle desktops stop on their own. Watch the screen live and take control at
+any time. Settings > Computer sets the bots' computer, the built-in browser,
+and whether bots share one desktop or get one each. **My devices** lists
+every Sagax install of yours, with bot access set per device, and
+unattended remote access keeps a computer reachable for its bots.
+([computer use](docs/computer-use-integration.md), [server environments](docs/user-sandbox.md),
+[remote sessions](docs/remote-sessions.md))
+
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/readme/bot-panel-light.png">
-    <img src="docs/readme/bot-panel-dark.png" alt="The bot panel of Pixel beside its conversation: a large mascot, suggestions, the coding task waiting for approval and a weekly routine" width="900">
-  </picture>
+  <img src="docs/readme/computer.png" alt="Settings, Computer: the bots' computer, the disk saver, the built-in browser, and the isolation choice between one shared desktop and one per bot" width="900">
+</p>
+
+### Groups and team rooms
+
+Mention a bot with `@` and it joins in; `stop @Bot` halts it. Give the group
+a goal and the bots work toward it in the group's own conversation. Linked
+to an organization, a room holds people and bots together, each person's
+turns run with that person's own access, and you can leave a group you were
+added to.
+
+<p align="center">
+  <img src="docs/readme/group.png" alt="A group named Launch room: the team lead bot Atlas reports the launch status, and the QA bot Scout answers when mentioned" width="900">
 </p>
 
 ### Vault, shopping and cards
@@ -233,83 +238,47 @@ recalls by meaning, not only by words. ([computer use](docs/computer-use-integra
 Logins, API keys and secure notes live in a vault on your system keychain;
 1Password works too, read only. A bot fills a login only after you allow it,
 for this turn only if you prefer, and a filled value never shows up in the
-prompt or the logs. Bots shop with cards in the chat, follow up on orders,
-and can pay with a one-time card from Shop Pay or Link. Phone calls and
-purchases show up as cards with a result.
+prompt or the logs. Bots shop with cards in the chat and follow up on
+orders; nothing is charged until you allow it.
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/vault-card-light.png">
-  <img src="docs/readme/vault-card-dark.png" alt="A sign-in request card: the bot asks to use a saved login, with the choice of a vault item and an Allow button" width="100%">
-</picture>
+<img src="docs/readme/vault-card.png" alt="A sign-in request card: the bot asks to use a saved login, with the choice of a vault item and This time or Always" width="100%">
 <p align="center"><sub>A bot asks before it signs in anywhere.</sub></p>
 </td>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/purchase-card-light.png">
-  <img src="docs/readme/purchase-card-dark.png" alt="A purchase card in the chat: what the bot wants to buy, the amount, and the buttons to approve or decline" width="100%">
-</picture>
+<img src="docs/readme/purchase-card.png" alt="A purchase card in the chat: what the bot wants to buy, the amount, and Pay, Always allow or Cancel" width="100%">
 <p align="center"><sub>Purchases wait on a card too.</sub></p>
 </td>
 </tr>
 </table>
 
-### iPhone, iPad and your watch
+### iPhone and iPad
 
 Follow work, answer approvals, call your bots and manage their routines from
-your phone. Each bot keeps the same single conversation as on the desktop.
-Notifications carry the bot's mascot, on the phone and on the watch, and a
-Live Activity can follow a running task from the lock screen (off by
-default). One tap opens every OS permission still missing.
-([iOS app](docs/ios-companion.md))
-
-<table>
-<tr>
-<td width="25%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/ios-iphone-02-home-approval-light.png">
-  <img src="docs/readme/ios-iphone-02-home-approval-dark.png" alt="iPhone home: the bot list by section with mascots, and an approval asked from the top of the screen, Scout needs you, with Allow and Deny" width="100%">
-</picture>
-</td>
-<td width="25%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/ios-iphone-03-chat-approval-light.png">
-  <img src="docs/readme/ios-iphone-03-chat-approval-dark.png" alt="iPhone conversation with Scout: the bot's reply and an approval card to publish a version, with Deny, Allow once and Always allow" width="100%">
-</picture>
-</td>
-<td width="25%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/ios-iphone-04-chat-page-light.png">
-  <img src="docs/readme/ios-iphone-04-chat-page-dark.png" alt="iPhone conversation with Atlas: a plan in bullet points, then a page card named Weekly plan with progress bars" width="100%">
-</picture>
-</td>
-<td width="25%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/ios-iphone-05-bot-profile-light.png">
-  <img src="docs/readme/ios-iphone-05-bot-profile-dark.png" alt="iPhone bot profile of Atlas: Coding, Routines, Library, Computer and Notifications" width="100%">
-</picture>
-</td>
-</tr>
-</table>
+your phone or tablet. Each bot keeps the same single conversation as on the
+desktop, and the iPad shows the desktop layout. Notifications carry the
+bot's mascot. ([iOS app](docs/ios-companion.md))
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/ios-ipad-01-chat-sidebar-light.png">
-  <img src="docs/readme/ios-ipad-01-chat-sidebar-dark.png" alt="iPad: the bot list beside a conversation with Atlas and a page card" width="100%">
-</picture>
+<img src="docs/readme/ios-iphone-home.png" alt="iPhone home: Atlas on top, then the bots with their owl and shape mascots and their last message" width="100%">
 </td>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme/ios-ipad-02-chat-approval-light.png">
-  <img src="docs/readme/ios-ipad-02-chat-approval-dark.png" alt="iPad: the bot list beside a conversation with Scout and its approval card" width="100%">
-</picture>
+<img src="docs/readme/ios-iphone-chat.png" alt="iPhone conversation with Pixel: the fix it made, and its approval card to push the branch, with Deny, Always allow and Allow once" width="100%">
 </td>
 </tr>
 </table>
+
+<p align="center">
+  <img src="docs/readme/ios-ipad-chat.png" alt="iPad in landscape: the bot list beside the conversation with Pixel and its approval card" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/readme/ios-ipad-panel.png" alt="iPad in landscape: the conversation with the bot Ledger and its panel, with its upcoming routines, suggestions, computer and voice" width="900">
+</p>
 
 ### And more
 
@@ -323,9 +292,6 @@ default). One tap opens every OS permission still missing.
   chat (what you asked, the error, the engine and model, the version), writes
   a precise GitHub issue with every name, address, ticket, path and secret
   replaced by a neutral word, shows you the exact text, and sends it.
-- **My devices.** Every Sagax install of yours, with bot access set per
-  device. Unattended remote access keeps a computer reachable for its bots.
-  ([remote sessions](docs/remote-sessions.md))
 - **Developer, when you need it.** MCP, tokens, webhooks, logs, embeddings,
   the working folder and zip export live in Settings > Developer, with
   OpenTelemetry traces, OTLP export and a usage stats API.
@@ -449,8 +415,11 @@ pnpm package:fork:mac   # macOS build into release/
 pnpm package:fork:win   # Windows build into release/
 ```
 
-The README's screenshots come from `node scripts/capture/readme-shots.mjs`,
-headless, on a fixture of invented bots.
+Every capture of this README comes from one command, `pnpm readme:shots`:
+the real app, headless, on a fixture of invented bots, in the Studio theme,
+plus the iPhone and iPad simulators paired with the same fixture
+(`scripts/capture/readme-shots.mjs`). `pnpm check:readme` fails when the
+README shows a file that is not in `docs/readme/`.
 
 ## Contributing
 

@@ -10,10 +10,21 @@ export type MacAppSetupId = (typeof MAC_APP_SETUP_IDS)[number];
 export const isMacAppSetupId = (value: unknown): value is MacAppSetupId =>
   typeof value === "string" && (MAC_APP_SETUP_IDS as readonly string[]).includes(value);
 
+/** One thing bots can do with an app (electron/mac-apps.mjs MAC_APP_TOOLS):
+ * the tool, its class, the permission it needs and whether it is granted. */
+export type MacAppSetupAction = {
+  tool: string;
+  kind: "read" | "write" | "delete" | "send";
+  needs: "automation" | "fullDiskAccess";
+  granted: boolean;
+};
+
 export type MacAppSetupRow = {
   id: MacAppSetupId;
   enabled: boolean;
   permissions: { automation: MessagesPermissionState; fullDiskAccess?: MessagesPermissionState };
+  /** Absent from an older desktop app. */
+  actions?: MacAppSetupAction[];
 };
 
 export type MacAppsSetupStatus = {
@@ -24,16 +35,6 @@ export type MacAppsSetupStatus = {
 };
 
 export type MacAppTestResult = { ok: boolean; error?: string; count: number; names: string[] };
-
-/** The bot tools each app gives (electron/mac-apps.mjs MAC_APP_TOOLS). */
-export const MAC_APP_SETUP_TOOLS: Record<MacAppSetupId, readonly string[]> = {
-  messages: ["mac_messages_read", "mac_messages_send"],
-  mail: ["mac_mail_search", "mac_mail_read", "mac_mail_send"],
-  calendar: ["mac_calendar_list", "mac_calendar_create"],
-  contacts: ["mac_contacts_search"],
-  reminders: ["mac_reminders_list", "mac_reminders_create"],
-  notes: ["mac_notes_search", "mac_notes_create"],
-};
 
 /** Where a setup page is: Plugins > This Mac > <app>. */
 export const macAppSubpage = (id: MacAppSetupId) => `mac-${id}` as const;

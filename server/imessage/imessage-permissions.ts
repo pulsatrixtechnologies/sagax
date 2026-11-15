@@ -14,8 +14,8 @@ import {
   type MessagesSetupTestResult,
 } from "../../shared/mac-messages-setup.ts";
 import type { MessagesHost } from "../../shared/imessage.ts";
-import { probeMacAppAutomation, requestMacAppAutomation } from "../../electron/mac-apps.mjs";
-import { openMessagesReader } from "./imessage-db.ts";
+import { DatabaseSync } from "node:sqlite";
+import { listChats, probeMacAppAutomation, requestMacAppAutomation } from "../../electron/mac-apps.mjs";
 import { readMessagesSettings } from "./imessage-settings.ts";
 
 export function messagesLibraryDir(home = homedir()): string {
@@ -41,13 +41,13 @@ export function probeFullDiskAccess(home = homedir()): MessagesPermissionState {
     }
   }
   try {
-    const opened = openMessagesReader(messagesLibraryDir(home));
+    const db = new DatabaseSync(file, { readOnly: true });
     try {
       // Opening alone is not enough: SQLite can open a garbage file. Require
       // the Messages chat table so corrupt or empty stubs count as denied.
-      opened.reader.findChats({ limit: 1 });
+      db.prepare("SELECT ROWID FROM chat LIMIT 1").all();
     } finally {
-      opened.close();
+      db.close();
     }
     return "granted";
   } catch {
@@ -83,26 +83,16 @@ export async function readMessagesPermissions(home = homedir()): Promise<Message
 }
 
 /** Recent conversation display names only. Never returns message text. */
-export function testMessagesConversationNames(home = homedir(), limit = 20): MessagesSetupTestResult {
+export async function testMessagesConversationNames(home = homedir(), limit = 20): Promise<MessagesSetupTestResult> {
   if (probeFullDiskAccess(home) !== "granted") {
     return { conversationCount: 0, names: [] };
   }
-  const opened = openMessagesReader(messagesLibraryDir(home));
-  try {
-    const chats = opened.reader.findChats({ limit });
-    const names = chats.map((chat) => {
-      const label = (chat.displayName ?? "").trim();
-      if (label) return label;
-      if (chat.handles[0]) return chat.handles[0];
-      return chat.identifier;
-    });
-    return {
-      conversationCount: names.length,
-      names: names.slice(0, 8),
-    };
-  } finally {
-    opened.close();
-  }
+  const chats = await listChats(messagesLibraryDir(home), { limit }) as Array<{ name: string | null; members: string[] }>;
+  const names = chats.map((chat) => (chat.name ?? "").trim() || chat.members[0] || "").filter(Boolean);
+  return {
+    conversationCount: names.length,
+    names: names.slice(0, 8),
+  };
 }
 
 export async function buildMessagesSetupStatus(input: {

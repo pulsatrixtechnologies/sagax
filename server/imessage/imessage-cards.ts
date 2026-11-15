@@ -1,26 +1,21 @@
-// A send that is not on the bot's allowed-recipient list waits on a card.
-// The pending text lives in this process only. A restart drops it. The
+// An Apple app write (a Messages send included) that waits on a card.
+// The pending call lives in this process only. A restart drops it. The
 // card in the conversation then answers that the send expired.
 import { randomBytes } from "node:crypto";
 
-import { IMESSAGE_REQUEST_PREFIX, type MessageService } from "../../shared/imessage.ts";
+import { IMESSAGE_REQUEST_PREFIX } from "../../shared/imessage.ts";
 
 export type PendingImessage = {
   requestId: string;
   threadId: string;
   botId: string;
   messageId?: string;
+  /** The card line: the verb and its target, never the content. */
   to: string;
-  text: string;
-  service: MessageService;
-  /** Basename only, for the card. The path stays in `file`. */
-  fileName?: string;
-  /** Absolute path inside the bot's folder. Never written on the card. */
-  file?: string;
-  /** An Apple app write (mac_mail_send, mac_calendar_create...) waiting on
-   * the card instead of a Messages send: the tool and its bounded arguments. */
-  /** `person`: organization server, the person whose Mac runs it (relay). */
-  macApp?: { tool: string; args: Record<string, unknown>; person?: string };
+  /** The tool (mac_messages_send, mac_mail_send, mac_calendar_create...) and
+   * its bounded arguments. `person`: organization server, the person whose
+   * Mac runs it (relay). */
+  macApp: { tool: string; args: Record<string, unknown>; person?: string };
 };
 
 const pending = new Map<string, PendingImessage>();

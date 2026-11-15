@@ -315,6 +315,38 @@ test("the connector registers as the signed-in person and answers a job", async 
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+test("#4158: a Mac reports its On apps with the mac_* tools this app runs for them", async () => {
+  const seen = { report: null };
+  const server = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const send = value => { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(value)); };
+    if (req.url === "/api/auth/session") return send({ kind: "session", identity: "perspicax" });
+    if (req.url === "/api/me/preferences") return send({ preferences: {} });
+    if (req.url === "/api/desktop-bridge/connect") return send({ ok: true });
+    if (req.url.endsWith("/mac-apps")) { seen.report = JSON.parse(body); return send({ ok: true }); }
+    if (req.url.endsWith("/poll")) { await new Promise(resolve => setTimeout(resolve, 200)); return send({ job: null }); }
+    res.statusCode = 404; send({});
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const home = sandboxHome();
+  const bridge = createDesktopBridge({
+    environment: () => ({ id: "org", name: "Example", origin }), fetch: globalThis.fetch, cookieHeader: async () => "",
+    home, attachmentsDir: path.join(home, "tmp"), protectedPaths: [path.join(home, "app-data")], activityFile: path.join(home, "app-data", "bridge-activity.jsonl"),
+    WebSocketImpl: null, hostname: "Ada-Mac", platform: "darwin", retryMs: 50,
+    macApp: async () => ({ content: [{ type: "text", text: "ok" }] }), macAppsOn: () => ["notes"],
+  });
+  bridge.sync();
+  for (let tries = 0; tries < 100 && !seen.report; tries++) await new Promise(resolve => setTimeout(resolve, 30));
+  bridge.close();
+  server.close();
+  assert.deepEqual(seen.report.on, ["notes"]);
+  assert.ok(seen.report.tools.includes("mac_notes_update"));
+  assert.ok(seen.report.tools.every((name) => name.startsWith("mac_notes_")));
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 // ── system proxies: HTTP, SOCKS5 (with and without auth), SOCKS4a, PAC ──
 
 test("the system's proxy answer (PAC result) becomes the routes to try, in order", () => {

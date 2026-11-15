@@ -2732,12 +2732,15 @@ function desktopBridgeLocalModelKeys() {
 }
 
 function desktopBridge() {
+  // The bridge's attachments folder: files the server stages for this Mac,
+  // and attachments an Apple app read saves for the server to read back.
+  const attachmentsDir = path.join(app.getPath("temp"), "Sagax", "attachments");
   desktopBridgeConnector ??= createDesktopBridge({
     environment: () => serverModeEnvironment(environmentsState),
     // main's own calls never go through the bundled-UI handler (bundled-ui.cjs)
     fetch: (url, init) => session.defaultSession.fetch(url, { ...init, bypassCustomProtocolHandlers: true }),
     cookieHeader: async (origin) => (await session.defaultSession.cookies.get({ url: origin })).map((cookie) => `${cookie.name}=${cookie.value}`).join("; "),
-    attachmentsDir: path.join(app.getPath("temp"), "Sagax", "attachments"),
+    attachmentsDir,
     // The app's own data (its cookies and grants) and the harness data dir
     // never pass through the bridge; the person's credential stores neither.
     protectedPaths: [app.getPath("userData"), desktopDataDir()],
@@ -2760,7 +2763,7 @@ function desktopBridge() {
       if (!appId || !macAppEnabled(app.getPath("userData"), appId)) {
         return { content: [{ type: "text", text: `${appId ?? "This app"} is off on this Mac. The person turns it on in Connect Apps > This Mac.` }], isError: true };
       }
-      return runMacAppCall(toolName, args, { signal });
+      return runMacAppCall(toolName, args, { signal, saveDir: attachmentsDir, filesDir: attachmentsDir });
     },
     macAppsOn: () => MAC_APP_IDS.filter((id) => macAppEnabled(app.getPath("userData"), id)),
     browse: bridgeBrowse,

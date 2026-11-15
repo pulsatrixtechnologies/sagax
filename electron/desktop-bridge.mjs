@@ -28,7 +28,7 @@ import { loginShellArgv, openBridgeTerminal } from "./desktop-terminal.mjs";
 import { createLocalVm } from "./local-vm.mjs";
 import { archiveKind, extractArchive, extractedFolderName } from "./archive-extract.mjs";
 import { executeLocalModel, normalizeLoopbackBase, probeLoopbackCatalog } from "./local-models.mjs";
-import { isMacAppTool, macAppTarget } from "./mac-apps.mjs";
+import { MAC_APP_TOOLS, isMacAppTool, macAppTarget } from "./mac-apps.mjs";
 
 export { createLocalVm };
 
@@ -708,8 +708,12 @@ export function createDesktopBridge({
           const reportMacApps = async () => {
             if (!macAppsOn || platform !== "darwin") return;
             try {
-              const on = macAppsOn();
-              await request(env, `/api/desktop-bridge/${id}/mac-apps`, { on: Array.isArray(on) ? on : [] }, live, secret);
+              const raw = macAppsOn();
+              const on = Array.isArray(raw) ? raw : [];
+              // The tools this app runs for those apps: the server lists only
+              // these (a desktop that sends none gets the older 12).
+              const tools = MAC_APP_TOOLS.filter((tool) => on.includes(tool.app)).map((tool) => tool.name);
+              await request(env, `/api/desktop-bridge/${id}/mac-apps`, { on, tools }, live, secret);
             } catch { /* optional */ }
           };
           pushMacApps = reportMacApps;

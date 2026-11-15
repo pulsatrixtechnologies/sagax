@@ -3,6 +3,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { relayMacAppCall } from "../desktop/desktop-bridge-tools.ts";
+import { macAppRelayFiles } from "../imessage/mac-app-files.ts";
 import { messagesOnBotMac } from "../../shared/imessage.ts";
 import type { MacAppId, MacAppToolResult } from "../../electron/mac-apps.mjs";
 import type { InternalRouteContext } from "./internal-route.ts";
@@ -29,10 +30,13 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
   const relayPerson = capability.desktopPrincipalId
     && !messagesOnBotMac({ platform: deps.platform(), identityKind: deps.identityKind() }).ok
     ? capability.desktopPrincipalId : null;
+  // A read_attachment tool saves into this conversation's folder.
+  const saveDir = join(deps.taskWorkspacesDir(), sender.id, capability.threadId);
   const relayMacApps = relayPerson ? {
     macApps: {
       enabled: (app: MacAppId) => (deps.desktopBridgeMacAppsOn?.(relayPerson) ?? []).includes(app),
-      run: (tool: string, args: Record<string, unknown>) => relayMacAppCall(async (operation) => {
+      tools: () => deps.desktopBridgeMacAppTools?.(relayPerson) ?? null,
+      run: (tool: string, args: Record<string, unknown>, context?: { saveDir?: string }) => relayMacAppCall(async (operation) => {
         const detail = `mac_app ${tool}`;
         try {
           const answer = await deps.desktopBridgesRequest(relayPerson, operation, () => deps.isActive(capability), undefined, { botId: capability.botId, threadId: capability.threadId });
@@ -42,7 +46,7 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
           deps.bridgeAuditRecord({ person: relayPerson, botId: capability.botId, threadId: capability.threadId, target: "user-desktop", kind: "tool", detail, ok: false, error: (error as Error).message });
           throw error;
         }
-      }, tool, args) as Promise<MacAppToolResult>,
+      }, tool, args, macAppRelayFiles(context?.saveDir ?? null)) as Promise<MacAppToolResult>,
       unasked,
       kept,
       relay: { person: relayPerson },
@@ -54,7 +58,8 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
     dbDir: messagesOnBotMac({ platform: deps.platform(), identityKind: deps.identityKind() }).ok
       ? join(homedir(), "Library", "Messages")
       : null,
-    filesRoots: [deps.workspaceDir(sender.id), join(deps.taskWorkspacesDir(), sender.id, capability.threadId)],
+    filesRoots: [deps.workspaceDir(sender.id), saveDir],
+    saveDir,
     allowedRecipients: sender.allowedRecipients,
     grantsAllowed: deps.standingGrantsAllowed(),
     stepUp: (args) => deps.autoAnswerStepUp(sender, capability.threadId, {
@@ -62,66 +67,36 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
       input: JSON.stringify(args),
       summary: "Send a message",
     }).length > 0,
-    sender: deps.imessageSender as never,
     botId: sender.id,
     threadId: capability.threadId,
     ...(relayMacApps ?? (deps.macAppEnabled && deps.runMacApp ? {
       macApps: {
         enabled: (app: MacAppId) => deps.macAppEnabled!(app),
-        run: (tool: string, args: Record<string, unknown>) => deps.runMacApp!(tool, args),
+        run: (tool: string, args: Record<string, unknown>, context?: { saveDir?: string }) => deps.runMacApp!(tool, args, context),
         unasked,
         // Always allow on the card keeps this rule; kept, the write acts unasked.
         kept,
       },
     } : {})),
     openCard: (pending) => {
-      if (pending.macApp) {
-        // An Apple app write (Mail, Calendar, Reminders, Notes) in Ask mode;
-        // Auto and Full act unasked (macApps.unasked). full-access: send
-        const message = deps.appendMessage(capability.threadId, {
-          role: "bot",
-          kind: "options",
-          from: { botId: sender.id, name: sender.name, color: sender.color },
-          card: {
-            title: "Approval needed",
-            subtitle: pending.to,
-            options: ["Allow", "Deny"],
-            requestId: pending.requestId,
-            // full-access: send
-            requestType: "permission",
-            tool: pending.macApp.tool,
-            toolInput: JSON.stringify(pending.macApp.args),
-            plain: { title: pending.to, line: pending.macApp.tool, risk: "write" },
-            // Always allow keeps this Apple app action for the bot (#2091).
-            ownerRule: macAppRule(pending.macApp.tool),
-          },
-        });
-        deps.bindImessageMessage(pending.requestId, message.id);
-        return;
-      }
-      const preview = pending.text.length > 240 ? `${pending.text.slice(0, 240)}...` : pending.text;
-      const line = pending.fileName ? `${preview ? `${preview} ` : ""}File: ${pending.fileName}` : preview;
-      // an iMessage send's card, below Full only (imessage-cards.ts
-      // reads the bot's level through its deps); full-access: send
+      // An Apple app write (a Messages send included) in Ask mode; Auto and
+      // Full act unasked (macApps.unasked). full-access: send
       const message = deps.appendMessage(capability.threadId, {
         role: "bot",
         kind: "options",
         from: { botId: sender.id, name: sender.name, color: sender.color },
         card: {
           title: "Approval needed",
-          subtitle: `Message to ${pending.to}: ${line}`,
+          subtitle: pending.to,
           options: ["Allow", "Deny"],
           requestId: pending.requestId,
           // full-access: send
           requestType: "permission",
-          tool: "send_message",
-          toolInput: JSON.stringify({
-            to: pending.to,
-            text: pending.text,
-            service: pending.service,
-            ...(pending.fileName ? { file: pending.fileName } : {}),
-          }),
-          plain: { title: `Message to ${pending.to}`, line, risk: "write" },
+          tool: pending.macApp.tool,
+          toolInput: JSON.stringify(pending.macApp.args),
+          plain: { title: pending.to, line: pending.macApp.tool, risk: "write" },
+          // Always allow keeps this Apple app action for the bot (#2091).
+          ownerRule: macAppRule(pending.macApp.tool),
         },
       });
       deps.bindImessageMessage(pending.requestId, message.id);

@@ -31,14 +31,6 @@ export const MESSAGES_SEND_MCP_NAME = `mcp__${MESSAGES_MCP_SERVER}__${MESSAGES_S
 
 export const IMESSAGE_REQUEST_PREFIX = "imsg-";
 
-export type MessageService = "iMessage" | "SMS" | "auto";
-
-const SERVICES = new Set<MessageService>(["iMessage", "SMS", "auto"]);
-
-export function messageService(value: unknown): MessageService {
-  return typeof value === "string" && SERVICES.has(value as MessageService) ? value as MessageService : "auto";
-}
-
 /** A 1:1 chat guid (`iMessage;-;+15145551234`). A group guid is null. */
 export function handleFromChatGuid(chatId: string): { service: "iMessage" | "SMS"; handle: string } | null {
   const match = /^(iMessage|SMS);[-+];([^;]+)$/.exec(chatId.trim());
@@ -46,29 +38,4 @@ export function handleFromChatGuid(chatId: string): { service: "iMessage" | "SMS
   const handle = match[2]!.trim();
   if (!handle || handle.includes(",") || handle.length > 200) return null;
   return { service: match[1] as "iMessage" | "SMS", handle };
-}
-
-export type SendPlan =
-  | { action: "send"; to: string; service: "iMessage" | "SMS" | "auto" }
-  | { action: "card"; to: string; service: "iMessage" | "SMS" | "auto" }
-  | { action: "refuse"; reason: "group" | "empty" | "invalid" };
-
-/** Listed recipients send. Everyone else is a card. A group chat is refused. */
-export function planImessageSend(input: {
-  to?: string;
-  chatId?: string;
-  service?: MessageService;
-  listed: boolean;
-}): SendPlan {
-  if (input.chatId?.trim()) {
-    const parsed = handleFromChatGuid(input.chatId);
-    if (!parsed) return { action: "refuse", reason: "group" };
-    return input.listed
-      ? { action: "send", to: parsed.handle, service: parsed.service }
-      : { action: "card", to: parsed.handle, service: parsed.service };
-  }
-  const to = input.to?.trim() ?? "";
-  if (!to || to.length > 200) return { action: "refuse", reason: "invalid" };
-  const service = input.service && input.service !== "auto" ? input.service : "auto";
-  return input.listed ? { action: "send", to, service } : { action: "card", to, service };
 }

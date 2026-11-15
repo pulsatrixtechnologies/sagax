@@ -72,7 +72,7 @@ export function createMessagesRoutes(deps: MessagesRoutesDeps): RouteHandler {
       }
       let result;
       try {
-        result = testMessagesConversationNames();
+        result = await testMessagesConversationNames();
       } catch (cause) {
         // A read error is not a permission refusal: say what failed.
         return json(res, 500, { error: messagesReadErrorText(cause), code: "messages_read_failed" });

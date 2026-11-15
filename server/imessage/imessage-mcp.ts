@@ -1,6 +1,15 @@
-// Messages tools for one turn. Reads and sends happen here, on the solo
-// Mac process. A send to someone who is not on the bot's allowed list
-// becomes a card and does not call the sender.
+// Messages and the other Apple apps of the person's Mac (mac_* tools) for one
+// turn. Solo: they run in this process, on this Mac. Organization server:
+// they run on the person's own Mac through their desktop app (relay). Every
+// Messages send takes one path (the Messages script) and one recipient
+// check: a listed recipient, or a group whose every member is listed, sends;
+// anyone else follows the bot's level like every other write.
+//
+// The older Messages names of the solo set (find_chats, read_messages,
+// search_messages, read_attachment, send_message, check_permissions) are no
+// longer listed: a call to one is answered by its mac_messages_ tool, so a
+// routine that names it keeps working, and chat.db has one reader
+// (electron/mac-apps.mjs).
 import { statSync } from "node:fs";
 import { basename } from "node:path";
 
@@ -9,22 +18,29 @@ import {
   MESSAGES_SEND_MCP_NAME,
   MESSAGES_SEND_TOOL,
   handleFromChatGuid,
-  messageService,
   messagesOnBotMac,
-  planImessageSend,
   type MessagesHost,
-  type MessageService,
 } from "../../shared/imessage.ts";
 import { stageImessageSend, type PendingImessage } from "./imessage-cards.ts";
-import { fileInsideRoots, messagesDbPresent, openMessagesReader, type MessageRow } from "./imessage-db.ts";
+import { fileInsideRoots } from "./imessage-db.ts";
 import { probeFullDiskAccess } from "./imessage-permissions.ts";
-import type { ImessageSender } from "./imessage-send.ts";
-import { MAC_APP_TOOLS, isMacAppTool, macAppOfTool, macAppOperation, macAppTarget, macAppToolWrites, type MacAppId, type MacAppToolResult } from "../../electron/mac-apps.mjs";
+import {
+  MAC_APP_TOOLS,
+  MAC_APP_UPDATE_DESKTOP,
+  isMacAppTool,
+  listChats,
+  macAppLegacyCall,
+  macAppOfTool,
+  macAppOperation,
+  macAppTarget,
+  macAppToolWrites,
+  macAppToolsFor,
+  type MacAppId,
+  type MacAppToolResult,
+} from "../../electron/mac-apps.mjs";
 
-const SEND_FILE_MAX_BYTES = 8_000_000;
-const MESSAGES_NEEDS_FULL_DISK = "Messages could not be read. Sagax needs Full Disk Access on this Mac.";
-/** What SQLite and the file system say when macOS refuses chat.db to this app. */
-const MESSAGES_ACCESS_REFUSED = /\bunable to open database file\b|\bauthori[sz]ation denied\b|\boperation not permitted\b|\bpermission denied\b|\bSQLITE_(?:CANTOPEN|AUTH|PERM)\b|\bEPERM\b|\bEACCES\b/i;
+/** A file to attach, as every mac_* tool takes it (the design's ceiling). */
+const FILE_MAX_BYTES = 25 * 1024 * 1024;
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 
@@ -32,76 +48,6 @@ const text = (value: unknown, isError = false): ToolResult => ({
   content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
   ...(isError ? { isError: true } : {}),
 });
-
-const TOOLS = [
-  {
-    name: "check_permissions",
-    description: "Whether this Mac can read Messages (Full Disk Access). Does not open System Settings and does not launch Messages.",
-    inputSchema: { type: "object", properties: {} },
-  },
-  {
-    name: "find_chats",
-    description: "List recent Messages chats on this Mac. Optional displayName or handle, and a limit.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        displayName: { type: "string" },
-        handle: { type: "string" },
-        limit: { type: "integer", minimum: 1, maximum: 50 },
-      },
-    },
-  },
-  {
-    name: "read_messages",
-    description: "Read recent messages in one chat. chatGuid comes from find_chats. An image attachment is named here; its bytes come from read_attachment.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        chatGuid: { type: "string" },
-        limit: { type: "integer", minimum: 1, maximum: 100 },
-      },
-      required: ["chatGuid"],
-    },
-  },
-  {
-    name: "search_messages",
-    description: "Search message text on this Mac.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        needle: { type: "string" },
-        limit: { type: "integer", minimum: 1, maximum: 100 },
-      },
-      required: ["needle"],
-    },
-  },
-  {
-    name: "read_attachment",
-    description: "Read one image attached to a message. messageGuid and attachmentId come from read_messages. Only an image inside the Messages folder, up to 1.5 MB. The path is not returned.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        messageGuid: { type: "string" },
-        attachmentId: { type: "integer" },
-      },
-      required: ["messageGuid", "attachmentId"],
-    },
-  },
-  {
-    name: MESSAGES_SEND_TOOL,
-    description: "Send one iMessage or SMS to one person on this Mac. Someone who is not on this bot's allowed recipients is not contacted: a card is posted instead. Group chats are refused. A file is sent only from this bot's folder, by iMessage, and only after the same card when the recipient is not listed.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        to: { type: "string", description: "Phone number or email of one person." },
-        chatId: { type: "string", description: "A 1:1 chat guid from find_chats. Groups are refused." },
-        text: { type: "string" },
-        file: { type: "string", description: "A file in this bot's folder. iMessage only." },
-        service: { type: "string", enum: ["iMessage", "SMS", "auto"] },
-      },
-    },
-  },
-] as const;
 
 export type MessagesMcpDeps = {
   host: MessagesHost;
@@ -116,16 +62,20 @@ export type MessagesMcpDeps = {
   grantsAllowed?: boolean;
   /** A class protected by a security key: keep the card even when listed. */
   stepUp?: (args: Record<string, unknown>) => boolean;
-  sender: ImessageSender;
+  /** The members (phone numbers or emails) of a conversation by its chat id.
+   * Default: read from chat.db (solo) or from the person's Mac (relay). */
+  chatMembers?: (chat: string) => Promise<string[]>;
+  /** This conversation's folder: where a read_attachment tool saves a file. */
+  saveDir?: string;
   botId: string;
   threadId: string;
   openCard: (pending: PendingImessage) => void;
-  /** The other Apple apps of this Mac (Mail, Calendar, Contacts, Reminders,
-   * Notes) and mac_messages_read, run in this process (electron/mac-apps.mjs). */
+  /** The Apple apps of the person's Mac (Messages, Mail, Calendar, Contacts,
+   * Reminders, Notes), run by electron/mac-apps.mjs. */
   macApps?: {
     /** The app's On/Off switch on its setup page. */
     enabled: (app: MacAppId) => boolean;
-    run: (tool: string, args: Record<string, unknown>) => Promise<MacAppToolResult>;
+    run: (tool: string, args: Record<string, unknown>, context?: { saveDir?: string }) => Promise<MacAppToolResult>;
     /** The bot's approval mode acts without asking (auto, full). */
     unasked: boolean;
     /** Always allow kept a rule for this write: it acts unasked. */
@@ -135,25 +85,15 @@ export type MessagesMcpDeps = {
      * `enabled` is what that Mac last reported, Messages included; an
      * offline Mac keeps the tools listed and `run` says it is offline. */
     relay?: { person: string };
+    /** Relay: the mac_* tools the person's Mac said it runs; null for an
+     * older desktop app, which runs its 12 tools only. */
+    tools?: () => readonly string[] | null;
   };
 };
 
-function view(row: MessageRow) {
-  return {
-    guid: row.guid,
-    chatGuid: row.chatGuid,
-    date: row.date,
-    fromMe: row.fromMe,
-    ...(row.handle ? { handle: row.handle } : {}),
-    service: row.service,
-    text: row.text,
-    ...(row.fallback ? { fallback: true } : {}),
-    ...(row.attachments.length ? { attachments: row.attachments } : {}),
-  };
-}
-
-function sendFile(deps: MessagesMcpDeps, raw: unknown): { path: string; name: string } | { error: string } | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
+/** A file from the bot's folders, as an absolute path, or why not. */
+function botFile(deps: MessagesMcpDeps, raw: unknown): { path: string; name: string } | { error: string } {
+  if (typeof raw !== "string" || !raw.trim()) return { error: "Give a file's path in this bot's folder. Nothing was sent." };
   const roots = deps.filesRoots ?? [];
   if (!roots.length) return { error: "A file is sent only from this bot's folder. Nothing was sent." };
   const inside = fileInsideRoots(roots, raw);
@@ -166,84 +106,53 @@ function sendFile(deps: MessagesMcpDeps, raw: unknown): { path: string; name: st
   } catch {
     return { error: "That file could not be read. Nothing was sent." };
   }
-  if (size > SEND_FILE_MAX_BYTES) return { error: "That file is over 8 MB. Nothing was sent." };
+  if (size > FILE_MAX_BYTES) return { error: "That file is over 25 MB. Nothing was sent." };
   const name = basename(inside).slice(0, 200);
   if (!name || name === "." || name === "..") return { error: "That file has no name. Nothing was sent." };
   return { path: inside, name };
 }
 
-function withReader<T>(deps: MessagesMcpDeps, run: (reader: ReturnType<typeof openMessagesReader>["reader"]) => T): T | ToolResult {
-  if (!deps.useMessages) return text("Messages is off. The person turns it on in Settings > Computer > Messages.", true);
-  if (!messagesOnBotMac(deps.host).ok) return text("Messages runs only on the Mac where this Sagax app runs, not from a server and not through another Mac.", true);
-  if (!deps.dbDir || !messagesDbPresent(deps.dbDir)) return text(MESSAGES_NEEDS_FULL_DISK, true);
-  let opened: ReturnType<typeof openMessagesReader> | null = null;
-  try {
-    opened = openMessagesReader(deps.dbDir);
-    return run(opened.reader);
-  } catch (error) {
-    // #2690: Full Disk Access revoked while chat.db still exists: SQLite
-    // refuses the open ("unable to open database file", "authorization
-    // denied"). Say the one sentence the reconnect card is raised on.
-    const said = error instanceof Error ? error.message : "";
-    return text(MESSAGES_ACCESS_REFUSED.test(said) ? MESSAGES_NEEDS_FULL_DISK : said || "Messages could not be read.", true);
-  } finally {
-    opened?.close();
+type ChatInfo = { name: string | null; members: string[] };
+
+/** A conversation's name and members by its chat id: from chat.db here
+ * (solo), or from the person's Mac (relay). Null when it cannot be read. */
+async function chatInfoOf(deps: MessagesMcpDeps, chat: string): Promise<ChatInfo | null> {
+  if (deps.chatMembers) return { name: null, members: await deps.chatMembers(chat) };
+  const ident = chat.split(";").pop() ?? chat;
+  let rows: Array<{ chat: string; name: string | null; members: string[] }>;
+  if (deps.macApps?.relay) {
+    if (!macAppOffered(deps, "mac_messages_list_chats")) return null;
+    const answer = await deps.macApps.run("mac_messages_list_chats", { query: ident, limit: 50 });
+    if (answer.isError) return null;
+    try { rows = (JSON.parse(answer.content[0]?.text ?? "{}") as { chats?: typeof rows }).chats ?? []; } catch { return null; }
+  } else {
+    if (!deps.dbDir) return null;
+    rows = await listChats(deps.dbDir, { query: ident, limit: 50 }) as typeof rows;
   }
+  const row = rows.find((item) => item.chat === chat);
+  return row ? { name: row.name ?? null, members: Array.isArray(row.members) ? row.members : [] } : null;
 }
 
-function listed(deps: MessagesMcpDeps, args: Record<string, unknown>): boolean {
-  if (deps.grantsAllowed === false || deps.stepUp?.(args)) return false;
-  // A chat guid is not a recipient the list can vouch for. A 1:1 guid
-  // names one handle, and that handle is what the list is checked against.
-  let to = typeof args.to === "string" ? args.to : "";
-  if (!to.trim() && typeof args.chatId === "string") to = handleFromChatGuid(args.chatId)?.handle ?? "";
-  if (!to.trim()) return false;
-  return sendRecipientsAllowed(deps.allowedRecipients, MESSAGES_SEND_MCP_NAME, { to, text: args.text, service: args.service });
+/** The one recipient check of every Messages send: it is listed when each
+ * person it reaches is on the bot's allowed recipients. A phone number or
+ * email (to), a one-to-one conversation by its handle, a group by every
+ * member (none read: not listed). */
+function sendListed(deps: MessagesMcpDeps, op: Record<string, unknown>, info: ChatInfo | null): boolean {
+  if (deps.grantsAllowed === false || deps.stepUp?.(op)) return false;
+  let people: string[];
+  if (typeof op.chat === "string") {
+    // Messages marks a group guid with ";+;" and a one-to-one with ";-;".
+    const single = /^[^;]+;\+;/.test(op.chat.trim()) ? null : handleFromChatGuid(op.chat);
+    people = single ? [single.handle] : info?.members ?? [];
+  } else {
+    people = typeof op.to === "string" && op.to.trim() ? [op.to] : [];
+  }
+  return people.length > 0
+    && people.every((to) => sendRecipientsAllowed(deps.allowedRecipients, MESSAGES_SEND_MCP_NAME, { to, text: op.text, service: op.service }));
 }
 
-async function send(deps: MessagesMcpDeps, args: Record<string, unknown>): Promise<ToolResult> {
-  const gate = messagesOnBotMac(deps.host);
-  if (!gate.ok) return text("Messages runs only on the Mac where this Sagax app runs.", true);
-  if (!deps.useMessages) return text("Messages is off. Nothing was sent.", true);
-  const body = typeof args.text === "string" ? args.text : "";
-  const file = sendFile(deps, args.file);
-  if (file && "error" in file) return text(file.error, true);
-  if (file && messageService(args.service) === "SMS") return text("A file goes by iMessage, not SMS. Nothing was sent.", true);
-  if ((!body.trim() && !file) || body.length > 4_000 || body.includes("\u0000")) {
-    return text("The message must be 1 to 4000 characters, or a file from this bot's folder.", true);
-  }
-  const plan = planImessageSend({
-    to: typeof args.to === "string" ? args.to : undefined,
-    chatId: typeof args.chatId === "string" ? args.chatId : undefined,
-    service: messageService(args.service),
-    listed: listed(deps, args),
-  });
-  if (plan.action === "refuse") {
-    return text(plan.reason === "group"
-      ? "That chat is a group. Name one phone number or email. Nothing was sent."
-      : "Name one phone number or email. Nothing was sent.", true);
-  }
-  if (file && plan.service === "SMS") return text("A file goes by iMessage, not SMS. Nothing was sent.", true);
-  if (plan.action === "card") {
-    const pending = stageImessageSend({
-      threadId: deps.threadId,
-      botId: deps.botId,
-      to: plan.to,
-      text: body,
-      service: file ? "iMessage" : plan.service,
-      ...(file ? { file: file.path, fileName: file.name } : {}),
-    });
-    deps.openCard(pending);
-    return text(`Not sent. An approval card is in the conversation for ${plan.to}. Wait for the person. Do not send it again.`);
-  }
-  const service: MessageService = file ? "iMessage" : plan.service;
-  try {
-    const sent = await deps.sender.send({ to: plan.to, text: body, service, ...(file ? { file: file.path } : {}) });
-    return text({ sent: true, to: plan.to, service: sent.service, via: sent.via, ...(file ? { file: file.name } : {}) });
-  } catch (error) {
-    return text(error instanceof Error ? error.message : "Messages did not send.", true);
-  }
-}
+/** The card line's name for a conversation: its name, else its members. */
+const chatLabel = (info: ChatInfo | null): string | undefined => info?.name?.trim() || (info?.members.length ? info.members.join(", ") : undefined);
 
 function macAppOn(deps: MessagesMcpDeps, app: MacAppId): boolean {
   if (deps.macApps?.relay) return deps.macApps.enabled(app);
@@ -256,31 +165,55 @@ function macAppsReachable(deps: MessagesMcpDeps): boolean {
   return Boolean(deps.macApps && (deps.macApps.relay || messagesOnBotMac(deps.host).ok));
 }
 
-/** The mac_* tools of the apps the person turned on. */
-function macAppTools(deps: MessagesMcpDeps) {
-  if (!macAppsReachable(deps)) return [];
-  return MAC_APP_TOOLS.filter((tool) => macAppOn(deps, tool.app)).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+/** Relay: what the person's Mac reported it runs (null: an older desktop app). */
+const reportedTools = (deps: MessagesMcpDeps): readonly string[] | null => (deps.macApps?.relay ? deps.macApps.tools?.() ?? null : MAC_APP_TOOLS.map((tool) => tool.name));
+
+/** Whether the person's Mac runs this tool (always, in solo). */
+function macAppOffered(deps: MessagesMcpDeps, name: string, args?: Record<string, unknown>): boolean {
+  const reported = reportedTools(deps);
+  return reported ? reported.includes(name) : macAppLegacyCall(name, args ?? {});
 }
 
-async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<string, unknown>): Promise<ToolResult> {
+/** The mac_* tools of the apps the person turned on, as their Mac runs them. */
+function macAppTools(deps: MessagesMcpDeps) {
+  if (!macAppsReachable(deps)) return [];
+  return macAppToolsFor(reportedTools(deps)).filter((tool) => macAppOn(deps, tool.app as MacAppId)).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+}
+
+async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<string, unknown>, extra: Record<string, unknown> = {}): Promise<ToolResult> {
   const app = macAppOfTool(name)!;
-  if (!deps.macApps || !macAppsReachable(deps)) return text("The Apple apps run only on the Mac where this Sagax app runs.", true);
-  if (!macAppOn(deps, app)) return text(`${app[0]!.toUpperCase()}${app.slice(1)} is off in Connect Apps > This Mac. Nothing was done.`, true);
-  const relay = deps.macApps.relay;
-  // The Messages send keeps its recipient list and card (send above). Through
-  // the relay, a listed recipient goes unasked; anyone else gets the card.
-  if (name === "mac_messages_send" && !relay) return send(deps, { to: args.to, text: args.text });
+  const relay = deps.macApps?.relay;
+  // An older Sagax app on the person's Mac runs its 12 tools only, with their
+  // fields: anything else is never sent to it.
+  if (relay && !macAppOffered(deps, name, args)) return text(MAC_APP_UPDATE_DESKTOP, true);
   let op: Record<string, unknown>;
   try { op = macAppOperation(name, args); } catch (error) { return text(error instanceof Error ? error.message : String(error), true); }
-  const listedRecipient = name === "mac_messages_send" && listed(deps, { to: args.to, text: args.text });
-  // A write follows the bot's approval mode: Ask shows a card, Auto and Full act.
+  // Files come only from the bot's folders, checked here, before any card.
+  if (Array.isArray(op.files)) {
+    const paths: string[] = [];
+    for (const raw of op.files) {
+      const file = botFile(deps, raw);
+      if ("error" in file) return text(file.error, true);
+      paths.push(file.path);
+    }
+    op = { ...op, files: paths };
+  }
+  const intoChat = typeof op.chat === "string";
+  if (!deps.macApps || !macAppsReachable(deps)) return text("The Apple apps run only on the Mac where this Sagax app runs.", true);
+  if (!macAppOn(deps, app)) return text(`${app[0]!.toUpperCase()}${app.slice(1)} is off in Connect Apps > This Mac. Nothing was done.`, true);
+  if (name.endsWith("_read_attachment")) {
+    if (!deps.saveDir) return text("There is no folder to save the attachment in here.", true);
+    return deps.macApps.run(name, { ...op, ...extra }, { saveDir: deps.saveDir });
+  }
+  const chat = name === "mac_messages_send" && intoChat ? await chatInfoOf(deps, String(op.chat)).catch(() => null) : null;
+  const listedRecipient = name === "mac_messages_send" && sendListed(deps, op, chat);
+  // A write follows the bot's approval mode: Ask shows a card, Auto and Full
+  // act. A Messages send to listed recipients acts at every level.
   if (macAppToolWrites(name) && !listedRecipient && !deps.macApps.unasked && !deps.macApps.kept?.(name)) {
     const pending = stageImessageSend({
       threadId: deps.threadId,
       botId: deps.botId,
-      to: macAppTarget(name, op),
-      text: "",
-      service: "iMessage",
+      to: macAppTarget(name, { ...op, ...(intoChat ? { chatLabel: chatLabel(chat) } : {}) }),
       macApp: { tool: name, args: op, ...(relay ? { person: relay.person } : {}) },
     });
     deps.openCard(pending);
@@ -289,13 +222,26 @@ async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<stri
   return deps.macApps.run(name, op);
 }
 
+const num = (value: unknown): number | undefined => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
+const word = (value: unknown): string | undefined => (typeof value === "string" && value.trim() ? value : undefined);
+
+/** An older Messages name, answered by its mac_messages_ tool. */
+function olderMessagesCall(name: string, args: Record<string, unknown>): { tool: string; args: Record<string, unknown>; extra?: Record<string, unknown> } | null {
+  switch (name) {
+    case "find_chats": return { tool: "mac_messages_list_chats", args: { query: word(args.displayName) ?? word(args.handle), limit: num(args.limit) } };
+    case "read_messages": return { tool: "mac_messages_read", args: { chat: word(args.chatGuid) ?? "", limit: num(args.limit) } };
+    case "search_messages": return { tool: "mac_messages_read", args: { query: word(args.needle) ?? "", limit: num(args.limit) } };
+    case "read_attachment": return { tool: "mac_messages_read_attachment", args: { id: args.messageGuid, index: 0 }, extra: { attachmentId: num(args.attachmentId) } };
+    case MESSAGES_SEND_TOOL: return { tool: "mac_messages_send", args: { to: args.to, chat: args.chatId, text: args.text, files: word(args.file) ? [args.file] : undefined, service: args.service === "auto" ? undefined : args.service } };
+    default: return null;
+  }
+}
+
 export async function handleMessagesMcp(body: unknown, deps: MessagesMcpDeps): Promise<{ result: unknown }> {
   const message = body && typeof body === "object" ? body as { method?: unknown; params?: unknown } : {};
   const method = typeof message.method === "string" ? message.method : "";
   const params = message.params && typeof message.params === "object" ? message.params as { name?: unknown; arguments?: unknown } : {};
-  // Through the relay, the chat.db tools of this process have no Mac: only
-  // the mac_* tools, which run on the person's Mac, are offered.
-  if (method === "tools/list") return { result: { tools: [...(deps.macApps?.relay ? [] : TOOLS), ...macAppTools(deps)] } };
+  if (method === "tools/list") return { result: { tools: macAppTools(deps) } };
   if (method !== "tools/call") return { result: text("Method not found.", true) };
   const name = typeof params.name === "string" ? params.name : "";
   const args = params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)
@@ -311,42 +257,11 @@ export async function handleMessagesMcp(body: unknown, deps: MessagesMcpDeps): P
       automation: "notAsked",
     }) };
   }
-  if (name === "find_chats" || name === "read_messages" || name === "search_messages") {
-    const found = withReader(deps, (reader) => {
-      if (name === "find_chats") {
-        return {
-          chats: reader.findChats({
-            displayName: typeof args.displayName === "string" ? args.displayName : undefined,
-            handle: typeof args.handle === "string" ? args.handle : undefined,
-            limit: typeof args.limit === "number" ? args.limit : undefined,
-          }),
-        };
-      }
-      if (name === "search_messages") {
-        const needle = typeof args.needle === "string" ? args.needle.trim() : "";
-        if (needle.length < 1 || needle.length > 200) return text("Give a search of 1 to 200 characters.", true);
-        return { messages: reader.search(needle, typeof args.limit === "number" ? args.limit : undefined).map(view) };
-      }
-      const chatGuid = typeof args.chatGuid === "string" ? args.chatGuid.trim() : "";
-      if (!chatGuid || chatGuid.length > 300) return text("Give a chatGuid from find_chats.", true);
-      return { messages: reader.items(chatGuid, typeof args.limit === "number" ? args.limit : undefined).map(view) };
-    });
-    return { result: found && typeof found === "object" && "content" in found ? found : text(found) };
+  const older = olderMessagesCall(name, args);
+  if (older) {
+    const clean = Object.fromEntries(Object.entries(older.args).filter(([, value]) => value !== undefined));
+    return { result: await macAppCall(deps, older.tool, clean, older.extra ? Object.fromEntries(Object.entries(older.extra).filter(([, value]) => value !== undefined)) : {}) };
   }
-  if (name === "read_attachment") {
-    const messageGuid = typeof args.messageGuid === "string" ? args.messageGuid : "";
-    const attachmentId = typeof args.attachmentId === "number" ? args.attachmentId : Number.NaN;
-    const found = withReader(deps, (reader) => reader.readAttachment(messageGuid, attachmentId));
-    if (found && typeof found === "object" && "content" in found) return { result: found };
-    if (!found) return { result: text("No such attachment.", true) };
-    const payload = {
-      attachment: found.attachment,
-      ...(found.reason ? { reason: found.reason } : {}),
-      ...(found.bytes ? { data: found.bytes.toString("base64") } : {}),
-    };
-    return { result: text(payload, Boolean(found.reason)) };
-  }
-  if (name === MESSAGES_SEND_TOOL) return { result: await send(deps, args) };
   if (isMacAppTool(name)) return { result: await macAppCall(deps, name, args) };
   return { result: text(`Unknown tool: ${name}`, true) };
 }

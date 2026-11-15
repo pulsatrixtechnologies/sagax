@@ -12,7 +12,7 @@ import { cleanCommandVariables } from "../vault/credential-command-env.ts";
 import { DESKTOP_BRIDGE_MESSAGES, type DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { localVmComputerCall, localVmComputerCatalogText } from "../computer/local-vm-computer.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools/tool-output-bound.ts";
-import { MAC_APP_TOOLS, isMacAppTool, macAppOperation } from "../../electron/mac-apps.mjs";
+import { MAC_APP_LEGACY_TOOLS, MAC_APP_UPDATE_DESKTOP, isMacAppTool, macAppFileName, macAppOperation } from "../../electron/mac-apps.mjs";
 
 const where = "on the computer of the person you are working for (their own PC, through their Sagax desktop app), like their own terminal";
 
@@ -366,22 +366,52 @@ export function boundDesktopResult(operation: DesktopBridgeOperation, result: To
  * stays listed, and the bot can tell the person why nothing ran. */
 export const MAC_OFFLINE_MESSAGE = "Your Mac is offline: the Sagax app on your Mac is not connected to this server right now. Open the Sagax app on your Mac, signed in to this server, then try again. Nothing was done.";
 
+/** The server side of the files a mac_* call carries (server/imessage/mac-app-files.ts):
+ * a file to send read in chunks from the bot's folder, an attachment saved
+ * into the conversation's folder. This module itself touches no file. */
+export type MacAppRelayFiles = {
+  chunks: (file: string) => AsyncIterable<{ data: Buffer; offset: number; final: boolean }>;
+  save?: (name: string, data: Buffer) => string;
+};
+
+const PULL_CHUNK = 768_000;
+
 /** One Apple app tool (mac_*) run on the person's Mac through their desktop
  * app (organization server). Never throws: offline, a stale desktop app or a
- * refusal comes back as an error result the bot can read. */
+ * refusal comes back as an error result the bot can read. Files to send go
+ * first to the desktop's attachments folder (stage_file, in chunks); a saved
+ * attachment comes back to the conversation's folder (read_file, in chunks). */
 export async function relayMacAppCall(
   request: (operation: DesktopBridgeOperation) => Promise<unknown>,
   tool: string,
   args: Record<string, unknown>,
+  files?: MacAppRelayFiles,
 ): Promise<ToolResult> {
   let operation: DesktopBridgeOperation;
   try { operation = desktopToolOperation(tool, args); } catch (error) { return text(error instanceof Error ? error.message : String(error), true); }
   if (operation.action !== "mac_app") return text(`Unknown tool: ${tool}`, true);
   try {
-    const result = desktopToolResult(await request(operation));
+    const toSend = Array.isArray(operation.arguments?.files) ? operation.arguments.files as string[] : [];
+    if (toSend.length) {
+      if (!files) return text("Files cannot be sent from here. Nothing was sent.", true);
+      const names: string[] = [];
+      for (const file of toSend) {
+        const name = macAppFileName(file);
+        for await (const chunk of files.chunks(file)) {
+          const staged = desktopToolResult(await request({ action: "stage_file", name, content: chunk.data.toString("base64"), encoding: "base64", offset: chunk.offset, final: chunk.final }));
+          if (staged.isError) return text(`The file could not reach your Mac: ${staged.content[0]?.type === "text" ? staged.content[0].text : "it did not copy"}. Nothing was sent.`, true);
+        }
+        names.push(name);
+      }
+      operation = { ...operation, arguments: { ...operation.arguments, files: names } };
+    }
+    let result = desktopToolResult(await request(operation));
     const first = result.content[0];
     if (result.isError === true && first?.type === "text" && (first.text === "Invalid request" || first.text === "Unsupported operation")) {
-      return text("The Sagax app on your Mac is too old to use its Apple apps. Update the Sagax app on your Mac.", true);
+      return text(MAC_APP_UPDATE_DESKTOP, true);
+    }
+    if (!result.isError && tool.endsWith("_read_attachment") && files?.save && first?.type === "text") {
+      result = await pullAttachment(request, first.text, files.save);
     }
     return result;
   } catch (error) {
@@ -391,6 +421,27 @@ export async function relayMacAppCall(
     if (message === DESKTOP_BRIDGE_MESSAGES.capability) return text("The Sagax app connected for you is not on a Mac that offers its Apple apps, or it is too old. Open the Sagax app on your Mac, updated, signed in to this server.", true);
     return text(message, true);
   }
+}
+
+/** Copy an attachment the Mac saved into the conversation's folder here. */
+async function pullAttachment(request: (operation: DesktopBridgeOperation) => Promise<unknown>, answer: string, save: (name: string, data: Buffer) => string): Promise<ToolResult> {
+  let saved: { path?: unknown; name?: unknown; mime?: unknown; bytes?: unknown };
+  try { saved = JSON.parse(answer) as typeof saved; } catch { return text("Your Mac answered with something unexpected.", true); }
+  if (typeof saved.path !== "string") return text("Your Mac did not save the attachment.", true);
+  const parts: Buffer[] = [];
+  for (let offset = 0, guard = 0; guard < 64; guard += 1) {
+    const read = desktopToolResult(await request({ action: "read_file", path: saved.path, encoding: "base64", offset, max_bytes: PULL_CHUNK }));
+    const body = read.content[0]?.type === "text" ? read.content[0].text : "";
+    if (read.isError) return text(`The attachment could not be copied from your Mac: ${body}`, true);
+    const more = /\n\[(\d+) more bytes; read again with offset (\d+)\]$/.exec(body);
+    const data = Buffer.from(more ? body.slice(0, more.index) : body, "base64");
+    parts.push(data);
+    if (!more) break;
+    offset = Number(more[2]);
+  }
+  const name = typeof saved.name === "string" && saved.name ? saved.name : "attachment";
+  const file = save(name, Buffer.concat(parts));
+  return text(JSON.stringify({ path: file, name, mime: typeof saved.mime === "string" ? saved.mime : null, bytes: Buffer.concat(parts).length, onMac: saved.path }));
 }
 
 export function desktopToolResult(value: unknown): ToolResult {
@@ -439,7 +490,9 @@ export async function handleDesktopBridgeMcp(
 ): Promise<unknown> {
   if (method === "tools/list") {
     if (!options?.macApps?.()) return { tools: DESKTOP_BRIDGE_TOOLS };
-    return { tools: [...DESKTOP_BRIDGE_TOOLS, ...MAC_APP_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))] };
+    // Only a desktop app that never reports its On apps lists them here: an
+    // older one, so its own 12 tools as they were.
+    return { tools: [...DESKTOP_BRIDGE_TOOLS, ...MAC_APP_LEGACY_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))] };
   }
   if (method === "tools/call") {
     const call = (params ?? {}) as { name?: unknown; arguments?: unknown };

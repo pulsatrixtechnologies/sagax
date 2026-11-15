@@ -4,7 +4,6 @@ import { DESKTOP_BRIDGE_ACTIONS } from "../server/desktop/desktop-bridge.ts";
 import {
   handleFromChatGuid,
   messagesOnBotMac,
-  planImessageSend,
 } from "./imessage.ts";
 
 describe("Messages stays on the bot Mac", () => {
@@ -17,14 +16,6 @@ describe("Messages stays on the bot Mac", () => {
 
   it("is not a desktop-bridge action", () => {
     expect(DESKTOP_BRIDGE_ACTIONS.some((action) => /message|imessage/i.test(action))).toBe(false);
-  });
-
-  it("sends to a listed person and cards everyone else", () => {
-    expect(planImessageSend({ to: "+15145551234", listed: true })).toEqual({ action: "send", to: "+15145551234", service: "auto" });
-    expect(planImessageSend({ to: "ada@example.com", service: "SMS", listed: false })).toEqual({ action: "card", to: "ada@example.com", service: "SMS" });
-    expect(planImessageSend({ chatId: "iMessage;-;+15145551234", listed: true })).toEqual({ action: "send", to: "+15145551234", service: "iMessage" });
-    expect(planImessageSend({ chatId: "any;-;chat123,chat456", listed: true })).toEqual({ action: "refuse", reason: "group" });
-    expect(planImessageSend({ listed: true })).toEqual({ action: "refuse", reason: "invalid" });
   });
 
   it("reads a 1:1 chat guid and refuses a group", () => {

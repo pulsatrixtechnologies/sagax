@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { appleDate } from "./imessage-db.ts";
+import { appleDate } from "../../electron/mac-apps.mjs";
 import { askMessagesAutomation, probeAutomation, probeFullDiskAccess, testMessagesConversationNames } from "./imessage-permissions.ts";
 
 const dirs: string[] = [];
@@ -23,6 +23,9 @@ function fixtureHome(): string {
     CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid TEXT, chat_identifier TEXT, display_name TEXT, service_name TEXT);
     CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT, service TEXT);
     CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
+    -- #4158: chat.db's one reader (electron/mac-apps.mjs) lists chats with their messages, as every real chat.db has.
+    CREATE TABLE message (ROWID INTEGER PRIMARY KEY, guid TEXT, text TEXT, date INTEGER, is_from_me INTEGER, handle_id INTEGER, service TEXT);
+    CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
     INSERT INTO chat (ROWID, guid, chat_identifier, display_name, service_name)
       VALUES (1, 'iMessage;-;+15145551234', '+15145551234', 'Ada Lovelace', 'iMessage');
     INSERT INTO chat (ROWID, guid, chat_identifier, display_name, service_name)
@@ -46,22 +49,22 @@ describe("imessage-permissions", () => {
     expect(probeFullDiskAccess(home)).toBe("denied");
   });
 
-  it("returns conversation name counts without message bodies", () => {
+  it("returns conversation name counts without message bodies", async () => {
     const home = fixtureHome();
-    const result = testMessagesConversationNames(home);
+    const result = await testMessagesConversationNames(home);
     expect(result.conversationCount).toBe(2);
     expect(result.names).toEqual(expect.arrayContaining(["Ada Lovelace", "Bea Example"]));
     expect(result.names).toHaveLength(2);
     expect(JSON.stringify(result)).not.toMatch(/hello|secret|body/i);
   });
 
-  it("returns an empty test when chat.db cannot open", () => {
+  it("returns an empty test when chat.db cannot open", async () => {
     const home = mkdtempSync(join(tmpdir(), "msg-perm-bad-"));
     dirs.push(home);
     mkdirSync(join(home, "Library", "Messages"), { recursive: true });
     writeFileSync(join(home, "Library", "Messages", "chat.db"), "not-a-db");
     expect(probeFullDiskAccess(home)).toBe("denied");
-    expect(testMessagesConversationNames(home)).toEqual({ conversationCount: 0, names: [] });
+    expect(await testMessagesConversationNames(home)).toEqual({ conversationCount: 0, names: [] });
   });
   // Native layer mocked: the status never prompts, the ask goes to Sagax's helper.
   it.runIf(process.platform === "darwin")("reads the live Automation state without prompting", async () => {

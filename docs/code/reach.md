@@ -492,9 +492,129 @@ app on macOS (`shared/mac-apps-setup.ts` `macAppsSectionVisible`), never on
 Windows, Linux or the web.
 
 - Tools (`electron/mac-apps.mjs` `MAC_APP_TOOLS`, single `_` names):
-  `mac_messages_read/send`, `mac_mail_search/read/send`,
-  `mac_calendar_list/create`, `mac_contacts_search`,
-  `mac_reminders_list/create`, `mac_notes_search/create`. Read and write.
+  the six apps' full action set below (`mac_<app>_<verb>[_<noun>]`). Read,
+  write, delete and send.
+  Each row carries `kind` (`read`, `write`, `delete`, `send`: the one place a
+  tool's class is written; `macAppToolWrites` is derived from it) and `needs`
+  (`automation` or `fullDiskAccess`). `macAppsStatus` gives each app an
+  `actions` list (tool, kind, need, granted) that the window reads; the
+  window's line per action is the locale key `connectApps.mac.action.<tool>`.
+- Mail (2026-11-13, #4158 lot `mac-mail-actions`):
+  `mac_mail_list_mailboxes` (accounts, nested mailboxes, unread counts),
+  `mac_mail_search` (one mailbox, default the inbox; words, sender, since,
+  until, unread, flagged, `inBody`; `limit` and `cursor`, `next` when more),
+  `mac_mail_read` (to, cc, reply-to, attachments by `index` with name, type
+  and size, the body 20,000 characters at a time with `offset`, `headers` on
+  demand), `mac_mail_read_attachment` (`{id, index}`: Mail's `save` into the
+  conversation's folder, the saved path returned, never bytes),
+  `mac_mail_update` (read, flagged, `flagColor`, junk), `mac_mail_move`
+  (`mailbox` [+ `account`] or `to: archive|inbox|junk`; archive is a move to
+  the archive mailbox of each email's own account, found by name; an account
+  with none answers its mailbox names), `mac_mail_delete` (to the Trash),
+  `mac_mail_send` (cc, bcc, `from` one of the addresses in Mail, `files`),
+  `mac_mail_reply` (`all`, `files`; Mail's own `reply` verb with no window),
+  `mac_mail_forward` (Mail's own `forward` verb). Writes take up to 50 `ids`
+  and answer `{updated|moved|deleted, failed}`. A Mail id is opaque
+  (`mailId`: account, mailbox path and Mail's message number, base64url
+  JSON after `mail.`), so a read or a write goes straight to its mailbox; a
+  bare number (the old id) is still read by a scan. The card and log target
+  (`macAppTarget`) names the verb, a count and the recipients or the
+  mailbox, never the content. Until the write pipeline lot, the Mail writes
+  (delete included) follow the bot's level and Always allow, like the other
+  Mac writes. Also `mac_mail_create_draft` (saved in Drafts, not sent; a new
+  email, or `replyTo` an id (+ `all`) through Mail's `reply` then `save`;
+  `files`; a draft changes by a new one plus a delete), `mac_mail_list_rules`
+  and `mac_mail_update_rule` (`{name, enabled}`).
+- Files (2026-11-14, #4158): `files` on `mac_mail_send`, `mac_mail_reply`,
+  `mac_mail_create_draft` and `mac_messages_send` are paths in the bot's
+  folders, checked by the server (`botFile` in `imessage-mcp.ts`,
+  `fileInsideRoots`, 25 MB each) before any card. Solo: Mail gets the path
+  (`make new attachment`), Messages sends `POSIX file`. Organization server:
+  `relayMacAppCall` first copies each file into the desktop's attachments
+  folder with the bridge's `stage_file` chunks, and the Mac gets the staged
+  names (`runMacAppCall` `filesDir`). A `read_attachment` tool saves into the
+  conversation's folder (`saveDir`); on an organization server the Mac saves
+  into its attachments folder and the server copies it back with `read_file`
+  chunks (`server/imessage/mac-app-files.ts`). Every saved or staged file is
+  named by one helper, `macAppFileName` (`electron/mac-apps.mjs`): a random
+  prefix, then the base name made safe.
+- The other five apps (2026-11-14, #4158), all through the apps' scripting
+  dictionaries (constant JXA), each list or search paged with `limit`,
+  `cursor` and `next`; the ids are the app's own strings, up to 50 per write:
+  - Messages: `mac_messages_list_chats` (people and groups from `chat.db`,
+    members from `chat_handle_join`, newest first; `listChats`),
+    `mac_messages_read` (`chat` = chat id, handle or name, `query`, `since`;
+    a word search matches the `text` column in SQL over every message and
+    decodes the messages kept only in `attributedBody` 2,000 candidates at a
+    time, at most 20,000 a call; its cursor is a position in that scan, so a
+    `next` resumes right after the last message given, or where the call
+    stopped, and no older match is dropped; each row carries `chatId`,
+    `reactions` (who and which, from the rows with
+    `associated_message_type` 2000 to 2006, a 3000 row taking one off; those
+    rows are not listed as messages), `attachments` by index, `edited`
+    (`date_edited`), `unsent` (`date_retracted`) and `replyTo`
+    (`thread_originator_guid`), where this Mac's chat.db has the column),
+    `mac_messages_read_attachment` (`{id, index}`: any file, copied from the
+    Messages folder into the conversation's folder; a file outside the
+    Messages folder is refused),
+    `mac_messages_send` (`to` a person, or `chat` an existing conversation,
+    a group included: `send <text> to chat id`; `files`; `service`). Every
+    Messages send, solo or relayed, to a person or into a conversation, with
+    or without files, runs the Messages script under one recipient check
+    (`sendListed`): sent when everyone it reaches is on the bot's allowed
+    recipients (a 1:1 chat id by its handle; a `;+;` group by every member,
+    read from `chat.db` solo or through `mac_messages_list_chats` relayed),
+    otherwise the write gate of every Apple app write (Ask: a card; Auto,
+    Full or a kept Always allow: sent). The older AppleScript sender and
+    `planImessageSend` are gone. The card names the conversation by its name
+    or members, never its chat id.
+    One chat.db reader (`electron/mac-apps.mjs`): the older solo names
+    (`find_chats`, `read_messages`, `search_messages`, `read_attachment`,
+    `send_message`, `check_permissions`) are no longer listed; a call to one
+    is answered by its `mac_messages_` tool (`olderMessagesCall`), and
+    `server/imessage/imessage-db.ts` keeps only the path helpers.
+  - Calendar: `list_calendars`, `list` (+ `query` on title, place, notes;
+    every occurrence of a repeating event in the range, computed from its
+    rule by `occurrences` in the Mac's time zone, minus its excluded dates;
+    a rule it cannot compute, BYSETPOS or hourly and the like, gives the
+    series once with `occurrences: "unknown"`), `read` (alerts, repeat rule,
+    invitees and their answer), `create` (+ `url`, `alarms` in minutes
+    before, `repeat` as an RFC 5545 rule), `update` (any field, a move by
+    dates or `calendar`), `delete`, `create_calendar`, `update_calendar`
+    (rename), `delete_calendar`. An event id is its `uid`; an occurrence id
+    is `uid#<start ISO>` (`calendarRef`). `scope` on `update` and `delete`:
+    `this` (default for an occurrence id: the date joins the series'
+    excluded dates and a changed occurrence becomes an event of its own),
+    `future` (the series ends before it with `UNTIL`, a new series starts
+    there with the rest of `COUNT`), `all` (default for a series id).
+  - Contacts: `search` (name, email or phone digits, from one bulk read of
+    ids, names, emails and phones), `read` (`id` or `me`: the full card,
+    addresses, dates, related names, note, groups), `create`, `update`
+    (lists replace), `delete`, `list_groups`, `create_group`,
+    `update_group` (`name`, `add`, `remove`), `delete_group`. Every change
+    ends with `save`.
+  - Reminders: `list_lists`, `list` (+ `query`, `dueFrom`, `dueTo`),
+    `create` and `update` (`due` (a date alone = all day), `remind` (the one
+    alert Reminders' dictionary has, `remind me date`), `priority`
+    none|low|medium|high, `list` moves it; `""` clears a date), `complete`
+    (`completed: false` reopens), `delete`, `create_list`, `update_list`,
+    `delete_list`. Several alerts, a repeat and a link are not in Reminders'
+    scripting dictionary: they come with the EventKit helper (design lot 10)
+    and are not offered before.
+  - Notes: `list_folders`, `search` (+ `folder`; a locked note shows no
+    preview), `read` (text or `html`, 20,000 characters at a time, attachment
+    names; a locked note answers `locked` only), `create`, `update`
+    (`mode: append` by default; Notes keeps a note as HTML and both modes
+    write `body` back; `replace` is refused on a note with attachments unless
+    `force`), `move`, `delete` (to Recently Deleted), `create_folder`,
+    `update_folder`, `delete_folder`.
+  Not in this lot (design lots 3, 5, 10, 11, 12): the held-request pipeline
+  for every write, the offered list read from each permission, the EventKit
+  and Contacts helper, invitees. Not yet proven by a live call on a Mac (the
+  design's [verify] items, its live checklist in #4158): reply and forward
+  with no window, junk as a status plus a move, a move across calendars,
+  what a Notes append keeps, Mail's save of an attachment into the folder,
+  the excluded dates write of a single occurrence.
 - Solo: the imessage MCP lists the tools of each app turned on
   (`mac-apps.json` in the data dir; Messages keeps `messages.json`). A write
   follows the bot's approval mode: Auto/Full run it, Ask stages a card.
@@ -504,8 +624,14 @@ Windows, Linux or the web.
   journal keeps the operation and the target (recipient, calendar, list),
   never the content. Setup is read over IPC (`mac-apps:status|set|test|open-settings`).
 - Organization server, any engine or computer (2026-11-06): the desktop
-  reports the apps On (`POST /api/desktop-bridge/<id>/mac-apps {on}`, on
-  connect, every system refresh and after each switch). The server keeps the
+  reports the apps On (`POST /api/desktop-bridge/<id>/mac-apps {on, tools}`,
+  on connect, every system refresh and after each switch). `tools` (2026-11-14,
+  #4158) is the `mac_*` tools that desktop app runs for those apps; the
+  server lists only those (`DesktopBridges.macAppTools`). A desktop app from
+  before sends no `tools` and keeps its 12 older tools, listed as they were
+  (`MAC_APP_LEGACY_TOOLS`); any other tool or field answers one sentence
+  asking the person to update the Sagax app on their Mac
+  (`MAC_APP_UPDATE_DESKTOP`) and nothing is sent to it. The server keeps the
   list per person (`desktop-mac-apps.json`, kept while the Mac is offline)
   and mounts the `messages` MCP for that person's bots in every sandbox and
   engine, listing the `mac_*` tools of each app On. A call is relayed through

@@ -17,7 +17,8 @@ import {
 describe("fleet-agent-settings (#1944)", () => {
   it("derives AGENT_SETTINGS_FIELDS from MEMBER_BOT_FIELDS and BOT_FIELD_PERMISSIONS (no drifting hand list)", () => {
     for (const field of MEMBER_BOT_FIELDS) {
-      if (field === "modelSelection") {
+      // #4329 lot 5: what runs the bot changes with its model (update_agent_model)
+      if (field === "modelSelection" || field === "harness") {
         expect(AGENT_SETTINGS_FIELDS.includes(field)).toBe(false);
         continue;
       }

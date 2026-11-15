@@ -4,11 +4,12 @@ import type { ModelSelection } from "../../shared/model-selection.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { requirePinnedClientThread } from "./bots-mutate-helpers.ts";
 import { normalizeDirectTriggers } from "../../shared/direct-triggers.ts";
+import { isHarnessId } from "../../shared/harness-matrix.ts";
 
 export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m, body } = state;
   const existingBot = env.store.bot(m[1]);
-  const rawSelection = (body as Record<string, unknown>).modelSelection;
+  let rawSelection = (body as Record<string, unknown>).modelSelection;
   if (body.threadId !== undefined && rawSelection === undefined) {
     env.json(env.res, 400, { error: "threadId goes with modelSelection" });
     return true;
@@ -38,7 +39,7 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
   // anyway, so an unverifiable level never reaches a CLI.
   if (
     existingBot?.approvalGrant &&
-    (rawSelection !== undefined || body.approvalMode !== undefined || body.autoApprove !== undefined)
+    (rawSelection !== undefined || body.harness !== undefined || body.approvalMode !== undefined || body.autoApprove !== undefined)
   ) {
     env.json(env.res, 409, { error: "wait for the approval-level change to finish before changing this setting" });
     return true;
@@ -47,6 +48,37 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     env.json(env.res, 400, { error: "requireAvailableModel requires modelSelection" });
     return true;
   }
+  // #4329 lot 5: what runs the bot ("Runs with"): a driver kind, or null for
+  // the provider's default. It is resolved into the bot's model now, never
+  // per turn: the model stays the routing key, on the engine that runs it.
+  const harnessSpecified = Object.prototype.hasOwnProperty.call(body, "harness");
+  let harness: string | null | undefined;
+  if (harnessSpecified) {
+    if (body.harness === null || body.harness === "") harness = null;
+    else if (isHarnessId(body.harness)) harness = body.harness;
+    else {
+      env.json(env.res, 400, { error: "harness must be an engine's driver kind (for example piAgent or opencodeGo), or null for the provider's default" });
+      return true;
+    }
+    if (!existingBot) {
+      env.json(env.res, 404, { error: "no such bot" });
+      return true;
+    }
+  }
+  const harnessOnly = harnessSpecified && rawSelection === undefined;
+  if (harnessOnly) rawSelection = existingBot!.modelSelection;
+  if (existingBot && rawSelection !== undefined && env.harnessChoice) {
+    const harnessed = await env.harnessChoice.selectionFor(env.auth, env.effectiveBotOwner(existingBot), rawSelection, {
+      stored: existingBot.harness ?? null, ...(harnessSpecified ? { harness } : {}),
+    });
+    if (!harnessed.ok) {
+      env.json(env.res, harnessed.status, { error: harnessed.error });
+      return true;
+    }
+    rawSelection = harnessed.selection;
+  }
+  // The engine already runs it: only the choice is saved, every thread keeps its own model.
+  if (harnessOnly && rawSelection === existingBot!.modelSelection) rawSelection = undefined;
   let normalizedSelection: ModelSelection | undefined;
   if (rawSelection !== undefined) {
     const onMachine = existingBot ? env.selectionOnMachine({ host: existingBot.host, workers: env.registeredWorkers, raw: rawSelection }) : null;
@@ -130,6 +162,7 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     }
   }
   if (normalizedSelection) patch.modelSelection = normalizedSelection;
+  if (harnessSpecified) patch.harness = harness ?? undefined;
   // one pinned message per thread; null/"" clears. The id is not
   // validated against the transcript here — a pin whose message was
   // edited to another branch or deleted simply resolves to nothing.

@@ -194,6 +194,10 @@ export interface AutoRequest {
   catalog: CatalogLookup;
   /** Models a recent refusal took out (payer, engine, model). */
   skip?: readonly AutoChainEntry[];
+  /** #4329 lot 5: the engines (driver kinds) the bot's owner chose to run
+   * with ("Runs with": the bot's own, then the defaults per provider),
+   * tried right after the bot's own engine, in this order. */
+  harnesses?: readonly string[];
 }
 
 export interface TaskInput {
@@ -490,10 +494,13 @@ function strongest(pool: Candidate[]): Candidate {
   return from.toSorted((a, b) => priceOf(b) - priceOf(a) || newestFirst(a, b))[0]!;
 }
 
-/** The bot's own engine first, then ENGINE_ORDER, then the rest by id. */
-export function orderEngines(engines: readonly AutoEngine[], baseInstanceId: string): AutoEngine[] {
+/** The bot's own engine first, then the engines its owner chose to run with
+ * (#4329 lot 5), then ENGINE_ORDER, then the rest by id. */
+export function orderEngines(engines: readonly AutoEngine[], baseInstanceId: string, harnesses: readonly string[] = []): AutoEngine[] {
   const orderOf = (engine: AutoEngine) => {
-    if (engine.instanceId === baseInstanceId) return -1;
+    if (engine.instanceId === baseInstanceId) return -1 - harnesses.length;
+    const chosen = harnesses.indexOf(engine.driverKind);
+    if (chosen >= 0) return chosen - harnesses.length;
     const index = ENGINE_ORDER.indexOf(engine.driverKind);
     return index >= 0 ? index : ENGINE_ORDER.length;
   };
@@ -521,7 +528,7 @@ function selectionOn(engine: AutoEngine, model: string, base: ModelSelection): M
 
 function pickTier(request: AutoRequest, tier: Tier, role: AutoPick["role"], taskClass?: TaskClass): AutoPick {
   const skip = request.skip ?? [];
-  const engines = orderEngines(request.engines, request.base.instanceId);
+  const engines = orderEngines(request.engines, request.base.instanceId, request.harnesses);
   const own = engines.find((engine) => engine.instanceId === request.base.instanceId);
   const chain: Array<{ engine: AutoEngine; model: Candidate; tier: Tier }> = [];
   for (const wanted of [tier, ...TIER_FALLBACK[tier]]) {

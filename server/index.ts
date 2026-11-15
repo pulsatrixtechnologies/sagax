@@ -1049,7 +1049,11 @@ import { withPersonalVoiceKeys } from "./voice/person-voice-keys.ts";
 import { PersonalProviderInstances } from "./engines/personal-provider-instances.ts";
 import type { ProviderAccountsView } from "../shared/provider-accounts.ts";
 import { createProviderAccountsFailureLog, ProviderAccounts, type ProviderAccountOwner } from "./engines/provider-accounts.ts";
-import { createProviderAccountsRoutes } from "./routes/provider-accounts.ts";
+import { createProviderAccountsRoutes, providerCatalogFor, type ProviderCatalogDeps } from "./routes/provider-accounts.ts";
+import type { ProviderCatalog } from "../shared/provider-catalog.ts";
+import type { EffortLevel } from "../shared/model-selection.ts";
+import { cleanHarnessDefaults } from "../shared/harness-matrix.ts";
+import { createHarnessChoice, harnessChoices } from "./models/resolve-harness.ts";
 import { createPersonSettingsRoutes } from "./routes/person-settings.ts";
 import { isPersonalBrowserProfileId, type PersonalFeature } from "../shared/person-settings.ts";
 import { type ReactionActor } from "../shared/reactions.ts";
@@ -2963,6 +2967,7 @@ bindLeafHost({
   get orgDisabledModels() { return orgDisabledModels; },
   get personDisabledModels() { return personDisabledModels; },
   get modelSwitchesFor() { return modelSwitchesFor; },
+  get autoHarnessesFor() { return autoHarnessesFor; },
   get modelSwitchRefusal() { return modelSwitchRefusal; },
   get orgOwnAccountsOutsideList() { return orgOwnAccountsOutsideList; },
   get orgAllowedEngines() { return orgAllowedEngines; },
@@ -29889,6 +29894,24 @@ ROUTES.push(createPersonSettingsRoutes({
     }
   }
 }));
+// #4329: what the provider catalog reads, for its route and for the
+// "Runs with" resolver (lot 5)
+const providerCatalogDeps: ProviderCatalogDeps = {
+  instances: async (auth) => await instancesInView({
+    resetPathCache,
+    instancesForViewer,
+    identityKind: () => IDENTITY.kind,
+    callerCan,
+    memberInstanceView: (instance, viewer) => memberInstanceView(instance as Parameters<typeof memberInstanceView>[0], viewer),
+    clientInstanceView: (instance) => clientInstanceView(instance as object),
+  }, auth),
+  botsLink: (auth) => {
+    const personId = sessionPrincipal(auth);
+    return personId ? grokBridgeService.view(personId) : null;
+  },
+  // an Azure resource behind an address row is served by the built in runtime only
+  instanceConfigs: () => providerConfigs(),
+};
 // 2026-10-30 (lot 2): the person's own model switches (Settings > Models)
 ROUTES.push(createModelSwitchRoutes({
   org: () => orgDisabledModels(),
@@ -29920,7 +29943,21 @@ ROUTES.push(createModelSwitchRoutes({
     } else {
       personSettings.setFavoriteModels(owner, list);
     }
-  }
+  },
+  // #4329 lot 5: what runs the person's bots, per provider
+  harnessDefaults: {
+    read: (owner) => (owner === "installation" ? cleanHarnessDefaults(cfg.harnessByProvider) : (personSettings.get(owner).harnessByProvider ?? {})),
+    refusal: (auth, provider, harness) => harnessChoice.defaultRefusal(auth, provider, harness),
+    save: async (owner, map, auth) => {
+      if (owner === "installation") {
+        saveConfig({ harnessByProvider: map });
+        cfg.harnessByProvider = map;
+      } else {
+        personSettings.setHarnessDefaults(owner, map);
+      }
+      await applyHarnessDefaults(owner, auth);
+    },
+  },
 }));
 ROUTES.push(createProviderAccountsRoutes({
   accounts: providerAccounts,
@@ -29936,22 +29973,7 @@ ROUTES.push(createProviderAccountsRoutes({
     return providerAccountOwner(sessionPrincipal(auth));
   },
   // #4329: one list by provider, read from the same engines GET /api/instances lists
-  catalog: {
-    instances: async (auth) => await instancesInView({
-      resetPathCache,
-      instancesForViewer,
-      identityKind: () => IDENTITY.kind,
-      callerCan,
-      memberInstanceView: (instance, viewer) => memberInstanceView(instance as Parameters<typeof memberInstanceView>[0], viewer),
-      clientInstanceView: (instance) => clientInstanceView(instance as object),
-    }, auth),
-    botsLink: (auth) => {
-      const personId = sessionPrincipal(auth);
-      return personId ? grokBridgeService.view(personId) : null;
-    },
-    // an Azure resource behind an address row is served by the built in runtime only
-    instanceConfigs: () => providerConfigs(),
-  },
+  catalog: providerCatalogDeps,
 }));
 // Capabilities lot 4 (server/routes/org-capabilities.ts): the organization's
 // capabilities, owned by Perspicax on a linked server that serves them,
@@ -32452,6 +32474,50 @@ function modelSwitchRefusal(instanceId: string, model: string, principalId: stri
   if (offer === "personOff") return MODEL_TURNED_OFF_BY_PERSON;
   return undefined;
 }
+// #4329 lot 5: what runs a person's bots ("Runs with"): their default per
+// provider, and the resolver every write of a bot's engine or model goes
+// through (server/models/resolve-harness.ts). Resolved when written, never
+// per turn.
+function personHarnessDefaults(principalId: string | null | undefined): Record<string, string> {
+  if (IDENTITY.kind !== "perspicax") return cleanHarnessDefaults(cfg.harnessByProvider);
+  const owner = personSettingsOwner(principalId);
+  return owner ? personSettings.get(owner).harnessByProvider ?? {} : {};
+}
+/** The caller's provider catalog (GET /api/me/providers/catalog). */
+function harnessCatalogFor(auth: RequestAuth): Promise<ProviderCatalog> {
+  const owner = providerAccountOwner(sessionPrincipal(auth)) ?? undefined;
+  return providerCatalogFor(providerCatalogDeps, providerAccounts, owner, auth);
+}
+const harnessChoice = createHarnessChoice({
+  catalog: (auth) => harnessCatalogFor(auth as RequestAuth),
+  place: () => (IDENTITY.kind === "perspicax" ? "organization" : "solo"),
+  defaultsFor: (principalId) => personHarnessDefaults(principalId),
+  effortAccepted: (instanceId, effort) => {
+    const live = registry.get(instanceId);
+    return Boolean(live) && effortAcceptedByEngine(effort as EffortLevel, live!.adapter.capabilities.effortLevels ?? []);
+  },
+});
+/** A new default for a provider moves the owner's bots that have no engine
+ * of their own and use that provider, as a model change does (every thread
+ * follows the bot). `owner` "installation": every bot of a solo server. */
+async function applyHarnessDefaults(owner: string | "installation", auth: RequestAuth): Promise<void> {
+  const catalog = harnessCatalogFor(auth);
+  for (const { id } of store.bots) {
+    const bot = store.bot(id);
+    if (!bot || bot.harness) continue;
+    const botOwner = effectiveBotOwner(bot);
+    if (owner !== "installation" && botOwner !== owner) continue;
+    const moved = await harnessChoice.selectionFor(auth, botOwner, bot.modelSelection, { stored: null, catalog });
+    if (!moved.ok || moved.selection === bot.modelSelection) continue;
+    const checked = checkedModelSelection(moved.selection, { selection: bot.modelSelection, busy: false }, false, botOwner);
+    if (checked.ok) store.patchBot(bot.id, { modelSelection: checked.selection });
+  }
+}
+/** The engines Auto tries right after the bot's own: its "Runs with" choice,
+ * then its owner's defaults per provider. */
+function autoHarnessesFor(bot: Pick<BotRecord, "harness" | "ownerUserId">): string[] {
+  return [...new Set([...(bot.harness ? [bot.harness] : []), ...Object.values(personHarnessDefaults(effectiveBotOwner(bot)))])];
+}
 /** A bot on a model now off (the organization's switch, or its owner's own)
  * moves to Auto on the same engine, from its first model still on; a
  * thread's own model follows its bot. `owner`: only that person's bots. */
@@ -33191,7 +33257,14 @@ const agentApi = createAgentApi({
         auto: true,
       }];
     });
-    return { models, current: bot ? agentModelSummary(bot) : null };
+    // #4329 lot 5: what may run the agent's model here (update_agent_model harness)
+    let current = bot ? agentModelSummary(bot) : null;
+    if (bot && current) {
+      const catalogRead = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/me/providers/catalog" });
+      const harnesses = catalogRead.status === 200 ? harnessChoices(catalogRead.body as ProviderCatalog, IDENTITY.kind === "perspicax" ? "organization" : "solo", bot.modelSelection) : [];
+      if (harnesses.length) current = { ...current, harnesses };
+    }
+    return { models, current };
   },
   async updateModel(caller, agentId, selection) {
     const bot = store.bot(agentId);
@@ -33209,7 +33282,7 @@ const agentApi = createAgentApi({
       if (isAgentRefusal(resolved)) return resolved;
       instanceId = resolved;
     }
-    if (!instanceId || (!model && selection.auto !== true)) {
+    if ((!instanceId || (!model && selection.auto !== true)) && !(selection.harness !== undefined && !selection.instanceId && !selection.model && !selection.effort && selection.auto !== true)) {
       const choices = await (async () => {
         const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/instances" });
         const instances = ((listed.body as { instances?: Array<{ instanceId?: string; models?: { options?: Array<{ id?: string }> } }> })?.instances ?? []);
@@ -33238,11 +33311,17 @@ const agentApi = createAgentApi({
       ...(selection.effort ? { effort: selection.effort } : {}),
       ...(selection.auto === true ? { auto: true } : {}),
     };
+    // #4329 lot 5: only what runs it changes: the bot's model stays and moves with it
+    const harnessOnly = selection.harness !== undefined && !selection.instanceId && !selection.model && !selection.effort && selection.auto !== true;
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/bots/${encodeURIComponent(agentId)}`,
       // #3033: bot-wide by design, so no conversation is named.
-      body: { modelSelection, botWide: true },
+      body: {
+        ...(harnessOnly ? {} : { modelSelection }),
+        ...(selection.harness !== undefined ? { harness: selection.harness } : {}),
+        botWide: true,
+      },
     });
     if (patched.status >= 300) {
       const message = String((patched.body as { error?: unknown; message?: unknown })?.error
@@ -34727,6 +34806,7 @@ ROUTES.push(createGroupsHttpRoutes({
 }));
 /** #2045: resolve (and ensure) the caller's team channel id for a display name. */
 ROUTES.push(createBotsCoreRoutes({
+  harnessChoice,
   store,
   resolveSectionId,
   teamDefaultsFor: teamDefaultsForAuth,
@@ -35440,6 +35520,9 @@ ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleet
 ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret, saveProductKey: saveProductKeyCard }));
 ROUTES.push(createBotsMutateRoutes({
   resolveSectionId,
+  // #4329 lot 5: a bot's engine and model are resolved together when written
+  harnessChoice,
+  effectiveBotOwner,
   teamDefaultsFor: teamDefaultsForAuth,
   originApprovals,
   ADMIN_APPROVAL_REQUIRED,

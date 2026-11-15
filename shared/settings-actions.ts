@@ -215,6 +215,8 @@ add({
   write: (ids, v) => ({ method: "PATCH", path: `/api/bots/${enc(ids.target!)}`, body: { modelSelection: { effort: v } } }),
 });
 botField("bot.fallback", "fallback", "array", "Fallback models", "Bot editor > Model > Fallback");
+// #4329 lot 5: what runs the bot, kept on its model (the same rights)
+botField("bot.harness", "harness", "string?", "Runs with: the engine that runs this bot's model (piAgent, opencodeGo, openai-compat, or its own tool's kind such as claudeAgent or codex; null for the provider's default). Only what the provider's connection allows", "Bot editor > Model > Runs with");
 // widening the bots a bot reaches carries the screen's own acknowledgement
 function botReach(key: string, field: string, label: string, where: string, classes?: SettingSpec["classes"]): void {
   add({
@@ -974,6 +976,14 @@ add({
   write: (ids, v) => ({ method: "PATCH", path: `/api/instances/${enc(ids.target!)}`, body: v }),
   // a new name only: the person's own; the program, folder or tools: others' work too
   classes: (v, ctx) => v && typeof v === "object" && Object.keys(v).every((field) => field === "displayName") ? ["own"] : engineReach(v, ctx),
+});
+// #4329 lot 5: what runs the person's bots for each provider ("Runs with"
+// on a provider's page); bots with an engine of their own keep it
+add({
+  key: "models.harnessDefault", family: "models", target: "none", value: "object",
+  label: "Runs with, per provider ({<provider id>: <engine kind> or null}; provider ids from GET /api/me/providers/catalog)", where: "Settings > Providers > provider > Runs with",
+  read: () => ({ path: "/api/me/models", field: "harnessByProvider" }),
+  write: (_ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "PUT", path: "/api/me/models", body: { harnessByProvider: v } } : "value is {<provider id>: <engine kind> or null}.",
 });
 add({
   key: "models.claudeAccount", family: "models", target: "none", value: "object",

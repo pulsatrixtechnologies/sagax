@@ -30,6 +30,7 @@
 // routine and webhook off, approval Full or Custom back to Ask, a member's
 // copy without the host settings that stay an admin's (memberImportReset), and a rollback that
 // removes everything the import wrote when any step fails.
+import { isHarnessId } from "../../shared/harness-matrix.ts";
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { exportedSecretFile, registrySettingsPath, withoutRegistrySecrets } from "../backup/workspace-backup-policy.ts";
 import { randomUUID } from "node:crypto";
@@ -161,6 +162,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   skillLearning: "settings",
   builtinPlugins: "settings",
   helperModel: "settings",
+  // #4329 lot 5: kept with the model it runs, dropped when the model is
+  harness: "settings",
   parkDirectMessages: "settings",
   approvePeerComms: "settings",
   localPrompt: "settings",
@@ -835,9 +838,11 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
   if (refusal) throw new BotZipError(refusal, "limit", 409);
   if (settings.managedSections?.length) warnings.push("Additional teams a Primary Bot coordinates are not imported: the copy is not a Primary Bot.");
   let selection: ModelSelection = settings.modelSelection ? { ...settings.modelSelection } as ModelSelection : await host.defaultSelection();
+  let keptModel = Boolean(settings.modelSelection);
   if (!host.engineUsable(selection)) {
     warnings.push(`${selection.instanceId} is not available here: the bot uses the default model.`);
     selection = await host.defaultSelection();
+    keptModel = false;
   }
   const name = takeImportName(options.name?.trim() || identity.name || manifest.bot.name, taken);
   const section = settings.section && host.sectionExists(settings.section) ? settings.section : undefined;
@@ -899,6 +904,7 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(settings.skillLearning !== undefined ? { skillLearning: settings.skillLearning } : {}),
       ...(settings.builtinPlugins !== undefined ? { builtinPlugins: { ...settings.builtinPlugins } } : {}),
       ...(settings.helperModel !== undefined ? { helperModel: settings.helperModel } : {}),
+      ...(keptModel && isHarnessId(settings.harness) ? { harness: settings.harness } : {}),
       ...(settings.parkDirectMessages !== undefined ? { parkDirectMessages: settings.parkDirectMessages } : {}),
       ...(settings.approvePeerComms !== undefined ? { approvePeerComms: settings.approvePeerComms } : {}),
       ...(settings.localPrompt !== undefined ? { localPrompt: settings.localPrompt } : {}),

@@ -2,7 +2,7 @@ import type { PersonalProviderServer } from "../../shared/provider-accounts.ts";
 import { PERSONAL_VOICE_KEY_PROVIDERS, isPersonalVoiceKeyProvider } from "../../shared/person-voice-keys.ts";
 import { ProviderAccountsError, type ProviderAccountOwner, type ProviderAccounts } from "../engines/provider-accounts.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
-import { providerCatalog, type CatalogBotsLink, type CatalogInstance } from "../../shared/provider-catalog.ts";
+import { providerCatalog, type CatalogBotsLink, type CatalogInstance, type ProviderCatalog } from "../../shared/provider-catalog.ts";
 import { azureOpenAIEndpoint } from "../../shared/azure-openai.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -16,14 +16,7 @@ export function createProviderAccountsRoutes(deps: {
   /** GET /api/me/providers/catalog (#4329): the engines this caller sees
    * (the same list as GET /api/instances) and their link to their bots in
    * the xAI group's bot app. */
-  catalog?: {
-    /** GET /api/instances rows (InstanceInfo), read as CatalogInstance. */
-    instances(auth: RequestAuth): Promise<readonly unknown[]>;
-    botsLink?(auth: RequestAuth): CatalogBotsLink | null;
-    /** The server's engine instance map (server/config.ts instanceConfigs,
-     * workspace address defaults merged), to tell an Azure resource. */
-    instanceConfigs?(): Readonly<Record<string, { driver: string; config?: unknown }>>;
-  };
+  catalog?: ProviderCatalogDeps;
 }): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     const legacyVoice = path === "/api/me/voice-keys" || path.startsWith("/api/me/voice-keys/");
@@ -56,18 +49,7 @@ export function createProviderAccountsRoutes(deps: {
       }
       if (path === "/api/me/providers/catalog" && method === "GET") {
         if (!deps.catalog) return PASS;
-        // one list by provider for the phone and for bots: the servers'
-        // protocols come from the person's accounts, never an address
-        const [instances, view] = await Promise.all([deps.catalog.instances(auth), deps.accounts.list(owner).catch(() => null)]);
-        return json(res, 200, providerCatalog({
-          instances: instances as readonly CatalogInstance[], place: owner ? "organization" : "solo",
-          servers: view?.servers.map((server) => ({
-            instanceId: server.instanceId, protocol: server.protocol,
-            azure: server.protocol === "openai" && azureOpenAIEndpoint(server.url) !== null,
-          })) ?? [],
-          azureInstances: azureAddressInstances(deps.catalog.instanceConfigs?.() ?? {}),
-          botsLink: deps.catalog.botsLink?.(auth) ?? null,
-        }));
+        return json(res, 200, await providerCatalogFor(deps.catalog, deps.accounts, owner, auth));
       }
       if (path === "/api/me/providers" && method === "GET") {
         const view = await deps.accounts.list(owner);
@@ -93,6 +75,32 @@ export function createProviderAccountsRoutes(deps: {
       return json(res, 503, { error: "Your provider accounts are unavailable. Try again." });
     }
   };
+}
+
+/** What GET /api/me/providers/catalog reads (#4329). */
+export interface ProviderCatalogDeps {
+  /** GET /api/instances rows (InstanceInfo), read as CatalogInstance. */
+  instances(auth: RequestAuth): Promise<readonly unknown[]>;
+  botsLink?(auth: RequestAuth): CatalogBotsLink | null;
+  /** The server's engine instance map (server/config.ts instanceConfigs,
+   * workspace address defaults merged), to tell an Azure resource. */
+  instanceConfigs?(): Readonly<Record<string, { driver: string; config?: unknown }>>;
+}
+
+/** One list by provider for this caller, for the phone, for bots and for
+ * the "Runs with" resolver (#4329 lot 5): the servers' protocols come from
+ * the person's accounts, never an address. `owner` undefined is solo. */
+export async function providerCatalogFor(catalog: ProviderCatalogDeps, accounts: ProviderAccounts, owner: ProviderAccountOwner | undefined, auth: RequestAuth): Promise<ProviderCatalog> {
+  const [instances, view] = await Promise.all([catalog.instances(auth), accounts.list(owner).catch(() => null)]);
+  return providerCatalog({
+    instances: instances as readonly CatalogInstance[], place: owner ? "organization" : "solo",
+    servers: view?.servers.map((server) => ({
+      instanceId: server.instanceId, protocol: server.protocol,
+      azure: server.protocol === "openai" && azureOpenAIEndpoint(server.url) !== null,
+    })) ?? [],
+    azureInstances: azureAddressInstances(catalog.instanceConfigs?.() ?? {}),
+    botsLink: catalog.botsLink?.(auth) ?? null,
+  });
 }
 
 /** The address instances whose address is an Azure resource, read as the

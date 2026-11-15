@@ -163,6 +163,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Model and effort ({instanceId, model, effort}) | Bot editor > Model | `sagax_settings` get, set `bot.model` | simple |
 | Reasoning effort (low, medium, high, ...; keeps the model) | Bot editor > Model > Effort | `sagax_settings` get, set `bot.effort` | simple |
 | Fallback models | Bot editor > Model > Fallback | `sagax_settings` get, set `bot.fallback` | simple |
+| Runs with: the engine that runs this bot's model (piAgent, opencodeGo, openai-compat, or its own tool's kind such as claudeAgent or codex; null for the provider's default). Only what the provider's connection allows | Bot editor > Model > Runs with | `sagax_settings` get, set `bot.harness` | simple |
 | Teams the Primary Bot manages (e.g. Built-in) | Bot editor > Permissions > Managed teams | `sagax_settings` get, set `bot.managedSections` | simple |
 | Ask before talking to other bots | Bot editor > Permissions | `sagax_settings` get, set `bot.approvePeerComms` | simple |
 | Send on your behalf ({policy: ask/allow, dailyCap}) | Bot editor > Permissions | `sagax_settings` get, set `bot.outbound` | simple (élargit les droits si allow) |
@@ -385,6 +386,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Live call settings | Settings > Voice > Live calls | `sagax_settings` get, set `models.liveCalls` | simple; organisation : organisation |
 | Engines and their accounts (read only: instanceId, name, driver, signedIn, account) | Settings > Models > Engines | `sagax_settings` get, set `models.engines` | simple |
 | An engine's settings ({displayName, configDir: a Claude account's folder, cli: the program's path, '' for the default, tools}) | Settings > Models > Engines > engine | `sagax_settings` get, set `models.engine` | simple; organisation : autrui |
+| Runs with, per provider ({<provider id>: <engine kind> or null}; provider ids from GET /api/me/providers/catalog) | Settings > Providers > provider > Runs with | `sagax_settings` get, set `models.harnessDefault` | simple |
 | Add a Claude account ({name, configDir?}); then models.engineSignIn posts its sign-in card | Settings > Models > Claude > Add account | `sagax_settings` set `models.claudeAccount` | simple |
 | Add a ChatGPT account for Codex ({name}); then models.engineSignIn posts its sign-in card | Settings > Models > Codex > Add account | `sagax_settings` set `models.chatgptAccount` | simple |
 | Post the sign-in card of an engine or account (value true): the person signs in themselves, the bot never sees the sign-in | Settings > Models > engine > Sign in | `sagax_settings` set `models.engineSignIn` | simple |

@@ -297,6 +297,11 @@ export interface AgentModelSummary {
   model: string;
   effort?: string;
   auto?: boolean;
+  /** #4329 lot 5: the engine kind that runs the model ("Runs with"). */
+  harness?: string;
+  /** True when the bot has an engine of its own, not the provider's default. */
+  harness_own?: boolean;  /** The engine kinds that may run this model here (list_agent_models). */
+  harnesses?: string[];
 }
 
 export interface AgentSummary {
@@ -541,6 +546,8 @@ export interface AgentApiDeps {
     model?: string;
     effort?: string;
     auto?: boolean;
+    /** #4329 lot 5: what runs it, a driver kind, or null for the provider's default. */
+    harness?: string | null;
   }): Promise<{ model: AgentModelSummary; agent: AgentSummary } | Refusal>;
   /** Partial Edit-bot fields (same checks as PATCH /api/bots/:id). */
   updateSettings?(caller: AgentCaller, agentId: string, fields: Record<string, unknown>): Promise<AgentSettingsResult | Refusal>;
@@ -1961,7 +1968,7 @@ function createAgentApiConfigHandlers(env: {
     },
 
     async update_agent_model(caller, args) {
-      const bad = onlyKeys(args, ["agent_id", "instance_id", "instance", "engine", "model", "effort", "auto"]);
+      const bad = onlyKeys(args, ["agent_id", "instance_id", "instance", "engine", "model", "effort", "auto", "harness"]);
       if (bad) return bad;
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
@@ -1978,8 +1985,11 @@ function createAgentApiConfigHandlers(env: {
       const instanceId = typeof instanceRaw === "string" ? instanceRaw.trim() : undefined;
       const model = typeof args.model === "string" ? args.model.trim() : undefined;
       const effort = typeof args.effort === "string" ? args.effort.trim() : undefined;
-      if (auto !== true && !instanceId && !model && !effort) {
-        return refuse(400, "bad_request", "Pass instance_id (or engine), model, effort, and/or auto true. Call list_agent_models for valid choices.");
+      // #4329 lot 5: what runs the agent's model; "" or null goes back to the provider's default
+      const harness = args.harness === null || args.harness === "" ? null : typeof args.harness === "string" ? args.harness.trim() : undefined;
+      if (args.harness !== undefined && harness === undefined) return refuse(400, "bad_request", "harness is an engine kind from list_agent_models (harnesses), or null.");
+      if (auto !== true && !instanceId && !model && !effort && harness === undefined) {
+        return refuse(400, "bad_request", "Pass instance_id (or engine), model, effort, harness, and/or auto true. Call list_agent_models for valid choices.");
       }
       if (effort !== undefined && !effort) return refuse(400, "bad_request", "effort is a non-empty effort level from list_agent_models.");
       const updated = await deps.updateModel(caller, agentId, {
@@ -1987,6 +1997,7 @@ function createAgentApiConfigHandlers(env: {
         ...(model ? { model } : {}),
         ...(effort ? { effort } : {}),
         ...(auto === true ? { auto: true } : {}),
+        ...(harness !== undefined ? { harness } : {}),
       });
       if (isRefusal(updated)) return updated;
       return ok({
@@ -2003,7 +2014,7 @@ function createAgentApiConfigHandlers(env: {
         // Name the refused key plainly when it is a model field (wrong tool).
         const keys = args && typeof args === "object" && !Array.isArray(args) ? Object.keys(args as object) : [];
         const unknown = keys.find((key) => key !== "agent_id" && !AGENT_SETTINGS_FIELDS.includes(key));
-        if (unknown === "modelSelection" || unknown === "model" || unknown === "instance_id" || unknown === "instance" || unknown === "engine" || unknown === "effort" || unknown === "auto") {
+        if (unknown === "modelSelection" || unknown === "model" || unknown === "instance_id" || unknown === "instance" || unknown === "engine" || unknown === "effort" || unknown === "auto" || unknown === "harness") {
           return refuse(400, "bad_request", "Model changes use update_agent_model, not update_agent_settings.");
         }
         return bad;

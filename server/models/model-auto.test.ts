@@ -315,6 +315,14 @@ describe("helpers", () => {
     expect(orderEngines([local, grok, codex, claude], "ollama").map((engine) => engine.instanceId)).toEqual(["ollama", "claude", "codex", "grok-build"]);
   });
 
+  // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
+  it("tries the chosen engines right after the bot's own, in the chosen order", () => {
+    expect(orderEngines([local, grok, codex, claude], "claude", [grok.driverKind, local.driverKind]).map((engine) => engine.instanceId))
+      .toEqual(["claude", "grok-build", "ollama", "codex"]);
+    // no choice: the order is today's
+    expect(orderEngines([local, grok, codex, claude], "ollama", []).map((engine) => engine.instanceId)).toEqual(["ollama", "claude", "codex", "grok-build"]);
+  });
+
   it.each([
     "This model is not available to the selected ChatGPT plan.",
     "400 invalid_request: model 'gpt-5.9-sol' does not exist",

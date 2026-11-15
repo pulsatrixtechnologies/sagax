@@ -157,6 +157,7 @@ export const AGENT_API_TOOLS = [
         model: { type: "string", minLength: 1, maxLength: 200, description: "From list_agent_models." },
         effort: { type: "string", minLength: 1, maxLength: 40 },
         auto: { type: "boolean", description: "true turns Auto on." },
+        harness: { type: ["string", "null"], maxLength: 61, description: "What runs it: one of list_agent_models current.harnesses; null: default." },
       },
       required: ["agent_id"],
     },

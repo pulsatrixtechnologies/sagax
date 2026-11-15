@@ -1,4 +1,4 @@
-import { Archive, AudioLines, Bell, Code2, Coins, Download, Info, KeyRound, LockKeyhole, Monitor, Palette, Plug, Settings2, ShieldCheck, Terminal, User, Building2 } from "lucide-react";
+import { Archive, AudioLines, Bell, Code2, Coins, Download, Info, KeyRound, LockKeyhole, Monitor, Palette, Plug, Settings2, ShieldCheck, Terminal, User, Building2, Server } from "lucide-react";
 import type { AppSettingsSection } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
@@ -88,7 +88,7 @@ export function navGroupsFor(organization: boolean): typeof NAV_GROUPS {
 
 export function sectionsFor(organization: boolean): typeof SECTIONS {
   if (organization) return SECTIONS;
-  return SECTIONS.map((entry) => entry.id === "organization" ? { ...entry, labelKey: "settings.section.servers", introKey: "settings.intro.servers" } : entry);
+  return SECTIONS.map((entry) => entry.id === "organization" ? { ...entry, labelKey: "settings.section.servers", introKey: "settings.intro.servers", icon: Server } : entry);
 }
 
 /** Former sections that are a card of another page now (2026-10-14), by the

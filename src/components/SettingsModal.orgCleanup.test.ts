@@ -121,6 +121,10 @@ describe("Settings on an organization server", () => {
     expect(solo).toContain('<option value="organization" selected="">Servers</option>');
     expect(solo).toContain("Your server, and the servers you connect to.");
     expect(solo).not.toContain("Your organization&#x27;s server");
+    // the page's rail icon is a server, not the organization's building
+    const row = (html: string) => /data-settings-nav-row="organization"[\s\S]*?<\/button>/.exec(html)?.[0] ?? "";
+    expect(row(solo)).toContain("lucide-server");
+    expect(row(solo)).not.toContain("lucide-building");
     // Computer and Backups and storage stay reachable under the same group
     expect(solo).toContain('data-settings-nav-row="computer"');
     expect(solo).toContain('data-settings-nav-row="backups"');
@@ -130,6 +134,7 @@ describe("Settings on an organization server", () => {
     expect(heading(linked)).toBe("Organization");
     expect(linked).toContain('<option value="organization" selected="">Organization</option>');
     expect(linked).not.toContain('<optgroup label="Installation">');
+    expect(row(linked)).toContain("lucide-building");
     // French, tu
     fixture.org = null;
     setLocale("fr");

@@ -1919,7 +1919,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "es": {
@@ -3822,7 +3821,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "fr": {
@@ -19201,8 +19199,7 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -21094,7 +21091,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "ja": {
@@ -24816,7 +24812,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "pt-br": {
@@ -27497,7 +27492,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "uk": {
@@ -29874,7 +29868,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "zh": {
@@ -32514,7 +32507,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "zh-tw": {
@@ -36121,7 +36113,6 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.pill.label": "49c4605816cfbf30455bf95871bcd0ff7c634d728b9d34a85d1ec9f75235d1d4",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     }
   }

@@ -123,6 +123,20 @@ describe("listening in a bot's chat (#4100)", () => {
     expect(currentListening()).toBeNull();
   });
 
+  it("keeps the last sentence said before Stop while the voice model is still telling the speaker", async () => {
+    const f = fakes();
+    // the voice model takes a moment, as it does on the desktop
+    const embedder = { embed: (audio: Float32Array) => new Promise<Float32Array>((resolve) => setTimeout(() => resolve(new Float32Array(192).fill(audio.length ? 0.1 : 0)), 5)) };
+    f.deps.models = async () => ({ vad: { probability: async () => VOICED, reset: () => {} }, embedder });
+    await startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps);
+    await f.frames(12, VOICED);
+    f.say("Last thing: ship Friday.");
+    await stopListening();
+    const sent = f.requests.filter((request) => request.path.endsWith("/lines")).flatMap((request) => (request.body as { lines: Array<{ text: string }> }).lines.map((line) => line.text));
+    expect(sent).toEqual(["Last thing: ship Friday."]);
+    expect(f.requests.at(-1)).toEqual({ path: "/api/listening/ls_aaaaaaaaaaaaaaaaaaaa/stop" });
+  });
+
   it("sends a heartbeat when nothing was heard", async () => {
     const f = fakes();
     await startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps);

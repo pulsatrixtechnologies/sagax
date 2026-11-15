@@ -2369,7 +2369,6 @@
   "listening.loading": "Завантаження транскрипції…",
   "listening.pill": "Слухаю в чаті {name}",
   "listening.unreadable": "Цю транскрипцію тут не вдається прочитати.",
-  "listening.pill.label": "Слухаю",
   "listening.back": "Назад до прослуховування",
   "listening.couldNotStart": "Не вдалося почати прослуховування: {error}",
   "listening.computerDenied": "Для звуку комп'ютера потрібен системний дозвіл на запис екрана й системного звуку.",

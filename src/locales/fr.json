@@ -7701,7 +7701,6 @@
   "listening.loading": "Chargement de la transcription…",
   "listening.unreadable": "Cette transcription ne peut pas être lue ici.",
   "listening.pill": "À l'écoute dans le chat de {name}",
-  "listening.pill.label": "À l'écoute",
   "listening.back": "Retour à l'écoute",
   "listening.couldNotStart": "L'écoute n'a pas pu commencer : {error}",
   "listening.computerDenied": "Le son de l'ordinateur demande la permission d'enregistrement de l'écran et de l'audio du système.",

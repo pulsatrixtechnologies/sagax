@@ -1913,7 +1913,6 @@
   "listening.loading": "Transkript wird geladen…",
   "listening.pill": "Hört im Chat von {name} zu",
   "listening.unreadable": "Dieses Transkript kann hier nicht gelesen werden.",
-  "listening.pill.label": "Hört zu",
   "listening.back": "Zurück zum Zuhören",
   "listening.couldNotStart": "Zuhören konnte nicht starten: {error}",
   "listening.computerDenied": "Der Computerton braucht die Systemberechtigung für Bildschirm- und Systemaudioaufnahme.",

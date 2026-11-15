@@ -66,14 +66,9 @@ export function LiveCallPill({ onOpen, currentBotId, iconOnly = false, variant =
   if (variant === "listening") {
     title = t("listening.pill", { name: bot.name });
     back = t("listening.back");
-    // the bot's name first, so a long name stays readable in the sidebar:
-    // the short label gives way before the name does
-    label = (
-      <span className="flex min-w-0 items-baseline gap-1">
-        <bdi dir="auto" className="min-w-0 truncate font-medium">{bot.name}</bdi>
-        <span className="min-w-0 shrink-[100] truncate text-ink-secondary">{t("listening.pill.label")}</span>
-      </span>
-    );
+    // one sentence cut as one string, like the call pill: the state word
+    // leads, so a long name is what gives way, never "Listening"
+    label = <span className="truncate">{title}</span>;
     icon = <Ear className="size-4" aria-hidden />;
     actions = (
       <button

@@ -2673,7 +2673,6 @@
   "listening.loading": "Carregando a transcrição…",
   "listening.pill": "Ouvindo no chat de {name}",
   "listening.unreadable": "Esta transcrição não pode ser lida aqui.",
-  "listening.pill.label": "Ouvindo",
   "listening.back": "Voltar para a escuta",
   "listening.couldNotStart": "Não foi possível começar a ouvir: {error}",
   "listening.computerDenied": "O som do computador precisa da permissão do sistema de gravação de tela e áudio do sistema.",

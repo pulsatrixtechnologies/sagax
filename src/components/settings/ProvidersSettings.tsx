@@ -6,7 +6,7 @@
 // provider" is one list in two columns (the reference's Connect Apps grid),
 // then one step. Other services and Advanced stay as they were.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, KeyRound, Plus, Search } from "lucide-react";
+import { ArrowLeft, ChevronRight, KeyRound, Plus, Search } from "lucide-react";
 
 import { useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -24,72 +24,62 @@ import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSe
 import { MemesSettings } from "./MemesSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { SavedKeysResetNotice } from "../SavedKeysReset";
-import { DescribedRow, HelpTip, InlineFold, PILL, PRIMARY_PILL, SettingsFoldSection, SettingsGroup, Switch, peekRequestedSettingsCard } from "../SettingsPrimitives";
+import { DescribedRow, HelpTip, InlineFold, PILL, SettingsFoldSection, SettingsGroup, Switch, peekRequestedSettingsCard } from "../SettingsPrimitives";
 import { SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { PLUGINS } from "../plugins/plugins-style";
-import { BOTS_LINK_SEARCH_WORDS, BotsLinkButton, BotsLinkLine, BotsLinkWords, botsLinkOnPage, useBotsLink, type BotsLink } from "./LinkedGrokBotSettings";
+import { BOTS_LINK_SEARCH_WORDS, BotsLinkButton, botsLinkOnPage, botsLinkWords, useBotsLink } from "./LinkedGrokBotSettings";
 import { PiServerForm } from "./PiModelServers";
 import { useProviderList, type ProviderList } from "./useProviderList";
-import { LineButton, ProviderLogo, XAI_PROVIDER_ID, groupName, lineWords, openProviderPage } from "./ProviderPage";
+import { LineButton, ProviderLogo, XAI_PROVIDER_ID, groupName, lineAction, openProviderPage } from "./ProviderPage";
+import { firstStepRow, providerSummary, type ProviderSummary } from "./provider-summary";
 import { providerCardTarget } from "@/lib/settings-sections";
 
-/** One row of the list (#4329 B1): logo, name, one grey line (the account,
- * or what it brings), one button; a second account is a second line with
- * its own button. The row opens the provider's page. */
-function ProviderListRow({ group, list, onOpen, extra }: { group: ProviderGroup; list: ProviderList; onOpen: (row?: ProviderRow) => void; extra?: ReactNode }) {
-  const [first, ...rest] = group.rows;
-  if (!first) return null;
-  const line = (row: ProviderRow) => {
-    const words = lineWords(row, group, list.instances);
-    return <>{words.label}{words.state && <> · <StatusText tone={row.state === "reconnect" || row.state === "keyMissing" ? "warning" : "neutral"}>{words.state}</StatusText></>}</>;
-  };
+/** One row of the list (#4376, measured on the reference's row that opens a
+ * detail page: one button the whole row wide, its hover the whole row, a
+ * chevron at the right): the logo, the name and ONE line that sums the
+ * provider up. A connected provider has no button here: signing out,
+ * disconnecting, removing and turning off are on its page. A provider not
+ * connected yet carries its first step ("Sign in"), the one control that
+ * sits over the row, never overlapping another. */
+export function ProviderListRow({ group, list, summary, onOpen, action, rowData }: {
+  group: ProviderGroup;
+  list: ProviderList;
+  summary: ProviderSummary;
+  onOpen: () => void;
+  action?: ReactNode;
+  rowData?: Record<string, string>;
+}) {
+  const name = groupName(group);
   return (
-    <li data-provider={group.id} data-provider-kind={group.kind} className="min-w-0">
-      <div className="flex min-h-16 min-w-0 items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-ink/[0.05] motion-reduce:transition-none">
-        <button type="button" data-provider-open={group.id} onClick={() => onOpen()}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
-          <ProviderLogo group={group} instances={list.instances} />
-          <span className="min-w-0 flex-1">
-            {/* a long server name wraps, never cut (#4329: no name cut at any width) */}
-            <span className="block break-words text-[13px] font-medium leading-[18px] text-ink [overflow-wrap:anywhere]">{groupName(group)}</span>
-            <span className={cn(PLUGINS.rowSub, "[overflow-wrap:anywhere]")} data-provider-line={first.id}>{line(first)}</span>
+    <li data-provider={group.id} data-provider-kind={group.kind} {...rowData}
+      className="group/provider relative min-w-0 rounded-2xl transition-colors hover:bg-ink/[0.05] has-[[data-provider-open]:focus-visible]:bg-ink/[0.05] motion-reduce:transition-none">
+      {/* the row's one target: under the words, the whole row wide */}
+      <button type="button" data-provider-open={group.id} onClick={onOpen} aria-label={`${name}, ${summary.text}`}
+        className="absolute inset-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70" />
+      {/* at a narrow width the button goes under the words, never squeezing the name letter by letter */}
+      <div data-provider-row-body="" className="pointer-events-none relative flex min-h-16 min-w-0 flex-wrap items-center gap-3 p-3">
+        <ProviderLogo group={group} instances={list.instances} />
+        <span className="min-w-[9rem] flex-1 basis-0">
+          {/* a long server name wraps, never cut (#4329: no name cut at any width) */}
+          <span className="block break-words text-[13px] font-medium leading-[18px] text-ink [overflow-wrap:anywhere]">{name}</span>
+          <span className={cn(PLUGINS.rowSub, "[overflow-wrap:anywhere]")} data-provider-summary={group.id}>
+            <StatusText tone={summary.tone}>{summary.text}</StatusText>
           </span>
-        </button>
-        <LineButton row={first} group={group} list={list} onOpen={onOpen} />
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-3">
+          {action && <span data-provider-row-action="" className="pointer-events-auto relative flex shrink-0">{action}</span>}
+          <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-tertiary transition-colors group-hover/provider:text-ink motion-reduce:transition-none" />
+        </span>
       </div>
-      {rest.map((row) => (
-        <div key={row.id} data-provider-line-row={row.id} className="-mt-2 flex min-w-0 items-center gap-3 pb-2 pl-[64px] pr-3">
-          <button type="button" onClick={() => onOpen(row)} className={cn(PLUGINS.rowSub, "mt-0 min-w-0 flex-1 [overflow-wrap:anywhere] rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70")} data-provider-line={row.id}>
-            {line(row)}
-          </button>
-          <LineButton row={row} group={group} list={list} onOpen={onOpen} />
-        </div>
-      ))}
-      {extra}
     </li>
   );
 }
 
 /** The xAI provider's row when none of its accounts is listed but the bots
- * link is there: its name, the link's words and its one button. */
-function BotsLinkProviderRow({ link, list, onOpen }: { link: BotsLink; list: ProviderList; onOpen: () => void }) {
-  const group: ProviderGroup = { id: XAI_PROVIDER_ID, name: vendorLabel(XAI_PROVIDER_ID), kind: "account", rows: [], state: "available" };
-  return (
-    <li data-provider={group.id} data-provider-kind={group.kind} className="min-w-0">
-      <div data-bots-link-row="" data-settings-row="providers.botsLink" data-settings-keywords={BOTS_LINK_SEARCH_WORDS} className="flex min-h-16 min-w-0 items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-ink/[0.05] motion-reduce:transition-none">
-        <button type="button" data-provider-open={group.id} data-bots-link-open="" onClick={onOpen}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
-          <ProviderLogo group={group} instances={list.instances} />
-          <span className="min-w-0 flex-1">
-            <span className="block break-words text-[13px] font-medium leading-[18px] text-ink [overflow-wrap:anywhere]">{group.name}</span>
-            <span className={cn(PLUGINS.rowSub, "[overflow-wrap:anywhere]")}><BotsLinkWords link={link} /></span>
-          </span>
-        </button>
-        <BotsLinkButton link={link} onOpen={onOpen} />
-      </div>
-    </li>
-  );
-}
+ * link is there (#4329 lot 2): its name and what the link says. */
+const BOTS_LINK_GROUP: ProviderGroup = { id: XAI_PROVIDER_ID, name: vendorLabel(XAI_PROVIDER_ID), kind: "account", rows: [], state: "available" };
+/** The row a settings search finds the bots link by (its old names included). */
+const BOTS_LINK_ROW = { "data-bots-link-row": "", "data-settings-row": "providers.botsLink", "data-settings-keywords": BOTS_LINK_SEARCH_WORDS };
 
 /** One choice of Add a provider. */
 type AddChoice =
@@ -341,18 +331,34 @@ export function ProvidersSettings() {
               <>
                 {list.groups.length > 0 || showBotsLink
                   ? <ul className="flex flex-col gap-0.5 px-1.5 py-1" data-providers-active="">
-                      {list.groups.map((group) => (
-                        <ProviderListRow key={group.id} group={group} list={list} onOpen={(row) => open(group, row)}
-                          extra={group.id === XAI_PROVIDER_ID && showBotsLink ? <BotsLinkLine link={botsLink} onOpen={openBotsLink} /> : undefined} />
-                      ))}
-                      {showBotsLink && !xaiListed && <BotsLinkProviderRow link={botsLink} list={list} onOpen={openBotsLink} />}
+                      {list.groups.map((group) => {
+                        const xai = group.id === XAI_PROVIDER_ID && showBotsLink;
+                        const step = firstStepRow(group, (row) => lineAction(row, list));
+                        return (
+                          <ProviderListRow key={group.id} group={group} list={list} onOpen={() => open(group)}
+                            summary={providerSummary(group, xai && botsLink.view?.linked === true && botsLink.state === "connected")}
+                            action={step ? <LineButton row={step} group={group} list={list} onOpen={(row) => open(group, row)} /> : undefined}
+                            rowData={xai ? BOTS_LINK_ROW : undefined} />
+                        );
+                      })}
+                      {showBotsLink && !xaiListed && (
+                        <ProviderListRow group={BOTS_LINK_GROUP} list={list} onOpen={openBotsLink} rowData={BOTS_LINK_ROW}
+                          summary={{ text: botsLinkWords(botsLink) ?? "", tone: "neutral" }}
+                          action={<BotsLinkButton link={botsLink} onOpen={openBotsLink} />} />
+                      )}
                     </ul>
                   : <div data-providers-empty=""><SettingsEmpty icon={KeyRound}>{t("providers.empty")}</SettingsEmpty></div>}
-                {/* the card's one primary action, last row (#2080) */}
-                <div data-add-provider-row="" className="mx-1.5 mt-1 border-t border-hairline/40 pt-1.5">
-                  <button type="button" data-add-provider-open="" onClick={() => setAdding(true)} className={cn(PRIMARY_PILL, "inline-flex w-full items-center justify-center gap-1.5")}>
-                    <Plus size={14} aria-hidden="true" className="shrink-0" />
-                    {t("providers.add.title")}
+                {/* #4376 ("the add provider is looking weird at this spot"): the
+                    list's last row, drawn as its rows are (the reference's
+                    "+ Add an account" row), never a button of another kind */}
+                <div data-add-provider-row="" className="px-1.5 pb-1">
+                  <button type="button" data-add-provider-open="" onClick={() => setAdding(true)}
+                    className="group/add flex min-h-16 w-full min-w-0 items-center gap-3 rounded-2xl p-3 text-left outline-none transition-colors hover:bg-ink/[0.05] focus-visible:bg-ink/[0.05] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70 motion-reduce:transition-none">
+                    <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-ink/[0.06] text-ink-secondary group-hover/add:text-ink">
+                      <Plus size={20} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-[13px] font-medium leading-[18px] text-ink">{t("providers.add.title")}</span>
+                    <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-tertiary transition-colors group-hover/add:text-ink motion-reduce:transition-none" />
                   </button>
                 </div>
               </>

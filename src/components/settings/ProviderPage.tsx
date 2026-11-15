@@ -1,21 +1,30 @@
-// #4329 lot 1: one provider's page, a settings sub-page ("Providers >
-// OpenAI", back arrow, Escape returns). Accounts first (one line per
-// account, key or server, one button each; the button opens what it does in
-// place: the sign-in card, the sign-out, the key), "Runs with" (read only
-// until the choice exists, hidden with one possible value), Models, and
-// Advanced, folded each time the page opens, holding everything else the
-// old row showed: who pays, the tool by its name with its version, location
-// and updates, a server's address, the model list problem, the identifier.
-import { useEffect, useState, type ReactNode } from "react";
-import { Copy, Cpu, KeyRound, Server } from "lucide-react";
+// One provider's page, a settings sub-page ("Providers > OpenAI", back
+// arrow, Escape returns). #4376 (the owner 2026-11-15: "I should be able to
+// rename existing one. Api key should be a separate section", "confusing
+// to go between two different pages"), sections in this order, each with a
+// plain heading and absent when it has nothing to show:
+// - Accounts: the sign-ins only, each named (the person renames it in
+//   place), its sign-in address and state under the name, one button (Sign
+//   in, Sign out), "Add an account" at the end;
+// - API key: whether a key is saved, Add, Replace, Remove;
+// - Your bots there (the xAI provider only);
+// - Runs with: absent until the engine choice exists (#4329 lot 5);
+// - Models: the provider's models unfolding in place, one switch each, the
+//   same switches as Settings > Models > Active models;
+// - Advanced, folded each time the page opens: who pays, the tool by its
+//   name with its version, location and updates, a server's address, the
+//   model list problem, the identifier.
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Copy, Cpu, KeyRound, Pencil, Server } from "lucide-react";
 
 import { api, useStore, type InstanceInfo } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { copyText } from "@/lib/copy-text";
-import { modelSwitches } from "@/lib/offered-instances";
-import { perspicaxKeysUrl } from "@/lib/perspicax-org";
+import { readableError } from "@/lib/plain-error";
+import { useOfferedInstances } from "@/lib/offered-instances";
+import { perspicaxKeysUrl, reloadMyEngines } from "@/lib/perspicax-org";
 import {
   connectionAction,
   connectionLabel,
@@ -24,15 +33,14 @@ import {
   type ProviderGroup,
   type ProviderRow,
 } from "@/lib/provider-rows";
-import { modelOn } from "../../../shared/offered-models";
-import { harnessRole, offeredHarnesses, type HarnessRole, type HarnessSource } from "../../../shared/harness-matrix";
 import { COMPUTER_PROVIDER_ID } from "../../../shared/model-provider";
 import { PERSONAL_PROVIDER_NAMES } from "../../../shared/provider-accounts";
 import { AddAnotherAccount, EngineRow } from "../EnginesSettings";
+import { EngineApiKeyField } from "../EngineApiKeyField";
 import { engineReady } from "../EngineLibrary";
 import { InstanceProviderMark, PresetProviderMark } from "../ProviderIcons";
 import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../../shared/provider-icon";
-import { ConfirmPill, CountPill, DescribedRow, HelpTip, LinkRow, PILL, SettingsGroup, peekRequestedSettingsCard, requestSettingsCard } from "../SettingsPrimitives";
+import { ConfirmPill, CountPill, DescribedRow, FIELD, HelpTip, PILL, SettingsGroup, peekRequestedSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { pluginActionClass } from "../plugins/plugins-style";
 import { ProviderKeyEditor, keyRowForEngine, removeProviderKey, type KeyRowId } from "./ProviderKeys";
@@ -41,6 +49,8 @@ import { PersonalProviderKey, PersonalProviderServerForm, removePersonalKey, rem
 import { LocalModelsSettings } from "./LocalModelsSettings";
 import { PiServerDetail, removePiServer } from "./PiModelServers";
 import { BotsLinkAdvanced, BotsLinkSection, botsLinkOnPage, useBotsLink } from "./LinkedGrokBotSettings";
+import { ProviderModels, activeModelProviders, useModelSwitches } from "./ModelSwitchesSettings";
+import { accountAddress, accountName, accountRows } from "./provider-summary";
 import {
   PI_SERVER_PREFIX,
   focusProviderLine,
@@ -68,14 +78,6 @@ const STATE_KEY = {
   offline: "providers.state.offline",
   available: "providers.state.available",
 } as const satisfies Record<ProviderRow["state"], LocaleKey>;
-
-const RUNS_WITH_KEY = {
-  own: "model.runsWith.own",
-  pi: "providers.runsWith.pi",
-  opencode: "providers.runsWith.opencode",
-  builtin: "model.runsWith.builtin",
-  tool: "providers.runsWith.tool",
-} as const satisfies Record<HarnessRole, LocaleKey>;
 
 /** The xAI provider (shared/model-provider.ts): its page holds the link to
  * the person's bots in its bot app. */
@@ -170,13 +172,13 @@ export function toolSpeakers(rows: readonly ProviderRow[], list: Pick<ProviderLi
 /** The one button of a line. Turn on and Turn off act at once; Remove (a
  * server, a saved key) asks to confirm first, as on the server's own page;
  * the others open what they do on the provider's page. */
-export function LineButton({ row, group, list, onOpen }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; onOpen: (row: ProviderRow) => void }) {
+export function LineButton({ row, group, list, onOpen, name }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; onOpen: (row: ProviderRow) => void; /** What it acts on, when not the provider ("Sign out · Work plan"). */ name?: string }) {
   const { dispatch, refreshInstances } = useStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const action = lineAction(row, list);
   if (!action) return null;
-  const label = `${t(ACTION_KEY[action])} · ${groupName(group)}`;
+  const label = `${t(ACTION_KEY[action])} · ${name ?? groupName(group)}`;
   const remove = () => {
     setBusy(true);
     setError(null);
@@ -229,17 +231,16 @@ export function vendorKeyOf(row: ProviderRow, group: ProviderGroup, list: Pick<P
   return server ? { server } : null;
 }
 
-/** The account line whose Advanced offers the key: the first signed-in one,
- * when no line of the page holds that key yet and no account line waiting
- * for a sign-in offers it already ("Use a key instead"). */
-export function keyOfferRow(group: ProviderGroup, list: Pick<ProviderList, "organization" | "manageKeys" | "instances">): { rowId: string; key: VendorKey } | null {
-  if (group.rows.some((row) => row.kind === "account" && row.state !== "connected")) return null;
-  const row = group.rows.find((entry) => entry.kind === "account" && entry.state === "connected");
-  const key = row ? vendorKeyOf(row, group, list) : null;
-  if (!row || !key) return null;
+/** The vendor's key a provider with accounts offers in its API key section
+ * (#4376: the key is its own section, never a row of Accounts), when no key
+ * row of the page holds it yet. */
+export function keyOffer(group: ProviderGroup, list: Pick<ProviderList, "organization" | "manageKeys" | "instances">): VendorKey | null {
+  const account = group.rows.find((row) => row.kind === "account");
+  const key = account ? vendorKeyOf(account, group, list) : null;
+  if (!key) return null;
   const held = group.rows.some((entry) => entry.kind === "key"
     && ("personal" in key ? entry.accountProvider === key.personal : entry.keyRow === key.server));
-  return held ? null : { rowId: row.id, key };
+  return held ? null : key;
 }
 
 function VendorKeyForm({ vendorKey, group, onClose }: { vendorKey: VendorKey; group: ProviderGroup; onClose: () => void }) {
@@ -248,38 +249,35 @@ function VendorKeyForm({ vendorKey, group, onClose }: { vendorKey: VendorKey; gr
     : <ProviderKeyEditor id={vendorKey.server} onClose={onClose} />;
 }
 
-/** What a line's button opens in place (first level): the sign-in card and
- * the sign-out of an account, the key. "Use a key instead" swaps the
- * sign-in for the provider's key. */
-function ConnectionPanel({ row, group, list, onClose }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; onClose: () => void }) {
-  const [useKey, setUseKey] = useState(false);
+/** What an account's button opens in place: its sign-in card or its
+ * sign-out (the key has its own section, #4376). */
+function ConnectionPanel({ row, list }: { row: ProviderRow; list: ProviderList }) {
   const instances = rowInstances(row, list.instances);
   const mineOf = (instance: InstanceInfo) => (list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined);
-  const vendorKey = row.state !== "connected" ? vendorKeyOf(row, group, list) : null;
-  if (useKey && vendorKey) return <VendorKeyForm vendorKey={vendorKey} group={group} onClose={onClose} />;
-  if (row.kind === "key" && row.keyRow && row.manage && !row.voiceKey && !row.accountProvider) return <ProviderKeyEditor id={row.keyRow} onClose={onClose} />;
-  if (row.accountProvider) return <PersonalProviderKey provider={row.accountProvider} name={groupName(group)} />;
   return (
     <>
       {instances.map((instance) => (
         <EngineRow key={instance.instanceId} instance={instance} mine={mineOf(instance)} member={list.member} issuer={list.issuer} bare keysManaged part="access" />
       ))}
-      {vendorKey && (
-        <button type="button" data-provider-use-key="" onClick={() => setUseKey(true)} className="self-start text-[12.5px] text-ink-secondary underline-offset-2 hover:text-ink hover:underline">
-          {t("providers.add.useKey")}
-        </button>
-      )}
     </>
   );
+}
+
+/** What a key line's Add, Replace or the provider's offered key opens in place. */
+function KeyForm({ row, group, list, onClose }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; onClose: () => void }) {
+  if (row.accountProvider) return <PersonalProviderKey provider={row.accountProvider} name={groupName(group)} onDone={onClose} />;
+  if (row.keyRow) return <ProviderKeyEditor id={row.keyRow} onClose={onClose} />;
+  // a key engine with no key row of its own (a solo server's Groq, Cerebras,
+  // MiniMax, Meta): the engine's own key field, the one its setup card uses
+  return <>{rowInstances(row, list.instances).map((instance) => <EngineApiKeyField key={instance.instanceId} instanceId={instance.instanceId} />)}</>;
 }
 
 /** Everything else a line had (#4329 B3 Advanced): who pays, the key in the
  * organization console, a server's address, the tool by its name with its
  * version, location and updates, the model list problem, the identifier. */
-function ConnectionAdvanced({ row, group, list, speakers, onEditKey, vendorKey }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; speakers: ReturnType<typeof toolSpeakers>; onEditKey?: () => void; vendorKey?: VendorKey }) {
+function ConnectionAdvanced({ row, list, speakers }: { row: ProviderRow; list: ProviderList; speakers: ReturnType<typeof toolSpeakers> }) {
   const { state, dispatch } = useStore();
   const [editing, setEditing] = useState(false);
-  const [addingKey, setAddingKey] = useState(false);
   const instances = rowInstances(row, list.instances);
   const server = row.compatServerId ? state.config?.openaiCompatServers?.find((entry) => entry.instanceId === row.compatServerId) : undefined;
   const managed = list.organization && row.payer === "org";
@@ -329,15 +327,6 @@ function ConnectionAdvanced({ row, group, list, speakers, onEditKey, vendorKey }
         <EngineRow key={`access:${instance.instanceId}`} instance={instance} mine={list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined}
           member={list.member} issuer={list.issuer} bare keysManaged part="access" />
       ))}
-      {/* a signed-in account: the vendor's key as the second way to pay; once
-          saved it is a line of its own (Remove there, Change key here) */}
-      {vendorKey && (addingKey
-        ? <div data-provider-add-key={row.id} className="flex min-w-0 flex-col gap-2"><VendorKeyForm vendorKey={vendorKey} group={group} onClose={() => setAddingKey(false)} /></div>
-        : <button type="button" data-provider-add-key-open={row.id} className={cn(PILL, "self-start")} onClick={() => setAddingKey(true)}>{t("providers.do.addKey")}</button>)}
-      {/* a saved key: Remove sits on its line; Change key opens the line's key */}
-      {onEditKey && (
-        <button type="button" data-provider-change-key={row.id} className={cn(PILL, "self-start")} onClick={onEditKey}>{t("providers.changeKey")}</button>
-      )}
       {!row.accountServer && instances.map((instance) => (
         <EngineRow key={instance.instanceId} instance={instance} mine={list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined}
           member={list.member} issuer={list.issuer} bare keysManaged part="details" advancedExtra={<>{explain}{copyId}</>}
@@ -367,34 +356,202 @@ function PageAdvanced({ providerId, children }: { providerId: string; children: 
   );
 }
 
-/** "Runs with", read only until the choice exists (lot 6): the engine that
- * runs this provider's line in use, in the person's words. Hidden when the
- * matrix allows one engine only for that connection. */
-export function runsWith(group: ProviderGroup, list: Pick<ProviderList, "organization" | "instances">): HarnessRole | null {
-  if (group.kind === "computer") return null;
-  const row = group.rows.find((entry) => entry.state === "connected" && entry.instanceIds.length) ?? null;
-  const instance = row ? list.instances.find((entry) => row.instanceIds.includes(entry.instanceId)) : undefined;
-  if (!row || !instance) return null;
-  const vendor = group.kind === "server" ? undefined : group.id;
-  const source: HarnessSource = group.kind === "server" ? { kind: "address", protocol: row.accountServer?.protocol ?? "openai" }
-    : row.kind === "account" ? { kind: "subscription", vendor: group.id, driver: instance.driverKind }
-      : { kind: "key", vendor: group.id };
-  const place = list.organization ? "organization" : "solo";
-  if (offeredHarnesses(source, place).length < 2) return null;
-  return harnessRole(instance.driverKind, vendor);
+/** The provider's models on its own page (#4376: never sent to another
+ * page): the count line unfolds in place into one switch per model, a
+ * search when the list is long; the same provider, rows and switches as
+ * Settings > Models > Active models (ModelSwitchesSettings.tsx). */
+function ModelsSection({ group }: { group: ProviderGroup }) {
+  const instances = useOfferedInstances("settings");
+  const { switches, toggle, busy, error, mayEdit, place } = useModelSwitches();
+  const provider = useMemo(() => activeModelProviders(instances, place).find((entry) => entry.id === group.id), [instances, place, group.id]);
+  if (!provider) return null;
+  return (
+    <SettingsGroup title={t("providers.page.modelsTitle")} groupId="provider-models">
+      <div data-provider-models={group.id}>
+        <ProviderModels provider={provider} switches={switches} mayEdit={mayEdit} onToggle={toggle} busy={busy} inPage />
+      </div>
+      {error && <p role="alert" className="px-3.5 py-1.5 text-[12px] text-danger">{error}</p>}
+    </SettingsGroup>
+  );
 }
 
-function ModelsRow({ group, list }: { group: ProviderGroup; list: ProviderList }) {
-  const { state, dispatch } = useStore();
-  const switches = modelSwitches(state.config);
-  const instances = group.rows.flatMap((row) => rowInstances(row, list.instances));
-  const total = instances.reduce((sum, instance) => sum + instance.models.options.length, 0);
-  const active = instances.reduce((sum, instance) => sum + instance.models.options.filter((model) => modelOn(switches, instance.instanceId, model.id)).length, 0);
-  if (total === 0) return null;
+/** An account's name, renamed in place (#4376): a click on the name or its
+ * pencil, type, Enter. Kept on the server: the engine's own name on a solo
+ * server, the person's own name for it on an organization server. */
+function AccountName({ rowId, name, onRename, clearable = false }: { rowId: string; name: string; onRename?: (next: string) => Promise<void>; clearable?: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const label = t("providers.account.rename", { name });
+  if (!onRename) return <span data-account-name={rowId} className="block break-words text-[13px] leading-[18px] text-ink [overflow-wrap:anywhere]">{name}</span>;
+  const start = () => { setDraft(name); setError(null); setEditing(true); };
+  const save = async () => {
+    const next = draft.trim();
+    if (busy) return;
+    // an emptied name gives back the default where the server keeps the person's
+    // own name apart (an organization); a solo engine always keeps a name
+    if (next === name || (!next && !clearable)) { setEditing(false); return; }
+    setBusy(true);
+    try {
+      await onRename(next);
+      setEditing(false);
+    } catch (failure) {
+      setError(readableError(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (editing) {
+    return (
+      <span className="flex min-w-0 flex-col gap-1" data-keeps-escape="">
+        <input data-account-name-input={rowId} autoFocus value={draft} maxLength={80} disabled={busy} aria-label={label}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => void save()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") { event.preventDefault(); void save(); }
+            if (event.key === "Escape") { event.preventDefault(); setEditing(false); }
+          }}
+          className={cn(FIELD, "h-7 min-h-0 py-0.5 md:min-h-0")} />
+        {error && <span role="alert" className="text-[12px] leading-4 text-danger">{error}</span>}
+      </span>
+    );
+  }
   return (
-    <SettingsGroup groupId="provider-models">
-      <LinkRow rowId={`providers.models.${group.id}`} label={t("providers.page.models", { active, total })}
-        onClick={() => { requestSettingsCard("models.advanced"); dispatch({ type: "toggleAppSettings", open: true, section: "engines" }); }} />
+    <span className="flex min-w-0 items-center gap-1">
+      <button type="button" data-account-name={rowId} onClick={start} title={label}
+        className="min-w-0 break-words rounded-md text-left text-[13px] leading-[18px] text-ink outline-none [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-accent/70">
+        {name}
+      </button>
+      <button type="button" data-account-rename={rowId} onClick={start} aria-label={label} title={label}
+        className="flex size-6 shrink-0 items-center justify-center rounded-full text-ink-tertiary transition-colors hover:bg-ink/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
+        <Pencil size={12} aria-hidden="true" />
+      </button>
+    </span>
+  );
+}
+
+/** Saves an account's new name where it belongs (AccountName). */
+function useRenameAccount(list: ProviderList) {
+  const { refreshInstances } = useStore();
+  return (instance: InstanceInfo) => {
+    // a company account is managed in desktop Settings (server/routes/instances.ts)
+    if (instance.instanceId.startsWith("company.") || !(list.organization || list.manageKeys)) return undefined;
+    return async (next: string) => {
+      const id = encodeURIComponent(instance.instanceId);
+      if (list.organization) await api(`/api/me/engines/${id}/name`, { method: "PUT", body: JSON.stringify({ name: next }) });
+      else await api(`/api/instances/${id}`, { method: "PATCH", body: JSON.stringify({ displayName: next }) });
+      await Promise.all([Promise.resolve(refreshInstances()).catch(() => {}), list.organization ? reloadMyEngines().catch(() => {}) : null]);
+    };
+  };
+}
+
+/** The account rows (#4376): the name, the address and state under it, one button. */
+function AccountsSection({ group, list, open, visited, show }: { group: ProviderGroup; list: ProviderList; open: string | null; visited: readonly string[]; show: (rowId: string | null) => void }) {
+  const rename = useRenameAccount(list);
+  const accounts = accountRows(group);
+  const lineInstances = accounts.flatMap((row) => rowInstances(row, list.instances));
+  const adders = list.member ? [] : lineInstances.filter((instance, index) => lineInstances.findIndex((other) => other.driverKind === instance.driverKind) === index);
+  if (!accounts.length) return null;
+  return (
+    <SettingsGroup title={t("providers.page.accounts")} groupId="provider-accounts">
+      <ul className="flex flex-col" data-provider-lines="">
+        {accounts.map((row, index) => {
+          const shown = open === row.id;
+          const instance = rowInstances(row, list.instances)[0];
+          const name = accountName(row, group, list.instances, index, accounts.length);
+          const address = accountAddress(row, list.instances);
+          const state = row.state === "connected" ? t("providers.state.connected") : t(STATE_KEY[row.state]);
+          const tone = row.state === "connected" ? "success" : row.state === "reconnect" ? "warning" : "neutral";
+          return (
+            <li key={row.id} data-provider-line={row.id} data-provider-account="" data-open={shown ? "true" : "false"} className="min-w-0">
+              <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
+                <span className="min-w-0 flex-1">
+                  <AccountName rowId={row.id} name={name} onRename={instance && row.instanceIds.length === 1 ? rename(instance) : undefined} clearable={list.organization} />
+                  <span className="block text-[12px] leading-4 text-ink-secondary [overflow-wrap:anywhere]" data-provider-account-line={row.id}>
+                    {address && <><span data-provider-account-address="">{address}</span> · </>}
+                    <StatusText tone={tone}>{state}</StatusText>
+                  </span>
+                </span>
+                <LineButton row={row} group={group} list={list} name={name} onOpen={() => show(shown ? null : row.id)} />
+              </div>
+              {(shown || visited.includes(row.id)) && lineAction(row, list) && (
+                <div data-provider-panel={row.id} hidden={!shown} className={cn("min-w-0 flex-col gap-2 px-3.5 pb-3", shown ? "flex" : "hidden")}>
+                  <ConnectionPanel row={row} list={list} />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {adders.map((instance) => <div key={instance.instanceId} data-provider-add-account="" className="px-3.5 pb-2"><AddAnotherAccount instance={instance} /></div>)}
+    </SettingsGroup>
+  );
+}
+
+/** One key of the API key section: whether it is saved (ending in ...),
+ * Add, Replace and Remove, with the confirm Remove always had. */
+function KeyLine({ row, group, list, shown, show }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; shown: boolean; show: (rowId: string | null) => void }) {
+  const action = lineAction(row, list);
+  const last4 = row.accountProvider ? list.accounts.view?.keys.find((key) => key.provider === row.accountProvider)?.last4 : null;
+  const words = row.state === "connected"
+    ? (last4 ? t("providers.key.savedLast4", { last4 }) : t("providers.key.saved"))
+    : t(STATE_KEY[row.state]);
+  const editable = action === "remove" || action === "addKey";
+  return (
+    <li data-provider-line={row.id} data-provider-key-line="" data-open={shown ? "true" : "false"} className="min-w-0">
+      <div className="flex min-h-[52px] flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-2">
+        <span className="min-w-0 flex-1">
+          <span className="block break-words text-[13px] leading-[18px] text-ink [overflow-wrap:anywhere]">
+            {row.state === "connected" ? words : <StatusText tone={row.state === "keyMissing" || row.state === "reconnect" ? "warning" : "neutral"}>{words}</StatusText>}
+          </span>
+          <span className="block text-[12px] leading-4 text-ink-secondary">{t(`providers.explainWhere.${row.keyWhere}` as LocaleKey)}</span>
+        </span>
+        <span className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {action === "remove" && (
+            <button type="button" data-provider-change-key={row.id} className={pluginActionClass("fill")} onClick={() => show(shown ? null : row.id)}>{t("providers.key.replace")}</button>
+          )}
+          {editable && <LineButton row={row} group={group} list={list} name={t("providers.page.apiKey")} onOpen={() => show(shown ? null : row.id)} />}
+        </span>
+      </div>
+      {shown && editable && (
+        <div data-provider-panel={row.id} className="flex min-w-0 flex-col gap-2 px-3.5 pb-3">
+          <KeyForm row={row} group={group} list={list} onClose={() => show(null)} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** #4376: the provider's API key, its own section, never a row of Accounts:
+ * the keys its page holds, else the vendor's key a signed-in provider can
+ * add as the second way to pay. */
+function KeySection({ group, list, open, show }: { group: ProviderGroup; list: ProviderList; open: string | null; show: (rowId: string | null) => void }) {
+  const [adding, setAdding] = useState(false);
+  const keys = group.rows.filter((row) => row.kind === "key");
+  const offer = keyOffer(group, list);
+  if (!keys.length && !offer) return null;
+  return (
+    <SettingsGroup title={t("providers.page.apiKey")} groupId="provider-key">
+      <ul className="flex flex-col" data-provider-keys="">
+        {keys.map((row) => <KeyLine key={row.id} row={row} group={group} list={list} shown={open === row.id} show={show} />)}
+        {offer && (
+          <li data-provider-key-offer="" className="min-w-0">
+            <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] leading-[18px] text-ink">{t("providers.key.none")}</span>
+                <span className="block text-[12px] leading-4 text-ink-secondary">{t("providers.key.noneHelp")}</span>
+              </span>
+              <button type="button" data-provider-add-key-open="" className={pluginActionClass("fill")} onClick={() => setAdding(!adding)}>{t("providers.do.addKey")}</button>
+            </div>
+            {adding && (
+              <div data-provider-add-key="" className="flex min-w-0 flex-col gap-2 px-3.5 pb-3">
+                <VendorKeyForm vendorKey={offer} group={group} onClose={() => setAdding(false)} />
+              </div>
+            )}
+          </li>
+        )}
+      </ul>
     </SettingsGroup>
   );
 }
@@ -435,62 +592,50 @@ export function ProviderPage({ providerId }: { providerId: string }) {
   }
   if (group.kind === "computer") return <ComputerPage group={group} />;
   if (group.id.startsWith(PI_SERVER_PREFIX)) return <PiServerPage group={group} list={list} />;
-  const role = runsWith(group, list);
   const speakers = toolSpeakers(group.rows, list);
-  const keyOffer = keyOfferRow(group, list);
-  const lineInstances = group.rows.filter((row) => row.kind === "account").flatMap((row) => rowInstances(row, list.instances));
-  const adders = list.member ? [] : lineInstances.filter((instance, index) => lineInstances.findIndex((other) => other.driverKind === instance.driverKind) === index);
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-provider-page={group.id}>
-      <SettingsGroup title={t("providers.page.accounts")} groupId="provider-accounts">
-        <ul className="flex flex-col" data-provider-lines="">
-          {group.rows.map((row) => {
-            const words = lineWords(row, group, list.instances, false);
-            const shown = open === row.id;
-            return (
-              <li key={row.id} data-provider-line={row.id} data-open={shown ? "true" : "false"} className="min-w-0">
-                <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words text-[13px] leading-[18px] text-ink [overflow-wrap:anywhere]">{words.label}</span>
-                    <span className="block text-[12px] leading-4">
-                      {words.state
-                        ? <StatusText tone={row.state === "reconnect" || row.state === "keyMissing" ? "warning" : "neutral"}>{words.state}</StatusText>
-                        : <StatusText tone="success">{t("providers.state.connected")}</StatusText>}
-                    </span>
-                  </span>
-                  <LineButton row={row} group={group} list={list} onOpen={() => show(shown ? null : row.id)} />
-                </div>
-                {(shown || visited.includes(row.id)) && lineAction(row, list) && (
-                  <div data-provider-panel={row.id} hidden={!shown} className={cn("min-w-0 flex-col gap-2 px-3.5 pb-3", shown ? "flex" : "hidden")}>
-                    <ConnectionPanel row={row} group={group} list={list} onClose={() => show(null)} />
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        {adders.map((instance) => <div key={instance.instanceId} className="px-3.5 pb-2"><AddAnotherAccount instance={instance} /></div>)}
-      </SettingsGroup>
+      <AccountsSection group={group} list={list} open={open} visited={visited} show={show} />
+      <ServerSection group={group} list={list} />
+      <KeySection group={group} list={list} open={open} show={show} />
       {/* #4329 lot 2 (B3): the link to the person's bots in this provider's bot app */}
       {group.id === XAI_PROVIDER_ID && <BotsLinkSection link={botsLink} />}
-      {role && (
-        <SettingsGroup groupId="provider-runs-with">
-          <DescribedRow label={t("model.runsWith")} description={t("providers.page.runsWithHelp", { provider: groupName(group) })} rowId="providers.page.runsWith">
-            <span data-provider-runs-with={role} className="text-[13px] text-ink-secondary">{t(RUNS_WITH_KEY[role])}</span>
-          </DescribedRow>
-        </SettingsGroup>
-      )}
-      <ModelsRow group={group} list={list} />
+      {/* Runs with: absent until the engine choice exists (#4329 lot 5), never a dead control */}
+      <ModelsSection group={group} />
       <PageAdvanced providerId={group.id}>
-        {group.rows.map((row) => (
-          <ConnectionAdvanced key={row.id} row={row} group={group} list={list} speakers={speakers}
-            vendorKey={keyOffer?.rowId === row.id ? keyOffer.key : undefined}
-            onEditKey={row.kind === "key" && lineAction(row, list) === "remove" ? () => show(row.id) : undefined} />
-        ))}
+        {group.rows.map((row) => <ConnectionAdvanced key={row.id} row={row} list={list} speakers={speakers} />)}
         {/* the bots link's technical fields: its own part of this one Advanced (#4329 B3) */}
         {group.id === XAI_PROVIDER_ID && <BotsLinkAdvanced link={botsLink} />}
       </PageAdvanced>
     </div>
+  );
+}
+
+/** A server added by its address: its name, what it brings, its Remove. */
+function ServerSection({ group, list }: { group: ProviderGroup; list: ProviderList }) {
+  const servers = group.rows.filter((row) => row.kind === "server");
+  if (!servers.length) return null;
+  return (
+    <SettingsGroup title={t("providers.page.server")} groupId="provider-server">
+      <ul className="flex flex-col" data-provider-servers="">
+        {servers.map((row) => {
+          const words = lineWords(row, group, list.instances, false);
+          return (
+            <li key={row.id} data-provider-line={row.id} className="min-w-0">
+              <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-[13px] leading-[18px] text-ink [overflow-wrap:anywhere]">{row.name}</span>
+                  <span className="block text-[12px] leading-4 text-ink-secondary">
+                    {words.state ? <StatusText tone="warning">{words.state}</StatusText> : words.label}
+                  </span>
+                </span>
+                <LineButton row={row} group={group} list={list} name={row.name} onOpen={() => {}} />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </SettingsGroup>
   );
 }
 

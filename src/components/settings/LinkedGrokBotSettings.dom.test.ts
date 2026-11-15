@@ -129,42 +129,39 @@ afterEach(() => {
   host.remove();
 });
 
-describe("Settings > Providers: the bots link is a line of the xAI provider", () => {
-  it("sits in the xAI provider's row of the list, never in Providers > Advanced", async () => {
+describe("Settings > Providers: the bots link is part of the xAI provider's one row (#4376)", () => {
+  it("says it in the xAI provider's one line, never a second line, never in Providers > Advanced", async () => {
     fixture.instances = [grok()];
     fixture.link = linked;
     await render();
     const row = host.querySelector('[data-settings-card="providers.list"] [data-provider="xai"]')!;
     expect(row, "the xAI provider's row").not.toBeNull();
     expect(row.textContent).toContain("SpaceXSI");
-    const line = row.querySelector("[data-bots-link-row]");
-    expect(line, "the line is in that row").not.toBeNull();
-    expect(line!.textContent).toContain("Your bots there");
+    expect(row.querySelector("[data-provider-summary]")!.textContent).toBe("Connected · your bots there too");
+    expect(row.getAttribute("data-settings-row"), "a search finds the link on that row").toBe("providers.botsLink");
     expect(host.querySelectorAll("[data-bots-link-row]")).toHaveLength(1);
     expect(host.querySelector("[data-providers-advanced] [data-bots-link-row], [data-providers-advanced] [data-bots-link-block]")).toBeNull();
   });
 
-  it("the list's Disconnect pauses the link (keeps the key) and Connect turns it back on", async () => {
+  it("no Disconnect or Connect on a connected provider's row: they are on its page", async () => {
     fixture.instances = [grok()];
     fixture.link = linked;
     await render();
-    await click(host.querySelector('[data-bots-link-row] [data-bots-link-action="disconnect"]'));
-    expect(fixture.puts).toEqual([{ enabled: false }]);
-    expect(host.querySelector("[data-bots-link-state]")?.getAttribute("data-bots-link-state")).toBe("off");
-    await click(host.querySelector('[data-bots-link-row] [data-bots-link-action="connect"]'));
-    expect(fixture.puts).toEqual([{ enabled: false }, { enabled: true }]);
-    expect(host.querySelector("[data-bots-link-state]")?.getAttribute("data-bots-link-state")).toBe("connected");
+    expect(host.querySelector('[data-provider="xai"] [data-bots-link-action], [data-provider="xai"] [data-provider-action]')).toBeNull();
+    await click(host.querySelector('[data-provider="xai"] [data-provider-open]'));
+    expect(openedXaiPage()).toBe(true);
+    fixture.link = { ...linked, enabled: false };
+    await rerender();
+    expect(host.querySelector('[data-provider="xai"] [data-provider-summary]')!.textContent, "a paused link: the provider is still connected").toBe("Connected");
   });
 
-  it("not linked: the list's Connect and the line open the xAI provider's page", async () => {
+  it("not linked, with an xAI account: the row opens the xAI provider's page, where Connect is", async () => {
     fixture.instances = [grok()];
     fixture.link = unlinked;
     await render();
-    await click(host.querySelector('[data-bots-link-row] [data-bots-link-action="connect"]'));
+    expect(host.querySelector('[data-provider="xai"] [data-bots-link-action]')).toBeNull();
+    await click(host.querySelector('[data-provider="xai"] [data-provider-open]'));
     expect(fixture.puts).toEqual([]);
-    expect(openedXaiPage()).toBe(true);
-    fixture.dispatch.mockClear();
-    await click(host.querySelector("[data-bots-link-row] [data-bots-link-open]"));
     expect(openedXaiPage()).toBe(true);
   });
 
@@ -196,13 +193,15 @@ describe("Settings > Providers: the bots link is a line of the xAI provider", ()
     expect(row!.textContent).toContain("Your bots there");
   });
 
-  it("organization off: the line says so with no button, and is hidden without a link", async () => {
+  it("organization off: the xAI row stays connected with no button, and the link's row is gone without a link", async () => {
     fixture.instances = [grok()];
     fixture.link = { ...linked, orgAllowed: false };
     await render();
-    expect(host.querySelector("[data-bots-link-state]")?.getAttribute("data-bots-link-state")).toBe("adminOff");
-    expect(host.querySelector("[data-bots-link-row]")!.textContent).toContain("Turned off by your organization");
+    expect(host.querySelector('[data-provider="xai"] [data-provider-summary]')!.textContent).toBe("Connected");
     expect(host.querySelector("[data-bots-link-row] [data-bots-link-action]")).toBeNull();
+    fixture.instances = [];
+    await rerender();
+    expect(host.querySelector('[data-provider="xai"] [data-provider-summary]')!.textContent).toBe("Your bots there · Turned off by your organization");
     fixture.link = { ...unlinked, orgAllowed: false };
     await rerender();
     expect(host.querySelector("[data-bots-link-row]")).toBeNull();

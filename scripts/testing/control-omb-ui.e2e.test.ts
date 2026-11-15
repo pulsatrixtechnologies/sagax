@@ -221,7 +221,7 @@ describe("control-omb ui drives the real renderer", () => {
     })()`), { timeout: 10_000 }).toBe(true);
     // #4329 (the owner: "You select a provider, you log in, done"): the
     // saved key is a provider of the list; its row opens the provider's
-    // page, whose Advanced "Change key" opens the key's editor in place.
+    // page, whose API key section's Replace opens the key's editor in place (#4376).
     await expect.poll(() => evaluate(`(() => { const b = document.querySelector('[data-provider-open$=":openaiCompat"]'); b?.click(); return Boolean(b); })()`), { timeout: 10_000 }).toBe(true);
     await expect.poll(() => evaluate(`(() => { const b = document.querySelector('[data-provider-change-key$=":openaiCompat"]'); b?.click(); return Boolean(b); })()`), { timeout: 10_000 }).toBe(true);
     await expect.poll(() => evaluate(`document.querySelector('[data-provider-key-dialog="openaiCompat"] [data-api-key-row="openaiCompat"]') !== null`), { timeout: 10_000 }).toBe(true);

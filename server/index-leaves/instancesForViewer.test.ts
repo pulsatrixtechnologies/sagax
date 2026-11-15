@@ -27,3 +27,26 @@ describe("instancesForViewer provider sync (#3519)", () => {
     expect(lines).toEqual(["provider accounts: the list step failed (organization server: unreachable)"]);
   });
 });
+
+describe("instancesForViewer account names (#4376)", () => {
+  it("shows a person the name they gave one of their accounts, and nobody else", async () => {
+    const names: Record<string, string> = { "pr_alice:codex": "Work plan" };
+    const host = {
+      IDENTITY: { kind: "perspicax" },
+      providerAccountOwner: () => null,
+      describeInstances: async () => [{ instanceId: "codex", displayName: "Codex" }, { instanceId: "claude", displayName: "Claude" }],
+      refusedModelsFor: () => [],
+      personalProviderInstances: { visible: () => true, get: () => undefined },
+      compatServerVisible: () => true,
+      orgOfferedEngines: (instances: unknown[]) => instances,
+      piKeyProviders: { forViewer: () => [] },
+      overlayModelServers: (instances: unknown[]) => instances,
+      piModelServersForViewer: async () => [],
+      desktopLocalModels: { overlay: (instances: unknown[]) => instances },
+      accountNames: { get: (person: string | null, id: string) => (person ? names[`${person}:${id}`] : undefined) },
+    };
+    const instancesForViewer = createInstancesForViewer(() => host);
+    expect((await instancesForViewer("pr_alice")).map((entry: { displayName: string }) => entry.displayName)).toEqual(["Work plan", "Claude"]);
+    expect((await instancesForViewer("pr_bob")).map((entry: { displayName: string }) => entry.displayName)).toEqual(["Codex", "Claude"]);
+  });
+});

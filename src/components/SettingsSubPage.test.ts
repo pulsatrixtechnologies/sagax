@@ -71,8 +71,11 @@ describe("sub-page navigation", () => {
     expect(subPageKeyAction({ key: "Escape", defaultPrevented: true })).toBeNull();
     expect(subPageKeyAction({ key: "Escape", defaultPrevented: false, isComposing: true })).toBeNull();
     expect(subPageKeyAction({ key: "Enter", defaultPrevented: false })).toBeNull();
-    const inSearch = { closest: (selector: string) => (selector === "[data-settings-search]" ? {} : null) };
+    const inSearch = { closest: (selector: string) => (selector.includes("[data-settings-search]") ? {} : null) };
     expect(subPageKeyAction({ key: "Escape", defaultPrevented: false, target: inSearch as never })).toBeNull();
+    // #4376: a name being renamed cancels its own edit with Escape
+    const renaming = { closest: (selector: string) => (selector.includes("[data-keeps-escape]") ? {} : null) };
+    expect(subPageKeyAction({ key: "Escape", defaultPrevented: false, target: renaming as never })).toBeNull();
     const inEditor = { closest: () => null };
     expect(subPageKeyAction({ key: "Escape", defaultPrevented: false, target: inEditor as never })).toBe("back");
   });

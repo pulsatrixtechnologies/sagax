@@ -17,19 +17,21 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
   const [configDir, setConfigDir] = useState(instance?.claudeAccount?.configDir ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = !instance || displayName.trim() !== instance.displayName || configDir.trim() !== instance.claudeAccount?.configDir;
+  const dirty = !instance || configDir.trim() !== instance.claudeAccount?.configDir;
   // A blank default means Claude's normal configuration, including its
   // keychain namespace. Do not turn a name-only save into an explicit path.
   const missingDirectory = Boolean(instance?.claudeAccount?.configDir && !configDir.trim());
 
   const save = async () => {
-    if (saving || !displayName.trim() || !dirty || missingDirectory) return;
+    if (saving || (!instance && !displayName.trim()) || !dirty || missingDirectory) return;
     setSaving(true);
     setError(null);
     try {
       await api(instance ? `/api/instances/${encodeURIComponent(instance.instanceId)}` : "/api/instances/claude-accounts", {
         method: instance ? "PATCH" : "POST",
-        body: JSON.stringify({ displayName: displayName.trim(), ...(configDir.trim() ? { configDir: configDir.trim() } : {}) }),
+        // an added account's name is renamed on its row (Providers > Claude >
+        // Accounts, #4376): this form names a new account only
+        body: JSON.stringify({ ...(instance ? {} : { displayName: displayName.trim() }), ...(configDir.trim() ? { configDir: configDir.trim() } : {}) }),
       });
       // The save has succeeded even if the subsequent catalog refresh fails.
       await refreshInstances().catch(() => {});
@@ -43,7 +45,7 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
 
   return (
     <form className="flex min-w-0 flex-col gap-3" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
+      {!instance && <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
         {t("engines.account.name")}
         <input
           value={displayName}
@@ -54,7 +56,7 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
           disabled={saving}
           className="w-full rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[13px] text-ink focus:outline-none disabled:opacity-50"
         />
-      </label>
+      </label>}
       <InlineFold label={t("engines.account.advanced")}>
         <label className="mt-2 flex flex-col gap-1 text-[12px] text-ink-secondary">
           {t("engines.account.configDir")}
@@ -75,7 +77,7 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       <div className="flex justify-end gap-2">
         {onCancel && <button type="button" onClick={onCancel} disabled={saving} className="rounded-lg px-3 py-1.5 text-[12px] text-ink-secondary hover:bg-raised/50 disabled:opacity-50">{t("common.cancel")}</button>}
-        <button type="submit" disabled={saving || !displayName.trim() || !dirty || missingDirectory} className="flex items-center gap-1.5 rounded-lg bg-raised px-3 py-1.5 text-[12px] text-ink hover:bg-raised-hover disabled:opacity-50">
+        <button type="submit" disabled={saving || (!instance && !displayName.trim()) || !dirty || missingDirectory} className="flex items-center gap-1.5 rounded-lg bg-raised px-3 py-1.5 text-[12px] text-ink hover:bg-raised-hover disabled:opacity-50">
           {saving && <Loader2 size={13} className="animate-spin" />}
           {instance ? t("common.save") : t("engines.account.add")}
         </button>

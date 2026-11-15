@@ -1296,7 +1296,7 @@ import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
 import { createPersonProductsRoutes, createSaveProductKeyCard, createSetProductKey } from "./routes/person-products.ts";
 import { productKeyCardShownText, productKeyResumeText } from "../shared/person-products.ts";
 import { createPersonProductsClient } from "./perspicax/person-products.ts";
-import { createMeEnginesRoutes } from "./routes/me-engines.ts";
+import { createMeEnginesRoutes } from "./routes/me-engines.ts"; import { createAccountNames } from "./engines/account-names.ts";
 import { createOrgBotsRoutes } from "./routes/org-bots.ts";
 import { createPeopleAvatarRoutes } from "./routes/people-avatar.ts";
 import { createRoutineDelegationStubRoutes } from "./routes/routine-delegation-stub.ts";
@@ -7036,7 +7036,7 @@ bindLeafHost({
   get holdSignInRefusal() { return holdSignInRefusal; },
   get accessCardFor() { return accessCardFor; },
   get describeInstances() { return describeInstances; },
-  get instancesForViewer() { return instancesForViewer; },
+  get instancesForViewer() { return instancesForViewer; }, get accountNames() { return accountNames; },
   get modelAccessRefusals() { return modelAccessRefusals; },
   get memberInstanceView() { return memberInstanceView; },
   get _stopCompanyInstancesImpl() { return _stopCompanyInstancesImpl; },
@@ -8783,7 +8783,7 @@ const desktopLocalModels = new DesktopLocalModels(DATA_DIR, desktopBridges, (per
 setDesktopInjectModels(() => desktopLocalModels.modelsFor(null));
 const desktopTunnels = new DesktopTunnels(liveSessionPerson);
 const bridgeAudit = createBridgeAudit(join(DATA_DIR, "desktop-bridge-audit.jsonl"));
-const userPreferenceStore = createUserPreferenceStore(DATA_DIR);
+const userPreferenceStore = createUserPreferenceStore(DATA_DIR); const accountNames = createAccountNames(DATA_DIR); // #4376
 // Read once at start, before the server listens: a person's first turn looks
 // their language up here and never pays the file's read and parse (#3539).
 userPreferenceStore.load();
@@ -22886,7 +22886,7 @@ function keyOnlyInstance(instanceId: string): boolean {
  * organization's key runs: "Claude (organization key)" in their language.
  * Any other engine, or an admin, keeps the name engineNameForViewer gives. */
 function engineNameForPerson(instanceId: string, name: string, driver: string, person: string | null | undefined): string {
-  const admin = person ? personIsOrgAdmin(person) : false;
+  const own = accountNames.get(person, instanceId); if (own) return own; const admin = person ? personIsOrgAdmin(person) : false; // #4376: the person's own name first
   if (IDENTITY.kind === "perspicax" && !admin && keyOnlyInstance(instanceId) && driverKeyBacked(cfg, driver, instanceId)) {
     return orgKeyEngineName(keyEngineProvider(driver, providerConfigs()[instanceId]?.displayName ?? name), languageOfPerson(person));
   }
@@ -28993,7 +28993,7 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
     cfg,
     serverEngineAllowedFor,
     engineNotAvailableReason,
-    engineNameForPerson,
+    engineNameForPerson, accountNames,
     engineDisplayName,
     secondLoginSupported,
     grokAccountsFor,

@@ -10,8 +10,9 @@
  * &usage=one|three|error (#4095): Settings > Usage with one engine, three, or three with one in error
  * &subPage=<id> (#4329): a sub-page of the section, e.g. providers.provider:anthropic
  * &empty=1 (#4329): no engine and no key, Providers' empty list
+ * &keyonly=1 (#4376): a key engine with no key row and no key; &expired=1 (with org=1): a second xAI account to sign in again
  * &firstKey=1 (#4360): Security with no key and no recent proof; &vault=unpaired|noperson: the vault refused
- * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu
+ * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu; ?picker=chip: the chat head's chip
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -22,6 +23,7 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type AppSettingsSection } from "../state/store";
 import { settingsPagesApi } from "./settings-pages-api";
 import { usagePageAnswer } from "./usage-page-api";
+import { answerGalleryWrite, applyStoredGalleryNames } from "./settings-pages-writes";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -32,6 +34,7 @@ await loadLocale(params.get("lang") ?? "en");
 if (params.get("mode") === "simple") { try { localStorage.setItem("sagax.interfaceMode.v1", "simple"); localStorage.setItem("sagax.advancedModeMigratedAt.v1", "2026-10-16"); } catch { /* private window */ } }
 
 const API = settingsPagesApi(params);
+applyStoredGalleryNames(API);
 
 // #2636: the desktop shell's diagnostics and logs exist, so Settings > Developer draws its Diagnostics card.
 {
@@ -79,6 +82,9 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.pathname === "/api/me/credentials/list" && (refusedVault === "unpaired" || refusedVault === "noperson")) {
     return json(refusedVault === "unpaired" ? { error: "Pair this device.", code: "not_paired" } : { error: "Sign in to use your credential vault.", code: "no_person" }, 403);
   }
+  // #4376: a rename, a model switch, a key change the page's data in memory
+  const written = answerGalleryWrite(API, url, init);
+  if (written !== undefined) return json(written);
   const body = usagePageAnswer(url, params) ?? API[url.pathname];
   if (body !== undefined) return json(body);
   return json({ error: "not in this gallery" }, 404);
@@ -91,6 +97,8 @@ function OpenModelPicker() {
   if (!state.bots[0]) return null;
   // ?picker=bar (#2963): the composer's model chip, which opens the chat bar menu.
   if (params.get("picker") === "bar") return <div className="m-auto w-[640px]"><ModelPicker bot={state.bots[0]} inComposer /></div>;
+  // ?picker=chip (#4376): the chat head's chip, which names the account in use
+  if (params.get("picker") === "chip") return <div className="m-auto w-[640px]"><ModelPicker bot={state.bots[0]} /></div>;
   return <ModelPicker bot={state.bots[0]} windowOnly />;
 }
 
@@ -104,6 +112,11 @@ function OpenSettings() {
     dispatch({ type: "hydrate", bots, groups: [], sections: [], computerControl: {} } as never);
     const subPage = params.get("subPage");
     if (!params.has("picker")) dispatch({ type: "toggleAppSettings", open: true, section, ...(subPage ? { subPage } : {}) });
+    // #4376: the server tells the page its config after a personal key
+    // changes (its live stream); this page has none, so it says it itself
+    const configChanged = () => dispatch({ type: "configStatus", config: { ...(API["/api/config"] as object) } } as never);
+    window.addEventListener("sagax:provider-accounts", configChanged);
+    return () => window.removeEventListener("sagax:provider-accounts", configChanged);
   }, [dispatch]);
   return null;
 }

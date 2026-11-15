@@ -4,6 +4,7 @@
  * Deps are read per request so late-bound index lets stay valid.
  */
 import { PASS, type RouteHandler } from "./table.ts";
+import { cleanAccountName } from "../engines/account-names.ts";
 
 /** Injected closures from index.ts. Pure move; host locals stay loosely typed. */
 export type MeEnginesRouteDeps = Record<string, any>;
@@ -77,6 +78,24 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       };
     });
     return json(res, 200, { engines, ...(deps.perspicaxKeysUrl() ? { keysUrl: deps.perspicaxKeysUrl() } : {}) });
+  }
+  // #4376: PUT /api/me/engines/:id/name {name} the person's own name for one
+  // of their accounts ("" gives back the engine's), kept for them alone
+  const named = /^\/api\/me\/engines\/([\w.-]+)\/name$/.exec(path);
+  if (named) {
+    if (method !== "PUT") return json(res, 405, { error: "method not allowed" });
+    if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+      return json(res, 415, { error: "content-type must be application/json" });
+    }
+    const instanceId = named[1];
+    const reachable = deps.orgOfferedEngines(deps.registry.entries(), principalId)
+      .some((entry: any) => entry.instanceId === instanceId && deps.personalProviderInstances.visible(entry.instanceId, principalId));
+    if (!reachable) return json(res, 404, { error: "unknown account" });
+    const body = await readBody(req, 4096);
+    const name = cleanAccountName(body?.name);
+    if (name === null) return json(res, 400, { error: "Give a name of 80 characters at most." });
+    deps.accountNames.set(principalId, instanceId, name);
+    return json(res, 200, { ok: true, ...(name ? { displayName: name } : {}) });
   }
   const status = /^\/api\/me\/engines\/([\w.-]+)\/login\/status$/.exec(path);
   const action = /^\/api\/me\/engines\/([\w.-]+)\/login\/(start|complete|cancel|sign-out)$/.exec(path);

@@ -138,6 +138,9 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
     const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers, probeTriggers ? deps.triggers : undefined, probeFlow ? deps.flow : undefined] as const;
     const pending = works.map((work, i) => {
       if (!work) return Promise.resolve({} as Probe);
+      // A routine's triggers are its own and a cheap local read: never shared
+      // with another routine of the bot, never kept after a trigger changes.
+      if (kinds[i] === "triggers") return boundedProbe(signal => work(routine, run, signal));
       const key = `${context}:${kinds[i]}${kinds[i] === "flow" ? JSON.stringify([routine.id, run.prompt ?? routine.prompt, routine.requires]) : ""}`;
       const old = memo!.get(key);
       if (old && now - old.at < ROUTINE_READINESS_CACHE_MS) return old.result;

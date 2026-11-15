@@ -283,6 +283,19 @@ describe("routine readiness", () => {
       expect(fine.ok).toBe(true);
       expect(fine.checks.find(check => check.kind === "triggers")).toMatchObject({ ok: true, code: "ready" });
     });
+    it("never shares one routine's triggers verdict with another routine of the same bot, nor keeps a stale one", async () => {
+      let hooks: { name: string; routineId: string; source?: { type: string } }[] = [{ name: "Product watch", routineId: "r2", source: { type: "perspicax" } }];
+      const shared = deps({ engine, triggers: (target) => soloRoutineTriggers(hooks, target.id ?? "") });
+      const first = await checkRoutineReadiness({ ...routine, id: "r1" }, run, shared, "check");
+      expect(first.checks.map(check => check.kind)).not.toContain("triggers");
+      const second = await checkRoutineReadiness({ ...routine, id: "r2" }, run, shared, "check");
+      expect(second.checks[0]).toMatchObject({ kind: "triggers", ok: false, code: "trigger_unreachable" });
+      const again = await checkRoutineReadiness({ ...routine, id: "r1" }, run, shared, "check");
+      expect(again.ok).toBe(true);
+      hooks = [];
+      const fixed = await checkRoutineReadiness({ ...routine, id: "r2" }, run, shared, "check");
+      expect(fixed.checks.map(check => check.kind)).not.toContain("triggers");
+    });
     it("says nothing about triggers for a routine without one, and never refuses a run for them", async () => {
       const none = await checkRoutineReadiness({ ...routine, id: "routine-clock" }, run, deps({ engine, triggers: () => [] }), "check");
       expect(none.checks.map(check => check.kind)).not.toContain("triggers");

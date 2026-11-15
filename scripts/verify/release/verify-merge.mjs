@@ -377,7 +377,7 @@ function main() {
   console.log(`  guard tests: ${guards.length}`);
   console.log(`  tests of the diff: ${diffTests.length ? diffTests.join(", ") : "none"}`);
   console.log(`  related tests (reach a changed source through imports): ${related.length ? related.join(", ") : "none"}`);
-  if (cut.length) console.log(`  related tests cut by the time ceiling, left to the run after the merge (${cut.length}): ${cut.join(", ")}`);
+  if (cut.length) console.log(`  related tests cut by the time ceiling, left to the run after the merge (${cut.length}): ${cut.slice(0, 10).join(", ")}${cut.length > 10 ? ` and ${cut.length - 10} more` : ""}`);
   for (const note of dependentNotes) console.log(`  ${note}`);
   if (electronTests.length) console.log(`  electron tests: ${electronTests.join(", ")}`);
   console.log(`  iOS: ${ios ? "swift test + simulator build (skipped only when swift is missing)" : "skipped (no ios/ or shared/ change)"}`);

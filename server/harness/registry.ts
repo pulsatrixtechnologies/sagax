@@ -296,6 +296,12 @@ export class ProviderRegistry {
     return this.byId.get(instanceId)?.live ?? null;
   }
 
+  /** Whether this server has a driver of that kind: false for an entry kept
+   * as configured from another build (an unavailable shadow). */
+  knowsDriver(driverKind: string): boolean {
+    return this.driversByKind.has(driverKind);
+  }
+
   /** The snapshot describe() last read of this live instance; absent before
    * the first read, or for an instance that is not live. */
   lastSnapshot(instanceId: InstanceId): ProviderSnapshot | undefined {

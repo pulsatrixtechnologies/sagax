@@ -34,6 +34,7 @@ function harness(overrides: Partial<InstancesRouteDeps> = {}) {
       get: (id) => id === "claude" || id === "mistral"
         ? { instanceId: id, driverKind: id === "claude" ? "claudeAgent" : "mistral" } as never
         : null,
+      knowsDriver: (driverKind) => driverKind === "claudeAgent" || driverKind === "mistral",
       refreshModels: vi.fn(async () => true),
       installRuntime: vi.fn(async () => true),
       forgetSnapshots: vi.fn(),
@@ -205,6 +206,16 @@ describe("instances routes", () => {
     expect(cfg.instances?.mistral?.displayName).toBe("Team plan");
     const folder = await call("PATCH", "/api/instances/mistral", { body: { configDir: "/tmp/x" }, auth: admin });
     expect(folder.sent).toEqual({ status: 400, body: { error: "The configuration folder is a setting of Claude accounts only." } });
+  });
+
+  it("refuses renaming an entry whose driver this server does not have and leaves it untouched (#4391)", async () => {
+    const { call, cfg, deps } = harness({ adminOrDelegate: () => true });
+    cfg.instances!.ghost = { driver: "not-a-real-driver", displayName: "Preserved shadow" };
+    const admin = { kind: "session", scopes: ["admin"], session: { id: "s1", principalId: "pr_1" } };
+    const refused = await call("PATCH", "/api/instances/ghost", { body: { displayName: "Renamed" }, auth: admin });
+    expect(refused.sent?.status).toBe(400);
+    expect(deps.persistProviderInstance).not.toHaveBeenCalled();
+    expect(cfg.instances?.ghost?.displayName).toBe("Preserved shadow");
   });
 
   it("refuses deleting the default Claude account", async () => {

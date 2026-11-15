@@ -35253,6 +35253,7 @@ ROUTES.push(createInstancesRoutes({
   clientInstanceView: (instance) => clientInstanceView(instance as object),
   registry: {
     get: (id) => registry.get(id) ?? null,
+    knowsDriver: (driverKind) => registry.knowsDriver(driverKind),
     refreshModels: (id) => registry.refreshModels(id),
     installRuntime: (id) => registry.installRuntime(id),
     forgetSnapshots: () => registry.forgetSnapshots(),

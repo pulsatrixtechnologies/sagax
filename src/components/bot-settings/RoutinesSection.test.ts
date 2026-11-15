@@ -201,7 +201,7 @@ describe("RoutinesSection", () => {
     // from Advanced, Delete after a confirmation, Clear run logs on the page.
     for (const needle of ["<RoutinePanelPage", "onDuplicate={(routine) => setEditing({ copyOf: routine })}"]) expect(detail).toContain(needle);
     expect(detail).not.toContain('mode={editMode}');
-    for (const needle of ["RoutinePanelActions", "deleteRoutine", "confirm(", "clearRoutineRuns", "RoutineStatusRows", "RoutineRunsSection"]) expect(page).toContain(needle);
+    for (const needle of ["RoutinePanelActions", "deleteRoutine", "confirm(", "clearRoutineRuns", "RoutineStatusRows", "RoutineRunsByDay", "RoutineLastRun"]) expect(page).toContain(needle);
     // 2026-11-05 (#2098): a run opens in the chat, never in a sheet beside it.
     expect(detail).toContain("onOpenRun={openRun}");
     expect(source).toContain("openRoutineRun(dispatch, { runId: run.id");

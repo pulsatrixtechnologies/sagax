@@ -1,10 +1,11 @@
-// A routine's page in the side panel (2026-11-06, JC: "one single pane").
-// One header (< name ×, a state badge when it fails), then everything in
-// place: Instruction (at least 45% of the panel), When to run, Next run,
-// Skipped while busy, Runs, then Advanced (Runs as in it; 2026-11-06, JC:
-// no Active toggle, Pause is in the bar; no This week). A change shows Cancel and Save in
-// the bar; otherwise the bar is the routine's own: Run now, Check, Pause,
-// Delete. Shared by the bot panel and the group panel.
+// A routine's page in the side panel. One header (< name ×, a state badge
+// when it fails), then three tabs (#4357, the owner's design C, 2026-11-14):
+// Overview (the instruction folded, When with every trigger, Next run, Last
+// run), Runs (every run, grouped by day) and Settings (every option, under
+// short headings). No Active toggle, Pause is in the bar; no This week
+// (2026-11-06). A change shows Cancel and Save in the bar; otherwise the bar
+// is the routine's own: Run now, Check, Pause, Delete. Shared by the bot
+// panel and the group panel.
 import { api, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun, RoutineRunOn } from "@/lib/routines";
 import { t } from "@/lib/i18n";
@@ -12,7 +13,7 @@ import { RoutineEditor } from "../RoutinesPage";
 import { ClipboardCheck, CirclePlay, Pause, Trash2 } from "lucide-react";
 import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from "../ActionBar";
 import { canRunRoutineNow, RunNowButton } from "../routines/RunNowButton";
-import { clearRoutineRuns, type RoutinePatch, RoutineRunAsRow, RoutineRunsSection, RoutineStateBadge, RoutineStatusRows } from "../routines/RoutineDetail";
+import { clearRoutineRuns, type RoutinePatch, routineHistory, RoutineLastRun, RoutineRunAsRow, RoutineRunsByDay, RoutineStateBadge, RoutineStatusRows } from "../routines/RoutineDetail";
 import { useRoutineReadiness, type RoutineReadinessControl } from "../routines/RoutineReadiness";
 import { useConfirm } from "../ConfirmProvider";
 
@@ -71,12 +72,15 @@ export function RoutinePanelPage({ routine, bot, bots, runs, lockedBotId, defaul
         onToggle={toggle}
         onPatch={patch}
         runAs={false}
+        actAs={false}
         active={false}
         week={false}
       />,
       runAs: <RoutineRunAsRow routine={routine} editable={editable} onPatch={patch} />,
       badge: <RoutineStateBadge routine={routine} runs={runs} />,
-      runs: <RoutineRunsSection
+      lastRun: <RoutineLastRun routine={routine} runs={runs} onOpenRun={openRun} />,
+      runCount: routineHistory(routine, runs).length,
+      runs: <RoutineRunsByDay
         routine={routine}
         runs={runs}
         onOpenRun={openRun}

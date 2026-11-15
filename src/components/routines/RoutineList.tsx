@@ -66,6 +66,20 @@ export function routineClockLabel(run: RoutineRun): string {
   return t("routines.latestRun", { status: [routineRunLabel(run), routineRunAgo(routineRunTime(run)), lastRunPreview(run)].filter(Boolean).join(" · ") });
 }
 
+/** The clock (#4151): its colour tells how the run went (routineClockTone),
+ * its words are its tooltip and accessible name; while a run is live it is
+ * the app's spinner at the same size and place (#4202). The bot panel's
+ * routine rows and a routine page's runs (#4357) draw the same one. */
+export function RoutineRunClock({ run, running, label, runningLabel }: { run: RoutineRun | undefined; running?: RoutineRun; label?: string; runningLabel?: string }) {
+  if (running) return <span data-routine-clock="running" role="img" aria-label={runningLabel} title={runningLabel} className="flex size-5 shrink-0 items-center justify-center">
+    <Loader2 size={16} strokeWidth={1.5} aria-hidden="true" className="animate-spin text-ink-tertiary motion-reduce:animate-none" />
+  </span>;
+  return <span data-routine-clock={routineClockTone(run)} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} title={label}
+    className="flex size-5 shrink-0 items-center justify-center">
+    <Clock size={16} strokeWidth={1.5} aria-hidden="true" className={CLOCK_TONES[routineClockTone(run)]} />
+  </span>;
+}
+
 /** A last run's first line, never for a hidden or quiet run. */
 function lastRunPreview(run: RoutineRun): string {
   return !run.redacted && !run.quiet ? routineRunPreview(run) : "";
@@ -186,16 +200,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           // #4202: while it runs, the clock is the app's spinner at the same
           // size and place; "Running" and since when are its words.
           const runningLabel = runningRun ? `${t("routines.status.running")} · ${routineRunAgo(runningRun.startedAt || routineRunTime(runningRun))}` : undefined;
-          const clock = leadingClock && (runningRun ? (
-            <span data-routine-clock="running" role="img" aria-label={runningLabel} title={runningLabel} className="flex size-5 shrink-0 items-center justify-center">
-              <Loader2 size={16} strokeWidth={1.5} aria-hidden="true" className="animate-spin text-ink-tertiary motion-reduce:animate-none" />
-            </span>
-          ) : (
-            <span data-routine-clock={routineClockTone(lastRun)} role={clockLabel ? "img" : undefined} aria-label={clockLabel} aria-hidden={clockLabel ? undefined : true} title={clockLabel}
-              className="flex size-5 shrink-0 items-center justify-center">
-              <Clock size={16} strokeWidth={1.5} aria-hidden="true" className={CLOCK_TONES[routineClockTone(lastRun)]} />
-            </span>
-          ));
+          const clock = leadingClock && <RoutineRunClock run={lastRun} running={runningRun} label={clockLabel} runningLabel={runningLabel} />;
           return (
             <div key={routine.id} data-routine-row data-routine-id={routine.id}
               onPointerDown={onRowDragStart && !readOnly ? (event) => {

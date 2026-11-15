@@ -75,11 +75,15 @@ export type EventEditorProps = {
 };
 
 export type RoutinePageSlots = {
-  /** Next run, Skipped while busy and the notes (under When to run). */
+  /** Next run, Skipped while busy and the notes (Overview, under When). */
   status?: ReactNode;
-  /** Runs (n) and its list (above Advanced since 2026-11-06). */
+  /** The newest run on one line (Overview, #4357). */
+  lastRun?: ReactNode;
+  /** The Runs tab: every run, grouped by day (#4357). */
   runs?: ReactNode;
-  /** Runs as, changed in place (in Advanced since 2026-11-06). */
+  /** How many runs the Runs tab lists (its count). */
+  runCount?: number;
+  /** Runs as, changed in place (Settings, #4357). */
   runAs?: ReactNode;
   /** The routine's state when it needs a look (failing, auto-paused), by the title. */
   badge?: ReactNode;

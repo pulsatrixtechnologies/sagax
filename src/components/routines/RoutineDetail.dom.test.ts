@@ -26,7 +26,8 @@ vi.mock("@/state/store", async (importOriginal) => {
 
 const { setLocale } = await import("@/lib/i18n");
 const { ConfirmProvider, useConfirm } = await import("@/components/ConfirmProvider");
-const { RoutineDetail, RoutineStateBadge, RoutineStatusRows, clearRoutineRuns } = await import("./RoutineDetail");
+const routineDetail = await import("./RoutineDetail");
+const { RoutineDetail, RoutineLastRun, RoutineRunsByDay, RoutineRunsSection, RoutineStateBadge, RoutineStatusRows, clearRoutineRuns } = routineDetail;
 
 const bot = { id: "runner", threadId: "main", name: "Runner", color: "green", tasks: [] } as unknown as Bot;
 const routine = {
@@ -119,5 +120,74 @@ describe("the side panel's status rows (2026-11-06, the owner)", () => {
     expect(host.querySelector("[data-routine-state-badge=warning]")?.textContent).toBe("Failing");
     flushSync(() => root.render(createElement(RoutineStateBadge, { routine, runs: [] })));
     expect(host.querySelector("[data-routine-state-badge]")).toBeNull();
+  });
+});
+
+describe("the routine page's runs (#4357)", () => {
+  const now = new Date(2026, 10, 14, 21, 0).getTime();
+  const at = (daysAgo: number, hour: number) => new Date(2026, 10, 14 - daysAgo, hour, 15).getTime();
+  const history = [
+    { id: "a", status: "completed", scheduledFor: at(0, 20), startedAt: at(0, 20), finishedAt: at(0, 20) + 300_000, output: "All quiet today." },
+    { id: "b", status: "failed", scheduledFor: at(0, 8), error: "The board did not answer." },
+    { id: "c", status: "completed", scheduledFor: at(1, 20), cost: 0.12 },
+    { id: "d", status: "completed", scheduledFor: at(3, 20), manual: true },
+    { id: "other", routineId: "r2", status: "completed", scheduledFor: at(0, 9) },
+  ].map((run) => ({ routineId: "r1", routineName: routine.name, botId: bot.id, target: "bot", runOn: "maus", ...run })) as unknown as RoutineRun[];
+
+  it("groups every run of this routine by day, newest first, one line each with the coloured clock; a click opens the run", () => {
+    const onOpenRun = vi.fn();
+    const onClearRuns = vi.fn();
+    flushSync(() => root.render(createElement(RoutineRunsByDay, { routine, runs: history, now, onOpenRun, onClearRuns })));
+    const days = [...host.querySelectorAll("[data-routine-runs-day]")];
+    expect(days.map((group) => group.querySelector("h3")?.textContent)).toEqual(["Today", "Yesterday", expect.any(String)]);
+    expect(days.map((group) => [...group.querySelectorAll("[data-run-row]")].map((row) => row.getAttribute("data-run-row")))).toEqual([["a", "b"], ["c"], ["d"]]);
+    expect(host.querySelector("[data-run-row=other]")).toBeNull();
+    expect(host.querySelector("[data-run-row=a] [data-routine-clock]")?.getAttribute("data-routine-clock")).toBe("neutral");
+    expect(host.querySelector("[data-run-row=b] [data-routine-clock]")?.getAttribute("data-routine-clock")).toBe("danger");
+    expect(host.querySelector("[data-run-row=a]")!.textContent).toContain("5 min");
+    expect(host.querySelector("[data-run-row=a] [data-run-row-preview]")?.textContent).toBe("All quiet today.");
+    expect(host.querySelector("[data-run-row=c]")!.textContent).toContain("$0.12");
+    expect(host.querySelector("[data-run-row=d]")!.textContent).toContain("Manual");
+    // Clear run logs once, at the top right; the count is the tab's.
+    expect(host.querySelectorAll("[data-routine-clear-runs]").length).toBe(1);
+    flushSync(() => host.querySelector<HTMLButtonElement>("[data-run-row=c]")!.click());
+    expect(onOpenRun).toHaveBeenCalledWith(expect.objectContaining({ id: "c" }));
+  });
+
+  it("one run row for every list: the side panel's history and the page's lines give a run the same words, unread dot and click (nothing in double)", () => {
+    expect("RoutineRunLine" in routineDetail).toBe(false);
+    const onOpenRun = vi.fn();
+    flushSync(() => root.render(createElement(RoutineRunsSection, { routine, runs: history, now, onOpenRun })));
+    const panelRow = host.querySelector<HTMLButtonElement>("[data-run-row=b]")!;
+    const panelLabel = panelRow.getAttribute("aria-label");
+    expect(panelLabel).toContain("Unseen failure");
+    expect(panelRow.querySelector("[data-run-row-label]")).not.toBeNull();
+    flushSync(() => root.render(createElement(RoutineRunsByDay, { routine, runs: history, now, onOpenRun })));
+    const pageRow = host.querySelector<HTMLButtonElement>("[data-run-row=b]")!;
+    expect(pageRow.getAttribute("aria-label")).toBe(panelLabel);
+    expect(pageRow.querySelector("[data-run-row-label]")).toBeNull();
+    expect(pageRow.querySelector(".bg-danger.rounded-full")).not.toBeNull();
+    flushSync(() => pageRow.click());
+    expect(onOpenRun).toHaveBeenCalledWith(expect.objectContaining({ id: "b" }));
+  });
+
+  it("Last run: the newest run on one line, how long ago; nothing before a first run", () => {
+    flushSync(() => root.render(createElement(RoutineLastRun, { routine, runs: history, now, onOpenRun: () => {} })));
+    const rows = host.querySelectorAll("[data-routine-last-run] [data-run-row]");
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.getAttribute("data-run-row")).toBe("a");
+    expect(host.querySelector("[data-routine-last-run] h3")?.textContent).toBe("Last run");
+    flushSync(() => root.render(createElement(RoutineLastRun, { routine, runs: [], now, onOpenRun: () => {} })));
+    expect(host.querySelector("[data-routine-last-run]")).toBeNull();
+  });
+
+  it("the page's status rows leave Au nom de to Settings (set once)", () => {
+    const readiness = { checking: false, error: "", answer: null, check: () => {} } as never;
+    const acting = { ...routine, actAs: "ops" } as unknown as Routine;
+    flushSync(() => root.render(createElement(RoutineStatusRows, { routine: acting, runs, readiness, runAs: false, active: false, week: false })));
+    expect(host.querySelector("[data-routine-act-as]")).not.toBeNull();
+    flushSync(() => root.render(createElement(RoutineStatusRows, { routine: acting, runs, readiness, runAs: false, actAs: false, active: false, week: false })));
+    expect(host.querySelector("[data-routine-act-as]")).toBeNull();
+    expect(host.querySelector("[data-routine-next]")).not.toBeNull();
   });
 });

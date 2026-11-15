@@ -8,7 +8,7 @@ import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { Check, Copy, Eye, EyeOff, Loader2, RotateCw, Terminal, Webhook } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { copyText } from "@/lib/copy-text";
+import { copyText, useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import type { Routine } from "@/lib/routines";
 import type { WebhookCredential, WebhookTrigger } from "@/lib/webhooks";
@@ -40,6 +40,19 @@ export function routineWebhookCurl(url: string, token: string | undefined): stri
 
 export function routineWebhookFor(webhooks: WebhookTrigger[], routineId: string | undefined): WebhookTrigger | undefined {
   return routineId ? webhooks.find((webhook) => webhook.routineId === routineId) : undefined;
+}
+
+/** The address's Copy on the routine page's webhook line (#4357): the same
+ * address the panel's "POST to" copies, without opening the panel. */
+export function RoutineWebhookCopyButton({ routine, className }: { routine: Routine; className?: string }) {
+  const { state } = useStore();
+  const webhook = routineWebhookFor(state.webhooks, routine.id);
+  const url = webhook ? routineWebhookUrl(state.webhookIngress?.baseUrl, webhook) : "";
+  const { state: result, copy } = useCopyFeedback(url);
+  if (!webhook) return null;
+  return <button type="button" data-routine-webhook-copy="" onClick={copy} aria-label={t("routineWebhook.copyUrl")} title={result === "failed" ? t("common.copyFailed") : url} className={cn(TEXT_ACTION, "shrink-0", className, result === "failed" && "text-danger")}>
+    {result === "copied" ? <Check size={13} className="text-accent" aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}{t("chat.copy")}
+  </button>;
 }
 
 export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?: Bot }) {

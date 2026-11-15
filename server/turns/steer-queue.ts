@@ -35,6 +35,10 @@ export interface SteerStore {
   projectBotForTask?(botId: string, threadId: string): BotRecord | null;
   appendMessage(threadId: string, message: Omit<Message, "id" | "at">): Message;
   patchMessage(threadId: string, messageId: string, patch: Partial<Message>): Message | null;
+  /** Puts the conversations' engine bookkeeping (their sessions and what
+   * each was handed) on disk now. A restart that finds a claimed send reads
+   * it to keep the send out of the model's next turn (server/index.ts). */
+  persistEngineSessions?(): void;
 }
 
 interface QueueEntry {
@@ -299,6 +303,14 @@ export function drainSteeredMessages(
     // committed to draining: the entry leaves the map before anything runs,
     // so a settle racing another settle can never fire the same queue twice
     const ids = group.map((item) => item.messageId);
+    // A claim a restart finds has an unknown outcome: the restart counts its
+    // words as handed to the session the conversation had, from the
+    // bookkeeping on disk. That bookkeeping is saved later and off the loop,
+    // so a hard kill could leave it older than the claim (no session known)
+    // and the next turn would replay the words to the model (#4370). It is
+    // on disk before the claim: a kill between the two leaves the send
+    // waiting, never sent.
+    store.persistEngineSessions?.();
     settleChatFollowups(ids, "dispatching");
     const rest = entry.items.slice(group.length);
     if (rest.length > 0) queues.set(threadId, { botId: entry.botId, items: rest });

@@ -25,6 +25,7 @@ import {
   LogReader,
   forgetLogMemory,
   noteAtRestWrite,
+  pauseAtRestMigration,
   sealLogLines,
   setAtRestThreadFiles,
   readAtRestSync,
@@ -405,6 +406,24 @@ describe("migration", () => {
     await runAtRestMigration({ sliceMs: Infinity });
     expect(sealedOnDisk(index)).toBe(true);
     expect(readMemoryFile("b1").text).toBe("the amber note\n");
+  });
+
+  it("runs the pass a write asked for while another pass ran, at the delay it asked, not minutes later (#4370)", async () => {
+    configureContentEncryption({ mode: "on", autoMigrate: true, resolveBotOwner: () => WORKSPACE_OWNER, resolveOwner: () => ({ owner: WORKSPACE_OWNER, confidential: false }) });
+    writeMemoryFile("b1", "the first note\n");
+    const first = join(workspaceDir("b1"), "MEMORY.md");
+    const release = await pauseAtRestMigration();
+    // a pass is running, held before it seals the first note
+    const pass = runAtRestMigration({ sliceMs: Infinity });
+    // a write lands meanwhile, after the pass listed the bots' folders
+    writeMemoryFile("b2", "the late note\n");
+    const late = join(workspaceDir("b2"), "MEMORY.md");
+    release();
+    await pass;
+    expect(sealedOnDisk(first)).toBe(true);
+    expect(sealedOnDisk(late)).toBe(false);
+    await expect.poll(() => sealedOnDisk(late), { timeout: 3_000, interval: 20 }).toBe(true);
+    expect(readMemoryFile("b2").text).toBe("the late note\n");
   });
 
   it("drops lastUse and scopeHints once a file is sealed or gone", async () => {

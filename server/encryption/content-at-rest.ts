@@ -1523,7 +1523,10 @@ const logSeen = new Map<string, { ino: number; size: number; on: boolean }>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let timerAt = 0;
 let running: Promise<AtRestPass> | null = null;
-let again = false;
+/** When the soonest pass asked for while one ran is due (0: none asked):
+ * that pass may have listed the file's folder already, so the request is
+ * kept and honoured once it ends, at the time it asked for. */
+let againAt = 0;
 
 export interface AtRestPass {
   sealed: number;
@@ -1545,7 +1548,11 @@ const REPLACEMENTS_PER_PAUSE = 8;
 
 function scheduleAtRest(delay = PAUSE_MS): void {
   if (!contentAutoMigrate()) return;
-  if (running) { again = true; return; }
+  if (running) {
+    const at = Date.now() + delay;
+    againAt = againAt ? Math.min(againAt, at) : at;
+    return;
+  }
   // the sooner of the two: a safety pass minutes away never delays one asked for now
   if (timer) {
     if (timerAt <= Date.now() + delay) return;
@@ -1554,9 +1561,9 @@ function scheduleAtRest(delay = PAUSE_MS): void {
   timerAt = Date.now() + delay;
   timer = setTimeout(() => {
     timer = null;
+    // a request made during the pass is scheduled by the pass itself (its finally)
     void runAtRestMigration().then((pass) => {
-      if (again || pass.waiting || pass.locked) { again = false; scheduleAtRest(pass.waiting ? graceMs + 50 : SAFETY_PASS_MS); }
-      else scheduleAtRest(SAFETY_PASS_MS);
+      scheduleAtRest(pass.waiting ? graceMs + 50 : SAFETY_PASS_MS);
     }, () => scheduleAtRest(SAFETY_PASS_MS)).catch(reportBackgroundError);
   }, delay);
   timer.unref?.();
@@ -1768,7 +1775,15 @@ export function runAtRestMigration(options: { sliceMs?: number; pauseMs?: number
     sweepOriginals();
     pruneAtRestHints();
     return pass;
-  })().finally(() => { running = null; });
+  })().finally(() => {
+    running = null;
+    // a write noted during this pass (a timer's or a direct call's) gets its own pass
+    if (againAt) {
+      const delay = Math.max(0, againAt - Date.now());
+      againAt = 0;
+      scheduleAtRest(delay);
+    }
+  });
   return running;
 }
 
@@ -1974,6 +1989,7 @@ export function resetAtRestState(): void {
   logSeen.clear();
   forgetCachedBlocks();
   if (timer) { clearTimeout(timer); timer = null; }
+  againAt = 0;
   graceMs = Number.isInteger(graceFromEnv) && graceFromEnv >= 0 ? graceFromEnv : GRACE_MS;
 }
 

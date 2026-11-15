@@ -17,7 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { saveChatFollowup } from "../messages/message-db.ts";
+import { chatFollowups, saveChatFollowup } from "../messages/message-db.ts";
 import {
   cancelSteeredMessage,
   drainSteeredMessages,
@@ -654,6 +654,22 @@ describe("steer-queue module", () => {
     // drain-once: a second settle finds nothing and fires nothing
     drainSteeredMessages(store, run);
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  // A restart that finds a claimed send keeps its words out of the model's
+  // next turn from the engine bookkeeping on disk, saved later off the loop:
+  // the drain puts it on disk before the claim (#4370).
+  it("saves the engine sessions to disk before it claims a waiting send", () => {
+    const bot = fakeBot("bot-claim", "thread-claim", false);
+    const store = fakeStore([bot]);
+    const queued = queueSteeredMessage(bot.id, bot.threadId, "deploy it");
+    const statusAtSave: Array<string | undefined> = [];
+    store.persistEngineSessions = () => { statusAtSave.push(chatFollowups().find((row) => row.id === queued.id)?.status); };
+    const run = vi.fn();
+    drainSteeredMessages(store, run);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(statusAtSave).toEqual(["pending"]);
+    expect(chatFollowups().find((row) => row.id === queued.id)?.status).toBe("dispatching");
   });
 
   // A Live call waits for a spoken request it saw queued; it asks here

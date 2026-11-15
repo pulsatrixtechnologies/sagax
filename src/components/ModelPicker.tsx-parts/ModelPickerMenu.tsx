@@ -13,8 +13,6 @@ import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
 import { MENU_MAX_HEIGHT, MENU_WIDTH, menuListMinHeight } from "./helpers";
-import { runsWithEntries, type RunsWithEntry } from "@/lib/model-menu-steps";
-import { HARNESS_TOOL_NAME } from "../../../shared/harness-matrix";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
 
@@ -75,6 +73,7 @@ export function ModelPickerMenu({
   customModel,
   onManage,
   engineMark,
+  runsWith,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
@@ -118,6 +117,9 @@ export function ModelPickerMenu({
   /** #2963: the engine chips at the top of the list (engine first, then its
    * models): each engine section's mark. */
   engineMark?: (sectionKey: string) => ReactNode;
+  /** #4329 lot 6: "Runs with" for the bot (src/components/RunsWith.tsx),
+   * computed by the picker (this menu stays hook-free). */
+  runsWith?: readonly RunsWithChoice[];
 }) {
   const width = MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
@@ -132,10 +134,6 @@ export function ModelPickerMenu({
   const fastTwin = active && !autoOn ? fastTwinOf(activeOptions, selection.model) : undefined;
   const engineEfforts = active?.capabilities?.effortLevels;
   const menuEfforts = active?.capabilities?.modelVariants ? [] : modelEffortLevels(activeOption, engineEfforts);
-  // #4329: "Runs with", the engines that can run the model in use (a pick
-  // keeps the model and changes what runs it); drawn with two or more.
-  const runsWith = autoOn ? [] : runsWithEntries(menuSections);
-  const runsWithChoices = runsWithLabels(runsWith, onRow);
   const settingsPanel = active ? (
     <ModelMenuSettings
       disabled={Boolean(bot.busy)}
@@ -153,7 +151,7 @@ export function ModelPickerMenu({
         modelDefault: modelDefaultEffort(activeOption, engineEfforts),
         onPick: setEffort,
       } : undefined}
-      runsWith={runsWithChoices}
+      runsWith={autoOn ? undefined : runsWith}
     />
   ) : null;
 
@@ -302,19 +300,4 @@ export function ModelPickerMenu({
   );
 
   return menuPanel;
-}
-
-/** #4329: the words of "Runs with" (design of #4329, B5): the vendor's own
- * tool, pi, OpenCode or Built in on the line; the tool by its name only in
- * the opened list. Recommended: the vendor's own tool, else Built in. */
-export function runsWithLabels(entries: readonly RunsWithEntry[], onRow: (row: ModelMenuRow) => void): RunsWithChoice[] {
-  const recommended = entries.find((entry) => entry.role === "own") ?? entries.find((entry) => entry.role === "builtin");
-  return entries.map((entry) => {
-    const tool = HARNESS_TOOL_NAME[entry.harness] ?? entry.harness;
-    const words = entry.role === "own" ? { label: t("model.runsWith.own"), hint: t("model.runsWith.ownHint", { tool }) }
-      : entry.role === "builtin" ? { label: t("model.runsWith.builtin"), hint: t("model.runsWith.builtinHint") }
-        : entry.role === "pi" || entry.role === "opencode" ? { label: tool, hint: t("model.runsWith.openHint") }
-          : { label: tool, hint: undefined };
-    return { key: entry.harness, ...words, recommended: entry === recommended, current: entry.current, onPick: () => onRow(entry.row) };
-  });
 }

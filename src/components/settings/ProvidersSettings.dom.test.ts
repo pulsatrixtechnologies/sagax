@@ -27,10 +27,15 @@ const fixture = vi.hoisted(() => ({
   piServers: [] as unknown[],
   keys: [] as { provider: string; last4: string | null }[],
   accountsDown: false,
+  harnessByProvider: {} as Record<string, string>,
 }));
 
 const answers = (path: string, init?: RequestInit): unknown => {
-  if (path === "/api/me/models") return { mine: (JSON.parse(String(init?.body ?? "{}")) as { disabledModels?: string[] }).disabledModels ?? [] };
+  if (path === "/api/me/models") {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { disabledModels?: string[]; harnessByProvider?: Record<string, string> };
+    if (body.harnessByProvider) fixture.harnessByProvider = { ...fixture.harnessByProvider, ...body.harnessByProvider };
+    return { mine: body.disabledModels ?? [], harnessByProvider: fixture.harnessByProvider };
+  }
   if (path.startsWith("/api/instances/")) return { instances: fixture.instances };
   if (/^\/api\/me\/engines\/[^/]+\/name$/.test(path)) return { ok: true };
   if (path === "/api/me/providers") {
@@ -115,6 +120,7 @@ beforeEach(() => {
   fixture.piServers = [];
   fixture.keys = [];
   fixture.accountsDown = false;
+  fixture.harnessByProvider = {};
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
   host = document.createElement("div");
   document.body.append(host);
@@ -368,7 +374,7 @@ describe("One provider's page (#4329 B3)", () => {
     const root = host.querySelector<HTMLElement>('[data-provider-page="mistral"]')!;
     expect(root.querySelector('[data-settings-group="provider-accounts"]'), "a key is not an account").toBeNull();
     expect(root.querySelector('[data-settings-group="provider-key"]')!.textContent).toContain("A key is saved");
-    expect(root.querySelector("[data-provider-runs-with], [data-settings-group=\"provider-runs-with\"]"), "absent until the engine choice exists").toBeNull();
+    expect(root.querySelector("[data-provider-runs-with], [data-settings-group=\"provider-runs-with\"]"), "one engine only can run it: nothing to choose").toBeNull();
     const models = root.querySelector<HTMLElement>('[data-settings-group="provider-models"]')!;
     expect(models.querySelector("h3")!.textContent).toBe("Models");
     expect(models.textContent).toContain("2 of 2 on");
@@ -666,5 +672,58 @@ describe("Settings > Providers, in an organization", () => {
     await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
     await settle();
     expect(apiCalls("PUT")).toEqual([["/api/me/engines/codex/name", JSON.stringify({ name: "" })]]);
+  });
+});
+
+// #4384 (#4329 lot 6): "Runs with" on the provider's page, the answer on
+// screen to "how do I use pi with this provider": between the API key (or
+// Your bots there) and Models, its words in plain language, the tool named
+// only in the opened list, a pick saved as the person's default for it.
+describe("Runs with on a provider's page (#4384)", () => {
+  const openaiKey = () => instance("openai", "openai-compat", "OpenAI", { models: { default: "gpt-6", options: [{ id: "gpt-6", label: "GPT-6" }] } });
+  const pi = () => instance("pi", "piAgent", "pi", { access: "custom", models: { default: "openai/gpt-6", options: [{ id: "openai/gpt-6", label: "GPT-6" }] } });
+
+  it("says what runs the bots with this provider, between the key and Models, and saves the pick as the person's default", async () => {
+    fixture.instances = [openaiKey(), pi()];
+    await page("openai");
+    const root = host.querySelector<HTMLElement>('[data-provider-page="openai"]')!;
+    const section = root.querySelector<HTMLElement>('[data-settings-group="provider-runs-with"]');
+    expect(section, "drawn: built in and pi can both run it").not.toBeNull();
+    const key = root.querySelector('[data-settings-group="provider-key"]')!;
+    const models = root.querySelector('[data-settings-group="provider-models"]')!;
+    expect(key.compareDocumentPosition(section!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section!.compareDocumentPosition(models) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(visibleText(section!)).toContain("Runs with");
+    expect(visibleText(section!)).toContain("What runs your bots when they use OpenAI.");
+    const pill = section!.querySelector<HTMLButtonElement>('[data-runs-with="settings"] button[data-pill-select]')!;
+    expect(pill.textContent).toBe("Built in (recommended)");
+    for (const name of TOOL_NAMES) expect(visibleText(section!), name).not.toContain(name);
+    await click(pill);
+    const options = [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Built in (recommended)Sagax talks to the provider directly",
+      "piAn open engine that works with many providers",
+    ]);
+    await click(options[1]);
+    expect(apiCalls("PUT")).toEqual([["/api/me/models", JSON.stringify({ harnessByProvider: { openai: "piAgent" } })]]);
+    expect(section!.querySelector('[data-runs-with="settings"]')!.getAttribute("data-runs-with-value")).toBe("piAgent");
+    expect(section!.querySelector("button[data-pill-select]")!.textContent).toBe("pi");
+  });
+
+  it("reads the person's saved default, in Quebec French", async () => {
+    setLocale("fr");
+    fixture.instances = [openaiKey(), pi()];
+    fixture.harnessByProvider = { openai: "piAgent" };
+    await page("openai");
+    const section = host.querySelector<HTMLElement>('[data-settings-group="provider-runs-with"]')!;
+    expect(visibleText(section)).toContain("Roule avec");
+    expect(visibleText(section)).toContain("Ce qui fait rouler tes bots quand ils utilisent OpenAI.");
+    expect(section.querySelector("button[data-pill-select]")!.textContent).toBe("pi");
+  });
+
+  it("is absent where one engine only can run the provider", async () => {
+    fixture.instances = [openaiKey()];
+    await page("openai");
+    expect(host.querySelector('[data-settings-group="provider-runs-with"]')).toBeNull();
   });
 });

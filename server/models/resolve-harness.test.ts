@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { harnessPairs, type HarnessPlace } from "../../shared/harness-matrix.ts";
+import { harnessAllowed, harnessPairs, type HarnessPlace } from "../../shared/harness-matrix.ts";
 import { providerCatalog, type CatalogInstance } from "../../shared/provider-catalog.ts";
 import { createHarnessChoice, harnessChoices, harnessDefaultRefusal, movedSelection, resolveHarness } from "./resolve-harness.ts";
 
@@ -38,8 +38,11 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     expect(back.ok && back.selection.instanceId).toMatch(/^claude/);
   });
 
+  // the same catalog with no engine of its own way in listing Claude's model
+  const subscriptionOnly = catalogOf(instances.map((entry) => entry.instanceId === "pi" ? instance({ instanceId: "pi", driverKind: "piAgent", access: "custom" }, ["openai/gpt-6"]) : entry));
+
   it("refuses by name a pair the matrix does not offer, with its reason", () => {
-    const result = resolveHarness({ catalog, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true });
+    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true });
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toMatch(/^pi cannot run Claude here\. The vendor keeps subscription use to its own tools/);
   });
@@ -53,8 +56,16 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     expect(!result.ok && result.error).toBe("pi does not offer claude-opus-5. Pick a model it offers first, then choose pi.");
   });
 
+  it("#4384: a subscription's model runs under pi when pi lists it with its own way in (the owner: every provider, subscriptions included)", () => {
+    const result = resolveHarness({ catalog, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true });
+    expect(result).toEqual({ ok: true, selection: { instanceId: "pi", model: "anthropic/claude-opus-5" }, harness: "piAgent", provider: "anthropic" });
+    expect(harnessDefaultRefusal(catalog, "solo", "anthropic", "piAgent")).toBeNull();
+    // OpenCode lists none of them here: still not offered
+    expect(resolveHarness({ catalog, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "opencodeGo", strict: true }).ok).toBe(false);
+  });
+
   it("keeps a stored choice that cannot run a newly picked model's connection without refusing the pick", () => {
-    const result = resolveHarness({ catalog, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent" });
+    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent" });
     expect(result).toEqual({ ok: true, selection: { instanceId: "claude", model: "claude-opus-5" }, harness: "claudeAgent", provider: "anthropic" });
   });
 
@@ -63,8 +74,11 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     expect(viaDefault.ok && viaDefault.selection).toEqual({ instanceId: "pi", model: "openai/gpt-6" });
     const botFirst = resolveHarness({ catalog, place: "solo", selection: { instanceId: "pi", model: "openai/gpt-6" }, bot: "openai-compat", defaults: { openai: "piAgent" } });
     expect(botFirst.ok && botFirst.selection).toEqual({ instanceId: "openai", model: "gpt-6" });
+    // the subscription's model moves to pi too, pi listing it (#4384)
+    const onSubscription = resolveHarness({ catalog, place: "solo", selection: { instanceId: "codex", model: "gpt-6" }, defaults: { openai: "piAgent" } });
+    expect(onSubscription.ok && onSubscription.selection).toEqual({ instanceId: "pi", model: "openai/gpt-6" });
     // a default the subscription cannot use is skipped, never refused
-    const skipped = resolveHarness({ catalog, place: "solo", selection: { instanceId: "codex", model: "gpt-6" }, defaults: { openai: "piAgent" } });
+    const skipped = resolveHarness({ catalog, place: "solo", selection: { instanceId: "codex", model: "gpt-6" }, defaults: { openai: "opencodeGo" } });
     expect(skipped.ok && skipped.selection).toEqual({ instanceId: "codex", model: "gpt-6" });
   });
 
@@ -99,7 +113,8 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
 
   it("lists the engines the bot may pick for its model, only where the engine lists it", () => {
     expect(harnessChoices(catalog, "solo", { instanceId: "claudeApi", model: "claude-opus-5" }).sort()).toEqual(["claudeAgent", "piAgent"]);
-    expect(harnessChoices(catalog, "solo", { instanceId: "claude", model: "claude-opus-5" })).toEqual(["claudeAgent"]);
+    expect(harnessChoices(catalog, "solo", { instanceId: "claude", model: "claude-opus-5" })).toEqual(["claudeAgent", "piAgent"]);
+    expect(harnessChoices(subscriptionOnly, "solo", { instanceId: "claude", model: "claude-opus-5" })).toEqual(["claudeAgent"]);
   });
 
   it("upgrade: with no choice anywhere the write path reads nothing and returns the selection as given", async () => {
@@ -120,7 +135,7 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     });
     const moved = await choice.selectionFor({}, "pr_a", { instanceId: "claudeApi", model: "claude-opus-5", effort: "high", variant: "x" }, { harness: "piAgent" });
     expect(moved).toEqual({ ok: true, selection: { instanceId: "pi", model: "anthropic/claude-opus-5", effort: "high" } });
-    const refused = await choice.selectionFor({}, "pr_a", { instanceId: "claude", model: "claude-opus-5" }, { harness: "piAgent" });
+    const refused = await choice.selectionFor({}, "pr_a", { instanceId: "claude", model: "claude-opus-5" }, { harness: "opencodeGo" });
     expect(refused.ok).toBe(false);
     expect(movedSelection({ instanceId: "a", model: "m", effort: "max", auto: true }, { instanceId: "b", model: "n" }, () => false)).toEqual({ instanceId: "b", model: "n", auto: true });
   });
@@ -173,13 +188,14 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     }
 
     for (const [vendor, driver] of [["anthropic", "claudeAgent"], ["openai", "codex"], ["xai", "grokAgent"]] as const) {
-      it(`${vendor} subscription: only what the matrix offers runs it`, () => {
+      it(`${vendor} subscription: what the matrix offers runs it, and pi or OpenCode listing its model with their own way in`, () => {
         const sub = instance({ instanceId: `s-${vendor}`, driverKind: driver, access: "subscription" }, ["m1"]);
         const catalog = catalogOf([sub, instance({ instanceId: "pi", driverKind: "piAgent" }, [`${vendor}/m1`]), instance({ instanceId: "oc", driverKind: "opencodeGo" }, [`${vendor}/m1`])]);
         for (const pair of harnessPairs({ kind: "subscription", vendor, driver }, "solo")) {
           const result = resolveHarness({ catalog, place: "solo", selection: { instanceId: sub.instanceId, model: "m1" }, bot: pair.harness, strict: true });
-          expect(result.ok, `${vendor} ${pair.harness}`).toBe(pair.mark === "works");
-          if (result.ok) expect(result.selection.instanceId).toBe(sub.instanceId);
+          const ownWay = (pair.harness === "piAgent" || pair.harness === "opencodeGo") && harnessAllowed({ kind: "key", vendor }, "solo", pair.harness);
+          expect(result.ok, `${vendor} ${pair.harness}`).toBe(pair.mark === "works" || ownWay);
+          if (result.ok) expect(result.selection.instanceId).toBe(ownWay ? (pair.harness === "piAgent" ? "pi" : "oc") : sub.instanceId);
         }
       });
     }

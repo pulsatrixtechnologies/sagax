@@ -3045,7 +3045,13 @@ Sagax's values (`ProvidersSettings.tsx`, `ProviderPage.tsx`):
   server added by address and its Remove), API key (whether a key is saved,
   "ending in 1234", Replace and Remove as two equal grey pills, Remove
   armed in red; or "No key saved" and Add key), Your bots there, Runs with
-  (absent until the engine choice exists), Models (a fold row whose line is
+  (#4384: one described row, "Runs with" 13px and under it in 12px grey
+  "What runs your bots when they use <provider>.", the reference's pill menu
+  at the right with "Its own tool (recommended)"; the opened list gives each
+  value one 12px grey line naming the tool, the reference's grey line; absent
+  where one engine only can; the same control is the model menu's line, a
+  "Runs with" column of Bot models with the plain words and a row of the
+  bot's Model tab), Models (a fold row whose line is
   "75 of 75 on" and whose count pill unfolds the switches in place, a search
   from 12 models) and Advanced folded each time the page opens: who pays,
   the tool by its name (version, location, updates), a server's address,

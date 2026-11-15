@@ -471,4 +471,71 @@ describe("BotModelsSettings page", () => {
       }
     }
   });
+
+  // #4384 (#4329 lot 6): each row gains "Runs with", the same control as
+  // the model menu and the bot's Model tab, while one bot has a choice.
+  it("adds a Runs with column when an engine can run a bot's model another way, and a pick writes that bot's choice", async () => {
+    const before = fixture.state.instances;
+    fixture.state.instances = [...before, {
+      instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "custom",
+      snapshot: { state: "available", authenticated: true },
+      models: { default: "xai/grok-4", options: [{ id: "xai/grok-4", label: "Grok 4" }] },
+    } as never];
+    try {
+      act(() => root.render(createElement(BotModelsSettings)));
+      await flush();
+      const headers = container.querySelector("[data-bot-models-cols]")!;
+      expect(headers.querySelectorAll("[data-bot-models-col]")).toHaveLength(4);
+      expect(headers.querySelector('[data-bot-models-col="runs-with"] > span:not([data-runs-with-sizer])')!.textContent).toBe("Runs with");
+      const cell = container.querySelector<HTMLElement>('[data-bot-models-runs-with-cell="bot-scout"]')!;
+      const pill = cell.querySelector<HTMLButtonElement>("button[data-pill-select]")!;
+      // the table cell keeps the plain words, as the design's row reads
+      expect(pill.textContent).toBe("Its own tool");
+      expect(pill.getAttribute("aria-label")).toBe("Change what runs Scout");
+      // Auto picks the model per turn: nothing to choose, an empty cell keeps the columns
+      const atlas = container.querySelector<HTMLElement>('[data-bot-models-runs-with-cell="bot-atlas"]')!;
+      expect(atlas.querySelector("button")).toBeNull();
+      await act(async () => { pill.click(); });
+      const option = [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].find((row) => row.textContent?.startsWith("pi"))!;
+      expect(option.querySelector("[data-pill-option-hint]")!.textContent).toBe("An open engine that works with many providers");
+      await act(async () => { option.click(); });
+      expect(fixture.dispatch).toHaveBeenCalledWith({ type: "updateBot", botId: "bot-scout", patch: { harness: "piAgent" } });
+    } finally {
+      fixture.state.instances = before;
+    }
+  });
+
+  // #4384 review: the column was a share of the row (minmax(7rem,1fr)) and
+  // cut "Son propre outil" to "Son propre ..." while squeezing Backup. It is
+  // now as wide as its widest word: a max-content track, and every cell of
+  // it (title, rows, empty cells) holds the same words, so it comes out the
+  // same on each row's grid; Backup keeps its share.
+  it("sizes the Runs with column to its widest word on every row, Backup keeping its share", async () => {
+    const before = fixture.state.instances;
+    fixture.state.instances = [...before, {
+      instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "custom",
+      snapshot: { state: "available", authenticated: true },
+      models: { default: "xai/grok-4", options: [{ id: "xai/grok-4", label: "Grok 4" }] },
+    } as never];
+    try {
+      act(() => root.render(createElement(BotModelsSettings)));
+      await flush();
+      const rows = [...container.querySelectorAll<HTMLElement>("[data-bot-models-row]")];
+      for (const grid of [container.querySelector<HTMLElement>("[data-bot-models-cols]")!, ...rows]) {
+        expect(grid.className).toContain("_max-content_minmax(7rem,1fr)]");
+        expect(grid.className).not.toContain("minmax(7rem,1fr)_minmax(7rem,1fr)");
+      }
+      const sizers = [...container.querySelectorAll<HTMLElement>("[data-runs-with-sizer]")];
+      // the title's cell and one per row, the rows with nothing to choose included
+      expect(sizers).toHaveLength(rows.length + 1);
+      const words = (sizer: HTMLElement) => [...sizer.children].map((word) => word.textContent);
+      for (const sizer of sizers) {
+        expect(words(sizer)).toEqual(words(sizers[0]!));
+        expect(sizer.getAttribute("aria-hidden")).toBe("true");
+      }
+      expect(words(sizers[0]!)).toEqual(expect.arrayContaining(["Runs with", "Its own tool", "pi"]));
+    } finally {
+      fixture.state.instances = before;
+    }
+  });
 });

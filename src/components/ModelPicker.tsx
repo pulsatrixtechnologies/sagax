@@ -54,6 +54,8 @@ import { ModelPickerTrigger } from "./ModelPicker.tsx-parts/ModelPickerTrigger";
 import { BusyModelMenu } from "./ModelPicker.tsx-parts/ModelPickerBusyMenu";
 import { lockedWhileBusy } from "./ModelPicker.tsx-parts/model-picker-reasoning";
 import { ModelPickerMenu, windowOnlyMenuPlace } from "./ModelPicker.tsx-parts/ModelPickerMenu";
+import { pickBotHarness, type RunsWithChoice } from "./RunsWith";
+import { botRunsWith } from "@/lib/runs-with";
 import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/modelPickerActions";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
@@ -232,6 +234,12 @@ export function ModelPicker({
     ? configured.filter((instance) => !notAllowed(instance) &&
       (instance.instanceId === selection.instanceId || (!orgRefusesEngine(instance) && !notGiven(instance))))
     : configured;
+  // #4329 lot 6: "Runs with", the bot's own setting (src/components/RunsWith.tsx):
+  // the engines offered here that may run its model; a pick writes the bot's choice
+  const runsWith = botRunsWith({
+    instances: pickerInstances, place: orgMode ? "organization" : "solo", selection: bot.modelSelection, chosen: bot.harness,
+    onPick: pickBotHarness(dispatch, bot.id),
+  });
   const selectable = pickerInstances.filter((instance) => !notAllowed(instance) && (!choose?.engine || choose.engine(instance)));
   const selectedVariantLabel = variantLabelForSelection(active, selection);
   const multipleClaudeAccounts = state.instances.filter(isClaudeAccount).length > 1;
@@ -451,6 +459,7 @@ export function ModelPicker({
       openActiveModels={openActiveModels}
       onManage={onManage}
       engineMark={engineMark}
+      runsWith={choose || viewerLocal ? undefined : runsWith}
       customModel={choose?.custom ? { label: choose.custom.label, onPick: (text) => { choose.onPick({ model: text }); closeAll(); } } : undefined}
     />
   );
@@ -496,6 +505,7 @@ function ModelPickerShell({
   openActiveModels,
   onManage,
   engineMark,
+  runsWith,
   customModel,
 }: {
   rootRef: React.RefObject<HTMLDivElement | null>;
@@ -538,6 +548,7 @@ function ModelPickerShell({
   openActiveModels?: () => void;
   onManage?: () => void;
   engineMark: (sectionKey: string) => ReactNode;
+  runsWith?: readonly RunsWithChoice[];
   customModel?: { label: (text: string) => string; onPick: (text: string) => void };
 }) {
   return (
@@ -632,6 +643,7 @@ function ModelPickerShell({
         openActiveModels,
         onManage,
         engineMark,
+        runsWith,
         customModel,
       }))}
     </div>

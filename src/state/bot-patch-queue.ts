@@ -55,6 +55,9 @@ type BotPatchBody = {
   mcpServers: string[] | null;
   mcpAccounts: Record<string, string> | null;
   modelSelection: ModelSelection;
+  /** #4329 lot 6: what runs the bot ("Runs with"), a driver kind; the
+   * server moves the bot's model to that engine. */
+  harness: string;
   /** Prompt-cache keep-warm override: true/false, or null to follow the workspace. */
   cacheKeepWarm: boolean | null;
 };

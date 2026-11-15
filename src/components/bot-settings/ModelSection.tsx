@@ -27,6 +27,7 @@ import { useBotEditor } from "./BotEditorContext";
 import { botRecovery, effectiveBackups, type BotRecovery } from "@/lib/bot-runtime-settings";
 import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
 import { BotHostSettings } from "./BotHostSettings";
+import { RunsWith, runsWithShown, useBotsRunsWith } from "../RunsWith";
 
 type Backup = NonNullable<Bot["fallback"]>[number];
 
@@ -72,6 +73,7 @@ export function ModelSection({ bot }: { bot: Bot }) {
           />
           {!draft && turn.busy && <ModelLockLine bot={bot} lock={turn} />}
         </div>}
+        {!machine && !draft && !viewerLocal && <BotRunsWithRow bot={bot} disabled={turn.busy || !canEditBotField(state.config, bot, "modelSelection")} />}
       </SettingsGroup>
       {!machine && (canSwitch || canOrder) && <IfItFailsCard key={`recovery:${bot.id}`} bot={bot} canSwitch={canSwitch} canOrder={canOrder} />}
       {keepWarm && (
@@ -87,6 +89,19 @@ export function ModelSection({ bot }: { bot: Bot }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** "Runs with" (#4329 B5): the same control as the model menu and Bot
+ * models, the bot's own setting; absent where one engine only can. */
+function BotRunsWithRow({ bot, disabled }: { bot: Bot; disabled: boolean }) {
+  const choices = useBotsRunsWith()(bot);
+  if (!runsWithShown(choices)) return null;
+  const label = t("model.runsWith");
+  return (
+    <DescribedRow label={label} rowId="botModel.runsWith">
+      <RunsWith tone="settings" choices={choices} disabled={disabled} ariaLabel={label} />
+    </DescribedRow>
   );
 }
 

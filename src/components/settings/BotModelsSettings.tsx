@@ -45,6 +45,7 @@ import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { DefaultBotSettings, newBotDefaultsSummary } from "../NewBotDialog";
 import { DescribedRow, DialogFrame, DialogLayer, HelpTip, PILL, PRIMARY_PILL, PillSelect, SettingsGroup, TABLE_CELL_CONTROL } from "../SettingsPrimitives";
 import { SelectionBar } from "./SettingsPatterns";
+import { RunsWith, runsWithShown, useBotsRunsWith, type RunsWithChoice } from "../RunsWith";
 
 // One grid for the column headers, the section headers and every row, so
 // the checkbox (Edit several only), Model · effort and Backup line up down
@@ -54,6 +55,13 @@ import { SelectionBar } from "./SettingsPatterns";
 const ROW_GRIDS = {
   selectBackup: "grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[1.25rem_minmax(8rem,1fr)_minmax(12rem,2fr)_minmax(7rem,1fr)]",
   backup: "grid grid-cols-[minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[minmax(8rem,1fr)_minmax(12rem,2fr)_minmax(7rem,1fr)]",
+  // #4329 lot 6: a "Runs with" column after Model · effort, while a bot has
+  // a choice to make. It is as wide as its widest word (every cell holds the
+  // same RunsWithSizer), never cut; the room comes from Bot and Model ·
+  // effort, so Backup keeps its width. The minimums fit 36rem, checkbox
+  // included.
+  selectRunsWith: "grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[1.25rem_minmax(5rem,0.6fr)_minmax(10rem,1.4fr)_max-content_minmax(7rem,1fr)]",
+  runsWith: "grid grid-cols-[minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[minmax(5rem,0.6fr)_minmax(10rem,1.4fr)_max-content_minmax(7rem,1fr)]",
 } as const;
 type Backup = NonNullable<Bot["fallback"]>[number];
 
@@ -103,6 +111,44 @@ function sectionTitle(section: string): string {
 export function botModelEffortText(row: BotModelsRow, instances: Parameters<typeof formatBotModelSelection>[1]): string {
   const effort = row.modelSelection.effort;
   return [formatBotModelSelection(row.modelSelection, instances), effort ? effortLabel(effort) : undefined].filter(Boolean).join(" · ");
+}
+
+/** Gives the "Runs with" column the width of its widest word: each row is
+ * its own grid, so every cell of the column (header, rows, empty cells)
+ * holds the same invisible words, laid out like the cell's pill (padding,
+ * gap, chevron), and the max-content track comes out equal on every row. */
+function RunsWithSizer({ words }: { words: readonly string[] }) {
+  return (
+    <span aria-hidden="true" data-runs-with-sizer="" className="invisible grid h-0 overflow-hidden">
+      {words.map((word) => (
+        <span key={word} className="flex gap-1.5 whitespace-nowrap px-2 text-[13px] leading-[18px]">
+          {word}
+          <span className="w-[13px] shrink-0" />
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** A bot's "Runs with" in its row (#4329 B7): the same control as the model
+ * menu and the bot's Model tab; an empty cell where one engine only can. */
+function BotRunsWithCell({ bot, choices, mayEdit, words }: { bot: Bot; choices: readonly RunsWithChoice[]; mayEdit: boolean; words: readonly string[] }) {
+  if (!runsWithShown(choices)) {
+    return <span data-bot-models-runs-with-cell={bot.id} aria-hidden="true" className="hidden @min-[36rem]:block"><RunsWithSizer words={words} /></span>;
+  }
+  const label = t("model.runsWith");
+  return (
+    <Cell label={label} data-bot-models-runs-with-cell={bot.id}>
+      <div className="min-w-0">
+        {mayEdit ? (
+          <RunsWith tone="settings" fill choices={choices} disabled={Boolean(bot.busy)} ariaLabel={t("botModels.runsWith.edit", { name: bot.name })} />
+        ) : (
+          <span className={READ_ONLY_CELL}>{choices.find((choice) => choice.current)?.label}</span>
+        )}
+        <RunsWithSizer words={words} />
+      </div>
+    </Cell>
+  );
 }
 
 function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
@@ -348,8 +394,15 @@ export function BotModelsSettings() {
   const bulkIds = useMemo(() => selectedFull.map((bot) => bot.id), [selectedFull]);
   const allOn = allIds.length > 0 && allIds.every((id) => selected.has(id));
   const anyOn = allIds.some((id) => selected.has(id));
-  const grid = ROW_GRIDS[editing ? "selectBackup" : "backup"];
-  const headingSpan = editing ? "@min-[36rem]:col-span-3" : "col-span-full";
+  // #4329 lot 6: what runs each bot (src/components/RunsWith.tsx); the
+  // column shows while one bot has a choice to make
+  const runsWithOf = useBotsRunsWith();
+  const runsWith = new Map(fullBots.map((bot) => [bot.id, runsWithOf(bot)]));
+  const runsWithColumn = [...runsWith.values()].some(runsWithShown);
+  // the words that can stand in the column, its title included: they size it
+  const runsWithWords = [...new Set([t("model.runsWith"), ...[...runsWith.values()].filter(runsWithShown).flatMap((choices) => choices.map((choice) => choice.label))])];
+  const grid = ROW_GRIDS[editing ? (runsWithColumn ? "selectRunsWith" : "selectBackup") : (runsWithColumn ? "runsWith" : "backup")];
+  const headingSpan = editing ? (runsWithColumn ? "@min-[36rem]:col-span-4" : "@min-[36rem]:col-span-3") : "col-span-full";
 
   const stopEditing = useCallback(() => {
     setEditing(false);
@@ -418,6 +471,12 @@ export function BotModelsSettings() {
               )}
               <span data-bot-models-col="bot" className="truncate">{editing ? t("botModels.selectAll") : t("botModels.col.bot")}</span>
               <span data-bot-models-col="model" className="hidden truncate px-2 @min-[36rem]:block" title={t("botModels.col.model")}>{t("botModels.col.modelEffort")}</span>
+              {runsWithColumn && (
+                <span data-bot-models-col="runs-with" className="hidden min-w-0 @min-[36rem]:block">
+                  <span className="block truncate px-2">{t("model.runsWith")}</span>
+                  <RunsWithSizer words={runsWithWords} />
+                </span>
+              )}
               <span data-bot-models-col="backup" className="hidden truncate px-2 @min-[36rem]:block">{t("botModels.col.backup")}</span>
             </div>
             {groups.map((group) => {
@@ -500,6 +559,7 @@ export function BotModelsSettings() {
                               <span className={READ_ONLY_CELL} title={modelName}>{modelName}</span>
                             )}
                           </Cell>
+                          {runsWithColumn && <BotRunsWithCell bot={full} choices={runsWith.get(row.id) ?? []} mayEdit={mayEdit} words={runsWithWords} />}
                           <Cell label={t("botModels.col.backup")} data-bot-models-backup-cell={row.id}>
                             {mayBackup ? (
                               <BotBackupCell bot={full} disabled={Boolean(full.busy)} />

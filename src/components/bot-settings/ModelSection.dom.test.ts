@@ -339,3 +339,31 @@ describe("Bot > Model on the profile page (plain surface)", () => {
     expect($('[data-settings-row="botPayerMode"]')).toBeNull();
   });
 });
+
+// #4384 (#4329 lot 6): the bot's Model tab carries "Runs with", the same
+// control as the model menu and Bot models; absent with one possible engine.
+describe("Bot > Model, Runs with", () => {
+  const grok = { instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] } } as InstanceInfo;
+  const pi = { instanceId: "pi", driverKind: "piAgent", displayName: "pi", access: "custom", snapshot: { state: "available", authenticated: true }, models: { default: "xai/grok-4", options: [{ id: "xai/grok-4", label: "Grok 4" }] } } as InstanceInfo;
+
+  it("offers what can run the bot's model, and a pick writes the bot's own choice", async () => {
+    fixture.instances = [grok, pi];
+    await render(bot({ modelSelection: { instanceId: "grok", model: "grok-4" } }));
+    const row = $('[data-settings-row="botModel.runsWith"]')!;
+    expect(row.textContent).toContain("Runs with");
+    expect(row.querySelector("button[data-pill-select]")!.textContent).toBe("Its own tool (recommended)");
+    expect(row.textContent).not.toContain("Grok");
+    await pick(row.querySelector("button[data-pill-select]"), "piAn open engine that works with many providers");
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "updateBot", botId: "bot-1", patch: { harness: "piAgent" } });
+  });
+
+  it("is absent with one possible engine, and while the bot is being made", async () => {
+    fixture.instances = [grok];
+    await render(bot({ modelSelection: { instanceId: "grok", model: "grok-4" } }));
+    expect($('[data-settings-row="botModel.runsWith"]')).toBeNull();
+    fixture.instances = [grok, pi];
+    await render(bot({ modelSelection: { instanceId: "grok", model: "grok-4" } }), true);
+    expect($('[data-settings-row="botModel.runsWith"]')).toBeNull();
+  });
+});
+

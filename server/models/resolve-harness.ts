@@ -17,16 +17,23 @@
 // existing bot keeps running on its vendor's own tool until someone chooses.
 // A default taken off puts the bots that followed it (no choice of their own,
 // still on that engine for that provider) back on the recommended engine.
+import type { HarnessPlace } from "../../shared/harness-matrix.ts";
 import {
-  harnessPairs,
-  HARNESS_TOOL_NAME,
-  type HarnessPair,
-  type HarnessPlace,
-} from "../../shared/harness-matrix.ts";
+  connectionInUse,
+  engineFor,
+  harnessChoices,
+  harnessName,
+  locateSelection,
+  providerHarnessPairs,
+  worksPairs as works,
+} from "../../shared/harness-choices.ts";
 import type { ModelSelection } from "../../shared/model-selection.ts";
-import { splitEngine } from "../../shared/model-provider.ts";
-import type { CatalogConnection, CatalogEngine, CatalogModel, CatalogProvider, ProviderCatalog } from "../../shared/provider-catalog.ts";
+import type { CatalogEngine, ProviderCatalog } from "../../shared/provider-catalog.ts";
 import { harnessPairRefusal, harnessModelRefusal, harnessUnknownProviderRefusal, harnessUnlistedRefusal } from "./model-access-refusals.ts";
+
+// The pure reading of the catalog lives in shared/harness-choices.ts (the
+// app's "Runs with" control lists with it); re-exported for the callers here.
+export { harnessChoices, harnessName, locateSelection };
 
 /** The person's default harness per provider id (shared/model-provider.ts). */
 export type HarnessDefaults = Readonly<Record<string, string>>;
@@ -60,69 +67,6 @@ export type ResolveHarnessResult =
     provider: string | null;
   }
   | { ok: false; error: string };
-
-interface Located {
-  provider: CatalogProvider;
-  model: CatalogModel;
-  engine: CatalogEngine;
-}
-
-/** Where the bot's model sits in the catalog: its provider, the model and
- * the engine row it runs on now. */
-export function locateSelection(catalog: ProviderCatalog, selection: Pick<ModelSelection, "instanceId" | "model">): Located | null {
-  for (const provider of catalog.providers) {
-    for (const model of provider.models) {
-      const engine = model.engines.find((entry) => entry.instanceId === selection.instanceId && entry.model === selection.model);
-      if (engine) return { provider, model, engine };
-    }
-  }
-  return null;
-}
-
-const works = (pairs: readonly HarnessPair[]) => pairs.filter((pair) => pair.mark === "works");
-const modelConnections = (provider: CatalogProvider) => provider.connections.filter((connection) => connection.kind !== "botsLink");
-
-/** The connection the bot's model comes through: the engine's own account,
- * key or address; for a row of pi or OpenCode (which hold no account of
- * their own), the provider's connection that offers that engine, else the
- * provider's key as the matrix states it. */
-function connectionInUse(located: Located, place: HarnessPlace): { connection: CatalogConnection | null; pairs: HarnessPair[] } {
-  const { provider, engine } = located;
-  const connections = modelConnections(provider);
-  const own = connections.find((connection) => connection.instanceId === engine.instanceId);
-  if (own) return { connection: own, pairs: own.harnesses };
-  const offering = connections.find((connection) => works(connection.harnesses).some((pair) => pair.harness === engine.harness));
-  if (offering) return { connection: offering, pairs: offering.harnesses };
-  if (splitEngine(engine.harness) && (provider.kind === "account" || provider.kind === "key")) {
-    return { connection: null, pairs: harnessPairs({ kind: "key", vendor: provider.id }, place) };
-  }
-  // A provider with no connection the matrix knows (another tool's models):
-  // its own engine only.
-  return { connection: null, pairs: [{ harness: engine.harness, role: "tool", mark: "works" }] };
-}
-
-/** The engine that runs this model with this harness: the connection's own
- * instance when it is that engine, else another engine of the provider
- * listing the same model, whose own connection (when it has one) offers the
- * harness too. */
-function engineFor(located: Located, connection: CatalogConnection | null, harness: string): CatalogEngine | null {
-  const { provider, model } = located;
-  const candidates = model.engines.filter((engine) => engine.harness === harness);
-  if (!candidates.length) return null;
-  const mine = connection?.instanceId ? candidates.find((engine) => engine.instanceId === connection.instanceId) : undefined;
-  if (mine) return mine;
-  if (located.engine.harness === harness) return located.engine;
-  const connections = modelConnections(provider);
-  return candidates.find((engine) => {
-    const own = connections.find((entry) => entry.instanceId === engine.instanceId);
-    return !own || works(own.harnesses).some((pair) => pair.harness === harness);
-  }) ?? null;
-}
-
-/** The tool's own name for a harness (opened choice and refusals only). */
-export function harnessName(harness: string): string {
-  return HARNESS_TOOL_NAME[harness] ?? harness;
-}
 
 /** See the header. */
 export function resolveHarness(input: ResolveHarnessInput): ResolveHarnessResult {
@@ -171,22 +115,9 @@ export function resolveHarness(input: ResolveHarnessInput): ResolveHarnessResult
 export function harnessDefaultRefusal(catalog: ProviderCatalog, place: HarnessPlace, providerId: string, harness: string): string | null {
   const provider = catalog.providers.find((entry) => entry.id === providerId);
   if (!provider) return harnessUnknownProviderRefusal(harnessName(harness), providerId);
-  const connections = modelConnections(provider);
-  const pairs = connections.length
-    ? connections.flatMap((connection) => connection.harnesses)
-    : provider.kind === "account" || provider.kind === "key" ? harnessPairs({ kind: "key", vendor: provider.id }, place) : [];
+  const pairs = providerHarnessPairs(provider, place);
   if (pairs.some((pair) => pair.harness === harness && pair.mark === "works")) return null;
   return harnessPairRefusal(harnessName(harness), provider.label, pairs.find((pair) => pair.harness === harness)?.reason);
-}
-
-/** The harnesses the bot may pick for its model here (the opened "Runs
- * with" list): the matrix's "works" pairs for the connection in use whose
- * engine lists the model. */
-export function harnessChoices(catalog: ProviderCatalog, place: HarnessPlace, selection: Pick<ModelSelection, "instanceId" | "model">): string[] {
-  const located = locateSelection(catalog, selection);
-  if (!located) return [];
-  const { connection, pairs } = connectionInUse(located, place);
-  return works(pairs).map((pair) => pair.harness).filter((harness) => engineFor(located, connection, harness) !== null);
 }
 
 /** The bot's selection on the engine the resolver chose: the engine's own

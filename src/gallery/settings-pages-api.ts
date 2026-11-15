@@ -76,6 +76,12 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
         { instanceId: "openrouter", displayName: "OpenRouter", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: false }, models: { default: "", options: [] } },
         { instanceId: "compat-research", displayName: "Research cluster in the basement rack, second floor", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "llama-4-70b", options: [{ id: "llama-4-70b", label: "Llama 4 70B", custom: true }, { id: "llama-4-8b", label: "Llama 4 8B", custom: true }] } },
       ] : []),
+      // &bots=11 (#4384 review): OpenCode too, so a bot has three engines to pick from
+      ...(params.get("providers") && params.get("bots") === "11" ? [
+        { instanceId: "opencode", displayName: "OpenCode", driverKind: "opencodeGo", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "", options: [
+          { id: "anthropic/opus", label: "Claude Opus 4.1" }, { id: "xai/grok-4", label: "Grok 4" },
+        ] } },
+      ] : []),
       // &keyonly=1 (#4376 review): a key engine with no key row of its own and no key yet
       ...(params.get("keyonly") ? [
         { instanceId: "meta", displayName: "Meta", driverKind: "meta", access: "api", snapshot: { state: "unavailable", reason: "No API key." }, models: { default: "", options: [] } },
@@ -143,6 +149,15 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       ...(params.get("providers") ? [
         { id: "bot-3", name: "Skye", section: "Lab", ownerUserId: "p-1", instanceId: "personal-lab", model: "qwen-3.8-27b", threadId: "thread-3", modelSelection: { instanceId: "personal-lab", model: "qwen-3.8-27b" }, threads: [], messages: [] },
         { id: "bot-4", name: "Ember", section: "Lab", ownerUserId: "p-1", instanceId: "claude-work", model: "opus", threadId: "thread-4", modelSelection: { instanceId: "claude-work", model: "opus", effort: "high" }, threads: [], messages: [] },
+      ] : []),
+      // &bots=11 (#4384 review): a real count of bots, several on a model another engine can run
+      ...(params.get("providers") && params.get("bots") === "11" ? [
+        { id: "bot-5", name: "Nimbus", section: "Clients", ownerUserId: "p-1", instanceId: "claude-work", model: "opus", threadId: "thread-5", modelSelection: { instanceId: "claude-work", model: "opus", effort: "medium" }, harness: "piAgent", fallback: [{ instanceId: "grok", model: "grok-4" }], threads: [], messages: [] },
+        { id: "bot-6", name: "Orion", section: "Clients", ownerUserId: "p-1", instanceId: "grok", model: "grok-4", threadId: "thread-6", modelSelection: { instanceId: "grok", model: "grok-4", effort: "high" }, threads: [], messages: [] },
+        { id: "bot-7", name: "Piper", section: "Clients", ownerUserId: "p-1", instanceId: "compat-azure", model: "gpt-4.1", threadId: "thread-7", modelSelection: { instanceId: "compat-azure", model: "gpt-4.1" }, threads: [], messages: [] },
+        { id: "bot-8", name: "Quill", section: "Lab", ownerUserId: "p-1", instanceId: "claude", model: "opus", threadId: "thread-8", modelSelection: { instanceId: "claude", model: "opus", effort: "low" }, threads: [], messages: [] },
+        { id: "bot-9", name: "Rowan", section: "Lab", ownerUserId: "p-1", instanceId: "grok", model: "grok-4", threadId: "thread-9", modelSelection: { instanceId: "grok", model: "grok-4" }, harness: "piAgent", threads: [], messages: [] },
+        { id: "bot-10", name: "Sable", ownerUserId: "p-1", instanceId: "claude-work", model: "sonnet", threadId: "thread-10", modelSelection: { instanceId: "claude-work", model: "sonnet" }, threads: [], messages: [] },
       ] : []),
     ], groups: [], sections: params.get("providers") ? ["Clients", "Lab"] : ["Clients"] },
     ...Object.fromEntries(BOTS.map((_, index) => [`/api/bots/bot-${index}/auto-model`, {

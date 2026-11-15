@@ -526,6 +526,9 @@ export interface Bot {
    * fed to the Thinking timer so elapsed time survives thread switches. */
   turnStartedAt?: number | null;
   modelSelection: ModelSelection;
+  /** #4329 lot 5: what runs this bot ("Runs with"), the driver kind the
+   * person chose for it (shared/wire.ts); absent: no choice of its own. */
+  harness?: string;
   /** Where this bot's turns run. Absent means the server (the fleet). */
   host?: { kind: "fleet" } | { kind: "machine"; userId: string; deviceId: string };
   /** Where this bot works: a computer, only the built-in browser tab, or

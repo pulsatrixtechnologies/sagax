@@ -547,8 +547,10 @@ export const PILL = "ui-button min-h-[44px] disabled:opacity-50 md:min-h-0";
 
 /** `group` heads a run of options in the open list (a native <optgroup>):
  * a grey line the arrows skip. `disabled` keeps a choice listed but not
- * choosable (an engine that is not ready, a saved value that is gone). */
-export type PillOption<T extends string> = { value: T; label: string; group?: string; disabled?: boolean };
+ * choosable (an engine that is not ready, a saved value that is gone).
+ * `hint`: one grey line under the option, in the open list only ("Runs
+ * with" names the tool there, #4329). */
+export type PillOption<T extends string> = { value: T; label: string; group?: string; disabled?: boolean; hint?: string };
 
 /** The reference design's borderless pill menu ("Follow System ⌄"): the current value
  * and a chevron; the choices open in a small list under it. A listbox, so
@@ -697,7 +699,12 @@ export function PillSelect<T extends string>({
                 }}
                 className="flex min-h-[30px] cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-[13px] leading-[18px] text-ink hover:bg-ink/[0.06] focus-visible:bg-ink/[0.06] focus-visible:outline-none aria-disabled:cursor-not-allowed aria-disabled:text-ink-secondary"
               >
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                {option.hint ? (
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate">{option.label}</span>
+                    <span data-pill-option-hint="" className="text-[12px] leading-4 text-ink-secondary">{option.hint}</span>
+                  </span>
+                ) : <span className="min-w-0 flex-1 truncate">{option.label}</span>}
                 <Check size={14} aria-hidden="true" className={cn("shrink-0 text-ink-secondary", !selected && "invisible")} />
               </li>
               </Fragment>

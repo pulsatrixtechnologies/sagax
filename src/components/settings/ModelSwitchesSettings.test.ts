@@ -41,7 +41,7 @@ describe("Settings > Models > Active models", () => {
     ], "solo");
     const labels = groups.map((group) => group.label);
     // the signed-in accounts first, Claude, OpenAI and the xAI group heading them
-    expect(labels.slice(0, 3)).toEqual(["Claude", "OpenAI", "SpaceXAI"]);
+    expect(labels.slice(0, 3)).toEqual(["Claude", "OpenAI", "SpaceXSI"]);
     expect(labels).toContain("Home server");
     expect(labels).toContain("OpenCode");
     // never a fold named after a tool or an engine, never this computer

@@ -34,6 +34,17 @@ describe("self-knowledge base", () => {
     expect(rows.every((row) => row.labelKey && row.group && row.keywords.length > 0)).toBe(true);
   });
 
+  // #4329 lot 2: the bots link's technical fields are its part of the xAI
+  // provider page's one Advanced, not Providers > Advanced; the base says
+  // where they really are.
+  it("places the bots link's technical fields in the xAI page's Advanced, not Providers > Advanced", () => {
+    const card = fresh.sections.find((section) => section.id === "card:providers.linkedGrokBot.advanced");
+    expect(card?.where).toContain("Settings > Providers > SpaceXSI > Advanced > Your bots there");
+    expect(card?.where).toContain("Réglages > Fournisseurs > SpaceXSI > Avancé > Tes bots là-bas");
+    const page = fresh.sections.find((section) => section.id === "card:providers.advanced");
+    expect(card?.title).not.toBe(page?.title);
+  });
+
   it("names settings-nav.ts when SECTIONS is missing, never TypeErrors later", () => {
     const dir = mkdtempSync(join(tmpdir(), "self-knowledge-nav-"));
     mkdirSync(join(dir, "src/components/settings"), { recursive: true });

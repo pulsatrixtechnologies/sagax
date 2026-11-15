@@ -30,7 +30,7 @@ const claude: ModelMenuSection = { key: "anthropic", label: "Claude", rows: [
   model("claude", "sonnet", "Sonnet 5", { harness: "claudeAgent" }),
   model("claudeApi", "haiku", "Haiku 5.5", { unavailable: "sign in", harness: "claudeAgent" }),
 ] };
-const xai: ModelMenuSection = { key: "xai", label: "SpaceXAI", rows: [model("grok", "grok-4.7", "Grok 4.7", { harness: "grokAgent" })] };
+const xai: ModelMenuSection = { key: "xai", label: "SpaceXSI", rows: [model("grok", "grok-4.7", "Grok 4.7", { harness: "grokAgent" })] };
 const computer: ModelMenuSection = { key: "computer", label: "This computer", rows: [model("claude", "dwarfstar::qwen", "Qwen", { harness: "claudeAgent" })] };
 const sections = [top, claude, xai, computer];
 

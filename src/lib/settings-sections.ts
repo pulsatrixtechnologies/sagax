@@ -169,8 +169,10 @@ export function mergedSettingsCard(section: AppSettingsSection): string | undefi
  * engine, a key or a server (`providers.advanced.<id>`), opened on the page
  * of the provider that holds that id. Null for any other card (Providers'
  * own Advanced and its claude.ai connectors stay on the list). */
-export function providerCardTarget(cardId: string | null | undefined): { kind: "computer" } | { kind: "row"; id: string } | null {
+export function providerCardTarget(cardId: string | null | undefined): { kind: "computer" } | { kind: "botsLink" } | { kind: "row"; id: string } | null {
   if (!cardId) return null;
+  // #4329 lot 2: the bots link left Providers > Advanced for the xAI provider's page
+  if (cardId === "providers.linkedGrokBot" || cardId.startsWith("providers.linkedGrokBot.")) return { kind: "botsLink" };
   if (cardId === "computer.localModels" || cardId === "providers.localModels" || cardId === "computer.localModels.endpoints") return { kind: "computer" };
   const prefix = "providers.advanced.";
   if (!cardId.startsWith(prefix)) return null;

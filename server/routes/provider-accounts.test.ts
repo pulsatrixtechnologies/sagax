@@ -67,7 +67,7 @@ describe("GET /api/me/providers/catalog (#4329)", () => {
     const answer = await call(handler) as { status: number; body: { providers: Array<{ id: string; label: string; connections: Array<{ kind: string; label: string; harnesses: Array<{ harness: string; mark: string }> }> }> } };
     expect(answer.status).toBe(200);
     expect(seen).toEqual([{ principal: "person-a" }]);
-    expect(answer.body.providers.map((provider) => provider.label)).toEqual(["OpenAI", "SpaceXAI", "Home server"]);
+    expect(answer.body.providers.map((provider) => provider.label)).toEqual(["OpenAI", "SpaceXSI", "Home server"]);
     expect(answer.body.providers[0]!.connections.map((connection) => connection.label)).toEqual(["ada@example.com", "OpenAI"]);
     // the server's protocol comes from the person's accounts; its address never leaves
     expect(answer.body.providers[2]!.connections[0]!.harnesses.find((pair) => pair.harness === "claudeAgent")?.mark).toBe("small");

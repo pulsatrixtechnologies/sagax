@@ -35,7 +35,7 @@ const sections: ModelMenuSection[] = [
   { key: "openai", label: "OpenAI", rows: [
     model("codex", "gpt-5.6", "GPT-5.6", { harness: "codex" }),
   ] },
-  { key: "xai", label: "SpaceXAI", rows: [
+  { key: "xai", label: "SpaceXSI", rows: [
     model("grok", "grok-4.7", "Grok 4.7"), model("grok", "grok-4.5", "Grok 4.5"),
   ] },
   { key: "computer", label: "This computer", rows: [
@@ -106,7 +106,7 @@ describe("the two-step model menu", () => {
     expect(models()).toEqual(["opus"]);
     expect(activeRow()!.dataset.modelOption).toBe("opus");
     expect(providers()).toEqual(["anthropic", "openai", "xai", "computer"]);
-    expect($$("[data-model-provider]").map((row) => row.textContent)).toEqual(["ClaudeOpus 5.5", "OpenAI1 model", "SpaceXAI2 models", "This computer1 model"]);
+    expect($$("[data-model-provider]").map((row) => row.textContent)).toEqual(["ClaudeOpus 5.5", "OpenAI1 model", "SpaceXSI2 models", "This computer1 model"]);
     expect($('[data-model-provider="anthropic"] [data-model-provider-current]')).not.toBeNull();
     for (const row of $$("[data-model-provider]")) {
       expect(row.getAttribute("role")).toBe("menuitem");
@@ -158,7 +158,7 @@ describe("the two-step model menu", () => {
     click($('[data-model-provider="xai"]')!);
     expect(step()).toBe("model");
     expect(models()).toEqual(["grok-4.7", "grok-4.5"]);
-    expect($("[data-model-step-back]")!.textContent).toContain("SpaceXAI");
+    expect($("[data-model-step-back]")!.textContent).toContain("SpaceXSI");
     click($("[data-model-step-back]")!);
     expect(step()).toBe("provider");
     expect(activeRow()!.dataset.modelProvider).toBe("xai");

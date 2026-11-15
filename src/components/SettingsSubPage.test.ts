@@ -105,7 +105,7 @@ describe("sub-page navigation", () => {
   });
 
   // #4329 lot 1: one provider's page is a sub-page of Providers.
-  it("Providers > SpaceXAI: a provider's page opens on Providers with its name in the breadcrumb", async () => {
+  it("Providers > SpaceXSI: a provider's page opens on Providers with its name in the breadcrumb", async () => {
     expect(resolveSubPage("providers.provider:xai")?.section).toBe("providers");
     expect(resolveSubPage("providers.nope")).toBeNull();
     fixture.section = "providers";
@@ -113,7 +113,7 @@ describe("sub-page navigation", () => {
     const html = await render();
     expect(html).toContain('data-settings-subpage="providers.provider:xai"');
     expect(html).toContain('aria-label="Back to Providers"');
-    expect(html).toMatch(/aria-current="page"[^>]*>SpaceXAI</);
+    expect(html).toMatch(/aria-current="page"[^>]*>SpaceXSI</);
   });
 
   it("an old link to a provider row's card names the page that holds it now", () => {

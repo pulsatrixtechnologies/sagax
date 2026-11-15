@@ -40,6 +40,7 @@ import { ServerForm } from "./OpenAiCompatServers";
 import { PersonalProviderKey, PersonalProviderServerForm, removePersonalKey, removePersonalServer } from "./PersonalProviderAccount";
 import { LocalModelsSettings } from "./LocalModelsSettings";
 import { PiServerDetail, removePiServer } from "./PiModelServers";
+import { BotsLinkAdvanced, BotsLinkSection, botsLinkOnPage, useBotsLink } from "./LinkedGrokBotSettings";
 import {
   PI_SERVER_PREFIX,
   focusProviderLine,
@@ -75,6 +76,10 @@ const RUNS_WITH_KEY = {
   builtin: "model.runsWith.builtin",
   tool: "providers.runsWith.tool",
 } as const satisfies Record<HarnessRole, LocaleKey>;
+
+/** The xAI provider (shared/model-provider.ts): its page holds the link to
+ * the person's bots in its bot app. */
+export const XAI_PROVIDER_ID = "xai";
 
 /** The provider's name as the person reads it: "This computer" in their language. */
 export function groupName(group: Pick<ProviderGroup, "kind" | "name">): string {
@@ -348,7 +353,7 @@ function ConnectionAdvanced({ row, group, list, speakers, onEditKey, vendorKey }
 function PageAdvanced({ providerId, children }: { providerId: string; children: ReactNode }) {
   const [open, setOpen] = useState(() => {
     const card = peekRequestedSettingsCard();
-    return Boolean(card && card.startsWith("providers.advanced.") && card !== "providers.advanced.connectors");
+    return Boolean(card && ((card.startsWith("providers.advanced.") && card !== "providers.advanced.connectors") || card === "providers.linkedGrokBot.advanced"));
   });
   return (
     <SettingsGroup groupId="provider-advanced">
@@ -410,10 +415,23 @@ export function ProviderPage({ providerId }: { providerId: string }) {
     show(focus);
     focusProviderLine(null);
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
+  // #4329 lot 2: the xAI provider's page holds the link to the person's bots in its bot app
+  const botsLink = useBotsLink(undefined, providerId === XAI_PROVIDER_ID);
   const group = list.pages.find((entry) => entry.id === providerId);
   if (!group) {
     const loading = providerId.startsWith(PI_SERVER_PREFIX) ? list.piServers.servers === null : false;
-    return loading ? <p className="px-1 py-2 text-[12px] text-ink-secondary">{t("piServers.loading")}</p> : <div data-provider-page={providerId}><SettingsEmpty icon={KeyRound}>{t("providers.page.gone")}</SettingsEmpty></div>;
+    const gone = <SettingsEmpty icon={KeyRound}>{t("providers.page.gone")}</SettingsEmpty>;
+    if (loading) return <p className="px-1 py-2 text-[12px] text-ink-secondary">{t("piServers.loading")}</p>;
+    // the xAI provider with none of its accounts: the link to the person's bots there still has its page (#4329 lot 2)
+    if (providerId === XAI_PROVIDER_ID && botsLinkOnPage(botsLink)) {
+      return (
+        <div className="flex min-w-0 flex-col gap-6 pb-2" data-provider-page={providerId}>
+          <BotsLinkSection link={botsLink} />
+          {botsLink.view?.linked && <PageAdvanced providerId={providerId}><BotsLinkAdvanced link={botsLink} /></PageAdvanced>}
+        </div>
+      );
+    }
+    return <div data-provider-page={providerId}>{gone}</div>;
   }
   if (group.kind === "computer") return <ComputerPage group={group} />;
   if (group.id.startsWith(PI_SERVER_PREFIX)) return <PiServerPage group={group} list={list} />;
@@ -453,6 +471,8 @@ export function ProviderPage({ providerId }: { providerId: string }) {
         </ul>
         {adders.map((instance) => <div key={instance.instanceId} className="px-3.5 pb-2"><AddAnotherAccount instance={instance} /></div>)}
       </SettingsGroup>
+      {/* #4329 lot 2 (B3): the link to the person's bots in this provider's bot app */}
+      {group.id === XAI_PROVIDER_ID && <BotsLinkSection link={botsLink} />}
       {role && (
         <SettingsGroup groupId="provider-runs-with">
           <DescribedRow label={t("model.runsWith")} description={t("providers.page.runsWithHelp", { provider: groupName(group) })} rowId="providers.page.runsWith">
@@ -467,6 +487,8 @@ export function ProviderPage({ providerId }: { providerId: string }) {
             vendorKey={keyOffer?.rowId === row.id ? keyOffer.key : undefined}
             onEditKey={row.kind === "key" && lineAction(row, list) === "remove" ? () => show(row.id) : undefined} />
         ))}
+        {/* the bots link's technical fields: its own part of this one Advanced (#4329 B3) */}
+        {group.id === XAI_PROVIDER_ID && <BotsLinkAdvanced link={botsLink} />}
       </PageAdvanced>
     </div>
   );

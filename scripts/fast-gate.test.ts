@@ -228,7 +228,42 @@ describe("fast-gate.sh", () => {
     const out = `${r.stdout}${r.stderr}`;
     const related = out.split("\n").find((l) => l.startsWith("[related]")) ?? "";
     expect(related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts'$/);
-    expect(out).toContain("fast-gate: related: 1 test file(s) reach the touched sources through imports, 2 more wait for the run after the merge");
+    expect(out).toContain("fast-gate: related: 1 of 3 test file(s) that reach the touched sources through imports run here (about 1s of the 150s ceiling and the 1 file bound); the ceiling cut 2, listed in related-cut.txt of the logs: they run after the merge");
+    expect(readFileSync(join(repo, ".gate-logs", "related-cut.txt"), "utf8")).toBe("src/ui/deeper.dom.test.ts\ntests/a-bar.test.ts\n");
+  });
+
+  // #4316: the bound was 120 files, and 120 files of the server (a driver's
+  // test alone takes a minute and a half) ran for over ten minutes where 120
+  // of the interface take two. The bound is the files' recorded seconds.
+  it("bounds the related check by the recorded seconds of its files, nearest first, and names what the ceiling cut", () => {
+    write("src/ui/pill.tsx", "export const Pill = 1;\n");
+    write("src/ui/bar.tsx", 'import { Pill } from "./pill";\nexport const Bar = Pill;\n');
+    write("src/ui/bar.test.ts", 'import { Bar } from "./bar";\n');
+    write("src/ui/heavy.test.ts", 'import { Bar } from "./bar";\n');
+    write("src/ui/flow.e2e.test.ts", 'import { Bar } from "./bar";\n');
+    write("tests/light.test.ts", 'import { Bar } from "../src/ui/bar";\n');
+    write("scripts/testing/vitest-shard-weights.json", JSON.stringify({ "src/ui/heavy.test.ts": 90, "server/a.e2e.test.ts": 20, "server/b.e2e.test.ts": 30, "server/c.e2e.test.ts": 40 }));
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/ui/pill.tsx", "export const Pill = 2;\n");
+    const run = (seconds?: string) => {
+      const env: Record<string, string> = { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAST_GATE_LOG_DIR: join(repo, ".gate-logs") } as Record<string, string>;
+      delete env.FAST_GATE_RELATED_MAX;
+      if (seconds === undefined) delete env.FAST_GATE_RELATED_SECONDS; else env.FAST_GATE_RELATED_SECONDS = seconds;
+      const r = spawnSync("bash", [SCRIPT, "--base", "HEAD", "--only", "related", "--dry-run"], { cwd: repo, encoding: "utf8", env });
+      const out = `${r.stdout}${r.stderr}`;
+      return { out, related: out.split("\n").find((l) => l.startsWith("[related]")) ?? "" };
+    };
+    // 1 s each for the light files, the median recorded e2e (30 s) for a new
+    // e2e file, 90 s recorded: 122 s fits under the default 150 s
+    const all = run();
+    expect(all.related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts' 'src\/ui\/flow\.e2e\.test\.ts' 'src\/ui\/heavy\.test\.ts' 'tests\/light\.test\.ts'$/);
+    expect(all.out).toContain("fast-gate: related: 4 test file(s) reach the touched sources through imports (about 122s, under the 150s ceiling)");
+    // a 40 s ceiling: the 90 s file is cut, the lighter ones after it fit
+    const cut = run("40");
+    expect(cut.related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts' 'src\/ui\/flow\.e2e\.test\.ts' 'tests\/light\.test\.ts'$/);
+    expect(cut.out).toContain("fast-gate: related: 3 of 4 test file(s) that reach the touched sources through imports run here (about 32s of the 40s ceiling); the ceiling cut 1, listed in related-cut.txt of the logs: they run after the merge");
+    expect(readFileSync(join(repo, ".gate-logs", "related-cut.txt"), "utf8")).toBe("src/ui/heavy.test.ts\n");
   });
 
   it("runs the checks in parallel, never more than the cap, and is green", () => {

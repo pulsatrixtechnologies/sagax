@@ -266,7 +266,7 @@ describe("markdown fields", () => {
 
   it("About me: mounts with the saved text and saves on blur", async () => {
     fixture.state = { ...fixture.state, config: { profile: { aboutMe: "I run **ops**." } } };
-    fixture.api.mockImplementation(async (_path: string, init?: { body?: string }) => ({ aboutMe: JSON.parse(init?.body ?? "{}").aboutMe }));
+    fixture.api.mockImplementation(async (_path: string, init?: { body?: string }) => ({ profile: JSON.parse(init?.body ?? "{}").profile }));
     render(createElement(AboutMeEditor));
     const editor = await markdownEditorIn(host, "about-me");
     expect(markdownText(editor)).toBe("I run **ops**.");
@@ -274,10 +274,7 @@ describe("markdown fields", () => {
     typeMarkdown(editor, "I run **ops** in Montreal.");
     blurMarkdown(editor);
     await settle();
-<<<<<<< HEAD
     // Each person has their own About me (#3428): it saves on its own route, not in the shared config.
-=======
->>>>>>> 8de207e999 (test: follow main for three tests left stale (Computer card in Simple, per-person About me route, zone wording))
     expect(fixture.api).toHaveBeenCalledWith("/api/me/about-me", expect.objectContaining({ method: "PUT", body: JSON.stringify({ aboutMe: "I run **ops** in Montreal." }) }));
   });
 

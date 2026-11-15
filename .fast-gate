@@ -57,15 +57,18 @@ shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space
 # are linked to nothing by the import graph, so eight of them went red on the
 # 0.8.100 release commit unseen (a renamed window, a restyled round button).
 # They read src/, the catalogs, the iPad wording map, the model providers
-# docs page and two scripts/testing files, so a lot that touches one of those runs them all. They are static scans and rendered markup with no server,
-# so they run two files at a time: about 75 s on a busy machine (240 s one
-# at a time).
-source-text: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(src/|ios/App/Localizable\.xcstrings$|ios/parity/desktop-wording\.json$|apps/docs/content/docs/providers/model-providers\.mdx$|scripts/testing/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)'; then G="$(node scripts/verify/release/guard-tests.mjs --source-text)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; fi; else echo "fast-gate: skip: no file the source-text tests read touched"; fi
+# docs page and two scripts/testing files (SOURCE_TEXT_READS, same file), so a
+# lot that touches one of those runs them all. They are static scans and
+# rendered markup with no server, so they run two files at a time: about 75 s
+# on a busy machine (240 s one at a time).
+source-text: G="$(node scripts/verify/release/guard-tests.mjs --source-text --touched)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --fileParallelism --maxWorkers=2 --testTimeout=60000 $G; else echo "fast-gate: skip: no file the source-text tests read touched"; fi
 
-# phone-parity (#4305): src/components/ios-trigger-parity.test.ts holds the
-# phone's trigger kinds and sources (ios/Sources/CompanionCore/DesktopBotPanel.swift)
-# to the desktop's (src/locales/en.json, shared/trigger-sources.ts), the list
-# the Swift package test ParityR1TriggersTests pins after a merge. A lot that
-# touches src/ runs it in source-text; a lot that touches only the source
-# types or the phone's copy runs it here, alone (well under a second).
-phone-parity: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^src/'; then echo "fast-gate: skip: source-text runs it for a lot that touches src/"; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^(shared/trigger-sources\.ts|ios/Sources/CompanionCore/DesktopBotPanel\.swift)$'; then ./node_modules/.bin/vitest run --reporter=dot src/components/ios-trigger-parity.test.ts; else echo "fast-gate: skip: neither side of the trigger pair touched"; fi
+# parity-pairs (#4305, #4320, #4316): the text-level tests that hold one side
+# of a pair to the other (PARITY_PAIRS in scripts/verify/release/guard-tests.mjs):
+# the phone's trigger kinds and sources (the list the Swift package test
+# ParityR1TriggersTests pins after a merge), the phone and tablet wording, the
+# phone's theme tokens, and the hooks the real-renderer smokes select. A lot
+# that touches either side runs the pair's test; when it touches a file the
+# source-text tests read, the source-text line runs it instead. A second or
+# two each.
+parity-pairs: G="$(node scripts/verify/release/guard-tests.mjs --parity --touched)"; case "$G" in skip:*) echo "fast-gate: $G" ;; *) ./node_modules/.bin/vitest run --reporter=dot $G ;; esac

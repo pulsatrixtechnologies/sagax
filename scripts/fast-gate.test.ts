@@ -442,6 +442,61 @@ describe("fast-gate.sh", () => {
     expect(runs("server/x.ts")).not.toContain("--fileParallelism");
   });
 
+  // #4316: the tablet's wording lost the provider keys the desktop renamed,
+  // and the renderer smoke lost three hooks of the provider page, each found a
+  // day later by the run after the merge. A lot that touches either side of a
+  // parity pair runs its text-level test; a lot that touches a file the
+  // source-text tests read leaves it to that line, which runs it already.
+  it("runs a parity pair's test on a lot that touches either side of it", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));
+    const pairs = ["src/components/ios-trigger-parity.test.ts", "src/components/ios-desktop-wording.test.ts", "src/components/ios-desktop-tokens.test.ts", "scripts/testing/renderer-smoke-hooks.test.ts"];
+    for (const file of pairs) write(file, "// parity\n");
+    git("add", "-A");
+    git("commit", "-qm", "pairs");
+    git("branch", "-f", "main");
+    const runs = (touched: string) => {
+      write(touched, "touched\n");
+      try { rmSync(join(fakeBin, "calls")); } catch { /* first run */ }
+      const { code, out } = gate("--base", "main", "--only", "extra-parity-pairs,extra-source-text");
+      expect(code, out).toBe(0);
+      rmSync(join(repo, touched));
+      let calls = "";
+      try { calls = readFileSync(join(fakeBin, "calls"), "utf8"); } catch { /* nothing ran */ }
+      return { calls, out };
+    };
+    // the phone's side alone: the pair's test, not the source-text tests
+    for (const [touched, test] of [
+      ["ios/Sources/CompanionCore/DesktopBotPanel.swift", "src/components/ios-trigger-parity.test.ts"],
+      ["shared/trigger-sources.ts", "src/components/ios-trigger-parity.test.ts"],
+      ["ios/App/Desktop/DesktopShortcuts.swift", "src/components/ios-desktop-wording.test.ts"],
+      ["ios/App/Desktop/DesktopTheme.swift", "src/components/ios-desktop-tokens.test.ts"],
+      ["scripts/testing/team-share-ui.e2e.test.ts", "scripts/testing/renderer-smoke-hooks.test.ts"],
+    ]) {
+      const { calls, out } = runs(touched);
+      expect(calls, touched).toBe(`vitest run --reporter=dot ${test}\n`);
+      expect(out, touched).toMatch(/skip\s+extra-source-text/);
+    }
+    // the desktop's side (src/): the source-text line runs every pair's test
+    const desktop = runs("src/locales/en.json");
+    expect(desktop.calls).toContain("--fileParallelism --maxWorkers=2");
+    for (const test of pairs) expect(desktop.calls).toContain(test);
+    expect(desktop.out).toMatch(/skip\s+extra-parity-pairs\s+\d+s\s+\(source-text runs the parity tests of this lot\)/);
+    // a lot elsewhere runs neither
+    const elsewhere = runs("server/x.ts");
+    expect(elsewhere.calls).toBe("");
+    expect(elsewhere.out).toMatch(/skip\s+extra-parity-pairs\s+\d+s\s+\(no side of a parity pair touched\)/);
+  });
+
+  it("holds each parity pair to a test of the source-text list that reads both of its sides", async () => {
+    const { PARITY_PAIRS, SOURCE_TEXT_TESTS } = await import("./verify/release/guard-tests.mjs");
+    for (const { test, reads } of PARITY_PAIRS as { test: string; reads: RegExp[] }[]) {
+      expect(SOURCE_TEXT_TESTS, test).toContain(test);
+      expect(reads.some((side) => side.test("src/locales/en.json") || side.test("src/styles.css") || side.test("src/App.tsx")), `${test}: a desktop side`).toBe(true);
+      expect(reads.some((side) => !side.source.startsWith("^src")), `${test}: another side`).toBe(true);
+    }
+  });
+
   it("lists every test the rail found red for reading sources as text, and none with a known failure", async () => {
     const { GUARD_TESTS, SOURCE_TEXT_TESTS } = await import("./verify/release/guard-tests.mjs");
     expect(SOURCE_TEXT_TESTS).toEqual(expect.arrayContaining([
@@ -493,8 +548,9 @@ describe("fast-gate.sh", () => {
 
   it("shows as skipped each extra check of the repository whose files a lot does not touch", () => {
     write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));
     write("docs/note.md", "a note\n");
-    const conditional = ["agents-proxy", "index-reach", "full-access-guard", "shared-cycles", "source-text", "phone-parity"];
+    const conditional = ["agents-proxy", "index-reach", "full-access-guard", "shared-cycles", "source-text", "parity-pairs"];
     const { code, out } = gate("--base", "main", "--only", conditional.map((name) => `extra-${name}`).join(","));
     expect(code, out).toBe(0);
     for (const name of conditional) expect(out, name).toMatch(new RegExp(`skip\\s+extra-${name}\\s`));

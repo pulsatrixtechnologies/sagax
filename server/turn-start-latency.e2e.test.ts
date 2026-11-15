@@ -9,7 +9,7 @@
 //   - the second turn sends no second copy of the opening prompt;
 //   - the timing line of each turn is printed, for the record.
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -25,7 +25,7 @@ type Fixture = {
   release: () => void;
 };
 
-async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number; toolMs?: number }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
+async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number; toolMs?: number; connectMcp?: boolean }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
   const fixture = await launchVerificationServer();
   const { dataDir, url, logPath } = fixture.info;
   let server: ChildProcess | undefined;
@@ -48,7 +48,9 @@ async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: b
       config: { cli: fileURLToPath(new URL("./testing/fake-acp-cli.ts", import.meta.url)) },
       environment: { ...(options.toolMs ? {} : { FAKE_ACP_TEXT_REPLY: "4" }), FAKE_ACP_RPC_APPEND_FILE: rpcFile, ...(options.coldMs ? { FAKE_ACP_COLD_MS: String(options.coldMs) } : {}),
         // a turn that runs one tool for toolMs before its answer
-        ...(options.toolMs ? { FAKE_ACP_MODE: "slow-tool", FAKE_ACP_TOOL_MS: String(options.toolMs) } : {}) },
+        ...(options.toolMs ? { FAKE_ACP_MODE: "slow-tool", FAKE_ACP_TOOL_MS: String(options.toolMs) } : {}),
+        // #4394: the engine starts and lists its tool servers as grok does
+        ...(options.connectMcp ? { FAKE_ACP_MCP_CONNECT: "1" } : {}) },
     };
     // a teammate's engine that holds its turn open until the gate file exists
     if (options.busy) config.instances.grokbusy = {
@@ -81,7 +83,7 @@ async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: b
       });
     } finally {
       writeFileSync(gateFile, "go");
-      if (process.env.TURN_LATENCY_DUMP) writeFileSync(process.env.TURN_LATENCY_DUMP, serverLog());
+      if (process.env.TURN_LATENCY_DUMP) appendFileSync(process.env.TURN_LATENCY_DUMP, serverLog());
     }
   } finally {
     await waitForExit(server, { signal: "SIGTERM" });
@@ -114,6 +116,9 @@ it("sends the opening prompt once and reuses the conversation's engine on its ne
     // the first turn starts the engine; the next ones reuse it
     expect(paths[0]).toBe("spawn");
     expect(paths.slice(1)).not.toContain("spawn");
+    // #4394: the spawn says why no warm engine took it (none yet), and only it
+    expect(/ spawnWhy=(\S+)/.exec(lines[0]!)?.[1]).toBe("none");
+    expect(lines.slice(1).join("\n")).not.toContain("spawnWhy=");
     // #3598: the line counts the process starts of the turn's wait (the
     // engine's start at least, on the first turn)
     expect(Number(/ starts=(\d+):\d+ms /.exec(lines[0]!)?.[1] ?? 0)).toBeGreaterThanOrEqual(1);
@@ -236,3 +241,46 @@ it("a warm conversation's no-tool and tool turns reach the engine without a star
     });
   }
 }, 240_000);
+
+// #4394: on a hosted server every turn of a conversation started its engine
+// and waited about 3.4 s for a connector's tool list (toolsBy=connector:3348).
+// A connector here is the person's own MCP server whose initialize and tool
+// list take 1 s and 2.3 s to answer (a remote connector's round trips). The
+// first engine start lists it at that cost; the next start of an engine for
+// the same bot (another conversation; on the hosted server, the next turn)
+// gets the list Sagax already knows at once, and the server is listed again
+// beside the turn.
+const FAKE_MCP = fileURLToPath(new URL("./testing/fake-mcp-server.ts", import.meta.url));
+it("serves a connector's known tool list to the next engine start instead of waiting for it (#4394)", async () => {
+  await withLatencyFixture({ connectMcp: true }, async (fixture) => {
+    const imported = await fixture.api("POST", "/api/mcp/servers/import", { json: JSON.stringify({ mcpServers: {
+      notes: { command: process.execPath, args: ["--experimental-strip-types", "--no-warnings", FAKE_MCP], env: { FAKE_MCP_INITIALIZE_MS: "1000", FAKE_MCP_LIST_MS: "2300" } },
+    } }) });
+    expect(imported.servers?.[0]?.name).toBe("notes");
+    await fixture.api("PATCH", "/api/mcp/servers/notes", { enabled: true });
+    const { bot } = await fixture.control("new-bot", "--name", "Connector bot");
+    await fixture.api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "grokfixture", model: "grok-4.7" } });
+    const turn = async (threadId: string) => {
+      await fixture.control("send", "--bot", bot.id, "--task", threadId, "--text", "What is 2 plus 2?");
+      expect((await fixture.control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "40")).status).toBe("settled");
+      return timingLines(fixture.serverLog(), threadId).at(-1)!;
+    };
+    const first = await turn(bot.activeTaskId);
+    const created = await fixture.api("POST", `/api/bots/${bot.id}/tasks`, { title: "Second conversation" });
+    const secondThread = created.task?.threadId;
+    expect(typeof secondThread, JSON.stringify(created).slice(0, 300)).toBe("string");
+    // the list read again beside the first turn has landed
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const second = await turn(secondThread);
+    console.info(`[#4394] connector timing lines:\n${first}\n${second}`);
+    const connectorMs = (line: string) => Number(/ toolsBy=(?:[^ ]*,)?connector:(\d+)/.exec(line)?.[1] ?? 0);
+    const toolsMs = (line: string) => Number(/ setupBy=(?:[^ ]*,)?tools:(\d+)/.exec(line)?.[1] ?? 0);
+    // both turns start an engine; the first one waits for the whole list
+    expect(/path=(\w+)/.exec(first)?.[1]).toBe("spawn");
+    expect(/path=(\w+)/.exec(second)?.[1]).toBe("spawn");
+    expect(connectorMs(first)).toBeGreaterThanOrEqual(3_000);
+    // the next start gets the known list without the server's 3.3 s
+    expect(toolsMs(second)).toBeLessThan(1_500);
+    expect(connectorMs(second)).toBeLessThan(1_500);
+  });
+}, 180_000);

@@ -203,6 +203,13 @@ export class PluginCopyFailures {
 
   succeeded(scope: string, name: string): void { this.rows.delete(PluginCopyFailures.key(scope, name)); }
 
+  /** #4394: the person's environment came up: their failed copies are tried
+   * again at once instead of after their pause. */
+  forgetPerson(person: string): void {
+    const prefix = `${person}\n`;
+    for (const key of this.rows.keys()) if (key.startsWith(prefix)) this.rows.delete(key);
+  }
+
   /** Why the plugin is not in the environment, whatever its content, or null. */
   reasonFor(scope: string, name: string): string | null {
     return this.rows.get(PluginCopyFailures.key(scope, name))?.reason ?? null;

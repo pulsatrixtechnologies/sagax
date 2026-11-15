@@ -98,6 +98,9 @@ export class UserSandboxManager {
   private readonly desktopOpens = new Map<string, Promise<unknown>>();
   private readonly desktopViews = new Map<string, { passwords: { full: string; view: string }; open: number; openedAt: number }>();
   private readonly execQueue: SandboxExecQueue;
+  /** #4394: per person, how many of their calls the environment cut while it
+   * was starting (wakeGaveUp), so the plugin copy knows it was cut that way. */
+  private readonly startCuts = new Map<string, number>();
   private info: SandboxdInfo | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   readonly graceMs: number;
@@ -223,6 +226,7 @@ export class UserSandboxManager {
         if (waited) notify("ready");
         return result;
       } catch (error) {
+        if (wakeGaveUp(error)) this.startCuts.set(who.principalId, (this.startCuts.get(who.principalId) ?? 0) + 1);
         if (waited) notify(wakeGaveUp(error) ? "timeout" : "ready");
         throw error;
       }
@@ -490,6 +494,27 @@ export class UserSandboxManager {
         release();
       }
       await this.sleep(EXEC_BUSY_RETRY_MS);
+    }
+  }
+
+  /** #4394: how many calls of this person the environment cut while it was
+   * starting. A caller compares it before and after its work to know whether
+   * that work was cut by the start (syncPluginsForTurn.ts). */
+  startingCuts(principalId: string): number {
+    return this.startCuts.get(principalId) ?? 0;
+  }
+
+  /** #4394: wait until this person's environment is up, the way a bot's
+   * command waits for it (the cluster's wake, then the environment's own
+   * start), and start it if it is not. True once it answers; false when it
+   * did not come up within that wait, or the person cannot use it. */
+  async whenUp(principalId: string, botId?: string): Promise<boolean> {
+    try {
+      this.refuseIfOut(principalId);
+      await this.clientFor(principalId, botId, "wake").ensure(this.keyFor(principalId));
+      return true;
+    } catch {
+      return false;
     }
   }
 

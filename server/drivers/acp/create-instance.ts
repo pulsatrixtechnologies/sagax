@@ -16,6 +16,7 @@ import { augmentedPath } from "../../env-path.ts";
 import { appendNative } from "../native.ts";
 import { armIdleClose, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
 import { createSendTurn } from "./turn-send.ts";
+import { noteEngineClosed } from "./turn-latency.ts";
 import { createAcpMcp } from "./instance-mcp.ts";
 import { createInstanceText } from "./instance-text.ts";
 import { createOpenSession } from "./session-open.ts";
@@ -147,6 +148,8 @@ export async function createAcpInstance(
     const session = sessions.get(threadId);
     if (!session || session.closing) return;
     if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] closeSession thread=${threadId.slice(0, 8)} why=${why}`);
+    // #4394: the next turn's spawn says why (spawnWhy)
+    noteEngineClosed(threadId, why);
     session.closing = true;
     session.budget?.retiring();
     stopIdleClose(`${instanceId}\0${threadId}`, session.idleTimer);

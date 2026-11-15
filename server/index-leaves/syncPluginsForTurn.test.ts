@@ -7,9 +7,10 @@ function deferred() {
   return { promise, resolve };
 }
 
-function hostWith(sync: (principalId: string, botId: string, limit: <T>(task: () => Promise<T>) => Promise<T>) => Promise<void>) {
+function hostWith(sync: (principalId: string, botId: string, limit: <T>(task: () => Promise<T>) => Promise<T>) => Promise<unknown>) {
   return {
-    userSandbox: {},
+    pluginCopyFailures: { forgotten: [] as string[], forgetPerson(person: string) { this.forgotten.push(person); } },
+    userSandbox: {} as Record<string, unknown>,
     pluginSyncedGenerations: new Map<string, Promise<void>>(),
     pluginSyncInFlight: new Map<string, Promise<void>>(),
     pluginSyncSlots: new Map(),
@@ -65,5 +66,52 @@ describe("syncPluginsForTurn (#3083)", () => {
     await Promise.all(runs);
     expect(peak).toBe(PLUGIN_SYNC_EXEC_SLOTS);
     expect(slots.size).toBe(0);
+  });
+
+  // #4394: a copy cut by an environment still starting was only tried again
+  // at a later turn, after its pause, or if another call happened to wait
+  it("a copy cut by the environment's start waits for it to be up, then copies again without the pause (#4394)", async () => {
+    const left = [true, false];
+    const calls: string[] = [];
+    let cuts = 0;
+    const up = deferred();
+    const host = hostWith(async (principal, botId) => {
+      calls.push(`${principal}/${botId}`);
+      if (calls.length === 1) cuts += 1;
+      return left.shift();
+    });
+    const asked: string[] = [];
+    host.userSandbox = {
+      startingCuts: () => cuts,
+      whenUp: async (principal: string, botId: string) => { asked.push(`${principal}/${botId}`); await up.promise; return true; },
+    };
+    const sync = createSyncPluginsForTurn(() => host);
+    const copy = sync("person", "turn-1", "bot-a");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // the copy waits for the environment itself, nothing else of the person does
+    expect(asked).toEqual(["person/bot-a"]);
+    expect(calls).toEqual(["person/bot-a"]);
+    // a later turn of the same bot joins the same copy
+    const joined = sync("person", "turn-2", "bot-a");
+    expect(host.pluginSyncInFlight.size).toBe(1);
+    up.resolve();
+    await Promise.all([copy, joined]);
+    expect(calls).toEqual(["person/bot-a", "person/bot-a"]);
+    expect(host.pluginCopyFailures.forgotten).toEqual(["person"]);
+    expect(host.pluginSyncInFlight.size).toBe(0);
+  });
+
+  it("a copy that left plugins for another reason, or whose environment did not come up, is not copied again at once", async () => {
+    const calls: string[] = [];
+    let cuts = 0;
+    const host = hostWith(async (principal, botId) => { calls.push(`${principal}/${botId}`); if (botId === "bot-b") cuts += 1; return true; });
+    host.userSandbox = { startingCuts: () => cuts, whenUp: async () => false };
+    const sync = createSyncPluginsForTurn(() => host);
+    // a command failed, no start cut: the failed copy's pause applies
+    await sync("person", "turn-1", "bot-a");
+    // cut by the start, but the environment never came up
+    await sync("person", "turn-1", "bot-b");
+    expect(calls).toEqual(["person/bot-a", "person/bot-b"]);
+    expect(host.pluginCopyFailures.forgotten).toEqual([]);
   });
 });

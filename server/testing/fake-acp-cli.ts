@@ -130,6 +130,12 @@
 //   FAKE_ACP_PERMISSION_OPTIONS JSON options override in permission mode
 //   FAKE_ACP_MCP_LIST_FILE  JSON answer to _x.ai/mcp/list (its managedGateway
 //                   servers only when GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED=true).
+//   FAKE_ACP_MCP_CONNECT=1  as grok does (#4394): session/new, load and resume
+//                   start every command server of mcpServers beside their
+//                   answer, initialize it and list its tools, and keep it
+//                   running; _x.ai/mcp/list reports each one `initializing`
+//                   until its tool list came back (then `connected`, or
+//                   `failed`), and sessionMcpResolved only once none is left.
 //   FAKE_ACP_DUMP   path to write {argv, env} as JSON, so a test can assert
 //                   argv shape (agent/stdio flags) and env hygiene
 //   Replays of grok 1.0.77 captures (fixtures/connectors/, issue #3343):
@@ -887,6 +893,44 @@ async function listMcpTools(entry: AnyMcpEntry, handshake: unknown): Promise<str
     write({ id: 1, method: "initialize", params: handshake });
   });
 }
+/** FAKE_ACP_MCP_CONNECT: the session's tool servers as grok keeps them. */
+const mcpConnections = new Map<string, { status: "initializing" | "connected" | "failed"; stop: () => void }>();
+process.on("exit", () => { for (const connection of mcpConnections.values()) connection.stop(); });
+function connectSessionMcp(entries: AnyMcpEntry[]): void {
+  if (process.env.FAKE_ACP_MCP_CONNECT !== "1") return;
+  for (const connection of mcpConnections.values()) connection.stop();
+  mcpConnections.clear();
+  for (const entry of entries) {
+    if (!entry?.name || typeof entry.command !== "string") continue;
+    const env = { ...process.env };
+    for (const { name, value } of entry.env ?? []) env[name] = value;
+    const child = spawn(entry.command, entry.args ?? [], { env, stdio: ["pipe", "pipe", "ignore"] });
+    const connection = { status: "initializing" as "initializing" | "connected" | "failed", stop: () => { child.stdin.end(); child.kill(); } };
+    mcpConnections.set(entry.name, connection);
+    const fail = () => { if (connection.status === "initializing") connection.status = "failed"; };
+    child.on("error", fail);
+    child.on("exit", fail);
+    child.stdin.on("error", fail);
+    const write = (frame: object) => child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", ...frame })}\n`);
+    let pending = "";
+    child.stdout.on("data", (chunk) => {
+      pending += chunk;
+      for (let nl = pending.indexOf("\n"); nl !== -1; nl = pending.indexOf("\n")) {
+        const line = pending.slice(0, nl);
+        pending = pending.slice(nl + 1);
+        let frame: any;
+        try { frame = JSON.parse(line); } catch { continue; }
+        if (frame.id === 1) {
+          if (frame.error) return fail();
+          write({ method: "notifications/initialized" });
+          write({ id: 2, method: "tools/list", params: {} });
+        }
+        if (frame.id === 2) connection.status = frame.error ? "failed" : "connected";
+      }
+    });
+    write({ id: 1, method: "initialize", params: GROK_MCP_HANDSHAKE });
+  }
+}
 // the session this process established, for FAKE_ACP_REJECT_LIVE_LOAD_FILE
 let liveSession: string | null = null;
 let rpcFailure: unknown = null;
@@ -1155,8 +1199,9 @@ function handle(msg: any) {
       const listFile = process.env.FAKE_ACP_MCP_LIST_FILE;
       const recorded = listFile ? JSON.parse(readFileSync(listFile, "utf8")) as { servers?: Array<{ type?: string }> } : null;
       const managed = process.env.GROK_MANAGED_MCPS_ENABLED === "true" && process.env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED === "true";
-      const servers = (recorded?.servers ?? []).filter((server) => server.type !== "managedGateway" || managed);
-      result(msg.id, { result: { servers, sessionMcpResolved: true } });
+      const servers: unknown[] = (recorded?.servers ?? []).filter((server) => server.type !== "managedGateway" || managed);
+      for (const [name, connection] of mcpConnections) servers.push({ name, session: { enabled: true, status: connection.status } });
+      result(msg.id, { result: { servers, sessionMcpResolved: ![...mcpConnections.values()].some((connection) => connection.status === "initializing") } });
       break;
     }
     case "_x.ai/mcp/call": {
@@ -1202,6 +1247,7 @@ function handle(msg: any) {
         writeFileSync(process.env.FAKE_ACP_DUMP, JSON.stringify(dumpState, null, 2));
       }
       sessionMcp = clineSettingsMcp() ?? servers as AnyMcpEntry[];
+      connectSessionMcp(sessionMcp);
       agentsMcp = (sessionMcp.find((s) => s?.name === "agents") as McpEntry | undefined) ?? null;
       if (process.env.FAKE_ACP_DUMP && !backgroundText) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(servers, null, 2));
@@ -1242,7 +1288,7 @@ function handle(msg: any) {
       if (process.env.FAKE_ACP_DUMP) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
       }
-      if (!cachedLiveLoad) sessionMcp = clineSettingsMcp() ?? msg.params?.mcpServers ?? [];
+      if (!cachedLiveLoad) { sessionMcp = clineSettingsMcp() ?? msg.params?.mcpServers ?? []; connectSessionMcp(sessionMcp); }
       const opts = configOptions();
       const mdls = sessionModels(loadedSessionModel(msg.params?.sessionId));
       liveSession = typeof msg.params?.sessionId === "string" ? msg.params.sessionId : liveSession;
@@ -1262,7 +1308,7 @@ function handle(msg: any) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
       }
       // a resume reconnects the MCP servers it is given, as a load does
-      if (Array.isArray(msg.params?.mcpServers)) sessionMcp = clineSettingsMcp() ?? msg.params.mcpServers;
+      if (Array.isArray(msg.params?.mcpServers)) { sessionMcp = clineSettingsMcp() ?? msg.params.mcpServers; connectSessionMcp(sessionMcp); }
       const opts = configOptions();
       const mdls = sessionModels();
       liveSession = typeof msg.params?.sessionId === "string" ? msg.params.sessionId : liveSession;

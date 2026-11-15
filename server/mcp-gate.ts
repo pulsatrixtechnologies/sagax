@@ -22,7 +22,7 @@
 // stdout is the MCP transport. Never log there.
 import { randomUUID } from "node:crypto";
 import { connect, type Socket } from "node:net";
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
@@ -37,6 +37,7 @@ import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mc
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
 import { parseAgentsWithhold, resolvedServerLog } from "./mcp/agents-withhold.ts";
 import { fitToolList } from "./mcp/mcp-tool-schema.ts";
+import { wholeToolList } from "./mcp/whole-tool-list.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
@@ -66,7 +67,7 @@ function gateEnvironment(): NodeJS.ProcessEnv {
   }
 }
 /** The gate's own settings never reach the upstream server's environment. */
-const GATE_ENV_KEYS = ["SAGAX_GATE_NAME", "SAGAX_GATE_SPILL_DIR", "SAGAX_GATE_BUDGET", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_SPILL_HINT", "SAGAX_GATE_TOOL_SCOPE", "SAGAX_GATE_DIRECTORY", "SAGAX_GATE_TOOL_NAMES", "SAGAX_GATE_REPORT_DIR", "SAGAX_GATE_APPROVAL_SOCKET", "SAGAX_GATE_APPROVAL_TOKEN", "SAGAX_GATE_READ_ONLY", "SAGAX_GATE_MISUSE_MODE", "SAGAX_GATE_SEARCH", "SAGAX_GATE_WITHHOLD"];
+const GATE_ENV_KEYS = ["SAGAX_GATE_NAME", "SAGAX_GATE_SPILL_DIR", "SAGAX_GATE_BUDGET", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_SPILL_HINT", "SAGAX_GATE_TOOL_SCOPE", "SAGAX_GATE_DIRECTORY", "SAGAX_GATE_TOOL_NAMES", "SAGAX_GATE_REPORT_DIR", "SAGAX_GATE_APPROVAL_SOCKET", "SAGAX_GATE_APPROVAL_TOKEN", "SAGAX_GATE_READ_ONLY", "SAGAX_GATE_MISUSE_MODE", "SAGAX_GATE_SEARCH", "SAGAX_GATE_WITHHOLD", "SAGAX_GATE_KEPT"];
 const gateEnv = gateEnvironment();
 /** Where this gate runs from: Sagax's own relays lie beside it. */
 const GATE_DIR = dirname(fileURLToPath(import.meta.url));
@@ -226,16 +227,17 @@ function upstreamSpec(): Upstream {
   return spec;
 }
 
-/** Delete spilled results older than SPILL_MAX_AGE_MS. Best effort: a sweep
- * that fails must never stop the bot's tools from working. */
-function sweepSpill(dir: string): void {
+/** Delete the files of `dir` older than `maxAgeMs` (spilled results, kept
+ * answers). Best effort: a sweep that fails must never stop the bot's tools
+ * from working. */
+function sweepOlderThan(dir: string, maxAgeMs: number): void {
   let entries: string[];
   try {
     entries = readdirSync(dir);
   } catch {
     return;
   }
-  const cutoff = Date.now() - SPILL_MAX_AGE_MS;
+  const cutoff = Date.now() - maxAgeMs;
   for (const entry of entries) {
     try {
       const path = join(dir, entry);
@@ -365,7 +367,7 @@ function reportToolNames(advertised: string[], outcome: ReturnType<ToolNameAlias
 const scope = toolScope();
 const READ_ONLY = readOnlyTools();
 const spec = upstreamSpec();
-if (SPILL_DIR) sweepSpill(SPILL_DIR);
+if (SPILL_DIR) sweepOlderThan(SPILL_DIR, SPILL_MAX_AGE_MS);
 
 const childEnv: NodeJS.ProcessEnv = { ...process.env, ...spec.env };
 for (const key of Object.keys(childEnv)) if (key.startsWith("SAGAX_GATE_")) delete childEnv[key];
@@ -423,8 +425,12 @@ let internalSeq = 0;
 const internal = new Map<string, (message: Json) => void>();
 const SEARCH_CATALOG_MS = 120_000;
 
+/** The ids of the gate's own requests: a late answer to one, past its
+ * timeout, is never passed on to the engine. */
+const INTERNAL_ID_PREFIX = `sagax-gate-${process.pid}-`;
+
 function upstreamRequest(method: string, params: Json): Promise<Json> {
-  const id = `sagax-gate-${process.pid}-${++internalSeq}`;
+  const id = `${INTERNAL_ID_PREFIX}${++internalSeq}`;
   const key = requestKey(id)!;
   return new Promise<Json>((resolve, reject) => {
     const timer = setTimeout(() => { internal.delete(key); reject(new Error("the server did not list its tools in time")); }, SEARCH_CATALOG_MS);
@@ -432,6 +438,106 @@ function upstreamRequest(method: string, params: Json): Promise<Json> {
     internal.set(key, (message) => { clearTimeout(timer); resolve(message); });
     child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
   });
+}
+
+// ── #4394: the server's last answers, kept (SAGAX_GATE_KEPT, gateKeptFile) ──
+// Every engine start starts this gate and its server again, and the engine
+// waits for the server's initialize and tool list before the turn's prompt
+// leaves (3.4 s for a connector on a hosted server, at every turn). The gate
+// keeps the server's last initialize answer (for the engine's protocol
+// version) and its last whole tool list, as the server sent them, and
+// answers the next start's initialize and tool list from them at once. The
+// server is still initialized with the engine's own request, beside the
+// turn, before any later frame reaches it, and listed again: a list that
+// changed is kept and the engine is told (notifications/tools/list_changed);
+// a server that refuses either one loses what was kept. Every check the gate
+// makes on a list (selection, names, schemas) applies to a kept one alike.
+const KEPT_FILE = gateEnv.SAGAX_GATE_KEPT || "";
+/** A mount no start used for this long (a removed server, a bot gone) loses
+ * what was kept of it; each start that reads its own file renews it. */
+const KEPT_MAX_AGE_MS = 30 * 24 * 60 * 60_000;
+interface KeptAnswers { init?: { version: string; result: Json }; list?: Json }
+function readKept(): KeptAnswers {
+  if (!KEPT_FILE) return {};
+  let text: string;
+  try {
+    text = readFileSync(KEPT_FILE, "utf8");
+    try { const now = new Date(); utimesSync(KEPT_FILE, now, now); } catch { /* read only: swept later */ }
+  } catch {
+    text = "";
+  }
+  sweepOlderThan(dirname(KEPT_FILE), KEPT_MAX_AGE_MS);
+  if (!text) return {};
+  try {
+    const value: unknown = JSON.parse(text);
+    if (!isRecord(value)) return {};
+    const init = isRecord(value.init) && typeof value.init.version === "string" && isRecord(value.init.result)
+      ? { version: value.init.version, result: value.init.result } : undefined;
+    const list = wholeToolList(value.list) ? value.list : undefined;
+    return { ...(init ? { init } : {}), ...(list ? { list } : {}) };
+  } catch {
+    return {};
+  }
+}
+function saveKept(): void {
+  if (!KEPT_FILE) return;
+  try {
+    if (!kept.init && !kept.list) {
+      rmSync(KEPT_FILE, { force: true });
+      return;
+    }
+    mkdirSync(dirname(KEPT_FILE), { recursive: true, mode: 0o700 });
+    const next = `${KEPT_FILE}.${process.pid}.tmp`;
+    writeFileSync(next, JSON.stringify(kept), { mode: 0o600 });
+    renameSync(next, KEPT_FILE);
+  } catch (error) {
+    process.stderr.write(`mcp-gate(${NAME}): could not keep the server's tool list: ${String(error)}\n`);
+  }
+}
+const keptVersion = (params: Json | undefined): string => JSON.stringify(params?.protocolVersion ?? null);
+const kept: KeptAnswers = readKept();
+/** The engine's requests whose answer from the server is kept, by request key. */
+const keptAsks = new Map<string, { kind: "init"; version: string } | { kind: "list" }>();
+let keptRelisting = false;
+
+/** The engine's initialize, answered from what was kept: the server gets
+ * the same request now, as the gate's own, and its answer is kept. */
+function answerInitializeKept(message: Json, id: string, params: Json | undefined): boolean {
+  const version = keptVersion(params);
+  if (kept.init?.version !== version) return false;
+  const answer = structuredClone(kept.init.result);
+  upstreamRequest("initialize", params ?? {}).then((reply) => {
+    if (isRecord(reply.result) && reply.error === undefined) kept.init = { version, result: reply.result };
+    else { delete kept.init; delete kept.list; }
+    saveKept();
+  }, () => undefined);
+  if (SEARCH || ALIASES) initializeIds.add(id);
+  pending.set(id, { kind: "other" });
+  relayUpstream({ jsonrpc: "2.0", id: message.id, result: answer });
+  return true;
+}
+
+/** The engine's tool list, answered from what was kept; the server is
+ * listed again beside it, once per gate. */
+function answerListKept(message: Json, id: string): boolean {
+  if (!kept.list) return false;
+  pending.set(id, { kind: "list" });
+  relayUpstream({ jsonrpc: "2.0", id: message.id, result: structuredClone(kept.list) });
+  if (!keptRelisting) {
+    keptRelisting = true;
+    upstreamRequest("tools/list", {}).then((reply) => {
+      if (reply.error !== undefined || !wholeToolList(reply.result)) {
+        if (reply.error !== undefined) { delete kept.list; saveKept(); }
+        return;
+      }
+      if (JSON.stringify(reply.result) === JSON.stringify(kept.list)) return;
+      kept.list = reply.result;
+      saveKept();
+      // through the same path as the server's own notice: a search catalog is read again
+      relayUpstream({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+    }, () => undefined);
+  }
+  return true;
 }
 
 async function readUpstreamCatalog(): Promise<CatalogTool[]> {
@@ -687,6 +793,14 @@ function misuseGateRefusal(params: Json | undefined): string | null {
 }
 
 function forward(line: string, message: Json | undefined, id: string | undefined, params: Json | undefined): void {
+  if (KEPT_FILE && id && message?.method === "initialize") {
+    if (answerInitializeKept(message, id, params)) return;
+    keptAsks.set(id, { kind: "init", version: keptVersion(params) });
+  }
+  if (KEPT_FILE && id && message?.method === "tools/list" && (params?.cursor === undefined || params.cursor === null)) {
+    if (answerListKept(message, id)) return;
+    keptAsks.set(id, { kind: "list" });
+  }
   if ((SEARCH || ALIASES) && id && message?.method === "initialize") initializeIds.add(id);
   if (id && typeof message?.method === "string") {
     if (scope && pending.has(id)) fail("duplicate request ID on a restricted connection");
@@ -722,6 +836,12 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     process.stdout.write(`${line}\n`);
     return;
   }
+  relayUpstream(message, line);
+});
+
+/** One frame of the server for the engine, rewritten where the gate must:
+ * read from the server's output, or a kept answer (#4394). */
+function relayUpstream(message: Json, line = JSON.stringify(message)): void {
   const id = typeof message.method === "string" ? undefined : requestKey(message.id);
   // The gate's own catalog requests (tool search) are never relayed.
   if (id !== undefined && internal.has(id)) {
@@ -729,6 +849,17 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     internal.delete(id);
     resolve(message);
     return;
+  }
+  if (id !== undefined && typeof message.id === "string" && message.id.startsWith(INTERNAL_ID_PREFIX)) return;
+  // #4394: the server's own answer, as it sent it, is kept for the next start
+  const ask = id === undefined ? undefined : keptAsks.get(id);
+  if (ask) {
+    keptAsks.delete(id!);
+    if (message.error === undefined) {
+      if (ask.kind === "init" && isRecord(message.result)) kept.init = { version: ask.version, result: structuredClone(message.result) };
+      if (ask.kind === "list" && wholeToolList(message.result)) kept.list = structuredClone(message.result);
+      saveKept();
+    }
   }
   if (SEARCH && message.method === "notifications/tools/list_changed") {
     searchGeneration += 1;
@@ -800,6 +931,6 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     }
   }
   process.stdout.write(`${JSON.stringify(message)}\n`);
-});
+}
 
 child.onExit((code) => process.exit(code));

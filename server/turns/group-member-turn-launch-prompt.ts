@@ -4,6 +4,7 @@ import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { IMAGE_PROMPT } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
+import { pluginCopyForTurnStart } from "../index-leaves/syncPluginsForTurn.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import { roomPeopleLine } from "../rooms/room-ask-cards.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
@@ -203,7 +204,8 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     ? ensureTaskWorkspace(bot.id, threadId)
     : groupTurnCwd(workspace, () => store.pinGroupCwd(readyGroup.id, threadId));
   if (IDENTITY.kind === "perspicax" && roomPrincipal) {
-    await syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id);
+    // #4394: at most a second; the copy goes on beside the member's turn
+    await pluginCopyForTurnStart(syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id));
   }
   {
     const drift = checkSoulDrift(bot.id, bot.soul ?? "", bot.soulHash ?? "");

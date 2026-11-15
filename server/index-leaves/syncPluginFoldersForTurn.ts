@@ -29,22 +29,26 @@ async function syncPluginFoldersForTurn(principalId: string, botId: string, limi
   // person on one environment share it): plugins that did not change send
   // no command, and the markers left to check are read in one command
   const options = {
-    failures: pluginCopyFailures, scope: principalId,
+    failures: host.pluginCopyFailures ?? pluginCopyFailures, scope: principalId,
     presence: host.sandboxPluginPresence ?? sandboxPluginPresence,
     environment: host.userSandbox.environmentOf?.(principalId, botId) ?? principalId,
     ...(host.pluginFolderDigests ? { digests: host.pluginFolderDigests } : {}),
   };
+  // #4394: true when plugins were left behind, so the copy is tried again
+  // once the environment is up (syncPluginsForTurn.ts)
   const report = (result) => {
     if (result.skipped.length) console.warn(`[plugins] not copied to the server environment: ${result.skipped.map((row) => `${row.name} (${row.reason})`).join(", ")}`);
+    return result.skipped.length > 0 || (result.deferred?.length ?? 0) > 0;
   };
   try {
-    report(await syncPluginRootsToSandbox([
+    return report(await syncPluginRootsToSandbox([
       ...(skills.length ? [{ root: SANDBOX_CAPABILITY_SKILLS_DIR, plugins: skills }] : []),
       // #4082: their text names their paths in this environment
       { root: SANDBOX_PLUGINS_DIR, dataRoot: SANDBOX_PLUGIN_DATA_DIR, plugins },
     ], target, options));
   } catch (error) {
     console.warn(`[plugins] server environment not updated: ${error instanceof Error ? error.message : String(error)}`);
+    return true;
   }
 
 }

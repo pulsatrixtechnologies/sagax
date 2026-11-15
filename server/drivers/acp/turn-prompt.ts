@@ -16,6 +16,7 @@ import { engineFailureKind, engineFailureMessage } from "../engine-errors.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
 import { composeAcpPromptInput } from "./turn-prompt-build.ts";
 import { noteEnginePrompt } from "../../turns/turn-trace.ts";
+import { takeEngineClosed } from "./turn-latency.ts";
 
 export async function promptAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   const {
@@ -122,6 +123,9 @@ if (state.settled || state.stopped || session.closing) throw new Error("turn sto
 state.promptSent = true;
 latency.promptAt = Date.now();
 latency.path = launchedThisTurn ? "spawn" : reused ? "pooled" : "load";
+// #4394: a process started after the warm one was taken (re-established, or
+// restarted) says why its last one was closed
+if (latency.path === "spawn" && !latency.spawnWhy) latency.spawnWhy = (() => { const why = takeEngineClosed(threadId); return why ? `closed:${why}` : "none"; })();
 // #4215: the conversation's timing line says whether the engine was warm
 noteEnginePrompt(threadId, latency.path !== "spawn", latency.promptAt);
 latency.promptChars = text.length;

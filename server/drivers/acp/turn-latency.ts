@@ -24,7 +24,8 @@
 //   the turn's connectors plan),
 //   place (where it runs: workspace, sandbox, the computer, what is left of
 //   the stage), mounts (#3619: the person's and the plugins' tool servers),
-//   plugins (the plugin copy into the person's environment), checkpoint
+//   plugins (the plugin copy into the person's environment, at most
+//   PLUGIN_COPY_TURN_WAIT_MS since #4394: the copy goes on beside the turn), checkpoint
 //   (the project folder's snapshot), browser (the built-in browser), prompt, recall,
 //   access (the turn's credentials, a typed command), slot (an engine start
 //   slot), send, dispatch (pictures, hand-off to the engine).
@@ -62,6 +63,22 @@
 // the wait, when over 250 ms: near the gap, the time is Sagax's (other turns,
 // a spawn, the collector), so its endpoints answered and its polls read late;
 // near zero, it is the engine's and its tool server processes'.
+// #4394: spawnWhy, on a turn whose path is spawn: why no warm engine took it.
+// none (this conversation had no engine process on this server), closed:<why>
+// (its process was closed: idle, warm budget, stop, reestablish...), exited
+// (the process had ended on its own), closing (its process was being closed
+// when the turn came), contract:<fields> (the process was
+// started for another command, variables or tool scope; the fields that
+// changed), budget (the warm budget had let it go), tools (the engine's tool
+// servers changed on an engine that restarts for that), reset (the person
+// started over). The engine's own start and its tool listing are setupBy's
+// init and tools; ttfa is the prompt to the first streamed update (the
+// model's first token, and whatever the engine does before it), and
+// firstWords splits the rest of ttft, up to the first answer text, in ms:
+// think (reasoning streamed), tool (a tool running: from its tool_call to
+// the update that says it completed or failed, however long it stays
+// silent), quiet (any other gap of a second or more between two updates once
+// the stream began). Numbers only.
 
 export type TurnLatencyPath = "pooled" | "load" | "spawn";
 
@@ -90,7 +107,15 @@ export interface TurnLatency {
   /** #3598: the process starts during queue and setup and their total
    * synchronous ms (starts) */
   starts?: { count: number; ms: number };
+  /** #4394: why the engine's process was started for this turn (spawnWhy) */
+  spawnWhy?: string;
+  /** #4394: the stream before the first answer text, ms by what it was
+   * doing (firstWords); `last` is the latest update's time and kind */
+  beforeText?: { think: number; tool: number; quiet: number; last?: { at: number; kind: "think" | "tool" | "text" }; open?: Set<string> };
 }
+
+/** #4394: a gap between two streamed updates that counts as quiet. */
+export const STREAM_QUIET_MS = 1_000;
 
 /** #3623: the wait for the engine's tool servers, server by server. */
 export interface TurnToolWait {
@@ -181,13 +206,95 @@ export function newTurnLatency(start: number, receivedAt?: number): TurnLatency 
   return { start, tools: 0, ...(typeof receivedAt === "number" && Number.isFinite(receivedAt) && receivedAt > 0 && receivedAt <= start ? { receivedAt } : {}) };
 }
 
-/** Record a streamed update of the running prompt. */
-export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, at: number): void {
+/** Record a streamed update of the running prompt. `update`: the update's
+ * tool call id and status, which open and close a running tool (firstWords). */
+export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, at: number, update?: { toolCallId?: unknown; status?: unknown }): void {
   if (!trace || trace.promptAt === undefined) return;
+  // #4394: a tool's progress closes the time it ran (firstWords), and is
+  // not an activity of its own
+  if (kind === "tool_call_update") { noteBeforeText(trace, "tool", at); noteToolState(trace, update, false); return; }
   if (kind !== "agent_message_chunk" && kind !== "agent_thought_chunk" && kind !== "tool_call") return;
+  noteBeforeText(trace, kind === "agent_message_chunk" ? "text" : kind === "tool_call" ? "tool" : "think", at);
+  if (kind === "tool_call") noteToolState(trace, update, true);
   trace.firstActivityAt ??= at;
   if (kind === "agent_message_chunk") trace.firstTextAt ??= at;
   if (kind === "tool_call") trace.tools += 1;
+}
+
+/** #4394: a tool call opens until an update of it says completed or failed;
+ * one reported already ended opens nothing. A call with no id is one at a
+ * time. */
+function noteToolState(trace: TurnLatency, update: { toolCallId?: unknown; status?: unknown } | undefined, started: boolean): void {
+  if (trace.firstTextAt !== undefined || !trace.beforeText) return;
+  const ended = update?.status === "completed" || update?.status === "failed";
+  const id = typeof update?.toolCallId === "string" && update.toolCallId ? update.toolCallId : "";
+  const open = (trace.beforeText.open ??= new Set());
+  if (started && !ended) open.add(id);
+  else if (!started && ended) open.delete(id);
+}
+
+/** #4394: the time since the previous update, until the first answer text,
+ * goes to a tool while one is running (whatever the gap), else to what the
+ * stream was doing then, or to quiet past STREAM_QUIET_MS. */
+function noteBeforeText(trace: TurnLatency, kind: "think" | "tool" | "text", at: number): void {
+  if (trace.firstTextAt !== undefined) return;
+  const before = (trace.beforeText ??= { think: 0, tool: 0, quiet: 0 });
+  const last = before.last;
+  if (last && last.kind !== "text") {
+    const gap = Math.max(0, at - last.at);
+    if (before.open?.size) before.tool += gap;
+    else if (gap >= STREAM_QUIET_MS) before.quiet += gap;
+    else before[last.kind] += gap;
+  }
+  before.last = { at, kind };
+}
+
+/** The firstWords field: `think:20100,tool:500,quiet:3000`, each part only
+ * when over zero; nothing before the first answer text. The time from the
+ * prompt to the first update is the line's own ttfa, never said twice. */
+export function turnFirstWords(trace: TurnLatency): string | undefined {
+  if (trace.promptAt === undefined || trace.firstTextAt === undefined || trace.firstActivityAt === undefined) return undefined;
+  const before = trace.beforeText ?? { think: 0, tool: 0, quiet: 0 };
+  const parts: Array<[string, number]> = [
+    ["think", before.think], ["tool", before.tool], ["quiet", before.quiet],
+  ];
+  const out = parts.filter(([, ms]) => Math.round(ms) > 0).map(([part, ms]) => `${part}:${Math.round(ms)}`);
+  return out.length ? out.join(",") : undefined;
+}
+
+/** #4394: why each conversation's last engine process was closed, so the
+ * next turn's spawn says it (spawnWhy). Ids only, a few words of reason. */
+const closedEngines = new Map<string, string>();
+const CLOSED_ENGINES_MAX = 2_000;
+
+export function noteEngineClosed(threadId: string, why: string): void {
+  closedEngines.delete(threadId);
+  closedEngines.set(threadId, why.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "closed");
+  while (closedEngines.size > CLOSED_ENGINES_MAX) closedEngines.delete(closedEngines.keys().next().value!);
+}
+
+/** The reason the conversation's last engine process was closed, once. */
+export function takeEngineClosed(threadId: string): string | undefined {
+  const why = closedEngines.get(threadId);
+  closedEngines.delete(threadId);
+  return why;
+}
+
+/** The parts of a spawn contract (turn-prepare-spawn.ts contractKey) that
+ * differ between two keys: `envFingerprint+cwd`. */
+const CONTRACT_FIELDS = ["person", "bot", "command", "args", "spawnArgs", "cwd", "fullAuto", "envFingerprint", "spawnFingerprint", "toolScope", "inheritedScope"];
+export function contractFieldsChanged(before: string, after: string): string {
+  try {
+    const a = JSON.parse(before) as unknown[];
+    const b = JSON.parse(after) as unknown[];
+    const parts: string[] = [];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) parts.push(CONTRACT_FIELDS[i] ?? String(i));
+    }
+    return parts.join("+") || "?";
+  } catch {
+    return "?";
+  }
 }
 
 type Mark = readonly [step: string, at: number];
@@ -297,6 +404,9 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
   if (toolsSlow) parts.push(`toolsSlow=${toolsSlow}`);
   const toolsGap = turnToolsGap(trace.toolWait);
   if (toolsGap) parts.push(`toolsGap=${toolsGap}`);
+  if (trace.path === "spawn" && trace.spawnWhy) parts.push(`spawnWhy=${trace.spawnWhy}`);
+  const firstWords = turnFirstWords(trace);
+  if (firstWords) parts.push(`firstWords=${firstWords}`);
   if (trace.stallMs !== undefined) parts.push(`stallGuard=${trace.stallMs}ms${trace.stallRetried ? " retried" : ""}`);
   parts.push(outcome);
   return parts.join(" ");

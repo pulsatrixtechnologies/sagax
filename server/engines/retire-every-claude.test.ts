@@ -35,8 +35,11 @@ it("preserves paid bot, thread, fast, defaults, backups and disabled models dura
   });
   expect(loaded.bot(bot.id)?.approvalMode).toBe("ask");
   expect(loaded.taskByThread(bot.id, task.threadId)).toMatchObject({
-    approvalMode: "edits", modelSelection: { instanceId: "codex", fast: { instanceId: "claudeApi", model: "haiku" } },
+    modelSelection: { instanceId: "codex", fast: { instanceId: "claudeApi", model: "haiku" } },
   });
+  // One approval level per bot (#4200): the conversation holds none of its
+  // own, before or after the move, and keeps following its bot's.
+  expect(loaded.taskByThread(bot.id, task.threadId)?.approvalMode).toBeUndefined();
   const disk = JSON.parse(readFileSync(join(DATA_DIR, "config.json"), "utf8"));
   expect(disk).toMatchObject({
     newBotDefaults: { profile: { modelSelection: { instanceId: "claudeApi", effort: "high" }, description: "Kept description" } },

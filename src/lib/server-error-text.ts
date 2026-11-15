@@ -86,6 +86,7 @@ const BY_CODE: Readonly<Record<string, LocaleKey>> = {
   not_org_admin: "serverError.notOrgAdmin",
   not_organization: "serverError.notOrganization",
   not_owner: "serverError.notOwner",
+  not_paired: "serverError.notPaired",
   not_person: "serverError.notPerson",
   not_published: "serverError.notPublished",
   not_pushed: "serverError.notPushed",

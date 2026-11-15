@@ -10,6 +10,7 @@
  * &usage=one|three|error (#4095): Settings > Usage with one engine, three, or three with one in error
  * &subPage=<id> (#4329): a sub-page of the section, e.g. providers.provider:anthropic
  * &empty=1 (#4329): no engine and no key, Providers' empty list
+ * &firstKey=1 (#4360): Security with no key and no recent proof; &vault=unpaired|noperson: the vault refused
  * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
@@ -73,6 +74,11 @@ const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
   if (!url.pathname.startsWith("/api/")) return realFetch(input, init);
+  // &vault=unpaired|noperson (#4360): the vault refused to a caller with no person, solo or linked words
+  const refusedVault = params.get("vault");
+  if (url.pathname === "/api/me/credentials/list" && (refusedVault === "unpaired" || refusedVault === "noperson")) {
+    return json(refusedVault === "unpaired" ? { error: "Pair this device.", code: "not_paired" } : { error: "Sign in to use your credential vault.", code: "no_person" }, 403);
+  }
   const body = usagePageAnswer(url, params) ?? API[url.pathname];
   if (body !== undefined) return json(body);
   return json({ error: "not in this gallery" }, 404);

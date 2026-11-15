@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from "react";
 import { downloadText, exportCredentials, exportFileName, importCredentials, type VaultImportOutcome, type VaultItemListing } from "@/lib/credential-vault";
 import { t } from "@/lib/i18n";
 import { rememberSettingsReturn } from "@/lib/settings-return";
+import { loadPerspicaxOrg } from "@/lib/perspicax-org";
 import { signInAgainPath } from "@/lib/sign-in-again";
 import { MAX_VAULT_ITEMS } from "../../../shared/credential-vault";
 import {
@@ -178,8 +179,9 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   /** The server asked for a recent sign-in: where "Sign in again" goes
-   * (src/lib/sign-in-again.ts), null when this server offers none. */
-  const [reauth, setReauth] = useState<{ path: string | null } | null>(null);
+   * (src/lib/sign-in-again.ts), null when this server offers none; solo: a
+   * server without an organization, where the desktop app exports (#4360). */
+  const [reauth, setReauth] = useState<{ path: string | null; solo: boolean } | null>(null);
   const word = t("vault.transfer.exportWord");
   const ready = understood && typed.trim().toLocaleUpperCase() === word.toLocaleUpperCase();
   const run = async () => {
@@ -203,7 +205,10 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
       setTyped("");
     } catch (failure) {
       const code = (failure as { body?: { code?: unknown } })?.body?.code;
-      if (code === "reauth_required") setReauth({ path: await signInAgainPath() });
+      if (code === "reauth_required") {
+        const [path, org] = await Promise.all([signInAgainPath(), loadPerspicaxOrg()]);
+        setReauth({ path, solo: org === null });
+      }
       else setError(message(failure));
     } finally {
       setBusy(false);
@@ -242,7 +247,7 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
         <input className={inputClass} value={typed} disabled={busy} autoComplete="off" spellCheck={false} onChange={(event) => setTyped(event.target.value)} aria-label={t("vault.transfer.exportType", { word })} />
       </EditorField>
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
-      {reauth && <p role="alert" className="text-[12px] text-danger" data-credential-export-reauth="">{reauth.path ? t("vault.transfer.reauthPulsatrix") : t("vault.transfer.reauthUnavailable")}</p>}
+      {reauth && <p role="alert" className="text-[12px] text-danger" data-credential-export-reauth="">{reauth.path ? t("vault.transfer.reauthPulsatrix") : reauth.solo ? t("vault.transfer.reauthSolo") : t("vault.transfer.reauthUnavailable")}</p>}
       {done && <p role="status" className="text-[12px] text-ink-secondary">{done}</p>}
       </EditorStack>
     </VaultDialog>

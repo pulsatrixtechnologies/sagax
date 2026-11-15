@@ -130,7 +130,10 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       excluded: [{ instanceId: "codex", engineLabel: "Codex", reason: "reconnect" }, { instanceId: "mistral", engineLabel: "Mistral", reason: "credentials" }, { instanceId: "compat-azure", engineLabel: "Azure Foundry", model: "o4-mini", modelLabel: "o4-mini", reason: "modelOff" }], backups: [],
     }])),
     "/api/approval-rules": { rules },
-    "/api/security-keys": { keys: [{ id: "key-1", name: "Desk key", createdAt: NOW - 40 * DAY, lastUsedAt: NOW - 2 * DAY, rpId: "localhost", deviceType: "singleDevice" }], classes: ["money"], rpId: "localhost" },
+    // &firstKey=1 (#4360): no key yet and no recent proof of the person
+    "/api/security-keys": params.get("firstKey")
+      ? { keys: [], classes: [], rpId: "localhost", needsSignIn: true }
+      : { keys: [{ id: "key-1", name: "Desk key", createdAt: NOW - 40 * DAY, lastUsedAt: NOW - 2 * DAY, rpId: "localhost", deviceType: "singleDevice" }], classes: ["money"], rpId: "localhost" },
     "/api/me/tool-grants": { grants: [
       { id: "tg-1", subject: { kind: "bot", id: "bot-0" }, scope: "agents:write", grantedBy: "p-1", grantedAt: NOW - 5 * DAY, state: "active" },
       { id: "tg-2", subject: { kind: "bot", id: "bot-1" }, scope: "files:read", grantedBy: "p-1", grantedAt: NOW - 9 * DAY, expiresAt: NOW + 20 * DAY, state: "active" },

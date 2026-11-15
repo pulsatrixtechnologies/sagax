@@ -19,6 +19,16 @@ describe("readiness timestamps in the viewer's time zone (#1945)", () => {
     const live = routineReadinessLine({ kind: "flow", code: "ready", ok: true, line: "", params: { live: "true" } });
     expect(live).toContain(locale === "fr" ? "n’a pas été vérifié" : "not checked");
   });
+  it.each(["en", "fr"])("says in plain words when a solo routine's trigger cannot reach the server in %s (#4360)", locale => {
+    setLocale(locale);
+    const line = routineReadinessLine({ kind: "triggers", code: "trigger_unreachable", ok: false, line: "Wire line", params: { trigger: "Product watch", source: "Perspicax" } });
+    expect(line).toContain("Product watch");
+    expect(line).toContain(locale === "fr" ? "serveur d’organisation" : "organization server");
+    expect(line).not.toContain("Wire line");
+    const ready = routineReadinessLine({ kind: "triggers", code: "ready", ok: true, line: "Wire line", params: { kind: "triggers" } });
+    expect(ready).toContain(locale === "fr" ? "déclencheurs" : "triggers");
+    expect(ready).not.toMatch(/Perspicax|organi[sz]ation/i);
+  });
   it("renders an unknown server code without throwing (#1991)", () => {
     expect(routineReadinessLine({ kind: "flow", code: "future_code", ok: false, line: "Server detail", params: { step: "plan" } } as never)).toBe("Server detail");
   });

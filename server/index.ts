@@ -5,7 +5,7 @@ import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeld
 import { agentBrowserIntegration } from "./browser/browser-engine.ts";
 import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
-import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer, type ReadinessEngine } from "./routines/routine-readiness.ts";
+import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, soloRoutineTriggers, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer, type ReadinessEngine } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
 import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, clearSignedOut, onEngineWorksAgain, persistSignedOutHolds, signedOutHeld } from "./engines/engine-refusals.ts";
 import { PreSendRefusals } from "./engines/presend-refusals.ts";
@@ -12263,6 +12263,7 @@ ROUTES.push(createCredentialVaultRoutes({
   vault: credentialVault,
   onePassword,
   principal: credentialVaultPrincipal,
+  organization: IDENTITY.kind === "perspicax",
   botExists: (id) => Boolean(store.bot(id)),
   // The vault card's "I'll sign in myself": the bot's own browser for that
   // conversation is armed first, and its password and code fields emptied at Done.
@@ -20479,12 +20480,19 @@ const routineReadinessDeps: RoutineReadinessDeps = {
       ...(IDENTITY.kind === "perspicax" ? ["perspicax"] : [])].filter(name => name === "perspicax" || canUseMcpServer(bot.toolScope, name));
     return { known, enabled, ...(IDENTITY.kind === "perspicax" ? { toolPrefixes: { cw_psa: "perspicax" } } : {}) };
   },
-  perspicax: async (_routine, run, signal) => {
-    if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return undefined;
-    const principal = effectiveRunAs(run);
-    if (!store.bot(run.botId) || !principal) return undefined;
-    return perspicaxMcp.probeReadiness(principal, signal);
-  },
+  // #4360: only a server linked to an organization has an organization
+  // connection to check; without one, « Check routine » checks the routine's
+  // own triggers instead (a relay source never reaches this server).
+  ...(IDENTITY.kind === "perspicax" ? {
+    perspicax: async (_routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal) => {
+      if (!perspicaxMcp) return undefined;
+      const principal = effectiveRunAs(run);
+      if (!store.bot(run.botId) || !principal) return undefined;
+      return perspicaxMcp.probeReadiness(principal, signal);
+    },
+  } : {
+    triggers: (routine: ReadinessRoutine) => routine.id ? soloRoutineTriggers(webhooks.list(), routine.id) : undefined,
+  }),
   flow: async (routine, run, signal) => {
     if (!perspicaxMcp) throw new Error("Perspicax Flow readiness is unavailable on this server.");
     const bot = store.bot(run.botId);

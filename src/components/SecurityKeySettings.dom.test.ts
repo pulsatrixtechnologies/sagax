@@ -10,8 +10,11 @@ const fixture = vi.hoisted(() => ({
     keys: [] as Array<{ id: string; name: string; createdAt: number; deviceType: "singleDevice" | "multiDevice"; rpId: string; lastUsedAt?: number }>,
     classes: ["destructive", "money"] as string[],
     rpId: "localhost",
+    needsSignIn: undefined as boolean | undefined,
   },
   register: vi.fn(async (_name?: string, _signal?: AbortSignal) => {}),
+  org: null as null | { name: string },
+  againPath: null as string | null,
   api: vi.fn(async (path: string, init?: { method?: string; body?: string }) => {
     if (path === "/api/security-keys" && (!init || !init.method || init.method === "GET")) return fixture.state;
     if (path === "/api/security-keys/register" || (path.startsWith("/api/security-keys/") && init?.method === "PATCH")) {
@@ -33,7 +36,8 @@ vi.mock("@/lib/step-up-client", () => ({
   securityKeyInBrowser: () => false,
   securityKeysUsable: () => true,
 }));
-vi.mock("@/lib/sign-in-again", () => ({ signInAgainPath: async () => null }));
+vi.mock("@/lib/sign-in-again", () => ({ signInAgainPath: async () => fixture.againPath }));
+vi.mock("@/lib/perspicax-org", () => ({ loadPerspicaxOrg: async () => fixture.org }));
 vi.mock("@/lib/settings-return", () => ({ rememberSettingsReturn: () => {} }));
 
 import { defaultSecurityKeyName, SecurityKeySettings } from "./SecurityKeySettings";
@@ -42,7 +46,9 @@ let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  fixture.state = { keys: [], classes: ["destructive", "money"], rpId: "localhost" };
+  fixture.state = { keys: [], classes: ["destructive", "money"], rpId: "localhost", needsSignIn: undefined };
+  fixture.org = null;
+  fixture.againPath = null;
   fixture.register.mockClear();
   fixture.api.mockClear();
   setLocale("en");
@@ -99,5 +105,37 @@ describe("SecurityKeySettings (#2080)", () => {
     });
     const save = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Save name"));
     expect(save).toBeTruthy();
+  });
+
+  // #4360: a server without an organization has no sign-in to make recent.
+  describe("first key without a recent proof", () => {
+    const render = async () => {
+      await act(async () => { root.render(createElement(SecurityKeySettings)); });
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    };
+    it.each(["en", "fr"])("on a solo server, says to add it on the computer that runs the app, never to sign in again (%s)", async (locale) => {
+      setLocale(locale);
+      fixture.state.needsSignIn = true;
+      await render();
+      const row = host.querySelector('[data-row-id="security-keys-reauth"], #security-keys-reauth') ?? host;
+      expect(row.textContent).toContain(locale === "fr" ? "Ajoute ta première clé sur ton ordinateur" : "Add your first key on your computer");
+      expect(row.textContent).toContain(locale === "fr" ? "l’app de bureau Sagax" : "Sagax desktop app");
+      expect(host.textContent).not.toMatch(/Sign in again|Reconnecte-toi|Pulsatrix/);
+      expect([...host.querySelectorAll("button")].some((button) => /Sign in again|Me reconnecter/.test(button.textContent ?? ""))).toBe(false);
+    });
+    it("on a linked server, keeps Sign in again unchanged", async () => {
+      fixture.org = { name: "Org" };
+      fixture.againPath = "/auth/login?fresh=1";
+      fixture.state.needsSignIn = true;
+      await render();
+      expect(host.textContent).toContain("Sign in again to add your first key");
+      expect(host.textContent).not.toContain("on your computer");
+      expect([...host.querySelectorAll("button")].some((button) => button.textContent === "Sign in again")).toBe(true);
+    });
+    it("once the person is proven (no needsSignIn), offers Add a key", async () => {
+      await render();
+      expect(host.textContent).toContain("Add a security key or a passkey");
+      expect(host.textContent).not.toContain("on your computer");
+    });
   });
 });

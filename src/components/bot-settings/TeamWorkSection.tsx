@@ -39,7 +39,8 @@ import { teamStepEnded, TEAM_WORK_STEPS_SHOWN } from "../../../shared/team-work"
 import { BotAvatar } from "../Avatar";
 import { avatarBot } from "../BotExchangeChip";
 import { CodingSessionRow } from "./CodingSessionRow";
-import { SectionHeader, stepActivityStatus } from "./ActivitySection";
+import { SectionHeader } from "./ActivitySection";
+import { stepActivityStatus } from "./open-team-step";
 
 /** What a click on a step opens. */
 export interface TeamOpenStep {

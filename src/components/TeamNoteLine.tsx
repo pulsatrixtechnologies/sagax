@@ -9,7 +9,7 @@ import { useStoreDispatch } from "@/state/store-selector";
 import { t } from "@/lib/i18n";
 import type { TeamNote } from "@/lib/team-work";
 import { NamesLine } from "./BotNamesLine";
-import { openTeamStep } from "./bot-settings/ActivitySection";
+import { openTeamStep } from "./bot-settings/open-team-step";
 
 export function TeamNoteLine({ note, count, orchestratorId, bots, mid }: {
   note: TeamNote;

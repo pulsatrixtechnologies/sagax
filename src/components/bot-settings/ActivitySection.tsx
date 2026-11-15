@@ -74,10 +74,11 @@ import { useBotActivityFeed } from "@/lib/use-bot-activity-feed";
 import { GROUPED_CARD, GROUPED_ROW, PANEL_LABEL } from "@/lib/grouped-card";
 import { deleteJobBranches, loadArchivedBranches, setBranchArchived } from "@/lib/code-branches";
 import { CodeBranchList, type BranchListActions } from "./CodeBranchList";
-import { TeamWorkSection, type TeamOpenStep } from "./TeamWorkSection";
+import { TeamWorkSection } from "./TeamWorkSection";
+import { openTeamStep } from "./open-team-step";
+
+export { openTeamStep, stepActivityStatus } from "./open-team-step";
 import { useTeamWork, type TeamWorkLoader } from "@/lib/use-team-work";
-import type { TeamWorkStep } from "@/lib/team-work";
-import type { BotActivityStatus } from "../../../shared/bot-activity-status";
 
 export { ActivityList, type CardActions };
 
@@ -390,42 +391,6 @@ export function CodingWorkSection({ panel }: { panel: BotCodingPanel }) {
 export function ActivitySection({ bot }: { bot: Bot }) {
   const panel = useBotCodingPanel(bot);
   return <ActivitySectionBody bot={bot} panel={panel} />;
-}
-
-/** The runtime status of a step, as the coding chat's header reads it. */
-export function stepActivityStatus(status: TeamWorkStep["status"] | undefined): BotActivityStatus {
-  switch (status) {
-    case "queued": return "queued";
-    case "needs_input":
-    case "waiting": return "waiting";
-    case "completed": return "finished";
-    case "failed":
-    case "expired": return "failed";
-    case "cancelled": return "stopped";
-    default: return "running";
-  }
-}
-
-/** A step's coding chat: the team bot's thread, opened
- * where the chat is; the selected bot stays the orchestrator (#3462). */
-export function openTeamStep(dispatch: (action: Action) => void, orchestratorId: string, step: TeamOpenStep, now = Date.now()): void {
-  const itemId = `thread:${step.threadId}`;
-  dispatch({
-    type: "openCodingChat",
-    target: {
-      botId: step.botId,
-      itemId,
-      threadId: step.threadId,
-      seed: { id: itemId, kind: "session", botId: step.botId, title: step.name, status: stepActivityStatus(step.status), startedAt: step.startedAt ?? now, updatedAt: now, threadId: step.threadId, coding: true },
-      step: {
-        orchestratorId,
-        name: step.name,
-        ...(step.work ? { work: step.work } : {}),
-        ...(step.index !== undefined ? { index: step.index } : {}),
-        ...(step.total !== undefined ? { total: step.total } : {}),
-      },
-    },
-  });
 }
 
 /** Activity's Coding section from a shared panel state; `codeWork` false

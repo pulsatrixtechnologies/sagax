@@ -274,7 +274,8 @@ describe("markdown fields", () => {
     typeMarkdown(editor, "I run **ops** in Montreal.");
     blurMarkdown(editor);
     await settle();
-    expect(fixture.api).toHaveBeenCalledWith("/api/config", expect.objectContaining({ method: "PUT", body: JSON.stringify({ profile: { aboutMe: "I run **ops** in Montreal." } }) }));
+    // Each person has their own About me (#3428): it saves on its own route, not in the shared config.
+    expect(fixture.api).toHaveBeenCalledWith("/api/me/about-me", expect.objectContaining({ method: "PUT", body: JSON.stringify({ aboutMe: "I run **ops** in Montreal." }) }));
   });
 
   it("New bot draft memory: mounts with the template file and writes it back", async () => {

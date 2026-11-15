@@ -26,6 +26,7 @@ import { useHeldMenuMotion } from "../MenuMotion";
 import { PersonAvatar } from "../MessageAuthor";
 import { Card } from "../SettingsPrimitives";
 import { personLabel } from "@/lib/human-label";
+import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MENU_FIT_ROW, useMenuInWindow, type MenuPoint } from "@/components/menu-look";
 
 export interface OrgBot {
   id: string;
@@ -296,7 +297,7 @@ export function OrgBotRow({ bot, expanded, onToggle, owner, admin, busy, onStop,
 /** The "⋯" holding an admin's force actions; delete in red, stop only while
  * the bot works (or when the server does not say). */
 function OrgBotMenu({ bot, busy, onStop, onDelete }: { bot: OrgBot; busy: boolean; onStop: () => void; onDelete: () => void }) {
-  const [menu, setMenu] = useState<{ left: number; top: number; keyboard: boolean } | null>(null);
+  const [menu, setMenu] = useState<MenuPoint & { keyboard: boolean } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const close = () => { setMenu(null); buttonRef.current?.focus(); };
@@ -311,10 +312,8 @@ function OrgBotMenu({ bot, busy, onStop, onDelete }: { bot: OrgBot; busy: boolea
     return () => window.removeEventListener("mousedown", outside);
   }, [menu]);
   const motion = useHeldMenuMotion(menu);
-  const position = motion.value && {
-    left: Math.max(8, Math.min(motion.value.left, window.innerWidth - 228)),
-    top: Math.max(8, Math.min(motion.value.top, window.innerHeight - 110)),
-  };
+  const position = motion.value && { left: motion.value.left, top: motion.value.top };
+  useMenuInWindow(menuRef, motion.value);
   const label = t("organization.sharing.actions", { name: bot.name });
   return (
     <>
@@ -330,7 +329,7 @@ function OrgBotMenu({ bot, busy, onStop, onDelete }: { bot: OrgBot; busy: boolea
         onClick={(event) => {
           if (menu) { close(); return; }
           const rect = event.currentTarget.getBoundingClientRect();
-          setMenu({ left: rect.right - 220, top: rect.bottom + 4, keyboard: event.detail === 0 });
+          setMenu({ left: rect.right, right: true, top: rect.bottom + 4, keyboard: event.detail === 0 });
         }}
         className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary outline-none hover:bg-raised hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-40"
       >
@@ -342,7 +341,7 @@ function OrgBotMenu({ bot, busy, onStop, onDelete }: { bot: OrgBot; busy: boolea
           role="menu"
           aria-label={label}
           style={position}
-          className={cn("fixed z-50 w-[220px] rounded-lg border border-hairline/50 popover-surface bg-card p-1 shadow-xl", motion.className)}
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-50", motion.className)}
           {...motion.exitProps}
           onMouseDown={(event) => event.stopPropagation()}
           onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } else navigateThreadMenu(event); }}
@@ -362,11 +361,11 @@ export function OrgBotMenuItems({ bot, busy, onStop, onDelete }: { bot: Pick<Org
   return (
     <>
       <button type="button" role="menuitem" data-org-force-action="stop" disabled={!canStop || busy} title={canStop ? undefined : t("organization.sharing.idle")} onClick={onStop}
-        className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink outline-none hover:bg-raised focus-visible:bg-raised disabled:opacity-40 disabled:hover:bg-transparent">
+        className={MENU_ROW}>
         <Square size={12} aria-hidden="true" />{t("organization.sharing.forceStop")}
       </button>
       <button type="button" role="menuitem" data-org-force-action="delete" disabled={busy} onClick={onDelete}
-        className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-danger outline-none hover:bg-danger/10 focus-visible:bg-danger/10 disabled:opacity-40">
+        className={MENU_ROW_DANGER}>
         <Trash2 size={12} aria-hidden="true" />{t("organization.sharing.forceDelete")}
       </button>
     </>

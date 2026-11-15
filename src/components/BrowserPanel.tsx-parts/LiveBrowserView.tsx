@@ -1,6 +1,6 @@
 // Live browser window chrome and page (extracted from LiveBrowser for #1383).
 import type { RefObject, Dispatch, SetStateAction } from "react";
-import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, LockKeyhole, Plus, RotateCw, Square, UserRound, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, LockKeyhole, Plus, RotateCw, UserRound, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
 import { BrowserProfilesManager } from "../BrowserProfilesManager";
@@ -10,6 +10,7 @@ import { resolveAddressBarInput } from "@/lib/browser-address";
 import { cn } from "@/lib/cn";
 import { NetworkDebuggerDialog } from "../NetworkDebuggerDialog";
 import { TeachStepsDialog } from "../TeachStepsDialog";
+import { TEACH_RECORDING_FRAME, TeachRecordingBar } from "../TeachRecordingBar";
 import type { TeachStep } from "../../../shared/teach-recording";
 import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
@@ -45,6 +46,8 @@ export interface LiveBrowserViewProps {
   showNetwork: boolean;
   setShowNetwork: Dispatch<SetStateAction<boolean>>;
   recording: boolean;
+  /** When the running recording started (ms), for its elapsed time. */
+  recordingStartedAt: number | null;
   taught: { steps: TeachStep[]; recordedAt: string } | undefined;
   setTaught: Dispatch<SetStateAction<{ steps: TeachStep[]; recordedAt: string } | undefined>>;
   teachNote: string;
@@ -74,6 +77,7 @@ export interface LiveBrowserViewProps {
   execute: (body: Record<string, unknown>) => Promise<void>;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
+  discardRecording: () => Promise<void>;
   action: (body: Record<string, unknown>, expected?: string) => Promise<unknown>;
   confirm: (opts: { title: string; confirmLabel: string; tone: "neutral" }) => Promise<boolean>;
   setError: Dispatch<SetStateAction<string>>;
@@ -84,10 +88,10 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
     bot, allowed, placeholder, frame, tabs, address, setAddress, connected, control, pending, error,
     showProfiles, setShowProfiles, showTyping, setShowTyping, masked, setMasked, takeControl, handBack,
     viewport, takeStatus, busy, reconnecting,
-    showNetwork, setShowNetwork, recording, taught, setTaught, teachNote, addressInput, profilesButton,
+    showNetwork, setShowNetwork, recording, recordingStartedAt, taught, setTaught, teachNote, addressInput, profilesButton,
     profilesPopover, typingPopover, typingField, menuSummary, profileName, interactive, typingReady,
     commandsReady, heldElsewhere, taking, mine, pageTitle, holder, pill, generation, viewer,
-    urlEditing, command, input, reconnect, execute, startRecording, stopRecording, action, confirm, setError,
+    urlEditing, command, input, reconnect, execute, startRecording, stopRecording, discardRecording, action, confirm, setError,
   } = p;
   return (
 <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-card text-ink">
@@ -136,15 +140,9 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       </details>
     </form>
     {/* While a recording runs this bar stays at the top of the window, above
-        the page, with the one action that ends it. */}
-    {recording && <div role="status" data-teach-recording="" className="flex min-h-10 items-center gap-2 border-b border-danger/40 bg-danger/10 px-3 py-1.5 text-[12px] text-danger">
-      <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-danger" /></span>
-      <span className="min-w-0 flex-1 font-medium">{t("teach.recording")}</span>
-      <button type="button" data-teach-stop="" onClick={() => void stopRecording()}
-        className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full bg-danger px-3 py-1 font-medium text-danger-ink hover:brightness-110 md:min-h-0">
-        <Square size={11} fill="currentColor" aria-hidden="true" />{t("teach.stop")}
-      </button>
-    </div>}
+        the page: Stop (it saves the steps) with the elapsed time, and
+        Discard, in the reference's look (#4208). */}
+    {recording && <TeachRecordingBar startedAt={recordingStartedAt ?? Date.now()} onStop={() => void stopRecording()} onDiscard={() => void discardRecording()} />}
     {teachNote && !recording && <div role="status" className="border-b border-hairline/30 px-3 py-2 text-[12px] text-ink-secondary">{teachNote}</div>}
     <div data-browser-holder={mine ? "you" : heldElsewhere ? "elsewhere" : "bot"} className="flex min-h-10 items-center gap-2 border-b border-hairline/40 px-3 py-1.5 text-[12px]">
       <span className={cn("flex min-w-0 flex-1 items-center gap-1.5", mine ? "font-medium text-accent-text" : "text-ink-secondary")}>
@@ -163,7 +161,8 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
           </button>)}
     </div>
     {error && <div role={reconnecting ? "status" : "alert"} className={`flex items-center justify-between gap-2 border-b border-hairline/30 px-3 py-2 text-[12px] ${reconnecting ? "text-ink-secondary" : "text-danger"}`}><span>{error}</span>{!connected && <button className="shrink-0 underline" onClick={reconnect}>{t("browser.live.reconnect")}</button>}</div>}
-    <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-inset/40", recording && "ring-2 ring-inset ring-danger")}>
+    <div className="relative min-h-0 flex-1 overflow-hidden bg-inset/40">
+      {recording && <div aria-hidden="true" data-recording-frame="" className={TEACH_RECORDING_FRAME} />}
       {frame ? <BrowserViewport frame={frame} {...viewport} driving={interactive} input={input}
         onReturnToToolbar={() => addressInput.current?.focus()}
         acknowledge={(seq) => { if (generation.current === frame.generation && viewer.current === frame.viewerId) void action({ type: "ack", seq }, frame.viewerId).catch(() => {}); }}

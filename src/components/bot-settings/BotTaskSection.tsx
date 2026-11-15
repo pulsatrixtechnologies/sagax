@@ -37,6 +37,7 @@ import { StoreSourceContext, useSourceSelector, type StoreSource } from "@/state
 import { BOT_TASK_DONE_FOLD_MS, BOT_TASK_DONE_LINGER_MS, listBotTasks, personBotTaskActions, type BotTask, type BotTaskAction, type BotTaskState } from "../../../shared/bot-task-list";
 import { navigateThreadMenu } from "../BotProjects";
 import { PanelPageHeader as RoutineDetailHeader } from "./PanelPage";
+import { MENU_ROW, MENU_SURFACE, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
 
 type LoadState = "ok" | "failed" | "needsUpdate";
 type PersonMove = Exclude<BotTaskAction, "advance">;
@@ -51,7 +52,7 @@ const MOVE_LABEL: Record<PersonMove, "botTasks.complete" | "botTasks.resume" | "
   resume: "botTasks.resume",
   reopen: "botTasks.reopen",
 };
-const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
+const MENU_ITEM = MENU_ROW;
 const DETAIL_BUTTON = "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-hairline/50 bg-panel px-3 py-2.5 text-[13px] font-medium text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
 
 /** How a failed read shows: the route missing on an older server is not an
@@ -83,7 +84,7 @@ export function taskListRetryDelay(attempt: number): number {
 
 const listPath = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/task-list`;
 
-type MenuState = { task: BotTask; x: number; y: number; trigger: HTMLElement };
+type MenuState = { task: BotTask; x: number; y: number; right: boolean; trigger: HTMLElement };
 
 /** A group's panel (2026-11-03): the task lists of the viewer's bots in the
  * group, narrowed to the tasks those bots added from the group's
@@ -142,6 +143,8 @@ export function BotTaskSection({ botId, scope }: { botId: string; scope?: BotTas
   const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useMenuInWindow(menuRef, menu && { left: menu.x, top: menu.y, right: menu.right });
   // Only the newest read lands: a slow answer never overwrites a newer one.
   const readSeq = useRef(0);
   const retry = useRef<{ timer: ReturnType<typeof setTimeout> | null; attempt: number }>({ timer: null, attempt: 0 });
@@ -276,7 +279,8 @@ export function BotTaskSection({ botId, scope }: { botId: string; scope?: BotTas
   const closeTask = () => { returnFocus.current = openId; setOpenId(null); };
   const openMenu = (task: BotTask, trigger: HTMLElement, at?: { x: number; y: number }) => {
     const rect = trigger.getBoundingClientRect();
-    setMenu({ task, trigger, x: at?.x ?? rect.right - 220, y: at?.y ?? rect.bottom + 4 });
+    // under the "...", its right edge on the trigger's; at the pointer, from it
+    setMenu({ task, trigger, x: at?.x ?? rect.right, y: at?.y ?? rect.bottom + 4, right: !at });
   };
   const closeMenu = (focusTrigger = true) => {
     const trigger = menu?.trigger;
@@ -350,9 +354,9 @@ export function BotTaskSection({ botId, scope }: { botId: string; scope?: BotTas
 
       {menu && createPortal(
         <div className="fixed inset-0 z-40" onMouseDown={() => closeMenu(false)} onContextMenu={(event) => { event.preventDefault(); closeMenu(false); }}>
-          <div role="menu" data-bot-task-menu-open={menu.task.id} aria-label={menu.task.title}
-            style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 228)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 220)) }}
-            className="absolute flex w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-ink shadow-lg"
+          <div ref={menuRef} role="menu" data-bot-task-menu-open={menu.task.id} aria-label={menu.task.title}
+            style={{ left: menu.x, top: menu.y }}
+            className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute")}
             onMouseDown={(event) => event.stopPropagation()}
             onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
               if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeMenu(); return; }

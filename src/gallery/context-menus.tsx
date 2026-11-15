@@ -6,6 +6,8 @@ import { createRoot } from "react-dom/client";
 import { ThreadMenu } from "../components/ThreadMenu";
 import { ExportTranscriptMenu } from "../components/ExportTranscriptMenu";
 import { OrgSectionMenuItems, orgSectionMenuItems } from "../components/OrgSectionMenu";
+import { MENU_SURFACE, MENU_FIT_ROW } from "../components/menu-look";
+import { cn } from "../lib/cn";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { Message } from "../state/store";
@@ -30,7 +32,7 @@ function Gallery() {
         position={{ left: 24, top: 24 }}
         onClose={noop}
       />
-      <div data-section-menu-sample className="fixed left-[280px] top-6 flex w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5">
+      <div data-section-menu-sample className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed left-[280px] top-6")}>
         <OrgSectionMenuItems items={items} actions={{ onRename: noop, onMoveUp: noop, onMoveDown: noop, onCollapseAll: noop, onExpandAll: noop, onDelete: noop }} />
       </div>
       <div className="fixed right-6 top-6">

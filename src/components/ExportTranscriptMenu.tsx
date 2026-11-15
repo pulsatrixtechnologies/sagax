@@ -13,9 +13,10 @@ import {
   slugifyTranscriptFilename,
 } from "@/lib/export-transcript";
 import type { Message } from "@/state/store";
+import { MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider, MENU_FIT_ROW } from "./menu-look";
 
 /** A row of the menu: the chrome of the sidebar's popover menus. */
-const ROW = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover disabled:opacity-60";
+const ROW = MENU_ROW;
 /** The submenu opens on a short hover and forgives a diagonal path out. */
 const SUB_OPEN_MS = 80;
 const SUB_CLOSE_MS = 250;
@@ -156,8 +157,8 @@ export function ExportTranscriptMenu({
   // exports (a submenu once there are two), then the tools. Nothing here
   // deletes, so the only red last section is Leave group (#1480).
   const exports: Array<{ key: string; label: string; icon: ReactNode; onSelect: () => void; attr?: Record<string, string> }> = [];
-  if (hasMessages) exports.push({ key: "download", label: t("chat.export.download"), icon: <Download size={16} className="shrink-0 text-ink" />, onSelect: handleDownload });
-  if (onExportBot) exports.push({ key: "bot-zip", label: t("chat.export.botZip"), icon: <Package size={16} className="shrink-0 text-ink" />, onSelect: () => { setOpen(false); onExportBot(); }, attr: { "data-export-bot-zip": "" } });
+  if (hasMessages) exports.push({ key: "download", label: t("chat.export.download"), icon: <Download size={16} />, onSelect: handleDownload });
+  if (onExportBot) exports.push({ key: "bot-zip", label: t("chat.export.botZip"), icon: <Package size={16} />, onSelect: () => { setOpen(false); onExportBot(); }, attr: { "data-export-bot-zip": "" } });
   const tools = Boolean(onToggleInspector || data);
 
   const openSub = (focus: boolean) => {
@@ -201,7 +202,7 @@ export function ExportTranscriptMenu({
             if (event.target instanceof Element && subRef.current?.contains(event.target)) return;
             navigateThreadMenu(event);
           }}
-          className={cn("absolute right-0 top-full z-40 mt-1 flex w-[240px] min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)} {...motion.exitProps}
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-40 mt-1", motion.className)} {...motion.exitProps}
         >
           {onClearChat && (
             <>
@@ -214,10 +215,10 @@ export function ExportTranscriptMenu({
                 onPointerOver={() => hoverSub(false)}
                 className={ROW}
               >
-                <SquarePen size={16} className="shrink-0 text-ink" />
+                <SquarePen size={16} />
                 <span className="flex-1 truncate">{t("chat.clearChat")}</span>
               </button>
-              <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />
+              <MenuDivider />
             </>
           )}
           {!hasMessages ? (
@@ -236,7 +237,7 @@ export function ExportTranscriptMenu({
                 {copied ? (
                   <Check size={16} className="shrink-0 text-success" />
                 ) : (
-                  <Copy size={16} className="shrink-0 text-ink" />
+                  <Copy size={16} />
                 )}
                 <span className="flex-1 truncate">
                   {copied ? t("chat.export.copied") : t("chat.export.copy")}
@@ -266,9 +267,9 @@ export function ExportTranscriptMenu({
                   event.preventDefault();
                   openSub(true);
                 }}
-                className={cn(ROW, sub && "bg-selected")}
+                className={sub ? MENU_ROW_ACTIVE : ROW}
               >
-                <Upload size={16} className="shrink-0 text-ink" />
+                <Upload size={16} />
                 <span className="flex-1 truncate">{t("chat.export.submenu")}</span>
                 <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
               </button>
@@ -289,7 +290,7 @@ export function ExportTranscriptMenu({
                     }
                     navigateThreadMenu(event);
                   }}
-                  className="absolute right-full top-[-6px] z-50 mr-2 flex w-max min-w-[200px] max-w-[320px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5"
+                  className={cn(MENU_SURFACE, "absolute right-full top-[-6px] z-50 mr-2 w-max min-w-[200px] max-w-[320px]")}
                 >
                   {exports.map((entry) => exportRow(entry, true))}
                 </div>
@@ -299,7 +300,7 @@ export function ExportTranscriptMenu({
 
           {onSplit && (
             <>
-              <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />
+              <MenuDivider />
               <button
                 type="button"
                 role="menuitem"
@@ -308,7 +309,7 @@ export function ExportTranscriptMenu({
                 onPointerOver={() => hoverSub(false)}
                 className={ROW}
               >
-                <Columns2 size={16} className="shrink-0 text-ink" />
+                <Columns2 size={16} />
                 <span className="flex-1 truncate">{t("splitView.splitRight")}</span>
               </button>
               <button
@@ -319,12 +320,12 @@ export function ExportTranscriptMenu({
                 onPointerOver={() => hoverSub(false)}
                 className={ROW}
               >
-                <Rows2 size={16} className="shrink-0 text-ink" />
+                <Rows2 size={16} />
                 <span className="flex-1 truncate">{t("splitView.splitDown")}</span>
               </button>
             </>
           )}
-          {tools && <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />}
+          {tools && <MenuDivider />}
           {onToggleInspector && (
             <button
               type="button"
@@ -336,7 +337,7 @@ export function ExportTranscriptMenu({
               onPointerOver={() => hoverSub(false)}
               className={ROW}
             >
-              <Bug size={16} className="shrink-0 text-ink" />
+              <Bug size={16} />
               <span className="flex-1 truncate">{t("chat.inspector")}</span>
               {inspectorOpen && <Check size={14} className="shrink-0 text-accent" />}
             </button>
@@ -351,22 +352,22 @@ export function ExportTranscriptMenu({
               onPointerOver={() => hoverSub(false)}
               className={ROW}
             >
-              <Database size={16} className="shrink-0 text-ink" />
+              <Database size={16} />
               <span className="flex-1 truncate">{t("dataWindow.open")}</span>
             </button>
           )}
           {onLeave && (
             <>
-              <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />
+              <MenuDivider />
               <button
                 type="button"
                 role="menuitem"
                 data-conversation-leave-group=""
                 onClick={() => { setOpen(false); onLeave(); }}
                 onPointerOver={() => hoverSub(false)}
-                className={cn(ROW, "text-danger")}
+                className={MENU_ROW_DANGER}
               >
-                <LogOut size={16} className="shrink-0" />
+                <LogOut size={16} />
                 <span className="flex-1 truncate">{t("groupPanel.leave")}</span>
               </button>
             </>

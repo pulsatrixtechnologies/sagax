@@ -48,6 +48,7 @@ import {
 } from "../../../shared/routine-folders";
 import { RoutineList } from "./RoutineList";
 import { routineRowActions, RoutineMenuPortal, RoutineRowMenuItems } from "./RoutineRowMenu";
+import { MENU_ROW, MenuDivider, menuRow } from "@/components/menu-look";
 
 interface FolderAnswer { folders: string[]; routines: Routine[]; undo?: RoutineFolderUndo }
 
@@ -78,7 +79,6 @@ export function canManageRoutineFolders(routines: Routine[], supported: boolean)
   return supported && (routines.length === 0 || routines.some((routine) => routine.canEdit !== false));
 }
 
-const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
 export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef, folderIcon = false, collapseAfter, leadingClock }: {
   bot: Bot;
@@ -361,7 +361,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
       {menu.kind === "section" ? (menu.naming
         ? <FolderNameInput label={t("routineFolders.newFolderLabel")} onCancel={() => closeMenu()} onSave={async (name) => { const answer = await act({ action: "create", botId: bot.id, name }); if (answer) closeMenu(); }} />
         : <>
-          {supported && <button type="button" role="menuitem" autoFocus data-routine-new-folder="" className={MENU_ITEM} onClick={() => setMenu({ ...menu, naming: true })}>
+          {supported && <button type="button" role="menuitem" autoFocus data-routine-new-folder="" className={MENU_ROW} onClick={() => setMenu({ ...menu, naming: true })}>
             <FolderPlus size={14} aria-hidden="true" />{t("routineFolders.newFolder")}
           </button>}
           {showSortAction && <SortByPrefixItem autoFocus={!supported} onSelect={() => { closeMenu(); void sortByPrefix(); }} />}
@@ -528,7 +528,7 @@ export function RoutineFolderHeader({ name, count, paused, collapsed, icon = fal
 }
 
 function SortByPrefixItem({ onSelect, autoFocus }: { onSelect: () => void; autoFocus?: boolean }) {
-  return <button type="button" role="menuitem" autoFocus={autoFocus} data-routine-sort-by-prefix="" className={MENU_ITEM} onClick={onSelect}>
+  return <button type="button" role="menuitem" autoFocus={autoFocus} data-routine-sort-by-prefix="" className={MENU_ROW} onClick={onSelect}>
     <span aria-hidden="true"><FolderInput size={14} /></span>{t("routineFolders.offerSort")}
   </button>;
 }
@@ -548,8 +548,8 @@ function FolderMenuItems({ canMoveUp, canMoveDown, anyOn, anyRoutine, canSortByP
     { key: "delete", label: t("routineFolders.delete"), icon: <Trash2 size={14} />, onSelect: onDelete, group: 2, danger: true },
   ];
   return <>{items.map((item, index) => <Fragment key={item.key}>
-    {index > 0 && items[index - 1]!.group !== item.group && <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />}
-    <button type="button" role="menuitem" autoFocus={index === 0} data-routine-folder-action={item.key} className={cn(MENU_ITEM, item.danger && "text-danger")} onClick={item.onSelect}>
+    {index > 0 && items[index - 1]!.group !== item.group && <MenuDivider />}
+    <button type="button" role="menuitem" autoFocus={index === 0} data-routine-folder-action={item.key} className={menuRow(item.danger ? "danger" : "idle")} onClick={item.onSelect}>
       <span aria-hidden="true">{item.icon}</span>{item.label}
     </button>
   </Fragment>)}</>;

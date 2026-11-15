@@ -6,7 +6,6 @@
 import { activeLocale, t } from "@/lib/i18n";
 import { engineSignedOut } from "@/lib/failed-turn";
 import { browserAvailable, builtInBrowserEnabled, type FeatureFlagConfig } from "@/lib/feature-flags";
-import { writeComputerPanelView } from "@/lib/computer-panel-view";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import type { Action, Bot, ConfigStatus, InstanceInfo } from "@/state/store";
@@ -150,8 +149,8 @@ export function openPlaceAction(
     case "watch":
     case "open-computer-panel":
     case "turn-on-browser":
-      writeComputerPanelView(target.botId, id === "turn-on-browser" ? "browser" : "computer");
-      dispatch({ type: "toggleComputer", open: true });
+      // the Computer section's screen window, on the browser for its own action
+      dispatch({ type: "toggleComputer", open: true, view: id === "turn-on-browser" ? "browser" : "screen" });
       return true;
     default:
       return false;

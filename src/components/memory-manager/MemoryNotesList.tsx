@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Check, FileStack, FolderInput, GripVertical, Link2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
 import { t } from "@/lib/i18n";
 import {
   applyFilters,
@@ -198,11 +199,11 @@ export function MemoryNotesList({
                 <FileStack size={14} aria-hidden="true" />{t("memoryManager.fromTemplate")}
               </button>
               {templateOpen && (
-                <div role="menu" className="absolute right-0 top-full z-30 mt-1.5 w-[260px] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 popover-surface" data-memory-templates="">
+                <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-30 mt-1.5")} data-memory-templates="">
                   {templates.map((template) => (
-                    <button key={template.key} type="button" role="menuitem" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setTemplateOpen(false); onFromTemplate(template); }}>
-                      <FileStack size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-                      <span className="truncate">{template.title}</span>
+                    <button key={template.key} type="button" role="menuitem" className={MENU_ROW} onClick={() => { setTemplateOpen(false); onFromTemplate(template); }}>
+                      <FileStack aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate">{template.title}</span>
                     </button>
                   ))}
                 </div>
@@ -313,10 +314,10 @@ export function MemoryNotesList({
                 <BookOpen size={14} aria-hidden="true" />{t("memoryManager.collections.add")}
               </button>
               {collectionOpen && (
-                <span role="menu" className="absolute left-0 top-full z-30 mt-1.5 flex w-[240px] flex-col rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-ink popover-surface">
+                <span role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute left-0 top-full z-30 mt-1.5")}>
                   {collections.map((collection) => (
-                    <button key={collection.id} type="button" role="menuitem" className="truncate rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-hover" onClick={() => { setCollectionOpen(false); onAddToCollection(keys, collection.id); }}>
-                      {collection.title}
+                    <button key={collection.id} type="button" role="menuitem" className={MENU_ROW} onClick={() => { setCollectionOpen(false); onAddToCollection(keys, collection.id); }}>
+                      <span className="min-w-0 flex-1 truncate">{collection.title}</span>
                     </button>
                   ))}
                 </span>

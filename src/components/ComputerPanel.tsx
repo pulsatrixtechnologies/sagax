@@ -1,17 +1,21 @@
-// The bot's computer, in the right-side slot. Where it runs decides the
-// whole flow: explicit cloud → provision the boat on open (idempotent) and preview
-// via SSE frames or a ~4s screenshot poll. macOS local mode keeps the legacy
-// in-panel capture. Linux local mode is an automation readiness state and its
-// separate preview remains explicitly user-initiated. Auto only reads an
-// existing Boat's state: opening this panel never creates, wakes, bootstraps
-// or opens one. A conversation's selected surface owns its preview;
-// its profile default owns lifecycle actions and the Works on picker.
+// The bot's computer in detail: what the Computer section's row cannot hold
+// (#4208). It is no side panel any more: the Computer section's "..." menu
+// opens it in a window (bot-settings/ComputerCard.tsx, Computer details),
+// and every link that opens the bot's computer opens the section's screen
+// window instead. Where it runs decides the whole flow: explicit cloud
+// previews via SSE frames or a ~4s screenshot poll, and Start it now / Wake
+// it now / Sleep / Replace are the person's own actions here. macOS local
+// mode keeps the in-panel capture and its Screen Recording recovery; Linux
+// local mode is an automation readiness state with its enable / disable /
+// retry controls. Auto only reads an existing Boat's state: opening this
+// never creates, wakes, bootstraps or opens one. A conversation's selected
+// surface owns its preview; its profile default owns lifecycle actions.
 // An inherited team Boat is shown as a shared resource, managed from Team map;
 // it must never fall back to this host or become a private Cloud selection.
+// An Android phone plugged in over USB shows under it.
 import { useEffect, useState } from "react";
 import { Globe, Monitor } from "lucide-react";
 import type { Bot } from "@/state/store";
-import { useCaptionChrome } from "@/components/DesktopCapabilities";
 import { useAndroidUsbDevices } from "./AndroidDevicePanel";
 import { openPlaceAction } from "@/lib/place-view";
 import type { PlaceActionId } from "../../shared/place-view";
@@ -20,17 +24,14 @@ import { requestSettingsCard } from "./SettingsPrimitives";
 import { BrowserScreen, OrgComputerTab, ScreenPicker } from "./computer/OrgComputerTab";
 import { BrowserPanel, type BrowserSignIn } from "./BrowserPanel";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
-import { RoutinesSection } from "./bot-settings/RoutinesSection";
 import { SignInBanner } from "./SignInRequestCard";
 
-import { usePanelResize } from "./ComputerPanel.tsx-parts/usePanelResize";
 import { useComputerPanelSession } from "./ComputerPanel.tsx-parts/useComputerPanelSession";
 import { useComputerPreview } from "./ComputerPanel.tsx-parts/useComputerPreview";
 import { useComputerControl } from "./ComputerPanel.tsx-parts/useComputerControl";
 import { useComputerActions } from "./ComputerPanel.tsx-parts/useComputerActions";
 import { useRemoteHosts } from "./ComputerPanel.tsx-parts/useRemoteHosts";
 import { ComputerDeviceBody } from "./ComputerPanel.tsx-parts/DeviceBody";
-import { ComputerPanelChrome } from "./ComputerPanel.tsx-parts/PanelChrome";
 import { buildComputerMoreItems } from "./ComputerPanel.tsx-parts/buildMoreItems";
 import { buildPlaceViews } from "./ComputerPanel.tsx-parts/buildPlaceViews";
 
@@ -38,20 +39,10 @@ import { buildPlaceViews } from "./ComputerPanel.tsx-parts/buildPlaceViews";
 export function ComputerPanel({
   bot: profileBot,
   onOpenVmWorkspace,
-  embedded = false,
 }: {
   bot: Bot;
   onOpenVmWorkspace?: (botId: string) => void;
-  /** Rendered as the Computer tab of the bot panel: no column of its own,
-   * no header or resize handle, just the body. */
-  embedded?: boolean;
 }) {
-  // Docked flush under the Windows caption corner: drop the header 16px.
-  const { padClass } = useCaptionChrome();
-  const {
-    panelWidth, separatorRef, separatorWidth,
-    onResizeStart, onResizeMove, onResizeEnd, onSeparatorKeyDown,
-  } = usePanelResize();
   const session = useComputerPanelSession(profileBot);
   const {
     state, dispatch, livePlace, browserOffered, soloView, setSoloView,
@@ -65,7 +56,7 @@ export function ComputerPanel({
     vmFrame, setVmFrame, vmViewerUrl, vmStatus, setVmStatus, vpsStatus, setVpsStatus,
     localFrame, setLocalFrame, pending, setPending, controlPending, setControlPending,
     viewerOpen, error, setError, setRetry, vmResumable, vmReadinessAttempts,
-    vmActionController, bridgeStatus, botRoutines, cloudRoutineReady,
+    vmActionController, bridgeStatus,
   } = session;
 
   const androidStatus = useAndroidUsbDevices();
@@ -247,7 +238,6 @@ export function ComputerPanel({
         : undefined)}</div>
     )}
     <ComputerDeviceBody
-      embedded={embedded}
       soloPicker={soloPicker}
       bot={bot}
       phase={phase}
@@ -296,9 +286,6 @@ export function ComputerPanel({
       primaryDesktop={primaryDesktop}
       moreItems={moreItems}
       vmViewerUrl={vmViewerUrl}
-      botRoutines={botRoutines}
-      routineRuns={state.routineRuns}
-      cloudRoutineReady={cloudRoutineReady}
       androidConnected={androidConnected}
       androidStatus={androidStatus}
     />
@@ -307,7 +294,7 @@ export function ComputerPanel({
   );
 
   const body = bridgeStatus ? (
-    <div className={embedded ? "pb-5" : "flex-1 overflow-y-auto px-5 pb-5"}>
+    <div className={"pb-5"}>
       <OrgComputerTab
         bridge={bridgeStatus}
         // The conversation's own place (its pin, else Works on), not the
@@ -331,12 +318,9 @@ export function ComputerPanel({
         onDetachRemoteHost={onDetachRemoteHost}
 
       />
-      {!embedded && <div className="mt-6">
-        <RoutinesSection key={bot.id} bot={bot} routines={botRoutines} runs={state.routineRuns} defaultRunOn={cloudRoutineReady ? "cloud" : "maus"} />
-      </div>}
     </div>
   ) : browserOffered && soloView === "browser" ? (
-    <div className={embedded ? "pb-5" : "flex-1 overflow-y-auto px-5 pb-5"}>
+    <div className={"pb-5"}>
       {soloPicker}
       <div className="mt-3">
         {signInHelp?.place === "browser" && <div className="mb-3">{signInBanner()}</div>}
@@ -351,26 +335,7 @@ export function ComputerPanel({
 
   return (
     <>
-    {embedded ? null : (
-      <ComputerPanelChrome
-        padClass={padClass}
-        panelWidth={panelWidth}
-        separatorRef={separatorRef}
-        separatorWidth={separatorWidth}
-        onSeparatorKeyDown={onSeparatorKeyDown}
-        onResizeStart={onResizeStart}
-        onResizeMove={onResizeMove}
-        onResizeEnd={onResizeEnd}
-        onBack={() => {
-          dispatch({ type: "toggleComputer", open: false });
-          dispatch({ type: "toggleSettings", open: true });
-        }}
-        onClose={() => dispatch({ type: "toggleComputer", open: false })}
-      >
-        {shown}
-      </ComputerPanelChrome>
-    )}
-    {embedded && shown}
+    {shown}
     <LocalComputerAutoWarning
       open={localAutoWarningTarget !== null}
       onCancel={() => setLocalAutoWarningTarget(null)}

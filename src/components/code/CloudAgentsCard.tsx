@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { api, useStore } from "@/state/store";
+import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 
 const POLL_ACTIVE_MS = 8_000;
 
@@ -88,14 +89,14 @@ function RowMenu({ record, botId }: { record: CloudAgentRecord; botId: string })
     return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", key); };
   }, [open]);
   const prUrl = httpsOnly(record.pr?.url ?? record.gitBranches.find((branch) => branch.prUrl)?.prUrl);
-  const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-popover-ink hover:bg-popover-hover disabled:opacity-50";
+  const item = MENU_ROW;
   return (
     <div ref={ref} className="relative">
       <button type="button" aria-label={t("code.card.menu")} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="rounded-md p-1 text-ink-secondary hover:bg-hover">
         <MoreHorizontal size={14} aria-hidden />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-7 z-20 w-52 rounded-lg border border-popover-border bg-popover p-1 shadow-lg">
+        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-7 z-20 w-52")}>
           <button
             type="button" role="menuitem" className={item}
             disabled={!cloudAgentStatusActive(record.status)}

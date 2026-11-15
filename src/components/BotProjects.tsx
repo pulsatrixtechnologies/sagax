@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
 import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
+import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MENU_FIT_ROW, useMenuInWindow } from "./menu-look";
 
 const FOLDER_EMOJI = ["📁", "💼", "🏠", "📬", "💡", "🚀", "🎨", "🧪", "📚", "🌱", "⭐", "🛠️"];
 
@@ -60,24 +61,22 @@ export function FolderActions({ project, canMoveUp, canMoveDown, canMarkRead, sa
   const move = (direction: -1 | 1) => onMove(direction, close);
   const motion = useHeldMenuMotion(menu);
   const shown = motion.value;
-  const position = shown && {
-    left: Math.max(8, Math.min(shown.left, window.innerWidth - 228)),
-    top: Math.max(8, Math.min(shown.top, window.innerHeight - 180)),
-  };
+  const position = shown && { left: shown.left, top: shown.top };
+  useMenuInWindow(menuRef, position);
   return <>
     <button ref={actionRef} type="button" aria-label={t("folder.actions", { name: project.name })} title={t("folder.actions", { name: project.name })} aria-haspopup="menu" aria-expanded={Boolean(menu)}
       onClick={(event) => { if (menu) { close(); return; } const rect = event.currentTarget.getBoundingClientRect(); onMenuChange({ left: rect.left, top: rect.bottom + 4 }); }}
       className="flex size-6 shrink-0 items-center justify-center rounded opacity-0 hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover/folder:opacity-100 max-md:opacity-70 touch:opacity-70"><MoreHorizontal size={13} /></button>
     {motion.shown && position && createPortal(<div ref={menuRef} role="menu" aria-label={t("folder.actions", { name: project.name })} aria-busy={saving || undefined} data-thread-overlay style={position}
-      className={cn("fixed z-50 w-[220px] rounded-lg border border-hairline/50 popover-surface bg-card p-1 shadow-xl", motion.className)} {...motion.exitProps}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-50", motion.className)} {...motion.exitProps}
       onMouseDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } else navigateThreadMenu(event); }}>
-      {onNewThread && <button type="button" role="menuitem" onClick={() => { close(); onNewThread(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Plus size={12} />{t("task.newIn", { name: project.name })}</button>}
-      <button type="button" role="menuitem" onClick={() => { close(); onEdit(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Pencil size={12} />{t("folder.rename")}</button>
-      <button type="button" role="menuitem" disabled={!canMarkRead || saving} onClick={() => onMarkRead(close)} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40"><CheckCheck size={12} />{t("folder.markRead")}</button>
-      <button type="button" role="menuitem" disabled={!canMoveUp || saving} onClick={() => move(-1)} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40"><ArrowUp size={12} />{t("folder.moveUp")}</button>
-      <button type="button" role="menuitem" disabled={!canMoveDown || saving} onClick={() => move(1)} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40"><ArrowDown size={12} />{t("folder.moveDown")}</button>
-      {onDelete && <button type="button" role="menuitem" onClick={() => { close(); onDelete(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-danger hover:bg-raised"><Trash2 size={12} />{t("folder.delete")}</button>}
+      {onNewThread && <button type="button" role="menuitem" onClick={() => { close(); onNewThread(); }} className={MENU_ROW}><Plus size={12} />{t("task.newIn", { name: project.name })}</button>}
+      <button type="button" role="menuitem" onClick={() => { close(); onEdit(); }} className={MENU_ROW}><Pencil size={12} />{t("folder.rename")}</button>
+      <button type="button" role="menuitem" disabled={!canMarkRead || saving} onClick={() => onMarkRead(close)} className={MENU_ROW}><CheckCheck size={12} />{t("folder.markRead")}</button>
+      <button type="button" role="menuitem" disabled={!canMoveUp || saving} onClick={() => move(-1)} className={MENU_ROW}><ArrowUp size={12} />{t("folder.moveUp")}</button>
+      <button type="button" role="menuitem" disabled={!canMoveDown || saving} onClick={() => move(1)} className={MENU_ROW}><ArrowDown size={12} />{t("folder.moveDown")}</button>
+      {onDelete && <button type="button" role="menuitem" onClick={() => { close(); onDelete(); }} className={MENU_ROW_DANGER}><Trash2 size={12} />{t("folder.delete")}</button>}
     </div>, document.body)}
   </>;
 }

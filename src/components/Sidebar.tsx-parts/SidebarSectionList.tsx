@@ -189,7 +189,7 @@ export function SidebarSectionList({
                 onContextMenu={orgMode && layoutInteractive && !isAutomaticSidebarSection(id) ? (event) => openOrgMenu(event, team?.key || null, id) : !remoteClient && layoutInteractive && sectionName ? (event) => {
                   event.preventDefault();
                   teamMenuReturn.current = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
-                  setTeamMenu({ name: sectionName, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 230)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 150)) });
+                  setTeamMenu({ name: sectionName, x: event.clientX, y: event.clientY });
                 } : undefined}
                 collapsed={collapsed}
                 attention={attention}

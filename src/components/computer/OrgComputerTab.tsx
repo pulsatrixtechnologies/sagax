@@ -53,6 +53,7 @@ import { SandboxDesktopView } from "../SandboxDesktopView";
 import { RemoteScreenCard } from "../remote-session/RemoteScreenCard";
 import { ComputerScreen, type ScreenAction, type ScreenControls } from "./ComputerScreen";
 import { SandboxDesktopModal } from "./SandboxDesktopModal";
+import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 
 /** Per-place menu actions for an unattended host in the Computer dropdown. */
 export type HostPlaceAction = "attach" | "detach";
@@ -469,7 +470,7 @@ export function ScreenPicker({ items, chosen, onPick, onRename, onHostAction }: 
       </button>
       <div ref={list} id={`${id}-list`} role="listbox" aria-label={t("orgComputer.choice.label")} tabIndex={-1} hidden={!open}
         aria-activedescendant={open && !renaming && !menuKey ? optionId(active) : undefined} onKeyDown={onListKey}
-        className="absolute left-1/2 top-full z-30 mt-1 flex w-max min-w-[180px] max-w-[min(280px,90vw)] -translate-x-1/2 flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg outline-none popover-surface">
+        className={cn(MENU_SURFACE, "absolute left-1/2 top-full z-30 mt-1 w-max min-w-[180px] max-w-[min(280px,90vw)] -translate-x-1/2 outline-none")}>
         {items.map((item, index) => {
           const selected = item.key === current.key;
           const Icon = item.icon;
@@ -539,20 +540,20 @@ export function ScreenPicker({ items, chosen, onPick, onRename, onHostAction }: 
                 <div
                   role="menu"
                   data-computer-host-menu=""
-                  className="absolute right-1 top-full z-40 mt-0.5 flex min-w-[140px] flex-col gap-0.5 rounded-lg border-[0.5px] border-border bg-elevated p-1 shadow-lg"
+                  className={cn(MENU_SURFACE, "absolute right-1 top-full z-40 mt-0.5 min-w-[140px]")}
                   onClick={(event) => event.stopPropagation()}
                 >
                   {onRename && (
-                    <button type="button" role="menuitem" data-computer-rename="" className="rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink hover:bg-raised-hover" onClick={() => beginRename(item)}>
+                    <button type="button" role="menuitem" data-computer-rename="" className={MENU_ROW} onClick={() => beginRename(item)}>
                       {t("computerScreen.rename")}
                     </button>
                   )}
                   {item.hostAttached ? (
-                    <button type="button" role="menuitem" data-computer-host-detach="" className="rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink hover:bg-raised-hover" onClick={() => runHostAction(item, "detach")}>
+                    <button type="button" role="menuitem" data-computer-host-detach="" className={MENU_ROW} onClick={() => runHostAction(item, "detach")}>
                       {t("botRemoteHosts.detach")}
                     </button>
                   ) : (
-                    <button type="button" role="menuitem" data-computer-host-attach="" className="rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink hover:bg-raised-hover" onClick={() => runHostAction(item, "attach")}>
+                    <button type="button" role="menuitem" data-computer-host-attach="" className={MENU_ROW} onClick={() => runHostAction(item, "attach")}>
                       {t("botRemoteHosts.attach")}
                     </button>
                   )}

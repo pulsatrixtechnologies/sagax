@@ -6,11 +6,13 @@
 // primary, export, copy link, float) opens on a right click on the mascot or
 // the name, and the profile page holds the same actions. Every section lives
 // under bot-settings/; their bodies and reads are useBotSectionContent, shared
-// with the persona editor. Activity > Computer opens the live desktop
-// window directly (SandboxDesktopModal); other links may still open ComputerPanel.
+// with the persona editor. Activity > Computer opens the live screen
+// window directly (SandboxDesktopModal); every other link to the bot's
+// computer (the store's computerOpen) lands here and opens that same window
+// (#4208: the old computer side panel is gone).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BOT_PANEL_BOUNDS, DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
-import { ArrowLeft, Settings, X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import type { Bot } from "@/state/store";
@@ -27,14 +29,14 @@ import { RoutinesSection } from "./bot-settings/RoutinesSection";
 import { botRoutineRuns } from "@/state/view-slices";
 
 import { showsComputer, visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
-import { ComputerCard } from "./bot-settings/ComputerCard";
+import { ComputerCard, computerWindowRequest } from "./bot-settings/ComputerCard";
+import type { BrowserSignIn } from "./BrowserPanel";
 import { VoiceChatCard } from "./bot-settings/VoiceChatCard";
 import { ActivitySectionBody, CodingWorkSection, useBotCodingPanel } from "./bot-settings/ActivitySection";
 import { BotTaskSection } from "./bot-settings/BotTaskSection";
 import { SuggestionsSection } from "./bot-settings/SuggestionsSection";
 import { BotNameTitleStack } from "./bot-settings/BotNameTitleStack";
 import { PackageProvenance } from "./bot-settings/PackageProvenance";
-import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
@@ -65,7 +67,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 }) {
   const advanced = useAdvancedMode();
   const dispatch = useStoreDispatch();
-  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat, connected: current.connected }), shallowEqual);
+  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, computerWindowView: current.computerWindowView, signInFocus: current.signInFocus, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat, connected: current.connected }), shallowEqual);
   const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
@@ -80,14 +82,26 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // lands on Activity: the store resets the tab then (#2149: kept in the
   // store so the header pill can reopen the panel on the tab it closed).
   const pickedTab: PanelTab = state.botPanelTab?.botId === bot.id ? state.botPanelTab.tab : "activity";
-  // The computer view is the store's computerOpen, so every existing "open
-  // the computer" link (the old Computer tab's included) still lands on it,
-  // pushed over Activity. A bot that works nowhere (Works on: Off) and
-  // Simple have no computer to show: the link lands on Activity.
-  // Off is gone: a saved Off reads as Auto and keeps the card.
+  // Every "open the computer" link is the store's computerOpen: the panel
+  // shows Activity (the store picks it) and its Computer section opens the
+  // screen window (#4208). Off is gone: a saved Off reads as Auto and keeps
+  // the card.
   const computerOff = false;
   const computerShown = showsComputer({ advanced, computerOff });
-  const computerView = computerShown && state.computerOpen;
+  // A sign-in card's Open: the window takes the browser to its page.
+  const [signIn, setSignIn] = useState<BrowserSignIn>();
+  const requestedSignIn = state.signInFocus?.botId === bot.id ? state.signInFocus : undefined;
+  useEffect(() => {
+    if (!requestedSignIn || requestedSignIn.consumed) return;
+    if (requestedSignIn.place === "browser") setSignIn({ url: requestedSignIn.url, site: requestedSignIn.site, nonce: requestedSignIn.requestId });
+    dispatch({ type: "signInFocusConsumed", requestId: requestedSignIn.requestId });
+  }, [dispatch, requestedSignIn]);
+  const windowRequest = computerShown ? computerWindowRequest(state, signIn) : null;
+  // The window closed: the panel stays, on Activity.
+  const closeComputerWindow = useCallback(() => {
+    setSignIn(undefined);
+    dispatch({ type: "toggleSettings", open: true });
+  }, [dispatch]);
   // an organization server's bots act as Perspicax roles: a recent refusal
   // shows as one row in Activity > Permissions
   const rolesOn = Boolean(state.config?.viewer?.role);
@@ -109,8 +123,8 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   }, [codingChatKey, bot.id, dispatch]);
   // the Library holds the bot's files (an achievement teaches it)
   useEffect(() => {
-    if (tab === "library" && !computerView) reportAchievement("files.opened");
-  }, [tab, computerView]);
+    if (tab === "library") reportAchievement("files.opened");
+  }, [tab]);
   const chooseTab = (next: PanelTab) => {
     if (state.computerOpen || !collapsed) dispatch({ type: "toggleSettings", open: true });
     dispatch({ type: "pickBotPanelTab", botId: bot.id, tab: next });
@@ -240,7 +254,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
       </TabIndicatorGroup>
     </div>
   );
-  const showCompact = compact && !computerView;
+  const showCompact = compact;
 
   return (
     <>
@@ -259,19 +273,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
         {/* Top bar: only the controls, the way the reference design's panel opens. On
             Windows it drops below the caption buttons (padClass). */}
         <div {...dragProps} className={cn("content-topbar relative flex h-12 shrink-0 items-center justify-between px-3", padClass)}>
-          {computerView ? (
-            <button
-              type="button"
-              data-bot-panel-back=""
-              onClick={() => dispatch({ type: "toggleSettings", open: true })}
-              aria-label={t("botPanel.computerCard.back")}
-              title={t("botPanel.computerCard.back")}
-              className={CIRCLE_BUTTON}
-            >
-              <ArrowLeft size={18} strokeWidth={1.75} />
-            </button>
-          ) : (
-            <button
+          <button
               type="button"
               data-bot-panel-gear=""
               // a Settings section, so the bot's profile page opens on its Settings tab (#2126)
@@ -282,7 +284,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
             >
               <Settings size={18} strokeWidth={1.75} />
             </button>
-          )}
           {showCompact && <div className="pointer-events-none absolute inset-x-14 flex justify-center [&>*]:pointer-events-auto">{tabList(true)}</div>}
           <div className="flex items-center gap-2">
             <BotActionsMenu
@@ -316,12 +317,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
           {viewerBotsReadOnly(state.config) && (
             <p role="note" data-bots-read-only className="mx-4 mb-2 rounded-lg bg-raised/60 px-3 py-2 text-center text-[12.5px] leading-snug text-ink-secondary">{botsReadOnlyText(state.config)}</p>
           )}
-          {computerView ? (
-            <div data-bot-panel-computer="" className="px-4 pt-2">
-              <ComputerPanel bot={bot} onOpenVmWorkspace={onOpenVmWorkspace} embedded />
-            </div>
-          ) : (
-            <>
+          <>
               {/* Who this is: it scrolls away, the tabs stay. -mt-1 takes the
                   card's 12px jump room to the reference's 8px under the top
                   bar (#4151); a jump (8% of 64px) still fits. */}
@@ -378,6 +374,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                       bot={bot}
                       onPatch={derived.patch}
                       readOnly={!canEditBotField(state.config, bot, "computer")}
+                      windowRequest={windowRequest}
+                      onWindowClose={closeComputerWindow}
+                      onOpenVmWorkspace={onOpenVmWorkspace}
                     />
                   )}
                   <VoiceChatCard bot={bot} onPatch={derived.patch} readOnly={!canEditBotField(state.config, bot, "voice")} />
@@ -407,8 +406,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                   <CodingWorkSection panel={codingPanel} />
                 </div>
               )}
-            </>
-          )}
+          </>
 
         </div>
       </aside>

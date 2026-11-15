@@ -17164,7 +17164,6 @@
       "botPanel.computerCard.title": "6d3ac489128eb83d9f039c74d0c07ad2352459017cf53e31ba6bbbd286af9df6",
       "botPanel.computerCard.awake": "9123b5f4812aa52e79126fac805d933eeb98b609491fa16ef391d1544b506b71",
       "botPanel.computerCard.working": "a92f0449a9f7235bf69dc2e8ff7070bfae3f00ec8f8f26e5457a9beac53466ac",
-      "botPanel.computerCard.back": "02b5e3c897d5eabd71ada6e6c9c9c0538e19ff39329bcb6dfd40a49eb0e28503",
       "botPanel.voiceChat.title": "9bdbc177e89d82e2faf7a8a3624d0e0db95781036cafde1e92e4d74036405052",
       "botPanel.coding.ignore": "fce77c34d3fec98733dd4c29f1592a92e60e93e43f0bfe8690c91160ae7efebe",
       "botPanel.coding.ignoreAria": "b33e624a8ade1695dce60bedc5e3168fe6dc338aaacb49de72fb896785837b12",
@@ -18892,7 +18891,10 @@
       "settings.nav.installation": "c3fc54aa5390dc2c333d4bb596a339d552ad787337c1fdaac3957ca5a7facf50",
       "settings.section.servers": "68d7beb6df59ee85bc11a6679c29ac3e6aab738833c6871c6df29ae0246d5d98",
       "settings.intro.servers": "03fe23acdebe18846bb5b50288f65c6553da9a522cf81ef8b6a02368a5306775",
-      "botPanel.suggestions.setup.identity.subtitleAlone": "1b610f54cb35374145a26c7d723f80186617d3d179be682fd9b78af6d7a639c3"
+      "botPanel.suggestions.setup.identity.subtitleAlone": "1b610f54cb35374145a26c7d723f80186617d3d179be682fd9b78af6d7a639c3",
+      "teach.stopAndSave": "246a57eda2153a4c7a42be252f38227bce13365430194bb2788d4894bb16a9dd",
+      "teach.discardRecording": "ae9e10026615c184de0c15ad61677203e5f8a19f63726f2b9c306e00bc694140",
+      "botPanel.computerCard.details": "b21a47e9a93040d2f1f5ce9329ba40998bf54e6a7bf01230558d437613309b28"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

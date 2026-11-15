@@ -13,6 +13,7 @@ import { Check, ChevronRight, Menu, Search, SlidersHorizontal, type LucideIcon }
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuDivider } from "./menu-look";
 
 /** A header control: a 36px square outlined icon button (Team map standard, 2026-11-06). A labelled control adds w-auto, px-3 and gap-1.5. */
 export const PAGE_HEADER_BUTTON = "flex size-9 shrink-0 cursor-pointer list-none items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary transition-colors hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden";
@@ -20,8 +21,10 @@ export const PAGE_HEADER_BUTTON = "flex size-9 shrink-0 cursor-pointer list-none
 export const PAGE_ACTION_BUTTON = "flex h-9 shrink-0 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 text-[12px] font-medium text-ink transition-colors hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-40 [&::-webkit-details-marker]:hidden";
 /** A popover under a header control (Filters, ☰, New). */
 export const PAGE_POPOVER = "absolute right-0 top-full z-40 mt-1.5 flex flex-col rounded-xl border-[0.5px] border-border popover-surface bg-elevated text-[13px] leading-[18px]";
-/** An entry of the ☰ menu. */
-export const PAGE_MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover";
+/** The ☰ menu under a header control: the menu family's surface (#4183). */
+export const PAGE_MENU = cn(MENU_SURFACE, "absolute right-0 top-full z-40 mt-1.5");
+/** An entry of the ☰ menu: the menu family's row. */
+export const PAGE_MENU_ITEM = MENU_ROW;
 /** A field's label inside Filters. */
 export const PAGE_FIELD_LABEL = "mb-1 block text-[12px] font-medium text-ink-secondary";
 /** A select inside Filters. */
@@ -244,7 +247,7 @@ export function PageMenu({ name, menuRef, label, title, badge, children }: {
         <Menu size={16} />
         {badge ? <span aria-hidden="true" className="absolute -right-1 -top-1 min-w-[16px] rounded-full border border-app bg-raised px-1 text-center text-[11px] leading-[14px] text-ink-secondary">{badge}</span> : null}
       </summary>
-      <div role="menu" className={cn(PAGE_POPOVER, "w-[240px] min-w-[200px] gap-0.5 p-1.5")}>
+      <div role="menu" className={cn(PAGE_MENU, MENU_FIT_ROW)}>
         {children}
       </div>
     </details>
@@ -262,14 +265,14 @@ export function PageMenuItem({ icon: Icon, children, current, trailing, onClick,
 } & Omit<HTMLAttributes<HTMLButtonElement>, "onClick"> & DataAttributes) {
   return (
     <button {...rest} type="button" role="menuitem" aria-current={current ? "page" : undefined} onClick={onClick} className={PAGE_MENU_ITEM}>
-      <Icon size={16} className="text-ink" />{children}
+      <Icon size={16} />{children}
       {trailing ?? (current && <Check size={14} className="ml-auto text-ink-secondary" aria-hidden="true" />)}
     </button>
   );
 }
 
 export function PageMenuSeparator() {
-  return <div role="separator" className="mx-1 my-1 h-px bg-hairline/50" />;
+  return <MenuDivider />;
 }
 
 /** The body under the header: the frame's card, a scroller and the centred column. */

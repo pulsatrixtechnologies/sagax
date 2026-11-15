@@ -16,6 +16,7 @@ import { useMenuMotion } from "./MenuMotion";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { trackInputModality } from "@/lib/input-modality";
 import { GLASS_POPUP_CHROME_TOP } from "@/lib/glass-popup";
+import { MENU_FIT, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
 
 export interface SidebarMenuItem {
   key: string;
@@ -234,7 +235,7 @@ function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEn
             entry.rename?.edit?.onCancel();
           }}
         >
-          {entry.icon && <span data-menu-glyph="" className="menu-glyph">{entry.icon}</span>}
+          {entry.icon && <MenuGlyph>{entry.icon}</MenuGlyph>}
           <input
             autoFocus
             value={entry.rename.edit.value}
@@ -259,13 +260,12 @@ function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEn
             onClose();
           }}
           className={cn(
-            "flex w-full items-center gap-1.5 rounded-[10px] px-2 text-left disabled:opacity-60",
-            entry.subtitle ? "min-h-8 py-1" : "h-8",
+            menuRow(entry.active ? "active" : "idle"),
+            entry.subtitle && "h-auto min-h-8 py-1",
             entry.rename && "pr-14",
-            entry.active ? "bg-menu-active text-ink" : "text-ink hover:bg-menu-hover",
           )}
         >
-          {entry.icon && <span data-menu-glyph="" className="menu-glyph">{entry.icon}</span>}
+          {entry.icon && <MenuGlyph>{entry.icon}</MenuGlyph>}
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate">{entry.label}</span>
             {entry.subtitle && <span className="truncate text-[11.5px] leading-[14px] text-ink-secondary">{entry.subtitle}</span>}
@@ -295,11 +295,6 @@ function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSubmenuEn
   );
 }
 
-/** The menu's hairline between groups: the reference's 0.5px line, 8px in
- * from the sides and 4px above and below (#4157). */
-function MenuDivider() {
-  return <div aria-hidden="true" className="menu-divider mx-2 my-1 h-[0.5px] shrink-0" />;
-}
 
 /** Opening is quick enough to feel like a hover, closing is slow enough to
  * forgive a diagonal path from the trigger to the menu. */
@@ -504,7 +499,8 @@ export function SidebarPopoverMenu({
             // (its typeface with 15px chat prose, #4093, #4157): 16px
             // corners, 6px padding, 32px rows 2px apart, 14/20 type, 10px
             // row corners; its fill, hairline and shadow are `.menu-surface`
-            "absolute z-40 flex min-w-[200px] flex-col gap-0.5 rounded-2xl popover-surface menu-surface p-1.5 text-[14px] leading-5",
+            MENU_SURFACE,
+            "absolute z-40 min-w-[200px]",
             placement === "below" ? "top-full right-0 mt-1 w-72 max-w-[calc(100vw-2rem)]" : cn("bottom-full mb-1", menuClassName),
             motion.className,
           )}
@@ -543,12 +539,11 @@ export function SidebarPopoverMenu({
                   if (!item.keepOpen) close();
                 }}
                 className={cn(
-                  "flex h-8 w-full items-center gap-1.5 rounded-[10px] px-2 text-left text-[14px] leading-5 disabled:opacity-60",
+                  menuRow(item.active || (item.submenu && sub === item.key) ? "active" : "idle"),
                   (item.subtitle || item.note) && "h-auto py-1.5",
-                  item.active || (item.submenu && sub === item.key) ? "bg-menu-active text-ink" : "text-ink hover:bg-menu-hover",
                 )}
               >
-                {item.icon && <span data-menu-glyph="" className="menu-glyph">{item.icon}</span>}
+                {item.icon && <MenuGlyph>{item.icon}</MenuGlyph>}
                 {item.subtitle || item.note ? (
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate">{item.label}</span>
@@ -585,7 +580,7 @@ export function SidebarPopoverMenu({
                   }}
                   data-sidebar
                   style={{ minWidth: item.submenuWidth ?? 180, ...subAt }}
-                  className="fixed z-[70] flex w-max max-w-[min(400px,calc(100vw-24px))] flex-col gap-0.5 overflow-hidden rounded-2xl popover-surface menu-surface p-1.5 text-[14px] leading-5"
+                  className={cn(MENU_SURFACE, MENU_FIT, "fixed z-[70] overflow-hidden")}
                 >
                   <div
                     data-submenu-rows=""

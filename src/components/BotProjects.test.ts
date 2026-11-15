@@ -97,7 +97,10 @@ describe("folder controls", () => {
       menu: { left: 990, top: 790 }, onMenuChange: vi.fn(), onEdit: vi.fn(), onMove: vi.fn(), onMarkRead: vi.fn(),
     }));
     expect(markup).toContain('role="menu" aria-label="Actions for Archived folder"');
-    expect(markup).toContain("left:772px;top:620px");
+    // #4183: the menu opens at the asked point and keeps itself in the
+    // window with its measured size after layout (useMenuInWindow, tested in
+    // menu-look.test.ts), no longer with a guessed 228px width
+    expect(markup).toContain("left:990px;top:790px");
     const readButton = markup.match(/<button[^>]*>[^]*?Mark folder as read<\/button>/)?.[0]?.split("<button").at(-1);
     expect(readButton).toBeDefined();
     expect(readButton?.includes('disabled=""')).toBe(disabled);

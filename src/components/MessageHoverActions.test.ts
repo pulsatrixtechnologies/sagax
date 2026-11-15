@@ -138,8 +138,10 @@ describe("MessageHoverActions: the … menu", () => {
     await render();
     await act(async () => q("[data-more-button]")!.click());
     const menu = q("[data-message-menu]")!;
-    expect(menu.className).toContain("rounded-[12px]");
-    expect(menu.className).toContain("min-w-[200px]");
+    // the menu family's surface and width since #4183 (menu-look.tsx)
+    expect(menu.className).toContain("menu-surface");
+    expect(menu.className).toContain("rounded-2xl");
+    expect(menu.className).toContain("min-w-[min(228px,calc(100vw-16px))]");
     expect([...menu.querySelectorAll("[data-quick-reaction]")].map((cell) => (cell as HTMLElement).dataset.quickReaction)).toEqual(["👍", "👎", "❤️", "😂", "🎉"]);
     const rows = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([data-more-reactions])')].filter((row) => !row.classList.contains("hidden"));
     expect(rows.map((row) => row.textContent)).toEqual(["Reply", "Copy", "Copy request ID", "Edit message"]);

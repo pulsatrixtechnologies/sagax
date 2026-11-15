@@ -17,6 +17,7 @@ import { Switch } from "../SettingsPrimitives";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
+import { MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
 
 export interface DetailTool {
   name: string;
@@ -374,7 +375,7 @@ export function PluginActionsMenu({ name, busy, actions, updateAvailable }: {
         {updateAvailable && <span data-plugin-update-dot className="absolute right-1 top-1 size-2 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-9 z-10 min-w-[220px] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1">
+        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-10 min-w-[220px]")}>
           {shown.map((action) => (
             <button
               key={action.id}
@@ -386,12 +387,9 @@ export function PluginActionsMenu({ name, busy, actions, updateAvailable }: {
                 setOpen(false);
                 action.onSelect();
               }}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[12.5px] disabled:opacity-40",
-                action.danger ? "text-danger hover:bg-danger/10" : "text-ink hover:bg-hover",
-              )}
+              className={menuRow(action.danger ? "danger" : "idle")}
             >
-              {action.icon} {action.label}
+              <MenuGlyph danger={action.danger}>{action.icon}</MenuGlyph>{action.label}
             </button>
           ))}
         </div>

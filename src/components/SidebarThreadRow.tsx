@@ -278,7 +278,8 @@ export const SidebarThreadRow = memo(function SidebarThreadRow({ task, ownerId, 
   const closed = Boolean(task.closedBy) && !status;
   const archived = isArchived(task);
   const snoozed = isSnoozed(task);
-  const openMenu = (x: number, y: number) => setMenu({ left: Math.max(8, Math.min(x, window.innerWidth - 228)), top: Math.max(8, Math.min(y, window.innerHeight - 200)) });
+  // ThreadMenu keeps itself in the window with its measured size.
+  const openMenu = (x: number, y: number) => setMenu({ left: x, top: y });
   const canDrag = Boolean(onMove) && !renaming;
   const startRename = () => { finishing.current = false; setDraft(task.title); setRenaming(true); setMenu(null); };
   const finishRename = (save: boolean) => {

@@ -34,7 +34,7 @@ describe("resize handles", () => {
     expect(rule(".app-resize-handle:focus-visible")).toContain("outline: none");
   });
 
-  it.each(["Sidebar.tsx-parts/SidebarResizeHandle.tsx", "DockedPanelResize.tsx", "ComputerPanel.tsx-parts/PanelChrome.tsx"])(
+  it.each(["Sidebar.tsx-parts/SidebarResizeHandle.tsx", "DockedPanelResize.tsx"])(
     "%s uses the shared handle, not a bright bar of its own",
     (file) => {
       if (file.startsWith("Sidebar.tsx-parts/")) {

@@ -204,9 +204,16 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
           [action.botId]: { held: action.held, helpReason: action.helpReason, help: action.help ?? null },
         },
       };
-    case "openSignIn":
+    case "openSignIn": {
+      // A sign-in card's Open opens the bot's computer where it waits: the
+      // Computer section's screen window, on the browser for a browser
+      // sign-in (#4208). The window takes the request (signInFocus).
+      const panelBot = state.panelOwner?.botId ?? state.selectedId;
+      const opened = panelBot === action.botId
+        ? reduce(state, { type: "toggleComputer", open: true, view: action.place === "browser" ? "browser" : "screen" })
+        : state;
       return {
-        ...state,
+        ...opened,
         signInFocus: {
           botId: action.botId,
           messageId: action.messageId,
@@ -217,6 +224,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
           consumed: false,
         },
       };
+    }
     case "signInFocusConsumed":
       return state.signInFocus?.requestId === action.requestId
         ? { ...state, signInFocus: { ...state.signInFocus, consumed: true } }

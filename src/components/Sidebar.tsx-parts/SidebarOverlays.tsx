@@ -1,7 +1,7 @@
 import { editSectionParents, removeFromSectionTree } from "@/lib/section-tree";
 import type { SidebarState } from "./types";
 import { createPortal } from "react-dom";
-import type { ReactNode, RefObject } from "react";
+import { useRef, type ReactNode, type RefObject } from "react";
 import { Archive, Trash2 } from "lucide-react";
 import { api, type Bot, type Group } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -27,6 +27,7 @@ import { viewerActorId } from "@/lib/viewer";
 import { SectionPicker } from "./SectionPicker";
 import { TeamMenuItems } from "./TeamMenuItems";
 import { roomDeleteCopy } from "./helpers";
+import { MENU_SURFACE, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
 
 export function SidebarOverlays(props: {
   state: SidebarState;
@@ -61,6 +62,11 @@ export function SidebarOverlays(props: {
     renameTeam, setRenameTeam, shareTeam, setShareTeam, teamSettings, setTeamSettings, renamedTeam,
   } = sections;
   const teamSettingsAllowed = useOwnerOrAdmin();
+  // both menus keep themselves in the window with their measured size
+  const orgMenuRef = useRef<HTMLDivElement>(null);
+  useMenuInWindow(orgMenuRef, orgMenu && { left: orgMenu.x, top: orgMenu.y });
+  const teamMenuRef = useRef<HTMLDivElement>(null);
+  useMenuInWindow(teamMenuRef, teamMotion.value && { left: teamMotion.value.x, top: teamMotion.value.y });
   const {
     selectedBotIds, batchEdit, setBatchEdit, batchSectionPicker, setBatchSectionPicker,
     batchArchiveConfirm, setBatchArchiveConfirm, clearSelection, archivableByViewer,
@@ -85,8 +91,8 @@ export function SidebarOverlays(props: {
       />}
       {renameTeam && <TeamDialog section={renameTeam} rename onRenamed={renamedTeam} onClose={() => setRenameTeam(null)} />}
       {orgMenu && createPortal(<div className="fixed inset-0 z-40" onMouseDown={closeOrgMenu} onContextMenu={(event) => { event.preventDefault(); closeOrgMenu(); }}>
-        <div role="menu" aria-label={orgMenu.name ?? t("teamLibrary.general")} style={{ left: orgMenu.x, top: orgMenu.y }} data-org-section-menu
-          className="absolute w-[220px] min-w-[200px] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px] text-ink"
+        <div ref={orgMenuRef} role="menu" aria-label={orgMenu.name ?? t("teamLibrary.general")} style={{ left: orgMenu.x, top: orgMenu.y }} data-org-section-menu
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute")}
           onMouseDown={event => event.stopPropagation()} onKeyDown={event => {
             if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeOrgMenu(); return; }
             navigateThreadMenu(event);
@@ -113,8 +119,8 @@ export function SidebarOverlays(props: {
         </div>
       </div>, document.body)}
       {teamMotion.shown && teamMotion.value && createPortal(<div className={cn("fixed inset-0 z-40", teamMotion.closing && "pointer-events-none")} onMouseDown={closeTeamMenu}>
-        <div role="menu" aria-label={teamMotion.value.name} style={{ left: teamMotion.value.x, top: teamMotion.value.y }}
-          className={cn("absolute w-[220px] min-w-[200px] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px] text-ink", teamMotion.className)} {...teamMotion.exitProps}
+        <div ref={teamMenuRef} role="menu" aria-label={teamMotion.value.name} style={{ left: teamMotion.value.x, top: teamMotion.value.y }}
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute", teamMotion.className)} {...teamMotion.exitProps}
           onMouseDown={event => event.stopPropagation()} onKeyDown={event => {
             if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeTeamMenu(); return; }
             navigateThreadMenu(event);

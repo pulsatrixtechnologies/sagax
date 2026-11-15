@@ -52,6 +52,7 @@ import { AttachmentPreviewDialog, canonicalDownloadFilename, startMessageFileDow
 import { HoverCard, type AnchorProps } from "../LinkHoverCard";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
 import { SkeletonRows } from "@/components/Skeleton";
+import { MENU_FIT, MENU_ROW, MENU_SURFACE, MenuGlyph } from "@/components/menu-look";
 
 export const KIND_ICON: Record<FileKind, LucideIcon> = {
   image: ImageIcon,
@@ -589,7 +590,7 @@ export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, cla
         {icon}
       </button>
       {open && (
-        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={menuLabel} align="end" className={cn("flex flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg popover-surface", wide ? "w-[220px]" : "w-[200px]")}>
+        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={menuLabel} align="end" className={cn(MENU_SURFACE, MENU_FIT, wide ? "min-w-[220px]" : "min-w-[200px]")}>
           {children(close)}
         </AnchoredPopover>
       )}
@@ -599,8 +600,8 @@ export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, cla
 
 export function MenuItem({ icon, label, ariaLabel, title, disabled, checked, onClick, ...data }: { icon: React.ReactNode; label: string; ariaLabel?: string; title?: string; disabled?: boolean; /** When set, the row is a checkbox (page always-on-top, #2046). */ checked?: boolean; onClick: () => void } & Record<`data-${string}`, string>) {
   return (
-    <button type="button" role={checked === undefined ? "menuitem" : "menuitemcheckbox"} aria-checked={checked} disabled={disabled} aria-label={ariaLabel} title={title} onClick={onClick} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40" {...data}>
-      <span className="shrink-0 text-ink-secondary">{icon}</span>
+    <button type="button" role={checked === undefined ? "menuitem" : "menuitemcheckbox"} aria-checked={checked} disabled={disabled} aria-label={ariaLabel} title={title} onClick={onClick} className={MENU_ROW} {...data}>
+      <MenuGlyph>{icon}</MenuGlyph>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {checked !== undefined && <Check size={13} aria-hidden="true" className={cn("shrink-0", checked ? "text-ink" : "invisible")} />}
     </button>
@@ -618,7 +619,7 @@ function MenuGroup({ label, children }: { label: string; children: React.ReactNo
 
 function MenuRadio({ checked, onClick, children, ...data }: { checked: boolean; onClick: () => void; children: React.ReactNode } & Record<`data-${string}`, string>) {
   return (
-    <button type="button" role="menuitemradio" aria-checked={checked} onClick={onClick} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover" {...data}>
+    <button type="button" role="menuitemradio" aria-checked={checked} onClick={onClick} className={MENU_ROW} {...data}>
       <Check size={13} aria-hidden="true" className={cn("shrink-0", checked ? "text-ink" : "invisible")} />
       {children}
     </button>

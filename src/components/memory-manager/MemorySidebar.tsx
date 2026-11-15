@@ -30,6 +30,7 @@ import { RightRailPanel } from "@/components/RightRail";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { SECTION_LABEL, Swatch } from "./memory-ui";
+import { MENU_SURFACE, MenuDivider, MenuGlyph, menuRow, MENU_FIT_ROW } from "@/components/menu-look";
 
 export type MemoryRowActionKind = "new" | "newFolder" | "rename" | "delete";
 
@@ -169,11 +170,11 @@ function FolderMenu({ name, menu, open, onOpenChange }: { name: string; menu: Me
         <MoreHorizontal size={13} aria-hidden="true" />
       </button>
       {open && (
-        <div role="menu" aria-label={name} className="absolute right-0 top-full z-40 mt-1 w-[220px] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-left popover-surface" data-memory-folder-menu="">
+        <div role="menu" aria-label={name} className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-40 mt-1")} data-memory-folder-menu="">
           {menu.lines.map((line, index) => (
             <p key={index} className="px-2 py-1 text-[12px] leading-4 text-ink-secondary" data-memory-folder-menu-line="">{line}</p>
           ))}
-          {menu.lines.length > 0 && menu.items.length > 0 && <div className="my-1 border-t border-hairline-weak" />}
+          {menu.lines.length > 0 && menu.items.length > 0 && <MenuDivider />}
           {menu.items.map((item) => (
             <button
               key={item.id}
@@ -183,12 +184,13 @@ function FolderMenu({ name, menu, open, onOpenChange }: { name: string; menu: Me
               title={item.disabledReason}
               onClick={(event) => { event.stopPropagation(); onOpenChange(false); item.onSelect(); }}
               className={cn(
-                "flex w-full min-w-0 flex-col items-start rounded-md px-2 py-1.5 text-left text-[13px] disabled:cursor-not-allowed",
-                item.disabledReason ? "text-ink-tertiary" : item.danger ? "text-danger hover:bg-danger/10" : "text-ink hover:bg-hover",
+                menuRow(item.danger ? "danger" : "idle"),
+                "h-auto flex-col items-start py-1.5 disabled:cursor-not-allowed",
+                item.disabledReason && "text-ink-tertiary",
               )}
               data-memory-folder-menu-item={item.id}
             >
-              <span className="flex items-center gap-2">{item.id === "delete" && <Trash2 size={13} aria-hidden="true" />}{item.label}</span>
+              <span className="flex items-center gap-1.5">{item.id === "delete" && <MenuGlyph danger><Trash2 /></MenuGlyph>}{item.label}</span>
               {item.disabledReason && <span className="mt-0.5 text-[11.5px] leading-4 text-ink-tertiary" data-memory-folder-menu-reason="">{item.disabledReason}</span>}
             </button>
           ))}

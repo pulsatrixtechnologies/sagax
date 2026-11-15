@@ -10,7 +10,7 @@
 // the history (src/lib/bot-history-reset.ts: a new conversation, the open
 // ones archived; memory, files and routines kept; routine runs,
 // confidential threads, hidden client threads and bot-to-bot threads stay).
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Archive, Bug, Check, Copy, Database, Download, Link2, MoreHorizontal, Pencil, PictureInPicture2, RotateCcw, Star, UserRoundPen } from "lucide-react";
 
@@ -38,6 +38,7 @@ import { useHeldMenuMotion } from "../MenuMotion";
 import { navigateThreadMenu } from "../BotProjects";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { readableError } from "@/lib/plain-error";
+import { MENU_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
 
 /** Where the menu opens: under the "..." button, or at a right click. */
 export interface BotActionsMenuAnchor {
@@ -89,14 +90,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
 
   // Kept inside the window, measured after every render (labels change
   // with the locale and the bot's state).
-  useLayoutEffect(() => {
-    const element = menuRef.current;
-    if (!element || !shown) return;
-    const { width, height } = element.getBoundingClientRect();
-    const left = shown.alignRight ? shown.x - width : shown.x;
-    element.style.top = `${Math.max(8, Math.min(shown.y, window.innerHeight - height - 8))}px`;
-    element.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
-  });
+  useMenuInWindow(menuRef, shown && { left: shown.x, top: shown.y, right: shown.alignRight });
 
   useEffect(() => {
     if (!anchor) return;
@@ -192,12 +186,9 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
         onClick();
         if (!opts?.keepOpen) close();
       }}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink",
-        opts?.disabled ? "cursor-default opacity-40" : "hover:bg-hover",
-      )}
+      className={cn(MENU_ROW, opts?.hint && "h-auto py-1.5")}
     >
-      <span className="shrink-0 text-ink [&>svg]:size-4">{icon}</span>
+      <MenuGlyph>{icon}</MenuGlyph>
       {opts?.hint ? (
         <span className="flex min-w-0 flex-col">
           <span>{label}</span>
@@ -206,7 +197,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
       ) : <span className="min-w-0 flex-1 truncate">{label}</span>}
     </button>
   );
-  const divider = (key: string) => <div key={key} className="mx-2 my-1 h-[0.5px] bg-border" aria-hidden="true" />;
+  const divider = (key: string) => <MenuDivider key={key} />;
   const heading = (key: string, label: string) => (
     <div key={key} className="px-2 py-1 text-[12px] leading-4 text-ink-secondary">{label}</div>
   );
@@ -266,7 +257,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
           aria-label={t("sidebar.bot.actions", { name: bot.name })}
           onKeyDown={navigateThreadMenu}
           style={{ top: shown.y, left: shown.x }}
-          className={cn("fixed z-[60] flex max-h-[calc(100dvh-16px)] w-[248px] min-w-[200px] max-w-[calc(100vw-16px)] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)}
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-[60] max-h-[calc(100dvh-16px)] overflow-y-auto overscroll-contain", motion.className)}
           {...motion.exitProps}
         >
           {entries.filter(Boolean)}

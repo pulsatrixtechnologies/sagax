@@ -20,6 +20,7 @@ import type { Crumb } from "../Breadcrumb";
 import { PluginPageHeader } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
 import { copyText } from "@/lib/copy-text";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { enginesLine } from "@/lib/capabilities";
@@ -256,12 +257,12 @@ function PublishMenu({ text, fileName, disabled }: { text: () => string; fileNam
         <Link2 size={14} aria-hidden="true" /> {copied ? t("connectApps.skill.copied") : t("connectApps.skill.publish")} <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-9 z-10 min-w-[220px] rounded-xl border border-border bg-raised p-1 shadow-lg">
-          <button type="button" role="menuitem" data-skill-publish-copy className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setOpen(false); void copyText(text()).then((result) => setCopied(result === "copied")); }}>
-            <Copy size={14} /> {t("connectApps.skill.copyMd")}
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-9 z-10")}>
+          <button type="button" role="menuitem" data-skill-publish-copy className={MENU_ROW} onClick={() => { setOpen(false); void copyText(text()).then((result) => setCopied(result === "copied")); }}>
+            <Copy aria-hidden="true" />{t("connectApps.skill.copyMd")}
           </button>
-          <button type="button" role="menuitem" data-skill-publish-file className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setOpen(false); download(); }}>
-            <Download size={14} /> {t("connectApps.skill.saveMd")}
+          <button type="button" role="menuitem" data-skill-publish-file className={MENU_ROW} onClick={() => { setOpen(false); download(); }}>
+            <Download aria-hidden="true" />{t("connectApps.skill.saveMd")}
           </button>
         </div>
       )}

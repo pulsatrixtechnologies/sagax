@@ -7,7 +7,7 @@ import type { EffortLevel } from "../../shared/wire";
 
 // The picker reads the engine catalog off the store, and the store module
 // touches window/localStorage at import time — the same shape
-// ComputerPanel.browser.test.ts uses to render a store-backed component
+// the computer tests used to render a store-backed component
 // under vitest's "node" environment.
 const fixture = vi.hoisted(() => {
   vi.stubGlobal("window", {});

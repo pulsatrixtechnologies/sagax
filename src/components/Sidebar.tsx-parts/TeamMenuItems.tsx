@@ -1,6 +1,7 @@
 import { Pencil, Share2, SlidersHorizontal, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { MENU_ROW } from "../menu-look";
 
 export function TeamMenuItems({ onAddBots, onRename, onShare, onDelete, onSetForAll }: {
   onAddBots: () => void;
@@ -10,7 +11,7 @@ export function TeamMenuItems({ onAddBots, onRename, onShare, onDelete, onSetFor
   /** Owner/admin only: one approval level or model for every bot in the team. */
   onSetForAll?: () => void;
 }) {
-  const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover";
+  const item = MENU_ROW;
   return (
     <>
       <button type="button" role="menuitem" autoFocus className={item} onClick={onAddBots}><Users size={14} />{t("team.addBots")}</button>

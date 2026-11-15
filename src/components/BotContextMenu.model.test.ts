@@ -111,7 +111,8 @@ describe("the sidebar's bot menu", () => {
 
   it("sets the groups apart: four separators, Delete last", () => {
     const { html } = render();
-    expect(html.match(/h-\[0\.5px\] bg-border/g)).toHaveLength(4);
+    // #4183: the menu family's divider (MenuDivider, menu-look.tsx)
+    expect(html.match(/class="menu-divider /g)).toHaveLength(4);
     expect(items(html).at(-1)).toBe("delete");
   });
 

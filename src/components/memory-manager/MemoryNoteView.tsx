@@ -18,6 +18,7 @@ import { ChatMarkdown } from "../ChatMarkdown";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import { MemoryJsonTree } from "./MemoryJsonTree";
 import { AuthorBadge, FIELD, fullDate, GHOST_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON, relLabel, SECTION_LABEL, Swatch, TagChip } from "./memory-ui";
+import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider, MENU_FIT_ROW } from "@/components/menu-look";
 
 /** [[Title]] and [[Title|alias]] read as their words (LINKS and BACKLINKS list the notes). */
 function plainWikiLinks(text: string): string {
@@ -185,19 +186,19 @@ export function MemoryNoteView({
                   <MoreHorizontal size={16} aria-hidden="true" />{t("memoryManager.note.more")}
                 </button>
                 {moreOpen && (
-                  <div role="menu" className="absolute right-0 top-full z-30 mt-2 flex w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 popover-surface">
-                    <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setMoreOpen(false); onPin(); }} data-memory-note-pin="">
+                  <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-30 mt-2")}>
+                    <button type="button" role="menuitem" className={MENU_ROW} onClick={() => { setMoreOpen(false); onPin(); }} data-memory-note-pin="">
                       {pinned ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />}{pinned ? t("memoryManager.unpin") : t("memoryManager.pin")}
                     </button>
                     {onMove && (
-                      <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setMoreOpen(false); onMove(); }} data-memory-note-move="">
+                      <button type="button" role="menuitem" className={MENU_ROW} onClick={() => { setMoreOpen(false); onMove(); }} data-memory-note-move="">
                         <FolderInput size={14} aria-hidden="true" />{t("memoryManager.move")}
                       </button>
                     )}
                     {onDelete && (
                       <>
-                        <div role="separator" className="mx-1 my-1 h-px bg-hairline/50" />
-                        <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-danger hover:bg-hover" onClick={() => { setMoreOpen(false); onDelete(); }} data-memory-note-delete="">
+                        <MenuDivider />
+                        <button type="button" role="menuitem" className={MENU_ROW_DANGER} onClick={() => { setMoreOpen(false); onDelete(); }} data-memory-note-delete="">
                           <Trash2 size={14} aria-hidden="true" />{t("memoryManager.delete")}
                         </button>
                       </>

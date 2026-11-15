@@ -7,6 +7,7 @@ import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
+import { MENU_SURFACE, MenuGlyph, menuRow, MENU_FIT_ROW } from "@/components/menu-look";
 
 export type ComputerMoreItem = {
   id: string;
@@ -55,7 +56,7 @@ export function ComputerMoreMenu({ items, defaultOpen = false }: { items: Comput
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={t("computer.more")} side="top" align="end" className="flex w-[230px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg popover-surface">
+        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={t("computer.more")} side="top" align="end" className={cn(MENU_SURFACE, MENU_FIT_ROW, "")}>
           {items.map((item) => (
             <button
               key={item.id}
@@ -65,12 +66,9 @@ export function ComputerMoreMenu({ items, defaultOpen = false }: { items: Comput
               disabled={item.disabled}
               title={item.title}
               onClick={() => { setOpen(false); item.onSelect(); }}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40",
-                item.danger ? "text-danger" : "text-ink",
-              )}
+              className={menuRow(item.danger ? "danger" : "idle")}
             >
-              <span className="shrink-0">{item.icon}</span>
+              <MenuGlyph danger={item.danger}>{item.icon}</MenuGlyph>
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
             </button>
           ))}

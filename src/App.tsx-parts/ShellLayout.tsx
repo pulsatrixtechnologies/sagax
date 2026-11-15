@@ -211,9 +211,9 @@ export function ShellLayout(shell: ShellNavigation) {
           (Computer panel, then the usage chip): every re-render mounts a
           fresh settings panel and never removes the previous one, so the
           panels pile up and Close stops working. */}
-      {/* One tabbed bot panel (Details, Routines, Files, Computer, Advanced) on the
-          desktop; its Computer tab is the store's computer view, so both
-          flags render the same panel under one key. */}
+      {/* One bot panel on the desktop; the store's computer flag opens it on
+          Activity, whose Computer section opens the screen window (#4208),
+          so both flags render the same panel under one key. */}
       {botPanelOpen && panelBotId && (
         <BotSurface key={`panel:${panelBotId}`} id={panelBotId}>{(current) => <BotSettingsDialog bot={current} onOpenVmWorkspace={openLocalVmWorkspace} />}</BotSurface>
       )}

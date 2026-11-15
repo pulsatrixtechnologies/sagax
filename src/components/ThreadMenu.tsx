@@ -5,7 +5,7 @@
 // Open beside | Rename, Regenerate title, Pin, Move to folder › | Archive, Snooze › |
 // Copy link, Create a Team Bot, Remove link | Refresh permissions | Delete in red. Only Snooze
 // and Move to folder open a page, one level down.
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Archive, ArchiveRestore, BellOff, Check, ChevronLeft, ChevronRight, Clock, FolderInput, Link2, Link2Off, Loader2, Lock, PanelRight, Pencil, Pin, PinOff, RefreshCw, Trash2, UsersRound } from "lucide-react";
 import type { BotProject, Task } from "@/state/store";
@@ -15,6 +15,7 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { useHeldMenuMotion } from "./MenuMotion";
 import { FolderIcon, navigateThreadMenu } from "./BotProjects";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow, useMenuInWindow } from "./menu-look";
 
 export type ThreadMenuTask = Pick<Task, "threadId" | "title"> & Partial<Pick<Task, "projectId" | "busy" | "activity" | "archivedAt" | "snoozedUntil" | "link" | "confidential">> & { pinned?: boolean };
 
@@ -67,8 +68,6 @@ const archivedNow = (task: ThreadMenuTask) => task.archivedAt !== undefined;
 const snoozedNow = (task: ThreadMenuTask, now = Date.now()) =>
   task.snoozedUntil !== undefined && (task.snoozedUntil === 0 || task.snoozedUntil > now);
 
-const ITEM = "flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] hover:bg-raised disabled:opacity-40";
-
 function Item({ icon, label, onClick, id, danger, disabled, title, busy, trailing }: {
   icon: ReactNode;
   label: string;
@@ -82,8 +81,8 @@ function Item({ icon, label, onClick, id, danger, disabled, title, busy, trailin
 }) {
   return (
     <button type="button" role="menuitem" data-thread-menu-item={id} disabled={disabled ?? false} aria-busy={busy || undefined} title={title} onClick={onClick}
-      className={cn(ITEM, danger ? "text-danger" : "text-ink")}>
-      {icon}<span className="min-w-0 flex-1 truncate">{label}</span>{trailing}
+      className={menuRow(danger ? "danger" : "idle")}>
+      <MenuGlyph danger={danger}>{icon}</MenuGlyph><span className="min-w-0 flex-1 truncate">{label}</span>{trailing}
     </button>
   );
 }
@@ -109,23 +108,23 @@ export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onC
   const run = (action: () => void) => () => { onClose(); action(); };
   const back = (to: ThreadMenuPage, label: string) => (
     <button type="button" role="menuitem" data-thread-menu-item="back" onClick={() => onPage(to)}
-      className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[11.5px] font-medium text-ink-secondary hover:bg-raised">
-      <ChevronLeft size={12} aria-hidden="true" />{label}
+      className={cn(menuRow(), "font-medium text-ink-secondary")}>
+      <MenuGlyph><ChevronLeft /></MenuGlyph>{label}
     </button>
   );
-  const sub = <ChevronRight size={12} aria-hidden="true" className="shrink-0 text-ink-tertiary" />;
+  const sub = <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-tertiary" />;
   const canMove = Boolean(actions.onMove) && folders.length > 0;
 
   if (page === "snooze" && actions.onSnooze) {
     const snooze = actions.onSnooze;
     return <>
       {back("main", t("task.snooze"))}
-      {snoozed && <Item id="stop-snooze" icon={<BellOff size={12} />} label={t("task.stopSnoozing")} onClick={run(() => snooze(null))} />}
+      {snoozed && <Item id="stop-snooze" icon={<BellOff />} label={t("task.stopSnoozing")} onClick={run(() => snooze(null))} />}
       {[
         { id: "snooze-activity", label: t("task.snoozeUntilActivity"), at: () => 0 },
         { id: "snooze-tonight", label: t("task.snoozeTonight"), at: nextSixPm },
         { id: "snooze-tomorrow", label: t("task.snoozeTomorrow"), at: tomorrowNineAm },
-      ].map((preset) => <Item key={preset.id} id={preset.id} icon={<Clock size={12} />} label={preset.label} disabled={busy} onClick={run(() => snooze(preset.at()))} />)}
+      ].map((preset) => <Item key={preset.id} id={preset.id} icon={<Clock />} label={preset.label} disabled={busy} onClick={run(() => snooze(preset.at()))} />)}
     </>;
   }
 
@@ -134,11 +133,11 @@ export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onC
     const current = folders.some((folder) => folder.id === task.projectId) ? task.projectId : undefined;
     return <>
       {back("main", t("folder.move"))}
-      {folders.map((folder) => <Item key={folder.id} id={`folder-${folder.id}`} icon={<FolderIcon emoji={folder.emoji} size={12} />} label={folder.name}
-        trailing={folder.id === current ? <Check size={12} className="shrink-0 text-accent" /> : null}
+      {folders.map((folder) => <Item key={folder.id} id={`folder-${folder.id}`} icon={<FolderIcon emoji={folder.emoji} size={16} />} label={folder.name}
+        trailing={folder.id === current ? <Check size={16} strokeWidth={1.5} className="shrink-0 text-accent" /> : null}
         onClick={run(() => { if (folder.id !== current) move(folder.id); })} />)}
-      <Item id="folder-none" icon={<FolderInput size={12} />} label={t("folder.none")}
-        trailing={current ? null : <Check size={12} className="shrink-0 text-accent" />}
+      <Item id="folder-none" icon={<FolderInput />} label={t("folder.none")}
+        trailing={current ? null : <Check size={16} strokeWidth={1.5} className="shrink-0 text-accent" />}
         onClick={run(() => { if (current) move(null); })} />
     </>;
   }
@@ -149,39 +148,39 @@ export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onC
   const sections: ReactNode[][] = [
     // open: beside the main chat (side thread), its own section on top
     [
-      actions.onOpenAside && <Item key="open-aside" id="open-aside" icon={<PanelRight size={12} />} label={t("sideThread.openAside")} onClick={run(actions.onOpenAside)} />,
+      actions.onOpenAside && <Item key="open-aside" id="open-aside" icon={<PanelRight />} label={t("sideThread.openAside")} onClick={run(actions.onOpenAside)} />,
     ],
     [
-      <Item key="rename" id="rename" icon={<Pencil size={12} />} label={t("task.renameAria")} onClick={run(actions.onRename)} />,
-      actions.onRegenerateTitle && <Item key="regenerate" id="regenerate" icon={regenerating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+      <Item key="rename" id="rename" icon={<Pencil />} label={t("task.renameAria")} onClick={run(actions.onRename)} />,
+      actions.onRegenerateTitle && <Item key="regenerate" id="regenerate" icon={regenerating ? <Loader2 className="animate-spin" /> : <RefreshCw />}
         label={regenerating ? t("task.regeneratingTitle") : t("task.regenerateTitle")} disabled={regenerating} busy={regenerating} onClick={onRegenerate} />,
-      actions.onPin && <Item key="pin" id="pin" icon={task.pinned === true ? <PinOff size={12} /> : <Pin size={12} />} label={task.pinned === true ? t("sidebar.bot.unpin") : t("sidebar.bot.pin")}
+      actions.onPin && <Item key="pin" id="pin" icon={task.pinned === true ? <PinOff /> : <Pin />} label={task.pinned === true ? t("sidebar.bot.unpin") : t("sidebar.bot.pin")}
         onClick={run(() => actions.onPin!(task.pinned !== true))} />,
-      canMove && <Item key="move" id="move" icon={<FolderInput size={12} />} label={t("folder.move")} trailing={sub} onClick={() => onPage("move")} />,
+      canMove && <Item key="move" id="move" icon={<FolderInput />} label={t("folder.move")} trailing={sub} onClick={() => onPage("move")} />,
     ],
     [
-      actions.onArchive && <Item key="archive" id="archive" icon={archived ? <ArchiveRestore size={12} /> : <Archive size={12} />} label={archived ? t("task.unarchive") : t("task.archive")} disabled={busy}
+      actions.onArchive && <Item key="archive" id="archive" icon={archived ? <ArchiveRestore /> : <Archive />} label={archived ? t("task.unarchive") : t("task.archive")} disabled={busy}
         onClick={run(() => actions.onArchive!(archived ? null : Date.now()))} />,
-      actions.onSnooze && <Item key="snooze" id="snooze" icon={<Clock size={12} />} label={snoozed ? t("task.snoozed") : t("task.snooze")} trailing={sub} onClick={() => onPage("snooze")} />,
+      actions.onSnooze && <Item key="snooze" id="snooze" icon={<Clock />} label={snoozed ? t("task.snoozed") : t("task.snooze")} trailing={sub} onClick={() => onPage("snooze")} />,
     ],
     [
-      actions.onCopyLink && <Item key="copy-link" id="copy-link" icon={<Link2 size={12} />} label={t("task.copyLink")} onClick={run(actions.onCopyLink)} />,
-      actions.onCreateTeamBot && <Item key="create-team-bot" id="create-team-bot" icon={<UsersRound size={12} />} label={t("teamBotFromThread.menu")} title={t("teamBotFromThread.menu")} onClick={run(actions.onCreateTeamBot)} />,
-      actions.onRemoveLink && task.link && <Item key="remove-link" id="remove-link" icon={<Link2Off size={12} />} label={t("task.removeLink")} onClick={run(actions.onRemoveLink)} />,
+      actions.onCopyLink && <Item key="copy-link" id="copy-link" icon={<Link2 />} label={t("task.copyLink")} onClick={run(actions.onCopyLink)} />,
+      actions.onCreateTeamBot && <Item key="create-team-bot" id="create-team-bot" icon={<UsersRound />} label={t("teamBotFromThread.menu")} title={t("teamBotFromThread.menu")} onClick={run(actions.onCreateTeamBot)} />,
+      actions.onRemoveLink && task.link && <Item key="remove-link" id="remove-link" icon={<Link2Off />} label={t("task.removeLink")} onClick={run(actions.onRemoveLink)} />,
     ],
     [
       task.confidential === true
-        ? <Item key="confidential" id="confidential-info" icon={<Lock size={12} />} label={t("confidential.menuIs")} title={t("confidential.menuIsHint")} disabled onClick={() => {}} />
-        : actions.onMakeConfidential && <Item key="confidential" id="make-confidential" icon={<Lock size={12} />} label={t("confidential.make")} disabled={busy} onClick={run(actions.onMakeConfidential)} />,
+        ? <Item key="confidential" id="confidential-info" icon={<Lock />} label={t("confidential.menuIs")} title={t("confidential.menuIsHint")} disabled onClick={() => {}} />
+        : actions.onMakeConfidential && <Item key="confidential" id="make-confidential" icon={<Lock />} label={t("confidential.make")} disabled={busy} onClick={run(actions.onMakeConfidential)} />,
     ],
     [
-      <Item key="delete" id="delete" icon={<Trash2 size={12} />} label={t("task.deleteAria")} danger disabled={busy} onClick={run(actions.onDelete)} />,
+      <Item key="delete" id="delete" icon={<Trash2 />} label={t("task.deleteAria")} danger disabled={busy} onClick={run(actions.onDelete)} />,
     ],
   ];
   return <>
     {sections.map((section) => section.filter(Boolean)).filter((section) => section.length > 0).map((section, index) => (
       <Fragment key={index}>
-        {index > 0 && <div role="separator" className="mx-2 my-1 h-px bg-hairline/50" />}
+        {index > 0 && <MenuDivider />}
         {section}
       </Fragment>
     ))}
@@ -229,15 +228,8 @@ export function ThreadMenu({ task, actions, folders, position, onClose, anchorRe
     window.addEventListener("mousedown", outside);
     return () => window.removeEventListener("mousedown", outside);
   }, [position === null]);
-  // Pages differ in height: keep the bottom edge on screen after each one.
-  useLayoutEffect(() => {
-    const element = menuRef.current;
-    const shown = motion.value;
-    if (!element || !shown) return;
-    const { width, height } = element.getBoundingClientRect();
-    element.style.top = `${Math.max(8, Math.min(shown.top, window.innerHeight - height - 8))}px`;
-    element.style.left = `${Math.max(8, Math.min(shown.left, window.innerWidth - width - 8))}px`;
-  });
+  // Pages differ in height and width: keep the menu on screen after each one.
+  useMenuInWindow(menuRef, motion.value);
   const makeConfidential = actions.onMakeConfidential;
   const confirmConfidential = makeConfidential ? <ConfirmDialog open={askConfidential} tone="neutral" icon={<Lock size={14} />}
     title={t("confidential.confirmTitle")} body={t("confidential.confirmBody")} confirmLabel={t("confidential.confirm")}
@@ -256,8 +248,7 @@ export function ThreadMenu({ task, actions, folders, position, onClose, anchorRe
   return <>{confirmConfidential}{createPortal(
     <div ref={menuRef} data-thread-overlay data-thread-menu={page} role="menu" aria-label={t("task.actions", { title: task.title })}
       style={{ left: motion.value.left, top: motion.value.top }}
-      className={cn("fixed z-50 max-h-[calc(100vh-16px)] w-[220px] overflow-y-auto rounded-lg border p-1 shadow-xl popover-surface",
-        tone === "popover" ? "border-popover-hairline bg-popover" : "border-hairline/50 bg-card", motion.className)} {...motion.exitProps}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-50 max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain", motion.className)} {...motion.exitProps}
       onMouseDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         if (event.key === "Escape") {

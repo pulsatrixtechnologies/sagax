@@ -1880,12 +1880,18 @@ Rules that hold at every width:
   6px apart and a 17% grey hover. The values live once, in `src/styles.css`:
   the `--menu-*` tokens per skin, `.menu-surface`, `.menu-glyph`,
   `.menu-divider` and the `bg-menu-hover` / `bg-menu-active` utilities.
-  `SidebarPopoverMenu` draws the sidebar's menus with them (the account
-  menu and its side cards, the sidebar's section and foot menus). The
-  reference's override is on its root, so every menu should take these
-  values; the header's conversation menu (`ThreadMenu`) and the rows'
-  three-dots menus still draw their own surface and rows until #4183 moves
-  them onto the same classes. The account button, open or after a mouse
+  The reference's override is on its root, so every menu takes these
+  values through one shared surface and row (#4183,
+  `src/components/menu-look.tsx`: `MENU_SURFACE`, `MENU_ROW`,
+  `MENU_ROW_ACTIVE`, `MENU_ROW_DANGER`, `MenuGlyph`, `MenuDivider`): the
+  account menu and its side cards (`SidebarPopoverMenu`), the header's
+  conversation menu (`ThreadMenu`), and the rows' and cards' three dots
+  menus (sidebar bot, section, folder and thread list menus, routines,
+  files, skills, branches, plugins, memory, code runs, the conversation's
+  "..." menu and the pages' ☰ menus). A bare leading icon in a menu row
+  takes the glyph's 16px, 1.5 stroke and ink. Test:
+  `src/components/menu-look.test.ts`; captures:
+  `scripts/capture/menu-family.mjs`. The account button, open or after a mouse
   click, shows the reference's soft fill only, never an outline (#4156); the
   focus ring is for keyboard focus, for every control of the app through one
   rule (`src/lib/input-modality.ts` marks a focus that follows a click, and

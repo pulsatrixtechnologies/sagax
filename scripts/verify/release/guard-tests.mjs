@@ -50,6 +50,8 @@ export const SOURCE_TEXT_TESTS = [
   "electron/skin-overlay.test.mjs",
   // reads the English catalog for the Connect Apps name since #4255
   "scripts/testing/compose-flow.test.ts",
+  // #4316: every hook a real-renderer smoke selects is still written in src/
+  "scripts/testing/renderer-smoke-hooks.test.ts",
   "scripts/testing/ui-click.test.ts",
   "server/model-providers-docs.test.ts",
   "shared/approval-describe.test.ts",

@@ -17,6 +17,16 @@
 # commit and refuses while a tracked file differs from HEAD or the diff imports
 # an untracked file; ignored files and untracked scratch files never block.
 #
+# Only a stamp verify-merge.mjs wrote counts (its first line is "ok <time>"),
+# #4316: a landing step that ran typecheck, lint and terms alone also left an
+# ok-<sha> file, empty, and the hook skipped every test, so a lot whose own
+# tests were red (#4354, #4356) still landed. On such a stamp the lint side is
+# done, so the hook runs the test side of the fast gate against the base
+# (scripts/fast-gate.sh --only tests,related,extra-source-text,extra-parity-pairs):
+# the tests of the touched files, the tests that reach them through imports,
+# the source-text tests and the parity pairs. Without a stamp it runs
+# verify:merge as before.
+#
 # Installed by `pnpm install` through scripts/install-git-hooks.mjs (sets
 # core.hooksPath). Skip once with `git push --no-verify`, or for a session
 # with SAGAX_SKIP_HOOKS=1.
@@ -40,7 +50,11 @@ STAMP_DIR="$COMMON/sagax-verify-merge"
 STAMP="$STAMP_DIR/ok-$SHA"
 LOCK_DIR="$STAMP_DIR/queue.lock"
 
-if [ -f "$STAMP" ]; then
+# A stamp verify-merge.mjs wrote: its first line is "ok <time>".
+verified_stamp() {
+  [ -f "$STAMP" ] && head -n 1 "$STAMP" | grep -q '^ok '
+}
+if verified_stamp; then
   echo "pre-push: verify:merge already OK for $SHA_SHORT (stamp)"
   exit 0
 fi
@@ -85,7 +99,7 @@ echo "$$" >"$LOCK_DIR/pid"
 trap release_lock EXIT INT TERM HUP
 
 # Another agent may have stamped this sha while we waited.
-if [ -f "$STAMP" ]; then
+if verified_stamp; then
   echo "pre-push: verify:merge already OK for $SHA_SHORT (stamp after queue)"
   exit 0
 fi
@@ -106,6 +120,16 @@ if [ -z "$BASE" ]; then
   done
 fi
 BASE="${BASE:-origin/main}"
+if [ -f "$STAMP" ]; then
+  TEST_SIDE="tests,related,extra-source-text,extra-parity-pairs"
+  echo "pre-push: the stamp for $SHA_SHORT is not verify:merge's (no tests ran): nice -n 19 scripts/fast-gate.sh --base $BASE --only $TEST_SIDE"
+  if command -v nice >/dev/null 2>&1; then
+    nice -n 19 bash "$ROOT/scripts/fast-gate.sh" --base "$BASE" --only "$TEST_SIDE"
+  else
+    bash "$ROOT/scripts/fast-gate.sh" --base "$BASE" --only "$TEST_SIDE"
+  fi
+  exit 0
+fi
 echo "pre-push: nice -n 19 pnpm verify:merge --base $BASE (git push --no-verify to skip)"
 if command -v nice >/dev/null 2>&1; then
   nice -n 19 pnpm verify:merge --base "$BASE"

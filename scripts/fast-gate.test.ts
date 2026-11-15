@@ -228,8 +228,43 @@ describe("fast-gate.sh", () => {
     const out = `${r.stdout}${r.stderr}`;
     const related = out.split("\n").find((l) => l.startsWith("[related]")) ?? "";
     expect(related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts'$/);
-    expect(out).toContain("fast-gate: related: 1 test file(s) reach the touched sources through imports, 2 more wait for the run after the merge");
+    expect(out).toContain("fast-gate: related: 1 of 3 test file(s) that reach the touched sources through imports run here (about 1s of the 150s ceiling and the 1 file bound); the ceiling cut 2, listed in related-cut.txt of the logs: they run after the merge");
+    expect(readFileSync(join(repo, ".gate-logs", "related-cut.txt"), "utf8")).toBe("src/ui/deeper.dom.test.ts\ntests/a-bar.test.ts\n");
   });
+
+  // #4316: the bound was 120 files, and 120 files of the server (a driver's
+  // test alone takes a minute and a half) ran for over ten minutes where 120
+  // of the interface take two. The bound is the files' recorded seconds.
+  it("bounds the related check by the recorded seconds of its files, nearest first, and names what the ceiling cut", () => {
+    write("src/ui/pill.tsx", "export const Pill = 1;\n");
+    write("src/ui/bar.tsx", 'import { Pill } from "./pill";\nexport const Bar = Pill;\n');
+    write("src/ui/bar.test.ts", 'import { Bar } from "./bar";\n');
+    write("src/ui/heavy.test.ts", 'import { Bar } from "./bar";\n');
+    write("src/ui/flow.e2e.test.ts", 'import { Bar } from "./bar";\n');
+    write("tests/light.test.ts", 'import { Bar } from "../src/ui/bar";\n');
+    write("scripts/testing/vitest-shard-weights.json", JSON.stringify({ "src/ui/heavy.test.ts": 90, "server/a.e2e.test.ts": 20, "server/b.e2e.test.ts": 30, "server/c.e2e.test.ts": 40 }));
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/ui/pill.tsx", "export const Pill = 2;\n");
+    const run = (seconds?: string) => {
+      const env: Record<string, string> = { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAST_GATE_LOG_DIR: join(repo, ".gate-logs") } as Record<string, string>;
+      delete env.FAST_GATE_RELATED_MAX;
+      if (seconds === undefined) delete env.FAST_GATE_RELATED_SECONDS; else env.FAST_GATE_RELATED_SECONDS = seconds;
+      const r = spawnSync("bash", [SCRIPT, "--base", "HEAD", "--only", "related", "--dry-run"], { cwd: repo, encoding: "utf8", env });
+      const out = `${r.stdout}${r.stderr}`;
+      return { out, related: out.split("\n").find((l) => l.startsWith("[related]")) ?? "" };
+    };
+    // 1 s each for the light files, the median recorded e2e (30 s) for a new
+    // e2e file, 90 s recorded: 122 s fits under the default 150 s
+    const all = run();
+    expect(all.related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts' 'src\/ui\/flow\.e2e\.test\.ts' 'src\/ui\/heavy\.test\.ts' 'tests\/light\.test\.ts'$/);
+    expect(all.out).toContain("fast-gate: related: 4 test file(s) reach the touched sources through imports (about 122s, under the 150s ceiling)");
+    // a 40 s ceiling: the 90 s file is cut, the lighter ones after it fit
+    const cut = run("40");
+    expect(cut.related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts' 'src\/ui\/flow\.e2e\.test\.ts' 'tests\/light\.test\.ts'$/);
+    expect(cut.out).toContain("fast-gate: related: 3 of 4 test file(s) that reach the touched sources through imports run here (about 32s of the 40s ceiling); the ceiling cut 1, listed in related-cut.txt of the logs: they run after the merge");
+    expect(readFileSync(join(repo, ".gate-logs", "related-cut.txt"), "utf8")).toBe("src/ui/heavy.test.ts\n");
+  }, 60_000);
 
   it("runs the checks in parallel, never more than the cap, and is green", () => {
     write("src/a.ts", "export const a = 2;\n");
@@ -407,6 +442,61 @@ describe("fast-gate.sh", () => {
     expect(runs("server/x.ts")).not.toContain("--fileParallelism");
   });
 
+  // #4316: a desktop change already runs the parity tests through the
+  // source-text line; the pairs add the other side, so a lot that touches only
+  // the phone's, the tablet's or a smoke's files runs the pair's test too
+  // (the renderer smokes' hooks have their own text-level test). A lot that
+  // touches a file the source-text tests read leaves it to that line.
+  it("runs a parity pair's test on a lot that touches either side of it", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));
+    const pairs = ["src/components/ios-trigger-parity.test.ts", "src/components/ios-desktop-wording.test.ts", "src/components/ios-desktop-tokens.test.ts", "scripts/testing/renderer-smoke-hooks.test.ts"];
+    for (const file of pairs) write(file, "// parity\n");
+    git("add", "-A");
+    git("commit", "-qm", "pairs");
+    git("branch", "-f", "main");
+    const runs = (touched: string) => {
+      write(touched, "touched\n");
+      try { rmSync(join(fakeBin, "calls")); } catch { /* first run */ }
+      const { code, out } = gate("--base", "main", "--only", "extra-parity-pairs,extra-source-text");
+      expect(code, out).toBe(0);
+      rmSync(join(repo, touched));
+      let calls = "";
+      try { calls = readFileSync(join(fakeBin, "calls"), "utf8"); } catch { /* nothing ran */ }
+      return { calls, out };
+    };
+    // the phone's side alone: the pair's test, not the source-text tests
+    for (const [touched, test] of [
+      ["ios/Sources/CompanionCore/DesktopBotPanel.swift", "src/components/ios-trigger-parity.test.ts"],
+      ["shared/trigger-sources.ts", "src/components/ios-trigger-parity.test.ts"],
+      ["ios/App/Desktop/DesktopShortcuts.swift", "src/components/ios-desktop-wording.test.ts"],
+      ["ios/App/Desktop/DesktopTheme.swift", "src/components/ios-desktop-tokens.test.ts"],
+      ["scripts/testing/team-share-ui.e2e.test.ts", "scripts/testing/renderer-smoke-hooks.test.ts"],
+    ]) {
+      const { calls, out } = runs(touched);
+      expect(calls, touched).toBe(`vitest run --reporter=dot ${test}\n`);
+      expect(out, touched).toMatch(/skip\s+extra-source-text/);
+    }
+    // the desktop's side (src/): the source-text line runs every pair's test
+    const desktop = runs("src/locales/en.json");
+    expect(desktop.calls).toContain("--fileParallelism --maxWorkers=2");
+    for (const test of pairs) expect(desktop.calls).toContain(test);
+    expect(desktop.out).toMatch(/skip\s+extra-parity-pairs\s+\d+s\s+\(source-text runs the parity tests of this lot\)/);
+    // a lot elsewhere runs neither
+    const elsewhere = runs("server/x.ts");
+    expect(elsewhere.calls).toBe("");
+    expect(elsewhere.out).toMatch(/skip\s+extra-parity-pairs\s+\d+s\s+\(no side of a parity pair touched\)/);
+  });
+
+  it("holds each parity pair to a test of the source-text list that reads both of its sides", async () => {
+    const { PARITY_PAIRS, SOURCE_TEXT_TESTS } = await import("./verify/release/guard-tests.mjs");
+    for (const { test, reads } of PARITY_PAIRS as { test: string; reads: RegExp[] }[]) {
+      expect(SOURCE_TEXT_TESTS, test).toContain(test);
+      expect(reads.some((side) => side.test("src/locales/en.json") || side.test("src/styles.css") || side.test("src/App.tsx")), `${test}: a desktop side`).toBe(true);
+      expect(reads.some((side) => !side.source.startsWith("^src")), `${test}: another side`).toBe(true);
+    }
+  });
+
   it("lists every test the rail found red for reading sources as text, and none with a known failure", async () => {
     const { GUARD_TESTS, SOURCE_TEXT_TESTS } = await import("./verify/release/guard-tests.mjs");
     expect(SOURCE_TEXT_TESTS).toEqual(expect.arrayContaining([
@@ -431,6 +521,41 @@ describe("fast-gate.sh", () => {
       expect(known.has(file), file).toBe(false);
     }
   });
+
+  // #4316: the summary said "ok" for an extra check whose files the lot did
+  // not touch, and nothing of the related tests the bound left out, so a
+  // green gate read as more than it ran.
+  it("names in its summary what it ran, with the test files of each, and what it skipped", () => {
+    write(".fast-gate", "never: if printf '%s\\n' \"$FAST_GATE_FILES\" | grep -q '^nowhere/'; then echo ran; else echo 'fast-gate: skip: no file of nowhere/ touched'; fi\nalways: echo checked\n");
+    write("src/ui/pill.tsx", "export const Pill = 1;\n");
+    write("src/ui/pill.test.ts", "// its own name\n");
+    write("src/ui/bar.tsx", 'import { Pill } from "./pill";\nexport const Bar = Pill;\n');
+    write("src/ui/bar.test.ts", 'import { Bar } from "./bar";\n');
+    write("src/ui/heavy.test.ts", 'import { Bar } from "./bar";\n');
+    write("scripts/testing/vitest-shard-weights.json", JSON.stringify({ "src/ui/heavy.test.ts": 900 }));
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/ui/pill.tsx", "export const Pill = 2;\n");
+    const { code, out } = gate("--base", "HEAD", "--only", "tests,related,extra-never,extra-always");
+    expect(code, out).toBe(0);
+    expect(out).toMatch(/ok\s+tests\s+\d+s\s+\(1 test files\)/);
+    expect(out).toMatch(/ok\s+related\s+\d+s\s+\(1 test files\)/);
+    expect(out).toMatch(/skip\s+extra-never\s+\d+s\s+\(no file of nowhere\/ touched\)/);
+    expect(out).toMatch(/ok\s+extra-always/);
+    expect(out).toContain("fast-gate: ran: tests related extra-always; skipped: extra-never");
+    expect(out).toMatch(/fast-gate: not run here: 1 related test file\(s\) past the time ceiling \(listed in .*related-cut\.txt\), they run after the merge/);
+  });
+
+  it("shows as skipped each extra check of the repository whose files a lot does not touch", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));
+    write("docs/note.md", "a note\n");
+    const conditional = ["agents-proxy", "index-reach", "full-access-guard", "shared-cycles", "source-text", "parity-pairs"];
+    const { code, out } = gate("--base", "main", "--only", conditional.map((name) => `extra-${name}`).join(","));
+    expect(code, out).toBe(0);
+    for (const name of conditional) expect(out, name).toMatch(new RegExp(`skip\\s+extra-${name}\\s`));
+    expect(out).toContain(`fast-gate: ran: nothing; skipped: ${conditional.map((name) => `extra-${name}`).join(" ")}`);
+  }, 60_000);
 
   it("has nothing to check on a clean branch", () => {
     const { code, out } = gate("--base", "main");

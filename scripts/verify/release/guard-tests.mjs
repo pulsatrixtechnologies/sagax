@@ -9,6 +9,16 @@
 //   node scripts/verify/release/guard-tests.mjs --source-text
 //                                                 prints the source-text
 //                                                 tests that exist
+//   node scripts/verify/release/guard-tests.mjs --source-text --touched
+//                                                 the same, only when a file
+//                                                 of $FAST_GATE_FILES is one
+//                                                 they read (SOURCE_TEXT_READS)
+//   node scripts/verify/release/guard-tests.mjs --parity --touched
+//                                                 the parity tests a side of
+//                                                 which $FAST_GATE_FILES
+//                                                 touches, less those the
+//                                                 source-text line runs, or
+//                                                 one line "skip: <why>"
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -50,6 +60,8 @@ export const SOURCE_TEXT_TESTS = [
   "electron/skin-overlay.test.mjs",
   // reads the English catalog for the Connect Apps name since #4255
   "scripts/testing/compose-flow.test.ts",
+  // #4316: every hook a real-renderer smoke selects is still written in src/
+  "scripts/testing/renderer-smoke-hooks.test.ts",
   "scripts/testing/ui-click.test.ts",
   "server/model-providers-docs.test.ts",
   "shared/approval-describe.test.ts",
@@ -156,6 +168,43 @@ export const SOURCE_TEXT_TESTS = [
   "src/state/routines-one-place.test.ts",
 ];
 
+/** What the source-text tests read as text: a lot that touches one of these
+ * runs them all (the "source-text" line of .fast-gate). src/, the phone's
+ * catalog, the iPad wording map, the model providers docs page and two
+ * scripts/testing files. */
+export const SOURCE_TEXT_READS = /^(src\/|ios\/App\/Localizable\.xcstrings$|ios\/parity\/desktop-wording\.json$|apps\/docs\/content\/docs\/providers\/model-providers\.mdx$|scripts\/testing\/(compose-flow|bot-tools-ui\.e2e\.test)\.ts$)/;
+
+/** The parity pairs: a text-level test that holds one side to the other, and
+ * the files of both sides it reads. A lot that touches either side runs the
+ * test (the "parity-pairs" line of .fast-gate; the source-text line runs it
+ * instead when the lot touches a file the source-text tests read). A desktop
+ * change already ran these tests through the source-text line; the pairs add
+ * the other side: a lot that touches only the phone's, the tablet's or a
+ * smoke's files runs the pair's test too (#4305, #4320, #4316), and the
+ * renderer smokes' hooks get a text-level test of their own (they had none
+ * before a merge). */
+export const PARITY_PAIRS = [
+  // the phone's trigger kinds and sources against the desktop's (#4305, #4320)
+  { test: "src/components/ios-trigger-parity.test.ts", reads: [/^src\/locales\/en\.json$/, /^shared\/trigger-sources\.ts$/, /^ios\/Sources\/CompanionCore\/DesktopBotPanel\.swift$/] },
+  // the phone and tablet wording against the desktop's catalogs and shortcuts
+  { test: "src/components/ios-desktop-wording.test.ts", reads: [/^src\/locales\/(en|fr)\.json$/, /^src\/lib\/keyboard-shortcuts\.ts$/, /^ios\/parity\/desktop-wording\.json$/, /^ios\/App\/Localizable\.xcstrings$/, /^ios\/App\/Desktop\/DesktopShortcuts\.swift$/] },
+  // the phone's theme and switch tokens against the desktop's stylesheets
+  { test: "src/components/ios-desktop-tokens.test.ts", reads: [/^src\/styles\.css$/, /^src\/styles\/skin-switch\.css$/, /^ios\/App\/Desktop\/(DesktopTheme|DesktopSettingsKit)\.swift$/] },
+  // the hooks the real-renderer smokes select against the app's sources
+  { test: "scripts/testing/renderer-smoke-hooks.test.ts", reads: [/^src\//, /^scripts\/testing\/[^/]+\.e2e\.test\.ts$/] },
+];
+
+/** The parity tests a lot needs, from its touched files: those a side of
+ * which it touches, less those the source-text line already runs for it
+ * (`sourceText`), with the reason when none is left. */
+export function parityPlan(files) {
+  const sourceText = files.some((file) => SOURCE_TEXT_READS.test(file));
+  const touched = PARITY_PAIRS.filter((pair) => files.some((file) => pair.reads.some((side) => side.test(file)))).map((pair) => pair.test);
+  const tests = touched.filter((test) => !(sourceText && SOURCE_TEXT_TESTS.includes(test)));
+  const skip = tests.length ? "" : touched.length ? "source-text runs the parity tests of this lot" : "no side of a parity pair touched";
+  return { tests, sourceText, skip };
+}
+
 /** Tests that hold main to a line: a key nothing reads, a route without a
  * policy row, a golden or a budget. They fail for the PR that merged last,
  * so every PR runs them. */
@@ -217,8 +266,17 @@ export function existingGuardTests(root) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
   const sourceText = process.argv.includes("--source-text");
-  const files = sourceText
-    ? SOURCE_TEXT_TESTS.filter((file) => existsSync(join(root, file)))
-    : existingGuardTests(root).filter((file) => !SOURCE_TEXT_TESTS.includes(file));
-  if (files.length) console.log(files.join("\n"));
+  const touched = (process.env.FAST_GATE_FILES ?? "").split("\n").filter(Boolean);
+  if (process.argv.includes("--parity")) {
+    const { tests, skip } = parityPlan(touched);
+    const present = tests.filter((file) => existsSync(join(root, file)));
+    console.log(present.length ? present.join("\n") : `skip: ${skip || "the parity tests of this lot are gone"}`);
+  } else if (sourceText && process.argv.includes("--touched") && !touched.some((file) => SOURCE_TEXT_READS.test(file))) {
+    // no file the source-text tests read: nothing to print
+  } else {
+    const files = sourceText
+      ? SOURCE_TEXT_TESTS.filter((file) => existsSync(join(root, file)))
+      : existingGuardTests(root).filter((file) => !SOURCE_TEXT_TESTS.includes(file));
+    if (files.length) console.log(files.join("\n"));
+  }
 }

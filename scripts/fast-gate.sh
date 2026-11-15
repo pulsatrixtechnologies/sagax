@@ -35,7 +35,10 @@
 #   Makefile       terms also runs `make dash-check` when the target exists
 #   .fast-gate     extra checks of the repository, one per line,
 #                  "<name>: <command>" ("#" starts a comment); each runs as
-#                  extra-<name> with FAST_GATE_FILES (newline list) set
+#                  extra-<name> with FAST_GATE_FILES (newline list) set;
+#                  a check that does not apply to the lot prints a line
+#                  "fast-gate: skip: <why>" and exits 0, and the summary
+#                  shows it as skipped
 #
 # Exit 0 when every check passed or was skipped, 1 when one failed, 2 on a
 # usage error. The logs stay in $FAST_GATE_LOG_DIR (default a temporary
@@ -96,6 +99,8 @@ if [ -n "$BASE" ]; then
 fi
 
 TOUCHED="$LOG_DIR/touched.txt"
+# (a reused log folder keeps no cut list of an earlier run)
+rm -f "$LOG_DIR/related-cut.txt"
 {
   [ -n "$SINCE" ] && git diff --name-only --diff-filter=ACMR "$SINCE" HEAD
   git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null
@@ -154,18 +159,32 @@ if [ -f package.json ]; then
     # their own check. Lots that ran only the tests beside their files left
     # four of these red on main. The whole graph of a UI file is about 500
     # test files (ten minutes), so the gate walks it breadth first, at most
-    # $FAST_GATE_RELATED_DEPTH files away (default 3), and runs at most
-    # $FAST_GATE_RELATED_MAX of them (default 120), the nearest first and,
-    # at one distance, those in the touched files' folders first; it prints
-    # how many it left to the run after the merge. A type-only import is no
-    # dependency. A test in the repository's known failures list
-    # (scripts/testing/known-failures.json) is not related work.
+    # $FAST_GATE_RELATED_DEPTH files away (default 3), the nearest first and,
+    # at one distance, those in the touched files' folders first.
+    #
+    # The ceiling is time, not a count (#4316): 120 light files of the
+    # interface take two minutes, 120 files of the server (a driver's test
+    # alone takes a minute and a half) took over ten. The gate keeps the
+    # files whose estimated seconds fit in $FAST_GATE_RELATED_SECONDS
+    # (default 150): a file weighs its recorded seconds in
+    # $FAST_GATE_TEST_WEIGHTS (default scripts/testing/vitest-shard-weights.json
+    # when the repository has it), else 1 s, an e2e file the median e2e file.
+    # Measured on recent lots (#4316), replayed on their merge base on a busy
+    # machine: #4356 ran 144 of 488 related files in 145 s, #4354 67 of 934
+    # (server files) in 170 s; the estimates of #4348 (67 files, 86 s, no cut),
+    # #4226 (53 of 576) and #4260 (87 of 1086) fill the ceiling.
+    # $FAST_GATE_RELATED_MAX, when set, also bounds the count. When the
+    # ceiling cuts the list the gate says how many files it ran, how many it
+    # cut, and writes the cut ones to related-cut.txt in its log folder: they
+    # run after the merge. A type-only import is no dependency. A test in the
+    # repository's known failures list (scripts/testing/known-failures.json)
+    # is not related work.
     TESTS="$LOG_DIR/tests.txt"
     RELATED="$LOG_DIR/related.txt"
     : > "$TESTS"
     : > "$RELATED"
     # (the import graph is read only when one of the two checks runs)
-    if wanted tests || wanted related; then FAST_GATE_TOUCHED_JS="$JS" FAST_GATE_RELATED_OUT="$RELATED" node -e '
+    if wanted tests || wanted related; then FAST_GATE_TOUCHED_JS="$JS" FAST_GATE_RELATED_OUT="$RELATED" FAST_GATE_RELATED_CUT="$LOG_DIR/related-cut.txt" node -e '
       const fs = require("fs"), path = require("path").posix;
       const { execFileSync } = require("child_process");
       const isTest = (f) => /\.(test|spec)\.[^/]+$/.test(f);
@@ -227,14 +246,26 @@ if [ -f package.json ]; then
         // related: breadth first through the files that import a touched
         // source, nearest first.
         const depthMax = Math.max(1, Number(process.env.FAST_GATE_RELATED_DEPTH) || 3);
-        const cap = Math.max(0, Number(process.env.FAST_GATE_RELATED_MAX ?? 120) || 0);
+        const maxSet = (process.env.FAST_GATE_RELATED_MAX ?? "") !== "";
+        const cap = maxSet ? Math.max(0, Number(process.env.FAST_GATE_RELATED_MAX) || 0) : Infinity;
+        const ceilingSet = (process.env.FAST_GATE_RELATED_SECONDS ?? "") !== "";
+        const ceiling = ceilingSet ? Math.max(0, Number(process.env.FAST_GATE_RELATED_SECONDS) || 0) : 150;
+        // Recorded seconds per test file, as the CI shards weigh them: an
+        // unlisted file is light (1 s), an unlisted e2e file the median e2e.
+        const E2E = /\.e2e\.test\.[^/]+$/;
+        let weights = {};
+        const weightsFile = process.env.FAST_GATE_TEST_WEIGHTS || "scripts/testing/vitest-shard-weights.json";
+        try { weights = JSON.parse(fs.readFileSync(weightsFile, "utf8")); } catch { /* no recorded seconds */ }
+        const e2eSeconds = Object.entries(weights).filter(([f]) => E2E.test(f)).map(([, s]) => Number(s) || 1).sort((a, b) => a - b);
+        const unlistedE2e = e2eSeconds.length ? e2eSeconds[Math.floor(e2eSeconds.length / 2)] : 1;
+        const estimate = (f) => Number(weights[f]) || (E2E.test(f) ? unlistedE2e : 1);
         let known = new Set();
         try { known = new Set(JSON.parse(fs.readFileSync("scripts/testing/known-failures.json", "utf8")).tests.map((t) => t.file)); } catch { /* no list */ }
         const dirs = [...new Set(sources.map((s) => path.dirname(s)))];
         const nearness = (t) => Math.max(...dirs.map((d) => (t.startsWith(d + "/") ? d.split("/").length : 0)));
         const seen = new Set(sources);
-        const related = [];
-        let left = 0, frontier = sources;
+        const related = [], cut = [];
+        let spent = 0, frontier = sources;
         for (let depth = 1; depth <= depthMax && frontier.length; depth++) {
           const next = [], level = [];
           for (const f of frontier) for (const importer of importers.get(f) ?? []) {
@@ -244,12 +275,21 @@ if [ -f package.json ]; then
             else if (!out.has(importer) && !known.has(importer)) level.push(importer);
           }
           level.sort((a, b) => nearness(b) - nearness(a) || (a < b ? -1 : 1));
-          const room = Math.max(0, cap - related.length);
-          related.push(...level.slice(0, room));
-          left += Math.max(0, level.length - room);
+          // nearest first; a file that does not fit is cut, a lighter one
+          // after it may still fit
+          for (const t of level) {
+            const s = estimate(t);
+            if (related.length < cap && spent + s <= ceiling) { related.push(t); spent += s; } else cut.push(t);
+          }
           frontier = next;
         }
-        if (related.length || left) console.error(`fast-gate: related: ${related.length} test file(s) reach the touched sources through imports${left ? `, ${left} more wait for the run after the merge` : ""}`);
+        if (related.length || cut.length) {
+          const total = related.length + cut.length;
+          console.error(cut.length
+            ? `fast-gate: related: ${related.length} of ${total} test file(s) that reach the touched sources through imports run here (about ${spent}s of the ${ceiling}s ceiling${maxSet ? ` and the ${cap} file bound` : ""}); the ceiling cut ${cut.length}, listed in related-cut.txt of the logs: they run after the merge`
+            : `fast-gate: related: ${related.length} test file(s) reach the touched sources through imports (about ${spent}s, under the ${ceiling}s ceiling)`);
+        }
+        fs.writeFileSync(process.env.FAST_GATE_RELATED_CUT, cut.sort().map((f) => f + "\n").join(""));
         fs.writeFileSync(process.env.FAST_GATE_RELATED_OUT, related.sort().map((f) => f + "\n").join(""));
       }
       process.stdout.write([...out].sort().map((f) => f + "\n").join(""));
@@ -368,16 +408,36 @@ for n in $NAMES; do
 done
 for p in $PIDS; do wait "$p" 2>/dev/null; done
 
+# The summary names what ran and what did not (#4316): the test files each
+# test check ran, an extra check whose files the lot does not touch as
+# skipped (it exits 0 after printing a line that starts with
+# "fast-gate: skip"), and the related tests the time ceiling cut.
 FAILED=""
+RAN=""
+SKIPPED=""
 for n in $NAMES; do
   read -r code secs < "$LOG_DIR/$n.status"
-  if [ "$code" = 0 ]; then
-    printf '  ok    %-14s %4ss\n' "$n" "$secs"
+  what=""
+  if [ "$n" = tests ] || [ "$n" = related ]; then
+    what="  ($(wc -l < "$LOG_DIR/$n.txt" | tr -d ' ') test files)"
+  fi
+  if [ "$code" = 0 ] && grep -q '^fast-gate: skip' "$LOG_DIR/$n.log" 2>/dev/null; then
+    printf '  skip  %-14s %4ss  (%s)\n' "$n" "$secs" "$(grep -m1 '^fast-gate: skip' "$LOG_DIR/$n.log" | sed 's/^fast-gate: skip[: ]*//')"
+    SKIPPED="$SKIPPED $n"
+  elif [ "$code" = 0 ]; then
+    printf '  ok    %-14s %4ss%s\n' "$n" "$secs" "$what"
+    RAN="$RAN $n"
   else
-    printf '  FAIL  %-14s %4ss  (exit %s, %s)\n' "$n" "$secs" "$code" "$LOG_DIR/$n.log"
+    printf '  FAIL  %-14s %4ss  (exit %s, %s)%s\n' "$n" "$secs" "$code" "$LOG_DIR/$n.log" "$what"
     FAILED="$FAILED $n"
+    RAN="$RAN $n"
   fi
 done
+echo "fast-gate: ran:${RAN:- nothing}; skipped:${SKIPPED:- nothing}"
+CUT="$LOG_DIR/related-cut.txt"
+if [ -s "$CUT" ]; then
+  echo "fast-gate: not run here: $(wc -l < "$CUT" | tr -d ' ') related test file(s) past the time ceiling (listed in $CUT), they run after the merge"
+fi
 for n in $FAILED; do
   echo "--- $n (last 40 lines) ---"
   tail -n 40 "$LOG_DIR/$n.log"

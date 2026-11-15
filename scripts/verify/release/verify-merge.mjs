@@ -15,9 +15,16 @@
 //      main silently when another PR lands (about 30 s)
 //   3. the tests of the diff: every changed test file, the tests beside a
 //      changed source (same folder, same stem: foo.test.ts, foo.*.test.ts,
-//      foo.e2e.test.ts), the tests beside a changed route's module, and the
-//      tests of an area the diff touches (AREA_TESTS: the connector matrix
-//      and the hosts' launch contract for the connector paths)
+//      foo.e2e.test.ts), the tests beside a changed route's module, the
+//      tests that import a changed source, and the tests of an area the diff
+//      touches (AREA_TESTS: the connector matrix and the hosts' launch
+//      contract for the connector paths)
+//   3b. the related tests: the tests that reach a changed source through
+//      other files, under a time ceiling (#4316). Both lists come from
+//      scripts/fast-gate.sh, the one selection of both gates: a shared list,
+//      a locale key, a menu or a server module merged green here and broke
+//      the tests that depend on it, found only by the run after the merge.
+//      The summary says how many the ceiling cut; they run after the merge.
 //   4. iOS, only when ios/ or shared/ changed: `swift test` and the Debug
 //      build of the Sagax scheme for the generic simulator (no device boots,
 //      no window). One rule, no switch: the stage runs wherever it can. On a
@@ -47,11 +54,15 @@
 // files nothing imports never block. So the OK stamp, keyed on HEAD, means HEAD.
 //
 // On OK, writes a stamp under the common git dir (`sagax-verify-merge/ok-<sha>`;
-// its content names any stage skipped on the host) so the pre-push hook can skip a re-run for the same HEAD. Strips every GIT_*
+// its first line is "ok <time>", the rest names any stage skipped on the host)
+// so the pre-push hook can skip a re-run for the same HEAD. The hook trusts
+// only that first line (#4316): a stamp written by anything else (an empty
+// file) still runs the test side of the fast gate. Strips every GIT_*
 // from the process env before any stage so a leaked hook GIT_DIR cannot make a
 // test commit into the branch being pushed (issue #1705).
 import { spawnSync, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { existingGuardTests } from "./guard-tests.mjs";
@@ -219,6 +230,28 @@ function siblingTests(file) {
     .map((name) => relative(ROOT, join(dir, name)).split("\\").join("/"));
 }
 
+/** The tests that depend on the commit's changed sources, as
+ * scripts/fast-gate.sh selects them (#4316): `tests` (the tests of a changed
+ * source's stem and the tests that import it) and `related` (the tests that
+ * reach it through other files, within the gate's time ceiling), plus `cut`
+ * (the related tests the ceiling left to the run after the merge) and the
+ * gate's own lines about its choice. One selection for both gates: this
+ * asks the fast gate for its plan (--dry-run) and runs nothing itself. */
+export function dependentTests(base, root = ROOT, spawn = spawnSync) {
+  const empty = { tests: [], related: [], cut: [], notes: [] };
+  const script = join(root, "scripts", "fast-gate.sh");
+  if (!existsSync(script)) return empty;
+  const logDir = mkdtempSync(join(tmpdir(), "verify-merge-related-"));
+  try {
+    const result = spawn("bash", [script, "--base", base, "--only", "tests,related", "--dry-run"], { cwd: root, encoding: "utf8", env: { ...process.env, FAST_GATE_LOG_DIR: logDir }, stdio: ["ignore", "pipe", "pipe"] });
+    const read = (name) => { try { return lines(readFileSync(join(logDir, name), "utf8")); } catch { return []; } };
+    const notes = lines(`${result.stdout ?? ""}\n${result.stderr ?? ""}`).filter((line) => line.startsWith("fast-gate: ") && !/ touched file\(s\) since /.test(line));
+    return { tests: read("tests.txt").filter(isVitestFile), related: read("related.txt").filter(isVitestFile), cut: read("related-cut.txt"), notes };
+  } finally {
+    rmSync(logDir, { recursive: true, force: true });
+  }
+}
+
 function plan(options) {
   const changed = changedFiles(options.base);
   const tests = new Set();
@@ -232,8 +265,11 @@ function plan(options) {
     }
   }
   for (const test of areaTests(changed)) if (existsSync(join(ROOT, test))) tests.add(test);
+  const dependent = dependentTests(options.base);
+  for (const test of dependent.tests) tests.add(test);
+  const related = dependent.related.filter((test) => !tests.has(test));
   const ios = options.ios || changed.some((file) => file.startsWith("ios/") || file.startsWith("shared/"));
-  return { changed, tests: [...tests].sort(), electronTests: [...electronTests].sort(), ios };
+  return { changed, tests: [...tests].sort(), related, cut: dependent.cut, dependentNotes: dependent.notes, electronTests: [...electronTests].sort(), ios };
 }
 
 function run(label, command, { cwd = ROOT } = {}) {
@@ -335,13 +371,17 @@ function main() {
   // friends; leaving them set lets a test commit into the branch being pushed.
   sanitizeGitEnv(process.env);
   const options = parseArgs(process.argv.slice(2));
-  const { changed, tests, electronTests, ios } = plan(options);
+  const { changed, tests, related: relatedAll, cut, dependentNotes, electronTests, ios } = plan(options);
   const guards = existingGuardTests(ROOT);
   const diffTests = tests.filter((file) => !guards.includes(file));
+  const related = relatedAll.filter((file) => !guards.includes(file));
   console.log(`verify:merge against ${options.base}: ${changed.length} changed file(s)`);
   console.log(`  light checks: ${LIGHT_CHECKS.map(([label]) => label).join(", ")}`);
   console.log(`  guard tests: ${guards.length}`);
   console.log(`  tests of the diff: ${diffTests.length ? diffTests.join(", ") : "none"}`);
+  console.log(`  related tests (reach a changed source through imports): ${related.length ? related.join(", ") : "none"}`);
+  if (cut.length) console.log(`  related tests cut by the time ceiling, left to the run after the merge (${cut.length}): ${cut.slice(0, 10).join(", ")}${cut.length > 10 ? ` and ${cut.length - 10} more` : ""}`);
+  for (const note of dependentNotes) console.log(`  ${note}`);
   if (electronTests.length) console.log(`  electron tests: ${electronTests.join(", ")}`);
   console.log(`  iOS: ${ios ? "swift test + simulator build (skipped only when swift is missing)" : "skipped (no ios/ or shared/ change)"}`);
   const refusal = driftMessage(commitDrift(ROOT, [...changed, ...tests, ...electronTests]));
@@ -371,6 +411,7 @@ function main() {
   const vitest = [process.execPath, VITEST, "run", "--reporter=dot", "--testTimeout=60000"];
   stop(run(`guard tests (${guards.length} files)`, [...vitest, ...guards]));
   if (diffTests.length) stop(run(`tests of the diff (${diffTests.length} files)`, [...vitest, ...diffTests]));
+  if (related.length) stop(run(`related tests (${related.length} files${cut.length ? `, ${cut.length} cut by the time ceiling` : ""})`, [...vitest, "--passWithNoTests", ...related]));
   for (const test of electronTests) stop(run(`electron ${test}`, [process.execPath, "--test", test]));
   const notes = ios ? runIosStage({ iosDir: join(ROOT, "ios"), stop }) : [];
   const seconds = ((Date.now() - started) / 1000).toFixed(0);

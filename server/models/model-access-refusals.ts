@@ -66,7 +66,7 @@ export function withoutRefusedModels<T extends { instanceId: string; models: { d
 
 /** The engine cannot run this provider's connection here. */
 export function harnessPairRefusal(tool: string, provider: string, reason?: string): string {
-  return `${tool} cannot run ${provider} here.${reason ? ` ${reason}` : ""} Pick another engine, or keep its own tool.`;
+  return `${tool} cannot run ${provider} here.${reason ? ` ${reason}` : ""} Pick another engine.`;
 }
 
 /** The engine runs this connection, but does not list this model. */

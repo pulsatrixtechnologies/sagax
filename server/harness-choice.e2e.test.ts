@@ -129,6 +129,12 @@ it("moves a bot to the engine it is told to run with, keeps the conversation, an
     const impossible = await api("PUT", "/api/me/models", { harnessByProvider: { openrouter: "claudeAgent" } }, 400);
     expect(impossible.error).toMatch(/^Claude Code cannot run OpenRouter here\./);
     expect((await api("GET", "/api/me/models")).harnessByProvider).toEqual({ openrouter: "openai-compat" });
+
+    // A bot made after a default lands on that engine, from its first model.
+    await api("PUT", "/api/me/models", { harnessByProvider: { openrouter: "piAgent" } });
+    const made = await api("POST", "/api/bots", { name: "Made after the default", modelSelection: BUILT_IN });
+    expect(made.bot.harness).toBeUndefined();
+    expect(made.bot.modelSelection).toMatchObject({ instanceId: "pi", model: "openrouter/fixture-model" });
   } finally {
     await fixture.close();
     upstream.closeAllConnections();

@@ -184,6 +184,16 @@ export function createBotsCoreCreateRoutes(deps: BotsCoreRouteDeps): RouteHandle
         if (!checked.ok) return json(res, checked.status, { error: checked.error });
         selection = checked.selection;
       }
+      // #4329 lot 5: a new bot has no engine of its own yet, so its model
+      // lands on the engine its person runs that provider with
+      if (deps.harnessChoice) {
+        const owner = deps.effectiveBotOwner({ ownerUserId: creatingBotOwnerId(auth) });
+        const harnessed = await deps.harnessChoice.selectionFor(auth, owner, selection, { stored: null });
+        if (harnessed.ok && harnessed.selection !== selection) {
+          const moved = checkedModelSelection(harnessed.selection, undefined, false, sessionPrincipal(auth));
+          if (moved.ok) selection = moved.selection;
+        }
+      }
       if (hostedModels && !hostedModels.allows(selection)) return json(res, 400, { error: hostedModels.error() });
       // Keep the capacity check immediately beside the synchronous write.
       // Awaiting provider discovery before this point cannot race the cap.

@@ -15,7 +15,7 @@ import { checkPersonQuote, messageNamesCard, normalizeWords, personWrote } from 
 import { decideSettingEffect, HOLD_TEXT, type SettingClass } from "../shared/settings-actions-policy.ts";
 import { decodePreference, isAppearancePreference, isSyncedPreference, pickValue, SETTING_FAMILIES, SETTINGS, settingSpec, valueFits, type SettingIds, type SettingSpec } from "../shared/settings-actions.ts";
 import { DEVICE_APPLY_PATH } from "../shared/device-settings.ts";
-import { HARNESS_TOOL_NAME } from "../shared/harness-matrix.ts";
+import { HARNESS_TOOL_NAME, harnessRole, type HarnessRole } from "../shared/harness-matrix.ts";
 import { BULK_TARGETS_MAX, splitBulkTargets } from "../shared/bulk-bot-edit.ts";
 import { withRequiredComputer, type RoutineRequirements } from "../shared/routine-readiness.ts";
 import { STEP_UP_CLASSES, botActClasses, type StepUpClass } from "../shared/step-up.ts";
@@ -280,10 +280,12 @@ export function settingStepUpClasses(classes: readonly SettingClass[], route: { 
  * label, its model id. */
 /** #4329 lot 5: the words that name an engine choice: its kind, its tool's
  * name, and the first-level words for pi, OpenCode and built in. */
+const HARNESS_ROLE_WORDS: Partial<Record<HarnessRole, readonly string[]>> = {
+  pi: ["pi"], opencode: ["OpenCode"], builtin: ["Built in", "intégré", "integre"],
+};
 function harnessNames(value: unknown): string[] {
   if (typeof value !== "string" || !value) return [];
-  const role = value === "piAgent" ? "pi" : value === "opencodeGo" ? "OpenCode" : value === "openai-compat" ? "Built in" : undefined;
-  return [value, HARNESS_TOOL_NAME[value], role, ...(value === "openai-compat" ? ["intégré", "integre"] : [])].filter((name): name is string => Boolean(name));
+  return [value, HARNESS_TOOL_NAME[value], ...(HARNESS_ROLE_WORDS[harnessRole(value)] ?? [])].filter((name): name is string => Boolean(name));
 }
 
 function modelNames(value: unknown, instanceName?: (id: string) => string | undefined): string[] {

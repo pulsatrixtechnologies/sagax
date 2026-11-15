@@ -303,8 +303,6 @@ export function recommendedHarness(source: HarnessSource, place: HarnessPlace, c
   return offered[0]!.harness;
 }
 
-/** #4329 lot 5: the most providers a person keeps a default engine for. */
-export const MAX_HARNESS_DEFAULTS = 200;
 const PROVIDER_ID = /^[\w.:-]{1,120}$/;
 const DRIVER_KIND = /^[A-Za-z][\w-]{0,60}$/;
 
@@ -319,7 +317,6 @@ export function cleanHarnessDefaults(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: Record<string, string> = {};
   for (const [provider, harness] of Object.entries(value as Record<string, unknown>)) {
-    if (Object.keys(out).length >= MAX_HARNESS_DEFAULTS) break;
     if (PROVIDER_ID.test(provider) && isHarnessId(harness)) out[provider] = harness;
   }
   return out;

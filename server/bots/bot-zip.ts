@@ -324,6 +324,9 @@ export interface BotZipHost {
   /** The engine of this selection is installed and allowed here. */
   engineUsable(selection: ModelSelection): boolean;
   defaultSelection(): Promise<ModelSelection> | ModelSelection;
+  /** #4329 lot 5: the new bot's model on the engine it runs with: its own
+   * choice when it brings one, else its owner's default for the provider. */
+  newBotSelection?(owner: string | undefined, selection: ModelSelection, harness: string | null): Promise<ModelSelection>;
   sectionExists(name: string): boolean;
   /** Why no bot can be added now (the workspace's cap), or null. */
   creationRefusal?(): string | null;
@@ -844,6 +847,7 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
     selection = await host.defaultSelection();
     keptModel = false;
   }
+  if (host.newBotSelection) selection = await host.newBotSelection(options.ownerPrincipalId, selection, keptModel && isHarnessId(settings.harness) ? settings.harness : null);
   const name = takeImportName(options.name?.trim() || identity.name || manifest.bot.name, taken);
   const section = settings.section && host.sectionExists(settings.section) ? settings.section : undefined;
   if (settings.section && !section) warnings.push(`Team ${settings.section} does not exist here: the bot is outside a team.`);

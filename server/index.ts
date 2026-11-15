@@ -524,7 +524,7 @@ import { isTechnicalNoticeName } from "../shared/chat-notices.ts";
 import { renewalPrompt } from "./context/context-renewal.ts";
 import { ModelCatalogStore } from "./model-catalog/catalog.ts";
 import { turnRunFor, type TurnRun } from "./turns/turn-run.ts";
-import { attachmentsInText, autoModelRecord, explainPick, isModelRefusal, nextInChain, type AutoChainEntry, type AutoEngine, type CatalogFacts } from "./models/model-auto.ts";
+import { attachmentsInText, autoModelRecord, explainPick, isModelRefusal, nextInChain, type AutoChainEntry, type AutoEngine, type AutoHarnesses, type CatalogFacts } from "./models/model-auto.ts";
 import type { AutoModelRecord } from "../shared/auto-model.ts";
 import { decodeGeneratedImage } from "./media/generated-image.ts";
 import { addDisabledMcpServer, MAX_MCP_SERVERS, isRemoteMcpServer, listMcpServers, mcpServerNameError, parseMcpServerMutation, parseStoredMcpServer, type StoredMcpServer } from "./mcp/mcp-registry.ts";
@@ -24606,6 +24606,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     ownerBotsReadOnly: (bot) => ownerBotsReadOnly(bot),
     personDirectTurn: (bot, threadId) => personDirectTurn(bot as unknown as BotRecord, threadId),
     defaultSelection: () => defaultSelection(),
+    newBotSelection: (owner, selection) => newBotSelection(owner, selection),
     checkedModelSelection: (value, fallback, requireComplete, ownerId) =>
       checkedModelSelection(value, fallback, requireComplete, ownerId) as never,
     hostedModelsAllows: (selection) => !hostedModels || hostedModels.allows(selection),
@@ -32063,6 +32064,7 @@ const botZipHost: BotZipHost = {
   engineUsable: (selection) => Boolean(registry.get(selection.instanceId)) && engineInstalled(selection.instanceId)
     && consoleEngineAllowed(selection.instanceId) && (!hostedModels || hostedModels.allows(selection)),
   defaultSelection: () => defaultSelection(),
+  newBotSelection: (owner, selection, harness) => newBotSelection(owner, selection, harness),
   sectionExists: (name) => store.sections.includes(name),
   creationRefusal: () => store.bots.length >= MAX_WORKSPACE_BOTS ? `This workspace is limited to ${MAX_WORKSPACE_BOTS} bots.` : null,
   browserProfileExists: (id) => id === "guest" || (cfg.browserProfiles ?? []).some((profile) => profile.id === id),
@@ -32513,10 +32515,23 @@ async function applyHarnessDefaults(owner: string | "installation", auth: Reques
     if (checked.ok) store.patchBot(bot.id, { modelSelection: checked.selection });
   }
 }
-/** The engines Auto tries right after the bot's own: its "Runs with" choice,
- * then its owner's defaults per provider. */
-function autoHarnessesFor(bot: Pick<BotRecord, "harness" | "ownerUserId">): string[] {
-  return [...new Set([...(bot.harness ? [bot.harness] : []), ...Object.values(personHarnessDefaults(effectiveBotOwner(bot)))])];
+/** What Auto tries right after the bot's own engine: its "Runs with" choice
+ * for any candidate, then its owner's default for the candidate's own
+ * provider only (server/models/model-auto.ts). */
+function autoHarnessesFor(bot: Pick<BotRecord, "harness" | "ownerUserId">): AutoHarnesses {
+  return { bot: bot.harness ?? null, byProvider: personHarnessDefaults(effectiveBotOwner(bot)) };
+}
+/** A new bot made without the person's own request auth (a bot's create
+ * call, an import): its model lands on the engine its owner's default for
+ * the provider names, as a bot made from the app does (bots-core-create).
+ * `harness` is the new bot's own choice when it brings one (an imported bot). */
+async function newBotSelection(owner: string | null | undefined, selection: ModelSelection, harness?: string | null): Promise<ModelSelection> {
+  const principal = effectiveBotOwner({ ownerUserId: owner ?? undefined });
+  const { auth } = botOwnerImportAuth({ ownerUserId: owner ?? undefined, name: "new bot" } as BotRecord);
+  const moved = await harnessChoice.selectionFor(auth, principal, selection, { stored: harness ?? null });
+  if (!moved.ok || moved.selection === selection) return selection;
+  const checked = checkedModelSelection(moved.selection, undefined, false, principal);
+  return checked.ok && (!hostedModels || hostedModels.allows(checked.selection)) ? checked.selection : selection;
 }
 /** A bot on a model now off (the organization's switch, or its owner's own)
  * moves to Auto on the same engine, from its first model still on; a
@@ -33110,6 +33125,9 @@ const agentApi = createAgentApi({
     if (temporaryActiveCount(store.bots.map((bot) => bot.temporary), temporaryQuotaKey(record)) >= TEMP_AGENT_QUOTA) {
       return agentRefuse(409, "temporary_quota", `${TEMP_AGENT_QUOTA} temporary agents are already active for this person. Delete one with delete_agent first.`, { quota: TEMP_AGENT_QUOTA });
     }
+    // #4329 lot 5: on the engine its person runs that provider with
+    selection = await newBotSelection(owner, selection);
+    if (store.bots.length >= MAX_WORKSPACE_BOTS) return agentRefuse(409, "limit", `This workspace is limited to ${MAX_WORKSPACE_BOTS} bots.`);
     const bot = store.createBot({
       name: input.name,
       description: input.description,

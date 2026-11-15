@@ -182,6 +182,9 @@ export interface InternalRoomsDeps {
   ownerBotsReadOnly(bot: InternalRoomsBot): boolean;
   personDirectTurn(bot: InternalRoomsBot, threadId: string): boolean;
   defaultSelection(): Promise<ModelSelection>;
+  /** #4329 lot 5: a new bot's model on the engine its owner runs that
+   * provider with (server/models/resolve-harness.ts). */
+  newBotSelection?(owner: string | null | undefined, selection: ModelSelection): Promise<ModelSelection>;
   checkedModelSelection(
     value: unknown,
     fallback: undefined,
@@ -271,6 +274,7 @@ export interface InternalRoomsCall {
   ownerBotsReadOnly: InternalRoomsDeps["ownerBotsReadOnly"];
   personDirectTurn: InternalRoomsDeps["personDirectTurn"];
   defaultSelection: InternalRoomsDeps["defaultSelection"];
+  newBotSelection: InternalRoomsDeps["newBotSelection"];
   checkedModelSelection: InternalRoomsDeps["checkedModelSelection"];
   memberOwnedInOrg: InternalRoomsDeps["memberOwnedInOrg"];
   memberFolderRefusal: InternalRoomsDeps["memberFolderRefusal"];

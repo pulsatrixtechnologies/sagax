@@ -300,7 +300,8 @@ export interface AgentModelSummary {
   /** #4329 lot 5: the engine kind that runs the model ("Runs with"). */
   harness?: string;
   /** True when the bot has an engine of its own, not the provider's default. */
-  harness_own?: boolean;  /** The engine kinds that may run this model here (list_agent_models). */
+  harness_own?: boolean;
+  /** The engine kinds that may run this model here (list_agent_models). */
   harnesses?: string[];
 }
 

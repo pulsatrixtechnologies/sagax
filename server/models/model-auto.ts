@@ -12,6 +12,7 @@ import type { EffortLevel, ModelSelection } from "../../shared/wire.ts";
 import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import type { AutoModelRecord, AutoPayerVia, AutoReason, AutoTaskClass, AutoTier } from "../../shared/auto-model.ts";
 import { autoOptimizeOf } from "../../shared/model-auto-optimize.ts";
+import { providerOfModel } from "../../shared/model-provider.ts";
 
 export type { AutoPayerVia, AutoReason } from "../../shared/auto-model.ts";
 export type TaskClass = AutoTaskClass;
@@ -194,10 +195,20 @@ export interface AutoRequest {
   catalog: CatalogLookup;
   /** Models a recent refusal took out (payer, engine, model). */
   skip?: readonly AutoChainEntry[];
-  /** #4329 lot 5: the engines (driver kinds) the bot's owner chose to run
-   * with ("Runs with": the bot's own, then the defaults per provider),
-   * tried right after the bot's own engine, in this order. */
-  harnesses?: readonly string[];
+  /** #4329 lot 5: what the bot's owner chose to run with ("Runs with"). */
+  harness?: AutoHarnesses;
+}
+
+/** #4329 lot 5: the "Runs with" choices Auto follows, in the resolver's
+ * order (server/models/resolve-harness.ts): a candidate on the bot's own
+ * engine kind first, then one on the engine its owner chose for that
+ * candidate's provider. A default for one provider never moves the
+ * candidates of another. */
+export interface AutoHarnesses {
+  /** The bot's own choice, a driver kind; null for none. */
+  bot?: string | null;
+  /** The owner's default per provider id (shared/model-provider.ts). */
+  byProvider?: Readonly<Record<string, string>>;
 }
 
 export interface TaskInput {
@@ -494,13 +505,10 @@ function strongest(pool: Candidate[]): Candidate {
   return from.toSorted((a, b) => priceOf(b) - priceOf(a) || newestFirst(a, b))[0]!;
 }
 
-/** The bot's own engine first, then the engines its owner chose to run with
- * (#4329 lot 5), then ENGINE_ORDER, then the rest by id. */
-export function orderEngines(engines: readonly AutoEngine[], baseInstanceId: string, harnesses: readonly string[] = []): AutoEngine[] {
+/** The bot's own engine first, then ENGINE_ORDER, then the rest by id. */
+export function orderEngines(engines: readonly AutoEngine[], baseInstanceId: string): AutoEngine[] {
   const orderOf = (engine: AutoEngine) => {
-    if (engine.instanceId === baseInstanceId) return -1 - harnesses.length;
-    const chosen = harnesses.indexOf(engine.driverKind);
-    if (chosen >= 0) return chosen - harnesses.length;
+    if (engine.instanceId === baseInstanceId) return -1;
     const index = ENGINE_ORDER.indexOf(engine.driverKind);
     return index >= 0 ? index : ENGINE_ORDER.length;
   };
@@ -526,15 +534,35 @@ function selectionOn(engine: AutoEngine, model: string, base: ModelSelection): M
   return selection;
 }
 
+/** #4329 lot 5: where a candidate stands under the owner's "Runs with"
+ * choices: the bot's own engine, then the bot's own choice, then the
+ * default for the candidate's provider, then the rest in engine order. */
+function chosenRank(candidate: { engine: AutoEngine; model: Candidate }, request: AutoRequest): number {
+  const { engine, model } = candidate;
+  if (engine.instanceId === request.base.instanceId) return 0;
+  const harness = request.harness;
+  if (harness?.bot && engine.driverKind === harness.bot) return 1;
+  const byProvider = harness?.byProvider;
+  if (byProvider && Object.keys(byProvider).length) {
+    const provider = providerOfModel(engine, { id: model.id }).id;
+    if (byProvider[provider] === engine.driverKind) return 2;
+  }
+  return 3;
+}
+
 function pickTier(request: AutoRequest, tier: Tier, role: AutoPick["role"], taskClass?: TaskClass): AutoPick {
   const skip = request.skip ?? [];
-  const engines = orderEngines(request.engines, request.base.instanceId, request.harnesses);
+  const engines = orderEngines(request.engines, request.base.instanceId);
   const own = engines.find((engine) => engine.instanceId === request.base.instanceId);
   const chain: Array<{ engine: AutoEngine; model: Candidate; tier: Tier }> = [];
   for (const wanted of [tier, ...TIER_FALLBACK[tier]]) {
-    for (const engine of engines) {
+    const found = engines.flatMap((engine) => {
       const model = modelForTier(engine, wanted, request.catalog, skip);
-      if (model && !chain.some((entry) => entry.engine.instanceId === engine.instanceId && entry.model.id === model.id)) {
+      return model ? [{ engine, model }] : [];
+    });
+    const ranked = request.harness ? found.toSorted((a, b) => chosenRank(a, request) - chosenRank(b, request)) : found;
+    for (const { engine, model } of ranked) {
+      if (!chain.some((entry) => entry.engine.instanceId === engine.instanceId && entry.model.id === model.id)) {
         chain.push({ engine, model, tier: wanted });
       }
     }

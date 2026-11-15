@@ -315,12 +315,30 @@ describe("helpers", () => {
     expect(orderEngines([local, grok, codex, claude], "ollama").map((engine) => engine.instanceId)).toEqual(["ollama", "claude", "codex", "grok-build"]);
   });
 
-  // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
-  it("tries the chosen engines right after the bot's own, in the chosen order", () => {
-    expect(orderEngines([local, grok, codex, claude], "claude", [grok.driverKind, local.driverKind]).map((engine) => engine.instanceId))
-      .toEqual(["claude", "grok-build", "ollama", "codex"]);
-    // no choice: the order is today's
-    expect(orderEngines([local, grok, codex, claude], "ollama", []).map((engine) => engine.instanceId)).toEqual(["ollama", "claude", "codex", "grok-build"]);
+  // #4329 lot 5: Auto follows "Runs with" as the resolver does: a default
+  // moves only the candidates of its own provider
+  describe("Runs with under Auto", () => {
+    const piOpenai: AutoEngine = { instanceId: "pi", driverKind: "piAgent", displayName: "pi", models: { default: "openai/gpt-6-astra", options: [{ id: "openai/gpt-6-astra", label: "GPT-6 Astra" }] } };
+    const piClaude: AutoEngine = { instanceId: "pi", driverKind: "piAgent", displayName: "pi", models: { default: "anthropic/claude-opus-5-5", options: [{ id: "anthropic/claude-opus-5-5", label: "Claude Opus 5.5" }] } };
+    const grokBase = { instanceId: "grok-build", model: "grok-4.7", auto: true as const };
+    const chainOf = (pi: AutoEngine, harness?: { bot?: string | null; byProvider?: Record<string, string> }) =>
+      pickEquivalentModel({ base: grokBase, engines: [grok, claude, codex, pi], catalog, ...(harness ? { harness } : {}) }, "top")!.chain.map((entry) => entry.instanceId);
+
+    it("puts the provider's chosen engine right after the bot's own", () => {
+      expect(chainOf(piOpenai, { byProvider: { openai: "piAgent" } })).toEqual(["grok-build", "pi", "claude"]);
+    });
+
+    it("never moves another provider's candidates", () => {
+      // OpenAI runs with pi: a Claude model on pi keeps its place
+      expect(chainOf(piClaude, { byProvider: { openai: "piAgent" } })).toEqual(chainOf(piClaude));
+      // OpenRouter runs with pi: nothing of OpenAI or Claude moves
+      expect(chainOf(piOpenai, { byProvider: { openrouter: "piAgent" } })).toEqual(chainOf(piOpenai));
+      expect(chainOf(piOpenai)).toEqual(["grok-build", "claude", "codex"]);
+    });
+
+    it("puts the bot's own choice first, whatever the provider", () => {
+      expect(chainOf(piClaude, { bot: "piAgent", byProvider: { anthropic: "claudeAgent" } })).toEqual(["grok-build", "pi", "claude"]);
+    });
   });
 
   it.each([

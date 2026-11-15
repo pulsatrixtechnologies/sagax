@@ -23,6 +23,7 @@ export async function handleCreateBot(call: InternalRoomsCall): Promise<typeof P
     ownerBotsReadOnly,
     personDirectTurn,
     defaultSelection,
+    newBotSelection,
     checkedModelSelection,
     memberOwnedInOrg,
     memberFolderRefusal,
@@ -84,6 +85,8 @@ export async function handleCreateBot(call: InternalRoomsCall): Promise<typeof P
     if (!checked.ok) return json(res, checked.status, { error: checked.error });
     selection = checked.selection;
   }
+  // #4329 lot 5: on the engine the Primary Bot's person runs that provider with
+  if (newBotSelection) selection = await newBotSelection(effectiveBotOwner(chief), selection);
   if (hostedModels && !hostedModels.allows(selection)) return json(res, 400, { error: hostedModels.error() });
   // The same check the profile path runs: absolute, exists, is a
   // folder. Creation names where the specialist works; nothing looser.

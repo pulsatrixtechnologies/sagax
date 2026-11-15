@@ -102,8 +102,12 @@ export function TriggersPanel({
   const [typedDraft, setTypedDraft] = useState<TypedDraft>(EMPTY_TYPED_DRAFT);
   // Setup of a typed trigger (URL and, once, a generated secret): memory only.
   const [setups, setSetups] = useState<Record<string, TriggerSourceSetup>>({});
-  // #4250 (S4): a product change only reaches a server linked to Perspicax.
-  const productOffered = usePerspicaxOrg() !== null || source === "perspicax";
+  // #4250 (S4), #4360: a product change, bot email and the phone line all
+  // arrive through the linked organization (relay sources): a server with no
+  // organization never receives them, so they are not offered there (the
+  // source already chosen stays listed).
+  const linked = usePerspicaxOrg() !== null;
+  const relayOffered = (type: (typeof TRIGGER_SOURCE_TYPES)[number]) => linked || !isRelaySource(type) || source === type;
   const ingress = state.webhookIngress;
   const chosenBot = bots.some((bot) => bot.id === botId) ? botId : bots[0]?.id ?? "";
 
@@ -169,7 +173,7 @@ export function TriggersPanel({
               }}
               options={[
                 ...TRIGGER_SOURCES.map((entry) => ({ value: entry.id, label: triggerSourceLabel(entry.id), group: t("triggers.group.link") })),
-                ...TRIGGER_SOURCE_TYPES.filter((type) => type !== "perspicax" || productOffered).map((type) => ({ value: type as string, label: typedSourceLabel(type), group: type === "telephony" ? t("triggers.group.telephony") : type === "perspicax" ? t("triggers.group.perspicax") : isRelaySource(type) ? t("triggers.group.botmail") : t("triggers.group.signed") })),
+                ...TRIGGER_SOURCE_TYPES.filter(relayOffered).map((type) => ({ value: type as string, label: typedSourceLabel(type), group: type === "telephony" ? t("triggers.group.telephony") : type === "perspicax" ? t("triggers.group.perspicax") : isRelaySource(type) ? t("triggers.group.botmail") : t("triggers.group.signed") })),
               ]}
             />
             {source === "custom" && (

@@ -123,7 +123,7 @@ describe("Triggers / Automations > Webhooks view", () => {
     // The source and the bot are pill menus (PillSelect): their choices.
     const menu = (label: string) => tree.find((node) => node.props.ariaLabel === label)!.props.options as Array<{ value: string; label: string }>;
     expect(menu(t("triggers.sourceAria")).map((option) => option.label)).toEqual(["Another app sends a link request", "Typeform", "Zapier", "Stripe", "Something else…",
-      "GitHub", "GitLab", "Slack", "Microsoft Teams", "Outlook", "Outlook Calendar", "Sentry", "PagerDuty", "Linear", "Bot email", "Bot phone"]);
+      "GitHub", "GitLab", "Slack", "Microsoft Teams", "Outlook", "Outlook Calendar", "Sentry", "PagerDuty", "Linear"]);
     expect(menu(t("triggers.botAria"))).toContainEqual({ value: "atlas", label: "Atlas" });
     expect(html).toContain("Create trigger");
     expect(html).toContain("No triggers yet");
@@ -318,6 +318,8 @@ describe("Triggers / Automations > Webhooks view", () => {
   });
 
   it("offers typed sources in their own group, next to the link-request presets", () => {
+    // relay sources come through the linked organization (#4360)
+    fixture.overrides.set(ORG, LINKED_ORG);
     const { html, nodes: tree } = render();
     const options = tree.find((node) => node.props.ariaLabel === t("triggers.sourceAria"))!.props.options as Array<{ value: string; group: string }>;
     expect(options.filter((option) => option.group === "Any app, with a bearer token").map((option) => option.value)).toEqual(["link", "typeform", "zapier", "stripe", "custom"]);
@@ -402,6 +404,23 @@ describe("Triggers / Automations > Webhooks view", () => {
     expect(sources()).not.toContain("perspicax");
     fixture.overrides.set(ORG, LINKED_ORG);
     expect(sources().at(-1)).toBe("perspicax");
+  });
+
+  it("offers bot email and the phone line only on a server linked to an organization (#4360)", () => {
+    const sources = () => (render().nodes.find((node) => node.props.ariaLabel === t("triggers.sourceAria"))!.props.options as Array<{ value: string }>).map((option) => option.value);
+    // solo: a trigger that can never fire is not offered
+    expect(sources()).not.toContain("botmail");
+    expect(sources()).not.toContain("telephony");
+    expect(sources()).toContain("github");
+    // linked: unchanged, every relay source is offered
+    fixture.overrides.set(ORG, LINKED_ORG);
+    expect(sources().slice(-3)).toEqual(["botmail", "telephony", "perspicax"]);
+  });
+
+  it("keeps a relay source already chosen listed on a solo server", () => {
+    fixture.overrides.set(SOURCE, "botmail");
+    const options = render().nodes.find((node) => node.props.ariaLabel === t("triggers.sourceAria"))!.props.options as Array<{ value: string }>;
+    expect(options.map((option) => option.value)).toContain("botmail");
   });
 
   it("is translated in French", () => {

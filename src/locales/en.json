@@ -15131,5 +15131,7 @@
   "settings.receive.weekly.switch": "Weekly review from {name}",
   "personProducts.access.direct": "Given to you directly",
   "personProducts.key.expired": "Expired",
-  "personProducts.test.since": "Failing since {when}"
+  "personProducts.test.since": "Failing since {when}",
+  "connectApps.scope.server": "This server",
+  "connectApps.scope.serverNote": "Apps, servers and plugins installed on your own server, for all of your bots."
 }

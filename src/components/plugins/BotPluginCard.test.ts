@@ -45,6 +45,19 @@ describe("scope toggle", () => {
     expect(html).toMatch(/aria-checked="true" data-plugins-scope-option="bot"/);
   });
 
+  it("names the installation scope This server when there is no organization (#4360)", () => {
+    const solo = renderToStaticMarkup(createElement(ScopeToggle, { scope: "workspace", botName: "Maya", solo: true, onScope: () => {} }));
+    expect(solo).toContain("This server");
+    expect(solo).not.toContain("Organization");
+    expect(solo).toContain('data-plugins-scope-option="workspace"');
+    // linked: unchanged
+    const linked = renderToStaticMarkup(createElement(ScopeToggle, { scope: "workspace", botName: "Maya", onScope: () => {} }));
+    expect(linked).toContain("Organization");
+    expect(linked).not.toContain("This server");
+    setLocale("fr");
+    expect(renderToStaticMarkup(createElement(ScopeToggle, { scope: "workspace", solo: true, onScope: () => {} }))).toContain("Ce serveur");
+  });
+
   it("speaks French", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(ScopeToggle, { scope: "workspace", botName: "Maya", onScope: () => {} }));

@@ -3728,5 +3728,7 @@
   "leftOut.reason.invalidYaml": "有効な YAML ではありません",
   "model.step.model": "モデル",
   "model.step.models": "{count} モデル",
-  "model.step.oneModel": "1 モデル"
+  "model.step.oneModel": "1 モデル",
+  "connectApps.scope.server": "このサーバー",
+  "connectApps.scope.serverNote": "自分のサーバーにインストールしたアプリ、サーバー、プラグイン。すべてのボットで使えます。"
 }

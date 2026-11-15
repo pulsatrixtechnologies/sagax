@@ -3613,5 +3613,7 @@
   "leftOut.reason.invalidYaml": "這不是有效的 YAML",
   "model.step.model": "模型",
   "model.step.models": "{count} 個模型",
-  "model.step.oneModel": "1 個模型"
+  "model.step.oneModel": "1 個模型",
+  "connectApps.scope.server": "此伺服器",
+  "connectApps.scope.serverNote": "安裝在你自己伺服器上的應用程式、伺服器和外掛，供你的所有機器人使用。"
 }

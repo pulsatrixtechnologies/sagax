@@ -2351,5 +2351,7 @@
   "leftOut.reason.invalidYaml": "це не коректний YAML",
   "model.step.model": "Модель",
   "model.step.models": "{count} моделей",
-  "model.step.oneModel": "1 модель"
+  "model.step.oneModel": "1 модель",
+  "connectApps.scope.server": "Цей сервер",
+  "connectApps.scope.serverNote": "Застосунки, сервери та плагіни, встановлені на вашому власному сервері, для всіх ваших ботів."
 }

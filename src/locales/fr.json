@@ -15131,5 +15131,7 @@
   "settings.receive.weekly.switch": "Revue de la semaine de {name}",
   "personProducts.access.direct": "Donné à toi directement",
   "personProducts.key.expired": "Expirée le",
-  "personProducts.test.since": "En échec depuis le {when}"
+  "personProducts.test.since": "En échec depuis le {when}",
+  "connectApps.scope.server": "Ce serveur",
+  "connectApps.scope.serverNote": "Les apps, serveurs et plugins installés sur ton propre serveur, pour tous tes bots."
 }

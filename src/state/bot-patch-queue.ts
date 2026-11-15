@@ -51,6 +51,7 @@ type BotPatchBody = {
   memoryUpkeep: boolean;
   skillLearning: boolean;
   builtinPlugins: Record<string, boolean>;
+  products: Record<string, boolean>;
   teamMemorySharing: "shared" | "private";
   mcpServers: string[] | null;
   mcpAccounts: Record<string, string> | null;

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createBotsMutateRoutes, type BotsMutateRouteDeps } from "./bots-mutate.ts";
 import { PASS, dispatchRoutes, type RouteContext } from "./table.ts";
 import { buildBotPatchProfile } from "./bots-mutate-patch-build-profile.ts";
+import { buildBotPatchAccess } from "./bots-mutate-patch-build-access.ts";
 import { createBotPatchState, type BotPatchState, type BotsMutateEnv } from "./bots-mutate-helpers.ts";
 
 function context(path: string, method = "GET", body: unknown = {}, headers: Record<string, string> = {}) {
@@ -95,6 +96,24 @@ function baseDeps(overrides: Partial<BotsMutateRouteDeps> = {}): BotsMutateRoute
 }
 
 describe("bots-mutate routes", () => {
+  it("#4359: a products patch merges this bot's switches and refuses anything but product ids with booleans", async () => {
+    const run = async (body: Record<string, unknown>, existing: Record<string, unknown> = { products: { psa: false } }) => {
+      const json = vi.fn();
+      const env = new Proxy({ json, res: {}, auth: { kind: "loopback" } } as Record<string, unknown>, { get: (target, key: string) => key in target ? target[key] : vi.fn(() => undefined) });
+      const state = { ...createBotPatchState(["/api/bots/osprey", "osprey"] as unknown as RegExpMatchArray), body, existingBot: { ...bot, ...existing } } as unknown as BotPatchState;
+      const stopped = await buildBotPatchAccess(env as unknown as BotsMutateEnv, state);
+      return { stopped, patch: state.patch as Record<string, unknown>, json };
+    };
+    const merged = await run({ products: { EDR: false } });
+    expect(merged.stopped).toBe(false);
+    expect(merged.patch.products).toEqual({ psa: false, edr: false });
+    expect((await run({ products: { psa: true } })).patch.products).toEqual({ psa: true });
+    const refused = await run({ products: { psa: "off" } });
+    expect(refused.stopped).toBe(true);
+    expect(refused.json).toHaveBeenCalledWith({}, 400, expect.objectContaining({ error: expect.stringContaining("true or false") }));
+    expect((await run({})).patch.products).toBeUndefined();
+  });
+
   it("Always allow from a linked root card saves only its exact source bot's grant", async () => {
     const worker = { ...bot, id: "worker", threadId: "work" };
     const original = { card: { requestId: "provider-request", allowKey: "mcp:read" } };

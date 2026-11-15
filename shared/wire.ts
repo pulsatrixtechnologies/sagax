@@ -704,6 +704,10 @@ export interface WireBot {
   /** The built-in plugins this bot switched (shared/builtin-plugins.ts), by
    * id. Absent or true: on; false: off for this bot. */
   builtinPlugins?: Record<string, boolean>;
+  /** #4359: the person's organization products this bot switched
+   * (shared/bot-products.ts), by product id. Absent or true: on; false: off
+   * for this bot, enforced by the server. */
+  products?: Record<string, boolean>;
   /** The saved account each MCP server signs in with for this bot, by
    * server name; a server it does not name uses its default account. */
   mcpAccounts?: Record<string, string>;

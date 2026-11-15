@@ -1296,6 +1296,7 @@ import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
 import { createPersonProductsRoutes, createSaveProductKeyCard, createSetProductKey } from "./routes/person-products.ts";
 import { productKeyCardShownText, productKeyResumeText } from "../shared/person-products.ts";
 import { createPersonProductsClient } from "./perspicax/person-products.ts";
+import { botProductEnabled, botProductsOff, normalProductId } from "../shared/bot-products.ts";
 import { createMeEnginesRoutes } from "./routes/me-engines.ts"; import { createAccountNames } from "./engines/account-names.ts";
 import { createOrgBotsRoutes } from "./routes/org-bots.ts";
 import { createPeopleAvatarRoutes } from "./routes/people-avatar.ts";
@@ -6346,6 +6347,7 @@ bindLeafHost({
   get botCapabilitiesFor() { return botCapabilitiesFor; },
   get consoleBotCapabilities() { return consoleBotCapabilities; },
   get botCapabilitiesAs() { return botCapabilitiesAs; },
+  get botProductInputs() { return botProductInputs; },
   get orgTeams() { return orgTeams; },
   get engineLogins() { return engineLogins; },
   get sectionChannels() { return sectionChannels; },
@@ -30063,6 +30065,19 @@ const personProducts = createPersonProductsClient({
     : Promise.resolve({ ok: false as const, error: "link" as const }),
 });
 const personProductsLinked = () => IDENTITY.kind === "perspicax" && perspicaxDirectory !== null;
+/** #4359: the bot owner's products with this bot's switch, for the This bot
+ * scope of Connect Apps, when the person looking owns the bot; undefined
+ * otherwise (a solo server, another person's bot, a list not read). */
+async function botProductInputs(bot: { products?: Record<string, boolean>; ownerUserId?: unknown }, principalId: string | undefined): Promise<Array<{ id: string; name: string; enabled: boolean }> | undefined> {
+  if (!principalId || !personProductsLinked() || effectiveBotOwner(bot) !== principalId) return undefined;
+  const token = await personProductsSubjectToken(principalId);
+  if (!token) return undefined;
+  const listed = await personProducts.list(principalId, token);
+  if (!listed.ok) return undefined;
+  return listed.products
+    .filter((product) => product.state !== "not_served")
+    .map((product) => ({ id: normalProductId(product.id), name: product.name, enabled: botProductEnabled(bot, product.id) }));
+}
 const setProductKey = createSetProductKey({ subjectToken: personProductsSubjectToken, client: personProducts });
 /** #4185: one product of a bot's owner, read as that person (the product key
  * card). A missing product is told apart from a Perspicax without the product
@@ -31418,6 +31433,11 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
       const raised = await raiseProductKeyCard(productKeyCardDeps, { bot, threadId: turn.threadId, group: Boolean(owner.group), productId: state.product });
       return raised.kind === "shown" ? productKeyCardShownText(raised.label) : null;
     },
+    // #4359: the products the person turned off for this bot (Connect Apps, This bot)
+    botProductsOff: (botId) => {
+      const off = botProductsOff(store.bot(botId));
+      return off.size ? off : null;
+    },
     // remote_support_open / status / close: the session shows in Sagax (server/remote-support/remote-session-register.ts)
     onRemoteSupport: (call) => {
       const principalId = call.principalId || remoteSessionSpeaker(call.threadId);
@@ -31809,6 +31829,7 @@ const orgBotsDeps: BotsDeps = {
       ...(source.memoryUpkeep !== undefined ? { memoryUpkeep: source.memoryUpkeep } : {}),
       ...(source.skillLearning !== undefined ? { skillLearning: source.skillLearning } : {}),
       ...(source.builtinPlugins !== undefined ? { builtinPlugins: { ...source.builtinPlugins } } : {}),
+      ...(source.products !== undefined ? { products: { ...source.products } } : {}),
       ...(source.helperModel !== undefined ? { helperModel: source.helperModel } : {}),
       ...(source.browser !== undefined ? { browser: source.browser } : {}),
       ...(source.computer !== undefined ? { computer: source.computer } : {}),

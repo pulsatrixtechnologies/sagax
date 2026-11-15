@@ -7,7 +7,7 @@ import { readableError } from "@/lib/plain-error";
 import { canEditConfig } from "@/lib/viewer";
 import { discoverItems, entryIcon, privateSkills } from "@/lib/installed-model";
 import { connectedSummary, TAILSCALE_KEY, type PluginItem } from "@/lib/plugins-model";
-import { organizationRows } from "@/lib/capabilities";
+import { botSwitchPatch, organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
 import { SavedKeysResetNotice } from "../SavedKeysReset";
 import { setMine } from "@/lib/org-capabilities";
@@ -249,9 +249,10 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
                 if (!item.orgDeclaration) return;
                 void setMine(item.orgDeclaration, next).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
               }}
-              onToggleBuiltin={scope === "bot" && scopeBot ? (item, next) => {
-                if (!item.builtin) return;
-                dispatch({ type: "updateBot", botId: scopeBot.id, patch: { builtinPlugins: { ...scopeBot.builtinPlugins, [item.builtin]: next } } });
+              onToggleBotSwitch={scope === "bot" && scopeBot ? (item, next) => {
+                const patch = botSwitchPatch(scopeBot, item, next);
+                if (!patch) return;
+                dispatch({ type: "updateBot", botId: scopeBot.id, patch });
                 // the resolver reads the saved bot: refresh once the patch landed
                 void flushBotPatches(scopeBot.id).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
               } : undefined}

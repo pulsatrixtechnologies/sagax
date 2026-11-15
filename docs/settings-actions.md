@@ -176,6 +176,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Memory upkeep | Bot editor > Memory | `sagax_settings` get, set `bot.memoryUpkeep` | simple |
 | Skill learning (revise skills, propose new ones) | Bot editor > Skills | `sagax_settings` get, set `bot.skillLearning` | simple |
 | Built-in plugins by id, false switches one off (rea: REA reverse engineering) | Connect Apps > Installed | `sagax_settings` get, set `bot.builtinPlugins` | simple |
+| The person's organization products this bot may use, by product id (api_list id), false switches one off for this bot | Connect Apps > Manage > This bot | `sagax_settings` get, set `bot.products` | simple |
 | Team memory sharing (shared, private) | Bot editor > Memory > Team memory | `sagax_settings` get, set `bot.teamMemorySharing` | simple (autrui pour élargir à shared) |
 | Browser | Bot editor > Access > Browser | `sagax_settings` get, set `bot.browser` | simple |
 | Browser profile | Bot editor > Access > Browser | `sagax_settings` get, set `bot.browserProfile` | simple |

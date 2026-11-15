@@ -301,6 +301,27 @@ describe("personal and complete plugin capabilities", () => {
     input.builtinPlugins = [{ plugin: REA_PLUGIN, enabled: true, runtimeMissing: true }];
     expect(byKey(resolveBotCapabilities(input, { principalId: "p1", mayChange: false }), "plugin:bot:builtin:rea")).toMatchObject({ enabled: true, canToggle: false, reason: "needs_runtime" });
   });
+
+  it("#4359: lists the person's products at This bot, one switch each, on the account connection when on", () => {
+    const input = inputs(ENGINES[0]!);
+    input.products = [{ id: "psa", name: "Service desk", enabled: true }, { id: "edr", name: "Endpoint security", enabled: false }];
+    const list = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
+    expect(byKey(list, "product:bot:psa")).toMatchObject({ form: "product", product: "psa", name: "Service desk", scope: "bot", state: "on", enabled: true, canToggle: true, mounts: ["perspicax"] });
+    expect(byKey(list, "product:bot:edr")).toMatchObject({ form: "product", product: "edr", state: "off", enabled: false, canToggle: true, reason: "disabled" });
+    expect(byKey(list, "product:bot:edr")?.mounts).toBeUndefined();
+    // read only for someone who may not change the bot, and for a list computed for its owner
+    expect(byKey(resolveBotCapabilities(input, { principalId: "p1", mayChange: false }), "product:bot:psa")?.canToggle).toBe(false);
+    expect(byKey(resolveBotCapabilities(input, { principalId: "p1", mayChange: true, computedFor: { principalId: "p2", name: "Owner" } }), "product:bot:psa")?.canToggle).toBe(false);
+  });
+
+  it("#4359: no product row on a solo server or without a product list", () => {
+    const input = inputs(ENGINES[0]!);
+    input.products = [{ id: "psa", name: "Service desk", enabled: true }];
+    input.organization = false;
+    expect(resolveBotCapabilities(input, { mayChange: true }).items.some((item) => item.form === "product")).toBe(false);
+    const linked = inputs(ENGINES[0]!);
+    expect(resolveBotCapabilities(linked, { principalId: "p1", mayChange: true }).items.some((item) => item.form === "product")).toBe(false);
+  });
 });
 
 describe("a turn mounts exactly what the list says", () => {

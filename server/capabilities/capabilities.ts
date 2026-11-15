@@ -148,6 +148,10 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
    * and on the desktop whether the runtime to start one is missing. Their
    * servers reach `pluginMcp` with scope bot and key `builtin:<id>`. */
   builtinPlugins?: Array<{ plugin: BuiltinPlugin; enabled: boolean; runtimeMissing?: boolean }>;
+  /** #4359: the bot owner's organization products (the Me scope's list,
+   * read as that person) with this bot's switch. Absent: none to show (a
+   * solo server, another person's bot, a list that could not be read). */
+  products?: Array<{ id: string; name: string; enabled: boolean }>;
   pluginHostRefused?: (url: string) => boolean | undefined;
   /** the bot's enabled plugin folders as a turn reads them (BotPlugins.pluginDirs) */
   botPluginDirs: string[];
@@ -536,6 +540,29 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       builtin: plugin.id,
       ...(!enabled ? { reason: "disabled" as const } : runtimeMissing ? { reason: "needs_runtime" as const } : {}),
     });
+  }
+
+  // #4359: the person's organization products, one switch each for this
+  // bot. They ride the account's main Perspicax connection: an off product's
+  // tools are left out of it for this bot (bot-products-filter.ts).
+  if (inputs.organization) {
+    const mount = engine.customMcp ? "perspicax" : undefined;
+    for (const product of inputs.products ?? []) {
+      push({
+        key: `product:bot:${product.id}`,
+        form: "product",
+        name: product.name,
+        source: { kind: "perspicax", label: inputs.organizationName ?? "Perspicax" },
+        scope: "bot",
+        state: product.enabled ? "on" : "off",
+        enabled: product.enabled,
+        canToggle: viewer.mayChange && ownSwitches,
+        engine: receipt("product", { mcp: product.enabled && Boolean(mount) }),
+        product: product.id,
+        ...(!product.enabled ? { reason: "disabled" as const } : {}),
+        ...(product.enabled && mount ? { mounts: [mount] } : {}),
+      });
+    }
   }
 
   // Complete-plugin MCP servers, in the runtime's exact order. The

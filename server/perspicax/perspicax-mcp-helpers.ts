@@ -44,6 +44,19 @@ export function apiNamesOf(value: unknown): Map<string, string> {
   return names;
 }
 
+/** #4359: the families an api_list answer declares (an API's `group`): each
+ * group id with its API ids, as Perspicax lists them. */
+export function apiGroupsOf(value: unknown): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  const apis = isObject(value) && Array.isArray(value.apis) ? value.apis : [];
+  for (const api of apis) {
+    if (!isObject(api) || typeof api.id !== "string" || !api.id.trim() || typeof api.group !== "string" || !api.group.trim()) continue;
+    const group = api.group.trim().toLowerCase();
+    groups.set(group, [...(groups.get(group) ?? []), api.id.trim().toLowerCase()]);
+  }
+  return groups;
+}
+
 /** The connectors whose reads an api_list answer marks as reviewed
  * (`reviewed_reads: true`: they return no credential), by the prefix of
  * their tools: each marked API id, and a served group (`group`) when every

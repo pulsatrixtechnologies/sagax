@@ -10,7 +10,9 @@
 // that list. The field names below are the contract those screens read:
 // add fields freely, never rename one without saying so in the PR.
 
-export type CapabilityForm = "plugin" | "skill" | "mcp" | "connector" | "role" | "flow";
+/** `product` (#4359): one of the person's organization products, served
+ * through the account's Perspicax connection, switched per bot. */
+export type CapabilityForm = "plugin" | "skill" | "mcp" | "connector" | "role" | "flow" | "product";
 
 /** bot = this bot; me = the person (all their bots); organization = declared
  * by the organization (the organization's Flow today); installation =
@@ -134,6 +136,9 @@ export interface Capability {
   /** added: the Sagax built-in plugin id (shared/builtin-plugins.ts), for
    * its own icon, translated description and switch. */
   builtin?: string;
+  /** added (#4359): the person's organization product id this row switches
+   * for the bot (shared/bot-products.ts). Never shown. */
+  product?: string;
 }
 
 export interface BotCapabilities {
@@ -216,10 +221,10 @@ export function engineReceipt(driverKind: string, form: CapabilityForm, parts: E
     if (parts.commands) out.commands = fileReceipt();
     if (parts.agents) out.agents = fileReceipt();
   }
-  if (parts.mcp && (form === "plugin" || form === "mcp" || form === "role" || form === "flow")) {
+  if (parts.mcp && (form === "plugin" || form === "mcp" || form === "role" || form === "flow" || form === "product")) {
     out.mcp = parts.customMcp ? (files ? "mounted" : "proxied") : "none";
   }
-  if (form === "role" && parts.mcp) out.tools = out.mcp;
+  if ((form === "role" || form === "product") && parts.mcp) out.tools = out.mcp;
   if (form === "connector" && parts.account) {
     out.tools = (parts.account === "claude" && claude) || (parts.account === "grok" && GROK_KINDS.has(driverKind)) ? "native" : "none";
   }

@@ -13,7 +13,9 @@
  * the same window size, the navigation Connect apps' pages follow
  * (2026-10-28). The bot Rocket has its own plugins (For Rocket).
  * &products=1 (#4185): the person's Perspicax products at the Me scope;
- * &products=many: twelve of them, every state.
+ * &products=many: twelve of them, every state; &products=real: the 22 a
+ * linked person really gets. With &bot=1 (#4359): the
+ * same products at Rocket's This bot scope, one switch each.
  * scripts/capture/connect-apps-grokbot.mjs clicks through the screens. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -290,6 +292,18 @@ if (params.has("products")) {
     ];
     more.forEach(([name, state], index) => products.push({ id: `prod-more-${index}`, name, auth_state: "missing", setup, state, base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: null, named: false, own: false }, form: null, actions: allowed(), console_url: "" } as never));
   }
+  // &products=real (#4359): the list a linked person really gets, its ids and
+  // titles as api_list serves them (a family split in twelve long titles)
+  if (params.get("products") === "real") {
+    const family = ["company", "configurations", "expense", "finance", "marketing", "procurement", "project", "sales", "schedule", "service", "system", "time"];
+    const real: Array<[string, string]> = [
+      ["bookstack", "BookStack API (content scope)"], ["brightgauge", "ConnectWise BrightGauge (internal web API)"], ["cw_cpq", "ConnectWiseSellService"],
+      ...family.map((part): [string, string] => [`cw_psa_${part}`, `Connectwise Manage Public Endpoints: ${part}`]),
+      ["cw_rmm", "ConnectWise Platform APIs"], ["sentinelone", "S1 MGMT API"], ["twilio_api", "Twilio - Api"], ["twilio_lookups", "Twilio - Lookups"],
+      ["twilio_messaging", "Twilio - Messaging"], ["twilio_monitor", "Twilio - Monitor"], ["x360recover", "X360Recover API"],
+    ];
+    products.splice(0, products.length, ...real.map(([id, name]) => ({ id, name, auth_state: "ok", setup, state: "connected", base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: "default", named: false, own: false }, form: null, actions: allowed("test"), console_url: "" } as never)));
+  }
   // what Perspicax answers, read as the Sagax server reads it
   const served = parsePersonProducts(products);
   MANAGE_API["/api/me/perspicax/products"] = { products: served };
@@ -318,6 +332,22 @@ if (params.has("bot")) {
       plugin("cursor-team-kit", "Cursor Team Kit", "cursor-plugins", ["rule-no-inline-imports", "ship-it"], ["ci-watcher"]),
     ],
   };
+}
+// ?bot=1&products=1 (#4359): the same products at Rocket's This bot scope,
+// one switch each, Endpoint Security switched off for Rocket (with
+// &products=real, the service family's service part and the EDR)
+if (params.has("bot") && params.has("products")) {
+  const listed = (MANAGE_API["/api/me/perspicax/products"] as { products: Array<{ id: string; name: string; state: string }> }).products;
+  const inventory = MANAGE_API["/api/bots/bot-a/capabilities"] as { items: unknown[] };
+  inventory.items = [...inventory.items, ...listed.filter((product) => product.state !== "not_served").map((product) => {
+    const enabled = !["prod-edr", "cw_psa_service", "sentinelone"].includes(product.id);
+    return {
+      key: `product:bot:${product.id}`, form: "product", name: product.name, product: product.id,
+      source: { kind: "perspicax", label: "Example Org" }, scope: "bot", state: enabled ? "on" : "off", enabled, canToggle: true,
+      engine: enabled ? { mcp: "mounted", tools: "mounted", nothing: false } : { nothing: true },
+      ...(enabled ? { mounts: ["perspicax"] } : { reason: "disabled" }),
+    };
+  })];
 }
 MANAGE_API["/api/me/skills-library"] = MANAGE_API["/api/skills-library"];
 

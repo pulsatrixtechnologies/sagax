@@ -531,6 +531,7 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   memoryUpkeep: "bots.behaviour",
   skillLearning: "bots.behaviour",
   builtinPlugins: "bots.behaviour",
+  products: "bots.behaviour",
   loopGuard: "bots.behaviour",
   voiceNotes: "bots.behaviour",
   emailDrafts: "bots.behaviour",

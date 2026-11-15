@@ -3,6 +3,7 @@
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { parseBuiltinPluginsPatch } from "../../shared/builtin-plugins.ts";
+import { botProductsAfter, parseBotProductsPatch } from "../../shared/bot-products.ts";
 
 export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m, body, patch, existingBot, normalizedSelection, computerSpecified, requestedComputer, patchStepUp } = state;
@@ -53,6 +54,14 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
       return true;
     }
     patch.builtinPlugins = { ...existingBot?.builtinPlugins, ...parsed.value };
+  }
+  if (body.products !== undefined) {
+    const parsed = parseBotProductsPatch(body.products);
+    if (!parsed.ok) {
+      env.json(env.res, 400, { error: parsed.error });
+      return true;
+    }
+    patch.products = botProductsAfter(existingBot?.products, parsed.value);
   }
   if (body.memoryUpkeep !== undefined) {
     if (typeof body.memoryUpkeep !== "boolean") {

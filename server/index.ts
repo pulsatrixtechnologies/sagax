@@ -24509,8 +24509,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       },
     ),
     claimTurnResource: (capability, resource) => claimTurnResource(capability as InternalCapability, resource),
-    browserAgentRpc: (session, spec, method, params, beforeDispatch, credentials) =>
-      browserRuntime.agentRpc(session, spec as never, method as "tools/call" | "tools/list", params, beforeDispatch, credentials as never),
+    browserAgentRpc: (session, spec, method, params, beforeDispatch, credentials, turn) =>
+      browserRuntime.agentRpc(session, spec as never, method as "tools/call" | "tools/list", params, beforeDispatch, credentials as never, turn),
     myChromeMemory: () => myChrome.memory,
     myChromeTakeNotes: (session) => myChrome.takeNotes(session),
     myChromeToolAllowed: (tool) => myChromeToolRefusal(tool) === null,

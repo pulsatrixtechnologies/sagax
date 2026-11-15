@@ -7,8 +7,12 @@ import {
   browserGuardSettings,
   createBrowserFailureGuard,
   isWebPageTool,
+  browserStopNote,
+  carriesBrowserNote,
   type BrowserGuardSettings,
 } from "./browser-failure-guard.ts";
+import { pageBlockNote } from "../browser/browser-tool-shape.ts";
+import { addHeldSecretScrubber } from "../../shared/redact.ts";
 import { wireTurnBudget } from "./turn-budget-wiring.ts";
 import { WORK_STYLE_PROMPT } from "../system-prompt.ts";
 import { chatToolName } from "../drivers/chat-mcp-tools.ts";
@@ -18,30 +22,26 @@ import { AUTO_COMPUTER_MCP_NAME } from "../computer/auto-computer.ts";
 const at = "2026-11-08T00:00:00.000Z";
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function harness(settings: BrowserGuardSettings = { enabled: true, stopAt: 4 }, language: "fr" | "en" = "fr") {
+function harness(settings: BrowserGuardSettings = { enabled: true }, language: "fr" | "en" = "fr") {
   const steers: string[] = [];
-  const stops: string[] = [];
-  const posts: string[] = [];
-  let live = true;
+  const live = true;
   const guard = createBrowserFailureGuard({
     settings: () => settings,
     live: () => live,
     canSteer: () => live,
     steer: async (_threadId, note) => { steers.push(note); return "steered"; },
-    interrupt: async (_threadId, cause) => { stops.push(cause); live = false; },
-    post: (_threadId, text) => { posts.push(text); },
     language: () => language,
     log: () => {},
   });
   const emit = (event: object) => guard.onEvent({ threadId: "th", instanceId: "grok", driver: "d", createdAt: at, turnId: "t1", ...event } as unknown as RuntimeEvent);
   let n = 0;
-  const call = (title: string, ok: boolean) => {
+  const call = (title: string, ok: boolean, output?: string) => {
     const itemId = `i${n++}`;
     emit({ type: "item.started", itemType: "tool", itemId, title });
-    emit({ type: "item.completed", itemType: "tool", itemId, ok, output: ok ? "page" : "browser crashed" });
+    emit({ type: "item.completed", itemType: "tool", itemId, ok, ...(output === "" ? {} : { output: output ?? (ok ? "page" : "browser crashed") }) });
   };
   emit({ type: "turn.started" });
-  return { guard, emit, call, steers, stops, posts };
+  return { guard, emit, call, steers };
 }
 
 describe("browser failure guard (QA 0.8.67 G4)", () => {
@@ -89,65 +89,115 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
     }
   });
 
-  it("replays the G4 turn with the chat engine titles: the note at 2, the stop at 4", async () => {
+  it("replays the G4 turn with the chat engine titles: one note at 2, and the turn is never stopped by the server", async () => {
     const h = harness();
     h.call(chatToolName(USER_SANDBOX_MCP_NAME, "browse"), false);
     h.call(chatToolName(AUTO_COMPUTER_MCP_NAME, "fetch_url"), false);
     expect(h.steers).toHaveLength(1);
+    expect(h.steers[0]).toContain("sagax_environment_browse, sagax_computer_fetch_url");
     h.call(chatToolName("browser", "agent_browser_tab_new"), false);
     h.call(chatToolName("browser", "agent_browser_wait_ms"), false);
     await flush();
-    expect(h.stops).toHaveLength(1);
-    expect(h.posts[0]).toContain("sagax_environment_browse, sagax_computer_fetch_url, browser_agent_browser_tab_new");
+    expect(h.steers).toHaveLength(1);
   });
 
-  it("replays the G4 turn: a note at the 2nd failure in a row, a stop with a clear message at the 4th, not 8 tries", async () => {
+  it("replays the G4 turn: a note at the 2nd failure in a row, once", async () => {
     const h = harness();
     h.call("browse", false);
     expect(h.steers).toEqual([]);
     h.call("fetch_url", false);
     expect(h.steers).toHaveLength(1);
-    expect(h.steers[0]).toContain("[Sagax : le navigateur a échoué 2 fois de suite (browse, fetch_url)");
-    expect(h.steers[0]).toContain("réponds tout de suite de mémoire, sans outil");
+    expect(h.steers[0]).toContain("[Sagax : 2 appels de page web ont échoué de suite (browse, fetch_url)");
+    expect(h.steers[0]).toContain("Ne refais pas le même appel");
+    expect(h.steers[0]).toContain("dans tes mots, ce qui te bloque");
+    expect(h.steers[0]).toContain("réponds de mémoire, sans outil");
     expect(h.steers[0]).toContain("au plus une seule recherche web");
+    // An action task is not told the browser did not respond.
+    expect(h.steers[0]).not.toMatch(/n'a pas répondu/);
     h.call("web_search", true);
     h.call("tab_new", false);
-    expect(h.steers).toHaveLength(1);
     h.call("tab_switch", false);
-    await flush();
-    expect(h.stops).toEqual(["le navigateur a échoué 4 fois ; le tour a été arrêté au lieu de boucler"]);
-    expect(h.posts).toHaveLength(1);
-    expect(h.posts[0]).toContain("le navigateur a échoué 4 fois (browse, fetch_url, tab_new, tab_switch)");
-    expect(h.posts[0]).toContain("réponds sans navigateur");
     h.call("tab_wait", false);
-    expect(h.stops).toHaveLength(1);
+    expect(h.steers).toHaveLength(1);
   });
 
-  it("keeps the working notes in the stop message", async () => {
-    const h = harness({ enabled: true, stopAt: 3 }, "en");
-    h.emit({ type: "item.completed", itemType: "assistant_text", text: "Tailscale is a mesh VPN; Pangolin is a tunnel." });
-    h.call("browse", false);
-    h.call("browse", false);
-    h.call("browse", false);
-    await flush();
-    expect(h.posts[0]).toContain("I stopped this turn: the browser failed 3 times (browse)");
-    expect(h.posts[0]).toContain("> Tailscale is a mesh VPN");
+  it("leaves the note to the built-in browser's own results when one carried it (#4394): no second copy", () => {
+    const h = harness({ enabled: true }, "en");
+    const stop = browserStopNote({ failures: 2, tools: ["agent_browser_click"] });
+    h.call("agent_browser_click", false, "Element not found");
+    h.call(chatToolName("browser", "agent_browser_fill"), false, `${stop}\nElement not found`);
+    h.call("mcp__browser__agent_browser_open", false);
+    expect(h.steers).toEqual([]);
+    // A page block note in the first failure says it too.
+    const wall = harness();
+    wall.call("agent_browser_open", false, pageBlockNote({ kind: "challenge", host: "social.test" }));
+    wall.call("agent_browser_click", false);
+    expect(wall.steers).toEqual([]);
   });
 
-  it("a page call that works resets the run; failures apart never stop the turn", async () => {
+  it("steers when built-in browser steps fail by throwing or before the runtime (#4394): no result carried the note", () => {
+    // The browser not up yet in a freshly woken environment: the route throws
+    // (409) before the runtime, and the engine's tool output is the bare error.
+    const h = harness();
+    h.call("mcp__browser__agent_browser_open", false, "Browser access changed while connecting.");
+    h.call("mcp__browser__agent_browser_open", false, "");
+    expect(h.steers).toHaveLength(1);
+    expect(h.steers[0]).toContain("(agent_browser_open)");
+    // A mixed run is steered too.
+    const mixed = harness();
+    mixed.call("fetch_url", false);
+    mixed.call("agent_browser_open", false);
+    expect(mixed.steers).toHaveLength(1);
+  });
+
+  it("logs each failed page step with its own error text, redacted and short, never a held secret (#4394)", () => {
+    const lines: string[] = [];
+    const held = "Vault-Held-Value-93";
+    const remove = addHeldSecretScrubber((text) => text.split(held).join("••••••"));
+    try {
+      const guard = createBrowserFailureGuard({
+        settings: () => ({ enabled: true }), live: () => true, canSteer: () => true,
+        steer: async () => "steered", language: () => "en", log: (line) => lines.push(line),
+      });
+      const emit = (event: object) => guard.onEvent({ threadId: "th", instanceId: "grok", driver: "d", createdAt: at, turnId: "t1", ...event } as unknown as RuntimeEvent);
+      emit({ type: "turn.started" });
+      emit({ type: "item.started", itemType: "tool", itemId: "a", title: "agent_browser_click" });
+      emit({ type: "item.completed", itemType: "tool", itemId: "a", ok: false, output: `Element @e12 not found while typing ${held} with sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123\n${"page text ".repeat(80)}` });
+      emit({ type: "item.started", itemType: "tool", itemId: "b", title: "agent_browser_open" });
+      emit({ type: "item.completed", itemType: "tool", itemId: "b", ok: false, output: `${pageBlockNote({ kind: "refused", host: "example.test" })}\nHTTP 403` });
+      emit({ type: "item.started", itemType: "tool", itemId: "c", title: "agent_browser_open" });
+      emit({ type: "item.completed", itemType: "tool", itemId: "c", ok: true, output: "fine" });
+      const failed = lines.filter((line) => line.includes("step failed"));
+      expect(failed).toHaveLength(2);
+      expect(failed[0]).toContain("tool=agent_browser_click");
+      expect(failed[0]).toContain("Element @e12 not found");
+      expect(failed[0]).not.toContain(held);
+      expect(failed[0]).not.toContain("abcdefghijklmnopqrstuvwxyz0123");
+      expect(failed[0]).not.toContain("page text");
+      expect(failed[0].length).toBeLessThan(320);
+      expect(failed[1]).toContain("tool=agent_browser_open");
+      expect(failed[1]).toContain("HTTP 403");
+    } finally {
+      remove();
+    }
+  });
+
+  it("finds the note in a tool output whatever the language", () => {
+    expect(carriesBrowserNote(browserStopNote({ failures: 2, tools: ["browse"] }))).toBe(true);
+    expect(carriesBrowserNote(browserStopNote({ language: "fr", failures: 3, tools: ["browse"] }))).toBe(true);
+    expect(carriesBrowserNote(`Error\n${pageBlockNote({ kind: "refused", host: "social.test" })}`)).toBe(true);
+    expect(carriesBrowserNote("browser crashed")).toBe(false);
+    expect(carriesBrowserNote(undefined)).toBe(false);
+  });
+
+  it("a page call that works resets the run", async () => {
     const h = harness();
     for (let round = 0; round < 3; round += 1) {
       h.call("browse", false);
       h.call("browse", round === 2 ? false : true);
     }
-    // failures: 1, reset, 1, reset, 1, 2 => note once, no stop
+    // failures: 1, reset, 1, reset, 1, 2 => note once
     expect(h.steers).toHaveLength(1);
-    expect(h.stops).toEqual([]);
-    // a research turn: 30 pages, 6 dead links spread out, keeps going
-    for (let n = 0; n < 30; n += 1) h.call(n % 2 ? "fetch_url" : "browse", n % 5 !== 0);
-    await flush();
-    expect(h.stops).toEqual([]);
-    expect(h.posts).toEqual([]);
   });
 
   it("starts over on each turn, and stays silent when off or idle", () => {
@@ -162,18 +212,16 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
     const off = harness({ enabled: false });
     for (let n = 0; n < 8; n += 1) off.call("browse", false);
     expect(off.steers).toEqual([]);
-    expect(off.stops).toEqual([]);
   });
 
   it("reads its settings from the environment", () => {
-    expect(browserGuardSettings({})).toEqual({ enabled: true, stopAt: 4 });
+    expect(browserGuardSettings({})).toEqual({ enabled: true });
     expect(browserGuardSettings({ SAGAX_BROWSER_GUARD: "0" })).toEqual({ enabled: false });
-    expect(browserGuardSettings({ SAGAX_BROWSER_GUARD_STOP_AT: "0" })).toEqual({ enabled: true });
-    expect(browserGuardSettings({ SAGAX_BROWSER_GUARD_STOP_AT: "6" })).toEqual({ enabled: true, stopAt: 6 });
-    expect(browserGuardSettings({ SAGAX_BROWSER_GUARD_STOP_AT: "2" })).toEqual({ enabled: true, stopAt: 4 });
+    // #4394: no ceiling any more; an old setting changes nothing.
+    expect(browserGuardSettings({ SAGAX_BROWSER_GUARD_STOP_AT: "6" })).toEqual({ enabled: true });
   });
 
-  it("is wired on every direct conversation with the turn budget, and posts its message in the chat", async () => {
+  it("is wired on every direct conversation with the turn budget, and never stops the turn or speaks in the bot's name (#4394)", async () => {
     const store = new Store((): ModelSelection => ({ instanceId: "grok", model: "grok-4.6" }));
     const bot = store.createBot({ name: "Osprey" }, { seedMessages: false });
     const threadId = bot.threadId;
@@ -201,11 +249,10 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
       emit({ type: "item.completed", itemType: "tool", itemId: `b${n}`, ok: false });
     }
     await flush();
-    expect(steers.some((note) => note.startsWith("[Sagax: the browser failed 2 times in a row"))).toBe(true);
-    expect(stops).toEqual([threadId]);
-    const last = store.messagesFor(threadId).at(-1);
-    expect(last?.role).toBe("bot");
-    expect(last?.text).toContain("I stopped this turn: the browser failed 4 times");
+    expect(steers.some((note) => note.startsWith("[Sagax: 2 web page calls failed in a row"))).toBe(true);
+    expect(stops).toEqual([]);
+    // Only the bot's own words reach the person: nothing written by the server in its name.
+    expect(store.messagesFor(threadId).some((message) => message.kind === "text" && /failed in a row/.test(message.text ?? ""))).toBe(false);
   });
 
   it("tells every bot once to answer general knowledge without a tool; the two-failures rule stays a runtime note", () => {

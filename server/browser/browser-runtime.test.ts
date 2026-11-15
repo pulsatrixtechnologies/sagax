@@ -198,6 +198,8 @@ const fs = require('node:fs');
 let initialized = false;
 let rpcTimeoutCalls = 0;
 let pageText = 'Ready';
+// PAGE_STATE: what the page reads as (url, title, text, flags); CLICK_PAGE: what it reads as after a click.
+let pageState = process.env.PAGE_STATE ? JSON.parse(process.env.PAGE_STATE) : null;
 lines.on('line', line => {
   const m = JSON.parse(line);
   if (m.method === 'notifications/initialized') { initialized = true; return; }
@@ -227,7 +229,8 @@ lines.on('line', line => {
   // LEAK: a page that shows a filled password back, in every kind of result.
   else if (process.env.LEAK && m.params.name !== 'agent_browser_get_url') result = { content:[{type:'text',text:'page says ' + process.env.LEAK},{type:'image',data:'AAAA',mimeType:'image/png'}], structuredContent:{ value: process.env.LEAK } };
   else if (m.params.name === 'agent_browser_eval' && process.env.FAIL_EVAL === '1') result = { isError:true, content:[{type:'text',text:'Evaluation failed'}] };
-  else if (m.params.name === 'agent_browser_eval') result = { content:[{type:'text',text:JSON.stringify(JSON.stringify({ url:'http://fixture.test/', title:'Fixture', text:pageText + '\\nSay hello' }))}] };
+  else if (m.params.name === 'agent_browser_eval') result = { content:[{type:'text',text:JSON.stringify(JSON.stringify(pageState ?? { url:'http://fixture.test/', title:'Fixture', text:pageText + '\\nSay hello' }))}] };
+  else if (m.params.name === 'agent_browser_click' && process.env.CLICK_PAGE) { pageState = JSON.parse(process.env.CLICK_PAGE); result = { content:[{type:'text',text:'clicked'}] }; }
   else if (m.params.name === 'agent_browser_click' && m.params.arguments.selector === '#missing') result = { isError:true, content:[{type:'text',text:'Element not found: #missing'}] };
   else if (m.params.name === 'agent_browser_click') { pageText = 'Hello, Ada'; result = { content:[{type:'text',text:JSON.stringify({ data:{ clicked:m.params.arguments.selector, lifecycle:{ launched:false, relaunchedBrowser:false, launchHash:1 } }, error:null, success:true }, null, 2)}] }; }
   else result = { content:[{type:'text',text:JSON.stringify(m.params)}],pid:process.pid };
@@ -934,6 +937,44 @@ describe("visit signature", () => {
       expect(warn).toHaveBeenCalledTimes(1);
     } finally { warn.mockRestore(); }
   });
+
+  it("does not try a failed signature again on every page of the same browser (#4394)", async () => {
+    const sign = vi.fn(async () => { throw new Error("The browser did not accept the visit signature."); });
+    const value = runtime({ signNavigation: sign });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const path of ["a", "b", "c"]) {
+        await value.agentRpc("unsigned", spec(), "tools/call", { name: "agent_browser_open", arguments: { url: `https://example.test/${path}` } });
+      }
+      // Each try costs a process start (up to 8 s): one per browser.
+      expect(sign).toHaveBeenCalledTimes(1);
+    } finally { warn.mockRestore(); }
+  });
+
+  it("tries the visit signature again once the browser closed or restarted (#4394)", async () => {
+    const sign = vi.fn(async () => { throw new Error("The browser did not accept the visit signature."); });
+    const value = runtime({ signNavigation: sign, closeBrowser: async () => true });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const open = (path: string) => value.agentRpc("resign", spec(), "tools/call", { name: "agent_browser_open", arguments: { url: `https://example.test/${path}` } });
+    try {
+      await open("a");
+      await open("b");
+      expect(sign).toHaveBeenCalledTimes(1);
+      // An idle close keeps the gate (to tell the bot), not the failure.
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      expect(await value.closeIfIdle("resign", 10)).toBe(true);
+      await open("c");
+      expect(sign).toHaveBeenCalledTimes(2);
+      // The person's Restart keeps the gate too.
+      await value.restart("resign", "person", async () => {});
+      await open("d");
+      expect(sign).toHaveBeenCalledTimes(3);
+      // The bot's own restart_browser.
+      await value.agentRpc("resign", spec(), "tools/call", { name: "restart_browser" });
+      await open("e");
+      expect(sign).toHaveBeenCalledTimes(4);
+    } finally { warn.mockRestore(); }
+  });
 });
 
 describe("browser MCP shaping at the runtime boundary", () => {
@@ -949,5 +990,130 @@ describe("browser MCP shaping at the runtime boundary", () => {
       expect(bulky.content[0].text).toContain("TRUNCATED by Sagax");
       expect(bulky.content[1]).toMatchObject({ type: "image" });
     } finally { await value.closeAll(); }
+  });
+});
+
+describe("a page that keeps the bot out (#4394)", () => {
+  const withPage = (env: Record<string, string>): BrowserSpawnSpec => {
+    const value = spec();
+    Object.assign(value.env, env);
+    return value;
+  };
+  const texts = (result: unknown) => ((result as { content?: Array<{ text?: string }> }).content ?? []).map((part) => part.text ?? "");
+
+  it("says at the first look that a site challenges the bot, as a failed step, before the page text", async () => {
+    const value = runtime();
+    const challenge = withPage({ PAGE_STATE: JSON.stringify({ url: "https://social.test/home", title: "Just a moment...", text: "Checking your browser", challenge: true }) });
+    const opened = await value.agentRpc("wall", challenge, "tools/call", { name: "agent_browser_open", arguments: { url: "https://social.test/home" } }) as { isError?: boolean };
+    expect(opened.isError).toBe(true);
+    expect(texts(opened)[0]).toMatch(/social\.test is checking for a person/);
+    expect(texts(opened)[0]).toMatch(/own words/);
+  });
+
+  it("points a sign-in wall at the bot's sign-in steps without failing the step", async () => {
+    const value = runtime();
+    const login = withPage({ PAGE_STATE: JSON.stringify({ url: "https://social.test/i/flow/login", title: "Log in", text: "Sign in\nPassword", password: true }) });
+    const opened = await value.agentRpc("login", login, "tools/call", { name: "agent_browser_open", arguments: { url: "https://social.test/compose" } }) as { isError?: boolean };
+    expect(opened.isError).not.toBe(true);
+    expect(texts(opened)[0]).toMatch(/asks to sign in.*request_login/);
+    // An ordinary page reads as before.
+    const plain = await value.agentRpc("plain", spec(), "tools/call", { name: "agent_browser_open", arguments: { url: "https://example.com" } });
+    expect(texts(plain).join("\n")).not.toMatch(/Sagax:/);
+  });
+
+  it("says it when an action lands on a refusal", async () => {
+    const value = runtime();
+    const refusal = withPage({ CLICK_PAGE: JSON.stringify({ url: "https://social.test/post", title: "403 Forbidden", text: "Access denied" }) });
+    const clicked = await value.agentRpc("act", refusal, "tools/call", { name: "agent_browser_click", arguments: { selector: "@e3" } }) as { isError?: boolean };
+    expect(clicked.isError).toBe(true);
+    expect(texts(clicked)[0]).toMatch(/social\.test refused the bot's browser/);
+  });
+
+  it("tells the bot in the result itself after two failed browser steps in a row, on every engine, once per run", async () => {
+    const value = runtime();
+    const first = await value.agentRpc("row", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } });
+    expect(texts(first).join("\n")).not.toMatch(/failed in a row/);
+    const second = await value.agentRpc("row", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } });
+    // First, so an engine's short preview of the result keeps it.
+    expect(texts(second)[0]).toMatch(/^\[Sagax: 2 web page calls failed in a row \(agent_browser_click\)/);
+    expect(texts(second)[0]).toMatch(/Do not repeat the same call/);
+    expect(texts(second)[0]).not.toMatch(/did not respond/);
+    const third = await value.agentRpc("row", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } });
+    expect(texts(third).join("\n")).not.toMatch(/in a row/);
+    // A step that works starts a new run.
+    await value.agentRpc("row", spec(), "tools/call", { name: "echo", arguments: {} });
+    await value.agentRpc("row", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } });
+    const again = await value.agentRpc("row", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } });
+    expect(texts(again)[0]).toMatch(/2 web page calls failed in a row/);
+  });
+
+  it("does not count a refused fill_credential as a failed page step, nor add the note to it", async () => {
+    const value = runtime();
+    // A deliberate refusal (no vault here) is the harness's answer, not a page that failed.
+    for (let step = 0; step < 3; step++) {
+      const refused = await value.agentRpc("fill", spec(), "tools/call", { name: "fill_credential", arguments: { credential: "c1", field: "password" } }) as { isError?: boolean };
+      expect(refused.isError).toBe(true);
+      expect(texts(refused)[0]).toBe("Saved credentials are not available to you here; nothing was filled.");
+    }
+    // Nor does a refusal break a run of page failures: the second failed click still carries the note.
+    await value.agentRpc("fill", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } });
+    await value.agentRpc("fill", spec(), "tools/call", { name: "fill_credential", arguments: { credential: "c1", field: "password" } });
+    const second = await value.agentRpc("fill", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } });
+    expect(texts(second)[0]).toMatch(/^\[Sagax: 2 web page calls failed in a row \(agent_browser_click\)/);
+  });
+
+  it("does not count the harness's own refusal of a page tool (a CSS selector while a login is allowed)", async () => {
+    const value = runtime();
+    const armed = { resolve: () => null, armed: () => true } as never;
+    for (let step = 0; step < 3; step++) {
+      const refused = await value.agentRpc("refs", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#post" } }, undefined, armed) as { isError?: boolean };
+      expect(refused.isError).toBe(true);
+      expect(texts(refused)).toHaveLength(1);
+      expect(texts(refused)[0]).toMatch(/^In this browser a saved login is allowed/);
+    }
+  });
+
+  it("counts a browser step that throws, and its error carries the note (the browser not up yet)", async () => {
+    const value = runtime();
+    const down: BrowserSpawnSpec = { command: process.execPath, args: ["-e", "process.exit(1)"], env: { PATH: process.env.PATH } };
+    const call = () => value.agentRpc("down", down, "tools/call", { name: "agent_browser_open", arguments: { url: "https://social.test/" } });
+    const first = await call().then(() => null, (error: unknown) => error as Error);
+    expect(first).toBeInstanceOf(Error);
+    expect(first!.message).not.toMatch(/failed in a row/);
+    const second = await call().then(() => null, (error: unknown) => error as Error);
+    expect(second).toBeInstanceOf(Error);
+    expect(second!.message).toMatch(/^\[Sagax: 2 web page calls failed in a row \(agent_browser_open\)/);
+  });
+
+  it("starts a fresh run for another conversation or the next turn on the same browser (#4394 review)", async () => {
+    const value = runtime();
+    // One turn of one conversation spends the run's full share on heavy pages.
+    for (let step = 0; step < 3; step++) await value.agentRpc("shared", spec(), "tools/call", { name: "bulky" }, undefined, undefined, "thread-a:g1");
+    const cut = await value.agentRpc("shared", spec(), "tools/call", { name: "bulky" }, undefined, undefined, "thread-a:g1");
+    expect(texts(cut)[0]!.length).toBeLessThan(7_000);
+    // Another conversation of the same bot, within seconds: its context is fresh.
+    const other = await value.agentRpc("shared", spec(), "tools/call", { name: "bulky" }, undefined, undefined, "thread-b:g1");
+    expect(texts(other)[0]!.length).toBeGreaterThan(30_000);
+    // A failure at the end of one turn and the first one of the next are not "2 in a row".
+    await value.agentRpc("shared", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } }, undefined, undefined, "thread-b:g1");
+    const next = await value.agentRpc("shared", spec(), "tools/call", { name: "agent_browser_click", arguments: { selector: "#missing" } }, undefined, undefined, "thread-b:g2");
+    expect(texts(next).join("\n")).not.toMatch(/in a row/);
+    // The next turn starts at the full budget too.
+    const fresh = await value.agentRpc("shared", spec(), "tools/call", { name: "bulky" }, undefined, undefined, "thread-b:g2");
+    expect(texts(fresh)[0]!.length).toBeGreaterThan(30_000);
+  });
+
+  it("bounds what a long browsing run puts into the conversation: later results are cut to a short budget", async () => {
+    const value = runtime();
+    const sizes: number[] = [];
+    for (let step = 0; step < 6; step++) {
+      const bulky = await value.agentRpc("long", spec(), "tools/call", { name: "bulky" });
+      sizes.push(texts(bulky)[0]!.length);
+    }
+    // The first results keep the full budget; once the run has taken its
+    // share, each further one is cut short with the hint to narrow it.
+    expect(sizes[0]).toBeGreaterThan(30_000);
+    expect(sizes.at(-1)).toBeLessThan(7_000);
+    expect(sizes.reduce((sum, size) => sum + size, 0)).toBeLessThan(110_000);
   });
 });

@@ -182,7 +182,10 @@ class Session {
   private pending: ListeningLine[] = [];
   private flushTimer: unknown = null;
   private heartbeat: unknown = null;
-  private sending = false;
+  /** The batch on its way to the server: stop waits for it. */
+  private inFlight: Promise<void> | null = null;
+  /** Kept here: the window's state is cleared once the session is over. */
+  private sessionId: string | null = null;
   private stopped = false;
   private microphone: { stop(): void } | null = null;
   private channel: ListeningChannel | null = null;
@@ -218,6 +221,7 @@ class Session {
     // here, after the highest seq the server kept: the line count can be
     // lower (an empty line is skipped) and a reused seq is taken for a resend
     this.seq = Math.max(this.seq, session.lastSeq ?? session.lineCount);
+    this.sessionId = session.sessionId;
     update((live) => ({ ...live, sessionId: session.sessionId, startedAt: session.startedAt, view: withFinal(live.view, [], session.speakers) }));
     for (const speaker of session.speakers) if (!this.book.speakers.some((known) => known.key === speaker.key)) this.book.speakers.push(speaker);
     const models = await this.deps.models().catch(() => ({ vad: new LevelVad() as VoiceProbability, embedder: null }));
@@ -281,7 +285,8 @@ class Session {
   }
 
   private scheduleFlush(ms: number): void {
-    if (this.flushTimer !== null) return;
+    // after Stop, stop() itself sends what is left
+    if (this.flushTimer !== null || this.stopped) return;
     this.flushTimer = this.deps.setTimer(() => {
       this.flushTimer = null;
       void this.flush();
@@ -297,23 +302,37 @@ class Session {
     }, HEARTBEAT_MS);
   }
 
-  /** Sends the lines waiting (or a heartbeat). A failed send keeps them. */
-  async flush(heartbeat = false): Promise<void> {
-    const sessionId = current?.sessionId;
-    if (!sessionId || this.sending || (!this.pending.length && !heartbeat)) return;
-    this.sending = true;
+  /** Sends the lines waiting (or a heartbeat). A failed send keeps them.
+   * One batch at a time: while one is on its way, this answers with it. */
+  flush(heartbeat = false): Promise<void> {
+    if (this.inFlight) return this.inFlight;
+    const sessionId = this.sessionId;
+    if (!sessionId || (!this.pending.length && !heartbeat)) return Promise.resolve();
     const batch = this.pending.slice();
-    try {
-      await this.deps.request(`/api/listening/${sessionId}/lines`, { method: "POST", body: JSON.stringify({ lines: batch, speakers: this.book.speakers }) });
-      this.pending = this.pending.filter((line) => !batch.includes(line));
-      if (current?.error) update((live) => ({ ...live, error: null }));
-    } catch (error) {
-      update((live) => ({ ...live, error: readableError(error) }));
-      this.scheduleFlush(RETRY_MS);
-    } finally {
-      this.sending = false;
-    }
-    if (this.pending.length) this.scheduleFlush(BATCH_MS);
+    const sent = (async () => {
+      try {
+        await this.deps.request(`/api/listening/${sessionId}/lines`, { method: "POST", body: JSON.stringify({ lines: batch, speakers: this.book.speakers }) });
+        this.pending = this.pending.filter((line) => !batch.includes(line));
+        if (current?.error) update((live) => ({ ...live, error: null }));
+      } catch (error) {
+        update((live) => ({ ...live, error: readableError(error) }));
+        this.scheduleFlush(RETRY_MS);
+      } finally {
+        this.inFlight = null;
+      }
+      if (this.pending.length) this.scheduleFlush(BATCH_MS);
+    })();
+    this.inFlight = sent;
+    return sent;
+  }
+
+  /** The window closes: the lines still waiting go with the stop, in one
+   * keepalive request (a second one could reach the server after it). */
+  stopOnUnload(): void {
+    const sessionId = this.sessionId;
+    if (!sessionId || this.stopped) return;
+    const body = this.pending.length ? { body: JSON.stringify({ lines: this.pending, speakers: this.book.speakers }) } : {};
+    void api(`/api/listening/${sessionId}/stop`, { method: "POST", keepalive: true, ...body }).catch(() => undefined);
   }
 
   /** The person's stop (or the session ended elsewhere: `remote`). */
@@ -329,9 +348,11 @@ class Session {
       this.deps.clearTimer(this.flushTimer);
       this.flushTimer = null;
     }
-    // the last lines first, then the stop: the bot's turn reads them all
+    // the batch on its way, then the last lines, then the stop: the server
+    // starts the bot's turn from the record as it stands at the stop
+    if (this.inFlight) await this.inFlight;
     for (let tries = 0; this.pending.length && tries < 3; tries++) await this.flush();
-    const sessionId = current?.sessionId;
+    const sessionId = this.sessionId;
     if (sessionId && !remote) await this.deps.request(`/api/listening/${sessionId}/stop`, { method: "POST" }).catch(() => undefined);
   }
 }
@@ -392,7 +413,5 @@ export function receiveListeningFrame(frame: Pick<ListeningFrame, "sessionId" | 
 /** Closing the window ends the session (the server would after a few
  * minutes; a keepalive request says it now). */
 export function stopListeningOnUnload(): void {
-  const sessionId = current?.sessionId;
-  if (!sessionId) return;
-  void api(`/api/listening/${sessionId}/stop`, { method: "POST", keepalive: true }).catch(() => undefined);
+  running?.stopOnUnload();
 }

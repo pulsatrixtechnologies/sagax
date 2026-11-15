@@ -66,13 +66,21 @@ function createDisplayMediaGuard({ now = Date.now, ttlMs = 5_000 } = {}) {
   });
 }
 
+/** Whether this platform can hear the computer's sound (#4100). Linux
+ * cannot: the shell does not arm a listen intent there, so the page never
+ * asks for a capture that would only be refused (and read as a denied
+ * permission Linux does not have); it listens on the microphone only. */
+function listensToComputer(platform) {
+  return platform === "win32" || platform === "darwin";
+}
+
 /** What the shell answers a trusted listen request (#4100): the computer's
  * sound ("loopback", Windows; tried on macOS, where the system asks for the
  * screen and system audio recording permission) beside the screen video the
  * shell requires. Linux has no loopback: no answer, the page listens on the
  * microphone only. */
 function listenResponse(platform, source) {
-  if (!source || (platform !== "win32" && platform !== "darwin")) return {};
+  if (!source || !listensToComputer(platform)) return {};
   return { video: source, audio: "loopback" };
 }
 
@@ -114,6 +122,7 @@ module.exports = {
   frameKey,
   invokeDisplayMediaCallback,
   listenResponse,
+  listensToComputer,
   originOf,
   selectCaptureSource,
 };

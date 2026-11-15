@@ -146,7 +146,7 @@ app.setAboutPanelOptions({ applicationName: FULL_NAME });
 const { desktopCapabilities, nativeDesktopActions } = capabilitiesModule;
 const nativeActions = nativeDesktopActions(process.platform);
 const require = createRequire(import.meta.url);
-const { createDisplayMediaGuard, invokeDisplayMediaCallback, listenResponse, selectCaptureSource } = require(
+const { createDisplayMediaGuard, invokeDisplayMediaCallback, listenResponse, listensToComputer, selectCaptureSource } = require(
   "./screen-preview.cjs",
 );
 const { STAGE_PREFIX: APPIMAGE_CUA_STAGE_PREFIX } = require("./cua-linux-bundle.cjs");
@@ -2345,7 +2345,7 @@ ipcMain.on("screen:preview-intent", localOnlySync("screen:preview-intent", (even
 // intent, of the "listen" kind (screen-preview.cjs), right before the page's
 // getDisplayMedia in the person's own click.
 ipcMain.on("listening:computer-intent", localOnlySync("listening:computer-intent", (event) => {
-  event.returnValue = displayMediaGuard.begin(event.senderFrame, "listen");
+  event.returnValue = listensToComputer(process.platform) ? displayMediaGuard.begin(event.senderFrame, "listen") : false;
 }));
 
 // Each account's page keeps its own count; the badge adds them up, as a

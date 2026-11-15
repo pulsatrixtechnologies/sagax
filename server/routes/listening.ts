@@ -5,8 +5,8 @@
 //                      (the one already live there is answered again)
 //   POST /api/listening/:id/lines      { lines: [{ seq, at?, speaker, text }], speakers?: [{ key, label }] }
 //        { session }   final lines, idempotent by seq; an empty batch is a heartbeat
-//   POST /api/listening/:id/stop
-//        { session }   ends it (again: the ended session)
+//   POST /api/listening/:id/stop       { lines?, speakers? }
+//        { session }   ends it, after the last lines when given (again: the ended session)
 //   GET  /api/listening/:id?after=<seq>
 //        { session, lines }   the transcript after that seq (all without it)
 //
@@ -83,6 +83,14 @@ export function createListeningRoutes(deps: ListeningRouteDeps): RouteHandler {
       return json(res, 200, { session: listeningView(session) });
     }
     if (action === "stop") {
+      // a window that closes sends its last lines with the stop, in one request
+      const body = await readBody(req).catch(() => null) as { lines?: unknown } | null;
+      if (body && body.lines !== undefined) {
+        if (!deps.sessions.get(id, person)) return json(res, 404, NOT_FOUND);
+        const batch = parseListeningBatch(body);
+        if ("error" in batch) return json(res, 400, { error: batch.error });
+        deps.sessions.addLines(id, person, batch);
+      }
       const session = deps.sessions.stop(id, person);
       if (!session) return json(res, 404, NOT_FOUND);
       return json(res, 200, { session: listeningView(session) });

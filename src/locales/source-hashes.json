@@ -18866,7 +18866,11 @@
       "connectApps.mac.action.mac_notes_update_folder": "7f02355e4fe745bba7bd39b5d575d65e2885986a7b1b8e8057577e4e7479ef0b",
       "connectApps.mac.action.mac_notes_delete_folder": "23ea98e3d44914656646f60a454766cf6cede9766b48cadf00abee05b19a6982",
       "routineReadiness.ready.triggers": "5e8867e9084696685afa3f12f445fb6efd071c2330b94d20f09ae55c8ae3d65d",
-      "routineReadiness.trigger_unreachable": "c67d5b8917c1ed8066ca581997d09ab17bdb32cca4dd71ddc603fb64ad6ba663"
+      "routineReadiness.trigger_unreachable": "c67d5b8917c1ed8066ca581997d09ab17bdb32cca4dd71ddc603fb64ad6ba663",
+      "serverError.notPaired": "67bc72580edc19730b01445ad50f0aa99a1af941c008640d87dd8af6ce94273c",
+      "security.solo.title": "1e37187c888e93e1d465fddc0cd8f9324956deaa2f595624b2ffbe851b2140e7",
+      "security.solo.hint": "99ee703ee0210944a8a708f1419d302f977f81e187d4b8249c2d826d27947546",
+      "vault.transfer.reauthSolo": "fc1671d23313a003de7c70ff191fd5d01ad3a6472dbd2d5ca74ecfa0d5399121"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

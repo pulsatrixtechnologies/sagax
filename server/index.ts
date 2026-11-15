@@ -12263,6 +12263,7 @@ ROUTES.push(createCredentialVaultRoutes({
   vault: credentialVault,
   onePassword,
   principal: credentialVaultPrincipal,
+  organization: IDENTITY.kind === "perspicax",
   botExists: (id) => Boolean(store.bot(id)),
   // The vault card's "I'll sign in myself": the bot's own browser for that
   // conversation is armed first, and its password and code fields emptied at Done.

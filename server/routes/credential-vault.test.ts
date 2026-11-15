@@ -26,6 +26,7 @@ afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) awai
 
 async function serve(options: {
   principal?: string | null;
+  organization?: boolean;
   exportGate?: Parameters<typeof createCredentialVaultRoutes>[0]["exportGate"];
   importGate?: Parameters<typeof createCredentialVaultRoutes>[0]["importGate"];
   exportBlocked?: () => boolean;
@@ -50,6 +51,7 @@ async function serve(options: {
     ...(options.purchaseStepUp ? { purchaseStepUp: options.purchaseStepUp } : {}),
     onePassword: options.onePassword ?? new OnePassword({ env: {}, exec: async () => { throw new Error("absent"); }, organization: () => false }),
     principal: () => options.principal === undefined ? LOCAL_VAULT_PRINCIPAL : options.principal,
+    ...(options.organization === undefined ? {} : { organization: options.organization }),
     botExists: (id) => id === "bot-a",
     cards: {
       find: (_botId, threadId, messageId) => cards.get(`${threadId}:${messageId}`) ?? null,
@@ -279,6 +281,26 @@ describe("credential vault routes", () => {
     expect(requiredScope("POST", "/api/me/credentials/wallets")).toBe("client");
   });
 
+  it.each([true, false])("tells a caller with no person what to do, by mode (organization: %s, #4360)", async (organization) => {
+    const { call } = await serve({ principal: null, organization });
+    const refused = await call("POST", "/api/me/credentials/list", {});
+    expect(refused.status).toBe(403);
+    expect(refused.body.items).toBeUndefined();
+    expect(refused.body.code).toBe(organization ? "no_person" : "not_paired");
+    if (organization) expect(refused.body.error).toBe("Sign in to use your credential vault.");
+    else expect(refused.body.error).toMatch(/paired with your server/);
+  });
+  it("serves the one local vault to a paired session on a solo server (#4360)", async () => {
+    const paired = { kind: "session", via: "bearer", scopes: ["admin", "client"], session: { id: "phone", principalId: "p_person" } } as unknown as RequestAuth;
+    const principal = vaultPrincipalFor(paired, { organization: false, desktop: false, loopbackOptIn: false, localPrincipal: LOCAL_VAULT_PRINCIPAL });
+    expect(principal).toBe(LOCAL_VAULT_PRINCIPAL);
+    const { call } = await serve({ principal, organization: false });
+    expect((await call("POST", "/api/me/credentials", { kind: "login", name: "Supplier", domains: ["supplier.example"], username: "me", password: FAKE_PASSWORD })).status).toBeLessThan(300);
+    const listed = await call("POST", "/api/me/credentials/list", {});
+    expect(listed.status).toBe(200);
+    expect(listed.body.items.map((item: { name: string }) => item.name)).toEqual(["Supplier"]);
+    expect(listed.text).not.toContain(FAKE_PASSWORD);
+  });
   it("refuses a caller with no person, and keeps the routes member scope and off for agents", async () => {
     const { call } = await serve({ principal: null });
     expect((await call("POST", "/api/me/credentials/list", {})).status).toBe(403);

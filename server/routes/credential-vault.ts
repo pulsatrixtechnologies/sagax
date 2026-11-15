@@ -47,6 +47,9 @@ export interface CredentialVaultRouteDeps {
   /** Whose vault this request reads: null refuses (a session-less caller
    * on an organization server). */
   principal(auth: RequestAuth): string | null;
+  /** #4360: false on a server without an organization, where there is no
+   * sign-in: a refused caller is told to pair this device instead. */
+  organization?: boolean;
   botExists(botId: string): boolean;
   /** The bot's own browser for this conversation, for a person who signs in
    * there themselves: null to go on, else why not (server/browser/browser-runtime.ts
@@ -167,7 +170,11 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
     if (!mine && !card) return PASS;
     res.setHeader("cache-control", "private, no-store");
     const principalId = deps.principal(auth);
-    if (!principalId) return json(res, 403, { error: "Sign in to use your credential vault.", code: "no_person" });
+    if (!principalId) {
+      return json(res, 403, deps.organization === false
+        ? { error: "Your vault opens on a device paired with your server, or in the Sagax desktop app. Open your server's address on your device and pair it with a code from your server.", code: "not_paired" }
+        : { error: "Sign in to use your credential vault.", code: "no_person" });
+    }
     const body = async (): Promise<Record<string, unknown>> => {
       if (!/^application\/json\b/i.test(String(req.headers["content-type"] ?? ""))) throw Object.assign(new Error("content-type must be application/json"), { status: 415 });
       const parsed = await readBody(req);

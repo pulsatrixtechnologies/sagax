@@ -8,6 +8,7 @@ import { Trash2 } from "lucide-react";
 import { activeLocale, t } from "@/lib/i18n";
 import { rememberSettingsReturn } from "@/lib/settings-return";
 import { signInAgainPath } from "@/lib/sign-in-again";
+import { loadPerspicaxOrg } from "@/lib/perspicax-org";
 import { StepUpError, registerSecurityKey, securityKeyInBrowser, securityKeysUsable } from "@/lib/step-up-client";
 import { api } from "@/state/store";
 import type { LocaleKey } from "@/locales";
@@ -73,6 +74,9 @@ export function SecurityKeySettings() {
   const [signingIn, setSigningIn] = useState(false);
   /** Where "Sign in again" goes; null: no Pulsatrix sign-in on this server. */
   const [againPath, setAgainPath] = useState<string | null | undefined>(undefined);
+  /** #4360: a server without an organization has no sign-in to make recent:
+   * the first key is added in the desktop app, on the computer that runs it. */
+  const [solo, setSolo] = useState(false);
   const waiting = useRef<AbortController | null>(null);
   const usable = securityKeysUsable();
 
@@ -90,7 +94,11 @@ export function SecurityKeySettings() {
   useEffect(() => {
     if (!needsSignIn) return;
     let live = true;
-    void signInAgainPath().then((path) => { if (live) setAgainPath(path); });
+    void Promise.all([signInAgainPath(), loadPerspicaxOrg()]).then(([path, org]) => {
+      if (!live) return;
+      setAgainPath(path);
+      setSolo(org === null);
+    });
     return () => { live = false; };
   }, [needsSignIn]);
 
@@ -227,6 +235,8 @@ export function SecurityKeySettings() {
           <DescribedRow label={t("security.browser.title")} description={t("security.browser.hint")} rowId="security-keys-browser">
             <button type="button" className={PILL} onClick={stopWaiting}>{t("security.browser.cancel")}</button>
           </DescribedRow>
+        ) : state?.needsSignIn && solo ? (
+          <DescribedRow label={t("security.solo.title")} description={t("security.solo.hint")} rowId="security-keys-reauth" />
         ) : state?.needsSignIn ? (
           <DescribedRow
             label={t("security.reauth.title")}

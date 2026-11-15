@@ -375,7 +375,11 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     const normalized = key.toUpperCase();
     if (value && platformKeys.has(normalized)) childEnv[normalized] = value;
   }
+  // The temporary folder the child is pointed at exists before it boots: a
+  // caller that spawns its own server with this environment would otherwise
+  // crash on the first mkdtemp (#4370).
   const fixtureTemp = join(dataDir, "tmp");
+  mkdirSync(fixtureTemp, { recursive: true });
   Object.assign(childEnv, {
     HOME: dataDir,
     USERPROFILE: dataDir,
@@ -580,9 +584,7 @@ export async function launchVerificationServer(
   // Native browser daemons use UNIX sockets; a macOS temp home can exceed
   // their path limit. This is still an owned, randomly named fixture only.
   const dataDir = mkdtempSync(join(browser && process.platform !== "win32" ? "/tmp" : tmpdir(), "openmausbot-verify-data-"));
-  const fixtureTemp = join(dataDir, "tmp");
   const fixtureDumpPath = join(dataDir, "fake-claude-dump.json");
-  mkdirSync(fixtureTemp, { recursive: true });
   const evidenceDir = join(tmpdir(), "openmausbot-verification-evidence");
   mkdirSync(evidenceDir, { recursive: true });
   const logPath = join(evidenceDir, `server-${Date.now()}-${process.pid}.log`);

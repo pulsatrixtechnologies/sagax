@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, type VerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer, verificationServerEnvironment, type VerificationServer } from "../scripts/control-omb.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { fakeAuthenticator } from "./testing/fake-authenticator.ts";
 import { freePortBlock } from "./testing/ports.ts";
@@ -252,10 +252,11 @@ it("every engine (#827): Codex and an ACP engine get the same Always allow, and 
   let log = "";
   const child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
     cwd: join(SERVER_DIR, ".."),
-    env: {
-      ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
-      HOME: home, USERPROFILE: home, SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "", SAGAX_PORT: String(port), SAGAX_WEBHOOK_PORT: String(port + 1),
-    },
+    // Sealed like every verification server: node alone on PATH and no
+    // machine-wide install dirs. With this computer's PATH the server found
+    // its Docker, the ACP turn attached the automatic Local VM and waited up
+    // to 90 s for a desktop, so the permission card never came (#4370).
+    env: verificationServerEnvironment(process.env, data, port),
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout!.on("data", (chunk) => (log += chunk));
@@ -320,11 +321,7 @@ it("a proposal card (a routine for another bot): Always allow keeps that kind fo
   let log = "";
   const child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
     cwd: join(SERVER_DIR, ".."),
-    env: {
-      ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
-      HOME: home, USERPROFILE: home, SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "", SAGAX_PORT: String(port), SAGAX_WEBHOOK_PORT: String(port + 1),
-      FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: dump,
-    },
+    env: { ...verificationServerEnvironment(process.env, dataDir, port), FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: dump },
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout!.on("data", (chunk) => (log += chunk));

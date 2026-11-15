@@ -18894,7 +18894,9 @@
       "botPanel.suggestions.setup.identity.subtitleAlone": "1b610f54cb35374145a26c7d723f80186617d3d179be682fd9b78af6d7a639c3",
       "teach.stopAndSave": "246a57eda2153a4c7a42be252f38227bce13365430194bb2788d4894bb16a9dd",
       "teach.discardRecording": "ae9e10026615c184de0c15ad61677203e5f8a19f63726f2b9c306e00bc694140",
-      "botPanel.computerCard.details": "b21a47e9a93040d2f1f5ce9329ba40998bf54e6a7bf01230558d437613309b28"
+      "botPanel.computerCard.details": "b21a47e9a93040d2f1f5ce9329ba40998bf54e6a7bf01230558d437613309b28",
+      "providers.page.runsWithHelp": "11a026b5178b3d2a2ad9b05dae0bc1239b16e76405c7303c6457cbf2a1d18477",
+      "botModels.runsWith.edit": "996d172d1b07d81a847040f401af80d8eec6af509cd5bbb97fae421d944428a9"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

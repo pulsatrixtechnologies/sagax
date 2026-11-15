@@ -8,7 +8,9 @@
 //   in, Sign out), "Add an account" at the end;
 // - API key: whether a key is saved, Add, Replace, Remove;
 // - Your bots there (the xAI provider only);
-// - Runs with: absent until the engine choice exists (#4329 lot 5);
+// - Runs with (#4329 lot 6, #4384): what runs the person's bots with this
+//   provider, their default for it (src/components/RunsWith.tsx); absent
+//   when one engine only can;
 // - Models: the provider's models unfolding in place, one switch each, the
 //   same switches as Settings > Models > Active models;
 // - Advanced, folded each time the page opens: who pays, the tool by its
@@ -50,6 +52,7 @@ import { LocalModelsSettings } from "./LocalModelsSettings";
 import { PiServerDetail, removePiServer } from "./PiModelServers";
 import { BotsLinkAdvanced, BotsLinkSection, botsLinkOnPage, useBotsLink } from "./LinkedGrokBotSettings";
 import { ProviderModels, activeModelProviders, useModelSwitches } from "./ModelSwitchesSettings";
+import { RunsWith, runsWithShown, useProviderRunsWith } from "../RunsWith";
 import { accountAddress, accountName, accountRows } from "./provider-summary";
 import {
   PI_SERVER_PREFIX,
@@ -356,6 +359,26 @@ function PageAdvanced({ providerId, children }: { providerId: string; children: 
   );
 }
 
+/** "Runs with" on the provider's page (#4329 B3, #4384): what runs the
+ * person's bots when they use this provider, their default for it. The
+ * answer on screen to "how do I use pi with this provider". Absent when
+ * only one engine can. */
+function RunsWithSection({ group }: { group: ProviderGroup }) {
+  const { choices, busy, error } = useProviderRunsWith(group.id);
+  if (!runsWithShown(choices)) return null;
+  const label = t("model.runsWith");
+  return (
+    <SettingsGroup groupId="provider-runs-with">
+      <div data-provider-runs-with={group.id}>
+        <DescribedRow label={label} description={t("providers.page.runsWithHelp", { provider: groupName(group) })} rowId="providers.page.runsWith">
+          <RunsWith tone="settings" choices={choices} disabled={busy} ariaLabel={label} />
+        </DescribedRow>
+      </div>
+      {error && <p role="alert" className="px-3.5 py-1.5 text-[12px] text-danger">{error}</p>}
+    </SettingsGroup>
+  );
+}
+
 /** The provider's models on its own page (#4376: never sent to another
  * page): the count line unfolds in place into one switch per model, a
  * search when the list is long; the same provider, rows and switches as
@@ -600,7 +623,7 @@ export function ProviderPage({ providerId }: { providerId: string }) {
       <KeySection group={group} list={list} open={open} show={show} />
       {/* #4329 lot 2 (B3): the link to the person's bots in this provider's bot app */}
       {group.id === XAI_PROVIDER_ID && <BotsLinkSection link={botsLink} />}
-      {/* Runs with: absent until the engine choice exists (#4329 lot 5), never a dead control */}
+      <RunsWithSection group={group} />
       <ModelsSection group={group} />
       <PageAdvanced providerId={group.id}>
         {group.rows.map((row) => <ConnectionAdvanced key={row.id} row={row} list={list} speakers={speakers} />)}

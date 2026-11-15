@@ -14,12 +14,11 @@ import { createRoot } from "react-dom/client";
 import { ChevronDown, ChevronRight, Mic, Monitor, Plus } from "lucide-react";
 import { ModelSearchList, type ModelMenuRow, type ModelMenuSection } from "../components/ModelMenu";
 import { ModelMenuSettings } from "../components/ModelMenuSettings";
-import { runsWithLabels } from "../components/ModelPicker.tsx-parts/ModelPickerMenu";
 import { InstanceProviderMark, PresetProviderMark } from "../components/ProviderIcons";
 import { loadLocale, t } from "../lib/i18n";
 import { localModelSubtext } from "../lib/local-model-label";
 import { favoriteKey, toggleModelFavorite, useModelFavorites, writeModelFavorites } from "../lib/model-favorites";
-import { runsWithEntries } from "../lib/model-menu-steps";
+import { runsWithChoices } from "../lib/runs-with";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { XAI_GROUP_LABEL } from "../../shared/model-provider";
 import "../styles.css";
@@ -127,7 +126,8 @@ function Gallery() {
     }
   }, []);
   const narrow = params.get("narrow") === "1";
-  const runsWith = runsWithLabels(runsWithEntries(sections), () => {});
+  // the bot runs a Claude model; its own tool and pi can run it (src/lib/runs-with.ts)
+  const runsWith = runsWithChoices({ harnesses: ["piAgent", "claudeAgent"], current: "claudeAgent", recommended: "claudeAgent", vendor: "anthropic", onPick: () => {} });
   const footer = (
     <>
       <ModelMenuSettings

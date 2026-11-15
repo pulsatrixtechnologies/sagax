@@ -6,7 +6,6 @@
 // engines of one provider stay pooled out of sight: one model, one row.
 // A menu with a single provider opens straight on its models. Typing in the
 // search field leaves the steps and lists every match flat.
-import { harnessRole, type HarnessRole } from "../../shared/harness-matrix";
 import {
   CURRENT_KEY_PREFIX,
   FAVORITE_KEY_PREFIX,
@@ -128,36 +127,4 @@ export function currentProvider(sections: readonly ModelMenuSection[]): ModelMen
 /** The breadcrumb of a step: the provider, when there was a choice. */
 export function stepCrumbs(view: ModelStepView): string[] {
   return view.level === "model" && view.provider && !view.skipped ? [view.provider.section.label ?? view.provider.section.key] : [];
-}
-
-/** One engine that can run the model in use, as "Runs with" offers it. */
-export interface RunsWithEntry {
-  /** The engine (a driver kind). */
-  harness: string;
-  role: HarnessRole;
-  /** The row a pick switches to: the same model on that engine. */
-  row: ModelMenuRow;
-  current: boolean;
-}
-
-const ROLE_ORDER: readonly HarnessRole[] = ["own", "builtin", "pi", "opencode", "tool"];
-
-/**
- * #4329: the engines that can run the model in use, one per engine (the
- * accounts of one engine stay pooled), the one in use kept. Read from the
- * provider's row and the rows pooled under it; the role says how the person
- * reads each (shared/harness-matrix.ts). Empty on Auto, on the bot's model
- * in a thread, or when the model in use is in no provider.
- */
-export function runsWithEntries(sections: readonly ModelMenuSection[]): RunsWithEntry[] {
-  const provider = currentProvider(sections);
-  const row = provider?.section.rows.find((candidate) => candidate.current && candidate.kind === "model");
-  if (!provider || !row?.harness) return [];
-  const vendor = provider.section.key;
-  const out: RunsWithEntry[] = [];
-  for (const candidate of [row, ...(row.alternatives ?? [])]) {
-    if (!candidate.harness || candidate.unavailable || out.some((entry) => entry.harness === candidate.harness)) continue;
-    out.push({ harness: candidate.harness, role: harnessRole(candidate.harness, vendor), row: candidate, current: candidate === row });
-  }
-  return out.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
 }

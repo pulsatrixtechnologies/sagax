@@ -8,7 +8,6 @@ import {
   currentProvider,
   modelMenuProviders,
   modelMenuStepView,
-  runsWithEntries,
   stepCrumbs,
   stepPathBack,
   stepPathInto,
@@ -109,24 +108,5 @@ describe("the path", () => {
     expect(stepCrumbs(at({}))).toEqual([]);
     expect(stepCrumbs(at({ provider: "anthropic" }))).toEqual(["Claude"]);
     expect(stepCrumbs(modelMenuStepView([top, xai], {}, []))).toEqual([]);
-  });
-});
-
-describe("runsWithEntries (#4329)", () => {
-  it("offers one entry per engine that can run the model in use, the vendor's own tool first", () => {
-    const entries = runsWithEntries(sections);
-    // the two Claude accounts are one engine: they stay pooled
-    expect(entries.map((entry) => [entry.harness, entry.role, entry.current])).toEqual([
-      ["claudeAgent", "own", true],
-      ["piAgent", "pi", false],
-    ]);
-    expect(entries[1]!.row).toMatchObject({ instanceId: "pi", modelId: "anthropic/opus" });
-  });
-
-  it("has a single entry when one engine runs the model, and none without a current model", () => {
-    const onGrok = [top, claude, { ...xai, rows: [{ ...xai.rows[0]!, current: true }] }].map((section) =>
-      section.key === "anthropic" ? { ...section, rows: section.rows.map((row) => ({ ...row, current: false })) } : section);
-    expect(runsWithEntries(onGrok).map((entry) => entry.harness)).toEqual(["grokAgent"]);
-    expect(runsWithEntries([top, { ...xai }])).toEqual([]);
   });
 });

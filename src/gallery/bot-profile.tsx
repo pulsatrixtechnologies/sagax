@@ -1,7 +1,7 @@
 /** Gallery of the bot profile page (PersonaEditorModal > BotProfilePage), in
  * organization mode, with every /api path the page and its sections call
  * answered by a rich, fictional stand-in so each section shows content.
- * Query: ?section=<overview|...> (default overview), ?skin=<skin id>, ?lang=<en|fr>.
+ * Query: ?section=<overview|...> (default overview), ?skin=<skin id>, ?lang=<en|fr>, ?pi=1 (pi lists the bot's model: Model shows Runs with).
  * Self-contained on purpose (no import of the other gallery fixtures): other
  * edits to the page cannot break it. Fictional names only. */
 import { StrictMode, useEffect } from "react";
@@ -512,6 +512,8 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
     { instanceId: "grok", displayName: "Grok", driverKind: "grok", access: "key", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] } },
     { instanceId: "openai", displayName: "OpenAI", driverKind: "codex", access: "key", snapshot: { state: "available", authenticated: true }, models: { default: "gpt-5", options: [{ id: "gpt-5", label: "GPT-5" }] } },
     { instanceId: "local", displayName: "Local oMLX", driverKind: "local", access: "local", snapshot: { state: "available", authenticated: true }, models: { default: "ornith-35b", options: [{ id: "ornith-35b", label: "Ornith 35B" }] } },
+    // ?pi=1 (#4384): pi lists the bot's model too, so Model shows "Runs with"
+    ...(new URLSearchParams(location.search).get("pi") ? [{ instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "custom", snapshot: { state: "available", authenticated: true }, models: { default: "anthropic/sonnet", options: [{ id: "anthropic/sonnet", label: "Sonnet" }] } }] : []),
   ] });
   if (path === "/api/routines") return json({ ...routinesAnswer, folders: [] });
   if (path === "/api/webhooks") return json({ webhooks: [], attempts: [], ingress: null, graphConnectors: [] });

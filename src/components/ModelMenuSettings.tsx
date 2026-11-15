@@ -10,8 +10,7 @@
 // when more than one engine can. The models window keeps the segmented
 // control (EffortSegments). Rendered by ModelPicker.tsx, which owns what
 // each choice does.
-import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 
 import type { EffortLevel } from "../../shared/wire";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
@@ -19,18 +18,10 @@ import { cn } from "@/lib/cn";
 import { effortLabel } from "@/lib/effort-label";
 import { SWITCH_OFF, SWITCH_ON } from "@/lib/status-tones";
 import { t } from "@/lib/i18n";
+import { ChoiceLine, ROW } from "./MenuChoiceLine";
+import { RunsWith, runsWithShown, type RunsWithChoice } from "./RunsWith";
 
-/** One value of "Runs with": the engine that would run the model in use. */
-export interface RunsWithChoice {
-  key: string;
-  /** The first-level word: "Its own tool", "pi", "OpenCode", "Built in". */
-  label: string;
-  /** One grey line in the opened list: the tool by its name, or what it is. */
-  hint?: string;
-  recommended?: boolean;
-  current: boolean;
-  onPick: () => void;
-}
+export type { RunsWithChoice };
 
 export interface ModelMenuSettingsProps {
   /** The model has a fast twin: the switch, on while it runs the twin. */
@@ -46,13 +37,12 @@ export interface ModelMenuSettingsProps {
   };
   /** A row of its own instead of Effort (an engine with model variants). */
   variantRow?: ReactNode;
-  /** The engines that can run the model in use; the line is drawn only
-   * with two or more. */
+  /** "Runs with" (src/components/RunsWith.tsx): what runs the bot with
+   * its model; the line is drawn only with two or more choices. */
   runsWith?: readonly RunsWithChoice[];
   disabled?: boolean;
 }
 
-const ROW = "flex w-full min-h-8 items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] text-popover-ink outline-none hover:bg-popover-hover focus-visible:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
 
 /** The word for "no level sent": the model's own default, when known. */
 function defaultWord(modelDefault?: EffortLevel): string {
@@ -61,8 +51,8 @@ function defaultWord(modelDefault?: EffortLevel): string {
 
 export function ModelMenuSettings({ fast, effort, variantRow, runsWith, disabled = false }: ModelMenuSettingsProps) {
   const [open, setOpen] = useState<"effort" | "runsWith" | null>(null);
-  const runsWithShown = runsWith && runsWith.length > 1 ? runsWith : undefined;
-  if (!fast && !effort && !variantRow && !runsWithShown) return null;
+  const shownRunsWith = runsWith && runsWithShown(runsWith) ? runsWith : undefined;
+  if (!fast && !effort && !variantRow && !shownRunsWith) return null;
   const toggle = (line: "effort" | "runsWith") => setOpen((current) => (current === line ? null : line));
   return (
     <div data-model-settings role="group" aria-label={t("model.settings.aria")} className="border-t border-popover-hairline px-1.5 py-1">
@@ -93,88 +83,11 @@ export function ModelMenuSettings({ fast, effort, variantRow, runsWith, disabled
             dataName="effort" />
         </div>
       ))}
-      {runsWithShown && (
-        <div data-model-settings-runs-with>
-          <ChoiceLine label={t("model.runsWith")} value={runsWithShown.find((choice) => choice.current)?.label ?? ""}
-            open={open === "runsWith"} disabled={disabled} onToggle={() => toggle("runsWith")}
-            choices={runsWithShown.map((choice) => ({
-              key: choice.key,
-              label: choice.recommended ? t("model.runsWith.recommended", { value: choice.label }) : choice.label,
-              hint: choice.hint,
-              current: choice.current,
-              onPick: () => {
-                if (!choice.current) choice.onPick();
-                setOpen(null);
-              },
-            }))}
-            dataName="runs-with" />
-        </div>
+      {shownRunsWith && (
+        <RunsWith tone="menu" choices={shownRunsWith} disabled={disabled}
+          open={open === "runsWith"} onToggle={() => toggle("runsWith")} onPicked={() => setOpen(null)} />
       )}
     </div>
-  );
-}
-
-interface LineChoice {
-  key: string;
-  label: string;
-  hint?: string;
-  title?: string;
-  ultracode?: boolean;
-  current: boolean;
-  onPick: () => void;
-}
-
-/** One line, its value at the right; a click opens its choices under it,
- * each with a check on the one in use. The arrow keys move between them. */
-function ChoiceLine({ label, value, open, disabled, onToggle, choices, dataName }: {
-  label: string;
-  value: string;
-  open: boolean;
-  disabled: boolean;
-  onToggle: () => void;
-  choices: readonly LineChoice[];
-  dataName: string;
-}) {
-  const listId = useId();
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
-    if (!step && event.key !== "Home" && event.key !== "End") return;
-    const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("[data-model-line-choice]")];
-    const at = buttons.indexOf(document.activeElement as HTMLElement);
-    const to = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (at + step + buttons.length) % buttons.length;
-    event.preventDefault();
-    // stays inside the menu: its own arrow keys must not move the list too
-    event.stopPropagation();
-    buttons[to]?.focus();
-  };
-  return (
-    <>
-      <button type="button" data-model-line={dataName} aria-expanded={open} aria-controls={listId} disabled={disabled}
-        onClick={onToggle} className={ROW}>
-        <span className="shrink-0">{label}</span>
-        <span className="flex min-w-0 items-center gap-1 text-popover-ink-secondary">
-          <span data-model-line-value className="truncate">{value}</span>
-          {open ? <ChevronDown size={14} aria-hidden="true" className="shrink-0" /> : <ChevronRight size={14} aria-hidden="true" className="shrink-0" />}
-        </span>
-      </button>
-      {open && (
-        <div id={listId} role="group" aria-label={label} data-model-line-choices={dataName} onKeyDown={onKeyDown} className="pb-0.5">
-          {choices.map((choice) => (
-            <button key={choice.key} type="button" role="menuitemradio" aria-checked={choice.current} disabled={disabled}
-              data-model-line-choice={choice.key} title={choice.title}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={choice.onPick}
-              className={cn(ROW, "pl-4")}>
-              <span className="flex min-w-0 flex-col">
-                <span className={cn("truncate", choice.ultracode && "ultracode-effort-option")}>{choice.label}</span>
-                {choice.hint && <span data-model-line-hint className="text-[12px] leading-4 text-popover-ink-secondary">{choice.hint}</span>}
-              </span>
-              {choice.current && <Check size={14} aria-hidden="true" className="shrink-0 text-popover-accent" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </>
   );
 }
 

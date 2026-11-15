@@ -563,8 +563,9 @@ describe("the composer's model menu (2026-10-12)", () => {
     });
   });
 
-  // #4329 (lot 3): "Runs with", the engines that can run the model in use,
-  // drawn only when there is a choice; a pick keeps the model.
+  // #4329 (lot 3, lot 6 #4384): "Runs with", the engines that can run the
+  // bot's model, drawn only when there is a choice; a pick writes the bot's
+  // own choice (its harness), which the server resolves into its model.
   describe("Runs with", () => {
     const piEngine = (): InstanceInfo => ({
       instanceId: "pi", driverKind: "piAgent", displayName: "pi", access: "custom",
@@ -580,7 +581,7 @@ describe("the composer's model menu (2026-10-12)", () => {
       expect(opened.html).not.toContain("data-model-settings-runs-with");
     });
 
-    it("offers the vendor's own tool and pi for a model both list, in plain words, and a pick keeps the model", () => {
+    it("offers the vendor's own tool and pi for a model both list, in plain words, and a pick writes the bot's choice", () => {
       fixture.instances = [signedIn(), piEngine()];
       const opened = open(bot("claude", "claude-opus-5-5"), composer);
       // one model, one row: pi's copy rides on Claude's
@@ -595,7 +596,7 @@ describe("the composer's model menu (2026-10-12)", () => {
       expect(opened.html).toContain("data-model-settings-runs-with");
       expect(opened.html).not.toContain(">Claude Code<");
       choices[1]!.onPick();
-      expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ selection: { instanceId: "pi", model: "anthropic/claude-opus-5-5" } }));
+      expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "updateBot", botId: "atlas", patch: { harness: "piAgent" } });
     });
 
     it("is not drawn on Auto", () => {

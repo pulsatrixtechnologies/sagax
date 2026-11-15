@@ -7033,6 +7033,16 @@
         }
       }
     },
+    "Another server": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre serveur"
+          }
+        }
+      }
+    },
     "API keys": {
       "localizations": {
         "en": {
@@ -11197,16 +11207,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Une règle Toujours permettre"
-          }
-        }
-      }
-    },
-    "An OpenAI-compatible server": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un serveur compatible OpenAI"
           }
         }
       }
@@ -21861,16 +21861,6 @@
         }
       }
     },
-    "Connect an account": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connecter un compte"
-          }
-        }
-      }
-    },
     "Connect an engine": {
       "localizations": {
         "en": {
@@ -30981,16 +30971,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "A cada N minutos ou horas"
-          }
-        }
-      }
-    },
-    "Every account is connected already.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tous les comptes sont déjà connectés."
           }
         }
       }
@@ -53717,6 +53697,16 @@
         }
       }
     },
+    "Nothing matches.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun résultat."
+          }
+        }
+      }
+    },
     "Nothing needs you": {
       "localizations": {
         "fr": {
@@ -54327,6 +54317,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ressource changée"
+          }
+        }
+      }
+    },
+    "Sign in with your account": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Te connecter avec ton compte"
           }
         }
       }
@@ -97703,7 +97703,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vous"
+            "value": "Toi"
           }
         },
         "pt-BR": {

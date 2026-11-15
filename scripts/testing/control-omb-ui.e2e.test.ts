@@ -219,9 +219,11 @@ describe("control-omb ui drives the real renderer", () => {
       tab?.click();
       return Boolean(tab);
     })()`), { timeout: 10_000 }).toBe(true);
-    // The OpenAI-compatible key opens in its own dialog from the provider key list.
-    await expect.poll(() => evaluate(`(() => { const b = document.querySelector('[data-provider-row$=":openaiCompat"] > button'); b?.click(); return Boolean(b); })()`), { timeout: 10_000 }).toBe(true);
-    await expect.poll(() => evaluate(`(() => { const b = document.querySelector('[data-provider-key-open="openaiCompat"]'); b?.click(); return Boolean(b); })()`), { timeout: 10_000 }).toBe(true);
+    // #4329 (the owner: "You select a provider, you log in, done"): the
+    // saved key is a provider of the list; its row opens the provider's
+    // page, whose Advanced "Change key" opens the key's editor in place.
+    await expect.poll(() => evaluate(`(() => { const b = document.querySelector('[data-provider-open$=":openaiCompat"]'); b?.click(); return Boolean(b); })()`), { timeout: 10_000 }).toBe(true);
+    await expect.poll(() => evaluate(`(() => { const b = document.querySelector('[data-provider-change-key$=":openaiCompat"]'); b?.click(); return Boolean(b); })()`), { timeout: 10_000 }).toBe(true);
     await expect.poll(() => evaluate(`document.querySelector('[data-provider-key-dialog="openaiCompat"] [data-api-key-row="openaiCompat"]') !== null`), { timeout: 10_000 }).toBe(true);
 
     // A saved key with an untouched field can be checked again.
@@ -285,7 +287,8 @@ describe("control-omb ui drives the real renderer", () => {
       // The page and its add flow render after a click: wait for each control.
       const clickWhenShown = (selector: string) => expect.poll(() => evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); el?.click(); return Boolean(el); })()`), { timeout: 10_000 }).toBe(true);
       await clickWhenShown('[data-add-provider-open]');
-      await clickWhenShown('[data-add-provider-way="server"]');
+      // #4329: Add a provider is one list; "Another server" adds a server by its address.
+      await clickWhenShown('[data-add-provider-choice="server"]');
       const fill = async (selector: string, value: string) => {
         await evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
       };

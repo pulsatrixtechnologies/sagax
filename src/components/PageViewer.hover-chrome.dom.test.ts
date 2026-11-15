@@ -92,9 +92,16 @@ describe("own page window: chrome until hover (#2336)", () => {
     expect(refreshed.textContent).toMatch(/\S/);
     expect(refreshed.title).toMatch(/\S/);
     const header = host.querySelector("[data-page-header]")!;
-    // order: close, last refresh ... controls
-    const kids = [...header.children];
-    expect(kids.indexOf(host.querySelector("[data-page-close]")!)).toBeLessThan(kids.indexOf(refreshed));
+    // order: close, last refresh ... title ... controls. Close and the last
+    // refresh share the bar's start cell since the title is centred in its
+    // own column (#4099, #4354), so the order is read in the document, not
+    // among the header's direct children.
+    const close = host.querySelector("[data-page-close]")!;
+    const download = host.querySelector("[data-page-download]")!;
+    expect(header.contains(refreshed)).toBe(true);
+    expect(close.parentElement).toBe(refreshed.parentElement);
+    expect(close.compareDocumentPosition(refreshed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(refreshed.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("follows the cursor that main reports, even over the content frame", async () => {

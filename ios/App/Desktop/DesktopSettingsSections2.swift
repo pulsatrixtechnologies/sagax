@@ -1146,7 +1146,7 @@ struct DesktopEnginesSettings: View {
             } else if addStep == "account" {
                 let rest = (engines ?? []).filter { !$0.ready }
                 if rest.isEmpty {
-                    DesktopText("Every account is connected already.", size: 12.5, color: \.inkSecondary).padding(.horizontal, 8)
+                    DesktopText("Nothing matches.", size: 12.5, color: \.inkSecondary).padding(.horizontal, 8)
                 }
                 ForEach(rest) { engine in
                     Button {
@@ -1164,9 +1164,11 @@ struct DesktopEnginesSettings: View {
                     .buttonStyle(DesktopHoverFill(radius: 8))
                 }
             } else {
-                ForEach([("account", Text("Connect an account"), Text("Claude, ChatGPT, Grok, Kimi and the other subscriptions"), DesktopSettingsIcon.user),
+                // the desktop's section names (ProvidersSettings.tsx AddProvider, #4329); the
+                // grey line says who each way covers, since the tablet lists ways, not providers
+                ForEach([("account", Text("Sign in with your account"), Text("Claude, ChatGPT, Grok, Kimi and the other subscriptions"), DesktopSettingsIcon.user),
                          ("key", Text("Paste a key"), Text("Anthropic, OpenAI, xAI, OpenRouter, Mistral, ElevenLabs, Fish Audio…"), .keyRound),
-                         ("server", Text("An OpenAI-compatible server"), Text("Azure AI Foundry, vLLM, a gateway: each server is a provider of its own, under its name"), .monitor)], id: \.0) { way in
+                         ("server", Text("Another server"), Text("Azure AI Foundry, vLLM, a gateway: each server is a provider of its own, under its name"), .monitor)], id: \.0) { way in
                     Button {
                         addStep = way.0
                     } label: {
@@ -1207,7 +1209,7 @@ struct DesktopEnginesSettings: View {
     static func detail(_ engine: DesktopEngine) -> String {
         if onThisComputer(engine) { return [String(localized: "This computer"), String(localized: "No key")].joined(separator: " · ") }
         let whereKey = engine.access == "custom" ? String(localized: "Key on the Sagax server") : String(localized: "Signed-in session")
-        return [String(localized: "Me"), whereKey].joined(separator: " · ")
+        return [String(localized: "You"), whereKey].joined(separator: " · ")
     }
 
     private func providerRow(_ engine: DesktopEngine) -> some View {

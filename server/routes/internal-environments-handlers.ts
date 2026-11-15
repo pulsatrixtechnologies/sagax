@@ -154,6 +154,8 @@ export interface InternalEnvironmentsDeps {
     params: unknown,
     beforeDispatch: () => void,
     credentials: unknown,
+    /** The calling turn (conversation and turn): it owns its run of browser steps (#4394). */
+    turn?: string,
   ): Promise<unknown>;
   myChromeMemory(): unknown;
   myChromeTakeNotes(session: string): unknown;
@@ -490,6 +492,7 @@ async function handleBrowserMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
       throw Object.assign(new Error("another thread is using this browser — pause browser work until that thread finishes"), { status: 409 });
     }
   };
+  const turn = `${capability.threadId}:${capability.generation}`;
   const run = (params: unknown) => deps.browserAgentRpc(
     browser.session,
     browser.spec,
@@ -497,6 +500,7 @@ async function handleBrowserMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
     params,
     beforeDispatch,
     credentials,
+    turn,
   );
   let result: unknown;
   if (!ownChrome) {
@@ -520,6 +524,7 @@ async function handleBrowserMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
           { name: "agent_browser_get_url", arguments: {} },
           beforeDispatch,
           credentials,
+          turn,
         ) as { content?: Array<{ text?: unknown }> };
         const text = String(answer?.content?.[0]?.text ?? "");
         try {

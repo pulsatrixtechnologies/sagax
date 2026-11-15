@@ -3,38 +3,44 @@
 // browser: browse failed 3 times, fetch_url twice, tab_new, tab_switch and
 // tab_wait once each, each call a different one, so the loop guard (same call
 // failing the same way) never fired. This guard counts failed web page calls
-// of any kind in a row in one turn. At 2 it steers one note: stop the
-// browser, answer with what you have (from memory for general knowledge), or
-// make one web search at most. At the ceiling it stops the turn and posts a
-// clear message in the person's language. Only failures in a row count: a
-// web page call that works resets the count (a research turn with a few dead
-// links among many good pages is never stopped); other tools leave it as is.
+// of any kind in a row in one turn. At 2 it steers one note: do not repeat
+// the call, stop browsing when a site keeps the bot out and say so in the
+// bot's own words, answer general knowledge from memory or with one web
+// search at most. Only failures in a row count: a web page call
+// that works resets the count; other tools leave it as is.
 //
-// SAGAX_BROWSER_GUARD=0 turns it off. SAGAX_BROWSER_GUARD_STOP_AT sets the
-// ceiling (at least 3; 0 never stops, the note still goes out).
+// #4394 (2026-11-15): the stop at 4 failures in a row is gone. It interrupted
+// the turn and posted a message the server wrote in the bot's name, which no
+// decision of the owner asked for (QA 0.8.67 G4, #2962); only the bot's own
+// words reach the person. On an engine that takes no steered note (ACP), the
+// note never arrived and the stop was all that ended the loop, after 41 steps.
+// The built-in browser now says it in its own results and errors (a page that
+// keeps the bot out, two failures in a row; server/browser/browser-runtime.ts),
+// on every engine. The guard steers whenever no failed result of the turn
+// carried the note: a failure before the browser runtime (an environment not
+// up yet), an engine whose tool output leaves it out, any other page tool.
+//
+// Each failed web page step logs one line with its tool and its own error
+// text (redacted, first line only, cut short, never the page), so the next
+// long run can be explained from the log (#4394).
+//
+// SAGAX_BROWSER_GUARD=0 turns it off.
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { isPageBlockNote } from "../browser/browser-tool-shape.ts";
+import { redactSecretsInText } from "../../shared/redact.ts";
 
 /** Failed web page calls in a row before the note. */
 export const BROWSER_STEER_AT = 2;
-/** Failed web page calls in a row before the turn is stopped. */
-export const BROWSER_STOP_AT = 4;
 
 export type BrowserGuardLanguage = "fr" | "en";
 
 export interface BrowserGuardSettings {
   enabled: boolean;
-  /** Undefined: never stops. */
-  stopAt?: number;
 }
 
 export function browserGuardSettings(env: NodeJS.ProcessEnv = process.env): BrowserGuardSettings {
-  if (env.SAGAX_BROWSER_GUARD === "0") return { enabled: false };
-  const raw = env.SAGAX_BROWSER_GUARD_STOP_AT?.trim();
-  if (raw === "0") return { enabled: true };
-  const parsed = raw ? Number(raw) : NaN;
-  const stopAt = Number.isInteger(parsed) && parsed > BROWSER_STEER_AT && parsed <= 100 ? parsed : BROWSER_STOP_AT;
-  return { enabled: true, stopAt };
+  return { enabled: env.SAGAX_BROWSER_GUARD !== "0" };
 }
 
 /** Web search is the fallback the note allows, not a page call. */
@@ -77,35 +83,35 @@ export function isWebPageTool(title: string | undefined): boolean {
   return BROWSER_SERVER.test(server ? server.replace(/^mcp__/, "") : name);
 }
 
-/** Opened as `[Sagax: …]`, which model-written text cannot open. */
+/** Opened as `[Sagax: …]`, which model-written text cannot open. The same
+ * words whether the built-in browser puts them in a result or the guard
+ * steers them (isBrowserStopNote finds both). */
 export function browserStopNote(input: { language?: BrowserGuardLanguage; failures: number; tools: readonly string[] }): string {
   const tools = input.tools.join(", ");
   if (input.language === "fr") {
-    return `[Sagax : le navigateur a échoué ${input.failures} fois de suite (${tools}). Arrête d'utiliser le navigateur et fetch_url pour ce tour. Si c'est une question de culture générale, réponds tout de suite de mémoire, sans outil. Sinon, fais au plus une seule recherche web, puis réponds avec ce que tu as et dis en une ligne que le navigateur n'a pas répondu.]`;
+    return `[Sagax : ${input.failures} appels de page web ont échoué de suite (${tools}). Ne refais pas le même appel. Lis l'erreur : si un site te bloque ou si le navigateur ne marche pas, arrête de naviguer pour ce tour et dis à la personne, dans tes mots, ce qui te bloque et ce qu'elle peut faire. Si c'est une question de culture générale, réponds de mémoire, sans outil, ou fais au plus une seule recherche web.]`;
   }
-  return `[Sagax: the browser failed ${input.failures} times in a row (${tools}). Stop using the browser and fetch_url for this turn. If this is general knowledge, answer now from memory, with no tool. Otherwise make one web search at most, then answer with what you have and say in one line that the browser did not respond.]`;
+  return `[Sagax: ${input.failures} web page calls failed in a row (${tools}). Do not repeat the same call. Read the error: if a site keeps you out or the browser does not work, stop browsing for this turn and tell the person in your own words what blocks you and what they can do. If this is general knowledge, answer from memory with no tool, or make one web search at most.]`;
 }
 
-/** The message posted when the ceiling stops the turn. */
-export function browserStopMessage(input: { language: BrowserGuardLanguage; failures: number; tools: readonly string[]; notes: readonly string[] }): string {
-  const fr = input.language === "fr";
-  const tools = input.tools.join(", ");
-  const head = fr
-    ? `J'ai arrêté ce tour : le navigateur a échoué ${input.failures} fois (${tools}) et je ne relance pas une boucle d'essais.`
-    : `I stopped this turn: the browser failed ${input.failures} times (${tools}) and I do not keep retrying it in a loop.`;
-  const body = input.notes.length
-    ? `${fr ? "Ce que j'avais déjà :" : "What I already had:"}\n\n${input.notes.map((note) => `> ${note.replace(/\n+/g, "\n> ")}`).join("\n\n")}`
-    : "";
-  const next = fr
-    ? "Réponds « réponds sans navigateur » et je te donne une réponse de mémoire ou avec une seule recherche web, ou réessaie plus tard."
-    : "Answer \"answer without the browser\" and I reply from memory or with one web search, or try again later.";
-  return [head, body, next].filter(Boolean).join("\n\n");
+/** A tool result or error that already carries a browser note: the stop note
+ * above, or a page block note of the built-in browser. */
+export function carriesBrowserNote(text: string | undefined): boolean {
+  if (!text) return false;
+  return /\[Sagax ?: \d+ (?:web page calls failed in a row|appels de page web ont échoué de suite)/.test(text) ||
+    text.split("\n").some((line) => isPageBlockNote(line.trim()));
 }
 
-export function browserStopCause(input: { language?: BrowserGuardLanguage; failures: number }): string {
-  return input.language === "fr"
-    ? `le navigateur a échoué ${input.failures} fois ; le tour a été arrêté au lieu de boucler`
-    : `the browser failed ${input.failures} times - the turn was stopped instead of looping`;
+const ERROR_TEXT_MAX = 160;
+
+/** A failed step's own error for the log: the first line that is not a
+ * browser note, secrets masked (held values and key shapes), one line, cut
+ * short. The rest of the output (a page's text) never reaches the log. */
+export function failedStepErrorText(output: string | undefined): string {
+  const lines = (output ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  const first = lines.find((line) => !carriesBrowserNote(line)) ?? "";
+  const text = redactSecretsInText(first).replace(/\s+/g, " ");
+  return text.length > ERROR_TEXT_MAX ? `${text.slice(0, ERROR_TEXT_MAX)}…` : text || "(no error text)";
 }
 
 export interface BrowserGuardDeps {
@@ -114,8 +120,6 @@ export interface BrowserGuardDeps {
   live(threadId: string): boolean;
   canSteer(threadId: string): boolean;
   steer(threadId: string, note: string): Promise<SteerOutcome>;
-  interrupt(threadId: string, cause: string): Promise<unknown>;
-  post(threadId: string, text: string): void;
   language(threadId: string): BrowserGuardLanguage;
   log?(line: string): void;
 }
@@ -125,8 +129,6 @@ export interface BrowserGuard {
   settle(threadId: string): void;
 }
 
-const NOTES_KEPT = 2;
-const NOTE_MAX = 700;
 const MAX_ITEMS = 256;
 const TOOLS_NAMED = 6;
 
@@ -136,9 +138,10 @@ interface TurnState {
   items: Map<string, string>;
   inRow: number;
   failedTools: string[];
-  notes: string[];
+  /** A failed result of this turn already carried the note (the built-in
+   * browser puts it in its own results, on every engine). */
+  noted: boolean;
   steered: boolean;
-  stopped: boolean;
 }
 
 export function createBrowserFailureGuard(deps: BrowserGuardDeps): BrowserGuard {
@@ -151,7 +154,7 @@ export function createBrowserFailureGuard(deps: BrowserGuardDeps): BrowserGuard 
 
   const fresh = (turnId?: string): TurnState => ({
     ...(turnId === undefined ? {} : { turnId }),
-    items: new Map(), inRow: 0, failedTools: [], notes: [], steered: false, stopped: false,
+    items: new Map(), inRow: 0, failedTools: [], noted: false, steered: false,
   });
 
   const steer = (threadId: string, turn: TurnState) => {
@@ -168,22 +171,6 @@ export function createBrowserFailureGuard(deps: BrowserGuardDeps): BrowserGuard 
     }
   };
 
-  const stop = (threadId: string, turn: TurnState, failures: number) => {
-    turn.stopped = true;
-    const language = deps.language(threadId);
-    let stopping: Promise<unknown>;
-    try {
-      stopping = Promise.resolve(deps.interrupt(threadId, browserStopCause({ language, failures })));
-    } catch {
-      return log(`stop not sent: thread=${threadId}`);
-    }
-    log(`stop sent: thread=${threadId} failures=${failures}`);
-    void stopping.then(
-      () => deps.post(threadId, browserStopMessage({ language, failures, tools: turn.failedTools, notes: turn.notes })),
-      () => log(`stop rejected: thread=${threadId}`),
-    ).catch(reportBackgroundError);
-  };
-
   const onEvent = (event: RuntimeEvent) => {
     const { threadId } = event;
     if (event.type === "turn.completed" || event.type === "session.exited") return settle(threadId);
@@ -198,15 +185,7 @@ export function createBrowserFailureGuard(deps: BrowserGuardDeps): BrowserGuard 
         turns.set(threadId, (turn = fresh(event.turnId)));
       }
     }
-    if (!turn || turn.stopped) return;
-    if (event.type === "item.completed" && event.itemType === "assistant_text") {
-      const text = event.text.trim();
-      if (text) {
-        turn.notes.push(text.length > NOTE_MAX ? `${text.slice(0, NOTE_MAX)}…` : text);
-        if (turn.notes.length > NOTES_KEPT) turn.notes.shift();
-      }
-      return;
-    }
+    if (!turn) return;
     if (event.type === "item.started" && event.itemType === "tool") {
       if (!event.itemId || !isWebPageTool(event.title)) return;
       if (turn.items.size >= MAX_ITEMS) turn.items.delete(turn.items.keys().next().value!);
@@ -222,11 +201,12 @@ export function createBrowserFailureGuard(deps: BrowserGuardDeps): BrowserGuard 
       return;
     }
     turn.inRow += 1;
+    if (carriesBrowserNote(event.output)) turn.noted = true;
+    log(`step failed: thread=${threadId} tool=${tool} failures-in-a-row=${turn.inRow} error=${JSON.stringify(failedStepErrorText(event.output))}`);
     if (!turn.failedTools.includes(tool) && turn.failedTools.length < TOOLS_NAMED) turn.failedTools.push(tool);
     const settings = deps.settings(threadId);
     if (!settings.enabled || !deps.live(threadId)) return;
-    if (settings.stopAt !== undefined && turn.inRow >= settings.stopAt) return stop(threadId, turn, turn.inRow);
-    if (!turn.steered && turn.inRow >= BROWSER_STEER_AT) steer(threadId, turn);
+    if (!turn.steered && !turn.noted && turn.inRow >= BROWSER_STEER_AT) steer(threadId, turn);
   };
 
   return { onEvent, settle };

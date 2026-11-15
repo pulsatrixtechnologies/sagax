@@ -30,6 +30,27 @@ describe("turn latency line", () => {
     );
   });
 
+  it("splits the time after the prompt into the tools' time and the rest, and counts the failed calls (#4394)", () => {
+    // A browser task: 41 calls in 10 minutes. The line must say whether the
+    // time went to the tools (the browser) or to the engine and its model.
+    const trace = newTurnLatency(0);
+    trace.promptAt = 1_000;
+    noteTurnActivity(trace, "tool_call", 2_000, { toolCallId: "a" });
+    noteTurnActivity(trace, "tool_call", 2_500, { toolCallId: "b" }); // beside a: counted once
+    noteTurnActivity(trace, "tool_call_update", 2_600, { toolCallId: "a", status: "in_progress" });
+    noteTurnActivity(trace, "tool_call_update", 3_000, { toolCallId: "a", status: "completed" });
+    noteTurnActivity(trace, "tool_call_update", 4_000, { toolCallId: "b", status: "failed" });
+    noteTurnActivity(trace, "tool_call", 6_000, { toolCallId: "c" });
+    noteTurnActivity(trace, "tool_call_update", 6_000, { toolCallId: "c", status: "failed" });
+    noteTurnActivity(trace, "tool_call", 9_000, { toolCallId: "d" }); // still running at the end
+    const line = turnLatencyLine("grok", "t", trace, 10_000, "ok");
+    expect(line).toContain(" toolTime=3000ms toolsFailed=2 modelTime=6000ms ");
+    // A turn with no tool call keeps its line as it was.
+    const plain = newTurnLatency(0);
+    plain.promptAt = 10;
+    expect(turnLatencyLine("grok", "t", plain, 500, "ok")).not.toMatch(/toolTime|toolsFailed|modelTime/);
+  });
+
   it("marks a stall retry", () => {
     const trace = newTurnLatency(0);
     trace.promptAt = 10;

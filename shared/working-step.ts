@@ -63,6 +63,8 @@ export interface WorkingStepCall {
   input?: string;
   /** The product a connector declared for this tool (tool.product). */
   product?: string;
+  /** #4394: the host the bot's built-in browser is on, for a step that names no address. */
+  pageHost?: string;
 }
 
 const DETAIL_MAX = 40;
@@ -243,7 +245,14 @@ export function workingStepFor(call: WorkingStepCall): WorkingStep | null {
   }
   if (/^(screenshot|screen_capture|take_screenshot|zoom|cursor_position)$/.test(bare) || /screenshot/.test(bare)) return { key: "screen" };
 
-  // The web.
+  // The web. #4394: each step of the built-in browser (agent_browser_*, with
+  // or without a server prefix), on the page it is on: a browser task of 41
+  // steps read "Browsing the web" for 8 minutes.
+  const builtInBrowser = /(?:^|_)agent_browser_(\w+)$/.exec(bare);
+  if (builtInBrowser) {
+    const host = hostOf(field(input, URL_FIELDS)) ?? call.pageHost;
+    return { key: /^(snapshot|get_|read|console|network)/.test(builtInBrowser[1]!) ? "readPage" : "browse", ...withDetail(host) };
+  }
   if (/^(web_?search|websearch|google_web_search|search_web|brave_search|tavily_search|search_query)$/.test(bare) || /web_search/.test(bare)) return { key: "searchWeb" };
   if (/^(web_?fetch|fetch|fetch_url|read_page|get_page_text|read_url|scrape|browse_page)$/.test(bare)) {
     return { key: "readPage", ...withDetail(hostOf(field(input, URL_FIELDS))) };

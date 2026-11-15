@@ -254,6 +254,20 @@ describe("createInternalEnvironmentsRoutes", () => {
     expect(sent[0]?.body).toEqual({ result: { tools: [] } });
   });
 
+  it("browser/mcp names the calling turn, which owns its run of browser steps (#4394)", async () => {
+    const turns: unknown[] = [];
+    const route = createInternalEnvironmentsRoutes(baseDeps({
+      browserAgentRpc: async (...args: unknown[]) => { turns.push(args[6]); return { content: [] }; },
+    }));
+    await call(route, { path: "/api/internal/browser/mcp", body: { method: "tools/call", params: { name: "agent_browser_snapshot", arguments: {} } } });
+    await call(route, {
+      path: "/api/internal/browser/mcp",
+      body: { method: "tools/call", params: { name: "agent_browser_snapshot", arguments: {} } },
+      capability: { botId: BOT.id, threadId: "t-2", generation: "g7", browserSession: "sess-1" },
+    });
+    expect(turns).toEqual(["t-1:g1", "t-2:g7"]);
+  });
+
   it("sandbox/mcp 404 when no user sandbox", async () => {
     const route = createInternalEnvironmentsRoutes(baseDeps({ userSandboxAvailable: () => false }));
     const { sent } = await call(route, { path: "/api/internal/sandbox/mcp", body: { method: "tools/list" } });

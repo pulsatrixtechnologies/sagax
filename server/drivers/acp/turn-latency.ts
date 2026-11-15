@@ -93,6 +93,11 @@
 // without the whole system block, the ids of the opening block's sections
 // that rode it because they changed (nothing else of the block is resent:
 // the engine's cache keeps it; `cached` says how much of the input it hit).
+// #4394: toolTime is the time after the prompt while at least one tool call
+// ran (calls side by side count once), toolsFailed the calls that ended
+// failed, and modelTime the rest of the time after the prompt: the engine
+// and its model reading, thinking and writing. A browser task of 41 calls in
+// 10 minutes reads from the line alone as the browser's time or the model's.
 
 export type TurnLatencyPath = "pooled" | "load" | "spawn";
 
@@ -139,6 +144,20 @@ export interface TurnLatency {
   /** #4394: the stream before the first answer text, ms by what it was
    * doing (firstWords); `last` is the latest update's time and kind */
   beforeText?: { think: number; tool: number; quiet: number; last?: { at: number; kind: "think" | "tool" | "text" }; open?: Set<string> };
+  /** #4394: the tool calls running now (toolTime) */
+  toolsRunning?: Set<string>;
+  /** #4394: when the current stretch with a tool running began */
+  toolsBusySince?: number;
+  /** #4394: ms after the prompt with at least one tool running */
+  toolMs?: number;
+  /** #4394: tool calls that ended failed */
+  toolsFailed?: number;
+}
+
+/** The part of an ACP session update the line reads: which call, and how it ended. */
+export interface TurnActivityUpdate {
+  toolCallId?: unknown;
+  status?: unknown;
 }
 
 /** #4394: a gap between two streamed updates that counts as quiet. */
@@ -234,18 +253,54 @@ export function newTurnLatency(start: number, receivedAt?: number): TurnLatency 
 }
 
 /** Record a streamed update of the running prompt. `update`: the update's
- * tool call id and status, which open and close a running tool (firstWords). */
-export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, at: number, update?: { toolCallId?: unknown; status?: unknown }): void {
+ * tool call id and status, which open and close a running tool (firstWords,
+ * toolTime). */
+export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, at: number, update?: TurnActivityUpdate): void {
   if (!trace || trace.promptAt === undefined) return;
-  // #4394: a tool's progress closes the time it ran (firstWords), and is
-  // not an activity of its own
-  if (kind === "tool_call_update") { noteBeforeText(trace, "tool", at); noteToolState(trace, update, false); return; }
+  const callId = typeof update?.toolCallId === "string" && update.toolCallId ? update.toolCallId : undefined;
+  // #4394: a tool's progress closes the time it ran (firstWords, toolTime),
+  // and is not an activity of its own
+  if (kind === "tool_call_update") {
+    noteBeforeText(trace, "tool", at);
+    noteToolState(trace, update, false);
+    if (callId && (update?.status === "completed" || update?.status === "failed")) toolEnded(trace, callId, update.status === "failed", at);
+    return;
+  }
   if (kind !== "agent_message_chunk" && kind !== "agent_thought_chunk" && kind !== "tool_call") return;
   noteBeforeText(trace, kind === "agent_message_chunk" ? "text" : kind === "tool_call" ? "tool" : "think", at);
   if (kind === "tool_call") noteToolState(trace, update, true);
   trace.firstActivityAt ??= at;
   if (kind === "agent_message_chunk") trace.firstTextAt ??= at;
-  if (kind === "tool_call") { trace.tools += 1; trace.firstToolAt ??= at; }
+  if (kind === "tool_call") {
+    trace.tools += 1;
+    trace.firstToolAt ??= at;
+    if (callId) {
+      const running = (trace.toolsRunning ??= new Set());
+      if (!running.size) trace.toolsBusySince = at;
+      running.add(callId);
+      // a call that starts and ends in one update
+      if (update?.status === "completed" || update?.status === "failed") toolEnded(trace, callId, update.status === "failed", at);
+    }
+  }
+}
+
+function toolEnded(trace: TurnLatency, callId: string, failed: boolean, at: number): void {
+  const running = trace.toolsRunning;
+  if (!running?.delete(callId)) return;
+  if (failed) trace.toolsFailed = (trace.toolsFailed ?? 0) + 1;
+  if (!running.size && trace.toolsBusySince !== undefined) {
+    trace.toolMs = (trace.toolMs ?? 0) + Math.max(0, at - trace.toolsBusySince);
+    trace.toolsBusySince = undefined;
+  }
+}
+
+/** toolTime, toolsFailed and modelTime at `end`; nothing for a turn with no tracked tool call. */
+export function turnToolShare(trace: TurnLatency, end: number): string | undefined {
+  if (trace.promptAt === undefined || (trace.toolMs === undefined && !trace.toolsRunning?.size)) return undefined;
+  const open = trace.toolsRunning?.size && trace.toolsBusySince !== undefined ? Math.max(0, end - trace.toolsBusySince) : 0;
+  const toolMs = Math.round((trace.toolMs ?? 0) + open);
+  const modelMs = Math.max(0, Math.round(end - trace.promptAt) - toolMs);
+  return `toolTime=${toolMs}ms${trace.toolsFailed ? ` toolsFailed=${trace.toolsFailed}` : ""} modelTime=${modelMs}ms`;
 }
 
 /** #4456: answer text of the running prompt reached the person (the driver
@@ -484,6 +539,8 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
   if (toolsSlow) parts.push(`toolsSlow=${toolsSlow}`);
   const toolsGap = turnToolsGap(trace.toolWait);
   if (toolsGap) parts.push(`toolsGap=${toolsGap}`);
+  const toolShare = turnToolShare(trace, end);
+  if (toolShare) parts.push(toolShare);
   if (trace.path === "spawn" && trace.spawnWhy) parts.push(`spawnWhy=${trace.spawnWhy}`);
   if (trace.full && trace.fullWhy) parts.push(`fullWhy=${trace.fullWhy}`);
   const firstWords = turnFirstWords(trace);

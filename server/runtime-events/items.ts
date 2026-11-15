@@ -50,7 +50,10 @@ export function handleItemEvents(event: any, ctx: any, host: any): void {
           // dropping it here would silently un-narrate every completed tool
           const row = host.store.messagesFor(event.threadId).find((m) => m.id === messageId);
           // #3126: arguments the engine sent after the start (grok's use_tool) replace the "{}" it showed
-          const existing = row?.tool && typeof event.input === "string" && event.input ? { ...row.tool, input: event.input } : row?.tool;
+          const lateInput = row?.tool && typeof event.input === "string" && event.input ? event.input : undefined;
+          // #4394: the step a "{}" start could not name (no address yet) reads from the real arguments
+          const lateStep = lateInput && !row.tool.step?.detail ? host.toolWorkingStep({ name: row.tool.name ?? "tool", input: lateInput }, event.threadId) : undefined;
+          const existing = lateInput ? { ...row.tool, input: lateInput, ...(lateStep ? { step: lateStep } : {}) } : row?.tool;
           toolName = existing?.name ?? "tool";
           const widget = event.ok && event.resultText ? cwToolRowWidget(toolName, existing?.input, event.resultText, host.latestPersonText(event.threadId)) : null;
           // How long the call ran, for the step row's quiet duration.
@@ -139,7 +142,8 @@ export function handleItemEvents(event: any, ctx: any, host: any): void {
         const product = host.declaredToolProduct(bot?.id, name, event.input);
         // 2026-10-29: the step the working line names, the same for every
         // engine (shared/working-step.ts); older clients ignore the field
-        const step = host.toolWorkingStep({ name, summary: event.summary, input: event.input, product: product?.product });
+        // #4394: per conversation, so a browser step reads on the page it is on
+        const step = host.toolWorkingStep({ name, summary: event.summary, input: event.input, product: product?.product }, event.threadId);
         // 2026-11-05 (#2033): no tool.role on chat steps; the role journal keeps it
         const message = pushMessage({
           role: "bot",

@@ -113,7 +113,7 @@ describe("LiveCallPill, listening variant (#4100)", () => {
   beforeEach(() => { vi.stubGlobal("window", { ogb: { speechStop: vi.fn(async () => {}) }, addEventListener: () => {}, removeEventListener: () => {} }); });
   afterEach(async () => { await stopListening(); });
 
-  it("is the same pill in the recording red: the bot's name first, then Stop", async () => {
+  it("is the same pill in the recording red: one sentence that starts with the state, then Stop", async () => {
     fixture.bots = [{ ...atlas, name: "Atlas Operations Assistant With A Long Name" }];
     expect(renderPill({ variant: "listening", onOpen: vi.fn(), currentBotId: "juniper" }).markup).toBe("");
     await listenToAtlas();
@@ -122,8 +122,10 @@ describe("LiveCallPill, listening variant (#4100)", () => {
     expect(markup).toContain('data-live-pill="listening"');
     expect(markup).toContain("border-danger/40");
     expect(markup).not.toContain("border-success/40");
-    // the name leads the line, the short label follows: a cut never takes the name first
-    expect(markup.indexOf("Atlas Operations Assistant With A Long Name")).toBeLessThan(markup.indexOf(">Listening<"));
+    // like the call pill: one sentence cut as one string, so the state word
+    // leads and a long name is what gives way, never "Listening"
+    expect(markup).toMatch(/<span class="truncate">Listening in Atlas Operations Assistant With A Long Name(&#x27;|')s chat<\/span>/);
+    expect(markup).not.toContain("shrink-[100]");
     expect(markup).toContain('aria-label="Stop listening"');
     expect(markup).not.toContain('aria-label="Mute"');
     findElement(tree(), (props) => props.title === "Back to listening")?.props.onClick?.();

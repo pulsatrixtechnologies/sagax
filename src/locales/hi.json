@@ -1866,7 +1866,6 @@
   "listening.loading": "ट्रांसक्रिप्ट लोड हो रहा है…",
   "listening.pill": "{name} की चैट में सुन रहा है",
   "listening.unreadable": "यह ट्रांसक्रिप्ट यहाँ पढ़ा नहीं जा सकता।",
-  "listening.pill.label": "सुन रहा है",
   "listening.back": "सुनने पर वापस जाएं",
   "listening.couldNotStart": "सुनना शुरू नहीं हो सका: {error}",
   "listening.computerDenied": "कंप्यूटर की आवाज़ के लिए सिस्टम की स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग अनुमति चाहिए।",

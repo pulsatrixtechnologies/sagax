@@ -1876,7 +1876,6 @@
   "listening.loading": "Cargando la transcripción…",
   "listening.pill": "Escuchando en el chat de {name}",
   "listening.unreadable": "Esta transcripción no se puede leer aquí.",
-  "listening.pill.label": "Escuchando",
   "listening.back": "Volver a la escucha",
   "listening.couldNotStart": "No se pudo empezar a escuchar: {error}",
   "listening.computerDenied": "El sonido del ordenador necesita el permiso del sistema de grabación de pantalla y audio del sistema.",

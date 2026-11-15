@@ -191,6 +191,8 @@ class Session {
   /** the computer's recent lines, for the echo drop */
   private computerLines: Array<{ at: number; text: string }> = [];
   private embedder: Pick<SpeakerEmbedder, "embed"> | null = null;
+  /** Utterances still being given their speaker. */
+  private hearing = new Set<Promise<void>>();
   private readonly book: SpeakerBook;
 
   constructor(private readonly deps: ListeningDeps, private readonly botId: string, private readonly threadId: string, personName: string) {
@@ -247,7 +249,13 @@ class Session {
       vad,
       now: () => this.deps.now(),
       onPartial: (text) => update((live) => ({ ...live, view: withPartial(live.view, channel, text), liveSpeaker: { ...live.liveSpeaker, [channel]: this.liveSpeaker(channel) } })),
-      onFinal: (utterance) => void this.heard(channel, utterance),
+      onFinal: (utterance) => {
+        // kept until done: stop waits for it, so the last sentence still
+        // reaches the server while the voice model tells its speaker
+        const done = this.heard(channel, utterance).catch(() => undefined);
+        this.hearing.add(done);
+        void done.finally(() => this.hearing.delete(done));
+      },
     });
   }
 
@@ -316,6 +324,7 @@ class Session {
     this.microphone?.stop();
     this.computer?.stop();
     await Promise.all([this.channel?.stop(), this.computerChannel?.stop()].map((done) => done?.catch(() => undefined)));
+    while (this.hearing.size) await Promise.all(this.hearing);
     if (this.flushTimer !== null) {
       this.deps.clearTimer(this.flushTimer);
       this.flushTimer = null;

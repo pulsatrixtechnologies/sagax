@@ -3180,7 +3180,6 @@
   "listening.loading": "正在載入逐字稿…",
   "listening.pill": "正在 {name} 的聊天中聆聽",
   "listening.unreadable": "此處無法讀取這份逐字稿。",
-  "listening.pill.label": "正在聆聽",
   "listening.back": "返回聆聽",
   "listening.couldNotStart": "無法開始聆聽：{error}",
   "listening.computerDenied": "電腦聲音需要系統的螢幕與系統音訊錄製權限。",

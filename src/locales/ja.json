@@ -3113,7 +3113,6 @@
   "listening.loading": "文字起こしを読み込んでいます…",
   "listening.pill": "{name} のチャットで聞いています",
   "listening.unreadable": "この文字起こしはここでは読み込めません。",
-  "listening.pill.label": "聞いています",
   "listening.back": "聞き取りに戻る",
   "listening.couldNotStart": "聞き取りを開始できませんでした: {error}",
   "listening.computerDenied": "コンピュータの音声には、システムの画面とシステムオーディオの録音の許可が必要です。",

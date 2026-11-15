@@ -23,7 +23,7 @@ public enum BotFieldRules {
     /// What an organization member sets on a bot they own with no further
     /// permission (`MEMBER_BOT_FIELDS`).
     public static let memberFields: Set<String> = clientFields.union([
-        "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "requireAvailableModel",
+        "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "harness", "requireAvailableModel",
     ])
 
     /// The other fields the owner sets with a permission of their profile

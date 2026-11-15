@@ -54,7 +54,10 @@
 // files nothing imports never block. So the OK stamp, keyed on HEAD, means HEAD.
 //
 // On OK, writes a stamp under the common git dir (`sagax-verify-merge/ok-<sha>`;
-// its content names any stage skipped on the host) so the pre-push hook can skip a re-run for the same HEAD. Strips every GIT_*
+// its first line is "ok <time>", the rest names any stage skipped on the host)
+// so the pre-push hook can skip a re-run for the same HEAD. The hook trusts
+// only that first line (#4316): a stamp written by anything else (an empty
+// file) still runs the test side of the fast gate. Strips every GIT_*
 // from the process env before any stage so a leaked hook GIT_DIR cannot make a
 // test commit into the branch being pushed (issue #1705).
 import { spawnSync, execFileSync } from "node:child_process";

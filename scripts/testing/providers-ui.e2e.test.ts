@@ -190,6 +190,34 @@ suite("Settings > Providers on the real renderer (#4376)", () => {
     }
   }, 120_000);
 
+  it("a connected provider with one account to sign in again says so on its row, in amber, with Sign in again (#4376 review)", async () => {
+    for (const [lang, said] of [["en", "Connected · your bots there too · 1 account to sign in again"], ["fr", "Connecté · tes bots là-bas aussi · 1 compte à reconnecter"]] as const) {
+      const page = await open("providers=1&org=1&expired=1", lang);
+      try {
+        const row = page.locator('[data-providers-active] > [data-provider="xai"]');
+        await expect.poll(() => row.locator("[data-provider-summary]").innerText(), { timeout: 60_000 }).toBe(said);
+        expect(await row.locator('[data-provider-summary] [data-status-text]').getAttribute("data-status-text")).toBe("warning");
+        expect(await row.locator('[data-provider-action="signInAgain"]').count()).toBe(1);
+      } finally {
+        await page.close();
+      }
+    }
+  }, 120_000);
+
+  it("Add key on a key engine with no key row opens its key field, and the key saves (#4376 review)", async () => {
+    const page = await open("providers=1&keyonly=1&subPage=providers.provider:meta");
+    try {
+      const section = page.locator('[data-settings-group="provider-key"]');
+      await section.locator('[data-provider-line="engine:meta"] button[data-provider-action="addKey"]').click();
+      const field = section.locator('[data-engine-api-key="meta"] input');
+      await field.fill("meta-test-1234");
+      await section.locator('[data-engine-api-key="meta"] button').first().click();
+      await expect.poll(() => section.innerText(), { timeout: 30_000 }).toMatch(/saved/i);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
   it("the API key section saves, replaces and removes a key (solo: the server's key)", async () => {
     const page = await open("providers=1&subPage=providers.provider:anthropic");
     const section = page.locator('[data-settings-group="provider-key"]');

@@ -36,6 +36,7 @@ import {
 import { COMPUTER_PROVIDER_ID } from "../../../shared/model-provider";
 import { PERSONAL_PROVIDER_NAMES } from "../../../shared/provider-accounts";
 import { AddAnotherAccount, EngineRow } from "../EnginesSettings";
+import { EngineApiKeyField } from "../EngineApiKeyField";
 import { engineReady } from "../EngineLibrary";
 import { InstanceProviderMark, PresetProviderMark } from "../ProviderIcons";
 import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../../shared/provider-icon";
@@ -263,10 +264,12 @@ function ConnectionPanel({ row, list }: { row: ProviderRow; list: ProviderList }
 }
 
 /** What a key line's Add, Replace or the provider's offered key opens in place. */
-function KeyForm({ row, group, onClose }: { row: ProviderRow; group: ProviderGroup; onClose: () => void }) {
+function KeyForm({ row, group, list, onClose }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; onClose: () => void }) {
   if (row.accountProvider) return <PersonalProviderKey provider={row.accountProvider} name={groupName(group)} onDone={onClose} />;
   if (row.keyRow) return <ProviderKeyEditor id={row.keyRow} onClose={onClose} />;
-  return null;
+  // a key engine with no key row of its own (a solo server's Groq, Cerebras,
+  // MiniMax, Meta): the engine's own key field, the one its setup card uses
+  return <>{rowInstances(row, list.instances).map((instance) => <EngineApiKeyField key={instance.instanceId} instanceId={instance.instanceId} />)}</>;
 }
 
 /** Everything else a line had (#4329 B3 Advanced): who pays, the key in the
@@ -375,7 +378,7 @@ function ModelsSection({ group }: { group: ProviderGroup }) {
 /** An account's name, renamed in place (#4376): a click on the name or its
  * pencil, type, Enter. Kept on the server: the engine's own name on a solo
  * server, the person's own name for it on an organization server. */
-function AccountName({ rowId, name, onRename }: { rowId: string; name: string; onRename?: (next: string) => Promise<void> }) {
+function AccountName({ rowId, name, onRename, clearable = false }: { rowId: string; name: string; onRename?: (next: string) => Promise<void>; clearable?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const [busy, setBusy] = useState(false);
@@ -386,7 +389,9 @@ function AccountName({ rowId, name, onRename }: { rowId: string; name: string; o
   const save = async () => {
     const next = draft.trim();
     if (busy) return;
-    if (!next || next === name) { setEditing(false); return; }
+    // an emptied name gives back the default where the server keeps the person's
+    // own name apart (an organization); a solo engine always keeps a name
+    if (next === name || (!next && !clearable)) { setEditing(false); return; }
     setBusy(true);
     try {
       await onRename(next);
@@ -462,7 +467,7 @@ function AccountsSection({ group, list, open, visited, show }: { group: Provider
             <li key={row.id} data-provider-line={row.id} data-provider-account="" data-open={shown ? "true" : "false"} className="min-w-0">
               <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
                 <span className="min-w-0 flex-1">
-                  <AccountName rowId={row.id} name={name} onRename={instance && row.instanceIds.length === 1 ? rename(instance) : undefined} />
+                  <AccountName rowId={row.id} name={name} onRename={instance && row.instanceIds.length === 1 ? rename(instance) : undefined} clearable={list.organization} />
                   <span className="block text-[12px] leading-4 text-ink-secondary [overflow-wrap:anywhere]" data-provider-account-line={row.id}>
                     {address && <><span data-provider-account-address="">{address}</span> · </>}
                     <StatusText tone={tone}>{state}</StatusText>
@@ -511,7 +516,7 @@ function KeyLine({ row, group, list, shown, show }: { row: ProviderRow; group: P
       </div>
       {shown && editable && (
         <div data-provider-panel={row.id} className="flex min-w-0 flex-col gap-2 px-3.5 pb-3">
-          <KeyForm row={row} group={group} onClose={() => show(null)} />
+          <KeyForm row={row} group={group} list={list} onClose={() => show(null)} />
         </div>
       )}
     </li>

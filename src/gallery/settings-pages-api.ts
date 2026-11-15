@@ -37,7 +37,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       live: { enabled: true, configured: false, voice: "", readTypedReplies: true, idleMinutes: 5 },
       imageGen: { configured: false },
       anthropic: { configured: !params.get("empty") },
-      ...(params.get("org") ? { personalSettings: true, viewer: { role: "admin", operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true }, allowedEngines: ["claude", "codex", "grok", "compat-azure"], disabledModels: ["compat-azure/gpt-4o"] } : {}),
+      ...(params.get("org") ? { personalSettings: true, viewer: { role: "admin", operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true }, allowedEngines: ["claude", "codex", "grok", "compat-azure", ...(params.get("expired") ? ["grok-team"] : [])], disabledModels: ["compat-azure/gpt-4o"] } : {}),
       ...(params.get("providers") ? { myDisabledModels: ["compat-azure/o4-mini"] } : {}),
       ...(params.get("providers") ? {
         openai: { configured: true },
@@ -74,6 +74,14 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
         { instanceId: "openrouter", displayName: "OpenRouter", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: false }, models: { default: "", options: [] } },
         { instanceId: "compat-research", displayName: "Research cluster in the basement rack, second floor", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "llama-4-70b", options: [{ id: "llama-4-70b", label: "Llama 4 70B", custom: true }, { id: "llama-4-8b", label: "Llama 4 8B", custom: true }] } },
       ] : []),
+      // &keyonly=1 (#4376 review): a key engine with no key row of its own and no key yet
+      ...(params.get("keyonly") ? [
+        { instanceId: "meta", displayName: "Meta", driverKind: "meta", access: "api", snapshot: { state: "unavailable", reason: "No API key." }, models: { default: "", options: [] } },
+      ] : []),
+      // &expired=1 (#4376 review, with org=1): a second xAI account whose sign-in expired
+      ...(params.get("expired") ? [
+        { instanceId: "grok-team", displayName: "Grok team", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] } },
+      ] : []),
       // &pi=1 (#2983): the pi engine, so Providers shows Model servers for pi
       ...(params.get("pi") ? [
         { instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "", options: [
@@ -87,6 +95,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       { id: "sx-0a1b2c3d4e", name: "oMLX on this Mac", url: "http://127.0.0.1:8000/v1", configured: true, models: [{ id: "qwen-3.8-27b", contextWindow: 131072 }, { id: "qwen-3.8-7b" }], checkedAt: new Date(NOW - DAY).toISOString(), provider: "px-own-sx-0a1b2c3d4e" },
       { id: "sx-5f6a7b8c9d", name: "Ollama", url: "http://localhost:11434/v1", configured: false, models: [], provider: "px-own-sx-5f6a7b8c9d" },
     ] } } : {}),
+    ...(params.get("keyonly") ? { "/api/instances/meta/api-key": { configured: false } } : {}),
     "/api/me/cloud-agent-providers": { providers: [] },
     // Providers > Advanced: the claude.ai connectors; Memes (Other services); the bots link (the xAI provider)
     "/api/me/harness-connectors": { manageUrl: "https://claude.ai/customize/connectors", canManage: true, enabled: true, claude: { available: true, connectors: [
@@ -108,6 +117,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
         { instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, subscription: { supported: true, signedIn: false }, myKey: true, keyWhere: "perspicax", orgKey: false, myTurns: "key" },
         { instanceId: "grok", driver: "grokAgent", displayName: "Grok", installed: true, subscription: { supported: true, signedIn: true }, myKey: false, orgKey: false, myTurns: "subscription" },
         { instanceId: "compat-azure", driver: "openaiCompat", displayName: "Azure Foundry", installed: true, subscription: { supported: false, signedIn: false }, myKey: false, orgKey: true, myTurns: "org-key" },
+        ...(params.get("expired") ? [{ instanceId: "grok-team", driver: "grokAgent", displayName: "Grok team", installed: true, subscription: { supported: true, signedIn: true, expired: true }, myKey: false, orgKey: false, myTurns: "expired" }] : []),
       ] },
       "/api/me/voice-keys": { elevenlabs: { configured: true, last4: "9f3a" }, fish: { configured: false, last4: null }, xai: { configured: false, last4: null }, openai: { configured: false, last4: null } },
     } : {}),

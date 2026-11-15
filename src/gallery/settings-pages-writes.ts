@@ -54,6 +54,16 @@ export function answerGalleryWrite(api: Api, url: URL, init?: RequestInit): unkn
     return { ok: true, ...(name ? { displayName: name } : {}) };
   }
 
+  // a key engine's own key (EngineApiKeyField): the engine is ready once it has one
+  const engineKey = /^\/api\/instances\/([\w.-]+)\/api-key$/.exec(url.pathname);
+  if (method === "POST" && engineKey) {
+    const configured = typeof body.key === "string" && body.key.trim().length > 0;
+    api[url.pathname] = { configured };
+    const instance = instances.find((entry) => entry.instanceId === engineKey[1]) as (Instance & { snapshot?: unknown }) | undefined;
+    if (instance) instance.snapshot = configured ? { state: "available", authenticated: true } : { state: "unavailable", reason: "No API key." };
+    return { configured };
+  }
+
   // a model switch (Active models and a provider's page)
   if (method === "PUT" && url.pathname === "/api/me/models" && Array.isArray(body.disabledModels)) {
     config.myDisabledModels = body.disabledModels;

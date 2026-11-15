@@ -26,13 +26,17 @@ const fixture = vi.hoisted(() => ({
   local: { expose: false, share: false, connected: false, endpoints: [], published: [], probes: [] } as Record<string, unknown>,
   piServers: [] as unknown[],
   keys: [] as { provider: string; last4: string | null }[],
+  accountsDown: false,
 }));
 
 const answers = (path: string, init?: RequestInit): unknown => {
   if (path === "/api/me/models") return { mine: (JSON.parse(String(init?.body ?? "{}")) as { disabledModels?: string[] }).disabledModels ?? [] };
   if (path.startsWith("/api/instances/")) return { instances: fixture.instances };
   if (/^\/api\/me\/engines\/[^/]+\/name$/.test(path)) return { ok: true };
-  if (path === "/api/me/providers") return { keys: fixture.keys, servers: [] };
+  if (path === "/api/me/providers") {
+    if (fixture.accountsDown) throw new Error("personal keys unreachable");
+    return { keys: fixture.keys, servers: [] };
+  }
   if (path === "/api/me/local-models") return fixture.local;
   if (path === "/api/me/pi-model-servers") return { servers: fixture.piServers };
   if (path.startsWith("/api/me/pi-model-servers/")) return {};
@@ -110,6 +114,7 @@ beforeEach(() => {
   fixture.local = { expose: false, share: false, connected: false, endpoints: [], published: [], probes: [] };
   fixture.piServers = [];
   fixture.keys = [];
+  fixture.accountsDown = false;
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
   host = document.createElement("div");
   document.body.append(host);
@@ -196,6 +201,28 @@ describe("Settings > Providers: the short list (#4329 B1)", () => {
     const row = host.querySelector<HTMLElement>('[data-provider="anthropic"]')!;
     expect(row.textContent).toContain("Session expired");
     expect(row.querySelector('[data-provider-action="signInAgain"]')!.textContent).toBe("Sign in again");
+  });
+
+  it("says on the row, in amber, that one account of a connected provider must sign in again, with its Sign in again (#4376 review)", async () => {
+    fixture.instances = [
+      instance("claude", "claudeAgent", "Claude Code", { access: "subscription" }),
+      instance("claude-work", "claudeAgent", "Claude work", { access: "subscription" }),
+    ];
+    fixture.org = ORG;
+    fixture.config = { viewer: { operator: false, role: "member" } };
+    fixture.mine = [
+      mine("claude", "claudeAgent", "Claude Code", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+      mine("claude-work", "claudeAgent", "Claude work", { subscription: { supported: true, signedIn: true, expired: true }, myTurns: "expired" }),
+    ];
+    await render();
+    const row = host.querySelector<HTMLElement>('[data-provider="anthropic"]')!;
+    const summary = row.querySelector("[data-provider-summary]")!;
+    expect(summary.textContent).toBe("Connected · 1 account to sign in again");
+    expect(summary.querySelector("[data-status-text]")!.getAttribute("data-status-text"), "amber, not neutral grey").toBe("warning");
+    expect(row.querySelector('[data-provider-action="signInAgain"]')!.textContent).toBe("Sign in again");
+    setLocale("fr");
+    await render();
+    expect(host.querySelector('[data-provider="anthropic"] [data-provider-summary]')!.textContent).toBe("Connecté · 1 compte à reconnecter");
   });
 
   it("opens the provider's page from its row, and on the line a button names", async () => {
@@ -345,6 +372,7 @@ describe("One provider's page (#4329 B3)", () => {
     const models = root.querySelector<HTMLElement>('[data-settings-group="provider-models"]')!;
     expect(models.querySelector("h3")!.textContent).toBe("Models");
     expect(models.textContent).toContain("2 of 2 on");
+    expect(models.querySelector("[data-count-pill]")!.textContent!.trim(), "the line says the count; the pill does not say it again").toBe("");
     expect(models.querySelector("[data-link-row]"), "never sent to another page").toBeNull();
     const advanced = root.querySelector<HTMLElement>("[data-provider-page-advanced]")!;
     expect(advanced.hidden, "folded each time it opens").toBe(true);
@@ -464,6 +492,19 @@ describe("One provider's page (#4329 B3)", () => {
     const settings = host.querySelector<HTMLElement>('[data-provider-page="computer"] [data-settings-card="providers.localModels"]')!;
     expect(settings).not.toBeNull();
     expect(settings.dataset.localModels).toBe("on");
+  });
+  it("opens a key setup on Add key for a key engine with no key row of its own: Groq on a solo server (#4376 review)", async () => {
+    // no personal key list to take it (the server's personal keys unreachable): the engine's own setup
+    fixture.accountsDown = true;
+    fixture.instances = [instance("groq", "groq", "Groq", { snapshot: { state: "unavailable", reason: "No API key." } })];
+    await page("groq");
+    const line = host.querySelector<HTMLElement>('[data-provider-line="engine:groq"]')!;
+    expect(line, "the key line of the engine").not.toBeNull();
+    await click(line.querySelector('[data-provider-action="addKey"]'));
+    const panel = host.querySelector<HTMLElement>('[data-provider-panel="engine:groq"]')!;
+    expect(panel, "Add key opens a panel").not.toBeNull();
+    expect(panel.children.length, "the panel is never empty").toBeGreaterThan(0);
+    expect(panel.querySelector('[data-engine-api-key="groq"] input'), "the engine's key field").not.toBeNull();
   });
 });
 
@@ -611,5 +652,19 @@ describe("Settings > Providers, in an organization", () => {
     await settle();
     expect(apiCalls("PUT")).toEqual([["/api/me/engines/codex/name", JSON.stringify({ name: "Team plan" })]]);
     expect(apiCalls("PATCH"), "never the organization's engine").toEqual([]);
+  });
+
+  it("gives an account its default name back when the person empties the name (#4376 review)", async () => {
+    await page("openai");
+    await click(host.querySelector('[data-account-rename="account:codex"]'));
+    const input = host.querySelector<HTMLInputElement>('[data-account-name-input="account:codex"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "  ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.mocked(apiMock).mockClear();
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await settle();
+    expect(apiCalls("PUT")).toEqual([["/api/me/engines/codex/name", JSON.stringify({ name: "" })]]);
   });
 });

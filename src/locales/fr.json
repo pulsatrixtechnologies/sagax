@@ -13619,6 +13619,8 @@
   "providers.summary.accounts": "{count} comptes connectés",
   "providers.summary.withBots": "{state} · tes bots là-bas aussi",
   "providers.summary.reconnect": "Session expirée, reconnecte-toi",
+  "providers.summary.reconnectOne": "{state} · 1 compte à reconnecter",
+  "providers.summary.reconnectSome": "{state} · {count} comptes à reconnecter",
   "providers.summary.signIn": "Connecte-toi pour l'utiliser",
   "providers.account.default": "Ton compte",
   "providers.account.numbered": "Compte {number}",

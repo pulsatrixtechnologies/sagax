@@ -31,7 +31,12 @@ export function providerSummary(group: ProviderGroup, botsThere = false): Provid
     if (group.kind === "server") return { text: modelsWords(models, "server"), tone: "neutral" };
     const accounts = group.rows.filter((row) => row.kind === "account" && row.state === "connected").length;
     const base = accounts > 1 ? t("providers.summary.accounts", { count: accounts }) : t("providers.state.connected");
-    return { text: botsThere ? t("providers.summary.withBots", { state: base }) : base, tone: "neutral" };
+    const state = botsThere ? t("providers.summary.withBots", { state: base }) : base;
+    // an account whose sign-in expired beside a connected one is said on the
+    // row, in amber, never hidden behind "Connected" (#4376 review)
+    const expired = expiredAccounts(group).length;
+    if (expired) return { text: t(expired === 1 ? "providers.summary.reconnectOne" : "providers.summary.reconnectSome", { state, count: expired }), tone: "warning" };
+    return { text: state, tone: "neutral" };
   }
   if (group.state === "reconnect") return { text: t("providers.summary.reconnect"), tone: "warning" };
   if (group.state === "keyMissing") return { text: t("providers.state.keyMissing"), tone: "warning" };
@@ -39,15 +44,21 @@ export function providerSummary(group: ProviderGroup, botsThere = false): Provid
   return { text: t("providers.summary.signIn"), tone: "neutral" };
 }
 
+/** The accounts of a provider whose sign-in expired. */
+function expiredAccounts(group: ProviderGroup): ProviderRow[] {
+  return group.rows.filter((row) => row.kind === "account" && row.state === "reconnect");
+}
+
 /** The actions a row of the list may carry: the first step of a provider
  * not connected yet. Everything else is on its page. */
 const FIRST_STEPS: ReadonlySet<ConnectionAction> = new Set(["signIn", "signInAgain", "addKey", "turnOn"]);
 
 /** The row of a provider whose first step the list's button takes, or null
- * (a connected provider, or one whose fix is not a first step: a server offline). */
+ * (a connected provider with no expired account, or one whose fix is not a
+ * first step: a server offline). */
 export function firstStepRow(group: ProviderGroup, actionOf: (row: ProviderRow) => ConnectionAction | null): ProviderRow | null {
-  if (group.state === "connected") return null;
-  const row = group.rows[0];
+  // a connected provider with an expired account keeps that account's Sign in again
+  const row = group.state === "connected" ? expiredAccounts(group)[0] : group.rows[0];
   const action = row ? actionOf(row) : null;
   return row && action && FIRST_STEPS.has(action) ? row : null;
 }

@@ -56,17 +56,20 @@ export function ProviderListRow({ group, list, summary, onOpen, action, rowData 
       {/* the row's one target: under the words, the whole row wide */}
       <button type="button" data-provider-open={group.id} onClick={onOpen} aria-label={`${name}, ${summary.text}`}
         className="absolute inset-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70" />
-      <div data-provider-row-body="" className="pointer-events-none relative flex min-h-16 min-w-0 items-center gap-3 p-3">
+      {/* at a narrow width the button goes under the words, never squeezing the name letter by letter */}
+      <div data-provider-row-body="" className="pointer-events-none relative flex min-h-16 min-w-0 flex-wrap items-center gap-3 p-3">
         <ProviderLogo group={group} instances={list.instances} />
-        <span className="min-w-0 flex-1">
+        <span className="min-w-[9rem] flex-1 basis-0">
           {/* a long server name wraps, never cut (#4329: no name cut at any width) */}
           <span className="block break-words text-[13px] font-medium leading-[18px] text-ink [overflow-wrap:anywhere]">{name}</span>
           <span className={cn(PLUGINS.rowSub, "[overflow-wrap:anywhere]")} data-provider-summary={group.id}>
             <StatusText tone={summary.tone}>{summary.text}</StatusText>
           </span>
         </span>
-        {action && <span data-provider-row-action="" className="pointer-events-auto relative flex shrink-0">{action}</span>}
-        <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-tertiary transition-colors group-hover/provider:text-ink motion-reduce:transition-none" />
+        <span className="ml-auto flex shrink-0 items-center gap-3">
+          {action && <span data-provider-row-action="" className="pointer-events-auto relative flex shrink-0">{action}</span>}
+          <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-ink-tertiary transition-colors group-hover/provider:text-ink motion-reduce:transition-none" />
+        </span>
       </div>
     </li>
   );

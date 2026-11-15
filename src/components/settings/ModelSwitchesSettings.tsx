@@ -116,7 +116,8 @@ export function ProviderModels({ provider, instance, switches, mayEdit, onToggle
       cardId={inPage ? `providers.page.models.${provider.id}` : `models.provider.${provider.id}`}
       label={inPage ? count : provider.label}
       {...(inPage ? {} : { icon: <SettingsIconTile>{instance ? <InstanceProviderMark instance={instance} size={16} /> : <Server size={14} />}</SettingsIconTile>, description: count })}
-      count={on}
+      // on a provider's page the line already says the count: no pill saying it again
+      count={inPage ? undefined : on}
       toggleLabel={t("modelSwitches.toggle", { name: provider.label })}
     >
       <div className="flex flex-col gap-1" data-model-switches={provider.id}>

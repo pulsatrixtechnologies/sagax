@@ -10,6 +10,7 @@
  * &usage=one|three|error (#4095): Settings > Usage with one engine, three, or three with one in error
  * &subPage=<id> (#4329): a sub-page of the section, e.g. providers.provider:anthropic
  * &empty=1 (#4329): no engine and no key, Providers' empty list
+ * &keyonly=1 (#4376): a key engine with no key row and no key; &expired=1 (with org=1): a second xAI account to sign in again
  * &firstKey=1 (#4360): Security with no key and no recent proof; &vault=unpaired|noperson: the vault refused
  * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu; ?picker=chip: the chat head's chip
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */

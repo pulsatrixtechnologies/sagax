@@ -9,8 +9,8 @@
 # A few minutes. The full suite is deliberately NOT here: it runs once, at
 # the version cut.
 #
-# Under nice, through a one-at-a-time queue (mkdir lock in the common git
-# dir), and with every GIT_* the hook inherited stripped so a test cannot
+# Under nice, through a one-at-a-time, first come first served queue (mkdir
+# lock and waiter tickets in the common git dir), and with every GIT_* the hook inherited stripped so a test cannot
 # commit into the branch being pushed via a leaked GIT_DIR (issue #1705).
 # Skips when a verify:merge OK stamp already exists for this HEAD sha. The
 # stamp means HEAD itself (#3684): verify-merge.mjs takes the diff from the
@@ -70,13 +70,46 @@ done
 cd "$ROOT"
 mkdir -p "$STAMP_DIR"
 
-release_lock() {
-  rm -rf "$LOCK_DIR"
-}
+TICKET_DIR="$STAMP_DIR/queue.tickets"
+mkdir -p "$TICKET_DIR"
+
 # One verify:merge at a time across worktrees of this repo (agents saturate
 # the machine otherwise). mkdir is atomic; a dead holder is cleared.
-waited=0
-while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+# First come, first served (#4377): each waiter leaves a ticket named
+# <arrival second>-<pid> and tries the lock only while its ticket is the
+# oldest one whose process is alive; dead waiters' tickets are dropped. A hook
+# of an older checkout (no ticket) still races for the lock and wins or waits.
+TICKET="$(printf '%010d' "$(date +%s)")-$$"
+: >"$TICKET_DIR/$TICKET"
+HOLDING=""
+leave_queue() {
+  rm -f "$TICKET_DIR/$TICKET"
+  if [ -n "$HOLDING" ]; then rm -rf "$LOCK_DIR"; fi
+}
+trap leave_queue EXIT
+trap 'exit 1' INT TERM HUP
+
+# Sets pos: 1 + the live tickets older than ours.
+queue_position() {
+  pos=1
+  [ -f "$TICKET_DIR/$TICKET" ] || : >"$TICKET_DIR/$TICKET"
+  for t in $(ls "$TICKET_DIR" 2>/dev/null | LC_ALL=C sort -t- -k1,1n -k2,2n); do
+    [ "$t" = "$TICKET" ] && return 0
+    if kill -0 "${t#*-}" 2>/dev/null; then
+      pos=$((pos + 1))
+    else
+      rm -f "$TICKET_DIR/$t"
+    fi
+  done
+}
+
+start="$(date +%s)"
+shown=""
+while :; do
+  queue_position
+  if [ "$pos" -eq 1 ] && mkdir "$LOCK_DIR" 2>/dev/null; then
+    break
+  fi
   if [ -f "$LOCK_DIR/pid" ]; then
     old="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
     if [ -n "$old" ] && ! kill -0 "$old" 2>/dev/null; then
@@ -85,18 +118,19 @@ while ! mkdir "$LOCK_DIR" 2>/dev/null; do
       continue
     fi
   fi
-  if [ "$waited" -eq 0 ]; then
-    echo "pre-push: waiting for another verify:merge (queue)"
+  if [ "$pos" != "$shown" ]; then
+    echo "pre-push: waiting for another verify:merge (queue position $pos)"
+    shown="$pos"
   fi
-  waited=$((waited + 1))
-  if [ "$waited" -gt 1800 ]; then
+  if [ $(($(date +%s) - start)) -gt 7200 ]; then
     echo "pre-push: timed out waiting for verify:merge queue" >&2
     exit 1
   fi
   sleep 1
 done
+HOLDING=1
 echo "$$" >"$LOCK_DIR/pid"
-trap release_lock EXIT INT TERM HUP
+rm -f "$TICKET_DIR/$TICKET"
 
 # Another agent may have stamped this sha while we waited.
 if verified_stamp; then

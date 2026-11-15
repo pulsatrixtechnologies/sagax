@@ -192,7 +192,7 @@ describe("createInternalMemoryRoutes", () => {
     const source = "# Report\n\nClosed tickets, response times and backlog.\n\nClosed tickets again.\n";
     const page = { id: "page_12345678", botId: "bot-1", threadId: "t-1", versions: [{ n: 1 }, { n: 2 }] };
     const read = (n: number) => ({ version: { n, kind: "markdown" as const, title: "Report", bytes: 1, sha256: "x" }, content: source, offset: 0, nextOffset: null });
-    function propose(replace: { quote: string; with: string }, over: Partial<InternalMemoryDeps> = {}) {
+    function propose(replace: { quote: string; with: string }, over: Partial<InternalMemoryDeps> = {}, kind = "markdown") {
       const proposePublishedPage = vi.fn((_input: Parameters<InternalMemoryDeps["proposePublishedPage"]>[0]) => ({ ok: true as const, page: { id: page.id }, version: { n: 3 } }));
       let answer: unknown;
       const route = createInternalMemoryRoutes(deps({
@@ -200,7 +200,7 @@ describe("createInternalMemoryRoutes", () => {
         pageSource: vi.fn((_id: string, n: number) => read(n)),
         proposePublishedPage,
         createCard: ({ proposePage }) => {
-          answer = proposePage({ pageId: page.id, title: "Report", kind: "markdown", content: "", replace });
+          answer = proposePage({ pageId: page.id, title: "Report", kind, content: "", replace });
           return { ok: true, messageId: "m1" };
         },
         ...over,
@@ -216,6 +216,14 @@ describe("createInternalMemoryRoutes", () => {
         pageId: page.id, kind: "markdown",
         content: "# Report\n\nClosed tickets, median response times and backlog.\n\nClosed tickets again.\n",
       });
+    });
+
+    it("keeps the kind of the page it changes, whatever kind the bot sent", async () => {
+      // a passage of a Markdown page never turns it into a deck, nor a deck into a document
+      const { route, proposePublishedPage, answer } = propose({ quote: "response times", with: "median response times" }, {}, "slides");
+      await call(route, { path: "/api/internal/options-card", body: {} }).run();
+      expect(answer()).toMatchObject({ ok: true });
+      expect(proposePublishedPage.mock.calls[0]![0]).toMatchObject({ kind: "markdown" });
     });
 
     it("refuses words not found, or found more than once, and says to send the whole page", async () => {

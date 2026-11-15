@@ -221,6 +221,7 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           const owning = deps.botByThread(capability.threadId) ?? sender;
           const ownerId = deps.isPerspicax() ? pageOwnerFor(deps.taskByThread(owning.id, capability.threadId), deps.botOwner(owning)) : undefined;
           let raw = rest.content;
+          let kind = rest.kind;
           if (replace) {
             // #4099: the words of a passage changed in a page this proposal
             // may revise (the rule of propose, so another person's page is
@@ -237,6 +238,9 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
                 : "replace: these words are not in the latest version as written (page_comments action source reads it); or send the whole page in content." };
             }
             raw = applied.content;
+            // the page keeps its own kind: a passage never turns a document
+            // into a deck, nor the reverse, whatever kind the bot sent
+            kind = read.version.kind;
           }
           if (file !== undefined) {
             try {
@@ -252,6 +256,7 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           const content = redactSecretsInText(raw);
           const proposed = deps.proposePublishedPage({
             ...rest,
+            kind,
             title: redactSecretsInText(proposal.title),
             content,
             botId: sender.id,

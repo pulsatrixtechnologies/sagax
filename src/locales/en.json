@@ -10437,7 +10437,7 @@
   "security.reauth.button": "Sign in again",
   "security.reauth.waiting": "Finish signing in. Sagax brings you back to this page afterwards.",
   "security.solo.title": "Add your first key on your computer",
-  "security.solo.hint": "On a server of your own, the first key is added in the Sagax desktop app, on the computer that runs it. Once it is there, you can use it from this device too.",
+  "security.solo.hint": "On a server of your own, the first key is added in the Sagax desktop app, on the computer that runs it.",
   "security.browser.title": "Finish in your browser",
   "security.browser.hint": "Your browser asks for Touch ID, your passkey or your security key. Sagax comes back here once it is done.",
   "security.browser.cancel": "Cancel",

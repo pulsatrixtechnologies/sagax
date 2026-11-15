@@ -10434,7 +10434,7 @@
   "security.reauth.button": "Me reconnecter",
   "security.reauth.waiting": "Termine la connexion. Sagax te ramène ensuite à cette page.",
   "security.solo.title": "Ajoute ta première clé sur ton ordinateur",
-  "security.solo.hint": "Sur ton propre serveur, la première clé s’ajoute dans l’app de bureau Sagax, sur l’ordinateur qui la fait rouler. Une fois ajoutée, tu peux t’en servir depuis cet appareil aussi.",
+  "security.solo.hint": "Sur ton propre serveur, la première clé s’ajoute dans l’app de bureau Sagax, sur l’ordinateur qui la fait rouler.",
   "security.browser.title": "Termine dans ton navigateur",
   "security.browser.hint": "Ton navigateur demande Touch ID, ta clé d'accès ou ta clé de sécurité. Sagax revient ici une fois terminé.",
   "security.browser.cancel": "Annuler",

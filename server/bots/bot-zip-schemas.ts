@@ -40,6 +40,8 @@ export const settingsSchema = z.object({
   skillLearning: z.boolean().optional(),
   builtinPlugins: z.record(z.string(), z.boolean()).optional(),
   helperModel: z.boolean().optional(),
+  /** #4329 lot 5: what runs the bot's model (a driver kind). */
+  harness: z.string().max(61).optional(),
   parkDirectMessages: z.boolean().optional(),
   approvePeerComms: z.boolean().optional(),
   localPrompt: z.enum(["compact", "full"]).optional(),

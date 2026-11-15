@@ -2,6 +2,7 @@
  * Shared types for the bots core HTTP routes (#1388 B1, split for #1383).
  * Handlers take this bag explicitly and never import server/index.ts.
  */
+import type { HarnessChoice } from "../models/resolve-harness.ts";
 import type { IncomingMessage } from "node:http";
 
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
@@ -156,6 +157,12 @@ export interface BotsCoreRouteDeps {
     requireAvailable: boolean,
     principal: string | null,
   ): { ok: true; selection: ModelSelection } | { ok: false; status: number; error: string };
+  /** #4329 lot 5: the bot's model on the engine it runs with
+   * (server/models/resolve-harness.ts). Absent in tests that do not need it. */
+  harnessChoice?: Pick<HarnessChoice, "selectionFor">;
+  /** #4329 lot 5: a new bot's model on the engine its owner runs that
+   * provider with; one path for every create (server/index.ts). */
+  newBotSelection?(owner: string | null | undefined, selection: ModelSelection, harness: string | null, auth: RequestAuth): Promise<ModelSelection>;
   hostedModels: { allows(selection: ModelSelection): boolean; error(): string; resetTask?(from: ModelSelection, to: ModelSelection): Record<string, unknown> } | null;
   ownerChosenVisibility(auth: RequestAuth, visibility: BotVisibility): BotVisibility;
   routines: BotsCoreRoutines;

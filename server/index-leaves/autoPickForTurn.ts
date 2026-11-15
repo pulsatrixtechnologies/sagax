@@ -30,7 +30,8 @@ function autoPickForTurn(input: {
   const limited = host.limitFailover.autoExcluded(payer, offered);
   const open = offered.filter((engine) => !limited.has(engine.instanceId));
   const engines = open.length ? open : offered;
-  const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip };
+  // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
+  const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}) };
   if (input.role === "continue") {
     const record = host.store.taskByThread(bot.id, input.threadId)?.autoModel;
     if (record && host.autoRecordUsable(record, engines, skip)) {

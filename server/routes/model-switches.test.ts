@@ -52,4 +52,29 @@ describe("GET/PUT /api/me/models", () => {
     expect((await call(handler, "PUT", { favoriteModels: "grok/fast" }))?.status).toBe(400);
     expect((await call(handler, "PUT", {}))?.status).toBe(400);
   });
+
+  // #4329 lot 5: what runs the person's bots, per provider, beside the switches
+  it("reads and writes the default engine per provider, refusing a pair the matrix does not offer", async () => {
+    const defaults = new Map<string, Record<string, string>>();
+    const moved: string[] = [];
+    const handler = createModelSwitchRoutes({
+      org: () => [], owner: (auth) => ((auth as { who?: string }).who ?? null), mine: () => [], save: () => {},
+      favorites: () => [], saveFavorites: () => {},
+      harnessDefaults: {
+        read: (owner) => defaults.get(owner) ?? {},
+        refusal: async (_auth, provider, harness) => provider === "anthropic" && harness === "piAgent" ? "pi cannot run Claude here." : null,
+        save: async (owner, map) => { defaults.set(owner, map); moved.push(owner); },
+      },
+    });
+    expect((await call(handler, "GET"))?.body).toMatchObject({ harnessByProvider: {} });
+    expect((await call(handler, "PUT", { harnessByProvider: { openai: "piAgent", openrouter: "openai-compat" } }))?.body)
+      .toMatchObject({ harnessByProvider: { openai: "piAgent", openrouter: "openai-compat" } });
+    expect(moved).toEqual(["p1"]);
+    // null clears one provider, the others stay
+    expect((await call(handler, "PUT", { harnessByProvider: { openai: null } }))?.body).toMatchObject({ harnessByProvider: { openrouter: "openai-compat" } });
+    // refused by name, nothing saved
+    expect(await call(handler, "PUT", { harnessByProvider: { anthropic: "piAgent" } })).toEqual({ status: 400, body: { error: "pi cannot run Claude here." } });
+    expect(defaults.get("p1")).toEqual({ openrouter: "openai-compat" });
+    expect((await call(handler, "PUT", { harnessByProvider: { openai: "not a kind!" } }))?.status).toBe(400);
+  });
 });

@@ -15,6 +15,7 @@ import { checkPersonQuote, messageNamesCard, normalizeWords, personWrote } from 
 import { decideSettingEffect, HOLD_TEXT, type SettingClass } from "../shared/settings-actions-policy.ts";
 import { decodePreference, isAppearancePreference, isSyncedPreference, pickValue, SETTING_FAMILIES, SETTINGS, settingSpec, valueFits, type SettingIds, type SettingSpec } from "../shared/settings-actions.ts";
 import { DEVICE_APPLY_PATH } from "../shared/device-settings.ts";
+import { HARNESS_TOOL_NAME, harnessRole, type HarnessRole } from "../shared/harness-matrix.ts";
 import { BULK_TARGETS_MAX, splitBulkTargets } from "../shared/bulk-bot-edit.ts";
 import { withRequiredComputer, type RoutineRequirements } from "../shared/routine-readiness.ts";
 import { STEP_UP_CLASSES, botActClasses, type StepUpClass } from "../shared/step-up.ts";
@@ -178,7 +179,7 @@ const ARCHIVE_WORDS = WORD("archiv|masque|hide");
 const RESTORE_WORDS = WORD("desarchiv|unarchiv|restaur|retabli|reaffiche|unhide");
 const ROUTINE_WORDS = WORD("routine|tache|automatisation|planifi|schedul|cron");
 const KEY_WORDS: Readonly<Record<string, RegExp | "value" | "model" | "effort" | "teams" | "delete" | "archive" | "bulk">> = {
-  "bot.model": "model", "bot.effort": "effort", "bot.name": "value", "bot.title": "value", "bot.description": "value",
+  "bot.model": "model", "bot.harness": "model", "bot.effort": "effort", "bot.name": "value", "bot.title": "value", "bot.description": "value",
   "bot.persona": WORD("persona|personnalite|soul|instruction|consigne|caractere|personality|ton |tone"),
   "bot.notifications": WORD("notif|alert|avis"), "bot.speakReplies": WORD("voix|voice|parle|lecture|speak|read aloud|a voix haute"),
   "bot.voiceNotes": WORD("note vocale|notes vocales|voice note"), "bot.pinned": WORD("epingl|pin"),
@@ -273,6 +274,16 @@ export function settingStepUpClasses(classes: readonly SettingClass[], route: { 
   if (classes.includes("secret") || classes.includes("others") || classes.includes("org") || classes.includes("bulk")) out.add("irreversible");
   if (approvalTo === "full" || approvalTo === "custom") for (const name of STEP_UP_CLASSES) out.add(name);
   return STEP_UP_CLASSES.filter((name) => out.has(name));
+}
+
+/** #4329 lot 5: the words that name an engine choice: its kind, its tool's
+ * name, and the first-level words for pi, OpenCode and built in. */
+const HARNESS_ROLE_WORDS: Partial<Record<HarnessRole, readonly string[]>> = {
+  pi: ["pi"], opencode: ["OpenCode"], builtin: ["Built in", "intégré", "integre"],
+};
+function harnessNames(value: unknown): string[] {
+  if (typeof value !== "string" || !value) return [];
+  return [value, HARNESS_TOOL_NAME[value], ...(HARNESS_ROLE_WORDS[harnessRole(value)] ?? [])].filter((name): name is string => Boolean(name));
 }
 
 /** The names a person uses for a model selection: its instance id and
@@ -748,6 +759,7 @@ export function createSettingsActions(deps: SettingsActionDeps) {
         names: [changedBot ? deps.targetName?.("bot", changedBot) : undefined, ...(spec.target === "routine" && ids.target ? [deps.targetName?.("routine", ids.target)] : [])],
         speakingBot: !changedBot || changedBot === input.botId, speakingName: input.botName, message: proof.message,
         ...(spec.key === "bot.model" ? { valueNames: modelNames(value, deps.instanceName) } : {}),
+        ...(spec.key === "bot.harness" ? { valueNames: harnessNames(value) } : {}),
       })
       : askedChange(proof.message, spec.key, value, subjectBot ? deps.targetName?.("bot", subjectBot) : undefined, !subjectBot || subjectBot === input.botId,
         spec.target === "rule" && ids.target ? deps.ruleText?.(speaker, spec.key.startsWith("rules.custom") ? "custom" : "owner", ids.target) : undefined,

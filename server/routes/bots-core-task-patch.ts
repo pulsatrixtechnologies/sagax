@@ -191,7 +191,15 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
       }
       if (body.modelSelection !== undefined) {
         if (current.approvalGrant) return json(res, 409, { error: "the bot's approval mode is still being confirmed" });
-        const checked = checkedModelSelection(body.modelSelection, { selection: current.modelSelection, busy: threadBusy(current.id, current.threadId) }, body.requireAvailableModel === true, sessionPrincipal(auth));
+        // #4329 lot 5: a model picked for the bot lands on the engine the bot runs with
+        let picked: unknown = body.modelSelection;
+        if (body.updateBotDefault === true && deps.harnessChoice) {
+          const owner = store.bot(m[1]!);
+          const harnessed = owner ? await deps.harnessChoice.selectionFor(auth, deps.effectiveBotOwner(owner), picked, { stored: owner.harness ?? null }) : { ok: true as const, selection: picked };
+          if (!harnessed.ok) return json(res, harnessed.status, { error: harnessed.error });
+          picked = harnessed.selection;
+        }
+        const checked = checkedModelSelection(picked, { selection: current.modelSelection, busy: threadBusy(current.id, current.threadId) }, body.requireAvailableModel === true, sessionPrincipal(auth));
         if (!checked.ok) return json(res, checked.status, { error: checked.error });
         patch.modelSelection = checked.selection;
       }

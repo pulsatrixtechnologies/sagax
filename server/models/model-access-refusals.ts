@@ -59,3 +59,28 @@ export function withoutRefusedModels<T extends { instanceId: string; models: { d
     return { ...instance, models: { ...instance.models, options, default: fallback } };
   });
 }
+
+// #4329 lot 5: a "Runs with" choice the compatibility matrix
+// (shared/harness-matrix.ts) does not offer is refused by name, with the
+// matrix's own reason when it states one. Never a pair the matrix lacks.
+
+/** The engine cannot run this provider's connection here. */
+export function harnessPairRefusal(tool: string, provider: string, reason?: string): string {
+  return `${tool} cannot run ${provider} here.${reason ? ` ${reason}` : ""} Pick another engine.`;
+}
+
+/** The engine runs this connection, but does not list this model. */
+export function harnessModelRefusal(tool: string, model: string): string {
+  return `${tool} does not offer ${model}. Pick a model it offers first, then choose ${tool}.`;
+}
+
+/** The bot's model (or the provider) is not in the person's list, so no
+ * pair can be checked. */
+export function harnessUnlistedRefusal(tool: string): string {
+  return `This model is not in your providers' list, so ${tool} cannot be checked for it. Pick a model from your providers first.`;
+}
+
+/** A default for a provider the person does not have. */
+export function harnessUnknownProviderRefusal(tool: string, provider: string): string {
+  return `${provider} is not one of your providers, so ${tool} cannot run it. Connect it first.`;
+}

@@ -302,3 +302,22 @@ export function recommendedHarness(source: HarnessSource, place: HarnessPlace, c
   }
   return offered[0]!.harness;
 }
+
+const PROVIDER_ID = /^[\w.:-]{1,120}$/;
+const DRIVER_KIND = /^[A-Za-z][\w-]{0,60}$/;
+
+/** Whether a value is shaped like a driver kind ("piAgent", "openai-compat"). */
+export function isHarnessId(value: unknown): value is string {
+  return typeof value === "string" && DRIVER_KIND.test(value);
+}
+
+/** The person's default engine per provider ("Runs with" on a provider's
+ * page), as stored: `{ <provider id>: <driver kind> }`, anything else dropped. */
+export function cleanHarnessDefaults(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [provider, harness] of Object.entries(value as Record<string, unknown>)) {
+    if (PROVIDER_ID.test(provider) && isHarnessId(harness)) out[provider] = harness;
+  }
+  return out;
+}

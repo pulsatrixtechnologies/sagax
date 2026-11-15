@@ -21,6 +21,7 @@ import {
   type PersonalFeature,
 } from "../../shared/person-settings.ts";
 import { cleanDisabledModels, cleanFavoriteModels } from "../../shared/offered-models.ts";
+import { cleanHarnessDefaults } from "../../shared/harness-matrix.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
 export const PERSON_SETTINGS_FILE = "person-settings.json";
@@ -38,6 +39,10 @@ export interface PersonSettings {
   /** #2050: the models this person starred in the model selector, as
    * `<engine>/<model>`, in star order. Absent when none. */
   favoriteModels?: string[];
+  /** #4329 lot 5: what runs this person's bots for each provider ("Runs
+   * with" on a provider's page), `{ <provider id>: <driver kind> }`. Absent
+   * when none. */
+  harnessByProvider?: Record<string, string>;
   /** #1940: days before a pending approval in this person's inbox expires
    * (0 = never). Absent follows the organization setting, then the env /
    * default (7). */
@@ -99,6 +104,7 @@ function parse(value: unknown): PersonSettings {
   }
   const disabledModels = cleanDisabledModels(raw.disabledModels);
   const favoriteModels = cleanFavoriteModels(raw.favoriteModels);
+  const harnessByProvider = cleanHarnessDefaults(raw.harnessByProvider);
   const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
   const aboutMe = typeof raw.aboutMe === "string" && raw.aboutMe.length <= ABOUT_ME_MAX ? raw.aboutMe : "";
   return {
@@ -106,6 +112,7 @@ function parse(value: unknown): PersonSettings {
     browserProfiles,
     ...(disabledModels.length ? { disabledModels } : {}),
     ...(favoriteModels.length ? { favoriteModels } : {}),
+    ...(Object.keys(harnessByProvider).length ? { harnessByProvider } : {}),
     ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
     ...(aboutMe ? { aboutMe } : {}),
   };
@@ -176,6 +183,15 @@ export class PersonSettingsStore {
     const { favoriteModels: _, ...rest } = current;
     const next = cleanFavoriteModels(list);
     return this.save(principalId, { ...rest, ...(next.length ? { favoriteModels: next } : {}) });
+  }
+
+  /** #4329 lot 5: the person's default engine per provider, the whole map. */
+  setHarnessDefaults(principalId: string, map: unknown): PersonSettings {
+    if (!map || typeof map !== "object" || Array.isArray(map)) throw new PersonSettingsError("harnessByProvider must be an object.");
+    const current = this.get(principalId);
+    const { harnessByProvider: _, ...rest } = current;
+    const next = cleanHarnessDefaults(map);
+    return this.save(principalId, { ...rest, ...(Object.keys(next).length ? { harnessByProvider: next } : {}) });
   }
 
   /** #1940: personal override for pending approval age. `null` clears it

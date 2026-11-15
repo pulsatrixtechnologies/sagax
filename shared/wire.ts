@@ -530,6 +530,11 @@ export interface WireBot {
   /** The bot's model: every thread without a model of its own runs on it
    * and moves with it. Navigating tasks never changes this value. */
   modelSelection: ModelSelection;
+  /** #4329 lot 5: what runs this bot ("Runs with"), a driver kind
+   * (shared/harness-matrix.ts) the person chose for this bot. Absent: the
+   * person's default for the model's provider, else the engine the model was
+   * picked on. Resolved into modelSelection when written, never per turn. */
+  harness?: string;
   /** where the bot works ("Works on"). Unset = auto. */
   computer?: Surface | "off";
   /** Enrolled unattended hosts (`h_` + 32 hex) attached from the Computer

@@ -17,7 +17,7 @@ export const CLIENT_BOT_PATCH_FIELDS = [
  * and shared browser profiles stay permission-gated or admin. */
 export const MEMBER_BOT_FIELDS = [
   ...CLIENT_BOT_PATCH_FIELDS,
-  "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "requireAvailableModel",
+  "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "harness", "requireAvailableModel",
 ] as const;
 
 const MEMBER_BOT_FIELD_SET = new Set<string>(MEMBER_BOT_FIELDS);

@@ -39,6 +39,8 @@ const MODEL_ROUTE_FIELDS = new Set([
   "engine",
   "effort",
   "auto",
+  // #4329 lot 5: what runs the bot is changed with its model
+  "harness",
 ]);
 
 /** Primary Bot switch (POST/DELETE /api/bots/:id/primary). */
@@ -62,10 +64,10 @@ function uniqueSorted(fields: Iterable<string>): string[] {
 /**
  * Every field update_agent_settings may accept. Derived from the server's
  * own MEMBER_BOT_FIELDS, BOT_FIELD_PERMISSIONS, runtime-settings schema and
- * Primary Bot route. modelSelection stays on update_agent_model.
+ * Primary Bot route. modelSelection and harness stay on update_agent_model.
  */
 export const AGENT_SETTINGS_FIELDS: readonly string[] = uniqueSorted([
-  ...MEMBER_BOT_FIELDS.filter((field) => field !== "modelSelection"),
+  ...MEMBER_BOT_FIELDS.filter((field) => !MODEL_ROUTE_FIELDS.has(field)),
   ...Object.keys(BOT_FIELD_PERMISSIONS).filter((field) => !MODEL_ROUTE_FIELDS.has(field)),
   ...RUNTIME_SETTINGS_FIELDS,
   ...PATCH_ACK_FIELDS,

@@ -209,6 +209,39 @@ switch writes the stored key of every engine that runs it
 while one engine still offers it and greyed only when the organization turned
 it off on every engine (`modelOfferAcross`).
 
+#4329 lot 5: what runs a bot ("Runs with", the harness) is in the data. A bot
+keeps an optional `harness` (a driver kind) beside its model; a person keeps a
+default per provider, `harnessByProvider` on `GET/PUT /api/me/models` (person
+settings on an organization server, `config.json` on a solo one; a provider
+given `null` goes back to no default, and the owner's bots without a choice of
+their own still on the engine it named go back to the recommended one). One resolver,
+`server/models/resolve-harness.ts`, maps the connection in use and the chosen
+engine to the instance that runs, through the matrix of
+`shared/harness-matrix.ts` as the provider catalog states it: the bot's own
+value, else the default for the model's provider, else the recommended engine
+when the one in use cannot run that connection. It runs when the choice or the
+bot's model is written (`PATCH /api/bots/:id` with `harness` or
+`modelSelection`, `PATCH /api/bots/:id/model`, a conversation's pick with
+`updateBotDefault`, a new default, which moves the owner's bots without a
+choice of their own, and a new bot from the app, a bot's create call, a
+room's create-bot or an import), never per turn: `instanceId` stays the routing key,
+with that engine's own id for the model, and every conversation follows the
+bot as on a model change. A pair the matrix does not offer is refused by name
+(`model-access-refusals.ts`), a model the engine does not list too. With no
+choice anywhere nothing is read and nothing moves: a bot made before this lot
+runs on its vendor's own tool until someone chooses. Auto follows the same
+order per candidate (`chosenRank` in `model-auto.ts`): after the bot's own
+engine, a candidate on the bot's chosen engine, then one on the engine its
+owner chose for that candidate's provider; a default never moves another
+provider's candidates. A bot reads and changes
+its own engine with the settings key `bot.harness` (and the default with
+`models.harnessDefault`); a person's AI client with `update_agent_model`
+`harness`, whose choices `list_agent_models` gives as `current.harnesses`.
+Tests: `server/models/resolve-harness.test.ts` (the whole matrix),
+`server/routes/model-switches.test.ts`, `server/models/model-auto.test.ts`,
+`server/harness-choice.e2e.test.ts` (fake engines: the same conversation goes
+on after the change, and a bot with no choice stays where it is).
+
 ## Settings > Providers (2026-10-30, redone 2026-11-14)
 
 One page, section id `providers` (`src/components/settings/ProvidersSettings.tsx`).

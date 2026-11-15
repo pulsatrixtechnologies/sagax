@@ -647,6 +647,9 @@ const appConfigSchema = z.object({
   /** #2050: on a solo server, the models its person starred in the model
    * selector (`<engine>/<model>`, shared/offered-models.ts). */
   favoriteModels: z.array(z.string().max(300)).max(40).optional(),
+  /** #4329 lot 5: on a solo server, what runs its person's bots for each
+   * provider ("Runs with"), `{ <provider id>: <driver kind> }`. */
+  harnessByProvider: z.record(z.string().max(120), z.string().max(61)).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
   box: z.object({ token: optionalText }).optional(),
@@ -910,6 +913,8 @@ export interface AppConfig extends HelperConfig {
   disabledModels?: string[];
   /** #2050: a solo server's starred models (`<engine>/<model>`). */
   favoriteModels?: string[];
+  /** #4329 lot 5: a solo server's default engine per provider. */
+  harnessByProvider?: Record<string, string>;
   /** Persisted under the historical config key "box" (ascii.dev renamed Box to Boat). */
   box?: { token?: string };
   /** A named host from the user's SSH config. Authentication stays with SSH. */
@@ -2031,6 +2036,8 @@ export function saveConfig(
   if (checkedPatch.openaiCompatServers !== undefined) disk.openaiCompatServers = checkedPatch.openaiCompatServers;
   if (checkedPatch.disabledModels !== undefined) disk.disabledModels = checkedPatch.disabledModels;
   if (checkedPatch.favoriteModels !== undefined) disk.favoriteModels = checkedPatch.favoriteModels;
+  // Replaced whole: a provider taken off the map runs on its own tool again.
+  if (checkedPatch.harnessByProvider !== undefined) disk.harnessByProvider = checkedPatch.harnessByProvider;
   if (checkedPatch.identityMigratedAt !== undefined) disk.identityMigratedAt = checkedPatch.identityMigratedAt;
   if (checkedPatch.privateThreadsMigratedAt !== undefined) disk.privateThreadsMigratedAt = checkedPatch.privateThreadsMigratedAt;
   if (checkedPatch.invites !== undefined) disk.invites = checkedPatch.invites;

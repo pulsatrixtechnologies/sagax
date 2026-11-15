@@ -28,7 +28,8 @@ export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): P
   }
   state.teamOverrides = team.teamOverrides;
   const sharedSettings = env.ownerSettingsForbidden(env.auth, env.store.bot(m[1]), {
-    model: Object.prototype.hasOwnProperty.call(body, "modelSelection"),
+    // #4329 lot 5: what runs the bot is part of its model
+    model: Object.prototype.hasOwnProperty.call(body, "modelSelection") || Object.prototype.hasOwnProperty.call(body, "harness"),
     notifications: Object.prototype.hasOwnProperty.call(body, "notifications")
   });
   if (sharedSettings) {

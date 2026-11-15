@@ -43,8 +43,18 @@ async function handleBotModel(env: BotsMutateEnv): Promise<boolean> {
       return true;
     }
     const onMachine = env.selectionOnMachine({ host: existing.host, workers: env.registeredWorkers, raw: body });
+    // #4329 lot 5: the model lands on the engine the bot runs with
+    let picked: unknown = body;
+    if (!onMachine && env.harnessChoice) {
+      const harnessed = await env.harnessChoice.selectionFor(env.auth, env.effectiveBotOwner(existing), body, { stored: existing.harness ?? null });
+      if (!harnessed.ok) {
+        env.json(env.res, harnessed.status, { error: harnessed.error });
+        return true;
+      }
+      picked = harnessed.selection;
+    }
     const checked = onMachine ?? env.checkedModelSelection(
-      body,
+      picked,
       { selection: selected.modelSelection, busy: env.threadBusy(selected.id, selected.threadId) },
       true,
       env.sessionPrincipal(env.auth),

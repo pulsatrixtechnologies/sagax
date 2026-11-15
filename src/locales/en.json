@@ -15138,5 +15138,6 @@
   "settings.connectionNotices.descriptionSolo": "A short notice while the server updates or can't be reached.",
   "settings.nav.installation": "Installation",
   "settings.section.servers": "Servers",
-  "settings.intro.servers": "Your server, and the servers you connect to."
+  "settings.intro.servers": "Your server, and the servers you connect to.",
+  "botPanel.suggestions.setup.identity.subtitleAlone": "So you can tell your bots apart"
 }

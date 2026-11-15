@@ -14,6 +14,7 @@ import type { Action } from "@/state/store";
 import { setLocale, t } from "@/lib/i18n";
 import { setAdvancedMode } from "@/lib/interface-mode";
 import { editBotFixture } from "@/gallery/edit-bot-api";
+import { loadPerspicaxOrg } from "@/lib/perspicax-org";
 import {
   BOT_PROFILE_CARD_SECTIONS,
   BOT_PROFILE_SUBPAGES,
@@ -123,9 +124,11 @@ afterEach(() => {
   sentMessages.length = 0;
 });
 
-async function mount(locale: "en" | "fr") {
+async function mount(locale: "en" | "fr", org = true) {
   setLocale(locale);
-  fixture = editBotFixture(true);
+  fixture = editBotFixture(org);
+  // the organization probe is cached once per page: ask again for this fixture
+  await loadPerspicaxOrg(true);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -369,6 +372,21 @@ describe("bot profile page: General cards in place (#3398)", () => {
     const settings = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
     const switches = Array.from(settings.querySelectorAll("[role='switch']")).map((node) => node.getAttribute("aria-label"));
     expect(switches).toEqual([t("botPanel.routines.collaboratorsCreate"), t("botPanel.voice.notifyHelp")]);
+  });
+
+  it("offers a person alone no collaborators switch and no sharing words (#4360)", async () => {
+    await mount("en", false);
+    const panel = await home("general");
+    const settings = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
+    const switches = Array.from(settings.querySelectorAll("[role='switch']")).map((node) => node.getAttribute("aria-label"));
+    expect(switches).toEqual([t("botPanel.voice.notifyHelp")]);
+    expect(panel.textContent).not.toContain(t("botPanel.routines.collaboratorsCreate"));
+    expect(panel.textContent).not.toContain(t("botSettings.sharing.empty"));
+    const sharing = panel.querySelector<HTMLElement>('[data-bot-profile-subpage-open="sharing"]');
+    if (sharing) {
+      expect(sharing.textContent).toContain(t("botSettings.visibility.title"));
+      expect(sharing.textContent).not.toContain(t("botProfile.v6.page.sharing.title"));
+    }
   });
 
   it("draws no team chat row where the server offers no Slack link, and keeps it where it does", async () => {

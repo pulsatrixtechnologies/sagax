@@ -18891,7 +18891,8 @@
       "settings.connectionNotices.descriptionSolo": "cebcaedd426a2886d9a0d00eb59eb97426fa22b8f9a53c90a8dd95b599119c69",
       "settings.nav.installation": "c3fc54aa5390dc2c333d4bb596a339d552ad787337c1fdaac3957ca5a7facf50",
       "settings.section.servers": "68d7beb6df59ee85bc11a6679c29ac3e6aab738833c6871c6df29ae0246d5d98",
-      "settings.intro.servers": "03fe23acdebe18846bb5b50288f65c6553da9a522cf81ef8b6a02368a5306775"
+      "settings.intro.servers": "03fe23acdebe18846bb5b50288f65c6553da9a522cf81ef8b6a02368a5306775",
+      "botPanel.suggestions.setup.identity.subtitleAlone": "1b610f54cb35374145a26c7d723f80186617d3d179be682fd9b78af6d7a639c3"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

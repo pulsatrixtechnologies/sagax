@@ -15138,5 +15138,6 @@
   "settings.connectionNotices.descriptionSolo": "Un court avis pendant une mise à jour du serveur ou quand il est injoignable.",
   "settings.nav.installation": "Installation",
   "settings.section.servers": "Serveurs",
-  "settings.intro.servers": "Ton serveur, et les serveurs auxquels tu te connectes."
+  "settings.intro.servers": "Ton serveur, et les serveurs auxquels tu te connectes.",
+  "botPanel.suggestions.setup.identity.subtitleAlone": "Pour reconnaître tes bots d'un coup d'œil"
 }

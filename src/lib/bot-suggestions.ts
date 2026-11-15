@@ -55,6 +55,8 @@ export interface BotSuggestionInput {
   waitingApprovals?: ReadonlyArray<{ threadId: string; openedByName?: string }>;
   routines?: ReadonlyArray<{ id: string; name: string; needsPerson?: RoutineNeedsPerson | null }>;
   cards?: readonly ServerCardInput[];
+  /** #4360: no organization on this server: the setup lines speak to one person */
+  alone?: boolean;
 }
 
 const MAX = 4;
@@ -152,7 +154,7 @@ export function botSuggestions(input: BotSuggestionInput): BotSuggestion[] {
     out.push({
       id: `setup:${step.id}`,
       titleKey: `botPanel.suggestions.setup.${step.id}.title` as LocaleKey,
-      subtitleKey: `botPanel.suggestions.setup.${step.id}.subtitle` as LocaleKey,
+      subtitleKey: input.alone && step.id === "identity" ? "botPanel.suggestions.setup.identity.subtitleAlone" : `botPanel.suggestions.setup.${step.id}.subtitle` as LocaleKey,
       action: { kind: "openSection", section: STEP_SECTION[step.id] },
     });
   }

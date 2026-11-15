@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { areaTests, changedFiles, commitDrift, driftMessage, IOS_NOT_RUN_NOTE, IOS_SKIPPED_LINE, reportBody, runIosStage, sanitizeGitEnv, stampPathFor, swiftProbe } from "./verify-merge.mjs";
+import { areaTests, changedFiles, commitDrift, dependentTests, driftMessage, IOS_NOT_RUN_NOTE, IOS_SKIPPED_LINE, reportBody, runIosStage, sanitizeGitEnv, stampPathFor, swiftProbe } from "./verify-merge.mjs";
 
 describe("sanitizeGitEnv", () => {
   it("strips every GIT_* key and leaves the rest", () => {
@@ -224,5 +224,63 @@ describe("the gate verifies the commit, not the working tree (#3684)", () => {
     const drift = commitDrift(root, ["server/feature.test.ts", "server/missing.ts"]);
     expect(drift).toEqual({ tracked: [], untrackedImported: ["server/helper.ts", "src/lib/util/index.ts"] });
     expect(driftMessage(drift)).toContain("server/helper.ts");
+  });
+});
+
+// #4316: a change to a shared list, a locale key, a menu or a server module
+// merged green and broke the tests that depend on it: verify:merge ran the
+// tests beside the changed files only. It now runs the tests that import a
+// changed source and those that reach it through other files, as the fast
+// gate selects them (one selection), and names what the ceiling cut.
+describe("the tests that depend on the commit (#4316)", () => {
+  const repos = [];
+  afterEach(() => { for (const dir of repos.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+  const env = { ...sanitizeGitEnv({ ...process.env }), GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+  const sh = (root, ...args) => execFileSync("git", args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
+  const put = (root, file, text) => { mkdirSync(dirname(join(root, file)), { recursive: true }); writeFileSync(join(root, file), text); };
+  const repo = () => {
+    const root = mkdtempSync(join(tmpdir(), "verify-merge-4316-"));
+    repos.push(root);
+    sh(root, "init", "-q", "-b", "main");
+    sh(root, "config", "commit.gpgsign", "false");
+    sh(root, "config", "core.hooksPath", "/dev/null");
+    put(root, "package.json", "{}\n");
+    put(root, "scripts/fast-gate.sh", readFileSync(resolve(import.meta.dirname, "../../fast-gate.sh"), "utf8"));
+    put(root, "src/lib/list.ts", "export const list = [1];\n");
+    put(root, "src/lib/list.test.ts", 'import { list } from "./list";\n');
+    put(root, "src/components/Menu.tsx", 'import { list } from "../lib/list";\nexport const Menu = list;\n');
+    put(root, "src/components/Menu.dom.test.ts", 'import { Menu } from "./Menu";\n');
+    put(root, "src/components/Page.tsx", 'import { Menu } from "./Menu";\nexport const Page = Menu;\n');
+    put(root, "src/components/Page.hover.dom.test.ts", 'import { Page } from "./Page";\n');
+    put(root, "src/components/Heavy.dom.test.ts", 'import { Page } from "./Page";\n');
+    put(root, "scripts/testing/vitest-shard-weights.json", JSON.stringify({ "src/components/Heavy.dom.test.ts": 900 }));
+    put(root, "server/other.test.ts", "// unrelated\n");
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "base");
+    sh(root, "checkout", "-q", "-b", "topic");
+    put(root, "src/lib/list.ts", "export const list = [1, 2];\n");
+    sh(root, "commit", "-qam", "change the shared list");
+    return root;
+  };
+
+  it("runs the tests that import a changed source and those that reach it through other files", () => {
+    const root = repo();
+    const dependent = dependentTests("main", root);
+    expect(dependent.tests).toEqual(["src/lib/list.test.ts"]);
+    expect(dependent.related).toEqual(["src/components/Menu.dom.test.ts", "src/components/Page.hover.dom.test.ts"]);
+    expect(dependent.related).not.toContain("server/other.test.ts");
+  });
+
+  it("names the related tests the time ceiling cut, left to the run after the merge", () => {
+    const root = repo();
+    const dependent = dependentTests("main", root);
+    expect(dependent.cut).toEqual(["src/components/Heavy.dom.test.ts"]);
+    expect(dependent.notes.join("\n")).toContain("the ceiling cut 1, listed in related-cut.txt");
+  });
+
+  it("selects nothing in a repository without the fast gate", () => {
+    const root = mkdtempSync(join(tmpdir(), "verify-merge-4316-none-"));
+    repos.push(root);
+    expect(dependentTests("main", root)).toEqual({ tests: [], related: [], cut: [], notes: [] });
   });
 });

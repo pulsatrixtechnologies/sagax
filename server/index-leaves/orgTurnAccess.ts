@@ -2,6 +2,7 @@
 /** orgTurnAccess (#1388). Pure move from server/index.ts. */
 import { materializeEngineAccess } from "../engines/engine-credentials.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
+import { claudeAccessUsable } from "../engines/claude-subscription-refresh.ts";
 export type Host = Record<string, any>;
 
 /** The account a bot signs in with on an organization server, for a turn
@@ -48,8 +49,27 @@ export function engineAccessDeps(host: Host, slot: LoginSlot = "primary") {
       return owner ? host.providerAccounts.resolve(owner, provider) : Promise.resolve({ ok: false as const, error: "link" as const });
     },
     invalidate: (sub, provider) => host.perspicaxDirectory?.invalidate(sub, provider),
-    loginDir: (principalId, driver, instanceId) => host.principalLoginDir(principalId, driver, slot, instanceId)
+    loginDir: (principalId, driver, instanceId) => host.principalLoginDir(principalId, driver, slot, instanceId),
+    // #4410: pi on the payer's Claude sign-in: its short token, renewed by
+    // the one flight every Claude turn of theirs shares, read in memory only
+    claudeSignIn: (principalId) => claudeSignInToken(host, principalId)
   };
+}
+
+/** #4410: the payer's Claude sign-in (their first account folder, the one
+ * resolveEngineAccess judged) as a pi turn takes it, or null. */
+export async function claudeSignInToken(host: Host, principalId: string): Promise<{ accessToken: string } | null> {
+  const logins = host.engineLogins;
+  if (!logins) return null;
+  const loginDir = logins.loginDir(principalId, "claudeAgent", "primary");
+  const cli = host.subscriptionCli("claude-code");
+  if (cli) {
+    const fresh = await host.ensureClaudeSubscriptionFresh({ loginDir, cli: cli.cli, environment: cli.environment });
+    if (!fresh.ok) return null;
+  }
+  const access = await host.readSubscriptionAccess("claude-code", loginDir);
+  if (!claudeAccessUsable(access, Date.now())) return null;
+  return { accessToken: access.accessToken };
 }
 
 export function createOrgTurnAccess(getHost: () => Host): any {

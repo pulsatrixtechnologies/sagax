@@ -65,6 +65,19 @@ describe("pi models filtered by the payer's keys (#3085)", () => {
     expect(piModelRefusal("localhost::model-g", providers)).toBeNull();
   });
 
+  it("#4410: the payer's own Claude sign-in counts as holding the Claude provider", () => {
+    const signedIn = (pid: string, driver: string) => pid === OWNER && driver === "claudeAgent";
+    const alone = piPayerProviders(input([], { subscriptionSignedIn: signedIn }), []);
+    expect([...alone!]).toEqual(["anthropic"]);
+    expect(filterPiCatalogByProviders(CATALOG, alone).options.filter((option) => option.keyPaid).map((option) => option.id)).toEqual(["anthropic/model-a", "anthropic/model-b"]);
+    expect(piModelRefusal("anthropic/model-a", alone)).toBeNull();
+    // beside a key of theirs, both
+    expect([...piPayerProviders(input(["SUB-OWNER/openai"], { subscriptionSignedIn: signedIn }), [])!].sort()).toEqual(["anthropic", "openai"]);
+    // a refused sign-in, or another person's, holds nothing
+    expect(piPayerProviders(input([], { subscriptionSignedIn: signedIn, subscriptionExpired: () => true }), [])!.size).toBe(0);
+    expect(piPayerProviders(input([], { speaker: { origin: "person", principalId: OTHER }, subscriptionSignedIn: signedIn }), [])!.size).toBe(0);
+  });
+
   it("when org-key applies, the providers offered are the organization's pi keys", () => {
     const providers = piPayerProviders(input([], { keyBacked: true }), ["anthropic", "openrouter"]);
     expect([...providers!].sort()).toEqual(["anthropic", "openrouter"]);

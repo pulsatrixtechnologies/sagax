@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { TurnSpeaker } from "./engine-access.ts";
-import { materializeEngineAccess, paidByPerson, providerOfDriver, providersOfDriver, resolveEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
+import { materializeEngineAccess, paidByPerson, piPayerProviders, providerOfDriver, providersOfDriver, resolveEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
 import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 
 const OWNER = "pr_00000000-0000-4000-8000-000000000001";
@@ -454,5 +454,109 @@ describe("an API-key engine runs on a key, never on a subscription (#1533)", () 
   it("the subscription engine itself is unchanged", () => {
     const plan = resolveEngineAccess(input({ instance: CLAUDE, signedIn: [`${OWNER}/claudeAgent`], keyBacked: true }));
     expect(plan).toMatchObject({ ok: true, via: "subscription" });
+  });
+});
+
+describe("#4410 lot 1: pi runs Claude models on the payer's own Claude sign-in", () => {
+  const BOB_PID = BOB.toLowerCase();
+  const TOKEN = "sk-ant-oat01-test-sign-in-000000000000000001";
+  const deps = (signIn: (principalId: string) => Promise<{ accessToken: string } | null>, key: (sub: string, provider: ModelProvider) => ProviderKeyResult = () => ({ ok: false, error: "no_key" })) => {
+    const asked: string[] = [];
+    return {
+      asked,
+      dataDir: "/data",
+      resolveKey: async (sub: string, provider: ModelProvider) => key(sub, provider),
+      invalidate: () => {},
+      loginDir: (principalId: string) => `/data/principals/${principalId}/claude`,
+      claudeSignIn: async (principalId: string) => { asked.push(principalId); return signIn(principalId); },
+    };
+  };
+
+  it("a person with a Claude sign-in and no key pays a pi turn with it", () => {
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`] })))
+      .toEqual({ ok: true, via: "subscription", payer: "speaker", payerPrincipalId: BOB, provider: "anthropic", claudeAccount: true });
+    expect(paidByPerson(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`] })))).toBe(true);
+  });
+
+  it("only the payer's own sign-in: the owner's never pays for the person who speaks", () => {
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${OWNER}/claudeAgent`] })))
+      .toEqual({ ok: false, reason: "no_access", cause: "no_credentials", payer: "speaker", payerPrincipalId: BOB });
+  });
+
+  it("a refused sign-in no longer pays, and other engines are unchanged", () => {
+    const expired = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], subscriptionExpired: (pid, driver) => pid === BOB && driver === "claudeAgent" });
+    expect(resolveEngineAccess(expired)).toMatchObject({ ok: false, cause: "no_credentials" });
+    expect(resolveEngineAccess(input({ instance: CODEX, speaker: bob, signedIn: [`${BOB}/claudeAgent`] }))).toMatchObject({ ok: false });
+    expect(resolveEngineAccess(input({ instance: { ...PI, keyOnly: true }, speaker: bob, signedIn: [`${BOB}/claudeAgent`] }))).toMatchObject({ ok: false });
+  });
+
+  it("with keys of theirs, the key plan carries the sign-in too", () => {
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], keys: ["SUB-BOB/xai"] })))
+      .toEqual({ ok: true, via: "speaker-key", payer: "speaker", payerPrincipalId: BOB, provider: "xai", claudeAccount: true });
+  });
+
+  it("hands the short token as ANTHROPIC_OAUTH_TOKEN in the turn's environment, in the payer's own pi home", async () => {
+    const inp = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`] });
+    const d = deps(async () => ({ accessToken: TOKEN }));
+    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), d);
+    expect(out).toEqual({
+      ok: true,
+      plan: expect.objectContaining({ via: "subscription", claudeAccount: true }),
+      access: { via: "subscription", identity: `subscription:${BOB_PID}:claude`, environment: { ANTHROPIC_OAUTH_TOKEN: TOKEN }, engineHome: join("/data", "principals", BOB_PID, "piAgent-key") },
+    });
+    expect(d.asked).toEqual([BOB_PID]);
+    // the label never carries the token
+    if (out.ok) expect(out.access.identity).not.toContain(TOKEN);
+  });
+
+  it("adds the sign-in beside the payer's keys only when no Anthropic key of theirs pays Claude", async () => {
+    const keyed = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], keys: ["SUB-BOB/xai"] });
+    const out = await materializeEngineAccess(keyed, resolveEngineAccess(keyed), deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "xai-test-bob-000000000001", fingerprint: "fx" })));
+    expect(out).toMatchObject({ ok: true, access: { via: "speaker-key", identity: `speaker-key:${BOB_PID}:fx+claude`, environment: { XAI_API_KEY: "xai-test-bob-000000000001", ANTHROPIC_OAUTH_TOKEN: TOKEN } } });
+    const both = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], keys: ["SUB-BOB/anthropic"] });
+    const d = deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "sk-ant-test-bob-key-000001", fingerprint: "fa" }));
+    const keyOnly = await materializeEngineAccess(both, resolveEngineAccess(both), d);
+    expect(keyOnly).toMatchObject({ ok: true, access: { environment: { ANTHROPIC_API_KEY: "sk-ant-test-bob-key-000001" } } });
+    if (keyOnly.ok) expect(keyOnly.access.environment?.ANTHROPIC_OAUTH_TOKEN).toBeUndefined();
+    expect(d.asked).toEqual([]);
+  });
+
+  it("the sign-in is added beside the organization's key, never in its place", async () => {
+    const orgKeys = ["openai", "xai"];
+    const withOrg = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], keyBacked: true, orgKeyProviders: orgKeys });
+    expect(resolveEngineAccess(withOrg)).toEqual({ ok: true, via: "org-key", payer: "organization", claudeAccount: true });
+    expect([...piPayerProviders(withOrg, ["openai", "xai"])!].sort()).toEqual(["anthropic", "openai", "xai"]);
+    const out = await materializeEngineAccess(withOrg, resolveEngineAccess(withOrg), deps(async () => ({ accessToken: TOKEN })));
+    expect(out).toMatchObject({ ok: true, access: { via: "org-key", identity: `org-key:${BOB}:claude`, environment: { ANTHROPIC_OAUTH_TOKEN: TOKEN }, engineHome: join("/data", "org", "piAgent-key") } });
+    // unreadable at dispatch: the organization's keys alone, as before
+    const lost = await materializeEngineAccess(withOrg, resolveEngineAccess(withOrg), deps(async () => null));
+    expect(lost).toMatchObject({ ok: true, access: { via: "org-key", identity: "org-key" } });
+    if (lost.ok) expect(lost.access.environment).toBeUndefined();
+  });
+
+  it("the organization's Anthropic key keeps paying Claude models: no sign-in then", async () => {
+    const withOrg = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], keyBacked: true, orgKeyProviders: ["openai", "xai", "anthropic"] });
+    expect(resolveEngineAccess(withOrg)).toEqual({ ok: true, via: "org-key", payer: "organization" });
+    expect([...piPayerProviders(withOrg, ["openai", "xai", "anthropic"])!].sort()).toEqual(["anthropic", "openai", "xai"]);
+    const d = deps(async () => ({ accessToken: TOKEN }));
+    expect(await materializeEngineAccess(withOrg, resolveEngineAccess(withOrg), d)).toMatchObject({ ok: true, access: { via: "org-key", identity: "org-key" } });
+    expect(d.asked).toEqual([]);
+  });
+
+  it("the sign-in is added beside a key saved on this server, never in its place", async () => {
+    const local = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], keyBacked: true, hasLocalKey: () => true, orgKeyProviders: ["anthropic"] });
+    expect(resolveEngineAccess(local)).toEqual({ ok: true, via: "speaker-key", payer: "speaker", payerPrincipalId: BOB, localKey: true, claudeAccount: true });
+    expect([...piPayerProviders(local, ["anthropic"])!]).toEqual(["anthropic"]);
+    expect(await materializeEngineAccess(local, resolveEngineAccess(local), deps(async () => ({ accessToken: TOKEN }))))
+      .toMatchObject({ ok: true, access: { via: "speaker-key", identity: `speaker-key:${BOB}:local+claude`, localKeyPrincipal: BOB, environment: { ANTHROPIC_OAUTH_TOKEN: TOKEN } } });
+  });
+
+  it("the sign-in alone serves last, also where the organization's key is not given to the person", async () => {
+    const notGiven = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`], keyBacked: true, serverEngineAllowed: () => false });
+    expect(resolveEngineAccess(notGiven)).toMatchObject({ ok: true, via: "subscription", claudeAccount: true });
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, keyBacked: true, serverEngineAllowed: () => false }))).toMatchObject({ ok: false, cause: "server_engine_not_allowed" });
+    // a sign-in-only plan that cannot be read at dispatch is refused, never loops
+    const alone = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`] });
+    expect(await materializeEngineAccess(alone, resolveEngineAccess(alone), deps(async () => { throw new Error("unreadable"); }))).toMatchObject({ ok: false, reason: "no_access" });
   });
 });

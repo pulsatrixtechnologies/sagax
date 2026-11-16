@@ -20,7 +20,9 @@ export function createPiKeyProviders(getHost: () => Host): any {
       speaker: { origin: "person", principalId: id },
       owner: { principalId: id, ...host.orgPersonFacts(host.principals.byId(id)) },
       instance: { instanceId: instance.instanceId, driver: instance.driverKind, installed: host.engineInstalled(instance.instanceId), keyOnly: host.keyOnlyInstance(instance.instanceId) },
-      subscriptionSignedIn: () => false,
+      // #4410: the viewer's Claude sign-in serves pi's Claude models
+      subscriptionSignedIn: (pid, driver, instanceId) => host.engineLogins?.signedIn(pid, driver, "primary", instanceId) ?? false,
+      subscriptionExpired: (pid, driver, instanceId) => host.engineLogins?.expired(pid, driver, "primary", instanceId) ?? false,
       hasKey: (sub, provider) => host.perspicaxDirectory?.providerKeys(sub).includes(provider) ?? false,
       keyBacked: host.driverKeyBacked(host.cfg, instance.driverKind, instance.instanceId),
       hasLocalKey: (pid, driver) => host.fileKeyConfigured(host.DATA_DIR, { organization: true, principalId: pid }, driver),

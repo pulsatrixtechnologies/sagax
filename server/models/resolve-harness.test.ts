@@ -42,9 +42,21 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
   const subscriptionOnly = catalogOf(instances.map((entry) => entry.instanceId === "pi" ? instance({ instanceId: "pi", driverKind: "piAgent", access: "custom" }, ["openai/gpt-6"]) : entry));
 
   it("refuses by name a pair the matrix does not offer, with its reason", () => {
-    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true });
+    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "opencodeGo", strict: true });
     expect(result.ok).toBe(false);
-    expect(!result.ok && result.error).toMatch(/^pi cannot run Claude here\. The vendor keeps subscription use to its own tools/);
+    expect(!result.ok && result.error).toMatch(/^OpenCode cannot run Claude here\. The vendor keeps subscription use to its own tools/);
+  });
+
+  it("#4410 lot 1: a Claude account runs under pi when pi lists the model for its payer, and is refused only for the model", () => {
+    for (const place of ["solo", "organization"] as const) {
+      const here = catalogOf(instances, place);
+      expect(resolveHarness({ catalog: here, place, selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true }))
+        .toEqual({ ok: true, selection: { instanceId: "pi", model: "anthropic/claude-opus-5" }, harness: "piAgent", provider: "anthropic" });
+      expect(harnessDefaultRefusal(here, place, "anthropic", "piAgent")).toBeNull();
+    }
+    // pi lists no Claude model for this payer (no sign-in, no key): the model, not the pair
+    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true });
+    expect(!result.ok && result.error).toBe("pi does not offer claude-opus-5. Pick a model it offers first, then choose pi.");
   });
 
   it("refuses an engine that does not list the model, never another model", () => {

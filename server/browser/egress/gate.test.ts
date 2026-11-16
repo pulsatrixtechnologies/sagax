@@ -6,7 +6,7 @@ import * as NodeOS from "node:os";
 import type { NetworkInterfaceInfo } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { gateChromeFlags, openGate, resolveTarget, type EgressGate, type GateTarget } from "./gate.ts";
+import { connectChecked, gateChromeFlags, openGate, resolveTarget, type EgressGate, type GateTarget } from "./gate.ts";
 import { ownAddresses, refusalFor, type EgressRules, type Refusal } from "./policy.ts";
 
 // A public IPv4 address this machine holds, which no private range covers.
@@ -206,6 +206,51 @@ describe("egress gate", () => {
     const { code, socket } = await connectThrough(port, ipv4Target("127.0.0.1", closedPort));
     socket.destroy();
     expect(code).toBe(5);
+  });
+
+  // upstream #4608: a public name usually resolves to IPv6 and IPv4; a host
+  // with no IPv6 route must still reach the IPv4 answer.
+  it("reaches the next address when the first family cannot route", async () => {
+    const reachable = NodeNet.createServer((socket) => socket.end("reached"));
+    await new Promise<void>((resolve) => reachable.listen(0, "127.0.0.1", resolve));
+    const reachablePort = (reachable.address() as NodeNet.AddressInfo).port;
+    // The name is this machine's own, as in the test above, so the loopback answer is a place to connect to.
+    const resolve = async () => [
+      { address: "2a00:1450:4009:c0f::54", family: 6 },
+      { address: "127.0.0.1", family: 4 },
+    ];
+    const { port } = await gate({ ...serverRules, host: "desktop" }, [], resolve);
+    const { code, socket } = await connectThrough(port, domainTarget("localhost", reachablePort));
+    const answer = await new Promise<Buffer>((resolveAnswer, decline) => {
+      socket.once("data", resolveAnswer);
+      socket.once("close", () => decline(new Error("closed before an answer")));
+      socket.once("error", decline);
+    }).catch(() => Buffer.alloc(0));
+    socket.destroy();
+    await new Promise<void>((resolve) => reachable.close(() => resolve()));
+    expect(code).toBe(0);
+    expect(answer.length === 0 || answer.toString() === "reached").toBe(true);
+  });
+
+  it("tries each checked address in turn: one that never answers does not hold up the next", async () => {
+    const reachable = NodeNet.createServer((socket) => socket.end("reached"));
+    await new Promise<void>((resolve) => reachable.listen(0, "127.0.0.1", resolve));
+    const reachablePort = (reachable.address() as NodeNet.AddressInfo).port;
+    const started = Date.now();
+    // 192.0.2.1 is a documentation address: no answer ever comes back.
+    const socket = await connectChecked(reachablePort, [{ address: "192.0.2.1", family: 4 }, { address: "127.0.0.1", family: 4 }], 50);
+    expect(socket.remoteAddress).toBe("127.0.0.1");
+    expect(Date.now() - started).toBeLessThan(2_000);
+    socket.destroy();
+    await new Promise<void>((resolve) => reachable.close(() => resolve()));
+  });
+
+  it("fails with the last error when no checked address answers", async () => {
+    const closed = NodeNet.createServer();
+    await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+    const closedPort = (closed.address() as NodeNet.AddressInfo).port;
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    await expect(connectChecked(closedPort, [{ address: "127.0.0.1", family: 4 }, { address: "::1", family: 6 }], 10)).rejects.toMatchObject({ code: "ECONNREFUSED" });
   });
 
   it("fails instead of crashing when it cannot listen", async () => {

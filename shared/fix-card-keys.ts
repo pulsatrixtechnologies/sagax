@@ -13,6 +13,7 @@
 //   (`routine-cheap-path:<routineId>`, server/routines/routine-cheap-path.ts).
 
 export const ROUTINE_PROBLEM_KEY_PREFIX = "routine-problem:";
+export const HOST_KEY_PREFIX = "host:";
 export const PRODUCT_KEY_PREFIX = "product:";
 export const VOICE_LINE_KEY = "voice-line";
 export const CHEAP_PATH_KEY_PREFIX = "routine-cheap-path:";
@@ -22,7 +23,7 @@ export type ServerCardKind = "fix" | "saving";
 /** What a keyed card of the server is, or null for a bot's own key. */
 export function serverCardKind(key: string | null | undefined): ServerCardKind | null {
   if (!key) return null;
-  if (key.startsWith(ROUTINE_PROBLEM_KEY_PREFIX) || key.startsWith(PRODUCT_KEY_PREFIX) || key === VOICE_LINE_KEY) return "fix";
+  if (key.startsWith(ROUTINE_PROBLEM_KEY_PREFIX) || key.startsWith(PRODUCT_KEY_PREFIX) || key.startsWith(HOST_KEY_PREFIX) || key === VOICE_LINE_KEY) return "fix";
   if (key.startsWith(CHEAP_PATH_KEY_PREFIX)) return "saving";
   return null;
 }

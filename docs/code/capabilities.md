@@ -1103,3 +1103,13 @@ took 13 tool calls and ended in "I can't". Now one call posts a card.
 - Copy link to this plugin (`src/lib/plugin-link.ts`): a marketplace
   plugin's repository, a reviewed server's documentation, else its https
   address; nothing for a connected app or a local server.
+
+## Connector call deadlines (#4467)
+
+The Claude, Codex and Grok connector hosts share one deadline for waiting
+in the engine start queue, startup and the upstream call. Reads use 30 seconds;
+other calls use 90 seconds. An expired queued call cannot start later.
+Timeouts name their cause and keep an uncertain write result uncertain.
+A turn closing unfinished tool rows distinguishes a person stopping it from
+an engine cancellation, interruption or exit. Restart recovery keeps its own
+restart explanation. Native calls inside an engine keep that engine's timeout.

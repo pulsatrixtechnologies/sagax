@@ -146,7 +146,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       // or error row. It must not become an unfinished-turn continuation.
       const stopped = event.stopReason === "interrupted" || event.stopReason === "cancelled" || clientStopped;
       // The turn is over: no call or sub-agent of it can still be at work.
-      host.closeCutToolRows(event.threadId, endedToolOutput({ stopped }));
+      host.closeCutToolRows(event.threadId, endedToolOutput({ stopped, clientStopped, stopReason: event.stopReason }));
       // Hang up only when the goodbye finished. A failed or interrupted
       // turn drops the request so a later turn does not inherit it.
       host.finishVoiceCallRequestedByBot(event.threadId, host.voiceCallTurnSettle(event, stopped));

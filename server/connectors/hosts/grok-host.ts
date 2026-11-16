@@ -30,6 +30,7 @@ import { createConnectorHostPool, type ConnectorHostPoolOptions, type PoolWork, 
 import { grokAskedCall, grokAskIsApproved, grokComDescribe, grokPinnedPrompt, grokToolResult } from "../providers/grok-com.ts";
 import type { ConnectorAccount } from "../types.ts";
 import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult, ConnectorHostUsage } from "./types.ts";
+import { connectorCallDeadline } from "./call-deadline.ts";
 
 /** The person's own Grok CLI on one sign-in: its command and environment
  * (HOME and GROK_HOME in that sign-in's folder). */
@@ -52,7 +53,6 @@ export interface GrokConnectorHostDeps {
   pool?: Omit<ConnectorHostPoolOptions, "gate">;
 }
 
-const CALL_TIMEOUT_MS = 90_000;
 /** How long an ended process has to exit before it is killed hard. */
 const EXIT_GRACE_MS = 2_000;
 /** How long a cancelled prompt has to answer (with its usage) before its
@@ -255,7 +255,7 @@ function runGrokCall(proc: GrokProcess, request: ConnectorHostCall, timeoutMs: n
     };
     const timer = setTimeout(() => {
       if (sessionId) proc.notify("session/cancel", { sessionId });
-      finish(output ?? { text: `${name} did not answer in time, so its result is unknown.`, isError: true }, false);
+      finish(output ?? { text: `${name} timed out before answering, so its result is unknown.`, isError: true }, false);
     }, timeoutMs);
     const notRun = (): ConnectorHostResult => ({
       text: refused?.altered
@@ -327,7 +327,6 @@ function runGrokCall(proc: GrokProcess, request: ConnectorHostCall, timeoutMs: n
 
 export function createGrokConnectorHost(deps: GrokConnectorHostDeps): ConnectorHost {
   const gate = deps.gate ?? (<T>(label: string, run: () => Promise<T>) => engineStartGate.run("probe", label, run));
-  const timeoutMs = deps.timeoutMs ?? CALL_TIMEOUT_MS;
   const running = new Set<ChildProcess>();
   const pool = createConnectorHostPool<GrokProcess>({ ...deps.pool, gate });
 
@@ -337,18 +336,17 @@ export function createGrokConnectorHost(deps: GrokConnectorHostDeps): ConnectorH
     if (!launch) return signIn(name);
     const home = grokHome(grokConnectorHostEnv(launch.env));
     if (!existsSync(join(home, "auth.json"))) return signIn(name);
-    // one time limit for the start and the call together, not one each
-    let deadline: number | undefined;
+    // The queue consumes the same budget as startup and the upstream call.
+    const deadline = connectorCallDeadline(request.tool, deps.timeoutMs);
     try {
-      return await pool.use(
+      return await deadline.run(() => pool.use(
         { principalId: request.principalId, accountKey: request.account.key },
         `${launch.cli} agent (connector call)`,
         () => {
-          deadline = Date.now() + timeoutMs;
-          return startGrokProcess(launch, name, timeoutMs, running);
+          return startGrokProcess(launch, name, deadline.remaining(), running);
         },
-        (proc, warm) => runGrokCall(proc, request, deadline === undefined ? timeoutMs : Math.max(1, deadline - Date.now()), warm),
-      );
+        (proc, warm) => runGrokCall(proc, request, deadline.remaining(), warm),
+      ));
     } catch (error) {
       if (error instanceof GrokStartRefused) return error.result;
       return { text: `${name} failed: ${error instanceof Error ? error.message : String(error)}`, isError: true };

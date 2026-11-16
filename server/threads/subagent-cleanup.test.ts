@@ -21,6 +21,12 @@ describe("rows a turn leaves open", () => {
   it("says Stop when a person stopped the turn, and that the turn ended otherwise (an error, a limit)", () => {
     expect(endedToolOutput({ stopped: true })).toBe(CUT_TOOL_OUTPUT);
     expect(endedToolOutput({ stopped: false })).toBe(ENDED_TOOL_OUTPUT);
+    expect(endedToolOutput({ stopped: true, clientStopped: true, stopReason: "cancelled" })).toBe(CUT_TOOL_OUTPUT);
+    expect(endedToolOutput({ stopped: true, clientStopped: false, stopReason: "cancelled" })).toContain("engine cancelled");
+    expect(endedToolOutput({ stopped: true, clientStopped: false, stopReason: "interrupted" })).toContain("engine interrupted");
+    expect(endedToolOutput({ stopped: false, clientStopped: false, stopReason: "superseded" })).toContain("newer turn");
+    expect(endedToolOutput({ stopped: false, stopReason: "exit_before_result" })).toContain("engine exited");
+    expect(endedToolOutput({ stopped: false, stopReason: "untrusted provider error" })).toBe(ENDED_TOOL_OUTPUT);
   });
 });
 

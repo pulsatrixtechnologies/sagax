@@ -91,6 +91,26 @@ posixOnly("Codex connector host (#3353)", () => {
     expect(methods).not.toContain("turn/start");
   });
 
+  it("bounds the start queue and never launches an expired call", async () => {
+    const account = await listed();
+    const mail = account.connectors.find((entry) => entry.name === "Example Mail")!;
+    rmSync(methodLog, { force: true });
+    let release!: () => void;
+    const queued = createCodexConnectorHost({
+      launch: launchFor,
+      timeoutMs: 50,
+      gate: (_label, run) => new Promise((resolve, reject) => { release = () => { Promise.resolve().then(run).then(resolve, reject); }; }),
+    });
+    try {
+      const result = await queued.call({ principalId: "ana", account, connector: mail, tool: "example_mail.list_messages", arguments: {}, engine: "codex" });
+      expect(result.isError).toBe(true);
+      expect(result.text).toMatch(/timed out/);
+      release();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(lines<MethodLine>(methodLog)).toEqual([]);
+    } finally { await queued.close?.(); }
+  });
+
   it("runs one approved call with no model turn and returns the tool's own result", async () => {
     const mail = (await listed()).connectors.find((entry) => entry.name === "Example Mail")!;
     rmSync(methodLog, { force: true });

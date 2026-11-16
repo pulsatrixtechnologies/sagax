@@ -10,13 +10,15 @@ export function foldPoint(history: readonly ReplayEntry[], keepExchanges = 2): {
   return cut > 0 ? { folded: history.slice(0, cut), firstKeptId: history[cut]!.id } : null;
 }
 
+const EXCERPTS_HEADER = "Historical excerpts in chronological order; newer corrections override older requests. These excerpts may omit earlier details.";
+
 /** A provider-independent fallback, not a claim that the first request is
  * still the goal. Keep the newest source excerpts with provenance, including
  * assistant outcomes and previously summarized context. Never normalize
  * punctuation, operators or whitespace inside the quoted source text. */
 export function deterministicSummary(history: readonly ReplayEntry[], maxBytes = MAX_SUMMARY_BYTES): string {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 512) throw new Error("invalid summary budget");
-  const header = "Historical excerpts in chronological order; newer corrections override older requests. These excerpts may omit earlier details.";
+  const header = EXCERPTS_HEADER;
   // Up to a third of the budget keeps facts from the WHOLE folded history,
   // so a decision, an open task or an identifier from an old turn survives
   // even when the verbatim excerpts below only reach the newest turns.
@@ -27,8 +29,11 @@ export function deterministicSummary(history: readonly ReplayEntry[], maxBytes =
   for (let i = history.length - 1; i >= 0; i--) {
     const entry = history[i]!;
     if (!entry.text.trim()) continue;
-    const text = `${entry.role === "user" ? "User message" : "Assistant/record"}: ${JSON.stringify(entry.text)}`;
-    const line = boundedContextText(text, Math.min(1_600, available));
+    // An earlier summary stays as written, up to the summary budget, rather
+    // than quoted and cut like a message (upstream #5952).
+    const prior = entry.priorSummary?.replace(EXCERPTS_HEADER, (match, at: number) => at === 0 ? "" : match).trim() || undefined;
+    const text = prior ?? `${entry.role === "user" ? "User message" : "Assistant/record"}: ${JSON.stringify(entry.text)}`;
+    const line = boundedContextText(text, Math.min(prior ? MAX_SUMMARY_BYTES : 1_600, available));
     if (available < 128) { omitted++; continue; }
     lines.unshift(line);
     available -= Buffer.byteLength(line) + 1;
@@ -54,6 +59,9 @@ export function keyFacts(history: readonly ReplayEntry[], maxBytes: number): str
   const seenSentences = new Set<string>();
   for (let i = history.length - 1; i >= 0; i--) {
     const entry = history[i]!;
+    // An earlier summary is kept whole with its own key facts: quoting them
+    // again would repeat and re-escape them on every fold.
+    if (entry.priorSummary?.trim()) continue;
     for (const match of entry.text.matchAll(IDENTIFIER)) {
       const id = match[0];
       if (!seenIds.has(id.toLowerCase())) { seenIds.add(id.toLowerCase()); ids.push(id); }

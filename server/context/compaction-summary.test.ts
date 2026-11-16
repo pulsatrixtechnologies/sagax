@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { deterministicSummary, draftSummary, foldPoint, keyFacts, summaryPrompt } from "./compaction-summary.ts";
-import type { ReplayEntry } from "./context-rebuild.ts";
+import { MAX_SUMMARY_BYTES, selectReplay, type CompactionRecord, type ReplayEntry } from "./context-rebuild.ts";
 
 const history: ReplayEntry[] = [
   { id: "1", role: "user", text: "Deploy release" },
@@ -101,4 +101,45 @@ it("adds no key-facts block when nothing qualifies and stays inside a small budg
 it("asks a model helper for decisions, open tasks, identifiers and pending approvals", () => {
   const prompt = summaryPrompt(history);
   for (const asked of ["decisions", "exact identifiers", "open tasks", "pending"]) expect(prompt).toContain(asked);
+});
+
+// upstream #5952: folding again keeps the previous summary whole, not quoted
+// and cut at 1600 characters like any message.
+it("keeps the previous summary whole across repeated compactions", () => {
+  const longestBackslashRun = (text: string) => Math.max(0, ...(text.match(/\\+/g) ?? []).map(run => run.length));
+  const early = `Decided: ship on Friday. ${"Context detail. ".repeat(150)}End of the first fold.`;
+  const history: ReplayEntry[] = [{ id: "m1", role: "user", text: `Deploy to "staging"\nthen run the tests. ${early}` }];
+  let record: (CompactionRecord & { id: string }) | undefined;
+  let summary = "";
+  const runs: number[] = [];
+  for (let round = 1; round <= 4; round++) {
+    const replay = selectReplay(history, { compaction: record, budgetBytes: 200_000, maxMessages: 1_000 });
+    summary = deterministicSummary(replay.transcript.filter(entry => entry.id));
+    runs.push(longestBackslashRun(summary));
+    record = { id: `c${round}`, firstKeptId: "", foldedThroughId: history.at(-1)!.id, summary, tokensBefore: 0, by: "person" };
+    history.push({ id: record.id, role: "assistant", text: "" }, { id: `m${round + 1}`, role: "user", text: `Round ${round + 1} note` });
+  }
+  expect(runs.every(run => run === runs[0])).toBe(true);
+  expect(summary).toContain("End of the first fold.");
+  expect(summary).toContain("Round 4 note");
+  expect(Buffer.byteLength(summary)).toBeLessThanOrEqual(MAX_SUMMARY_BYTES);
+});
+
+it("quotes the entry when the prior summary is empty or blank", () => {
+  for (const priorSummary of ["", "  \n "]) {
+    const summary = deterministicSummary([{ id: "c", role: "assistant", text: "[summary]", priorSummary }, { id: "m", role: "user", text: "next" }]);
+    expect(summary).toContain('Assistant/record: "[summary]"');
+    expect(summary).toContain('User message: "next"');
+  }
+});
+
+it.each([512, 3_200, MAX_SUMMARY_BYTES])("keeps a multibyte prior summary valid within a %i byte budget", maxBytes => {
+  const priorSummary = "摘要🙂".repeat(580);
+  const summary = deterministicSummary([
+    { id: "c", role: "assistant", text: JSON.stringify(priorSummary), priorSummary },
+    { id: "m", role: "user", text: "最新訊息🙂" },
+  ], maxBytes);
+  expect(Buffer.byteLength(summary)).toBeLessThanOrEqual(maxBytes);
+  expect(summary).toContain("最新訊息🙂");
+  expect(summary).not.toContain("\uFFFD");
 });

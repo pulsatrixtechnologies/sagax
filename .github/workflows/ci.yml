@@ -588,7 +588,7 @@ jobs:
     # is read from connectApps.title), so a red run is a real break (#3568).
     name: renderer smoke (control-omb ui, Ubuntu 24.04)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -609,7 +609,25 @@ jobs:
         env:
           SAGAX_UI_E2E: "1"
           SAGAX_UI_EVIDENCE_DIR: .omb-scratch/verify-evidence
-        run: pnpm exec vitest run scripts/testing/control-omb-ui.e2e.test.ts scripts/testing/bot-tools-ui.e2e.test.ts scripts/testing/thinking-timer-ui.e2e.test.ts scripts/testing/team-share-ui.e2e.test.ts scripts/testing/org-library-ui.e2e.test.ts scripts/testing/presets-ui.e2e.test.ts
+        # Keep the named renderer flows in a regular off-Mac job (#4399).
+        run: >-
+          pnpm exec vitest run
+          scripts/testing/control-omb-ui.e2e.test.ts
+          scripts/testing/bot-tools-ui.e2e.test.ts
+          scripts/testing/thinking-timer-ui.e2e.test.ts
+          scripts/testing/team-share-ui.e2e.test.ts
+          scripts/testing/org-library-ui.e2e.test.ts
+          scripts/testing/presets-ui.e2e.test.ts
+          scripts/testing/cline-ui.e2e.test.ts
+          scripts/testing/team-computers-ui.e2e.test.ts
+          scripts/testing/bot-draft-visibility-ui.e2e.test.ts
+          scripts/testing/direct-coordination-ui.e2e.test.ts
+          scripts/testing/slack-management-ui.e2e.test.ts
+          scripts/testing/team-access-ui.e2e.test.ts
+          scripts/testing/team-template-ui.e2e.test.ts
+          scripts/testing/tool-selection-ui.e2e.test.ts
+          scripts/testing/trust-controls-ui.e2e.test.ts
+          scripts/testing/workspace-backup-ui.e2e.test.ts
       - name: Upload the renderer screenshot
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -619,6 +637,7 @@ jobs:
             .omb-scratch/verify-evidence/chat-ui.png
             .omb-scratch/verify-evidence/thinking-timer-anchored.png
             .omb-scratch/verify-evidence/share-team-dialog.png
+            .omb-scratch/verify-evidence/*.png
           if-no-files-found: warn
           retention-days: 7
 

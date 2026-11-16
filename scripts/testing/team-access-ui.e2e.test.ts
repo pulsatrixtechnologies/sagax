@@ -6,6 +6,7 @@ import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.t
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
+import { openBotMenuJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env }));
@@ -35,14 +36,7 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     };
     const ui = (verb: string, ...args: string[]) => runControlOmb(["ui", verb, "--ui", info.ui, ...args]) as Promise<any>;
     const click = (name: string) => ui("click", "--name", name);
-    // The browser harness does not assign refs to native <summary> nodes.
-    const toggleTeams = () => ui("eval", "--js", `(() => {
-      const summary = [...document.querySelectorAll('[data-persona-section=permissions] summary')]
-        .find(node => node.textContent.trim() === 'Additional teams');
-      if (!summary) throw new Error('Additional teams is missing');
-      summary.click();
-      return true;
-    })()`);
+    const toggleTeams = () => click("Additional teams");
     const snapshot = async () => (await ui("snapshot")).snapshot as string;
     const clickRole = async (role: string, name: string | RegExp) => {
       let match: [string, { role: string; name: string }] | undefined;
@@ -66,11 +60,10 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     await ui("eval", "--js", "location.reload(); true");
     await expect.poll(snapshot, { timeout: 15_000 }).toContain("Open Clive's panel");
     await click("Open Clive's panel");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "Bot menu"');
-    await click("Bot menu");
+    await expect.poll(async () => (await ui("eval", "--js", openBotMenuJs())).result).toBe(true);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('menuitem "Edit bot"');
     await click("Edit bot");
-    await click("Permissions");
+    await ui("eval", "--js", "document.querySelector('[data-bot-profile-subpage-open=advanced]').click(); true");
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Additional teams");
     await toggleTeams();
     await clickRole("checkbox", "Engineering");
@@ -106,6 +99,9 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     expect((await saved()).managedSections).toEqual(["Research"]);
     const receipts = { granted, recreated: await snapshot(), final: await saved(), screenshot, logPath: info.logPath };
     writeFileSync(info.logPath + ".team-access.json", JSON.stringify(receipts, null, 2));
+    const renderer = await ui("console");
+    expect(renderer.ok).toBe(true);
+    expect((renderer.messages as Array<{ type: string }>).filter(message => message.type === "error")).toEqual([]);
     console.log("Team access evidence:", info.logPath + ".team-access.json");
   } finally {
     await waitForExit(child, { signal: "SIGINT", graceMs: 30_000 });

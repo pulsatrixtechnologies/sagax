@@ -203,18 +203,19 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   // a Sagax built-in (REA): translated description, shown in the detail like every row
   const about = builtinDescription(item) ?? item.description;
   return (
-    <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} data-capability-scope={item.scope} data-capability-state={item.state} className="border-b border-hairline-weak last:border-b-0">
+    <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} {...(item.product ? { "data-capability-product": item.product } : {})} data-capability-scope={item.scope} data-capability-state={item.state} className="border-b border-hairline-weak last:border-b-0">
       <div className={cn("flex min-w-0 items-center gap-2 px-2.5 py-1.5", item.supersededBy && "flex-wrap")}>
         <button type="button" aria-expanded={expanded} onClick={onExpand}
           aria-label={t("capabilities.row.openAria", { name })}
-          className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", item.supersededBy && "basis-full sm:basis-0")}>
+          className={cn("flex min-w-[45%] flex-1 items-center gap-1.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", item.supersededBy && "basis-full sm:basis-0")}>
           {expanded ? <ChevronDown size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" /> : <ChevronRight size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" />}
           <span className="min-w-0 flex-1">
             <span className="block break-words text-[13px] text-ink" title={name}>{name}</span>
             <span className="block truncate text-[11.5px] text-ink-secondary" title={source}>{source}</span>
           </span>
         </button>
-        <span className={cn("flex max-w-[50%] shrink-0 flex-wrap justify-end gap-1", item.supersededBy && "ml-auto")}>
+        {/* #4359: at a phone's width the chips stack before a long name breaks a word */}
+        <span className={cn("flex min-w-0 max-w-[50%] flex-wrap justify-end gap-1", item.supersededBy && "ml-auto")}>
           <span className={cn(CHIP, TONE.muted)} data-capability-scope-chip="">{scopeWord(item.scope)}</span>
           {tone && <span className={cn(CHIP, TONE[tone])} data-capability-state-chip="" title={reason ?? undefined}>{stateWord(item.state)}</span>}
         </span>

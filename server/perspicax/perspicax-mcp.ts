@@ -20,7 +20,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
-import { servedSpelling, twilioToolsOf, apiNamesOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
+import { servedSpelling, twilioToolsOf, apiNamesOf, apiGroupsOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
 import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { MiB, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
@@ -33,6 +33,7 @@ import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import { productKeyStateOf, withToolNote, type ProductKeyState } from "./product-key-state.ts";
+import { describedProducts, filterNamingAnswer, flowReachOf, listedToolNames, offFamilyTools, offProductOfCall, offProductOfFamilyCall, offProductOfDescribeAnswer, productOffText, sweepArgsWithoutOff, withoutOffTools, type BotProductsView } from "./bot-products-filter.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
 import { reportBackgroundError } from "../background-error.ts";
@@ -166,6 +167,10 @@ export interface PerspicaxMcpOptions {
    * or null when no card was raised (a routine, another bot's turn, a server
    * without product keys). Its failures never change the answer. */
   onProductKeyState?(turn: { threadId: string; botId: string; principalId: string; routine: boolean }, state: ProductKeyState): Promise<string | null>;
+  /** #4359: the product ids this bot switched off (shared/bot-products.ts),
+   * or null for none. Their tools leave the bot's tool list and search, and
+   * a call of one is refused here (server/perspicax/bot-products-filter.ts). */
+  botProductsOff?(botId: string): ReadonlySet<string> | null;
   /** 2026-10-28: a bot's own voice_call (direct, call_tool or use_tool)
    * goes to place_phone_call with its arguments: the same card, AI
    * disclosure, pilot and do-not-call list. Absent: refused. */
@@ -540,6 +545,8 @@ function telephonyBlock(frame: Json, twilioTools: ReadonlySet<string> | undefine
 const API_NAMES_TTL_MS = 30 * 60_000;
 /** Bounds the bots whose product names are kept. */
 const API_NAMES_MAX = 500;
+/** #4359: the most family names one bot keeps mapped to their products. */
+const API_PRODUCTS_MAX = 2000;
 
 function isObject(value: unknown): value is Json {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -628,8 +635,8 @@ export class PerspicaxMcp {
   /** 2026-10-27, by bot: the product names Perspicax declares for its
    * APIs (api_list), so a step row names the product as the server does,
    * and the connectors whose reads it marks as reviewed. */
-  private readonly apiNames = new Map<string, { at: number; names: Map<string, string>; reviewed: Set<string> }>();
-  private readonly apiNamesPending = new Set<string>();
+  private readonly apiNames = new Map<string, { at: number; names: Map<string, string>; reviewed: Set<string>; groups: Map<string, string[]>; products: Map<string, string[]> }>();
+  private readonly apiNamesPending = new Map<string, Promise<void>>();
   /** "At the same time": a 5 minute window, then a write is sent again. */
   private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
 
@@ -1445,10 +1452,90 @@ export class PerspicaxMcp {
   /** Relay one JSON-RPC frame from a bridge to Perspicax /mcp. `judged`:
    * the call comes from callTool, whose native tool the agents proxy already
    * put through the permission check, so it is not judged (nor audited) twice. */
-  async relay(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
+  async relay(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean; mapping?: boolean }): Promise<PerspicaxRelayAnswer> {
+    // #4359: a product off for this bot is never called, whatever the path
+    // (`mapping`: the filter's own api_list and api_describe, never filtered)
+    const frame = isObject(input.frame) ? input.frame : null;
+    const products = input.mapping || (frame?.method !== "tools/list" && frame?.method !== "tools/call") ? null : await this.botProductsView(input);
+    const params = frame && isObject(frame.params) ? frame.params : null;
+    const tool = params && typeof params.name === "string" ? params.name : "";
+    if (products && frame?.method === "tools/call" && frame.id !== undefined) {
+      const off = offProductOfCall(products, tool, params?.arguments) ?? await offProductOfFamilyCall(products, tool, params?.arguments, this.familyMapping(input), this.flowMapping(input));
+      if (off) return toolError(frame.id, productOffText(products, off));
+      // an identity sweep (alone or as an api_plan step) skips the off products
+      const sweep = sweepArgsWithoutOff(products, tool, params?.arguments);
+      if (sweep.kind === "off") return toolError(frame.id, productOffText(products, sweep.id));
+      if (sweep.kind === "args") input = { ...input, frame: { ...frame, params: { ...params, arguments: sweep.args } } };
+    }
     const answer = await this.relayKept(input);
     this.noteRemoteSupport(input, answer);
-    return this.withProductKeyCard(input, answer);
+    const carded = await this.withProductKeyCard(input, answer);
+    if (!products || carded.status !== 200) return carded;
+    if (frame?.method === "tools/list") return { ...carded, body: withoutOffTools(products, carded.body, await offFamilyTools(products, listedToolNames(carded.body), this.familyMapping(input))) };
+    if (frame?.method === "tools/call") {
+      const described = offProductOfDescribeAnswer(products, tool, carded.body);
+      if (described) return toolError(frame.id, productOffText(products, described));
+      return { ...carded, body: filterNamingAnswer(products, tool, carded.body) };
+    }
+    return carded;
+  }
+
+  /** #4359: this bot's off products, every product id known for it and the
+   * families api_list declares (read first when this bot has none yet), or
+   * null when it switched none off. */
+  private async botProductsView(input: { threadId: string; generation: string; botId: string }): Promise<BotProductsView | null> {
+    let off: ReadonlySet<string> | null | undefined;
+    try { off = this.options.botProductsOff?.(input.botId); } catch { off = null; }
+    if (!off || off.size === 0) return null;
+    if (!this.apiNames.has(input.botId)) await this.refreshApiNames(input);
+    const known = this.apiNames.get(input.botId);
+    return {
+      off,
+      known: new Set([...off, ...(known ? known.names.keys() : []), ...(known ? [...known.groups.values()].flat() : [])]),
+      name: (id) => known?.names.get(id),
+      groups: known?.groups ?? new Map(),
+    };
+  }
+
+  /** #4359: the products of one family a resource, an action or a task tool
+   * reaches, as Perspicax maps it (api_describe: `api`, `target`, or the apis
+   * an ambiguous name is found in); kept with the bot's api_list. */
+  private familyMapping(input: { threadId: string; generation: string; botId: string }) {
+    return (group: string, members: readonly string[], name: string) => this.productsOfName(input, group, members, name);
+  }
+
+  /** #4359: what one Flow action or routine reaches, by Perspicax's own card
+   * of it (`flow` describe: an action's tools and products, a routine's
+   * steps); kept with the bot's api_list like the family names. */
+  private flowMapping(input: { threadId: string; generation: string; botId: string }) {
+    return async (name: string): Promise<string[] | null> => {
+      const key = `flow\u0000${name}`;
+      const cached = this.apiNames.get(input.botId)?.products.get(key);
+      if (cached) return cached;
+      const answer = await this.callTool({ ...input, name: "flow", args: { command: "describe", args: { name } }, mapping: true });
+      if (!answer.ok || answer.isError) return null;
+      const reach = flowReachOf(answer.value);
+      const products = this.apiNames.get(input.botId)?.products;
+      if (products) {
+        products.set(key, reach);
+        while (products.size > API_PRODUCTS_MAX) products.delete(products.keys().next().value!);
+      }
+      return reach;
+    };
+  }
+
+  private async productsOfName(input: { threadId: string; generation: string; botId: string }, group: string, members: readonly string[], name: string): Promise<string[]> {
+    const key = `${group}\u0000${name}`;
+    const cached = this.apiNames.get(input.botId)?.products.get(key);
+    if (cached) return cached;
+    const answer = await this.callTool({ ...input, name: "api_describe", args: { op_id: name }, legacyName: "api__describe", mapping: true });
+    const found = answer.ok ? describedProducts(answer.value, members) : [];
+    const products = this.apiNames.get(input.botId)?.products;
+    if (found.length && products) {
+      products.set(key, found);
+      while (products.size > API_PRODUCTS_MAX) products.delete(products.keys().next().value!);
+    }
+    return found;
   }
 
   /** #4185: a product tool refused for a key state raises the product key
@@ -2149,13 +2236,20 @@ export class PerspicaxMcp {
    * the turn never waits on it. */
   async refreshApiNames(input: { threadId: string; generation: string; botId: string }): Promise<void> {
     const cached = this.apiNames.get(input.botId);
-    if ((cached && Date.now() - cached.at < API_NAMES_TTL_MS) || this.apiNamesPending.has(input.botId)) return;
-    this.apiNamesPending.add(input.botId);
+    if (cached && Date.now() - cached.at < API_NAMES_TTL_MS) return;
+    const pending = this.apiNamesPending.get(input.botId);
+    if (pending) return pending;
+    const read = this.readApiNames(input);
+    this.apiNamesPending.set(input.botId, read);
+    return read;
+  }
+
+  private async readApiNames(input: { threadId: string; generation: string; botId: string }): Promise<void> {
     try {
-      const answer = await this.callTool({ ...input, name: "api_list", args: {} });
+      const answer = await this.callTool({ ...input, name: "api_list", args: {}, mapping: true });
       if (!answer.ok || answer.isError) return;
       this.apiNames.delete(input.botId);
-      this.apiNames.set(input.botId, { at: Date.now(), names: apiNamesOf(answer.value), reviewed: reviewedReadsOf(answer.value) });
+      this.apiNames.set(input.botId, { at: Date.now(), names: apiNamesOf(answer.value), reviewed: reviewedReadsOf(answer.value), groups: apiGroupsOf(answer.value), products: new Map() });
       while (this.apiNames.size > API_NAMES_MAX) this.apiNames.delete(this.apiNames.keys().next().value!);
     } catch {
       // a name is a nicety: the row reads a generic name without it
@@ -2189,7 +2283,7 @@ export class PerspicaxMcp {
    * authenticated caller. A session is opened first when the entry has
    * none, since a call that can change data is never replayed on a new one.
    * Never throws; no token is logged or returned. */
-  async callTool(input: { threadId: string; generation: string; botId: string; name: string; args: Json; legacyName?: string }): Promise<PerspicaxToolAnswer> {
+  async callTool(input: { threadId: string; generation: string; botId: string; name: string; args: Json; legacyName?: string; mapping?: boolean }): Promise<PerspicaxToolAnswer> {
     const answer = await this.callToolOnce(input, input.name);
     // A server before Perspicax 1.9.19 serves the `__` spelling only; when
     // this turn never listed its tools, the one `_` name is unknown there.
@@ -2199,7 +2293,7 @@ export class PerspicaxMcp {
     return answer;
   }
 
-  private async callToolOnce(input: { threadId: string; generation: string; botId: string; args: Json }, requested: string): Promise<PerspicaxToolAnswer> {
+  private async callToolOnce(input: { threadId: string; generation: string; botId: string; args: Json; mapping?: boolean }, requested: string): Promise<PerspicaxToolAnswer> {
     const entry = this.turnEntry(input.threadId, input.generation, input.botId);
     if (!entry) return { ok: false, code: "profile_not_mounted", error: "the Perspicax connection is not mounted in this turn" };
     const link = this.options.link();
@@ -2218,6 +2312,7 @@ export class PerspicaxMcp {
       botId: input.botId,
       frame: { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: input.args } },
       judged: true,
+      ...(input.mapping ? { mapping: true } : {}),
     });
     const body = answer.body;
     if (answer.status !== 200 || !isObject(body)) {

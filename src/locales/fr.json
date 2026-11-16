@@ -13318,6 +13318,7 @@
   "capabilities.form.connector": "Connecteur de compte",
   "capabilities.form.role": "Rôle Perspicax",
   "capabilities.form.flow": "Flow",
+  "capabilities.form.product": "Produit",
   "capabilities.scope.bot": "Ce bot",
   "capabilities.scope.me": "Moi",
   "capabilities.scope.organization": "Organisation",

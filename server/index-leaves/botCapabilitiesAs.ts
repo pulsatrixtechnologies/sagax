@@ -69,6 +69,9 @@ async function botCapabilitiesAs(
       signedIn: (name, server) => server.kind === "remote" && host.personOAuth(principal).status(name, host.personalRemoteSpec(server))?.auth === "connected"
     };
   }
+  // #4359: the owner's organization products, one switch each for this bot
+  let products: CapabilityInputs["products"];
+  try { products = organization ? await host.botProductInputs(bot, principal) : undefined; } catch { products = undefined; }
   const prompt = host.scopedSkillsPrompt(bot, instance, principal, { managedTools: skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope), fileAccess: supportsWorkspaceFiles(kind) });
   const inputs: CapabilityInputs = {
     organization,
@@ -104,6 +107,7 @@ async function botCapabilitiesAs(
       // an organization runs it in the person's sandbox: no desktop check
       runtimeMissing: !organization && builtinRuntimeMissing(plugin),
     })),
+    ...(products ? { products } : {}),
     pluginHostRefused: (url) => host.personalHostChecks.get(url)?.refused,
     workspacePlugins: host.pluginMarketplaces.installed().map((plugin) => ({
       key: plugin.key, name: plugin.name, marketplace: plugin.marketplace, servers: plugin.servers, skills: plugin.skills,

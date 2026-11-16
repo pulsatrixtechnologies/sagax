@@ -227,6 +227,41 @@ plus runtime observation.
   `src/components/bot-settings/CapabilitiesTab.test.ts`. Gallery:
   `bot-capabilities.html?rea=on|off|missing`.
 
+## The person's organization products, per bot (#4359)
+
+- On a server linked to Perspicax, the This bot scope lists the bot owner's
+  products (the Me scope's list, `personProducts.list` as that person, the
+  ones not `not_served`) as rows of form `product`, key
+  `product:bot:<id>`, scope `bot`, with the bot's own switch. The window
+  writes it like a built-in's (`botSwitchPatch`, one bot PATCH).
+- On by default: `WireBot.products[id] === false` is the only off, so no bot
+  loses a product by the upgrade. PATCH `products` takes product ids with
+  booleans (`parseBotProductsPatch`), merged into the bot's map; permission
+  `bots.behaviour`; settings action `bot.products`.
+- Enforced on the server in `PerspicaxMcp.relay`, the one path of every
+  engine frame and native call (`bot-products-filter.ts`): an off product's
+  tools leave tools/list and api_search, a call of one (or api_describe,
+  api_lookup, an api_plan step on it) is refused before Perspicax with the
+  sentence that offers to turn it on, api_list marks it `off_for_this_bot`.
+  A tool's product is the longest known id its name starts with, then `_`.
+- A family (api_list `group`, several products sharing `<group>_query`,
+  `_write`, `_action` and task tools) is resolved per call with Perspicax's
+  own mapping: api_describe of the call's `resource` or `action` gives its
+  `api`, of a task tool its `target` (kept per bot with api_list). A task
+  tool of an off product leaves tools/list; the shared tools leave it only
+  when every product of the family is off. A Flow action (`flow_action`) or
+  routine (`flow_run`) is resolved by Perspicax's own card of it (`flow`
+  describe: an action's tools and products, a routine's steps) and refused
+  only when it reaches an off product, in a family or not.
+- An `identity` sweep (alone or as an api_plan step) skips the off products:
+  they leave its `apis`, which is filled with the bot's other known products
+  when the call names none; a call naming only off products is refused, and
+  an answer row (`matches`, `lookups`, `errors`) of an off product is dropped.
+- Not covered: a Perspicax agent run (`agent_run_start`, an
+  `agent_automation_*`) runs on Perspicax under the person's own grants, not
+  under this bot's switches.
+- A solo server, another person's bot or a list that cannot be read: no row.
+
 ## Capabilities: one resolved list per bot (lot 1a, 2026-10-30)
 
 One server function says, for ONE bot and ITS engine, everything the bot

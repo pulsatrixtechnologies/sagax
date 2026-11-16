@@ -62,6 +62,15 @@ export const GUIDES: Guide[] = [
     refs: ["file:shared/builtin-plugins.ts", "file:server/capabilities/builtin-plugin-mounts.ts", "file:src/components/plugins/InstalledView.tsx"],
   },
   {
+    id: "bot-products",
+    title: "Choose which of the person's organization products a bot can use",
+    where: "Connect Apps (Connecter des apps) > Manage, scope This bot (Ce bot): one row per product, with its switch",
+    access: "the bot's owner, for their own bot; no administrator; a server linked to Perspicax only",
+    keywords: "produit produits product products acces access bot connect apps connecter applications ce bot this bot switch interrupteur desactiver activer turn off on api_list perspicax",
+    text: "On a server linked to Perspicax, Connect Apps > Manage lists at the Me scope the products the organization serves the person, and at the This bot scope the same products with one switch each, for that bot only. Every product is on for every bot until the person turns it off (bot setting products, a product id: false turns it off). A product off for a bot gives it none of that product's tools: they are not listed, not in its tool search, an identity search skips it, and a call is refused by the server; api_list still names it with off_for_this_bot. In a family of products that share tools (one api_list group), the server tells each call's product from its resource, action or task with Perspicax's own mapping, and a Flow action (flow_action) or routine (flow_run) is refused only when Perspicax's own card of it (flow describe) reaches an off product. Other bots and what the organization serves the person do not change. When the work needs a product that is off, the bot says so and offers to turn it on: it asks the person with a card, then sets bot.products with sagax_settings.",
+    refs: ["file:shared/bot-products.ts", "file:server/perspicax/bot-products-filter.ts", "file:src/components/plugins/InstalledView.tsx"],
+  },
+  {
     id: "voice-team",
     title: "Give voice mode (xAI) to a team or to people",
     where: "Perspicax console > Access > Bot rights (Accès > Droits sur les bots), tab Who has what (Qui a quoi), /sagax/permissions?tab=assign",

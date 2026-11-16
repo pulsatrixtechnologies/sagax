@@ -16,7 +16,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { entryIcon, type InstalledBrings, type InstalledEntry } from "@/lib/installed-model";
 import type { PluginItem } from "@/lib/plugins-model";
-import { botPluginKey, capabilityName, formWord, installationServerName, reasonText, stateWord, type BotCapabilities, type Capability } from "@/lib/capabilities";
+import { botPluginKey, capabilityName, isBotSwitch, formWord, installationServerName, reasonText, stateWord, type BotCapabilities, type Capability } from "@/lib/capabilities";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
@@ -97,8 +97,10 @@ export interface InstalledViewProps {
   /** lot 4: the person's own switch of an offered organization capability
    * (their Me state, all their bots). Absent: no switch. */
   onToggleOrganization?: (item: Capability, next: boolean) => void;
-  /** this bot's switch of a plugin Sagax ships (REA): on by default */
-  onToggleBuiltin?: (item: Capability, next: boolean) => void;
+  /** this bot's own switch of a row (lib/capabilities botSwitchPatch): a
+   * plugin Sagax ships (REA) or one of the person's organization products
+   * (#4359); on by default */
+  onToggleBotSwitch?: (item: Capability, next: boolean) => void;
   /** Removes only this bot's obsolete copy, directly, leaving Flow in place. */
   onRemoveSuperseded?: (item: Capability) => void;
   removingSuperseded?: string | null;
@@ -165,7 +167,7 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBuiltin, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin, accounts, personal = [] }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin, accounts, personal = [] }: InstalledViewProps) {
   const [all, setAll] = useState(false);
   // connected account rows first, then the notices, the ones to finish, the unverifiable
   const accountLines: InstalledLine[] = (accounts?.sections ?? []).flatMap(({ group, rows }) => [
@@ -194,10 +196,10 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
       )}
       {forms}
       {resolved !== undefined && <CapabilitiesBody botName={botName} data={resolved} error={resolvedError} onRetry={onRetryResolved} showReceived={false}
-        switchable={(item) => Boolean(item.builtin
-          ? onToggleBuiltin && item.canToggle
+        switchable={(item) => Boolean(isBotSwitch(item)
+          ? onToggleBotSwitch && item.canToggle
           : onToggleOrganization && item.scope === "organization" && item.orgDeclaration && item.canToggle)}
-        onToggle={(item, next) => (item.builtin ? onToggleBuiltin : onToggleOrganization)?.(item, next)}
+        onToggle={(item, next) => (isBotSwitch(item) ? onToggleBotSwitch : onToggleOrganization)?.(item, next)}
         rowActions={(item) => {
           const plugin = botPluginKey(item);
           const remove = plugin && item.supersededBy && item.canToggle && onRemoveSuperseded ? (

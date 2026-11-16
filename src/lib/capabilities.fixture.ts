@@ -60,3 +60,14 @@ export function reaCapabilityFixture(overrides: Partial<Capability> = {}): Capab
     ...overrides,
   };
 }
+
+/** #4359: one of the person's organization products at This bot. */
+export function productCapabilityFixture(overrides: Partial<Capability> = {}): Capability {
+  return {
+    key: "product:bot:psa", form: "product", name: "Service desk", product: "psa",
+    source: { kind: "perspicax", label: "Example Org" },
+    scope: "bot", state: "on", enabled: true, canToggle: true,
+    engine: { mcp: "mounted", tools: "mounted", nothing: false }, mounts: ["perspicax"],
+    ...overrides,
+  };
+}

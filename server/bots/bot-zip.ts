@@ -193,6 +193,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   remoteHosts: "host",
   mcpServers: "host",
   mcpAccounts: "host",
+  // #4359: which of the person's organization products the bot may use
+  products: "host",
   visibility: "sharing",
   grants: "sharing",
   directGrants: "sharing",

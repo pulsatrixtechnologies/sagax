@@ -23,6 +23,7 @@ function harness(options: {
   guard?: PerspicaxMcpOptions["permissionGuard"];
   remoteSupport?: PerspicaxMcpOptions["onRemoteSupport"];
   productKeyState?: PerspicaxMcpOptions["onProductKeyState"];
+  botProductsOff?: PerspicaxMcpOptions["botProductsOff"];
   askGo?: PerspicaxMcpOptions["askGo"];
 } = {}) {
   let clock = 1_000_000;
@@ -109,6 +110,7 @@ function harness(options: {
     ...(options.guard ? { permissionGuard: options.guard } : {}),
     ...(options.remoteSupport ? { onRemoteSupport: options.remoteSupport } : {}),
     ...(options.productKeyState ? { onProductKeyState: options.productKeyState } : {}),
+    ...(options.botProductsOff ? { botProductsOff: options.botProductsOff } : {}),
     ...(options.askGo ? { askGo: options.askGo } : {}),
     fetch: fetcher,
     now: () => clock,
@@ -1118,6 +1120,205 @@ describe("PerspicaxMcp product key state (#4185)", () => {
       expect((answer.body as { result: { content: unknown[] } }).result.content).toHaveLength(1);
     }
     expect(calls).toBe(2);
+  });
+});
+
+describe("PerspicaxMcp products off for one bot (#4359)", () => {
+  // The real shapes: a product id is the api_list id; a family (`group`)
+  // shares its tools, whose names never start with a product id.
+  const tools = [
+    "cw_psa_query", "cw_psa_write", "cw_psa_action", "cw_psa_find_tickets", "cw_psa_log_time", "flow_action", "flow_filter",
+    "edrtool_query", "twilio_api_query", "memory_recall", "api_search", "api_describe",
+  ].map((name) => ({ name, inputSchema: { type: "object" } }));
+  const family = (id: string, title: string) => ({ id, group: "cw_psa", title: `Connectwise Manage Public Endpoints: ${title}` });
+  const listValue = {
+    apis: [
+      family("cw_psa_service", "service"), family("cw_psa_time", "time"), family("cw_psa_finance", "finance"), family("cw_psa_project", "project"),
+      { id: "cw_rmm", title: "ConnectWise Platform APIs" }, { id: "edrtool", title: "S1 MGMT API" }, { id: "twilio_api", title: "Twilio - Api" },
+    ],
+  };
+  const searchValue = { results: [{ api: "cw_psa_service", tool: "cw_psa_query", op_id: "getServiceTickets" }, { api: "cw_psa_finance", tool: "cw_psa_query", op_id: "getFinanceAgreements" }, { api: "edrtool", tool: "edrtool_query", op_id: "agents" }], total: 3 };
+  // Perspicax's own mapping (api_describe), as it answers live
+  const described: Record<string, unknown> = {
+    "service.tickets": { api: "cw_psa_service", resource: "tickets" },
+    "service.tickets_write": { api: "cw_psa_service", resource: "tickets" },
+    agreements: { api: "cw_psa_finance", resource: "agreements" },
+    sheets_approve: { api: "cw_psa_time", op_id: "postTimeSheetsByIdApprove" },
+    cw_psa_find_tickets: { kind: "task", target: "cw_psa_service/tickets", tool: "cw_psa_find_tickets" },
+    cw_psa_log_time: { kind: "task", target: "cw_psa_time/entries", tool: "cw_psa_log_time" },
+    cw_psa_update_ticket: { kind: "task", target: "cw_psa_service/tickets", tool: "cw_psa_update_ticket" },
+  };
+  // Perspicax's own card of a Flow action or routine (`flow` describe)
+  const flowCards: Record<string, unknown> = {
+    close_ticket: { action: { name: "close_ticket", tools: ["cw_psa_find_tickets", "cw_psa_update_ticket"], products: ["connectwise"] } },
+    "time-entry-log": { action: { name: "time-entry-log", tools: ["cw_psa_log_time"], products: ["connectwise"] } },
+    "isolate-endpoint": { action: { name: "isolate-endpoint", tools: ["cw_psa_log_time", "edrtool__write"], products: ["edrtool", "connectwise"] } },
+    "threat-watch": { routine: { name: "threat-watch", server_profiles: ["watch"], steps: "1. List open threats with edrtool_query.\n2. Log the time with cw_psa_log_time." } },
+  };
+  const ambiguous = { code: "params_invalid", details: { apis: ["cw_psa_project", "cw_psa_service", "cw_rmm"], status: 400 }, message: "tickets is found in 3 apis" };
+  const answering = ({ body }: { body: any }) => {
+    if (body.id === undefined) return new Response(null, { status: 202 });
+    const name = body.params?.name;
+    const op = body.params?.arguments?.op_id;
+    let result: unknown;
+    if (body.method === "tools/list") result = { tools };
+    else if (name === "flow") result = { content: [{ type: "text", text: JSON.stringify(flowCards[body.params?.arguments?.args?.name] ?? { status: "blocked", reason: "routine_not_in_pack" }) }] };
+    else if (name === "api_describe" && op === "tickets") result = { isError: true, content: [{ type: "text", text: JSON.stringify(ambiguous) }] };
+    else if (name === "identity") {
+      // Perspicax sweeps the asked apis, else every served one
+      const asked: string[] | undefined = body.params?.arguments?.apis;
+      const swept = listValue.apis.map((api) => api.id).filter((id) => !asked?.length || asked.includes(id));
+      const value = { query: body.params?.arguments?.query, matches: swept.map((api) => ({ api, resource: "devices", field: "name", items: [{ id: 1 }] })), lookups: swept.map((api) => ({ api, type: "status", entries: [] })), errors: [], calls: swept.length };
+      result = { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value };
+    }
+    else {
+      const value = name === "api_search" ? searchValue : name === "api_list" ? listValue : name === "api_describe" ? described[op] ?? { api: "cw_rmm" } : { ok: true };
+      result = { content: [{ type: "text", text: JSON.stringify(value) }] };
+    }
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
+  };
+  const offFor = (ids: string[]) => (botId: string) => (botId === "x" ? new Set(ids) : null);
+  const called = (h: ReturnType<typeof harness>, name: string) => h.mcpCalls.filter((c) => c.body?.method === "tools/call" && c.body.params?.name === name).length;
+  const call = (h: ReturnType<typeof harness>, id: number, name: string, args: Record<string, unknown> = {}) =>
+    h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } } });
+  const refused = (answer: { body?: unknown }) => (answer.body as any).result?.isError === true && /off for this bot/.test((answer.body as any).result.content[0].text);
+  const ready = async (off: string[]) => {
+    const h = harness({ mcp: answering, botProductsOff: offFor(off) });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    return h;
+  };
+
+  it("refuses a family call whose resource is an off product, by Perspicax's mapping, and lets the family's other products through", async () => {
+    const h = await ready(["cw_psa_service"]);
+    const query = await call(h, 1, "cw_psa_query", { resource: "service.tickets" });
+    expect(refused(query)).toBe(true);
+    expect((query.body as any).result.content[0].text).toMatch(/^Connectwise Manage Public Endpoints: service is off for this bot/);
+    expect((query.body as any).result.content[0].text).toContain('{"cw_psa_service": true}');
+    expect(refused(await call(h, 2, "cw_psa_write", { resource: "service.tickets", action: "update", id: 1, set: {} }))).toBe(true);
+    expect(refused(await call(h, 3, "cw_psa_query", { resource: "tickets" }))).toBe(true);
+    expect(refused(await call(h, 4, "cw_psa_find_tickets", { state: "open" }))).toBe(true);
+    expect(refused(await call(h, 5, "api_plan", { steps: [{ tool: "cw_psa_query", args: { resource: "agreements" } }, { tool: "cw_psa_query", args: { resource: "service.tickets" } }] }))).toBe(true);
+    expect(refused(await call(h, 6, "flow_action", { name: "close_ticket", params: {} }))).toBe(true);
+    expect(called(h, "cw_psa_query")).toBe(0);
+    expect(called(h, "cw_psa_write")).toBe(0);
+    expect(called(h, "cw_psa_find_tickets")).toBe(0);
+    expect(called(h, "flow_action")).toBe(0);
+    // the family's other products, and its compute tools, go through
+    expect(refused(await call(h, 7, "cw_psa_query", { resource: "agreements" }))).toBe(false);
+    expect(refused(await call(h, 8, "cw_psa_log_time", { ticket: "1" }))).toBe(false);
+    expect(refused(await call(h, 9, "cw_psa_action", { action: "sheets_approve", id: 1 }))).toBe(false);
+    expect(refused(await call(h, 10, "flow_filter", { items: [] }))).toBe(false);
+    expect(called(h, "cw_psa_query")).toBe(1);
+    expect(called(h, "cw_psa_log_time")).toBe(1);
+    expect(called(h, "cw_psa_action")).toBe(1);
+    // describing it is refused like a call
+    expect(refused(await call(h, 11, "api_describe", { op_id: "service.tickets" }))).toBe(true);
+    expect(refused(await call(h, 12, "api_describe", { op_id: "cw_psa_find_tickets" }))).toBe(true);
+  });
+
+  it("resolves a Flow action or routine by Perspicax's card of it: refused when it reaches an off product outside the family, let through when only an unrelated family product is off", async () => {
+    const h = await ready(["edrtool"]);
+    expect(refused(await call(h, 1, "flow_action", { name: "isolate-endpoint", params: {} }))).toBe(true);
+    expect(refused(await call(h, 2, "flow_run", { command: "run.init", args: { routine: "threat-watch" } }))).toBe(true);
+    expect(refused(await call(h, 3, "flow_action", { name: "time-entry-log", params: {} }))).toBe(false);
+    expect(called(h, "flow_action")).toBe(1);
+    expect(called(h, "flow_run")).toBe(0);
+    // the card is read once per name, kept with the bot's api_list
+    await call(h, 4, "flow_action", { name: "isolate-endpoint", params: {} });
+    expect(h.mcpCalls.filter((c) => c.body?.params?.name === "flow" && c.body.params.arguments?.args?.name === "isolate-endpoint")).toHaveLength(1);
+
+    const k = await ready(["cw_psa_finance"]);
+    expect(refused(await call(k, 1, "flow_action", { name: "close_ticket", params: {} }))).toBe(false);
+    expect(refused(await call(k, 2, "flow_action", { name: "time-entry-log", params: {} }))).toBe(false);
+    expect(refused(await call(k, 3, "flow_run", { command: "status" }))).toBe(false);
+    expect(called(k, "flow_action")).toBe(2);
+    expect(called(k, "flow_run")).toBe(1);
+    // Flow's tools stay listed: only a run that reaches an off product is refused
+    const listed = await k.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 9, method: "tools/list" } });
+    expect((listed.body as any).result.tools.map((tool: { name: string }) => tool.name)).toContain("flow_action");
+  });
+
+  it("leaves an off product's tools out of the list (a family's task tools too) and its search results, and marks it in api_list", async () => {
+    const h = await ready(["cw_psa_service", "edrtool"]);
+    const listed = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    expect((listed.body as any).result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+      "cw_psa_query", "cw_psa_write", "cw_psa_action", "cw_psa_log_time", "flow_action", "flow_filter", "twilio_api_query", "memory_recall", "api_search", "api_describe",
+    ]);
+    const search = await call(h, 2, "api_search", { query: "tickets" });
+    expect(JSON.parse((search.body as any).result.content[0].text).results.map((r: { api: string }) => r.api)).toEqual(["cw_psa_finance"]);
+    const apis = await call(h, 3, "api_list");
+    const value = JSON.parse((apis.body as any).result.content[0].text);
+    expect(value.apis.filter((api: { off_for_this_bot?: boolean }) => api.off_for_this_bot).map((api: { id: string }) => api.id)).toEqual(["cw_psa_service", "edrtool"]);
+    expect(refused(await call(h, 4, "edrtool_query", { resource: "agents" }))).toBe(true);
+    expect(called(h, "edrtool_query")).toBe(0);
+  });
+
+  it("drops the family's shared tools when every product of it is off", async () => {
+    const h = await ready(["cw_psa_service", "cw_psa_time", "cw_psa_finance", "cw_psa_project"]);
+    const listed = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    expect((listed.body as any).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["flow_action", "flow_filter", "edrtool_query", "twilio_api_query", "memory_recall", "api_search", "api_describe"]);
+    expect(refused(await call(h, 2, "cw_psa_query", {}))).toBe(true);
+  });
+
+  it("refuses the native path (callTool) the same way, and says how to turn it on", async () => {
+    const h = await ready(["twilio_api"]);
+    const native = await h.mcp.callTool({ ...turn, botId: "x", name: "twilio_api_query", args: {} });
+    expect(native).toMatchObject({ ok: true, isError: true });
+    expect(called(h, "twilio_api_query")).toBe(0);
+    const answer = await call(h, 1, "twilio_api_query");
+    expect((answer.body as any).result.content[0].text).toMatch(/sagax_settings set bot\.products with \{"twilio_api": true\}/);
+  });
+
+  it("takes an off product out of an identity sweep: its apis, the served ones when it names none, an api_plan step, and the answer", async () => {
+    const h = await ready(["cw_psa_service", "edrtool"]);
+    const sweptApis = () => h.mcpCalls.filter((c) => c.body?.params?.name === "identity").map((c) => c.body.params.arguments.apis);
+    const answeredApis = (answer: { body?: unknown }) => JSON.parse((answer.body as any).result.content[0].text).matches.map((m: { api: string }) => m.api).sort();
+    const served = ["cw_psa_finance", "cw_psa_project", "cw_psa_time", "cw_rmm", "twilio_api"];
+    // no apis: the served ones minus the off ones
+    const all = await call(h, 1, "identity", { query: "host-123" });
+    expect(refused(all)).toBe(false);
+    expect([...sweptApis()[0]].sort()).toEqual(served);
+    expect(answeredApis(all)).toEqual(served);
+    expect(JSON.stringify((all.body as any).result.structuredContent)).not.toMatch(/edrtool|cw_psa_service/);
+    // apis naming an off product: it is dropped, the others are swept
+    const some = await call(h, 2, "identity", { query: "host-123", apis: ["edrtool", "twilio_api"] });
+    expect(sweptApis()[1]).toEqual(["twilio_api"]);
+    expect(answeredApis(some)).toEqual(["twilio_api"]);
+    // apis naming only off products: refused, nothing swept
+    const off = await call(h, 3, "identity", { query: "host-123", apis: ["edrtool"] });
+    expect(refused(off)).toBe(true);
+    expect((off.body as any).result.content[0].text).toMatch(/^S1 MGMT API is off for this bot/);
+    expect(called(h, "identity")).toBe(2);
+    // an api_plan step sweeps the same way
+    await call(h, 4, "api_plan", { steps: [{ tool: "identity", args: { query: "host-123" } }] });
+    const plan = h.mcpCalls.filter((c) => c.body?.params?.name === "api_plan").at(-1)!;
+    expect([...plan.body.params.arguments.steps[0].args.apis].sort()).toEqual(served);
+  });
+
+  it("drops an off product's rows from an identity answer even when the sweep reached it", async () => {
+    const loose = ({ body }: { body: any }) => {
+      if (body.params?.name !== "identity") return answering({ body });
+      const value = { matches: [{ api: "edrtool", items: [{ id: 7 }] }, { api: "twilio_api", items: [{ id: 8 }] }], lookups: [{ api: "edrtool", entries: [] }], errors: [{ api: "edrtool", error: "x" }], calls: 3 };
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: JSON.stringify(value) }] } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
+    };
+    const h = harness({ mcp: loose, botProductsOff: offFor(["edrtool"]) });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await call(h, 1, "identity", { query: "host-123" });
+    const value = JSON.parse((answer.body as any).result.content[0].text);
+    expect(value.matches.map((m: { api: string }) => m.api)).toEqual(["twilio_api"]);
+    expect(value.lookups).toEqual([]);
+    expect(value.errors).toEqual([]);
+  });
+
+  it("changes nothing for a bot with no product off (other bots, every bot before the switch)", async () => {
+    const h = harness({ mcp: answering, botProductsOff: () => null });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const listed = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    expect((listed.body as any).result.tools).toHaveLength(tools.length);
+    await call(h, 2, "cw_psa_query", { resource: "service.tickets" });
+    expect(called(h, "cw_psa_query")).toBe(1);
+    expect(called(h, "api_describe")).toBe(0);
+    expect(called(h, "api_list")).toBe(0);
   });
 });
 

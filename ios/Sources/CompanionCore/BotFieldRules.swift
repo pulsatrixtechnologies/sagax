@@ -45,6 +45,7 @@ public enum BotFieldRules {
         "memeReplies": "bots.behaviour",
         "skillLearning": "bots.behaviour",
         "builtinPlugins": "bots.behaviour",
+        "products": "bots.behaviour",
         "collaboratorsCreateRoutines": "bots.behaviour",
         "emailDrafts": "bots.behaviour",
         "fallback": "bots.behaviour",

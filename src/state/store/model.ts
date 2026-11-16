@@ -639,6 +639,8 @@ export interface Bot {
   /** Built-in plugins this bot switched (shared/builtin-plugins.ts): absent
    * or true on, false off. */
   builtinPlugins?: Record<string, boolean>;
+  /** #4359: the person's products switched for this bot (false: off). */
+  products?: Record<string, boolean>;
   /** Prompt-cache keep-warm for this bot's Claude threads: true/false
    * overrides the workspace setting, absent follows it (null clears over PATCH). */
   cacheKeepWarm?: boolean | null;

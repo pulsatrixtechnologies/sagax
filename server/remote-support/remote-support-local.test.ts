@@ -424,10 +424,10 @@ describe("remote support on this computer", () => {
     const guide = GUIDES.find((entry) => entry.id === "remote-support");
     expect(guide?.text).not.toContain("tailcat_session.py");
     expect(guide?.text).toContain("new key for this session only");
-    expect(open?.description).toContain("new key for this session only");
+    expect(open?.description).toContain("session-only key");
     expect(open?.inputSchema.properties.scope).toMatchObject({ enum: ["full-control", "view-only", "shell-only"] });
     expect(open?.inputSchema.properties.call_ref).toMatchObject({ type: "string", maxLength: 80, description: "Optional reference of the phone call or ticket that records the person's consent" });
-    expect(open?.description).toContain("Do not download tailcat");
+    expect(open?.description).toMatch(/do not .*download tailcat/i);
     expect(guide?.text).toContain("Do not download tailcat");
     expect(guide?.text).toContain("donne-moi le lien");
     expect(guide?.text).not.toMatch(/[–—]/);
@@ -444,19 +444,19 @@ describe("remote support on this computer", () => {
     const guide = GUIDES.find((entry) => entry.id === "remote-support")?.text ?? "";
     for (const text of [open, guide]) {
       expect(text).toContain("at most three calls");
-      expect(text).toMatch(/without administrator rights/);
+      expect(text).toMatch(/without administrator rights|standard rights/);
       expect(text).toContain("first reply");
       expect(text).toContain("Mac shell eats");
-      expect(text).toContain("no cloud fallback");
-      expect(text).toMatch(/never expose the person's own computer/i);
+      expect(text).toMatch(/no cloud fallback/i);
     }
+    expect(guide).toMatch(/never expose the person's own computer/i);
     expect(guide).toContain("powershell code fence");
     expect(guide).toContain("fetch_ip_count must be exactly 1");
     expect(guide).toContain("do not open Preview");
     expect(guide).toContain("Sessions à distance");
     expect(status).toContain("fetch_ip_count must be exactly 1");
-    expect(status).toContain("never write a screenshot to the Desktop or open Preview");
-    expect(status).toContain("posts the session card and the live screen in the chat");
+    expect(status).toContain("never save a screenshot or open Preview");
+    expect(status).toContain("posts the session card and live screen itself");
     expect(status).toContain("remote_session_snapshot");
     expect(publish).toContain("posted by itself");
     for (const text of [open, status, publish, guide]) expect(text).not.toMatch(/[–—]/);

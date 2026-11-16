@@ -82,6 +82,7 @@ const FORM_KEY: Record<CapabilityForm, LocaleKey> = {
   connector: "capabilities.form.connector",
   role: "capabilities.form.role",
   flow: "capabilities.form.flow",
+  product: "capabilities.form.product",
 };
 
 const SCOPE_KEY: Record<CapabilityScope, LocaleKey> = {
@@ -175,6 +176,22 @@ export function visibleCapabilities(items: readonly Capability[]): Capability[] 
     if (item.reason !== "name_taken") winners.add(`${item.form}\0${capabilityName(item).toLowerCase()}`);
   }
   return ordered.filter((item) => item.reason !== "name_taken" || !winners.has(`${item.form}\0${capabilityName(item).toLowerCase()}`));
+}
+
+/** A row this bot switches on its own record: a Sagax built-in plugin, or
+ * one of the person's organization products (#4359). */
+export const isBotSwitch = (item: Pick<Capability, "builtin" | "product">): boolean => Boolean(item.builtin || item.product);
+
+/** The bot PATCH one of its own switches makes: the whole map with the row
+ * flipped, as the bot editor writes it; null for any other row. */
+export function botSwitchPatch(
+  bot: { builtinPlugins?: Record<string, boolean>; products?: Record<string, boolean> },
+  item: Pick<Capability, "builtin" | "product">,
+  next: boolean,
+): { builtinPlugins: Record<string, boolean> } | { products: Record<string, boolean> } | null {
+  if (item.builtin) return { builtinPlugins: { ...bot.builtinPlugins, [item.builtin]: next } };
+  if (item.product) return { products: { ...bot.products, [item.product]: next } };
+  return null;
 }
 
 /** The plugin key of a bot plugin row (`plugin:bot:name@market`), for its switch. */

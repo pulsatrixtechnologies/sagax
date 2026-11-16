@@ -138,7 +138,7 @@ function localTarget(rawPath, pathApi, home) {
   return local(target) ? target : null;
 }
 
-export async function revealInFolder(rawPath, { reveal, fsp = fs.promises, pathApi = path, home }) {
+export async function revealInFolder(rawPath, { reveal, openDirectory, fsp = fs.promises, pathApi = path, home }) {
   const target = localTarget(rawPath, pathApi, home);
   if (!target) return "invalid";
   let stats;
@@ -148,6 +148,10 @@ export async function revealInFolder(rawPath, { reveal, fsp = fs.promises, pathA
     return "missing";
   }
   if (!stats.isFile() && !stats.isDirectory()) return "invalid";
+  if (stats.isDirectory() && openDirectory) {
+    const error = await openDirectory(target);
+    return error ? "failed" : "shown";
+  }
   reveal(target);
   return "shown";
 }

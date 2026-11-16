@@ -40,6 +40,7 @@ const USE_MODAL_DIALOG_ALLOW = new Set([
   "components/remote-session/AddComputerDialog.tsx", // Add computer modal (#2723)
   "components/remote-session/HostSharingControls.tsx", // per-host sharing window (#3134)
   "components/settings/VaultDialog.tsx", // the Vault's item, import and export windows (#4094)
+  "components/bot-profile/BotPageModal.tsx", // the bot page's modals, as the reference app (owner, #4470)
 ]);
 
 /** Files that may mention window.confirm only in comments (or this guard). */

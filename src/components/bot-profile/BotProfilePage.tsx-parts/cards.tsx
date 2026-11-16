@@ -31,6 +31,7 @@ import { ShowMoreFold } from "../../ShowMoreFold";
 import { BotEmailAddress } from "../../bot-settings/BotEmailAddress";
 import { BotReachMe } from "../../bot-settings/BotReachMe";
 import { AddMenu } from "./AddMenu";
+import { BotPageModal } from "../BotPageModal";
 
 const ENTRY = new Map(BOT_SECTIONS.map((entry) => [entry.id, entry]));
 
@@ -152,7 +153,8 @@ function SlackLogo() {
 }
 
 /** General > Channels, in place on the tab (#3398): where the bot can be
- * reached, each with its state and its Connect or Manage. A channel this
+ * reached, each with its state and its Connect or Manage, which opens the
+ * channel's settings in a modal over the page (#4470). A channel this
  * server does not offer is not drawn (Slack without its Admin link: Slack
  * as a channel is removed for now, shared/team-chat-channels.ts), and a
  * card with no channel left is not drawn. */
@@ -176,13 +178,20 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
     <button
       type="button"
       data-bot-profile-action={channel}
-      aria-expanded={open === channel}
-      onClick={() => onOpen(open === channel ? null : channel)}
+      aria-haspopup="dialog"
+      onClick={() => onOpen(channel)}
       className={cn(PILL, "shrink-0")}
     >
-      {open === channel ? t("botProfile.hide") : connected ? t("botProfile.manage") : t("botProfile.connect")}
+      {connected ? t("botProfile.manage") : t("botProfile.connect")}
     </button>
   );
+  // A channel's settings, in its modal: its name, the state under it, then the same controls.
+  const modal = (channel: Channel, label: string, state: string | null, body: ReactNode) =>
+    open === channel ? (
+      <BotPageModal id={`channel-${channel}`} title={label} description={state ?? undefined} onClose={() => onOpen(null)}>
+        <div data-bot-profile-channel={channel} className="flex min-w-0 flex-col gap-6">{body}</div>
+      </BotPageModal>
+    ) : null;
 
   const reachOn = (reach?.settings.channels ?? []).map((id) => (REACH_LABEL[id] ? t(REACH_LABEL[id]!) : null)).filter((label): label is string => label !== null);
   const messagesHere = messages ? messages.available && messages.onThisMac : false;
@@ -199,7 +208,7 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
         state={t("botProfile.state.managedInAdmin")}
         action={pill("slack", true)}
       >
-        {open === "slack" ? <SlackSection managementUrl={slackUrl} /> : null}
+        {modal("slack", t("botProfile.channel.slack"), t("botProfile.state.managedInAdmin"), <SlackSection managementUrl={slackUrl} />)}
       </CardRow>,
     );
   }
@@ -213,20 +222,21 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
         state={mail === null ? null : mail.address ?? t("botProfile.state.noAddress")}
         action={mail?.address ? pill("email", true) : undefined}
       >
-        {open === "email" && mail?.address ? <BotEmailAddress botId={bot.id} /> : null}
+        {mail?.address ? modal("email", t("botProfile.channel.email"), mail.address, <BotEmailAddress botId={bot.id} />) : null}
       </CardRow>,
     );
   }
+  const reachState = reach === null ? null : reachOn.length > 0 ? reachOn.join(", ") : t("botProfile.state.notConnected");
   rows.push(
     <CardRow
       key="reachMe"
       rowId="reachMe"
       icon={<BellRing />}
       label={t("botPanel.reachMe.label")}
-      state={reach === null ? null : reachOn.length > 0 ? reachOn.join(", ") : t("botProfile.state.notConnected")}
+      state={reachState}
       action={reach === null ? undefined : pill("reachMe", reachOn.length > 0)}
     >
-      {open === "reachMe" ? <BotReachMe botId={bot.id} /> : null}
+      {modal("reachMe", t("botPanel.reachMe.label"), reachState, <BotReachMe botId={bot.id} />)}
     </CardRow>,
   );
   if (messages === undefined || messagesHere) {
@@ -241,8 +251,9 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
             <button
               type="button"
               data-bot-profile-action="messages"
+              aria-haspopup="dialog"
               onClick={() => {
-                // #4420: Connect apps opens as a page of this page
+                // Connect apps' own window, over this page (#4420, #4470)
                 dispatch({ type: "togglePlugins", open: true, surface: "apps", inProfile: true });
                 window.dispatchEvent(new CustomEvent("sagax:open-mac-messages"));
               }}
@@ -306,7 +317,7 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
   useEffect(() => { if (adding) firstFieldRef.current?.focus(); }, [adding]);
 
   const connect = (surface: "apps" | "mcp") => {
-    // #4420: Connect apps opens as a page of this page, on this bot
+    // Connect apps' own window, over this page, on this bot (#4420, #4470)
     dispatch({ type: "togglePlugins", open: true, surface, botId: bot.id, inProfile: true });
   };
 
@@ -474,9 +485,9 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
             </div>
           )}
           {adding && (
-            <div data-bot-profile-row="vault-new" className="flex flex-col gap-2 px-4 pb-3 pt-2">
-              <span className="text-[14px] leading-5 text-ink">{t("botProfile.add.vault")}</span>
-              <span className="text-[12px] leading-4 text-ink-secondary">{t("botPanel.teamVault.help", { bot: bot.name })}</span>
+            // Add > Shared vault login: its form in a modal over the page (#4470)
+            <BotPageModal id="vault-new" title={t("botProfile.add.vault")} description={t("botPanel.teamVault.help", { bot: bot.name })} onClose={() => setAdding(false)}>
+            <div data-bot-profile-row="vault-new" className="flex flex-col gap-2">
               <TeamVaultForm
                 plain
                 busy={logins.busy}
@@ -490,6 +501,7 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
                 className="flex flex-col gap-2"
               />
             </div>
+            </BotPageModal>
           )}
           {vault && logins.error && <p role="alert" className="px-4 pb-2 text-[12px] leading-4 text-danger">{logins.error}</p>}
           {(serversError || actionError) && (

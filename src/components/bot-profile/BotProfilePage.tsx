@@ -24,10 +24,15 @@
 //   true, read from the bot's routines; a row opens in place and points to
 //   the chat for what needs the person (BotProfilePage.tsx-parts/Outcomes).
 //
-// A row opens its own sub-page in the same column, only for a setting too
-// long for a card: a link back named after the tab at the top left of the
-// top bar (focused when the page opens, #4078, #4420), the title where the
-// tab row was, one line of intro, then the cards. Each change applies in place, at once, as
+// Every button or row of the page that opens another surface opens it as a
+// modal over the page, as the reference app does (#4470, BotPageModal): a
+// row opens its sub-page (its title and one line of intro in the modal's
+// header, then the cards), a channel's Manage its settings, the Access
+// card's engine the Model sub-page and Add > Shared vault login its form,
+// Folder and memory's Memory row the Memory page stacked over that modal;
+// Connect apps and Analytics' All bots open their own windows over the page
+// (a window stays a window). Escape closes the top modal and the focus goes
+// back to its button. Each change applies in place, at once, as
 // on the Settings pages (#3397): no Cancel and no Save bar, no question on
 // leaving; Versions restores a change. Nothing of the editor is gone: each
 // sub-page shows the same section bodies (useBotSectionContent, and the
@@ -38,10 +43,11 @@
 //
 // Opened by the store action openPersonaEditor ("..." > Edit bot, a click on
 // the mascot, the bot panel's gear, a deep link to a section). A section asked
-// for opens its tab and sub-page and scrolls into view. A section this
+// for opens its tab and its sub-page's modal, scrolled into view. A section this
 // viewer may not change says why (botSectionLock); nothing is hidden for
 // lack of a permission.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Bell, Brain, ChevronRight, Repeat, Users } from "lucide-react";
 
 import { openNotificationTarget, openRoutineRun, useStore, type Bot, type BotSettingsSection } from "@/state/store";
@@ -91,13 +97,13 @@ import { AccountsCard, Block, CardRow, ChannelsCard, Note, ProfileCard, sectionL
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
 import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
-import { GROUP_LABEL, SUBPAGE_META, SubPage, SubPageRow, type ElsewhereSubPage } from "./BotProfilePage.tsx-parts/subpages";
+import { GROUP_LABEL, SUBPAGE_META, SubPageModal, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
+import { BotPageModal } from "./BotPageModal";
 import { useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
 import { SETTINGS_SWITCH_SEARCH_WORDS, personaSubPageForQuery, settingsSwitchForQuery, type BotProfileSettingsSwitch } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
 import { OutcomesCard, useOutcomes } from "./BotProfilePage.tsx-parts/Outcomes";
 import { MemoryManagerPanel, PluginsPanel } from "../lazy-screens";
-import { UsageSection } from "../lazy-settings-sections";
 import { PageHostProvider } from "../page-host";
 
 /** General's Settings card (its two switches lead it, #3398). */
@@ -168,46 +174,27 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // The Share popover of the top bar (Grok Bot): the one place the people
   // and groups the bot is shared with are managed.
   const [shareOpen, setShareOpen] = useState(false);
-  // #4420: the surfaces a page of this page opens that live elsewhere in the
-  // app, opened here as pages of this page with the way back: every bot's
-  // usage (Analytics > All bots), drawn in the column as a sub-page, and the
-  // Memory page (Knowledge > Folder and memory), drawn in the page's ground
-  // under its top bar. Moving to a tab, a row or a section leaves them.
-  const [elsewhere, setElsewhere] = useState<"usage" | "memory" | null>(null);
+  // The Memory page (Knowledge > Folder and memory > Memory): a modal
+  // stacked over Folder and memory's (#4470).
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
-  // A row opens its sub-page at the top; Back returns to the row.
+  // A row opens its sub-page's modal over the tab it belongs to; closing it
+  // returns to the row (the modal gives the focus back to its button).
   const openPage = (next: BotProfileSubPage) => {
-    setElsewhere(null);
+    setMemoryOpen(false);
     setTab(botProfileTabOfPage(next));
     setPage(next);
-    scrollTo.current = "[data-bot-profile-subpage]";
   };
-  const back = () => {
-    if (elsewhere) {
-      leaveElsewhere();
-      return;
-    }
+  const closePage = () => {
     const from = page;
+    setMemoryOpen(false);
     setPage(null);
     if (from) scrollTo.current = `[data-bot-profile-row="page-${from}"]`;
   };
   const openTab = (next: BotProfileTab) => {
-    setElsewhere(null);
+    setMemoryOpen(false);
     setTab(next);
     setPage(null);
-  };
-
-  // The way back from a page opened from elsewhere: to the tab or sub-page
-  // it was opened from, at its opener.
-  const leaveElsewhere = () => {
-    const from = elsewhere;
-    setElsewhere(null);
-    scrollTo.current = from === "usage" ? "[data-bot-analytics-all-bots]" : from === "memory" ? "[data-bot-profile-memory]" : null;
-  };
-  const openElsewhere = (next: "usage" | "memory") => {
-    setShareOpen(false);
-    setElsewhere(next);
-    if (next === "usage") scrollTo.current = "[data-bot-profile-subpage]";
   };
 
   // The card of the General tab that holds a section in place (the
@@ -227,9 +214,16 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     return { category: id, selector: cardSelector(id) ?? `[data-bot-profile-section="${id}"]` };
   };
 
-  // Opens a section where it lives: its tab and sub-page, scrolled into view.
-  const openCategory = (category: PersonaCategory, query?: string) => {
-    setElsewhere(null);
+  // A search's hit held on a sub-page while the person types: its row is
+  // marked on the tab; Enter opens it (#4470).
+  const [searchRow, setSearchRow] = useState<BotProfileSubPage | null>(null);
+
+  // Opens a section where it lives: its tab and sub-page, scrolled into
+  // view. A search shows the tab and marks the sub-page's row (`open`
+  // false) until Enter opens its modal (#4470).
+  const openCategory = (category: PersonaCategory, query?: string, open = true) => {
+    setMemoryOpen(false);
+    setSearchRow(null);
     // A search for one of the two switches in place (#3398) opens General
     // at the Settings card, where the switch is now.
     if (query && settingsSwitchSelector(query)) {
@@ -242,6 +236,12 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     const hit = query ? resolvePage(personaSubPageForQuery(resolve(category), query)) : null;
     const next = hit ?? pageOf(category);
     setTab(hit ? botProfileTabOfPage(hit) : tabOf(category));
+    if (next && !open) {
+      setPage(null);
+      setSearchRow(next);
+      scrollTo.current = `[data-bot-profile-row="page-${next}"]`;
+      return;
+    }
     setPage(next);
     // A section held by a card in place opens the General tab at its card.
     if (!next) scrollTo.current = cardSelector(resolve(category)) ?? scrollTo.current;
@@ -273,13 +273,12 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     const selector = scrollTo.current;
     if (!selector) return;
     scrollTo.current = null;
-    const node = rootRef.current?.querySelector<HTMLElement>(selector);
+    // a section on an open sub-page's modal (portalled to the body), else on the page
+    const modal = page ? document.querySelector<HTMLElement>(`[data-bot-page-modal="page-${page}"]`) : null;
+    const node = modal?.querySelector<HTMLElement>(selector) ?? rootRef.current?.querySelector<HTMLElement>(selector);
     node?.scrollIntoView?.({ block: "start", inline: "nearest" });
-    // a row, or the opener of a page opened from elsewhere, on the way back
-    if (node?.matches("[data-bot-profile-row], [data-bot-analytics-all-bots], [data-bot-profile-memory]")) node.focus({ preventScroll: true });
-    // A sub-page just opened: the focus goes to its link back (#3398), at
-    // the top left of the top bar (#4078, #4420).
-    if (node?.matches("[data-bot-profile-subpage]")) rootRef.current?.querySelector<HTMLElement>("[data-bot-profile-back]")?.focus({ preventScroll: true });
+    // a row, on the way back from its modal (the search's marked row leaves the field its focus)
+    if (node?.matches("[data-bot-profile-row]") && !(document.activeElement instanceof HTMLInputElement)) node.focus({ preventScroll: true });
   });
 
   const goTo = (id: BotSettingsSection) => {
@@ -328,8 +327,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     // #3398: both switches sit in place in General > Settings.
     notifyElsewhere: true,
     routinesSwitchElsewhere: true,
-    // #4420: Analytics' All bots is a page of this page
-    onAllBotsUsage: () => openElsewhere("usage"),
   });
 
   const lockOf = (id: BotSettingsSection): LocaleKey | null => botSectionLock(state.config, bot, id);
@@ -359,7 +356,17 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
               label={t("botProfile.sharing.people")}
               state={personaSharingSummary(bot)}
               action={
-                <button type="button" data-bot-profile-share-open="" onClick={() => setShareOpen(true)} className={cn(PILL, "shrink-0")}>
+                <button
+                  type="button"
+                  data-bot-profile-share-open=""
+                  onClick={() => {
+                    // the Share popover is the top bar's, under this modal:
+                    // the modal closes and the popover opens (#4470)
+                    if (page === "sharing") setPage(null);
+                    setShareOpen(true);
+                  }}
+                  className={cn(PILL, "shrink-0")}
+                >
                   {t("botProfile.manage")}
                 </button>
               }
@@ -451,13 +458,13 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         return (
           <>
             {block("files")}
-            {/* The Memory page (every bot's memory): a row that opens it as a page of this page. */}
+            {/* The Memory page (every bot's memory): a row that opens it as a modal over this one (#4470). */}
             <ProfileCard title={sectionLabel("memory")} groupId="botMemoryPage">
               <button
                 type="button"
                 data-bot-profile-memory=""
-                // #4420: a page of this page, under its top bar, with the way back
-                onClick={() => openElsewhere("memory")}
+                aria-haspopup="dialog"
+                onClick={() => setMemoryOpen(true)}
                 className="flex min-h-[44px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left transition-colors hover:bg-hover"
               >
                 <Brain strokeWidth={1.5} aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
@@ -522,7 +529,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     return (
       <ProfileCard key={group.id} title={t(GROUP_LABEL[group.id]!)} groupId={`bot-profile-group-${group.id}`}>
         {switches}
-        {rows.map((id) => <SubPageRow key={id} page={id} title={pageTitle(id)} value={id === "sharing" ? sharingValue : rowValue(id)} onOpen={() => openPage(id)} />)}
+        {rows.map((id) => <SubPageRow key={id} page={id} title={pageTitle(id)} value={id === "sharing" ? sharingValue : rowValue(id)} hit={search.q !== "" && id === searchRow} onOpen={() => openPage(id)} />)}
       </ProfileCard>
     );
   };
@@ -593,36 +600,14 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     />
   );
 
-  // #4420: Connect apps opened from this page (Add > Apps or MCP servers, a
-  // Connect of the Access card, Mac Messages) is a page of this page, under
-  // its top bar with the link back, never the centred window. It is open
-  // while the store says so: the profile and Connect apps both open means it
-  // was opened here (the reducer leaves the profile otherwise).
+  // Connect apps opened from this page (Add > Apps or MCP servers, a
+  // Connect of the Access card, Mac Messages) is its own window, the one the
+  // sidebar opens, over this page (#4470; a window stays a window). It is
+  // open while the store says so: the profile and Connect apps both open
+  // means it was opened here (the reducer leaves the profile otherwise).
   const connectAppsOpen = state.pluginsOpen;
   const connectAppsOpenRef = useRef(connectAppsOpen);
   connectAppsOpenRef.current = connectAppsOpen;
-  const closeConnectApps = () => dispatch({ type: "togglePlugins", open: false });
-  const memoryOpen = elsewhere === "memory" && !connectAppsOpen;
-  const memoryOpenRef = useRef(memoryOpen);
-  memoryOpenRef.current = memoryOpen;
-  // the page's own ground under a page drawn over it (#4420)
-  const covered = connectAppsOpen || memoryOpen;
-  const usageOpen = elsewhere === "usage";
-  const usagePage: ElsewhereSubPage = { id: "usage", title: "settings.section.usage", intro: "settings.intro.usage" };
-  // The top bar of a page drawn over this page's ground (Connect apps,
-  // Memory): its link back to the tab, Share and close, opaque.
-  const topBarOver = (onBack: () => void) => (
-    <BotProfileTopBar
-      bot={bot}
-      onClose={onClose}
-      back={{ tab, onBack }}
-      shareShown={shown("sharing")}
-      shareOpen={shareOpen}
-      onShareOpenChange={setShareOpen}
-      condensed
-      floating={false}
-    />
-  );
 
   // The page fills the main panel (#2136): focus moves in when it opens and
   // back to the opener when it closes; Escape closes it (empty search).
@@ -631,13 +616,17 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    const opener = document.activeElement instanceof HTMLElement && !root.contains(document.activeElement) ? document.activeElement : null;
-    if (!root.contains(document.activeElement)) root.focus({ preventScroll: true });
+    // A deep link opens the page with a modal (#4470): its effect ran first
+    // and holds the focus, and the opener is whatever it took it from.
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const inModal = Boolean(active?.closest("[data-bot-page-modal]"));
+    const opener = active && !inModal && !root.contains(active) ? active : null;
+    if (!root.contains(active) && !inModal) root.focus({ preventScroll: true });
     const onBodyKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
       if (event.target !== document.body) return;
-      // Connect apps' page takes its own Escape (a step back, then this page)
-      if (connectAppsOpenRef.current || memoryOpenRef.current) return;
+      // Connect apps' window takes its own Escape
+      if (connectAppsOpenRef.current) return;
       event.preventDefault();
       onCloseRef.current();
     };
@@ -690,40 +679,33 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       data-bot-profile-placement="main"
       data-persona-modal=""
       data-bot-profile-tab-current={tab}
-      data-bot-profile-subpage-current={usageOpen ? "usage" : page ?? undefined}
-      data-bot-profile-elsewhere={elsewhere ?? undefined}
+      data-bot-profile-subpage-current={page ?? undefined}
+      data-bot-profile-modal-open={page || memoryOpen || channel ? "" : undefined}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
-        // Connect apps' page takes its own Escape (#4420): a step back
-        // inside it, then back to this page.
+        // Connect apps' window takes its own Escape.
         if (connectAppsOpen) return;
-        // The Memory page keeps its own Escape (a note, a preview), as on
-        // its own; its link back and close are the ways out.
-        if (elsewhere === "memory") return;
+        // A modal of the page is open: its own Escape closes it (BotPageModal).
+        if (page || memoryOpen || channel) return;
         // A popover of the page is open (Share, Add, a pill list): this
         // Escape is its own, so it closes that popover only (its dismiss
         // hook on the window) and the page stays (#3398).
         if (pagePopoverOpen(rootRef.current)) return;
         event.preventDefault();
         event.stopPropagation();
-        if (page || elsewhere) back();
-        else onCloseRef.current();
+        onCloseRef.current();
       }}
       className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
     >
       <BotProfileInsetStrip />
-      {/* The page's own ground, under the inset strip: its scroll, and over
-          it the pages it opens that are not its own sub-pages (#4420). */}
-      <div data-bot-profile-body="" className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} onScroll={onScroll} data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden" inert={covered}>
+      <div ref={scrollRef} onScroll={onScroll} data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {/* The bar floats over the banner (sticky, no height of its own in
             the flow) and the banner scrolls away under it with the page. */}
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
-          back={page || usageOpen ? { tab, onBack: back } : null}
           shareShown={shown("sharing")}
-          shareOpen={shareOpen && !covered}
+          shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}
           condensed={condensed}
         />
@@ -740,55 +722,48 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[920px] flex-col px-4 pb-12 sm:px-8">
           <BotProfileHeader bot={bot} derived={derived} hero={hero} />
 
-          {((!page && !usageOpen) || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} attention={tabAttention} />}
+          <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} attention={tabAttention} />
 
-          {usageOpen ? (
-            <SubPage key="usage" page={usagePage}>
-              <UsageSection />
-            </SubPage>
-          ) : page ? (
-            <SubPage key={page} page={page} title={pageTitle(page)}>
-              {subPageBody(page)}
-            </SubPage>
-          ) : (
-            <div
-              key={tab}
-              id={`bot-profile-panel-${tab}`}
-              role="tabpanel"
-              aria-labelledby={`bot-profile-tab-${tab}`}
-              data-bot-profile-panel={tab}
-              className="mt-[26px] flex min-w-0 flex-col gap-6"
-            >
-              {tab === "outcomes"
-                ? outcomesBody
-                : tab === "stats"
-                ? (
-                    <>
-                      {/* #3401: the reference block first, our cost breakdown after it */}
-                      {block("usage")}
-                      <BotUsageBreakdownSection bot={bot} />
-                    </>
-                  )
-                : tab === "appearance"
-                  ? block("appearance")
-                  : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
-            </div>
-          )}
+          <div
+            key={tab}
+            id={`bot-profile-panel-${tab}`}
+            role="tabpanel"
+            aria-labelledby={`bot-profile-tab-${tab}`}
+            data-bot-profile-panel={tab}
+            className="mt-[26px] flex min-w-0 flex-col gap-6"
+          >
+            {tab === "outcomes"
+              ? outcomesBody
+              : tab === "stats"
+              ? (
+                  <>
+                    {/* #3401: the reference block first, our cost breakdown after it */}
+                    {block("usage")}
+                    <BotUsageBreakdownSection bot={bot} />
+                  </>
+                )
+              : tab === "appearance"
+                ? block("appearance")
+                : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
+          </div>
         </div>
       </div>
-      {connectAppsOpen && (
-        <PageHostProvider value={{ header: topBarOver(closeConnectApps) }}>
-          <PluginsPanel />
-        </PageHostProvider>
+      {/* The modals over the page (#4470): a sub-page, and Memory stacked over Folder and memory's. */}
+      {page && (
+        <SubPageModal key={page} page={page} title={pageTitle(page)} onClose={closePage}>
+          {subPageBody(page)}
+        </SubPageModal>
       )}
-      {memoryOpen && (
-        <PageHostProvider value={{ header: topBarOver(leaveElsewhere) }}>
-          <div data-bot-profile-hosted="memory" className="absolute inset-0 z-30 flex min-h-0 flex-col bg-app">
+      {page === "folder" && memoryOpen && (
+        <BotPageModal id="memory" title={t("memoryManager.title")} size="page" bare onClose={() => setMemoryOpen(false)}>
+          {/* drawn as a page of this modal: no window strip; its own close closes the modal */}
+          <PageHostProvider value={{ onClose: () => setMemoryOpen(false) }}>
             <MemoryManagerPanel />
-          </div>
-        </PageHostProvider>
+          </PageHostProvider>
+        </BotPageModal>
       )}
-      </div>
+      {/* Connect apps' own window, over the page (portalled after every header for Electron's drag regions) */}
+      {connectAppsOpen && (typeof document === "undefined" ? <PluginsPanel /> : createPortal(<PluginsPanel />, document.body))}
       {dialogs}
     </main>
     </SettingsSurfaceProvider>

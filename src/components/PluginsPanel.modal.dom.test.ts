@@ -113,7 +113,6 @@ vi.mock("@/state/store", async () => {
 });
 
 import { PluginsPanel } from "./PluginsPanel";
-import { PageHostProvider } from "./page-host";
 import { api } from "@/state/store";
 
 describe("PluginsPanel modal", () => {
@@ -158,29 +157,6 @@ describe("PluginsPanel modal", () => {
     expect(host.querySelector("[data-tour=\"apps-close\"]")).not.toBeNull();
     expect(host.querySelector("[data-apps-back]")).toBeNull();
     // the window's name since #4169 (owner request #4153)
-    expect(host.textContent).toMatch(/Connect Apps/);
-  });
-
-  // #4420: opened from the bot's profile page, Connect apps is a page of
-  // that page under its top bar (the link back, Share, close), never the
-  // centred window over a backdrop.
-  it("regression #4420: under a host page it is a page with the host's top bar, no window nor backdrop", async () => {
-    const header = createElement("div", { "data-host-bar": "" }, "Back");
-    await act(async () => {
-      root.render(createElement(PageHostProvider, { value: { header } }, createElement(PluginsPanel)));
-    });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    const page = host.querySelector<HTMLElement>('[data-tour="apps-panel"]')!;
-    expect(page.getAttribute("data-plugins-presentation")).toBe("page");
-    expect(page.getAttribute("role")).toBe("region");
-    expect(page.hasAttribute("aria-modal")).toBe(false);
-    // neither the window's frame (its size, ring and corners) nor its backdrop
-    expect(page.className).not.toContain("rounded-[14px] border border-border");
-    expect(page.className).not.toContain("h-[min(700px");
-    expect(host.querySelector(".fixed.inset-0")).toBeNull();
-    // the host's bar heads it; its own X is gone (the bar has the way back)
-    expect(page.firstElementChild?.hasAttribute("data-host-bar")).toBe(true);
-    expect(host.querySelector('[data-tour="apps-close"]')).toBeNull();
     expect(host.textContent).toMatch(/Connect Apps/);
   });
 

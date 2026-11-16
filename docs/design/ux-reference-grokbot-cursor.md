@@ -367,23 +367,48 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   texte des onglets et les étiquettes grises des cartes partagent un même bord gauche,
   12 px dans la colonne. Partager (le mot seul) puis le bouton rond Fermer ensemble en
   haut à droite (Partager reste la seule porte du partage des personnes et des
-  groupes) ; le lien de retour d'une sous-page en haut à gauche ; la barre devient floue
-  avec la petite mascotte et le nom quand le nom passe dessous.
+  groupes) ; la barre devient floue avec la petite mascotte et le nom quand le nom
+  passe dessous.
 - Onglets en pilules : Général, Objectifs, Apparence, Connaissances, Analytique (Simple
   masque Analytique). Apparence est un onglet (#4420), plus une rangée de Général. La
   loupe à droite cherche dans tous les réglages.
-- Une option de la page qui ouvre une autre surface l'ouvre comme une page de la page,
-  avec son retour, jamais comme une fenêtre (#4420) : Connecter des apps (Ajouter >
-  Applications ou Serveurs MCP, Connecter d'une rangée d'Accès, Messages sur ce Mac)
-  s'ouvre sous la barre de la page (retour, Partager, Fermer) ; Échap recule d'un pas,
-  puis revient à la page. La barre latérale ouvre toujours la fenêtre. « Tous les bots »
-  d'Analytique ouvre l'utilisation de tous les bots comme une sous-page (retour vers
-  Analytique), plus la fenêtre des Réglages. La rangée Mémoire de Dossier et mémoire
-  ouvre la page Mémoire sous la barre de la page (retour vers Connaissances, Partager,
-  Fermer), plus en quittant la page. La référence n'a ni l'un ni l'autre : sa mémoire
-  partagée est une section de son onglet Connaissances, son Analytique n'a pas de lien
-  vers tous les bots. Les routines (Connaissances > Routines, Objectifs) étaient déjà
-  une sous-page ; Répondre, Demander et Ouvrir l'exécution mènent au chat du bot.
+- Chaque bouton ou rangée de la page qui ouvre une autre surface l'ouvre dans une
+  fenêtre modale par-dessus la page, comme la référence, jamais comme une page à sa
+  place (#4470, qui corrige #4420). Une seule coquille, `BotPageModal`
+  (`src/components/bot-profile/BotPageModal.tsx`), mesurée sur la coquille des
+  dialogues de la page du bot de la référence : 560 px de large (la largeur moins
+  16 px de chaque côté sur un téléphone), 700 px de haut (moins 48 px en haut et en
+  bas dans une fenêtre basse), coins de 20 px, un filet d'un demi-pixel, le voile à
+  50 % de noir ; le titre centré à 22 px (interligne 28, medium, -0,012 em), à 40 px
+  du haut et des côtés, sa ligne grise dessous à 14 px ; le bouton rond Fermer à 10 px
+  du coin haut droit ; un corps à 24 px des côtés qui défile ; les pilules en bas à
+  droite. La couche, le bouton Fermer et le clavier sont ceux de l'app (`DialogLayer`,
+  `DialogCloseButton`, `useModalDialog`). Une fenêtre ouverte depuis une fenêtre
+  s'empile par-dessus avec son propre voile ; Échap ferme celle du dessus et le focus
+  revient au bouton qui l'a ouverte ; une liste ouverte dedans garde son Échap.
+  - Dans les modales : chaque rangée (Personnalité, Modèle, Avant d'agir, Partagé
+    avec, Règles, Quand il agit seul, Voix, Réglages avancés, Versions, Routines,
+    Dossier et mémoire), le Gérer ou Connecter de chaque canal, le Gérer du moteur
+    d'Accès (la modale Modèle), Ajouter > Connexion du coffre (son formulaire), et la
+    rangée Mémoire de Dossier et mémoire (la page Mémoire, à la taille de la fenêtre
+    des Réglages, empilée sur la modale de Dossier et mémoire ; son propre X la
+    ferme).
+  - Ce qui était une fenêtre reste une fenêtre, ouverte par-dessus la page qui reste
+    là : Connecter des apps (Ajouter > Applications ou Serveurs MCP, Connecter d'une
+    rangée d'Accès, Messages sur ce Mac) ouvre la fenêtre que la barre latérale
+    ouvre ; « Tous les bots » d'Analytique ouvre la fenêtre des Réglages à
+    Utilisation. Gérer de Partagé avec ferme sa modale et ouvre la bulle Partager de
+    la barre.
+  - Restent sur place : l'Apparence (un onglet), les interrupteurs de Réglages, les
+    objectifs (une rangée s'ouvre sur place, #4098) et Afficher N de plus.
+  - Un lien vers une section d'une sous-page ouvre la page avec la modale de cette
+    sous-page. La recherche montre l'onglet et marque la rangée de la sous-page qui
+    tient le résultat pendant qu'on tape ; Entrée ouvre sa modale, ses rangées
+    marquées.
+  - Téléphone : l'app iOS pousse aujourd'hui la plupart des rangées comme des pages de
+    sa pile de navigation (`ios/App/Profile/BotPanelPhone.swift`), et ouvre Me joindre
+    et l'Accès en feuilles (`BotProfilePage.swift`) ; passer ses rangées en feuilles
+    suit dans son propre lot.
 - Général est fait de cartes de section avec leurs contrôles sur place, comme la
   référence : une étiquette grise de 13 px au-dessus d'une carte pleine sans bordure,
   24 px entre les groupes.
@@ -391,7 +416,7 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     des routines », « M'avertir quand ce bot termine ou a besoin de moi ») ; puis les
     rangées Personnalité, Modèle, Avant d'agir.
   - Canaux : une rangée par canal (logo ou icône, nom, une ligne grise d'état, Connecter
-    ou Gérer à droite) ; un canal déplie ses réglages sous sa rangée. Un canal que le
+    ou Gérer à droite) ; Gérer ouvre les réglages du canal dans une modale (#4470). Un canal que le
     serveur n'offre pas n'est pas dessiné, et une carte sans canal n'est pas dessinée.
     Slack et Microsoft Teams comme canal entre une équipe et le bot sont retirés pour
     le moment (décision de JC du 2026-11-10, `shared/team-chat-channels.ts`) ;
@@ -407,8 +432,8 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     Chaque app, serveur ou connexion du coffre une seule fois, son contrôle dans sa
     rangée ; une personne que le serveur refuserait voit l'état sans interrupteur.
     Sans compte, une rangée vide porte Ajouter. Le menu Ajouter : Applications,
-    Serveurs MCP et « Connexion du coffre » (formulaire dans la carte, rangée avec
-    Retirer ; plus dans Partagé avec, décision de JC du 2026-11-10, #3399).
+    Serveurs MCP et « Connexion du coffre » (formulaire dans une modale, #4470 ; rangée
+    avec Retirer ; plus dans Partagé avec, décision de JC du 2026-11-10, #3399).
   - Plus : Partagé avec, Règles, Quand il agit seul, Voix, Réglages avancés, Versions.
 - Connaissances (#3400) : deux cartes sur place, puis Son travail.
   - À réviser : une rangée par apprentissage qui attend (son nom, une ligne grise de ce

@@ -24,7 +24,6 @@ import { ConnectedMark, PluginIcon, PluginStatusLabel } from "./PluginParts";
 
 export { ConnectedMark };
 import { PLUGINS } from "./plugins-style";
-import { usePageHost } from "../page-host";
 
 /** The pills: All, then each category in the section order (only those with
  * a row, and the chosen one). Kinds and sources are not pills. */
@@ -200,9 +199,6 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, connected, scope, scopeNote, homeNote, manageActions, search, results, page, notices, refreshing, onRefresh } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("discover") ? "discover" : tabs[0] ?? "discover";
   const [stuck, setStuck] = useState(false);
-  // #4420: as a page of a host page (the bot's profile), the sticky row and
-  // the icons' cut-out take that page's ground, not the window's tint.
-  const hosted = usePageHost() !== null;
   // each view opens at its top: the hairline of a scrolled list goes with it
   useEffect(() => setStuck(false), [shown]);
 
@@ -241,7 +237,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               >
                 <span className="flex -space-x-1.5" aria-hidden="true">
                   {connected.icons.slice(0, 4).map((item) => (
-                    <PluginIcon key={item.key} item={item} className={cn("size-[22px] rounded-[7px] ring-2", hosted ? "ring-(--color-app)" : "ring-(--color-inset)")} />
+                    <PluginIcon key={item.key} item={item} className="size-[22px] rounded-[7px] ring-2 ring-(--color-inset)" />
                   ))}
                 </span>
                 <span>{connected.count > 0 ? t("connectApps.connectedCount", { count: connected.count }) : t("connectApps.manageLink")}</span>
@@ -252,8 +248,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           <div
             className={cn(
               PLUGINS.gutter,
-              "sticky top-0 z-10 flex items-center gap-3 py-2 transition-[padding] motion-reduce:transition-none",
-              hosted ? "bg-app" : "bg-inset",
+              "sticky top-0 z-10 flex items-center gap-3 bg-inset py-2 transition-[padding] motion-reduce:transition-none",
               stuck && "border-b border-hairline-weak sm:pr-14",
             )}
             data-plugins-search-row

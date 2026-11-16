@@ -1,12 +1,11 @@
 // The V6 bot page's rows and sub-pages (#2612, the "Épuré Grok Bot"
 // canvas): a row under a grey label opens its own sub-page (a title, one line
 // of intro, then the section bodies), for a setting too long for a card
-// (#3398: the channels and the accounts are cards in place). The link back
-// to the tab sits at the top left of the page's top bar (#4078, #4420).
+// (#3398: the channels and the accounts are cards in place). A sub-page is a
+// modal over the bot page, as the reference app's (#4470).
 import type { ReactNode } from "react";
 import {
   AudioLines,
-  ChevronLeft,
   ChevronRight,
   Cpu,
   FolderOpen,
@@ -20,11 +19,10 @@ import {
   Zap,
 } from "lucide-react";
 
-import { CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import type { BotProfileSubPage, BotProfileTab } from "@/lib/persona-sections";
-import { TAB_LABEL } from "./cards";
+import type { BotProfileSubPage } from "@/lib/persona-sections";
+import { BotPageModal } from "../BotPageModal";
 
 type Meta = { icon: ReactNode; title: LocaleKey; desc: LocaleKey; intro: LocaleKey };
 
@@ -55,14 +53,23 @@ export const GROUP_LABEL: Record<string, LocaleKey> = {
 };
 
 /** One row of a tab: icon, name, description under it, a value and a
- * chevron on the right. The whole row opens its sub-page. */
-export function SubPageRow({ page, value, onOpen, title }: { page: BotProfileSubPage; value?: string | null; onOpen: () => void; title?: LocaleKey }) {
+ * chevron on the right. The whole row opens its sub-page's modal. */
+export function SubPageRow({ page, value, onOpen, title, hit = false }: {
+  page: BotProfileSubPage;
+  value?: string | null;
+  onOpen: () => void;
+  title?: LocaleKey;
+  /** the search's hit is on this sub-page: marked as Settings marks a hit; Enter opens it (#4470) */
+  hit?: boolean;
+}) {
   const entry = { ...SUBPAGE_META[page], ...(title ? { title } : {}) };
   return (
     <button
       type="button"
       data-bot-profile-row={`page-${page}`}
       data-bot-profile-subpage-open={page}
+      aria-haspopup="dialog"
+      data-settings-search-hit={hit ? "" : undefined}
       onClick={onOpen}
       className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition-colors hover:bg-hover"
     >
@@ -77,42 +84,14 @@ export function SubPageRow({ page, value, onOpen, title }: { page: BotProfileSub
   );
 }
 
-/** The link back of every sub-page, named after the tab it returns to: one
- * control, drawn at the top left of the page's top bar (#4078, #4420) as
- * the bar's labelled pill (Share's look). It takes the focus when a
- * sub-page opens (#3398). */
-export function SubPageBack({ tab, onBack }: { tab: BotProfileTab; onBack: () => void }) {
-  const tabName = t(TAB_LABEL[tab]);
+/** A sub-page, opened as a modal over the bot page (#4470, as the
+ * reference): its title and one line of intro in the modal's header, then
+ * its cards. Escape or the close button returns to the row that opened it. */
+export function SubPageModal({ page, children, title, onClose }: { page: BotProfileSubPage; children: ReactNode; title?: LocaleKey; onClose: () => void }) {
+  const entry = { ...SUBPAGE_META[page], ...(title ? { title } : {}) };
   return (
-    <button
-      type="button"
-      data-bot-profile-back=""
-      aria-label={t("botProfile.v6.backTo", { tab: tabName })}
-      onClick={onBack}
-      className={CIRCLE_LABEL_BUTTON}
-    >
-      <ChevronLeft size={14} aria-hidden="true" />
-      {tabName}
-    </button>
-  );
-}
-
-/** A page the bot page opens that is not one of its rows (#4420: every
- * bot's usage from Analytics) names its own title and intro. */
-export type ElsewhereSubPage = { id: string; title: LocaleKey; intro: LocaleKey };
-
-/** A sub-page: its title in the Settings page title style where the tab
- * row was, one line of intro, then its cards. Its link back is in the top
- * bar (SubPageBack). The scroll margin keeps the title clear of the sticky
- * bar when the page opens scrolled to it. */
-export function SubPage({ page, children, title }: { page: BotProfileSubPage | ElsewhereSubPage; children: ReactNode; title?: LocaleKey }) {
-  const entry = typeof page === "string" ? { id: page, ...SUBPAGE_META[page], ...(title ? { title } : {}) } : page;
-  return (
-    <div data-bot-profile-subpage={entry.id} className="mt-4 flex min-w-0 scroll-mt-16 flex-col">
-      {/* on the page's left edge, 12px in, with the name and the labels (#4420) */}
-      <h2 data-bot-profile-subpage-title="" className="px-3 text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink">{t(entry.title)}</h2>
-      <p className="mt-1 px-3 text-[13px] leading-5 text-ink-secondary">{t(entry.intro)}</p>
-      <div className="mt-5 flex min-w-0 flex-col gap-6">{children}</div>
-    </div>
+    <BotPageModal id={`page-${page}`} title={t(entry.title)} description={t(entry.intro)} onClose={onClose}>
+      <div data-bot-profile-subpage={page} className="flex min-w-0 flex-col gap-6">{children}</div>
+    </BotPageModal>
   );
 }

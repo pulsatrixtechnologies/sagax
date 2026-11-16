@@ -1830,8 +1830,8 @@ export type Action =
    * notification of a routine run refused in another person's thread. */
   | { type: "openBotActivity"; botId: string; itemId: string }
   | { type: "botActivityOpened" }
-  /** `inProfile`: opened from the bot's profile page, it opens as a page
-   * inside that page, which stays open behind it (#4420); ignored when no
+  /** `inProfile`: opened from the bot's profile page, its window opens over
+   * that page, which stays open behind it (#4420, #4470); ignored when no
    * profile page is open. */
   | { type: "togglePlugins"; open?: boolean; surface?: "apps" | "mcp"; botId?: string | null; page?: "pages" | "providers" | "accounts" | "sources" | "bots" | null; focusApps?: string[]; inProfile?: boolean }
   | { type: "toggleTriggers"; open?: boolean }
@@ -1859,7 +1859,9 @@ export type Action =
   | { type: "createFreshTopic"; botId: string }
   | { type: "focusMessageConsumed"; nonce: number }
   | { type: "unreadDividerDone"; threadId: string }
-  | { type: "toggleAppSettings"; open?: boolean; section?: AppSettingsSection; subPage?: string; phonePairing?: boolean }
+  /** `inProfile`: opened from the bot's profile page, the window opens over
+   * that page, which stays open behind it (#4470). */
+  | { type: "toggleAppSettings"; open?: boolean; section?: AppSettingsSection; subPage?: string; phonePairing?: boolean; inProfile?: boolean }
   | { type: "openBotCatalog"; section?: "templates"; installUrl?: string }
   | { type: "closeBotCatalog" }
   | { type: "openPersonaEditor"; botId: string; section?: BotSettingsSection }

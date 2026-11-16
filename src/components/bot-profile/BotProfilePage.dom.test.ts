@@ -88,6 +88,11 @@ function Shell() {
 
 let host: HTMLDivElement;
 let root: Root;
+/** Waits for a lazy screen's chunk (seconds, not rounds: a cold import is slow alone). */
+const until = async (found: () => unknown, ms = 15_000) => {
+  const end = Date.now() + ms;
+  while (!found() && Date.now() < end) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+};
 const settle = async () => { for (let i = 0; i < 12; i += 1) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
 
 beforeAll(async () => {
@@ -155,23 +160,25 @@ const click = async (node: HTMLElement | null, what: string) => {
   await settle();
 };
 
-/** The page's column on a tab's home (V6, #2612): Back out of any sub-page,
- * then the tab. */
+/** The modals open over the page (#4470), the top one last. */
+const openModals = () => Array.from(document.querySelectorAll<HTMLElement>("[data-bot-page-modal]"));
+
+/** The page's column on a tab's home (V6, #2612): close any modal of the
+ * page (#4470), then the tab. */
 async function home(tab: BotProfileTab): Promise<HTMLElement> {
   if (!host.querySelector("[data-persona-modal]")) {
     await act(async () => { dispatch({ type: "openPersonaEditor", botId: fixture.bot.id, section: "overview" } as never); });
     await settle();
   }
-  const back = host.querySelector<HTMLElement>("[data-bot-profile-back]");
-  if (back) await click(back, "Back");
+  for (const modal of openModals().reverse()) await click(modal.querySelector<HTMLElement>(":scope > [data-dialog-close]"), "close the modal");
   await click(host.querySelector<HTMLElement>(`[data-bot-profile-tab="${tab}"]`), `tab ${tab}`);
   const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
   expect(page.getAttribute("data-bot-profile-tab-current")).toBe(tab);
   return page.querySelector<HTMLElement>("[data-bot-profile-column]")!;
 }
 
-/** The page's column once a view is open (a tab's home, or a sub-page opened
- * from its row) and every fold is unfolded. */
+/** The page's column once a tab's home is open, or the modal of a sub-page
+ * opened from its row (#4470), every fold unfolded. */
 async function column(view: View): Promise<HTMLElement> {
   if ("tab" in view) {
     const node = await home(view.tab);
@@ -181,8 +188,10 @@ async function column(view: View): Promise<HTMLElement> {
   const node = await home(botProfileTabOfPage(view.page));
   await click(node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${view.page}"]`), `row ${view.page}`);
   expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe(view.page);
-  await unfold(node);
-  return node;
+  const modal = document.querySelector<HTMLElement>(`[data-bot-page-modal="page-${view.page}"]`)!;
+  expect(modal, `the modal of ${view.page}`).not.toBeNull();
+  await unfold(modal);
+  return modal;
 }
 
 /** What a view shows under the header: the tab's rows or the sub-page. */
@@ -195,7 +204,7 @@ const scope = (node: HTMLElement, view: View) =>
  * surfaces, not cards of the column. Before/after captures of the
  * profile (tabs, bare mascot, condensed bar):
  * docs/screenshots/bot-profile-tabs (#2969). */
-const OUT_OF_SCOPE = "[data-mascot-hero], [data-bot-profile-section='appearance'], [aria-label][data-bot-profile-appearance], [data-bot-profile-appearance-toggle], [data-mascot-play], [data-mascot-move-list], .popover-surface, [role='dialog'], [role='menu'], [role='listbox']";
+const OUT_OF_SCOPE = "[data-mascot-hero], [data-bot-profile-section='appearance'], [aria-label][data-bot-profile-appearance], [data-bot-profile-appearance-toggle], [data-mascot-play], [data-mascot-move-list], .popover-surface, [role='dialog']:not([data-bot-page-modal]), [role='menu'], [role='listbox']";
 const inScope = (node: Element) => !node.closest(OUT_OF_SCOPE) && !node.matches(OUT_OF_SCOPE);
 
 const describeNode = (node: Element) => {
@@ -209,35 +218,47 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     await mount("en");
     for (const view of VIEWS) {
       const node = await column(view);
-      // #4420: the reference's reading width
-      expect(node.className, viewName(view)).toMatch(/max-w-\[920px\]/);
+      // #4420: the reference's reading width; #4470: a sub-page is the reference's 560px modal
+      expect(node.className, viewName(view)).toMatch("tab" in view ? /max-w-\[920px\]/ : /w-\[min\(560px,calc\(100vw-32px\)\)\]/);
       expect(node.querySelector("[data-bot-profile-column-side]")).toBeNull();
       expect(scope(node, view), viewName(view)).not.toBeNull();
       for (const panel of Array.from(node.querySelectorAll("[role='tabpanel']"))) expect(panel.className).not.toMatch(/grid-cols-2/);
     }
   });
 
-  it("each row opens its sub-page (Back, title, intro) and Back returns to the row", async () => {
+  it("regression #4470: each row opens its sub-page as a modal over the page (title, intro), Escape closes it and the focus returns to the row", async () => {
     await mount("en");
     for (const tab of BOT_PROFILE_TABS) {
       const rows = Array.from((await home(tab)).querySelectorAll<HTMLElement>("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open") as BotProfileSubPage);
       for (const id of rows) {
         const node = await home(tab);
-        await click(node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${id}"]`), `row ${id}`);
-        const sub = node.querySelector<HTMLElement>(`[data-bot-profile-subpage="${id}"]`);
-        expect(sub, `sub-page ${id}`).not.toBeNull();
-        expect(sub!.querySelector("[data-bot-profile-subpage-title]")?.textContent).toBe(t(`botProfile.v6.page.${id}.title` as never));
-        expect(node.querySelector("[role='tablist']"), `no tabs on ${id}`).toBeNull();
-        // #3398: the link back names the tab it returns to, and has the focus;
-        // #4078: it is in the top bar beside the close button, not in the column
-        expect(sub!.querySelector("[data-bot-profile-back]"), `no back in the column of ${id}`).toBeNull();
-        const back = host.querySelector<HTMLElement>("[data-bot-profile-topbar] [data-bot-profile-back]")!;
-        expect(back, `back in the top bar of ${id}`).not.toBeNull();
-        expect(back.textContent, `back on ${id}`).toBe(t(`botProfile.tab.${tab}` as never));
-        expect(document.activeElement, `focus on Back of ${id}`).toBe(back);
-        await click(back, "Back");
-        expect(host.querySelector("[data-bot-profile-back]"), `no back on the tab after ${id}`).toBeNull();
-        expect(node.querySelector(`[data-bot-profile-subpage]`)).toBeNull();
+        const row = node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${id}"]`)!;
+        expect(row.getAttribute("aria-haspopup"), `row ${id} says it opens a dialog`).toBe("dialog");
+        row.focus();
+        await click(row, `row ${id}`);
+        // a modal over the page, never a page in its place: the tabs and the row stay under it
+        const modal = document.querySelector<HTMLElement>(`[data-bot-page-modal="page-${id}"]`);
+        expect(modal, `the modal of ${id}`).not.toBeNull();
+        expect(modal!.getAttribute("role")).toBe("dialog");
+        expect(modal!.getAttribute("aria-modal")).toBe("true");
+        expect(host.contains(modal), `${id} is portalled over the page`).toBe(false);
+        expect(node.querySelector("[role='tablist']"), `the tabs stay under ${id}`).not.toBeNull();
+        expect(node.querySelector(`[data-bot-profile-subpage-open="${id}"]`), `the row stays under ${id}`).toBe(row);
+        expect(node.querySelector("[data-bot-profile-subpage]"), `nothing of ${id} in the column`).toBeNull();
+        expect(host.querySelector("[data-bot-profile-back]"), `no link back for ${id}`).toBeNull();
+        // the reference's header: the title then its intro, and the close
+        const title = modal!.querySelector<HTMLElement>("[data-bot-page-modal-header] h2")!;
+        expect(title.textContent).toBe(t(`botProfile.v6.page.${id}.title` as never));
+        expect(modal!.getAttribute("aria-labelledby")).toBe(title.id);
+        expect(modal!.querySelector("[data-bot-page-modal-header] p")?.textContent).toBe(t(`botProfile.v6.page.${id}.intro` as never));
+        expect(modal!.querySelector("[data-dialog-close]"), `close of ${id}`).not.toBeNull();
+        expect(modal!.querySelector(`[data-bot-profile-subpage="${id}"]`), `the cards of ${id}`).not.toBeNull();
+        expect(modal!.contains(document.activeElement), `the focus is in ${id}`).toBe(true);
+        // Escape closes the modal only: the page stays, the focus returns to the row
+        await act(async () => { modal!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+        await settle();
+        expect(document.querySelector("[data-bot-page-modal]"), `${id} closed`).toBeNull();
+        expect(host.querySelector("[data-persona-modal]"), `the page stays after ${id}`).not.toBeNull();
         expect(document.activeElement?.getAttribute("data-bot-profile-subpage-open"), `focus back on row ${id}`).toBe(id);
       }
     }
@@ -363,10 +384,20 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(accounts!.querySelector("[data-bot-profile-add]"), "the Add button").not.toBeNull();
     expect(accounts!.querySelector('[data-bot-profile-row="engine"] [data-bot-profile-action="engine"]'), "the engine row and its Manage").not.toBeNull();
     expect(panel.textContent).not.toContain("What it can use");
-    // a channel unfolds its settings under its row, in place
-    await click(channels!.querySelector<HTMLElement>('[data-bot-profile-action="reachMe"]'), "Reach me");
+    // #4470: a channel's Manage opens its settings in a modal over the page
+    const reachButton = channels!.querySelector<HTMLElement>('[data-bot-profile-action="reachMe"]')!;
+    reachButton.focus();
+    await click(reachButton, "Reach me");
     expect(host.querySelector("[data-bot-profile-subpage]")).toBeNull();
-    expect(panel.querySelector('[data-bot-profile-row="reachMe"] [data-bot-reach-me]'), "Reach me unfolds under its row").not.toBeNull();
+    expect(panel.querySelector("[data-bot-reach-me]"), "nothing unfolds in place").toBeNull();
+    const reachModal = document.querySelector<HTMLElement>('[data-bot-page-modal="channel-reachMe"]');
+    expect(reachModal, "Reach me's modal").not.toBeNull();
+    expect(reachModal!.querySelector("h2")?.textContent).toBe(t("botPanel.reachMe.label"));
+    expect(reachModal!.querySelector("[data-bot-reach-me]"), "Reach me's settings in the modal").not.toBeNull();
+    await act(async () => { reachModal!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await settle();
+    expect(document.querySelector("[data-bot-page-modal]")).toBeNull();
+    expect(document.activeElement).toBe(reachButton);
     // the two switches lead the Settings card
     const settings = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
     const switches = Array.from(settings.querySelectorAll("[role='switch']")).map((node) => node.getAttribute("aria-label"));
@@ -478,7 +509,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
     }
   });
 
-  it("a search for routines opens Knowledge > Routines, and a short or generic query does not jump to General", async () => {
+  it("a search for routines shows Knowledge with its Routines row marked, Enter opens it, and a short or generic query does not jump to General", async () => {
     await mount("en");
     const search = async (value: string) => {
       if (!host.querySelector("[data-persona-search]")) await click(host.querySelector<HTMLElement>("[data-bot-profile-search-toggle]"), "search");
@@ -494,10 +525,18 @@ describe("bot profile page: General cards in place (#3398)", () => {
     await home("general");
     const page = await search("routines");
     expect(page.getAttribute("data-bot-profile-tab-current")).toBe("knowledge");
+    // #4470: typing marks the row and keeps the field; Enter opens the modal
+    expect(page.getAttribute("data-bot-profile-subpage-current")).toBeNull();
+    expect(page.querySelector('[data-bot-profile-subpage-open="routines"]')!.hasAttribute("data-settings-search-hit")).toBe(true);
+    expect(document.activeElement).toBe(host.querySelector("[data-persona-search]"));
+    await act(async () => { host.querySelector("[data-persona-search]")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
+    await settle();
     expect(page.getAttribute("data-bot-profile-subpage-current")).toBe("routines");
+    expect(document.querySelector('[data-bot-page-modal="page-routines"]')).not.toBeNull();
     for (const query of ["a", "m", "r", "me", "ion", "rate", "create", "créer"]) {
       await home("knowledge");
-      const settings = (await search(query)).querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"] [data-settings-search-hit]');
+      // a sub-page's row may be marked (#4470); the two switches may not
+      const settings = (await search(query)).querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"] [data-settings-search-hit]:not([data-bot-profile-subpage-open])');
       expect(settings, `${query}: no switch of General is marked`).toBeNull();
     }
     for (const query of ["create", "créer"]) {
@@ -614,12 +653,36 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     expect(card.querySelector("[data-bot-profile-vault-remove]"), "Remove in its row").not.toBeNull();
     await click(card.querySelector<HTMLElement>("[data-bot-profile-add]"), "Add");
     await click(document.querySelector<HTMLElement>('[data-bot-profile-add-item="vault"]'), "Vault login");
-    const form = card.querySelector<HTMLElement>('[data-bot-profile-row="vault-new"] [data-team-vault-form]');
-    expect(form, "the login form opens in the card").not.toBeNull();
-    expect(card.textContent).toContain(t("botPanel.teamVault.help", { bot: fixture.bot.name }));
+    // #4470: the login form opens in a modal over the page
+    const modal = document.querySelector<HTMLElement>('[data-bot-page-modal="vault-new"]');
+    expect(modal, "the login form's modal").not.toBeNull();
+    expect(modal!.querySelector('[data-bot-profile-row="vault-new"] [data-team-vault-form]'), "the login form in it").not.toBeNull();
+    expect(card.querySelector("[data-team-vault-form]"), "nothing unfolds in the card").toBeNull();
+    expect(modal!.textContent).toContain(t("botPanel.teamVault.help", { bot: fixture.bot.name }));
     expect(document.activeElement?.getAttribute("aria-label")).toBe(t("botPanel.teamVault.name"));
     const sharing = await column({ page: "sharing" });
     expect(sharing.querySelector('[data-settings-card="bot.teamVault"]'), "no vault on Shared with").toBeNull();
+  });
+
+  // #4470: Connect apps opened from the bot page is its own window (the one
+  // the sidebar opens, a window stays a window) over the page, which stays.
+  it("regression #4470: Add > Apps opens Connect apps' own centred window over the bot page", async () => {
+    await mount("en");
+    const card = await accounts();
+    await click(card.querySelector<HTMLElement>("[data-bot-profile-add]"), "Add");
+    await click(document.querySelector<HTMLElement>('[data-bot-profile-add-item="apps"]'), "Apps");
+    const store = latest as unknown as { pluginsOpen: boolean; personaEditor: unknown };
+    expect(store.pluginsOpen).toBe(true);
+    expect(store.personaEditor, "the bot page stays").not.toBeNull();
+    // the window is a lazy screen: wait for its chunk
+    await until(() => document.querySelector('[data-tour="apps-panel"]'));
+    const window = document.querySelector<HTMLElement>('[data-tour="apps-panel"]')!;
+    expect(window, "Connect apps' window").not.toBeNull();
+    expect(window.getAttribute("role")).toBe("dialog");
+    expect(window.getAttribute("aria-modal")).toBe("true");
+    expect(window.hasAttribute("data-plugins-presentation"), "never a page of the bot page").toBe(false);
+    expect(host.contains(window), "portalled over the page").toBe(false);
+    expect(host.querySelector("[data-bot-profile-scroll]"), "the page is still under it").not.toBeNull();
   });
 
   it("a viewer the server would refuse sees each row's status with no switch, account choice or Use all", async () => {
@@ -749,61 +812,61 @@ describe("bot profile page: Analytics tab (#3401)", () => {
     expect(host.querySelector(`[data-bot-profile-tab="stats"]`)?.textContent).toBe("Analytique");
   });
 
-  // #4420 (the owner 2026-11-15): every option of the bot page that opens
-  // another surface opens it as a page of the bot page, with the way back.
-  // All bots used to open the centred Settings window over the page.
-  it("regression #4420: All bots opens every bot's usage as a page of the bot page, and Back returns to Analytics", async () => {
+  // #4470 (the owner 2026-11-16, correcting #4420): every option of the bot
+  // page that opens another surface opens it over the page, never as a page
+  // in its place. All bots opens the Settings window at Usage, its own
+  // window (a window stays a window), and the bot page stays under it.
+  it("regression #4470: All bots opens the Settings window at Usage over the bot page, which stays", async () => {
     await mount("en");
     const node = await home("stats");
     await click(node.querySelector<HTMLElement>("[data-bot-analytics-all-bots]"), "All bots");
-    const store = latest as unknown as { appSettingsOpen: boolean; personaEditor: unknown };
-    expect(store.appSettingsOpen, "no Settings window").toBeFalsy();
-    expect(store.personaEditor, "the bot page stays").not.toBeNull();
+    const store = latest as unknown as { appSettingsOpen: boolean; appSettingsSection: string; personaEditor: unknown };
+    expect(store.appSettingsOpen, "the Settings window").toBe(true);
+    expect(store.appSettingsSection).toBe("usage");
+    expect(store.personaEditor, "the bot page stays under it").not.toBeNull();
     const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
-    expect(page.getAttribute("data-bot-profile-subpage-current")).toBe("usage");
-    const usage = page.querySelector<HTMLElement>('[data-bot-profile-subpage="usage"]');
-    expect(usage, "the usage page in the column").not.toBeNull();
-    expect(usage!.querySelector("[data-bot-profile-subpage-title]")?.textContent).toBe("Usage");
-    // the tab row gives way to the page, as on a sub-page; its link back names the tab
-    expect(page.querySelector("[data-bot-profile-tab]")).toBeNull();
-    const back = page.querySelector<HTMLElement>("[data-bot-profile-back]");
-    expect(back?.getAttribute("aria-label")).toContain("Analytics");
-    await click(back, "Back");
+    expect(page.querySelector('[data-bot-profile-subpage="usage"]'), "no usage page in the column").toBeNull();
     expect(page.getAttribute("data-bot-profile-tab-current")).toBe("stats");
-    expect(page.querySelector('[data-bot-profile-subpage="usage"]')).toBeNull();
-    expect(document.activeElement?.hasAttribute("data-bot-analytics-all-bots"), "focus back on All bots").toBe(true);
-    // Escape steps back too
-    await click(page.querySelector<HTMLElement>("[data-bot-analytics-all-bots]"), "All bots");
-    await act(async () => { page.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    // closing the window lands back on the bot page
+    await act(async () => { dispatch({ type: "toggleAppSettings", open: false } as never); });
     await settle();
-    expect(page.querySelector('[data-bot-profile-subpage="usage"]')).toBeNull();
     expect((latest as unknown as { personaEditor: unknown }).personaEditor).not.toBeNull();
   });
 
-  it("regression #4420: Folder and memory's Memory row opens the Memory page as a page of the bot page, with the way back", async () => {
+  it("regression #4470: Folder and memory's Memory row opens the Memory page in a modal stacked over Folder and memory's; Escape closes the top one only", async () => {
     await mount("en");
     const node = await home("knowledge");
     await click(node.querySelector<HTMLElement>('[data-bot-profile-subpage-open="folder"]'), "row folder");
-    await click(host.querySelector<HTMLElement>("[data-bot-profile-memory]"), "Memory row");
+    const folder = document.querySelector<HTMLElement>('[data-bot-page-modal="page-folder"]')!;
+    const row = folder.querySelector<HTMLElement>("[data-bot-profile-memory]")!;
+    expect(row.getAttribute("aria-haspopup")).toBe("dialog");
+    row.focus();
+    await click(row, "Memory row");
     const store = latest as unknown as { activeView: string; memoryManagerOpen: boolean; personaEditor: unknown };
     expect(store.personaEditor, "the bot page stays").not.toBeNull();
     expect(store.activeView, "the main column stays the bot page").not.toBe("memory");
     expect(store.memoryManagerOpen).toBeFalsy();
-    const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
-    const hosted = page.querySelector<HTMLElement>('[data-bot-profile-hosted="memory"]');
-    expect(hosted, "Memory drawn in the bot page").not.toBeNull();
+    // stacked: Folder and memory's modal, then Memory's over it, last in the body
+    expect(openModals().map((modal) => modal.getAttribute("data-bot-page-modal"))).toEqual(["page-folder", "memory"]);
+    const memoryModal = document.querySelector<HTMLElement>('[data-bot-page-modal="memory"]')!;
+    expect(memoryModal.getAttribute("aria-label")).toBe(t("memoryManager.title"));
     // the Memory page is a lazy screen: wait for its chunk
-    for (let round = 0; round < 40 && !hosted!.querySelector("[data-memory-manager-presentation]"); round += 1) await settle();
-    const memory = hosted!.querySelector<HTMLElement>('[data-memory-manager-presentation="page"]');
-    expect(memory, "the Memory page under the bot page's top bar").not.toBeNull();
-    // one way out each: the bot page's link back and close, not Memory's own X
-    expect(memory!.querySelector(`[aria-label="${t("memoryManager.close")}"]`)).toBeNull();
-    expect(memory!.querySelector("[data-bot-profile-topbar]")).not.toBeNull();
-    expect(page.querySelector("[data-bot-profile-scroll]")!.hasAttribute("inert"), "the page under it is inert").toBe(true);
-    await click(memory!.querySelector<HTMLElement>("[data-bot-profile-back]"), "Back");
-    expect(page.querySelector('[data-bot-profile-hosted="memory"]')).toBeNull();
-    expect(page.getAttribute("data-bot-profile-subpage-current"), "back on Folder and memory").toBe("folder");
+    await until(() => memoryModal.querySelector("[data-memory-manager-presentation]"));
+    const memory = memoryModal.querySelector<HTMLElement>('[data-memory-manager-presentation="modal"]');
+    expect(memory, "the Memory page in the modal").not.toBeNull();
+    // one close: Memory's own X (it closes the modal), no second one over its header
+    expect(memoryModal.querySelector(":scope > [data-dialog-close]")).toBeNull();
+    const memoryClose = memory!.querySelector<HTMLElement>(`[aria-label="${t("memoryManager.close")}"]`);
+    expect(memoryClose).not.toBeNull();
+    await act(async () => { memoryModal.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await settle();
+    expect(openModals().map((modal) => modal.getAttribute("data-bot-page-modal")), "Folder and memory's modal stays").toEqual(["page-folder"]);
     expect(document.activeElement?.hasAttribute("data-bot-profile-memory"), "focus back on the Memory row").toBe(true);
+    // and Memory's own X closes its modal the same way
+    await click(document.querySelector<HTMLElement>('[data-bot-page-modal="page-folder"] [data-bot-profile-memory]'), "Memory row");
+    await until(() => document.querySelector(`[data-bot-page-modal="memory"] [aria-label="${t("memoryManager.close")}"]`));
+    await click(document.querySelector<HTMLElement>(`[data-bot-page-modal="memory"] [aria-label="${t("memoryManager.close")}"]`), "Memory's X");
+    expect(openModals().map((modal) => modal.getAttribute("data-bot-page-modal"))).toEqual(["page-folder"]);
   });
 
   it("draws the analytics block before the cost breakdown", async () => {

@@ -34,6 +34,18 @@ describe("teamMapMutationError", () => {
     expect(teamMapMutationError(refusal)).not.toMatch(/admin scope|forbidden/i);
   });
 
+  // #4471: the gate now refuses an admin-only route with code admin_route
+  it("replaces the gate's admin_route refusal with the team admin sentence", () => {
+    const refusal = new ApiError("Only an administrator can do this on this server.", 403, {
+      error: "Only an administrator can do this on this server. Ask an administrator if you need it.",
+      code: "admin_route",
+    });
+    expect(teamMapMutationError(refusal)).toBe(t("team.adminOnly"));
+    // a handler's own admin_only refusal keeps its own words
+    const handler = new ApiError("Restoring a backup stays an admin's.", 403, { error: "Restoring a backup stays an admin's.", code: "admin_only" });
+    expect(teamMapMutationError(handler)).not.toBe(t("team.adminOnly"));
+  });
+
   it("keeps a plain sentence from another failure", () => {
     expect(teamMapMutationError(new Error("A team with that name already exists."))).toBe("A team with that name already exists.");
   });

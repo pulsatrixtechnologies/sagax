@@ -2942,6 +2942,7 @@ bindLeafHost({
   get ownIntegrationsRefusal() { return ownIntegrationsRefusal; },
   get memberOwnsBot() { return memberOwnsBot; },
   get ownerOrAdminOf() { return ownerOrAdminOf; },
+  get callerOwnsBot() { return callerOwnsBot; },
   get companionRequest() { return companionRequest; },
   get botEditsNeedOwner() { return botEditsNeedOwner; },
   get computerOwnerFields() { return computerOwnerFields; },
@@ -25598,6 +25599,17 @@ ROUTES.push(createRoomHoldRoutes({
   },
 }));
 ROUTES.push(createBrowserSiteRoutes({
+  // #4471: a person reaches the browser of their own bot; a profile several
+  // bots share stays an admin's.
+  refusal: (auth, which) => {
+    if (auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin")) return null;
+    if ("profile" in which) return { status: 403, error: "A shared browser profile holds the sign-ins of several bots: only an administrator manages it.", code: "shared_browser_profile" };
+    const bot = store.bot(which.bot);
+    if (!bot) return { status: 404, error: "no such bot" };
+    if (!callerOwnsBot(auth, bot)) return { status: 404, error: "no such bot" };
+    if (sharedBrowserProfileValue(bot.browserProfile)) return { status: 403, error: "This bot uses a shared browser profile, which holds the sign-ins of several bots: only an administrator manages it.", code: "shared_browser_profile" };
+    return null;
+  },
   target: (which) => {
     const engine = browserEngineStatus();
     if (engine.kind !== "ready") return { status: 409, error: engine.reason };
@@ -29126,6 +29138,16 @@ function ownerOrAdminOf(auth: RequestAuth, bot: BotRecord): boolean {
   if (auth.scopes.includes("admin")) return true;
   if (memberOwnsBot(auth, bot)) return true;
   return IDENTITY.kind === "perspicax" && atLeast(viewerBotLevel(auth, bot), "edit");
+}
+/** #4471: the bot is the caller's own environment: the owner at this
+ * computer, an admin session, the person who owns it (whether or not they may
+ * still create bots), or someone granted edit on it. The gate's check for a
+ * client route marked `owner: "bot"`. */
+function callerOwnsBot(auth: RequestAuth, bot: BotRecord): boolean {
+  if (ownerOrAdminOf(auth, bot)) return true;
+  if (auth.kind !== "session") return false;
+  const actor = actorPrincipalId(auth).trim().toLowerCase();
+  return Boolean(actor) && effectiveBotOwner(bot) === actor;
 }
 /** This computer's own person (request-auth.ts clientSessionIsComputerOwner):
  * the owner at this computer, an admin session, or on a personal server a
@@ -36031,7 +36053,20 @@ const widgetCheckAttempts = new WidgetCheckAttempts();
 ROUTES.push(createBotAvatarGenerateRoutes({ store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast }));
 ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrAdminOf, computerOwner, outboundCounts }));
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
-ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret, saveProductKey: saveProductKeyCard }));
+ROUTES.push(createBotSecretCardRoutes({
+  getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret, saveProductKey: saveProductKeyCard,
+  // #4471: a member answers the cards of their own conversations, never
+  // another person's (private threads, server/threads/thread-privacy.ts).
+  mayAnswer: (_auth, botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    const viewerId = scopedThreadViewer();
+    if (!viewerId) return true;
+    const room = store.groupByThread(threadId);
+    if (room) return groupVisible(room, viewerId) && groupPostAllowed(room, viewerId);
+    return botThreadReadable(bot, threadId, viewerId, "thread.post");
+  },
+}));
 ROUTES.push(createBotsMutateRoutes({
   resolveSectionId,
   // #4329 lot 5: a bot's engine and model are resolved together when written

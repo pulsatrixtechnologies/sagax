@@ -104,7 +104,8 @@ export class PersonalUsageUnavailable extends Error {
 function olderServer(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
   if (error.status === 404) return true;
-  return error.status === 403 && typeof error.body?.error === "string" && /lacks the admin scope/.test(error.body.error);
+  // #4471: the gate's code `admin_route`; an older server says "lacks the admin scope".
+  return error.status === 403 && (error.body?.code === "admin_route" || (typeof error.body?.error === "string" && /lacks the admin scope/.test(error.body.error)));
 }
 
 async function readPersonalUsage(now: Date, get: <T>(path: string) => Promise<T>, legacy: boolean): Promise<PersonalUsage> {

@@ -99,7 +99,8 @@ describe("direct grants", () => {
 
   it("serves DELETE at client scope for the owner and tells the server to narrow at once", () => {
     expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/pr_00000000-0000-4000-8000-000000000001")).toBe("client");
-    expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/bob@example.test")).toBe("admin");
+    // #4471: any id form reaches the handler, which keeps the bot to its owner
+    expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/bob@example.test")).toBe("client");
   });
 });
 

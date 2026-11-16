@@ -9,8 +9,9 @@
 // phone included), and only while they hold control (POST .../computer/control
 // take): 409 `no_control` otherwise, or `control_lease` when someone else's
 // lease holds it. 404 `no_computer` when the bot has no desktop to drive.
-// Admin scope for sessions (request-auth.ts lists none of these for clients);
-// the companion lists them behind the per-phone desktop capability. Each
+// A person's own routes since #4471: input, clipboard and teach are in
+// CLIENT_ALLOW (client-allow.ts), and this handler's mayDrive decides who
+// drives; the companion lists them behind the per-phone desktop capability. Each
 // batch is audited as counts by event type, never the typed text.
 import type { IncomingMessage } from "node:http";
 

@@ -465,7 +465,14 @@ public enum APIError: Error, LocalizedError, Sendable {
     /// with the server update; never an error to show.
     public var isRouteMissing: Bool {
         guard case let .status(code, message) = self, let message else { return false }
-        return Self.isNoRoute(code: code, message: message) || (code == 403 && message.contains("lacks the admin scope"))
+        return Self.isNoRoute(code: code, message: message) || (code == 403 && Self.isAdminOnly(message: message))
+    }
+
+    /// A member refused on a route that is an administrator's: "Only an
+    /// administrator can do this" since #4471 (server/auth/admin-routes.ts
+    /// ADMIN_ONLY_PREFIX, code admin_only), "lacks the admin scope" before.
+    static func isAdminOnly(message: String) -> Bool {
+        message.hasPrefix("Only an administrator can do this") || message.contains("lacks the admin scope")
     }
 
     static func isNoRoute(code: Int, message: String) -> Bool {

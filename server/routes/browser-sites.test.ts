@@ -16,7 +16,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
 });
 
-async function serve() {
+async function serve(refusal?: Parameters<typeof createBrowserSiteRoutes>[0]["refusal"]) {
   const asked: BrowserSitesRef[] = [];
   const signedOut: Array<{ session: string; site: string | null }> = [];
   const routes = [createBrowserSiteRoutes({
@@ -27,6 +27,7 @@ async function serve() {
     },
     list: async () => ({ running: false, sites: [{ site: "example.com", cookies: 2, storage: 1 }] }),
     signOut: async (target, site) => { signedOut.push({ session: target.session, site }); return { running: true, sites: [] }; },
+    refusal,
   })];
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -41,9 +42,26 @@ async function serve() {
 }
 
 describe("signed-in sites routes", () => {
-  it("are for admins only, like the browser profiles", () => {
-    expect(requiredScope("GET", "/api/browser-sites")).toBe("admin");
-    expect(requiredScope("POST", "/api/browser-sites/sign-out")).toBe("admin");
+  // #4471: a person's own bot's browser; the handler's refusal keeps another
+  // person's bot and a shared profile out (server/index.ts)
+  it("are a person's own routes", () => {
+    expect(requiredScope("GET", "/api/browser-sites")).toBe("client");
+    expect(requiredScope("POST", "/api/browser-sites/sign-out")).toBe("client");
+  });
+
+  it("refuse another person's bot and a shared profile before reaching the browser", async () => {
+    const { base, asked, post, signedOut } = await serve((_auth, which) => "profile" in which
+      ? { status: 403, error: "A shared browser profile holds the sign-ins of several bots: only an administrator manages it.", code: "shared_browser_profile" }
+      : which.bot === "someone-elses" ? { status: 404, error: "no such bot" } : null);
+    const shared = await fetch(`${base}/api/browser-sites?profile=profile-work`);
+    expect(shared.status).toBe(403);
+    expect(await shared.json()).toMatchObject({ code: "shared_browser_profile" });
+    expect((await fetch(`${base}/api/browser-sites?bot=someone-elses`)).status).toBe(404);
+    const out = await post({ bot: "someone-elses" });
+    expect(out.status).toBe(404);
+    expect(await out.json()).toEqual({ error: "no such bot" });
+    expect(asked).toEqual([]);
+    expect(signedOut).toEqual([]);
   });
 
   it("list one profile's or one bot's sites", async () => {

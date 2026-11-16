@@ -502,6 +502,10 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // claim that it stored a host credential. Saving and `provided` stay local
   // to the host's OS-backed credential store.
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:resume|dismiss)$/ },
+  // #4471: the phone's login request card (ios VaultLoginCard): a login of
+  // the person's own vault given to the bot, a 1Password item, or a no. The
+  // harness checks the card was made for this person; no value crosses.
+  { method: "POST", path: /^\/api\/bots\/[\w-]+\/vault-cards\/[\w-]+\/(?:grant|dismiss|onepassword)$/ },
   // A sign-in card's two answers. The person signs in on the page itself;
   // nothing secret crosses this route, only "done" or "cancel".
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/sign-in-cards\/[\w-]+\/(?:done|cancel)$/ },

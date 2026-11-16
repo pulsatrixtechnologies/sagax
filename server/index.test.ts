@@ -1762,7 +1762,7 @@ describe("harness HTTP API", () => {
     for (const [method, path] of [["GET", "/api/fleet"], ["POST", "/api/fleet/workspaces"], ["DELETE", "/api/fleet/workspaces/acme"], ["POST", "/api/fleet/upgrade"]] as const) {
       const refused = await fetch(`${BASE}${path}`, { method, headers: { authorization: `Bearer ${token}` } });
       expect(refused.status, `${method} ${path}`).toBe(403);
-      expect(((await refused.json()) as { error: string }).error).toContain("lacks the admin scope");
+      expect(((await refused.json()) as { error: string }).error).toContain("Only an administrator can do this");
     }
   });
 

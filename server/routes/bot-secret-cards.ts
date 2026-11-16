@@ -46,7 +46,13 @@ export interface BotSecretCardRouteDeps {
   /** #4185: a product key card's values, sent to Perspicax as the person the
    * card was raised for, then tested; never kept here. */
   saveProductKey?: (auth: RequestAuth, botId: string, threadId: string, messageId: string, values: unknown) => Promise<{ status: number; body: Record<string, unknown> }>;
+  /** #4471: whether this caller may answer a card of that conversation (it
+   * is theirs to write in). These routes are a person's own (client scope);
+   * another person's card reads as one that does not exist. Absent: yes. */
+  mayAnswer?: (auth: RequestAuth, botId: string, threadId: string) => boolean;
 }
+
+const NO_CARD = { error: "no such credential request" };
 
 export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
@@ -67,6 +73,10 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
       const raw = await readBody(req, SECRET_VALUE_MAX_BYTES * 4);
       const fields = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
       const threadId = String(fields.threadId ?? "");
+      if (deps.mayAnswer && !deps.mayAnswer(auth, m[1]!, threadId)) {
+        json(res, 404, NO_CARD);
+        return;
+      }
       const result = deps.saveCustomSecret(m[1]!, threadId, m[2]!, fields.value);
       json(res, result.status, result.body);
       return;
@@ -106,7 +116,7 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
     m = path.match(/^\/api\/bots\/([\w-]+)\/secret-cards\/([\w-]+)\/provide$/);
     if (m && method === "POST") {
       if (req.headers["x-openmausbot-companion"] !== "1") {
-        json(res, 403, { error: "Secure phone entry must come from a paired phone" });
+        json(res, 403, { error: "Secure phone entry must come from a paired phone", code: "phone_required" });
         return;
       }
       const rawDeviceId = req.headers["x-openmausbot-companion-device"];
@@ -123,6 +133,10 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
       // Custom secrets from a phone need a sealed open path not wired here yet; only allowlisted keys.
       if (!parsed.success || !isCredentialTargetId(parsed.data?.target)) {
         json(res, 400, { error: "The encrypted credential request is invalid" });
+        return;
+      }
+      if (deps.mayAnswer && !deps.mayAnswer(auth, m[1]!, parsed.data.threadId)) {
+        json(res, 404, NO_CARD);
         return;
       }
       const state = await provideSecretFromPhone({
@@ -143,8 +157,8 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
       const body = await readBody(req);
       const threadId = String(body.threadId ?? "");
       const message = secretMessage(m[1], threadId, m[2]);
-      if (!message?.secret) {
-        json(res, 404, { error: "no such credential request" });
+      if (!message?.secret || (deps.mayAnswer && !deps.mayAnswer(auth, m[1], threadId))) {
+        json(res, 404, NO_CARD);
         return;
       }
       // A vault login card is answered on its own routes (server/routes/credential-vault.ts).

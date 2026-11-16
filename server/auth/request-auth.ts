@@ -14,8 +14,10 @@ import { isIP } from "node:net";
 
 import type { Scope, SessionRecord, SessionRegistry } from "./sessions.ts";
 import type { PermissionKey } from "../../shared/permissions.ts";
-import { CLIENT_ALLOW, type ClientFeatures } from "./client-allow.ts";
+import { CLIENT_ALLOW, type ClientFeatures, type ClientRoute } from "./client-allow.ts";
+import { adminOnlyRefusal } from "./admin-routes.ts";
 export { CLIENT_ALLOW, type ClientFeature, type ClientFeatures } from "./client-allow.ts";
+export { ADMIN_ROUTES, OTHER_AUTH_ROUTES, ADMIN_ONLY_PREFIX, ADMIN_ROUTE_CODE, adminOnlyRefusal, heldRoute } from "./admin-routes.ts";
 import { denyReason as companionDenial, isCompanionNotice } from "../../companion/src/routes.ts";
 import {
   MEMBER_BOT_FIELDS,
@@ -54,6 +56,8 @@ export interface RequestAuthResult {
    * body's `code`), and the session it named when the server remembers it
    * (for the log line only; never the token or its hash). */
   code?: string;
+  /** #4471: the app's key for an admin-only route's reason (admin-routes.ts). */
+  reasonKey?: string;
   sessionId?: string;
   /** How the refused credential came: bearer, cookie or stream ticket. */
   via?: "bearer" | "cookie" | "ticket";
@@ -459,13 +463,33 @@ export function routePermission(method: string, path: string, features: ClientFe
   return routePermissions(method, path, features)?.[0] ?? null;
 }
 
-export function requiredScope(method: string, path: string, features: ClientFeatures = {}): Scope {
+function clientRoute(method: string, path: string, features: ClientFeatures): ClientRoute | null {
   const upper = method.toUpperCase();
   for (const rule of CLIENT_ALLOW) {
     if (rule.feature && features[rule.feature] !== true) continue;
-    if (rule.path.test(path) && rule.methods.includes(upper)) return "client";
+    if (rule.path.test(path) && rule.methods.includes(upper)) return rule;
   }
-  return "admin";
+  return null;
+}
+
+/** `client` for a person's own route (CLIENT_ALLOW), else `admin`. A route of
+ * the server that is in no list is caught by route-scopes.test.ts (#4471). */
+export function requiredScope(method: string, path: string, features: ClientFeatures = {}): Scope {
+  return clientRoute(method, path, features) ? "client" : "admin";
+}
+
+/** #4471: the bot a client route acts on when its CLIENT_ALLOW row is marked
+ * `owner: "bot"`: the gate lets a non-admin session through only on a bot it
+ * owns or may edit. Null for every other route. */
+export function clientRouteOwnerBot(method: string, path: string, features: ClientFeatures = {}): string | null {
+  if (clientRoute(method, path, features)?.owner !== "bot") return null;
+  return /^\/api\/bots\/([\w-]+)\//.exec(path)?.[1] ?? null;
+}
+
+/** The refusal of a route a session's scopes do not open: plain words for an
+ * admin-only route (#4471), never a scope name. */
+export function scopeRefusal(needed: Scope, method: string, path: string): { error: string; code?: string; reasonKey?: string } {
+  return needed === "admin" ? adminOnlyRefusal(method, path) : { error: `forbidden: this session lacks the ${needed} scope` };
 }
 
 /** Fields a client session may change on a bot: how it looks in the list,
@@ -706,7 +730,7 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
     const needed = requiredScope(method, path, options.features ?? {});
     if (!session.scopes.includes(needed)) {
       const grants = needed === "admin" && session.scopes.includes("client") ? routePermissions(method, path, options.features ?? {}) : null;
-      if (!grants) return deny(403, `forbidden: this session lacks the ${needed} scope`);
+      if (!grants) return { auth: null, status: 403, ...scopeRefusal(needed, method, path) };
       if (!grants.some((key) => options.permits?.(session, key))) return { auth: null, status: 403, error: "forbidden", permission: grants[0] };
     }
     // Only a request that passed both checks counts as use of the session,

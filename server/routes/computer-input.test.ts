@@ -44,10 +44,11 @@ const send = (base: string, path: string, method: string, body?: unknown) => fet
 });
 
 describe("computer input routes", () => {
-  it("stay admin scope for sessions (the companion lists them behind its desktop capability)", () => {
-    expect(requiredScope("POST", "/api/bots/scout/computer/input")).toBe("admin");
-    expect(requiredScope("GET", "/api/bots/scout/computer/clipboard")).toBe("admin");
-    expect(requiredScope("PUT", "/api/bots/scout/computer/clipboard")).toBe("admin");
+  // #4471: the person's own (the handler's mayDrive decides who drives)
+  it("are a person's routes for the computer they may drive", () => {
+    expect(requiredScope("POST", "/api/bots/scout/computer/input")).toBe("client");
+    expect(requiredScope("GET", "/api/bots/scout/computer/clipboard")).toBe("client");
+    expect(requiredScope("PUT", "/api/bots/scout/computer/clipboard")).toBe("client");
   });
 
   it("sends events while control is held, and audits counts only", async () => {

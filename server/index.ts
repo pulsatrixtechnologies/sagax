@@ -1206,6 +1206,7 @@ import { markWorkspaceUse, promptSectionPaths } from "./workspace/workspace-usag
 import { createBotActivityReader, createBotActivityRoutes, type BotActivityRouteDeps } from "./routes/bot-activity.ts";
 import { createBotTeamWorkRoutes } from "./routes/bot-team-work.ts";
 import { createTeamWorkReader } from "./team-work/team-work.ts";
+import { teamWorkClearSteps } from "../shared/team-work.ts";
 import { createPersonNote, setPersonNoteSink } from "./team-work/person-note.ts";
 import { queueTeamWorkFrames } from "./team-work/frames.ts";
 import { createPageDataRoutes } from "./routes/page-data.ts";
@@ -27158,6 +27159,11 @@ ROUTES.push(createBotTeamWorkRoutes({
   },
   viewerId: (auth) => channelFilterViewerId(auth),
   read: (botId, viewerId, since) => teamWorkReader.read(botId, viewerId, since),
+  // #4421: the person clears their own rows; the hand-overs they read carry the end
+  clear: (botId, viewerId, since, clear) => {
+    const ids = teamWorkClearSteps(teamWorkReader.read(botId, viewerId, since), clear);
+    return ids.length ? coordinator.endWork(ids, { at: Date.now(), outcome: "cleared" }) : 0;
+  },
 }));
 setPersonNoteSink(createPersonNote({
   thread: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,

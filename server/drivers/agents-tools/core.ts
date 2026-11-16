@@ -81,7 +81,12 @@ export const DEF_COORDINATE_BOTS = {
       done_when: { type: "string", minLength: 1, maxLength: 500, description: "Harness-checked criterion: tool:ask_choice and/or first_line:PASS|FAIL (join with \"; \"). Free text is advisory. Unmet or a work-mode ack-only reply ends failed(incomplete)." },
       default_answer: { type: "string", minLength: 1, maxLength: 1000, description: "Optional answer the harness applies if the person never replies to a question this work parks on them (R6). When used, the run resumes with a note that it was the requester's default. Leave out to expire the wait as status expired after the delay (and a mid-delay push reminder)." },
       ...WORK_LABEL_PARAMS,
-    }, required: ["bot_ids", "message"] },
+      end_work: { type: "object", additionalProperties: false, description: "Optional, with work and without bot_ids or message: end that piece of work though steps of its plan were never handed out (finished another way, taken over elsewhere, stopped). It leaves the person's panel; nothing is sent. A later step under the same work name opens it again.",
+        properties: {
+          outcome: { type: "string", enum: ["done", "dropped"], description: "done: the work is finished. dropped: it will not be finished." },
+          why: { type: "string", description: "One line why (120 characters)." },
+        }, required: ["outcome"] },
+    }, required: [] },
   };
 
 /** An external runtime's coordinate_bots description: it is never resumed,
@@ -531,12 +536,20 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     delete canonical.groupId;
     if (canonical.bot_ids === undefined) canonical.bot_ids = args.botIds;
     if (canonical.group_id === undefined) canonical.group_id = args.groupId;
+    // #4421: end_work closes a piece of work; it hands nothing out
+    if (canonical.end_work !== undefined && canonical.end_work !== null) {
+      const work = typeof canonical.work === "string" ? canonical.work.trim() : "";
+      if (!work) return { text: "end_work needs work: the name of the piece of work to end, as you gave it to its steps.", isError: true };
+      const r = await api("/api/internal/coordinate-bots", { method: "POST", body: JSON.stringify({ work, endWork: canonical.end_work }) });
+      if (r.error) return { text: `Couldn't end that work: ${String(r.error)}${openWorkLine(r)}`, isError: true };
+      return { text: `${String(r.message ?? "Ended.")}${openWorkLine(r)}` };
+    }
     const ids = canonical.bot_ids;
     const usable = Array.isArray(ids) && ids.length > 0 && ids.every((id) => typeof id === "string")
       && typeof canonical.message === "string" && canonical.message.trim().length > 0;
     if (!usable) {
       return {
-        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, rework, thread ("standing" or "new") and reply ("resume" or "none") are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
+        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required to hand work out (end_work with work ends a piece of work instead); group_id, rework, thread ("standing" or "new") and reply ("resume" or "none") are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
         isError: true,
       };
     }

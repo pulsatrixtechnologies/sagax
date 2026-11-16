@@ -9,7 +9,9 @@ import {
   TEAM_PLAN_STEPS,
   TEAM_STEP_NAME_CHARS,
   TEAM_WORK_NAME_CHARS,
+  TEAM_WORK_WHY_CHARS,
   teamWorkName,
+  type TeamWorkEnded,
   type TeamWorkLabel,
   type TeamWorkPlanned,
 } from "../../shared/team-work.ts";
@@ -43,4 +45,15 @@ export function workLabel(raw: { work?: unknown; step?: unknown; plan?: unknown 
   }
   if (!name && !step) return undefined;
   return { ...(name ? { name } : {}), ...(step ? { step } : {}), ...(plan.length ? { plan } : {}) };
+}
+
+/** The end an orchestrator gives a piece of work (#4421, coordinate_bots
+ * end_work): done or dropped, with one line why, redacted and cut.
+ * Undefined when the call gave no end it can read. */
+export function workEnd(raw: unknown, at: number): TeamWorkEnded | undefined {
+  const record = raw && typeof raw === "object" ? raw as Record<string, unknown> : undefined;
+  const outcome = typeof raw === "string" ? raw : record?.outcome;
+  if (outcome !== "done" && outcome !== "dropped") return undefined;
+  const why = line(record?.why, TEAM_WORK_WHY_CHARS);
+  return { at, outcome, ...(why ? { why } : {}) };
 }

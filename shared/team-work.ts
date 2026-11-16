@@ -37,6 +37,11 @@ export const TEAM_WORK_NAME_CHARS = 80;
 export const TEAM_STEP_NAME_CHARS = 40;
 /** The steps of a declared plan, at most. */
 export const TEAM_PLAN_STEPS = 12;
+/** The one line why a piece of work ended, at most (#4421). */
+export const TEAM_WORK_WHY_CHARS = 120;
+/** A piece of work still listed that nothing touched for this long, with
+ * no step live, reads stale (#4421). */
+export const TEAM_WORK_STALE_MS = 12 * 60 * 60_000;
 
 /** What the orchestrator says of a hand-over when it makes it (#3463,
  * optional fields of coordinate_bots and send_to_bot), stored on the
@@ -47,6 +52,20 @@ export interface TeamWorkLabel {
   name?: string;
   step?: string;
   plan?: TeamWorkPlanned[];
+  /** The piece of work ended without every step of its plan handed out
+   * (#4421): written on each of its rows by the orchestrator's close or the
+   * person's clear. A hand-over made after it reopens the work. */
+  ended?: TeamWorkEnded;
+}
+
+/** How a piece of work ended before its plan was handed out (#4421).
+ * done, dropped: the orchestrator closed it (coordinate_bots end_work).
+ * cleared: the person cleared its row from the panel. */
+export interface TeamWorkEnded {
+  at: number;
+  outcome: "done" | "dropped" | "cleared";
+  /** One line why, secrets redacted. */
+  why?: string;
 }
 
 /** The runtime's own status of a hand-over (server/runtime/types.ts Status). */
@@ -149,6 +168,8 @@ export interface TeamStepFacts {
   /** The plan of the piece of work declared with this hand-over; the
    * latest declared wins. */
   plan?: readonly TeamWorkPlanned[];
+  /** The work was closed or cleared (#4421); the newest end wins. */
+  ended?: TeamWorkEnded;
   mode: "work" | "consult" | "notify";
   /** Work inside a room. */
   room?: boolean;
@@ -225,8 +246,14 @@ export interface TeamWorkItem {
   finished: boolean;
   merged: boolean;
   startedAt: number;
-  /** Finished: when its last step ended. */
+  /** Finished: when its last step ended, or when the orchestrator closed it. */
   endedAt?: number;
+  /** The orchestrator closed it as done before its plan was handed out
+   * (#4421): its one line why, when it gave one. */
+  closed?: { why?: string };
+  /** Still listed, no step live and nothing touched it for
+   * TEAM_WORK_STALE_MS: since when (its newest action, #4421). */
+  staleSince?: number;
   /** Its newest action, start or end: the live list's order. */
   updatedAt: number;
 }
@@ -314,18 +341,24 @@ function tally(steps: readonly TeamWorkStep[], plan: readonly TeamWorkPlanned[] 
   };
 }
 
-function toItem(key: string, name: string, steps: TeamWorkStep[], plan?: readonly TeamWorkPlanned[]): TeamWorkItem {
+function toItem(key: string, name: string, steps: TeamWorkStep[], now: number, plan?: readonly TeamWorkPlanned[], closed?: TeamWorkEnded): TeamWorkItem {
   steps.sort((a, b) => a.createdAt - b.createdAt);
-  const { done, total, toCome } = tally(steps, plan);
-  const live = steps.filter((step) => !teamStepEnded(step.status));
+  const tallied = tally(steps, plan);
+  const { done, total } = tallied;
+  // closed as done: nothing of its plan is to come any more
+  const toCome = closed ? [] : tallied.toCome;
+  const live = closed ? [] : steps.filter((step) => !teamStepEnded(step.status));
   const open = live.filter((step) => step.live.state === "working" || step.live.state === "silent");
   const current = open.sort((a, b) => (b.live.lastActionAt ?? 0) - (a.live.lastActionAt ?? 0))[0]
     ?? live.find((step) => step.status === "queued") ?? live[0];
-  // no live step and no plan step left to hand out
+  // no live step and no plan step left to hand out, or closed by the orchestrator
   const finished = live.length === 0 && toCome.length === 0;
   const ends = steps.map((step) => step.finishedAt ?? step.createdAt);
-  const endedAt = finished ? Math.max(...ends) : undefined;
+  const endedAt = closed ? closed.at : finished ? Math.max(...ends) : undefined;
   const updatedAt = Math.max(...steps.map((step) => Math.max(step.live.lastActionAt ?? 0, step.finishedAt ?? 0, step.startedAt ?? 0, step.createdAt)));
+  // still listed, nothing live in any of its threads, untouched for long
+  const quiet = !finished && steps.every((step) => teamStepEnded(step.status) || step.live.state === "idle");
+  const staleSince = quiet && now - updatedAt >= TEAM_WORK_STALE_MS ? updatedAt : undefined;
   return {
     key, name, steps, toCome, done, total,
     durationMs: steps.reduce((sum, step) => sum + step.durationMs, 0),
@@ -335,6 +368,8 @@ function toItem(key: string, name: string, steps: TeamWorkStep[], plan?: readonl
     finished, merged: steps.some((step) => step.merged),
     startedAt: Math.min(...steps.map((step) => step.startedAt ?? step.createdAt)),
     ...(endedAt !== undefined ? { endedAt } : {}),
+    ...(closed ? { closed: closed.why ? { why: closed.why } : {} } : {}),
+    ...(staleSince !== undefined ? { staleSince } : {}),
     updatedAt,
   };
 }
@@ -342,33 +377,64 @@ function toItem(key: string, name: string, steps: TeamWorkStep[], plan?: readonl
 /** The read model, from the hand-overs the server gathered. Pure. */
 export function buildTeamWork(input: TeamWorkInput): TeamWork {
   const { orchestratorId, now, since } = input;
-  const groups = new Map<string, { name: string; steps: TeamWorkStep[]; coding: boolean; plan?: { at: number; steps: readonly TeamWorkPlanned[] } }>();
+  const groups = new Map<string, { name: string; steps: TeamWorkStep[]; coding: boolean; plan?: { at: number; steps: readonly TeamWorkPlanned[] }; ended?: TeamWorkEnded; newest: number }>();
   for (const facts of input.steps) {
     if (!isTeamStep(facts, orchestratorId)) continue;
     const named = facts.work ? teamWorkName(facts.work) : "";
     const key = named ? `work:${named}` : `step:${facts.id}`;
     let group = groups.get(key);
     if (!group) {
-      group = { name: (facts.work?.trim().replace(/\s+/g, " ")) || facts.title, steps: [], coding: false };
+      group = { name: (facts.work?.trim().replace(/\s+/g, " ")) || facts.title, steps: [], coding: false, newest: facts.createdAt };
       groups.set(key, group);
     }
     group.steps.push(toStep(facts, now));
     if (facts.coding) group.coding = true;
     // the latest plan declared for a piece of work wins
     if (named && facts.plan?.length && (!group.plan || facts.createdAt >= group.plan.at)) group.plan = { at: facts.createdAt, steps: facts.plan };
+    group.newest = Math.max(group.newest, facts.createdAt);
+    // the newest end of the work (#4421)
+    if (facts.ended && (!group.ended || facts.ended.at > group.ended.at)) group.ended = facts.ended;
   }
   const live: TeamWorkItem[] = [];
   const doneToday: TeamWorkItem[] = [];
   for (const [key, group] of groups) {
     // only code work is listed; other hand-overs stay in the chat
     if (!group.coding) continue;
-    const item = toItem(key, group.name, group.steps, group.plan?.steps);
+    // ended (#4421), unless a step was handed out after the end: then it is open again
+    const ended = group.ended && group.ended.at >= group.newest ? group.ended : undefined;
+    // dropped by the orchestrator or cleared by the person: it leaves the list
+    if (ended && ended.outcome !== "done") continue;
+    const item = toItem(key, group.name, group.steps, now, group.plan?.steps, ended);
     if (!item.finished) live.push(item);
     else if ((item.endedAt ?? 0) >= since) doneToday.push(item);
   }
   live.sort((a, b) => b.updatedAt - a.updatedAt);
   doneToday.sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
   return { botId: orchestratorId, at: now, team: teamRow([...live, ...doneToday], input), live, doneToday };
+}
+
+/** Nothing of the piece of work runs any more: finished, or every step it
+ * handed out ended (what "Clear finished" takes, #4421). */
+export function teamWorkSettled(item: Pick<TeamWorkItem, "finished" | "steps">): boolean {
+  return item.finished || item.steps.every((step) => teamStepEnded(step.status));
+}
+
+/** What a person's clear asks for (#4421): rows by key, or every settled one. */
+export interface TeamWorkClear {
+  keys?: readonly string[];
+  finished?: boolean;
+}
+
+/** The hand-overs (runtime row ids) a person's clear ends: the steps of the
+ * listed pieces of work it names, as that person reads them. */
+export function teamWorkClearSteps(work: Pick<TeamWork, "live" | "doneToday">, clear: TeamWorkClear): string[] {
+  const keys = new Set(clear.keys ?? []);
+  const ids: string[] = [];
+  for (const item of [...work.live, ...work.doneToday]) {
+    if (!keys.has(item.key) && !(clear.finished && teamWorkSettled(item))) continue;
+    for (const step of item.steps) ids.push(step.id);
+  }
+  return ids;
 }
 
 function teamRow(items: readonly TeamWorkItem[], input: TeamWorkInput): TeamWorkBot[] {

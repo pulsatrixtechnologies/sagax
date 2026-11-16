@@ -10,10 +10,12 @@
 // signed-in account live in Providers. A window the vendor does not report is
 // absent. An account whose read failed stays with its reason and Try again
 // (#1774). The group is always drawn (2026-10-16): with no account it says so
-// in one line. It is the page's "Usage limits" group (#4095), each window in
-// the reference's large-percent form (LimitMeter).
+// in one line. It is the page's "Usage limits" group (#4095). #4445: one
+// slim row per account (LimitRow, about 56 px), its two windows side by side
+// as slim meters (LimitMeter), the favourite first then the account closest
+// to a limit.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw, Star } from "lucide-react";
+import { Loader2, RefreshCw, RotateCw, Star } from "lucide-react";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -81,7 +83,7 @@ function FavoriteStar({ provider, favorite }: { provider: PlanRow; favorite: Non
       title={label}
       onClick={() => favorite.onToggle(provider.id)}
       className={cn(
-        "ml-auto flex size-6 shrink-0 items-center justify-center self-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
+        "flex size-5 shrink-0 items-center justify-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
         on ? "text-accent" : "text-ink-tertiary opacity-0 hover:text-ink group-hover/plan:opacity-100 focus-visible:opacity-100 touch:opacity-100",
       )}
     >
@@ -134,92 +136,148 @@ export function limitFigure(percent: number): string {
   return t("usage.limits.figure", { percent: Math.round(Math.min(100, Math.max(0, percent))) });
 }
 
-/** One limit as the reference's usage page draws it (#4095): its name, a
- * large percent with "used" beside it, a 4 px bar, then the renewal at the
- * left and a second figure at the right. Every limit of Settings > Usage
- * goes through it: each engine's windows and the spending limit. */
-export function LimitMeter({ title, percent, tone, ariaLabel, start, end, ...data }: {
-  /** Absent where the row above names the limit (the spending limit). */
-  title?: React.ReactNode;
-  percent: number;
-  tone: string;
-  ariaLabel: string;
-  start?: React.ReactNode;
-  end?: React.ReactNode;
+/** One row of Usage limits (#4445): the name (and its grey line) at the
+ * left, then a two-column grid of slim meters, about 56 px in all. Every row
+ * of the group goes through it: each account and the spending limit, so the
+ * meters of every row line up. At phone width the grid moves under the name
+ * and the two meters stay on one line. */
+export function LimitRow({ name, detail, accessory, children, ...data }: {
+  name: React.ReactNode;
+  detail?: React.ReactNode;
+  /** After the name (an account's star). */
+  accessory?: React.ReactNode;
+  /** The grid's cells (LimitCell). */
+  children?: React.ReactNode;
 } & { [key: `data-${string}`]: string | undefined }) {
-  const shown = Math.round(Math.min(100, Math.max(0, percent)));
   return (
-    <div {...data} data-limit-meter="" className="flex min-w-0 flex-col gap-2.5">
-      <div className="flex min-w-0 flex-col gap-3">
-        {title && <div className="truncate text-[13px] leading-[18px] text-ink">{title}</div>}
-        <div className="flex min-w-0 items-baseline gap-1.5" data-limit-figure="">
-          <span className="text-[22px] leading-7 tabular-nums text-ink">{limitFigure(shown)}</span>
-          {" "}
-          <span className="text-[13px] leading-[18px] text-ink-tertiary">{t("usage.limits.used")}</span>
+    <div {...data} data-plan-line="" className="group/plan flex min-h-[44px] min-w-0 flex-wrap items-center gap-x-5 gap-y-1.5 px-3.5 py-1.5">
+      <div className="flex min-w-0 flex-1 basis-[140px] flex-col">
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="truncate text-[13px] leading-[18px] text-ink" data-plan-name="">{name}</span>
+          {accessory}
         </div>
+        {detail && <div className="min-w-0 truncate text-[12px] leading-4 text-ink-secondary">{detail}</div>}
       </div>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="h-1 overflow-hidden rounded-full bg-inset" role="meter" aria-label={ariaLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={shown}>
-          <div className={cn("h-full rounded-full", tone)} style={{ width: `${shown}%` }} />
-        </div>
-        {(start || end) && (
-          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2.5 text-[12px] leading-4 tabular-nums text-ink-secondary" data-limit-footer="">
-            <span className="min-w-0">{start}</span>
-            <span className="shrink-0">{end}</span>
-          </div>
-        )}
-      </div>
+      <div data-plan-meters="" className="grid min-w-0 max-w-full shrink basis-[356px] grid-cols-2 items-center gap-x-5">{children}</div>
     </div>
   );
 }
 
-/** One window of an account: the shared limit form with its renewal
- * (#556, #4095). The percent used says it all (#4418): no second figure. */
+/** A cell of a LimitRow's grid: column 1 the short window, column 2 the
+ * week (a missing short window leaves its cell empty, the week keeps its
+ * column). `span` takes both columns (a failed read's reason). */
+export function LimitCell({ col, span, className, children }: { col: 1 | 2; span?: boolean; className?: string; children: React.ReactNode }) {
+  return <div data-plan-col={String(col)} className={cn("min-w-0", span ? "col-span-2" : col === 2 ? "col-start-2" : "col-start-1", className)}>{children}</div>;
+}
+
+/** One limit as a slim meter (#4445; the reference's meter, its label and
+ * percent on one line): the label at the left, "34% used" at the right, a
+ * 4 px bar, then one short grey line (the renewal or the amount). */
+export function LimitMeter({ label, percent, tone, ariaLabel, foot, footTitle, ...data }: {
+  label?: React.ReactNode;
+  percent: number;
+  tone: string;
+  ariaLabel: string;
+  foot?: React.ReactNode;
+  /** The whole foot on hover, when the line shows it short. */
+  footTitle?: string;
+} & { [key: `data-${string}`]: string | undefined }) {
+  const shown = Math.round(Math.min(100, Math.max(0, percent)));
+  return (
+    <div {...data} data-limit-meter="" className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 items-baseline justify-between gap-2 text-[12px] leading-4" data-limit-figure="">
+        <span className="min-w-0 truncate text-ink-secondary">{label}</span>
+        <span className="shrink-0 whitespace-nowrap tabular-nums">
+          <span className="text-ink">{limitFigure(shown)}</span>{" "}<span className="text-ink-tertiary">{t("usage.limits.used")}</span>
+        </span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-inset" role="meter" aria-label={ariaLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={shown}>
+        <div className={cn("h-full rounded-full", tone)} style={{ width: `${shown}%` }} />
+      </div>
+      {foot && <div className="min-w-0 truncate text-[12px] leading-4 tabular-nums text-ink-tertiary" title={footTitle} data-limit-footer="">{foot}</div>}
+    </div>
+  );
+}
+
+/** A renewal as a meter's foot: the date with a small renew mark, the
+ * whole sentence ("Renews Wed, Oct 21, 7:59 PM") read aloud and on hover. */
+export function RenewalFoot({ date }: { date: string }) {
+  const sentence = t("usage.headline.renews", { date });
+  return (
+    <span data-plan-window="" title={sentence} className="inline-flex min-w-0 max-w-full items-center gap-1">
+      <RotateCw size={10} aria-hidden="true" className="shrink-0" />
+      <span className="sr-only">{sentence}</span>
+      <span aria-hidden="true" className="truncate">{date}</span>
+    </span>
+  );
+}
+
+/** One window of an account in the slim meter form, with its renewal. */
 function Meter({ provider, meter }: { provider: PlanRow; meter: PlanMeter }) {
   const used = Math.round(Math.min(100, Math.max(0, meter.usedPercent)));
   const renews = renewalDate(meter.resetsAt);
   return (
     <LimitMeter
       data-plan-window-kind={meter.kind}
-      title={meter.label}
+      label={meter.label}
       percent={used}
       tone={usageTone(used)}
       ariaLabel={`${provider.name} · ${meter.label}`}
-      start={renews ? <span data-plan-window="">{t("usage.headline.renews", { date: renews })}</span> : null}
+      foot={renews ? <RenewalFoot date={renews} /> : null}
     />
   );
 }
 
-/** An account's line (#4418): its name (and plan), then the short window and
- * the week side by side. Each window keeps its column, so the weeks of every
- * account line up even where an account reports no short window. */
+/** The highest percent an account reports (null: none). */
+function closestToLimit(provider: PlanRow): number | null {
+  const meters = provider.state === "error" ? [] : planMeters(provider);
+  return meters.length ? Math.max(...meters.map((meter) => meter.usedPercent)) : null;
+}
+
+/** The accounts' order (#4445): the favourite first, then the account
+ * closest to a limit; an account with no figure (a failed read, no window)
+ * after them, each group in the report's order. */
+export function orderAccountRows(rows: PlanRow[], favoriteId: string | null = null): PlanRow[] {
+  return rows
+    .map((row, index) => ({ row, index, top: closestToLimit(row) }))
+    .sort((a, b) => {
+      const fa = a.row.id === favoriteId ? 1 : 0;
+      const fb = b.row.id === favoriteId ? 1 : 0;
+      if (fa !== fb) return fb - fa;
+      if (a.top === null || b.top === null) return a.top === b.top ? a.index - b.index : a.top === null ? 1 : -1;
+      return b.top - a.top || a.index - b.index;
+    })
+    .map((entry) => entry.row);
+}
+
+/** An account's row (#4418, #4445): its name and plan, then the short window
+ * and the week side by side. A failed read keeps its reason (whole on hover)
+ * and Try again in the meters' place (#1774). */
 function AccountLimits({ provider, favorite, loading, onRefresh }: { provider: PlanRow } & Pick<PlanUsageViewProps, "favorite" | "loading" | "onRefresh">) {
-  const meters = planMeters(provider);
+  const meters = provider.state === "error" ? [] : planMeters(provider);
   return (
-    <div data-plan-row={provider.id} className="group/plan flex min-w-0 flex-col gap-3 px-3.5 py-4">
-      <div className="flex min-w-0 items-baseline gap-2">
-        <span className="truncate text-[13px] leading-[18px] text-ink" data-plan-name="">{provider.name}</span>
-        {provider.plan && <span className="truncate text-[12px] text-ink-secondary">{provider.plan}</span>}
-        {favorite && <FavoriteStar provider={provider} favorite={favorite} />}
-      </div>
-      {meters.length > 0 && (
-        <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-          {meters.map((meter) => (
-            <div key={meter.kind} className={cn("min-w-0", meter.kind === "weekly" && "col-start-2")}>
-              <Meter provider={provider} meter={meter} />
-            </div>
-          ))}
-        </div>
-      )}
+    <LimitRow
+      data-plan-row={provider.id}
+      name={provider.name}
+      detail={provider.plan}
+      accessory={favorite ? <FavoriteStar provider={provider} favorite={favorite} /> : null}
+    >
+      {meters.map((meter) => (
+        <LimitCell key={meter.kind} col={meter.kind === "weekly" ? 2 : 1}>
+          <Meter provider={provider} meter={meter} />
+        </LimitCell>
+      ))}
       {provider.state === "error" && (
-        <div data-plan-state="error" className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <p className="min-w-0 flex-1 text-[12px] leading-4 text-ink-secondary">{provider.message}</p>
-          <button type="button" onClick={onRefresh} disabled={loading} className={PILL} data-plan-retry="">
-            {t("planUsage.tryAgain")}
-          </button>
-        </div>
+        <LimitCell col={1} span>
+          <div data-plan-state="error" className="flex min-w-0 flex-1 items-center gap-3">
+            <p data-plan-reason="" title={provider.message ?? undefined} className="line-clamp-2 min-w-0 flex-1 text-[12px] leading-4 text-ink-secondary">{provider.message}</p>
+            <button type="button" onClick={onRefresh} disabled={loading} className={cn(PILL, "shrink-0")} data-plan-retry="">
+              {t("planUsage.tryAgain")}
+            </button>
+          </div>
+        </LimitCell>
       )}
-    </div>
+    </LimitRow>
   );
 }
 
@@ -237,9 +295,10 @@ function planStatus({ report, loading, failed, unavailable }: Pick<PlanUsageView
  * 2026-10-16: always drawn; with no account it says why in one line.
  * #4095: the reference's "Usage limits" group: a grey title with the refresh
  * at the right of its row, one card, `leading` (the spending limit) first.
- * #4418: then one line per signed-in account, its short window and its week. */
+ * #4418: then one line per signed-in account, its short window and its week.
+ * #4445: one slim row each, the favourite first, then the closest to a limit. */
 export function PlanUsageView({ report, loading, onRefresh, failed = false, unavailable = false, favorite, leading }: PlanUsageViewProps) {
-  const rows = unavailable ? [] : accountLimitRows(report);
+  const rows = unavailable ? [] : orderAccountRows(accountLimitRows(report), favorite?.id ?? null);
   const status = rows.length === 0 ? planStatus({ report, loading, failed, unavailable }) : null;
   const refresh = unavailable ? undefined : (
     <button

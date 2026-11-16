@@ -1,8 +1,9 @@
 // Settings > Usage (#2080, 2026-11-05; the reference's layout since #4095):
-// group titles over one card each. My plan: this month's cost and its
-// renewal. Usage limits (refresh in its title row): the spending limit and
-// each signed-in account's short window and week (#4418), a large percent
-// with its bar and renewal line each.
+// group titles over one card each. Usage limits (refresh in its title row):
+// the spending limit and each signed-in account's short window and week
+// (#4418), one slim row each with two meters on one line (#4445). The "My
+// plan" card that held only the month's renewal is gone (#4445): the renewal
+// is said on the spending limit's row.
 // The bots' usage: the cycle's cost, a segmented control (by source, by bot,
 // by model), the coloured share bar with its legend, the daily cost chart.
 // Detail: the plan history and the per-job traces on a sub-page. With
@@ -36,10 +37,10 @@ import {
   type PersonalUsageGroup,
   type PersonalUsageSummary,
 } from "@/lib/usage-personal";
-import { LimitMeter, PlanUsageView, usePlanUsage } from "./PlanUsage";
+import { LimitCell, LimitMeter, LimitRow, PlanUsageView, RenewalFoot, usePlanUsage } from "./PlanUsage";
 import { PlanUsageHistoryView, usePlanHistory } from "./PlanUsageHistory";
 import { SettingsSubPageRow } from "./SettingsSubPage";
-import { ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
+import { ConfirmPill, FIELD, FoldRow, PILL, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
 import { PageSegment } from "./content-page";
 import { formatTileShare, seriesColor, UsageChartCard } from "./usage-chart/UsageChartCard";
 import { readableError } from "@/lib/plain-error";
@@ -193,10 +194,9 @@ export function UsageSection() {
         error={error}
         hasPlan={hasPlan}
         planLoading={plan.loading}
-        now={plan.now}
         onRetry={() => { setReload((count) => count + 1); plan.onRefresh(); }}
       />
-      <PlanUsageView {...plan} leading={cap?.supported ? <SpendCapRow data={cap} onChange={setCap} /> : null} />
+      <PlanUsageView {...plan} leading={cap?.supported ? <SpendCapRow data={cap} onChange={setCap} now={plan.now} /> : null} />
       {usage && <UsageBreakdown usage={usage} cycle={cycle} onCycle={setCycle} detail={detail?.cycle === cycle ? detail.data : null} />}
       <UsageDetail
         planHistory={planShown && !plan.unavailable ? <PlanUsageHistoryView history={planHistory.history} failed={planHistory.failed} now={plan.now} /> : null}
@@ -224,55 +224,45 @@ function barTone(percent: number, warn: boolean, exceeded: boolean): string {
   return "bg-accent";
 }
 
-/** My plan (#4095, the reference's first group): the day the month renews,
- * as a row of one card. The month's cost is said once, as the large figure
- * of the bots' usage group, and the renewal once, here (not again under the
- * spending limit). With neither a cost nor a plan
- * window, one quiet line with Try again instead of a card per missing
- * figure; while the first answer is on its way, one loading line. */
-/** The page's headline (the renewal row of My plan) keeps the Settings type
- * scale, 13/18 regular with tabular figures (owner rule 2026-11-08); only the
- * large percent and cost figures use 22/28, as figures (#4113, #4123). */
-export const USAGE_HEADLINE_TYPE = "text-[13px] font-normal leading-[18px] tabular-nums text-ink";
-
-export function UsagePlan({ usage, error, hasPlan = false, planLoading = false, now = Date.now(), onRetry }: {
+/** #4445: the "My plan" card that held only the month's renewal is gone
+ * (the renewal is said on the spending limit's row). With neither a cost nor
+ * a plan window the page still says so once, with Try again, instead of a
+ * card per missing figure; otherwise nothing. */
+export function UsagePlan({ error, hasPlan = false, planLoading = false, onRetry }: {
   usage: PersonalUsage | null;
   error: PersonalUsageError | null;
   /** An engine reports its plan windows (the limits group then speaks for the page). */
   hasPlan?: boolean;
   planLoading?: boolean;
-  now?: number;
   onRetry?: () => void;
 }) {
-  const nothing = error !== null && !hasPlan && !planLoading;
-  const loading = !nothing && !usage && error === null;
+  if (error === null || hasPlan || planLoading) return null;
   return (
     <div data-settings-card="usage.headline" className="contents">
-      <SettingsGroup title={t("usage.group.plan")} groupId="usage-plan">
-        {nothing ? (
-          <div role="status" className="flex flex-wrap items-center gap-3 px-3.5 py-2.5" data-usage-unavailable={error ?? ""}>
-            <p className="min-w-0 flex-1 text-[13px] text-ink-secondary">{t("usage.headline.unavailable")}</p>
-            {onRetry && <button type="button" className={PILL} onClick={onRetry} data-usage-retry>{t("planUsage.tryAgain")}</button>}
-          </div>
-        ) : loading ? (
-          <p role="status" className="px-3.5 py-2.5 text-[13px] text-ink-secondary">{t("planUsage.loading")}</p>
-        ) : usage ? (
-          <DescribedRow label={t("usage.headline.renews", { date: renewalDay(new Date(now)) })} rowId="renewal" labelClassName={USAGE_HEADLINE_TYPE} />
-        ) : null}
+      <SettingsGroup groupId="usage-unavailable">
+        <div role="status" className="flex flex-wrap items-center gap-3 px-3.5 py-2.5" data-usage-unavailable={error}>
+          <p className="min-w-0 flex-1 text-[13px] text-ink-secondary">{t("usage.headline.unavailable")}</p>
+          {onRetry && <button type="button" className={PILL} onClick={onRetry} data-usage-retry>{t("planUsage.tryAgain")}</button>}
+        </div>
       </SettingsGroup>
     </div>
   );
 }
 
 /** Limite de dépenses: the person's own monthly limit, the first row of
- * Usage limits. A set limit shows in the shared limit form under its row
- * (#4095). A reached limit stops new turns (the server answers 409
- * spend_cap) until it is raised here. Edit opens the field in place. */
-export function SpendCapRow({ data, write = writeSpendCap, onChange, defaultEditing = false }: {
+ * Usage limits. #4445: one slim row of the same block as the accounts (its
+ * label and monthly amount, then in the first column the percent, the bar,
+ * the amount spent and the month's renewal, in the second Edit). A reached
+ * limit stops new turns (the server answers 409 spend_cap) until it is raised
+ * here; near or at the limit, one coloured line says so under the row. Edit
+ * opens the field in place. */
+export function SpendCapRow({ data, write = writeSpendCap, onChange, defaultEditing = false, now = Date.now() }: {
   data: PersonalSpendCap;
   write?: (monthlyUsd: number | null) => Promise<PersonalSpendCap>;
   onChange?: (next: PersonalSpendCap) => void;
   defaultEditing?: boolean;
+  /** When the month's renewal is read from. */
+  now?: number;
 }) {
   const [editing, setEditing] = useState(defaultEditing);
   const [text, setText] = useState("");
@@ -295,59 +285,59 @@ export function SpendCapRow({ data, write = writeSpendCap, onChange, defaultEdit
   };
   const cap = data.cap;
   const status = cap && (cap.exceeded || cap.warn) ? (
-    <span className={cn("block", cap.exceeded ? "text-danger" : "text-warning")} data-cap-status={cap.exceeded ? "reached" : "near"}>
+    <p className={cn("px-3.5 pb-1.5 text-[12px] leading-4", cap.exceeded ? "text-danger" : "text-warning")} data-cap-status={cap.exceeded ? "reached" : "near"}>
       {cap.exceeded ? t("usage.cap.reached") : t("usage.cap.nearing")}
-    </span>
+    </p>
   ) : cap ? <span className="sr-only" data-cap-status="within">{t("usage.cap.within")}</span> : null;
-  const meter = cap ? (
-    <div className="mt-3">
-      <LimitMeter
-        data-usage-bar="cap"
-        percent={cap.percent}
-        tone={barTone(cap.percent, cap.warn, cap.exceeded)}
-        ariaLabel={t("usage.cap.title")}
-        end={t("usage.cap.spent", { spent: formatCost(cap.spentUsd), cap: formatCost(cap.monthlyUsd), percent: cap.percent })}
-      />
-    </div>
-  ) : null;
   return (
-    <DescribedRow
-      label={t("usage.cap.title")}
-      rowId="cap-state"
-      description={<>{cap ? t("usage.cap.perMonth", { cap: formatCost(cap.monthlyUsd) }) : t("usage.cap.noneShort")}{status}</>}
-      below={meter || editing ? (
-        <>
-          {meter}
-          {editing && (
-            <div className="mt-2 flex flex-col gap-2" data-settings-row="cap-edit">
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  className={cn(FIELD, "w-40")}
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  placeholder={cap ? t("usage.cap.raisePlaceholder") : t("usage.cap.placeholder")}
-                  aria-label={t("usage.cap.monthly")}
-                  aria-invalid={text !== "" && parsed === null}
-                  data-cap-input
-                />
-                <button type="button" className={PRIMARY_PILL} disabled={busy || parsed === null} onClick={() => parsed !== null && void save(parsed)} data-cap-save>
-                  {cap ? t("usage.cap.raise") : t("usage.cap.set")}
-                </button>
-                {cap && <ConfirmPill label={t("usage.cap.remove")} confirmLabel={t("usage.cap.removeConfirm")} onConfirm={() => void save(null)} disabled={busy} />}
-                <button type="button" className={PILL} onClick={() => { setEditing(false); setText(""); setFailed(null); }} data-cap-cancel>{t("common.cancel")}</button>
-              </div>
-              {text !== "" && parsed === null && <p role="alert" className="text-[12px] text-danger">{t("usage.cap.invalid", { min: formatCost(data.minUsd) })}</p>}
-              {failed && <p role="alert" className="text-[12px] text-danger">{failed}</p>}
-              <p className="text-[12px] leading-4 text-ink-secondary">{t("usage.cap.hint")}</p>
-            </div>
-          )}
-        </>
-      ) : undefined}
-    >
-      {!editing && <button type="button" className={PILL} onClick={() => setEditing(true)} data-cap-edit>{t("usage.cap.edit")}</button>}
-    </DescribedRow>
+    <div role="group" aria-label={t("usage.cap.title")} data-settings-row="cap-state">
+      <LimitRow name={t("usage.cap.title")} detail={cap ? t("usage.cap.perMonth", { cap: formatCost(cap.monthlyUsd) }) : t("usage.cap.noneShort")}>
+        {cap && (
+          <LimitCell col={1}>
+            <LimitMeter
+              data-usage-bar="cap"
+              label={<span data-cap-spent="">{formatCost(cap.spentUsd)}</span>}
+              percent={cap.percent}
+              tone={barTone(cap.percent, cap.warn, cap.exceeded)}
+              ariaLabel={t("usage.cap.title")}
+              foot={<RenewalFoot date={renewalDay(new Date(now))} />}
+              footTitle={t("usage.cap.spent", { spent: formatCost(cap.spentUsd), cap: formatCost(cap.monthlyUsd), percent: cap.percent })}
+            />
+          </LimitCell>
+        )}
+        {!editing && (
+          <LimitCell col={2} className="flex justify-end">
+            <button type="button" className={PILL} onClick={() => setEditing(true)} data-cap-edit>{t("usage.cap.edit")}</button>
+          </LimitCell>
+        )}
+      </LimitRow>
+      {status}
+      {editing && (
+        <div className="flex flex-col gap-2 px-3.5 pb-2.5 pt-1" data-settings-row="cap-edit">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              inputMode="decimal"
+              className={cn(FIELD, "w-40")}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder={cap ? t("usage.cap.raisePlaceholder") : t("usage.cap.placeholder")}
+              aria-label={t("usage.cap.monthly")}
+              aria-invalid={text !== "" && parsed === null}
+              data-cap-input
+            />
+            <button type="button" className={PRIMARY_PILL} disabled={busy || parsed === null} onClick={() => parsed !== null && void save(parsed)} data-cap-save>
+              {cap ? t("usage.cap.raise") : t("usage.cap.set")}
+            </button>
+            {cap && <ConfirmPill label={t("usage.cap.remove")} confirmLabel={t("usage.cap.removeConfirm")} onConfirm={() => void save(null)} disabled={busy} />}
+            <button type="button" className={PILL} onClick={() => { setEditing(false); setText(""); setFailed(null); }} data-cap-cancel>{t("common.cancel")}</button>
+          </div>
+          {text !== "" && parsed === null && <p role="alert" className="text-[12px] text-danger">{t("usage.cap.invalid", { min: formatCost(data.minUsd) })}</p>}
+          {failed && <p role="alert" className="text-[12px] text-danger">{failed}</p>}
+          <p className="text-[12px] leading-4 text-ink-secondary">{t("usage.cap.hint")}</p>
+        </div>
+      )}
+    </div>
   );
 }
 

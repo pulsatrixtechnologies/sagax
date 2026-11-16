@@ -92,18 +92,21 @@ describe("what Settings > Usage asks the server", () => {
 });
 
 describe("the page's order (#4095: the reference's groups)", () => {
-  it("draws My plan, Usage limits, the bots' usage, then Detail, each a grey title over one card", () => {
+  // #4445: the "My plan" card that held only the renewal is gone.
+  it("draws Usage limits, the bots' usage, then Detail, each a grey title over one card; no My plan", () => {
     const usage: PersonalUsage = { month: summary(3, 1), previous: summary(1, 1), days30: summary(3, 1), byBot: summary(3, 1), byModel: summary(3, 1) };
     const html = renderToStaticMarkup(createElement("div", null,
-      createElement(UsagePlan, { usage, error: null, now: NOW.getTime() }),
+      createElement(UsagePlan, { usage, error: null }),
       createElement(PlanUsageView, { report: { providers: [] }, loading: false, now: NOW.getTime(), onRefresh: () => {} }),
       createElement(UsageBreakdown, { usage }),
       createElement(UsageDetail, { planHistory: createElement("div", { "data-history": "" }), onOpenTraces: () => {} }),
     ));
-    const order = ["usage-plan", "usage-limits", "usage-breakdown", "detail"].map((id) => html.indexOf(`data-settings-group="${id}"`));
+    expect(html).not.toContain("usage-plan");
+    expect(html).not.toContain(">My plan</h3>");
+    const order = ["usage-limits", "usage-breakdown", "detail"].map((id) => html.indexOf(`data-settings-group="${id}"`));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    for (const title of ["My plan", "Usage limits", "Your bots&#x27; usage", "Detail"]) expect(html).toContain(`>${title}</h3>`);
+    for (const title of ["Usage limits", "Your bots&#x27; usage", "Detail"]) expect(html).toContain(`>${title}</h3>`);
     // nothing folds the breakdown or the plan any more: they are groups of their own
     expect(html).not.toContain("usage.planDetail");
     expect(html).not.toMatch(/data-settings-card="usage.breakdown" data-open/);
@@ -159,28 +162,16 @@ describe("My plan", () => {
     byModel: summary(month, 4),
   });
 
-  it("says when the month renews, as a row of the plan's card, and leaves the cost to the bots' usage", () => {
-    const html = renderToStaticMarkup(createElement(UsagePlan, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
-    expect(html).toContain('data-settings-row="renewal"');
-    expect(html).not.toContain("$12.00");
-    expect(html).toContain("Renews Nov");
-    expect(html).not.toContain("data-usage-bar");
-    expect(html).not.toMatch(/[\u2013\u2014]/);
-  });
-
-  it("draws the page headline on the Settings type scale, the large figures alone at 22/28 (#4123)", () => {
-    const html = renderToStaticMarkup(createElement(UsagePlan, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
-    const label = /data-settings-row="renewal"[\s\S]*?<div id="[^"]+" class="([^"]+)">Renews Nov/.exec(html)?.[1] ?? "";
-    for (const cls of ["text-[13px]", "font-normal", "leading-[18px]", "tabular-nums", "text-ink"]) expect(label.split(" "), cls).toContain(cls);
-    expect(html).not.toMatch(/text-\[22px\]|font-semibold/);
+  // #4445: the renewal moved to the spending limit's row; with figures
+  // loaded My plan draws nothing.
+  it("draws nothing once the figures are in: no card that only says when the month renews", () => {
+    const html = renderToStaticMarkup(createElement(UsagePlan, { usage: usage(12, 10), error: null }));
+    expect(html).toBe("");
   });
 
   it("writes the renewal day the Quebec way", () => {
     setLocale("fr");
     expect(renewalDay(NOW)).toMatch(/^1er\u00a0nov/);
-    const html = renderToStaticMarkup(createElement(UsagePlan, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
-    expect(html).toContain("Mon forfait");
-    expect(html).toContain("Se renouvelle le 1er");
   });
 
   it("with no cost and no plan, says so once with Try again instead of a card per missing figure", () => {
@@ -196,15 +187,17 @@ describe("My plan", () => {
     expect(renderToStaticMarkup(createElement(UsagePlan, { usage: null, error: "unavailable", hasPlan: true }))).not.toContain("data-usage-unavailable");
   });
 
-  it("shows the spending limit as its row with the large percent and its bar, the renewal left to My plan", () => {
+  it("shows the spending limit as one slim row: its percent, its bar, the amount spent and the month's renewal (#4445)", () => {
     const cap = { supported: true, minUsd: 1, cap: { month: "2026-10", monthlyUsd: 50, spentUsd: 12, percent: 24, warn: false, exceeded: false } };
     const html = renderToStaticMarkup(createElement(SpendCapRow, { data: cap, write: () => new Promise<never>(() => {}) }));
     expect(html).toContain('data-usage-bar="cap"');
     expect(html).toContain('data-settings-row="cap-state"');
     expect(html).toContain('aria-valuenow="24"');
     expect(html).toMatch(/data-limit-figure=""[^]*>24%<[^]*>used</);
-    expect(html).not.toContain("Renews");
+    expect(html).toContain("Renews ");
+    expect(html).toContain(">$12.00<");
     expect(html).toContain("$12.00 of $50.00 (24%)");
+    expect(html).not.toContain("text-[22px]");
   });
 });
 
@@ -279,7 +272,7 @@ describe("Detail", () => {
     setLocale("fr");
     // no shortcut to Perspicax in the Settings (2026-11-05)
     const usage: PersonalUsage = { month: summary(12, 4), previous: summary(10, 3), days30: summary(12, 4), byBot: summary(12, 4), byModel: summary(12, 4) };
-    const html = renderToStaticMarkup(createElement("div", null, createElement(UsagePlan, { usage, error: null, now: NOW.getTime() }), createElement(UsageBreakdown, { usage })));
+    const html = renderToStaticMarkup(createElement("div", null, createElement(UsagePlan, { usage, error: null }), createElement(UsageBreakdown, { usage })));
     expect(html).not.toContain('data-settings-row="manage"');
     expect(html).not.toContain("data-usage-org-link");
     expect(html).not.toContain("Ouvrir Sagax Business");

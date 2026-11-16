@@ -150,7 +150,7 @@ const turn = { threadId: "t1", generation: "g1" };
 
 describe("Perspicax shared warm budget", () => {
   it("protects active generations and revokes an idle session evicted by the global cap", async () => {
-    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 1, bytes: 10 * MiB, personCount: 10, personBytes: 10 * MiB } });
+    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 1, bytes: 10 * MiB, personCount: 10, personBytes: 10 * MiB, followUpMs: 0 } });
     const h = harness({ warmBudget: budget, engineWarm: new Set(["t1", "t2"]) });
     try {
       await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
@@ -172,7 +172,7 @@ describe("Perspicax shared warm budget", () => {
   });
 
   it("evicts only the person exceeding their retained memory cap", async () => {
-    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 10, bytes: 10 * MiB, personCount: 10, personBytes: MiB + 1024 } });
+    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 10, bytes: 10 * MiB, personCount: 10, personBytes: MiB + 1024, followUpMs: 0 } });
     const h = harness({ warmBudget: budget, engineWarm: new Set(["wren", "osprey-one", "osprey-two"]) });
     try {
       for (const [threadId, speakerPrincipalId] of [["wren", BOB], ["osprey-one", ALICE], ["osprey-two", ALICE]]) {

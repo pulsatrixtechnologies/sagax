@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contractFieldsChanged, newTurnLatency, noteEngineClosed, type TurnToolWait, noteTurnActivity, takeEngineClosed, turnFirstWords, turnLatencyLine, turnLatencyParts, turnToolsGap, turnToolsSlow } from "./turn-latency.ts";
+import { contractFieldsChanged, newTurnLatency, engineGoneWhy, noteEngineClosed, noteEngineExited, noteEngineOpened, type TurnToolWait, noteTurnActivity, takeEngineClosed, turnFirstWords, turnLatencyLine, turnLatencyParts, turnToolsGap, turnToolsSlow } from "./turn-latency.ts";
 
 describe("turn latency line", () => {
   it("logs every stage of a pooled one-tool turn, ids and numbers only", () => {
@@ -290,9 +290,28 @@ describe("what the line says of a spawn and of the time to the first words (#439
   it("remembers why a conversation's engine closed, in a few plain words, once", () => {
     noteEngineClosed("thread-a", "warm budget");
     noteEngineClosed("thread-b", "Context full!");
-    expect(takeEngineClosed("thread-a")).toBe("warm-budget");
+    expect(takeEngineClosed("thread-a")).toBe("closed:warm-budget");
     expect(takeEngineClosed("thread-a")).toBeUndefined();
-    expect(takeEngineClosed("thread-b")).toBe("context-full");
+    expect(takeEngineClosed("thread-b")).toBe("closed:context-full");
+    // an end of its own: the exit code, else the signal
+    noteEngineExited("thread-c", 0);
+    expect(takeEngineClosed("thread-c")).toBe("exited:0");
+    noteEngineExited("thread-c", null, "SIGKILL");
+    expect(takeEngineClosed("thread-c")).toBe("exited:sigkill");
+  });
+
+  it("tells a first start from a process kept under another engine (#4394)", () => {
+    expect(engineGoneWhy("thread-d", "engine-a")).toBe("first");
+    noteEngineOpened("thread-d", "engine-a");
+    expect(engineGoneWhy("thread-d", "engine-b")).toBe("instance");
+    noteEngineClosed("thread-d", "idle");
+    expect(engineGoneWhy("thread-d", "engine-a")).toBe("closed:idle");
+  });
+
+  it("says why the whole opening block rode the prompt (#4394)", () => {
+    const line = turnLatencyLine("grokAgent", "thread-e", { start: 0, promptAt: 10, path: "spawn", spawnWhy: "exited:0", full: true, fullWhy: "new:load-failed", tools: 0 }, 20, "ok");
+    expect(line).toContain(" spawnWhy=exited:0 fullWhy=new:load-failed ");
+    expect(turnLatencyLine("grokAgent", "thread-e", { start: 0, promptAt: 10, path: "pooled", full: false, fullWhy: "anchor", tools: 0 }, 20, "ok")).not.toContain("fullWhy=");
   });
 
   it("names the parts of a spawn contract that changed", () => {

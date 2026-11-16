@@ -18,7 +18,7 @@ describe("openai-chat tools warm cache", () => {
     async execute() { return { text: "ok", ok: true }; }, async close() {} });
 
   it("uses the shared LRU and never evicts mounts claimed by an active turn", async () => {
-    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 1, bytes: 1000 * MiB, personCount: 10, personBytes: 1000 * MiB } });
+    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 1, bytes: 1000 * MiB, personCount: 10, personBytes: 1000 * MiB, followUpMs: 0 } });
     const cache = createWarmToolSessions({ budget });
     // #4228 (#4215): the caps bound idle retention only; a running turn is
     // not retention. So the cap of one evicts the older of two idle mounts,

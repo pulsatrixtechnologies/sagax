@@ -64,14 +64,21 @@
 // a spawn, the collector), so its endpoints answered and its polls read late;
 // near zero, it is the engine's and its tool server processes'.
 // #4394: spawnWhy, on a turn whose path is spawn: why no warm engine took it.
-// none (this conversation had no engine process on this server), closed:<why>
-// (its process was closed: idle, warm budget, stop, reestablish...), exited
-// (the process had ended on its own), closing (its process was being closed
+// first (no engine process of this conversation since this server started),
+// closed:<why> (Sagax closed its process: idle, warm budget, call ended, stop,
+// reestablish...), exited:<code or signal> (the process ended on its own:
+// between turns, at the end of the last one, or killed by the system),
+// instance (its process runs under another engine of this server), closing (its process was being closed
 // when the turn came), contract:<fields> (the process was
 // started for another command, variables or tool scope; the fields that
 // changed), budget (the warm budget had let it go), tools (the engine's tool
 // servers changed on an engine that restarts for that), reset (the person
-// started over). The engine's own start and its tool listing are setupBy's
+// started over). fullWhy, on a turn whose prompt carried the whole system
+// block (full=yes): new:<why> (a new native session: no-cursor, the
+// conversation's session could not be loaded (load-failed, load-timeout,
+// load-empty) or was on another model (load-model)), unsent (a session with
+// no record of its opening block), stable (the stable half changed) or anchor
+// (the periodic re-anchor). The engine's own start and its tool listing are setupBy's
 // init and tools; ttfa is the prompt to the first streamed update (the
 // model's first token, and whatever the engine does before it), and
 // firstWords splits the rest of ttft, up to the first answer text, in ms:
@@ -109,6 +116,12 @@ export interface TurnLatency {
   starts?: { count: number; ms: number };
   /** #4394: why the engine's process was started for this turn (spawnWhy) */
   spawnWhy?: string;
+  /** #4394: why this turn opened a new native session instead of loading the
+   * conversation's own (no-cursor, load-failed, load-timeout, load-model,
+   * load-empty) */
+  newSessionWhy?: string;
+  /** #4394: why the prompt carried the whole system block (fullWhy) */
+  fullWhy?: string;
   /** #4394: the stream before the first answer text, ms by what it was
    * doing (firstWords); `last` is the latest update's time and kind */
   beforeText?: { think: number; tool: number; quiet: number; last?: { at: number; kind: "think" | "tool" | "text" }; open?: Set<string> };
@@ -262,22 +275,57 @@ export function turnFirstWords(trace: TurnLatency): string | undefined {
   return out.length ? out.join(",") : undefined;
 }
 
-/** #4394: why each conversation's last engine process was closed, so the
- * next turn's spawn says it (spawnWhy). Ids only, a few words of reason. */
+/** #4394: why each conversation's last engine process went, so the next
+ * turn's spawn says it (spawnWhy): `closed:<why>` when Sagax closed it,
+ * `exited:<code or signal>` when it ended on its own. Ids only, a few words of
+ * reason. */
 const closedEngines = new Map<string, string>();
+/** #4394: the engine instance each conversation last started a process on,
+ * so a spawn with no recorded end tells a first start from another engine's. */
+const openedEngines = new Map<string, string>();
 const CLOSED_ENGINES_MAX = 2_000;
 
-export function noteEngineClosed(threadId: string, why: string): void {
-  closedEngines.delete(threadId);
-  closedEngines.set(threadId, why.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "closed");
-  while (closedEngines.size > CLOSED_ENGINES_MAX) closedEngines.delete(closedEngines.keys().next().value!);
+function remember(map: Map<string, string>, threadId: string, value: string): void {
+  map.delete(threadId);
+  map.set(threadId, value);
+  while (map.size > CLOSED_ENGINES_MAX) map.delete(map.keys().next().value!);
 }
 
-/** The reason the conversation's last engine process was closed, once. */
+const reasonWord = (why: string, fallback: string) =>
+  why.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || fallback;
+
+export function noteEngineClosed(threadId: string, why: string): void {
+  remember(closedEngines, threadId, `closed:${reasonWord(why, "closed")}`);
+}
+
+/** The process ended on its own (an exit, a signal, or a start that failed),
+ * not by Sagax's close. */
+export function noteEngineExited(threadId: string, code: number | null, signal?: NodeJS.Signals | null | "error"): void {
+  remember(closedEngines, threadId, `exited:${code !== null ? code : reasonWord(signal ?? "", "unknown")}`);
+}
+
+/** A process was started for this conversation on `instanceId`. */
+export function noteEngineOpened(threadId: string, instanceId: string): void {
+  remember(openedEngines, threadId, instanceId);
+}
+
+/** How the conversation's last engine process went (`closed:<why>` or
+ * `exited:<code>`), once. */
 export function takeEngineClosed(threadId: string): string | undefined {
   const why = closedEngines.get(threadId);
   closedEngines.delete(threadId);
   return why;
+}
+
+/** spawnWhy for a turn that found no process of its conversation in its
+ * engine's pool: how the last one went, else `first` (no process of this
+ * conversation since this server started) or `instance` (its process runs
+ * under another engine of this server). */
+export function engineGoneWhy(threadId: string, instanceId: string): string {
+  const gone = takeEngineClosed(threadId);
+  if (gone) return gone;
+  const opened = openedEngines.get(threadId);
+  return opened === undefined ? "first" : opened !== instanceId ? "instance" : "unrecorded";
 }
 
 /** The parts of a spawn contract (turn-prepare-spawn.ts contractKey) that
@@ -405,6 +453,7 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
   const toolsGap = turnToolsGap(trace.toolWait);
   if (toolsGap) parts.push(`toolsGap=${toolsGap}`);
   if (trace.path === "spawn" && trace.spawnWhy) parts.push(`spawnWhy=${trace.spawnWhy}`);
+  if (trace.full && trace.fullWhy) parts.push(`fullWhy=${trace.fullWhy}`);
   const firstWords = turnFirstWords(trace);
   if (firstWords) parts.push(`firstWords=${firstWords}`);
   if (trace.stallMs !== undefined) parts.push(`stallGuard=${trace.stallMs}ms${trace.stallRetried ? " retried" : ""}`);

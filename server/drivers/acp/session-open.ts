@@ -15,6 +15,7 @@ import {
   acpRpcError,
 } from "./helpers.ts";
 import { questionRequestFor } from "./question-requests.ts";
+import { noteEngineExited } from "./turn-latency.ts";
 import { createPermissionHandler } from "./session-permission.ts";
 import { createStreamHandlers } from "./session-stream.ts";
 import type {
@@ -318,6 +319,8 @@ export function createOpenSession(deps: OpenSessionDeps) {
       if (session.stderr.length > 8192) session.stderr = session.stderr.slice(-8192);
     });
     child.on("error", (e) => {
+      // #4394: the next turn's spawn says how this process went (spawnWhy)
+      if (!session.closing && !session.dead && sessions.get(threadId) === session) noteEngineExited(threadId, null, "error");
       session.dead = true;
       retireClosedWarmProcess(session.budget, child);
       // A call warm has pending RPCs but no current turn. Reject them
@@ -328,9 +331,12 @@ export function createOpenSession(deps: OpenSessionDeps) {
       emit({ ...base(threadId, current.turnId), type: "runtime.error", ...describeSpawnFailure(e, launch.command, cwd) });
       settle(threadId, session, false, "spawn_error");
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       retireClosedWarmProcess(session.budget, child);
       if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] child-close thread=${threadId.slice(0, 8)} code=${code} closing=${session.closing}`);
+      // #4394: a process that ended on its own (not closed by Sagax) leaves
+      // its exit code or signal for the next turn's spawn (spawnWhy)
+      if (!session.closing && !session.dead && sessions.get(threadId) === session) noteEngineExited(threadId, code, signal);
       session.dead = true;
       session.acp.failAll(new Error(`${DRIVER_KIND} exited ${code} before the prompt result${session.stderr ? `: ${session.stderr.trim().slice(-300)}` : ""}`));
       const current = session.current;

@@ -2623,7 +2623,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
         expect(lines).toHaveLength(1);
         expect(lines[0]).toMatch(
-          /^\[turn-latency\] \S+ thread=t-latenc path=spawn queue=\d+ms setup=\d+ms ttfa=\d+ms ttft=\d+ms tools=\d+ total=\d+ms prompt=\d+ch full=\S+ in=\S+ cached=\S+ queueBy=\S+ setupBy=\S+ spawnWhy=none stallGuard=150ms retried ok$/,
+          /^\[turn-latency\] \S+ thread=t-latenc path=spawn queue=\d+ms setup=\d+ms ttfa=\d+ms ttft=\d+ms tools=\d+ total=\d+ms prompt=\d+ch full=\S+ in=\S+ cached=\S+ queueBy=\S+ setupBy=\S+ spawnWhy=first stallGuard=150ms retried ok$/,
         );
         // #3561: a spawned turn names its process start and handshake
         expect(lines[0]).toMatch(/ setupBy=prepare:\d+,init:\d+/);
@@ -3623,6 +3623,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
     it("retires idle processes through the shared global cap across people", async () => {
       vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+      // the caps\' mechanics: no follow-up window (#4394)
+      vi.stubEnv("SAGAX_WARM_FOLLOW_UP_MS", "0");
       try {
         countFile = join(scratch, "budget-launches");
         process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;

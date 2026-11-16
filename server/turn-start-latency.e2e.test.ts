@@ -25,7 +25,7 @@ type Fixture = {
   release: () => void;
 };
 
-async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number; toolMs?: number; connectMcp?: boolean }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
+async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number; toolMs?: number; connectMcp?: boolean; idleExitMs?: number }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
   const fixture = await launchVerificationServer();
   const { dataDir, url, logPath } = fixture.info;
   let server: ChildProcess | undefined;
@@ -50,7 +50,9 @@ async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: b
         // a turn that runs one tool for toolMs before its answer
         ...(options.toolMs ? { FAKE_ACP_MODE: "slow-tool", FAKE_ACP_TOOL_MS: String(options.toolMs) } : {}),
         // #4394: the engine starts and lists its tool servers as grok does
-        ...(options.connectMcp ? { FAKE_ACP_MCP_CONNECT: "1" } : {}) },
+        ...(options.connectMcp ? { FAKE_ACP_MCP_CONNECT: "1" } : {}),
+        // #4394: an engine that ends on its own between two turns
+        ...(options.idleExitMs ? { FAKE_ACP_IDLE_EXIT_MS: String(options.idleExitMs) } : {}) },
     };
     // a teammate's engine that holds its turn open until the gate file exists
     if (options.busy) config.instances.grokbusy = {
@@ -116,9 +118,11 @@ it("sends the opening prompt once and reuses the conversation's engine on its ne
     // the first turn starts the engine; the next ones reuse it
     expect(paths[0]).toBe("spawn");
     expect(paths.slice(1)).not.toContain("spawn");
-    // #4394: the spawn says why no warm engine took it (none yet), and only it
-    expect(/ spawnWhy=(\S+)/.exec(lines[0]!)?.[1]).toBe("none");
+    // #4394: the spawn says why no warm engine took it (the first one here), and only it
+    expect(/ spawnWhy=(\S+)/.exec(lines[0]!)?.[1]).toBe("first");
     expect(lines.slice(1).join("\n")).not.toContain("spawnWhy=");
+    // and why its prompt carried the whole opening block: a new session
+    expect(/ fullWhy=(\S+)/.exec(lines[0]!)?.[1]).toBe("new:no-cursor");
     // #3598: the line counts the process starts of the turn's wait (the
     // engine's start at least, on the first turn)
     expect(Number(/ starts=(\d+):\d+ms /.exec(lines[0]!)?.[1] ?? 0)).toBeGreaterThanOrEqual(1);
@@ -282,5 +286,34 @@ it("serves a connector's known tool list to the next engine start instead of wai
     // the next start gets the known list without the server's 3.3 s
     expect(toolsMs(second)).toBeLessThan(1_500);
     expect(connectorMs(second)).toBeLessThan(1_500);
+  });
+}, 180_000);
+
+// #4394: on a hosted server every turn of a conversation said path=spawn with
+// spawnWhy=none, the reason for "no engine of this conversation here", though
+// the conversation had one a turn before. An engine process that ended on its
+// own between two turns was dropped from the pool without a word. Each spawn
+// now names why the last engine of the conversation went (here: it exited
+// with code 0 while idle), so a production line says it too.
+it("names the end of an engine that exited between two turns in the next spawn's line (#4394)", async () => {
+  await withLatencyFixture({ idleExitMs: 400 }, async (fixture) => {
+    const { bot } = await fixture.control("new-bot", "--name", "Arithmetic bot");
+    await fixture.api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "grokfixture", model: "grok-4.7" } });
+    const threadId = bot.activeTaskId;
+    for (const text of ["What is 2 plus 2?", "And 3 plus 3?"]) {
+      await fixture.control("send", "--bot", bot.id, "--task", threadId, "--text", text);
+      expect((await fixture.control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "40")).status).toBe("settled");
+      // the engine ends on its own before the next send
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+    }
+    const lines = timingLines(fixture.serverLog(), threadId);
+    console.info(`[#4394] idle-exit timing lines:\n${lines.join("\n")}`);
+    expect(lines).toHaveLength(2);
+    expect(lines.map((line) => /path=(\w+)/.exec(line)?.[1])).toEqual(["spawn", "spawn"]);
+    expect(/ spawnWhy=(\S+)/.exec(lines[0]!)?.[1]).toBe("first");
+    expect(/ spawnWhy=(\S+)/.exec(lines[1]!)?.[1]).toMatch(/^exited:0$/);
+    // the new process loads the conversation's own session: only the
+    // request and what changed ride, not a second opening block
+    expect(/full=(\w+)/.exec(lines[1]!)?.[1]).toBe("no");
   });
 }, 180_000);

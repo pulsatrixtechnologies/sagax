@@ -15,12 +15,22 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
 - full: the prompt carried the whole system block (new session, changed stable half, re-anchor).
 - in / cached: the provider's input tokens and the cached share.
 - stallGuard: how long a silent prompt is given before Sagax cancels and asks once more.
-- spawnWhy (#4394): on a spawn only, why no warm engine took the turn: `none` (no engine
-  process of this conversation on this server), `closed:<why>` (its process was closed:
-  `idle`, `warm-budget`, `stop`, `reestablish`, `rpc-failure`...), `exited` (it ended on its
-  own), `closing` (its process was being closed when the turn came), `contract:<fields>` (started for another command, variables or tool scope:
+- spawnWhy (#4394): on a spawn only, why no warm engine took the turn: `first` (no engine
+  process of this conversation since this server started), `closed:<why>` (Sagax closed its
+  process: `idle`, `warm-budget`, `call-ended`, `stop`, `reestablish`, `rpc-failure`...),
+  `exited:<code or signal>` (it ended on its own, between turns or at the end of the last
+  one, or the system stopped it: `exited:sigkill`), `instance` (its process runs under
+  another engine of this server), `closing` (its process was being closed when the turn
+  came), `contract:<fields>` (started for another command, variables or tool scope:
   `envFingerprint`, `cwd`, `spawnArgs`...), `budget`, `tools` (an engine that restarts for
-  changed tool servers) or `reset`.
+  changed tool servers) or `reset`. Every way a process goes leaves its reason, so `none`
+  (the reading of 0.8.125, which also covered a process that had exited on its own) is gone.
+- fullWhy (#4394): on a full=yes turn, why the whole opening block rode: `new:<why>` (a new
+  native session: `no-cursor`, or the conversation's session could not be loaded:
+  `load-failed`, `load-timeout`, `load-empty`, `load-model` when it was kept on another
+  model), `unsent` (a session with no record of its opening block), `stable` (the stable
+  half changed) or `anchor` (the periodic re-anchor). A process started again that loads the
+  conversation's own session sends only the request and what changed (full=no).
 - firstWords (#4394): what the stream did between its first update (ttfa) and the first answer
   text, in ms: `think` (reasoning streamed), `tool` (a tool running, from its
   call to the update that says it completed or failed, however long it is silent), `quiet`

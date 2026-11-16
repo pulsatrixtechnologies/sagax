@@ -97,7 +97,10 @@ for (;;) {
   const { selectionParams } = sessionInputs(init);
   let loaded = false;
   let replaceLoaded = false;
+  /** #4394: why the conversation's session was not loaded (fullWhy) */
+  let loadMissed = "no-cursor";
   if (cursor) {
+    loadMissed = "load-empty";
     try {
       await request(
         support.resumeMethod === "resume" ? "session/resume" : "session/load",
@@ -112,6 +115,7 @@ for (;;) {
             turn: cliTurn, currentModelId: result?.models?.currentModelId,
           })) {
             replaceLoaded = true;
+            loadMissed = "load-model";
             return;
           }
           loaded = true;
@@ -122,6 +126,8 @@ for (;;) {
       );
     } catch (error) {
       const classification = support.classifyError?.(error);
+      loadMissed = (error as { message?: unknown })?.message === `${support.resumeMethod === "resume" ? "session/resume" : "session/load"} timed out`
+        ? "load-timeout" : "load-failed";
       // The session is gone (OpenCode's or Cursor's shape). Other
       // invalidParams responses (model/config errors) must not erase history.
       const missingSession = acpMissingSession(error, cursor);
@@ -171,6 +177,7 @@ for (;;) {
     promptTurn = { ...turn, text: recovery.text };
     rebuiltFromReplay = recovery.replayed;
   }
+  if (latency) latency.newSessionWhy = loadMissed;
   await request("session/new", { cwd, mcpServers, ...selectionParams }, NEW_SESSION_TIMEOUT, (result: any) => {
     session.sessionId = typeof result?.sessionId === "string" ? result.sessionId : null;
     session.sessionKey = sessionKey;

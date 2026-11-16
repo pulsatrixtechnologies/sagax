@@ -125,11 +125,17 @@ latency.promptAt = Date.now();
 latency.path = launchedThisTurn ? "spawn" : reused ? "pooled" : "load";
 // #4394: a process started after the warm one was taken (re-established, or
 // restarted) says why its last one was closed
-if (latency.path === "spawn" && !latency.spawnWhy) latency.spawnWhy = (() => { const why = takeEngineClosed(threadId); return why ? `closed:${why}` : "none"; })();
+if (latency.path === "spawn" && !latency.spawnWhy) latency.spawnWhy = takeEngineClosed(threadId) ?? "unrecorded";
 // #4215: the conversation's timing line says whether the engine was warm
 noteEnginePrompt(threadId, latency.path !== "spawn", latency.promptAt);
 latency.promptChars = text.length;
 if (pendingSplitReceipt) latency.full = pendingSplitReceipt.receipt.turnsSinceFull === 0;
+// #4394: why the whole system block rode this prompt (fullWhy)
+if (latency.full && pendingSplitReceipt) {
+  const previous = pendingSplitReceipt.previous;
+  latency.fullWhy = !previous ? (latency.newSessionWhy ? `new:${latency.newSessionWhy}` : "unsent")
+    : previous.stable !== pendingSplitReceipt.receipt.stable ? "stable" : "anchor";
+}
 acknowledge();
 const promptIdleMs = promptIdleTimeoutMs();
 const quiet = startQuietWatch(threadId, session, current);

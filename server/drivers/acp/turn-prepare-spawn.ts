@@ -4,7 +4,7 @@ import { MiB, warmResourcePerson, warmResources } from "../../resources/warm-res
 import { killCliTree } from "../../procs.ts";
 import { narrowsNativeTools } from "../../../shared/tool-scope.ts";
 import type { AcpSession } from "./types.ts";
-import { contractFieldsChanged, takeEngineClosed } from "./turn-latency.ts";
+import { contractFieldsChanged, engineGoneWhy, noteEngineOpened, takeEngineClosed } from "./turn-latency.ts";
 
 export type AcpSpawnDeps = {
   support: any;
@@ -24,6 +24,8 @@ export type AcpSpawnDeps = {
   closeSession: (threadId: string, reason: string) => void;
   sessionAllows: Map<string, unknown>;
   sessionServersKey: unknown;
+  /** the engine instance whose pool this is (spawnWhy) */
+  instanceId?: string;
 };
 
 export type AcpSpawnResult = {
@@ -48,6 +50,7 @@ export function prepareAcpSpawn(deps: AcpSpawnDeps): AcpSpawnResult {
     support, turn, turnConfig, cliTurn, approvalGated, launch, env, cwd, accountModels,
     openSession, threadId, active, warming, sessions, closeSession, sessionAllows, sessionServersKey,
   } = deps;
+  const instanceId = deps.instanceId ?? "";
   // The spawn contract: everything that changes what process a turn
   // gets. The model rides argv where a support passes -m, and a
   // selectModel support re-applies it over the wire on the live
@@ -105,6 +108,7 @@ export function prepareAcpSpawn(deps: AcpSpawnDeps): AcpSpawnResult {
       },
     });
     launchedThisTurn = true;
+    noteEngineOpened(threadId, instanceId);
     return opened;
   };
   const sessionKey = JSON.stringify([sessionServersKey, turn.toolScope ?? null, inheritedScopeFingerprint, turn.withholdHostTools === true]);
@@ -134,10 +138,13 @@ export function prepareAcpSpawn(deps: AcpSpawnDeps): AcpSpawnResult {
     pooled.idleTimer = null;
     session = pooled;
   } else {
-    const closed = takeEngineClosed(threadId);
-    spawnWhy = turn.sessionReset ? "reset"
-      : !pooled ? (closed ? `closed:${closed}` : "none")
-      : pooled.dead ? "exited" : pooled.closing ? "closing"
+    // #4394: every way a process goes leaves its reason (turn-latency.ts)
+    if (turn.sessionReset) {
+      takeEngineClosed(threadId);
+      spawnWhy = "reset";
+    } else if (!pooled) spawnWhy = engineGoneWhy(threadId, instanceId);
+    else if (pooled.dead) spawnWhy = takeEngineClosed(threadId) ?? "exited";
+    else spawnWhy = pooled.closing ? "closing"
       : contractMismatch ? `contract:${contractFieldsChanged(pooled.contractKey, contractKey)}`
       : budgetGone ? "budget" : "tools";
     if (pooled) {

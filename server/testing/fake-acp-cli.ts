@@ -16,6 +16,8 @@
 //   FAKE_ACP_CACHED_LIVE_LOAD  acknowledge session/load of a live session but
 //                       keep its original MCP credentials, matching Qwen.
 //   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text.
+//   FAKE_ACP_IDLE_EXIT_MS  end (code 0) once nothing reached the process for
+//                       this long: an engine that leaves between two turns.
 //   FAKE_ACP_IGNORE_CANCEL=1  session/cancel is ignored: a hanging prompt
 //                       keeps running so cancel-timeout must end the process
 //   FAKE_ACP_MODE   happy (default) | image | empty-reply | reasoning-only | reasoning-only-error | exit-early | fail-after-text | hang | hang-initialize | stall-after-text | stall-first-prompt | unkeyed-tool | no-auth | auth-required | permission | question
@@ -1089,8 +1091,20 @@ async function voiceDelay(msg: any): Promise<void> {
   else if (msg.method === "session/new" || msg.method === "session/load" || msg.method === "session/resume") await pause(envMs("FAKE_ACP_LOAD_MS"));
 }
 
+// #4394: FAKE_ACP_IDLE_EXIT_MS, an engine that ends on its own (code 0) once
+// nothing reached it for that long: the next turn of the conversation finds
+// no warm process
+let idleExit: ReturnType<typeof setTimeout> | null = null;
+const armIdleExit = () => {
+  const ms = envMs("FAKE_ACP_IDLE_EXIT_MS");
+  if (!(ms > 0)) return;
+  if (idleExit) clearTimeout(idleExit);
+  idleExit = setTimeout(() => process.exit(0), ms);
+};
+armIdleExit();
 let buf = "";
 process.stdin.on("data", (c) => {
+  armIdleExit();
   buf += c;
   let nl;
   while ((nl = buf.indexOf("\n")) !== -1) {

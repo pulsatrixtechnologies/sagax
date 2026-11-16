@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { warmResources } from "../../resources/warm-resources.ts";
 import { prepareAcpSpawn, type AcpSpawnDeps } from "./turn-prepare-spawn.ts";
-import { noteEngineClosed, takeEngineClosed } from "./turn-latency.ts";
+import { noteEngineClosed, noteEngineExited, takeEngineClosed } from "./turn-latency.ts";
 import type { AcpSession } from "./types.ts";
 
 function fakeSession(contractKey: string): AcpSession {
@@ -31,7 +31,7 @@ describe("why a turn starts an engine (#4394)", () => {
     vi.spyOn(warmResources, "register").mockReturnValue({ active: () => true, retiring: () => {} } as never);
     const sessions = new Map<string, AcpSession>();
     const first = prepareAcpSpawn(deps(sessions));
-    expect(first.spawnWhy).toBe("none");
+    expect(first.spawnWhy).toBe("first");
     const second = prepareAcpSpawn(deps(sessions));
     expect(second.session).toBe(first.session);
     expect(second.spawnWhy).toBeUndefined();
@@ -48,5 +48,22 @@ describe("why a turn starts an engine (#4394)", () => {
     sessions.get("thread-1")!.dead = true;
     expect(prepareAcpSpawn(deps(sessions, { env: { A: "2" } })).spawnWhy).toBe("exited");
     expect(prepareAcpSpawn(deps(sessions, { env: { A: "2" }, turn: { botId: "bot", sessionReset: true } })).spawnWhy).toBe("reset");
+  });
+
+  it("names a process that ended on its own, and one kept under another engine (#4394)", () => {
+    vi.spyOn(warmResources, "register").mockReturnValue({ active: () => true, retiring: () => {} } as never);
+    const sessions = new Map<string, AcpSession>();
+    const on = (instanceId: string) => deps(sessions, { threadId: "thread-2", instanceId });
+    expect(prepareAcpSpawn(on("engine-a")).spawnWhy).toBe("first");
+    // the process exited (code 0) between two turns: dropped from the pool
+    noteEngineExited("thread-2", 0);
+    sessions.delete("thread-2");
+    expect(prepareAcpSpawn(on("engine-a")).spawnWhy).toBe("exited:0");
+    // killed by the system while it still sat in the pool
+    noteEngineExited("thread-2", null, "SIGKILL");
+    sessions.get("thread-2")!.dead = true;
+    expect(prepareAcpSpawn(on("engine-a")).spawnWhy).toBe("exited:sigkill");
+    // another engine of this server takes the conversation: its pool has none
+    expect(prepareAcpSpawn({ ...on("engine-b"), sessions: new Map() }).spawnWhy).toBe("instance");
   });
 });

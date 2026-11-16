@@ -9365,7 +9365,7 @@ describe("harness HTTP API", () => {
       showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false,
       decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false,
       claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false,
-      savedSteps: true, savedStepsHere: process.platform === "darwin", teachTask: false,
+      savedSteps: true, savedStepsHere: process.platform === "darwin", teachTask: true,
     };
     const saved = await api("PATCH", "/api/config", {
       features: { skillAuthoring: false },

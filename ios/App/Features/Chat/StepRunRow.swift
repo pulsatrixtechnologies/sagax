@@ -44,7 +44,7 @@ struct StepRunRow: View {
         let words = StepWords.app
         let steps = run.steps
         // One step on its own reads as that step, as the desktop's lone chip.
-        if steps.count == 1, !run.narrated, run.settled, let only = steps.first {
+        if steps.count == 1, let only = steps.first {
             StepMessageRow(message: only, words: words, nameOf: nameOf)
                 .padding(.leading, 2)
         } else {
@@ -57,7 +57,8 @@ struct StepRunRow: View {
         // #3581: a turn of this thread still running says "Working" (the
         // working line names the step), by the desktop's one rule
         // (TurnLiveness): never an old turn while the bot works elsewhere
-        let live = TurnLiveness.foldsLiveTurn(run.messages, liveTurns: rowContext.liveTurns)
+        // #4437: a stretch the bot wrote after is over, even mid-turn
+        let live = !run.closed && TurnLiveness.foldsLiveTurn(run.messages, liveTurns: rowContext.liveTurns)
         let line = StepGroup.words(summary, elapsed: run.elapsed, words: words, nameOf: nameOf, live: live)
         return VStack(alignment: .leading, spacing: 4) {
             Button {
@@ -71,7 +72,7 @@ struct StepRunRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(line.accessibility)
-            .accessibilityIdentifier("step-group.\(run.turnId ?? run.messages[0].id)")
+            .accessibilityIdentifier("step-group.\(run.messages[0].id)")
 
             if expanded {
                 VStack(alignment: .leading, spacing: 4) {

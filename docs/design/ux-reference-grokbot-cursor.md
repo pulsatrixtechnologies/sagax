@@ -178,35 +178,22 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
   panneau de fil. Test : `src/components/ChatView.pinned-once.dom.test.ts` (une carte
   par demande, dans les tests de garde).
 - Ligne de travail : sous le dernier message, la mascotte, des points animés et l'étape
-  en mots simples (« Lecture de ton courriel »), jamais un nom d'outil. Une phrase
-  courte que le bot écrit pendant le tour (#3696) s'y écrit dès son premier mot, dans
-  le même style, à la place de l'étape : au plus 100 caractères sur une ligne, sans
-  bloc Markdown ni lien (une ligne au bureau, deux à 390 px, un compte et non une
-  mesure, donc la même place à toute largeur). Elle y reste jusqu'à ce que les mots
-  de l'étape suivante la remplacent, comme une étape remplace une étape. Une règle
-  unique, `src/lib/live-text-place.ts`, lue par la ligne, la bulle en cours d'écriture
-  et la rangée du tour, au chat direct comme au salon. Le téléphone et la tablette
-  (#3712) lisent la même règle, `ios/Sources/CompanionCore/LiveTextPlace.swift`, avec
-  les mêmes cas de test ; la phrase y tient sur deux lignes au plus.
-- Rangée du tour (#3581) : dans le chat d'une personne, seule la réponse reste une
-  bulle. Les notes du bot pendant qu'il travaille et ses étapes finies se rangent
-  derrière une seule rangée d'étape (StepRow, chevron discret) : « Au travail » qui
-  scintille tant que le tour roule, puis « A travaillé 2 min 53 s ». Pendant le tour,
-  rien de ce que le bot a écrit ne passe d'une bulle à caché (#3696, le propriétaire
-  2026-11-11) : ce qui est à l'écran reste ou change sur place. Une note courte vit
-  dans la ligne de travail, jamais en bulle, puis dans la rangée dès qu'une rangée
-  plus récente du même tour existe. Un texte qui dépasse la forme courte est une
-  réponse en cours : il s'ouvre en bulle sur place et le reste jusqu'à la fin du
-  tour, même si une étape suit. À la fin du tour, le dernier texte est la bulle de
-  réponse (une réponse courte encore dans la ligne devient sa bulle sur place) et ce
-  qui précède se range une seule fois derrière « A travaillé ». Un salon garde ses
-  bulles pendant le tour : une phrase courte s'y écrit aussi dans la ligne, puis
-  devient sa bulle quand elle est reçue. Tests : `src/lib/activity-runs.test.ts`,
-  `src/components/ChatView.turn-fold.dom.test.ts`. La rangée ne nomme
-  jamais l'étape (la ligne de travail le fait). Ouverte, elle montre les notes dans
-  l'ordre, et les étapes quand « Appels d'outils » est actif ; sans eux, elle est
-  quand même dessinée et s'ouvre sur les notes seules. Une délégation échouée reste
-  visible hors de la rangée. Même rangée que « A travaillé » d'un salon.
+  en mots simples (« Lecture de ton courriel »), jamais un nom d'outil. Elle ne
+  montre jamais les mots du bot (#4437) : une phrase que le bot écrit pendant le tour
+  est une bulle dès son premier mot, au bureau comme au téléphone.
+- Rangée du tour (#3581, #4437) : comme dans la référence (chaque message du bot est
+  sa propre rangée, les appels d'outils ne sont jamais mêlés aux textes), chaque texte
+  que le bot écrit à la personne pendant un tour est sa propre bulle, dans l'ordre,
+  dès son premier mot, gardée après le tour et après un rechargement. Seul le travail
+  se range : les étapes entre deux textes passent derrière une rangée d'étape
+  (StepRow, chevron discret), « Au travail » qui scintille tant que l'étape roule,
+  puis « A travaillé 38 s ». Sans « Appels d'outils », aucune rangée n'est dessinée.
+  Même règle au chat direct, dans un salon, dans la fenêtre d'une exécution de
+  routine ou d'un échange (le détail d'activité rend chaque texte du tour, `said`)
+  et dans l'app du téléphone. Tests : `src/lib/activity-runs.test.ts`,
+  `src/components/ChatView.turn-fold.dom.test.ts`, `src/lib/routine-run-exchange.test.ts`.
+  La rangée ne nomme jamais l'étape (la ligne de travail le fait). Une délégation
+  échouée reste visible hors de la rangée. Même rangée que « A travaillé » d'un salon.
 - Compositeur : une capsule flottante, détachée du bas, largeur de la colonne. À gauche
   un bouton +, au centre « Message » suivi du nom du bot, à droite le micro (dictée)
   puis un bouton rond plein à la couleur du bot (mode voix). Le + ouvre un petit menu

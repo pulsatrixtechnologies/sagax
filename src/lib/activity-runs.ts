@@ -3,11 +3,10 @@
 // A bot working through a task emits one row per tool call, and a long
 // stretch of them buries the thing you actually came to read: what the bot
 // SAID. Every step between two visible messages (running, finished or
-// failed, and a settled turn's narration) folds into a single group that
-// names the work; text the bot left visible breaks the group, so the bot's
-// words always separate one group from the next.
+// failed) folds into a single group that names the work; every text the bot
+// writes is a bubble of its own and breaks the group, so the bot's words
+// always separate one group from the next (#4437).
 import { isBusyElsewhereWait } from "@/lib/turn-tail";
-import { liveTextPlace } from "@/lib/live-text-place";
 import type { Message } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { autoWorkerLine } from "@/lib/auto-model";
@@ -28,9 +27,11 @@ import type { FinishUntilLine, FinishUntilLineStatus } from "../../shared/finish
 
 export type ActivityTranscriptItem =
   | { kind: "message"; message: Message }
-  /** one stretch of work: tool steps and a turn's notes, in order (#3581:
-   * in a person's chat only the answer stays a bubble). `elapsedMs` is how long the bot worked, when it is known. */
-  | { kind: "run"; id: string; messages: Message[]; elapsedMs?: number };
+  /** one stretch of work: tool steps, in order; the bot's words between two
+   * stretches are bubbles of their own (#4437). `elapsedMs` is how long the
+   * bot worked, when it is known; `closed`: the bot wrote after it, so this
+   * stretch is over even while its turn still runs. */
+  | { kind: "run"; id: string; messages: Message[]; elapsedMs?: number; closed?: true };
 
 export type TranscriptItem = ActivityTranscriptItem;
 
@@ -211,138 +212,61 @@ export function isToolStep(message: Message): message is Message & { tool: NonNu
   return failedTurnCause(tool.name) === null;
 }
 
-/** A settled turn's folded rows and how long the whole turn took. */
-export type TurnFold = { turnId: string; elapsedMs: number; messages: Message[] };
+/** One stretch of a turn's work behind one row, and how long it took.
+ * `closed`: the bot wrote a text of the same turn after it, so the
+ * stretch is over even while the turn still runs. */
+type TurnFold = { turnId: string; elapsedMs: number; messages: Message[]; closed: boolean };
 
-function foldable(message: Message): boolean {
-  return isToolStep(message) && message.tool.ok === true;
-}
-
-const isNarration = (message: Message, turnId: string) =>
-  message.role === "bot" && message.kind === "text" && message.turnId === turnId && !message.turnTerminal;
-
-/** Once a turn has its answer, the rows `folded` picks go behind one run chip at the first of them. */
-function settledTurnFolds(messages: Message[], folded: (message: Message, turnId: string) => boolean): {
-  byAnchorId: Map<string, TurnFold>;
-  hiddenIds: Set<string>;
-} {
+/** A person's chat draws every text the bot writes during a turn as its own
+ * bubble, in order, from the moment it is written and after the turn ends
+ * (#4437: "C'est un message ultra pertinent"). Only the work folds: each
+ * stretch of steps between two of the bot's texts (or between the person's
+ * message and the bot's first text) goes behind one row at its place, so
+ * the Working group holds tool calls and never the bot's words. A failed
+ * step stays where it was (a failed hand-off is why no answer came). */
+function chatTurnFolds(messages: Message[]): { byAnchorId: Map<string, TurnFold>; hiddenIds: Set<string> } {
   const byAnchorId = new Map<string, TurnFold>();
   const hiddenIds = new Set<string>();
-
-  messages.forEach((terminal, terminalIndex) => {
-    if (
-      terminal.role !== "bot" ||
-      terminal.kind !== "text" ||
-      !terminal.turnId ||
-      !terminal.turnTerminal
-    ) return;
-    const turnId = terminal.turnId;
-    const before = messages.slice(0, terminalIndex);
-    const rows = before.filter((message) => folded(message, turnId));
-    if (!rows.length) return;
-
-    const firstIndex = before.findIndex((message) => message.turnId === turnId);
-    let startedAt = before[firstIndex]?.at ?? rows[0].at;
-    for (let i = firstIndex - 1; i >= 0; i -= 1) {
-      if (messages[i].role === "user") {
-        startedAt = messages[i].at;
-        break;
-      }
-    }
-    byAnchorId.set(rows[0].id, { turnId, elapsedMs: Math.max(0, terminal.at - startedAt), messages: rows });
-    for (const message of rows) hiddenIds.add(message.id);
+  // the newest text each turn wrote: a stretch before it is over
+  const lastText = new Map<string, number>();
+  messages.forEach((message, index) => {
+    if (message.role === "bot" && message.kind === "text" && message.turnId) lastText.set(message.turnId, index);
   });
-
+  let stretch: Message[] = [];
+  let lastIndex = 0;
+  let startedAt = 0;
+  let previous: Message | undefined;
+  const close = (next?: Message) => {
+    const first = stretch[0];
+    if (!first) return;
+    const last = stretch.at(-1)!;
+    const closed = (lastText.get(first.turnId!) ?? -1) > lastIndex;
+    const endedAt = next !== undefined && next.turnId === first.turnId ? next.at : last.at + (last.tool?.durationMs ?? 0);
+    byAnchorId.set(first.id, { turnId: first.turnId!, elapsedMs: Math.max(0, endedAt - startedAt), messages: stretch, closed });
+    for (const message of stretch) hiddenIds.add(message.id);
+    stretch = [];
+  };
+  messages.forEach((message, index) => {
+    // "On your computer" is stored for the server, never drawn: it splits nothing
+    if (isHiddenStatusActivity(message)) return;
+    const work = message.turnId !== undefined && isToolStep(message) && message.tool.ok !== false;
+    if (!work) {
+      close(message);
+    } else {
+      if (stretch.length && stretch[0]!.turnId !== message.turnId) close(message);
+      if (!stretch.length) {
+        // the stretch starts with what came just before it in this turn,
+        // or with the person's message that started the turn
+        const from = previous && (previous.role === "user" || previous.turnId === message.turnId) ? previous.at : message.at;
+        startedAt = Math.min(from, message.at);
+      }
+      stretch.push(message);
+      lastIndex = index;
+    }
+    previous = message;
+  });
+  close();
   return { byAnchorId, hiddenIds };
-}
-
-/** A room shows a member's answer, not its working notes. */
-function assistantTurnFolds(messages: Message[]) {
-  return settledTurnFolds(messages, isNarration);
-}
-
-/** What a person's chat knows of the turns that run now (#3696). */
-export type LiveTranscript = {
-  /** the turns still running (tool-liveness.ts liveTurnIds) */
-  liveTurns?: ReadonlySet<string>;
-  /** the note the working line draws now (live-text-place.ts liveLineNote):
-   * no row of the list while it is there */
-  lineNoteId?: string;
-};
-
-/** A person's chat folds a turn's notes and finished steps behind the turn's
- * one row, so only the answer stays a bubble (#3581). Once the turn has its
- * final message, every note and finished step before it folds. While the
- * turn runs, where its text goes is read from the text (#3696,
- * live-text-place.ts): a short note folds (the working line draws the newest
- * one, the row the others) and a text that opened into a bubble stays one, so
- * nothing on screen goes from a bubble to hidden while the turn runs. A turn
- * that ended without its final message folds a note as soon as a later row of
- * the same turn exists. Every step that has not failed folds: the chat shows
- * the row, the bubbles and the working line. A failed step stays where it was
- * (a failed hand-off is why no answer came). */
-function chatTurnFolds(messages: Message[], live: LiveTranscript) {
-  const settled = settledTurnFolds(messages, (message, turnId) =>
-    message.turnId === turnId && (isNarration(message, turnId) || foldable(message)));
-  const ends = new Set<string>();
-  const last = new Map<string, number>();
-  messages.forEach((message, index) => {
-    if (!message.turnId || message.role !== "bot") return;
-    last.set(message.turnId, index);
-    if (message.kind === "text" && message.turnTerminal) ends.add(message.turnId);
-  });
-  const open = new Map<string, Message[]>();
-  messages.forEach((message, index) => {
-    const turnId = message.turnId;
-    if (!turnId || ends.has(turnId)) return;
-    // in the working line: no row until a later row of its turn exists
-    if (message.id === live.lineNoteId) {
-      settled.hiddenIds.add(message.id);
-      return;
-    }
-    const note = isNarration(message, turnId) && (live.liveTurns?.has(turnId)
-      ? liveTextPlace(message.text) === "line"
-      : index < (last.get(turnId) ?? index));
-    const step = isToolStep(message) && message.tool.ok !== false;
-    if (!note && !step) return;
-    open.set(turnId, [...(open.get(turnId) ?? []), message]);
-  });
-  for (const [turnId, rows] of open) {
-    const firstIndex = messages.findIndex((message) => message.turnId === turnId);
-    let startedAt = messages[firstIndex]!.at;
-    for (let i = firstIndex - 1; i >= 0; i -= 1) {
-      if (messages[i]!.role === "user") {
-        startedAt = messages[i]!.at;
-        break;
-      }
-    }
-    const lastAt = messages[last.get(turnId) ?? firstIndex]!.at;
-    settled.byAnchorId.set(rows[0]!.id, { turnId, elapsedMs: Math.max(0, lastAt - startedAt), messages: rows });
-    for (const message of rows) settled.hiddenIds.add(message.id);
-  }
-  return settled;
-}
-
-/** A room's settled turns, folded above their final message: in a room every
- * member's working notes would otherwise read as one reply each (teammates
- * took them for the answer). Keyed by the final (terminal) message, which
- * stays in the transcript; the notes leave the room's rows and open from
- * one "Worked" row above it. A turn still running keeps every line. */
-export function roomTurnFolds(messages: Message[]): {
-  byTerminalId: Map<string, TurnFold>;
-  hiddenIds: Set<string>;
-} {
-  const { byAnchorId, hiddenIds } = assistantTurnFolds(messages);
-  const terminals = new Map<string, string>();
-  for (const message of messages) {
-    if (message.role === "bot" && message.kind === "text" && message.turnId && message.turnTerminal) terminals.set(message.turnId, message.id);
-  }
-  const byTerminalId = new Map<string, TurnFold>();
-  for (const fold of byAnchorId.values()) {
-    const terminalId = terminals.get(fold.turnId);
-    if (terminalId) byTerminalId.set(terminalId, fold);
-  }
-  return { byTerminalId, hiddenIds };
 }
 
 /** How long a stretch of steps ran: from the first start to the last end.
@@ -364,10 +288,10 @@ function stepSpan(messages: Message[]): number | undefined {
   return total;
 }
 
-function group(messages: Message[], foldAssistantTurns: boolean, live: LiveTranscript = {}): TranscriptItem[] {
+function group(messages: Message[], foldTurns: boolean): TranscriptItem[] {
   const items: TranscriptItem[] = [];
-  const folds = foldAssistantTurns
-    ? chatTurnFolds(messages, live)
+  const folds = foldTurns
+    ? chatTurnFolds(messages)
     : { byAnchorId: new Map<string, TurnFold>(), hiddenIds: new Set<string>() };
   let run: Message[] = [];
   const flush = () => {
@@ -397,11 +321,11 @@ function group(messages: Message[], foldAssistantTurns: boolean, live: LiveTrans
     const fold = folds.byAnchorId.get(message.id);
     if (fold) {
       flush();
-      items.push({ kind: "run", id: `run:${fold.messages[0].id}`, messages: fold.messages, elapsedMs: fold.elapsedMs });
+      items.push({ kind: "run", id: `run:${fold.messages[0]!.id}`, messages: fold.messages, elapsedMs: fold.elapsedMs, ...(fold.closed ? { closed: true } : {}) });
       continue;
     }
     if (folds.hiddenIds.has(message.id)) continue;
-    if (foldable(message) || isToolStep(message)) {
+    if (isToolStep(message)) {
       join(message);
       continue;
     }
@@ -416,8 +340,8 @@ export function groupActivityRuns(messages: Message[]): ActivityTranscriptItem[]
   return group(messages, false);
 }
 
-export function groupTranscript(messages: Message[], live: LiveTranscript = {}): TranscriptItem[] {
-  return group(messages, true, live);
+export function groupTranscript(messages: Message[]): TranscriptItem[] {
+  return group(messages, true);
 }
 
 const MAX_NAMES = 3;

@@ -6,7 +6,9 @@ final class TranscriptPresentationTests: XCTestCase {
         try JSONDecoder().decode([Message].self, from: Data(json.utf8))
     }
 
-    func testCompletedNarrationFoldsAtEveryActivityLevel() throws {
+    /// #4437: every text the bot writes during a turn is its own row, in
+    /// order, at every activity level; nothing of it goes behind a run.
+    func testEveryTextOfATurnStaysItsOwnRowAtEveryActivityLevel() throws {
         let transcript = try messages("""
         [
           {"id":"user","role":"user","kind":"text","at":1000,"text":"Check this"},
@@ -17,15 +19,11 @@ final class TranscriptPresentationTests: XCTestCase {
         """)
         for detail in ActivityDetail.allCases {
             let rows = transcriptRows(transcript, detail: detail)
-            XCTAssertEqual(rows.map(\.id), ["user", "turn.turn-1", "answer"])
+            XCTAssertEqual(rows.map(\.id), ["user", "progress", "progress2", "answer"], "\(detail)")
             XCTAssertEqual(rosterPreview(transcript, detail: detail), "The answer")
-            guard case let .activityRun(run) = rows[1] else { return XCTFail("Missing narration fold") }
-            XCTAssertEqual(run.messages.map(\.text), ["Let me check", "Checking again"])
-            XCTAssertEqual(run.englishLabel, "Worked for 4s")
         }
-        // History caches must retain the markers, too.
         let roundTrip = try JSONDecoder().decode([Message].self, from: JSONEncoder().encode(transcript))
-        XCTAssertEqual(transcriptRows(roundTrip, detail: .hidden).map(\.id), ["user", "turn.turn-1", "answer"])
+        XCTAssertEqual(transcriptRows(roundTrip, detail: .hidden).map(\.id), ["user", "progress", "progress2", "answer"])
     }
 
     func testUnfinishedAndLegacyRepliesStayVisible() throws {
@@ -39,7 +37,7 @@ final class TranscriptPresentationTests: XCTestCase {
         XCTAssertEqual(transcriptRows(transcript, detail: .reduced).map(\.id), ["legacy", "progress", "error"])
     }
 
-    func testFoldsOnlyTextFromTheCompletedTurn() throws {
+    func testNeverFoldsTheBotsTexts() throws {
         let transcript = try messages("""
         [
           {"id":"a","role":"bot","kind":"text","at":1000,"turnId":"a"},
@@ -49,7 +47,7 @@ final class TranscriptPresentationTests: XCTestCase {
           {"id":"final","role":"bot","kind":"text","at":4000,"turnId":"a","turnTerminal":true}
         ]
         """)
-        XCTAssertEqual(transcriptRows(transcript, detail: .reduced).map(\.id), ["turn.a", "b", "user", "error", "final"])
+        XCTAssertEqual(transcriptRows(transcript, detail: .reduced).map(\.id), ["a", "b", "user", "error", "final"])
     }
 
     func testWebhookPreviewShowsTaskWithoutEnvelopeOrPayload() throws {
@@ -79,7 +77,7 @@ final class TranscriptPresentationTests: XCTestCase {
         XCTAssertNil(WebhookMessageContent.parse("[DEFAULT WEBHOOK INSTRUCTIONS]\n \n[/DEFAULT WEBHOOK INSTRUCTIONS]\n" + event))
     }
 
-    func testTerminalPatchFoldsAnAlreadyVisibleTurn() throws {
+    func testTerminalPatchKeepsEveryTextOfTheTurn() throws {
         var state = CompanionState()
         let replies = try messages("""
         [
@@ -88,13 +86,13 @@ final class TranscriptPresentationTests: XCTestCase {
         ]
         """)
         for message in replies { state.apply(.message(threadId: "thread", message: message)) }
-        // #3581: while the turn runs, a note a later row follows folds already
-        XCTAssertEqual(transcriptRows(state.transcript(forThread: "thread"), detail: .hidden).map(\.id), ["turn.turn", "b"])
+        // #4437: while the turn runs, each text is a row of its own
+        XCTAssertEqual(transcriptRows(state.transcript(forThread: "thread"), detail: .hidden).map(\.id), ["a", "b"])
         let patch = try JSONDecoder().decode(Frame.self, from: Data("""
         {"kind":"message.patch","threadId":"thread","message":{"id":"b","role":"bot","kind":"text","at":2000,"turnId":"turn","turnTerminal":true}}
         """.utf8))
         state.apply(patch)
-        XCTAssertEqual(transcriptRows(state.transcript(forThread: "thread"), detail: .hidden).map(\.id), ["turn.turn", "b"])
+        XCTAssertEqual(transcriptRows(state.transcript(forThread: "thread"), detail: .hidden).map(\.id), ["a", "b"])
     }
 
     func testWebhookParserLeavesOrdinaryAndIncompleteMessagesAlone() {

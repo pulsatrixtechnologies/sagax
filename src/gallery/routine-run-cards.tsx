@@ -14,6 +14,9 @@
  * run window that Details opens, with a long report that holds a table),
  * window-gone (the run window opened from a card whose run's record is gone:
  * the card's own report, whole),
+ * window-live (#4437: the run window of a running turn, &moment=run1, run2,
+ * run3 or settled: every text the bot wrote is its own bubble between the
+ * steps, kept once the run ends),
  * feedback (wakes rated in place, a watch alert's exits, a brief), card
  * (#2719: two runs that handed work to teammates beside a finished coding
  * job; a click on Tester's row opens its work in the chat), streak-before
@@ -266,6 +269,35 @@ const windowRoutine = { id: "r-report", botId: "server", name: say("Evening disp
 const windowRun = { id: "run-report", routineId: "r-report", routineName: windowRoutine.name, botId: "server", target: "bot", runOn: "maus", status: "completed", manual: false,
   scheduledFor: NOW - 12 * M, createdAt: NOW - 12 * M, startedAt: NOW - 12 * M, finishedAt: NOW - 9 * M, output: LONG_REPORT.slice(0, 600), threadId: "server-run" } as unknown as RoutineRun;
 
+/** ?scene=window-live (#4437): a run whose turn writes three texts between
+ * its steps, at a moment (run1, run2, run3) and once it ends (settled). */
+const liveMoment = (params.get("moment") ?? "run3") as "run1" | "run2" | "run3" | "settled";
+const LIVE_TEXTS = [
+  say("I'm reading the four tickets waiting on the evening board.", "Je lis les quatre billets qui attendent sur le tableau du soir."),
+  say("Two of them have no technician. I'm checking who is free tonight.", "Deux d'entre eux n'ont pas de technicien. Je vérifie qui est libre ce soir."),
+  say("Ticket 4815 needs a part first, so I'm leaving it for the morning.", "Le billet 4815 demande d'abord une pièce, je le laisse pour le matin."),
+];
+const LIVE_REPORT = say("Evening pass done: 4815 waits for its part, 4812 and 4821 are assigned, nothing needs you.", "Passe du soir faite : 4815 attend sa pièce, 4812 et 4821 sont assignés, rien ne t'attend.");
+const liveStart = NOW - 3 * M;
+const liveSteps = [
+  { id: "ls1", name: "Read", input: JSON.stringify({ file_path: "/srv/board/evening.json" }), ok: true, at: liveStart + 8_000 },
+  { id: "ls2", name: "Bash", input: JSON.stringify({ command: "jq '.members[] | select(.free)' schedule.json" }), ok: liveMoment === "run2" ? undefined : true, at: liveStart + 30_000 },
+  { id: "ls3", name: "Grep", input: JSON.stringify({ pattern: "4815", path: "parts" }), ok: true, at: liveStart + 70_000 },
+  { id: "ls4", name: "Bash", input: JSON.stringify({ command: "assign 4812 4821" }), ok: true, at: liveStart + 120_000 },
+];
+const LIVE_AT = [liveStart + 4_000, liveStart + 50_000, liveStart + 100_000];
+const liveCut = { run1: [1, 0], run2: [1, 2], run3: [3, 3], settled: [3, 4] }[liveMoment];
+const liveSaid = [
+  ...LIVE_AT.slice(0, liveCut[0]).map((at, i) => ({ id: `lt${i}`, text: LIVE_TEXTS[i]!, at })),
+  ...(liveMoment === "settled" ? [{ id: "lt-final", text: LIVE_REPORT, at: liveStart + 150_000, final: true }] : []),
+];
+const liveDone = liveMoment === "settled";
+const liveRun = { id: "run-live", routineId: "r-report", routineName: windowRoutine.name, botId: "server", target: "bot", runOn: "maus", status: liveDone ? "completed" : "running", manual: false,
+  scheduledFor: liveStart, createdAt: liveStart, startedAt: liveStart, ...(liveDone ? { finishedAt: liveStart + 150_000 } : {}),
+  output: liveDone ? LIVE_REPORT : liveSaid.at(-1)?.text, threadId: "server-run" } as unknown as RoutineRun;
+const liveDetail = { id: "run:run-live", kind: "routine", botId: "server", title: windowRoutine.name, status: liveDone ? "finished" : "running", startedAt: liveStart, updatedAt: NOW,
+  ...(liveDone ? { endedAt: liveStart + 150_000 } : {}), steps: liveSteps.slice(0, liveCut[1]), stepsTruncated: false, said: liveSaid, files: [], children: [] };
+
 /** ?scene=card (#2719): the delegation rows of a run, beside a coding job. */
 const finishedRun = card("finished", { routineName: say("Morning dispatch", "Répartition du matin"), status: "completed", startedAt: NOW - 70 * M,
   summary: say("Morning pass done: 41 open tickets, 3 reassigned, nothing over SLA.", "Passe du matin faite : 41 billets ouverts, 3 réassignés, rien hors SLA."),
@@ -296,10 +328,13 @@ window.fetch = async (input, init) => {
   if (url.includes("/api/bots?")) return json({ bots: team, groups: [room], sections: [], computerControl: {} });
   if (url.includes("/api/instances")) return json({ instances });
   if (url.includes("/api/threads/tester-work/messages")) return json({ messages: testerMessages, activeLeafId: "o2", hasMore: false });
+  if (scene === "window-live" && url.includes("/activity/item")) return json({ item: liveDetail });
+  if (scene === "window-live" && url.includes("/api/routines")) return json({ routines: [windowRoutine], runs: [liveRun], scope: "mine", allowed: { mine: true, team: false, all: false }, facets: { teams: [], owners: [], botChoices: [] } });
   if (url.includes("/api/routines?run=run-gone")) return json({ routines: [windowRoutine], runs: [] });
   if (url.includes("/api/routines?run=")) return json({ routines: [windowRoutine], runs: [{ ...windowRun, report: LONG_REPORT }] });
   if (url.includes("/api/routines")) return json({ routines: [windowRoutine], runs: [windowRun], scope: "mine", allowed: { mine: true, team: false, all: false }, facets: { teams: [], owners: [], botChoices: [] } });
   if (url.includes("/api/me/proactive")) return json({ domains: {}, available: [{ domain: "dispatch", label: { fr: "Répartition", en: "Dispatch" }, eligible: true, watches: [{ id: "unassigned-tickets", summary: say("Tickets with no technician assigned", "Billets sans technicien assigné"), cadence: "1h", products: [], runs: true }] }] });
+  if (url.includes("/api/webhooks")) return json({ webhooks: [], attempts: [] });
   if (url.includes("/api/")) return json({});
   return realFetch(input, init);
 };
@@ -320,8 +355,9 @@ function Shell() {
   useEffect(() => {
     dispatch({ type: "hydrate", bots: team, groups: [room], sections: [], computerControl: {} } as never);
     dispatch({ type: "instances", instances } as never);
-    dispatch({ type: "routinesHydrated", routines: [windowRoutine], runs: [windowRun] });
+    dispatch({ type: "routinesHydrated", routines: [windowRoutine], runs: scene === "window-live" ? [liveRun] : [windowRun] });
     dispatch({ type: "select", id: scene === "room" ? "room" : "server" });
+    if (scene === "window-live") openRoutineRun(dispatch, { runId: "run-live", routineId: "r-report" });
     if (scene === "window") openRoutineRun(dispatch, { runId: "run-report", routineId: "r-report" });
     // #3581: the run log no longer holds this run; Details opens the card's own report
     if (scene === "window-gone") openRoutineRun(dispatch, { runId: goneCard.routineRun!.runId, routineId: "r-report", botId: "server", report: { text: goneCard.routineRun!.summary ?? "", at: goneCard.at } });
@@ -387,6 +423,11 @@ function Shell() {
             <>
               {neighbour}
               <RoutineRunRow message={reportCard} botId="server" />
+              <ChatViewSheets state={{ codingChat: null, routineRunWindow: state.routineRunWindow }} storeBots={team} dispatch={dispatch} />
+            </>
+          ) : scene === "window-live" ? (
+            <>
+              {neighbour}
               <ChatViewSheets state={{ codingChat: null, routineRunWindow: state.routineRunWindow }} storeBots={team} dispatch={dispatch} />
             </>
           ) : scene === "window-gone" ? (

@@ -41,9 +41,9 @@ final class ChatPreferencesTests: XCTestCase {
         XCTAssertEqual(messages.map(\.id), ["a", "b", "c", "d"], "hiding a row does not drop the stored message")
     }
 
-    /// The phone transcript: a turn's tool steps and narration are one step
-    /// line, the reply and the question card stay; Hidden keeps only the
-    /// folded narration.
+    /// The phone transcript: a turn's tool steps are one step line, every
+    /// text of the bot, the reply and the question card stay (#4437);
+    /// Hidden drops the steps.
     func testToolActivityRowIsDroppedAndTextAndQuestionCardStay() {
         var user = Message(id: "user", role: .user, kind: .text, at: 1_000)
         user.text = "can you import this bot"
@@ -73,13 +73,15 @@ final class ChatPreferencesTests: XCTestCase {
         let messages = [user, succeeded, failed, progress, answer, question]
         for detail in ActivityDetail.allCases {
             let rows = transcriptRows(messages, detail: detail)
-            XCTAssertEqual(rows.map(\.id), ["user", "turn.turn", "answer", "ask"], "\(detail)")
-            guard case let .activityRun(run) = rows[1] else { return XCTFail("the worked summary stays") }
-            XCTAssertEqual(run.englishLabel, "Worked for 43s")
-            XCTAssertEqual(run.steps.map(\.id), detail == .hidden ? [] : ["ok", "bad"], "\(detail)")
+            let steps = detail == .hidden ? [] : ["run.ok"]
+            XCTAssertEqual(rows.map(\.id), ["user"] + steps + ["progress", "answer", "ask"], "\(detail)")
+            if detail != .hidden {
+                guard case let .activityRun(run) = rows[1] else { return XCTFail("the worked summary stays") }
+                XCTAssertEqual(run.steps.map(\.id), ["ok", "bad"], "\(detail)")
+            }
             guard case let .message(kept) = rows[0] else { return XCTFail("the text stays") }
             XCTAssertEqual(kept.attachments?.first?.name, "export-connectwise-psa.json")
-            guard case let .message(asked) = rows[3] else { return XCTFail("the question card stays") }
+            guard case let .message(asked) = rows.last else { return XCTFail("the question card stays") }
             XCTAssertEqual(asked.kind, .options)
             XCTAssertEqual(asked.card?.questions.first?.question, "Whose profile?")
         }

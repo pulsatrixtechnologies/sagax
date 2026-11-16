@@ -48,6 +48,54 @@ describe("routineRunToExchange", () => {
     expect(messages.some((message) => message.kind === "activity" && message.tool?.ok === false)).toBe(true);
   });
 
+  // #4437: "Pourquoi le texte de la bulle s'update ... ça devrait plutôt en
+  // écrire plusieurs": each text the run's turn wrote is its own bubble
+  describe("#4437: every text of the run is its own bubble, in order", () => {
+    const t0 = run.startedAt!;
+    const steps = [
+      { id: "s1", name: "Read", ok: true, at: t0 + 2_000 },
+      { id: "s2", name: "Grep", ok: true, at: t0 + 6_000 },
+    ];
+    const said = [
+      { id: "m1", text: "Reading the overnight alerts first.", at: t0 + 1_000 },
+      { id: "m2", text: "Two alerts, I am checking whether they cleared.", at: t0 + 4_000 },
+    ];
+    const detail = (extra: object = {}) => ({ steps, said, stepsTruncated: false, files: [], children: [], canStop: false, ...extra }) as never;
+    const shape = (messages: ReturnType<typeof routineRunExchangeMessages>) =>
+      messages.map((message) => message.kind === "activity" ? `step:${message.tool?.name}` : message.text);
+
+    it("while the run goes: each text stays, the steps between them, never one bubble rewritten", () => {
+      const live = { ...run, status: "running", finishedAt: undefined, output: said[1]!.text } as RoutineRun;
+      expect(shape(routineRunExchangeMessages({ run: live, routine, bot, detail: detail() }))).toEqual([
+        "Summarise overnight alerts.",
+        said[0]!.text,
+        "step:Read",
+        said[1]!.text,
+        "step:Grep",
+      ]);
+    });
+
+    it("once it ends: the texts stay and the report closes the conversation once", () => {
+      const final = { id: "m3", text: "Two alerts, both cleared.", at: t0 + 8_000, final: true };
+      const messages = routineRunExchangeMessages({ run, routine, bot, detail: detail({ said: [...said, final] }) });
+      expect(shape(messages)).toEqual([
+        "Summarise overnight alerts.",
+        said[0]!.text,
+        "step:Read",
+        said[1]!.text,
+        "step:Grep",
+        "Two alerts, both cleared.",
+      ]);
+      expect(JSON.stringify(messages)).not.toMatch(/"m1"|"m2"|"m3"/);
+    });
+
+    it("a finished run whose newest text has no final mark draws it once, as the report", () => {
+      const last = { id: "m3", text: "Two alerts, both cleared.", at: t0 + 8_000 };
+      const messages = routineRunExchangeMessages({ run, routine, bot, detail: detail({ said: [...said, last] }) });
+      expect(messages.filter((message) => message.text === "Two alerts, both cleared.")).toHaveLength(1);
+    });
+  });
+
   it("writes a quiet meta line without raw ids", () => {
     const meta = routineRunExchangeMeta(run, run.finishedAt);
     expect(meta).toContain("Completed");

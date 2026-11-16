@@ -52,6 +52,7 @@ import {
   type BotActivityItem,
   type BotActivityStatus,
   type BotActivityStep,
+  type BotActivityText,
   type BotCodeWork,
 } from "../../shared/bot-activity.ts";
 import type { BotLaunchedAgentItem } from "../../shared/bot-launched-agents.ts";
@@ -97,6 +98,10 @@ export interface ActivityMessage {
   status?: string;
   turnSucceeded?: boolean;
   requestCancelled?: boolean;
+  /** The turn's final message (a bot text). */
+  turnTerminal?: boolean;
+  /** A note for teammates, never drawn in the person's chat. */
+  teamNote?: unknown;
   tool?: { name: string; ok?: boolean; summary?: string; itemId?: string; files?: string[]; setup?: boolean; input?: unknown; output?: unknown; parentItemId?: string };
   digest?: { access?: { via: BotActivityDetail["via"] & string; payer: BotActivityDetail["payer"] & string } };
   sender?: { name?: string } | null;
@@ -747,6 +752,7 @@ function activityDetailMethods(state: BotActivityState, listed: ReturnType<typeo
     const page = messages(task.threadId, BOT_ACTIVITY_STEPS);
     const organization = deps.organization();
     const steps: BotActivityStep[] = [];
+    const said: BotActivityText[] = [];
     const files = new Set<string>();
     let access: NonNullable<ActivityMessage["digest"]>["access"];
     const stepByItem = new Map<string, string>();
@@ -757,6 +763,12 @@ function activityDetailMethods(state: BotActivityState, listed: ReturnType<typeo
     page.messages.forEach((message, index) => {
       if (message.digest?.access) access = message.digest.access;
       if (index <= start) return;
+      // #4437: what the bot wrote between its steps is kept, each text whole,
+      // so a run's window never shows only the newest one
+      if (message.role === "bot" && message.kind === "text" && !message.teamNote && message.text?.trim()) {
+        said.push({ id: message.id, text: redactSecretsInText(message.text).trim(), at: message.at, ...(message.turnTerminal ? { final: true } : {}) });
+        return;
+      }
       const tool = message.tool;
       if (!tool || tool.setup) return;
       for (const file of tool.files ?? []) files.add(file);
@@ -791,6 +803,7 @@ function activityDetailMethods(state: BotActivityState, listed: ReturnType<typeo
       ...(access ? { via: access.via, payer: access.payer } : {}),
       steps,
       stepsTruncated: page.hasMore || start > 0,
+      ...(said.length ? { said } : {}),
       files: [...files],
       children: turnChildren(childItems(bot, task.threadId, viewerId), threadScan(bot, task).turnAt),
       ...(note ? { note } : {}),

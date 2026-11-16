@@ -3,7 +3,7 @@
 // the opening line from the routine, then the bot's report and tool steps.
 import type { Message } from "@/state/store";
 import type { ExchangeParty, ExchangeRun } from "@/lib/bot-exchange";
-import type { BotActivityDetail, BotActivityStep } from "@/lib/bot-activity";
+import type { BotActivityDetail, BotActivityStep, BotActivityText } from "@/lib/bot-activity";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { routineDateTime, routineRunDuration, routineRunLabel } from "@/lib/routine-display";
 import { formatUsd } from "@/lib/usage";
@@ -53,7 +53,17 @@ function stepMessage(step: BotActivityStep, bot: RoutineExchangeBot, index: numb
   } as Message;
 }
 
-/** Messages for the exchange sheet: instruction, tool steps, then the report. */
+/** The record's text is a clip of the bot's newest text (clipReadable, which
+ * may end it with "…"): the same words, drawn once. */
+function sameWords(text: string, record: string): boolean {
+  const clip = record.replace(/…$/, "").trimEnd();
+  return text === record || (clip.length > 0 && text.startsWith(clip));
+}
+
+/** Messages for the exchange sheet: instruction, then every text the bot
+ * wrote and every tool step, in the order they came (#4437: each text its
+ * own bubble, never one bubble rewritten with the newest text), then the
+ * report. */
 export function routineRunExchangeMessages(args: {
   run: RoutineRun;
   routine: Routine | null;
@@ -80,16 +90,31 @@ export function routineRunExchangeMessages(args: {
     } as Message);
   }
 
-  const steps = detail?.steps ?? [];
-  for (let index = 0; index < steps.length; index += 1) {
-    messages.push(stepMessage(steps[index]!, bot, index));
-  }
-
   const botFrom = { botId: bot.id, name: bot.name, color: (bot.color ?? "blue") as NonNullable<Message["from"]>["color"] };
   // #3581: the whole report when the single-run read gave it (the card's
   // "Details"), else the record's own text.
   const output = (run.report ?? run.output ?? "").trim();
-  if (output && !run.redacted) {
+  const live = run.status === "queued" || run.status === "running" || run.status === "waiting";
+  const reported = Boolean(output) && !run.redacted;
+  // #4437: the texts the run's turn wrote, each its own bubble. The final
+  // one is the report, drawn below (whole when the single-run read gave it);
+  // so is the newest one of a finished run whose record holds the same words.
+  const said: BotActivityText[] = run.redacted ? [] : (detail?.said ?? []).filter((entry) => !(reported && entry.final));
+  if (reported && !live && said.length && sameWords(said.at(-1)!.text, output)) said.pop();
+  const steps = detail?.steps ?? [];
+  let next = 0;
+  said.forEach((entry, index) => {
+    while (next < steps.length && steps[next]!.at <= entry.at) {
+      messages.push(stepMessage(steps[next]!, bot, next));
+      next += 1;
+    }
+    messages.push({ id: `routine-said:${index}`, role: "bot", kind: "text", text: entry.text, at: entry.at, from: botFrom } as Message);
+  });
+  for (; next < steps.length; next += 1) messages.push(stepMessage(steps[next]!, bot, next));
+
+  // while the run goes, its record is only the newest text, already drawn
+  if (live && said.length) return messages;
+  if (reported) {
     messages.push({
       id: "routine-report",
       role: "bot",

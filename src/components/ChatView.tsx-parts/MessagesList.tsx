@@ -1,7 +1,5 @@
 import { StepBoundary, stepFallbackText, stepIdOf } from "../MessageBoundary";
-import { Fragment, memo, use, useEffect, useMemo, type ReactNode } from "react";
-import { LiveTurnsContext } from "@/hooks/use-live-tool-ids";
-import { useLiveLineNoteId } from "@/hooks/use-live-line-note";
+import { Fragment, memo, useEffect, useMemo, type ReactNode } from "react";
 import { CloudAgentsCard, cloudAgentAnchors, useThreadCloudAgents } from "../code/CloudAgentsCard";
 import { type Bot, type InstanceInfo, type Message } from "@/state/store";
 import { useStoreGetter, useStoreSelector } from "@/state/store-selector";
@@ -92,9 +90,6 @@ export const MessagesList = memo(function MessagesList({
   const getState = useStoreGetter();
   const { botId, threadId, botName, hasMore, bots, focus, showToolCalls, locale, dispatch, botDmIds } = useChatRows();
   const showThreads = useShowThreads();
-  // #3696: a live turn's text is drawn where it stays (live-text-place.ts)
-  const liveTurns = use(LiveTurnsContext);
-  const lineNoteId = useLiveLineNoteId(transcript, liveTurns, threadId);
   const appleMobileWeb = isAppleMobileWebClient();
   // #3681: an ask the pinned card over the box holds is drawn there only
   const held = usePinnedHeld();
@@ -159,7 +154,7 @@ export const MessagesList = memo(function MessagesList({
     let pending: Message[] = [];
     const flush = () => {
       if (!pending.length) return;
-      listed.push(...groupTranscript(pending, { liveTurns, lineNoteId }));
+      listed.push(...groupTranscript(pending));
       pending = [];
     };
     for (const entry of collapsed) {
@@ -199,7 +194,7 @@ export const MessagesList = memo(function MessagesList({
     // Two or more "Go to conversation" lines in a row become one chip.
     return collapseGotoLines(incoming, (item) => silentChatItem(item, showToolCalls),
       showThreads ? gotoTargetOf : unifiedGotoTargetOf) as ListedItem[];
-  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds, storeBots, held, liveTurns, lineNoteId]);
+  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds, storeBots, held]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const newestMessageId = messages.at(-1)?.id;
   let newestUserMessageId: string | undefined;

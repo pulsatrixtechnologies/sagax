@@ -4,8 +4,8 @@ import XCTest
 
 /// #3581 on the phone and the tablet: the same forms as the desktop. A
 /// routine's result is a compact card that folds to its row once a newer
-/// result follows; a turn's notes fold while it runs; requests received fold
-/// into one names line per burst.
+/// result follows; every text of a turn stays its own row (#4437); requests
+/// received fold into one names line per burst.
 final class ChatRelevantFormsTests: XCTestCase {
     private func run(_ id: String, routine: String = "r", status: String = "completed", summary: String? = "All 12 backups completed.",
                      problems: String? = nil, at: Double) -> Message {
@@ -84,31 +84,26 @@ final class ChatRelevantFormsTests: XCTestCase {
         XCTAssertEqual(RoutineResultStack.form(card, attention: nil, folded: false), .card)
     }
 
-    // MARK: The live fold
+    // MARK: The bot's words (#4437)
 
-    func testARunningTurnFoldsEveryNoteButTheNewest() {
+    func testARunningTurnKeepsEveryTextAsItsOwnRow() {
         var user = Message(id: "u", role: .user, kind: .text, at: 0)
         user.text = "go"
-        let messages = [user, note("n1", turn: "t", at: 1), step("s1", turn: "t", at: 2), note("n2", turn: "t", at: 3)]
+        let messages = [user, note("n1", turn: "t", at: 1), step("s1", turn: "t", at: 2), step("s2", turn: "t", at: 3), note("n2", turn: "t", at: 4)]
         let rows = transcriptRows(messages, detail: .full)
-        XCTAssertEqual(rows.map(\.id), ["u", "turn.t", "n2"], "the row, then the line being written")
-        guard case let .activityRun(run) = rows[1] else { return XCTFail("the turn's row") }
-        XCTAssertEqual(run.messages.map(\.id), ["n1", "s1"])
-        XCTAssertFalse(run.settled)
+        XCTAssertEqual(rows.map(\.id), ["u", "n1", "run.s1", "n2"], "each text, the work between them")
+        guard case let .activityRun(run) = rows[2] else { return XCTFail("the stretch of work") }
+        XCTAssertEqual(run.messages.map(\.id), ["s1", "s2"], "the run holds only the work")
+        XCTAssertTrue(run.closed, "the bot wrote after it: that stretch is over")
     }
 
-    func testASettledTurnIsOneRowAndTheAnswerWithToolCallsOnAndOff() {
+    func testASettledTurnKeepsEveryTextWithToolCallsOnAndOff() {
         var user = Message(id: "u", role: .user, kind: .text, at: 0)
         user.text = "go"
         let messages = [user, note("n1", turn: "t", at: 1), step("s1", turn: "t", at: 2), note("n2", turn: "t", at: 3),
                         step("s2", turn: "t", at: 4), note("n3", turn: "t", at: 5), note("a", turn: "t", at: 6, terminal: true)]
-        for detail in [ActivityDetail.full, .hidden] {
-            let rows = transcriptRows(messages, detail: detail)
-            XCTAssertEqual(rows.map(\.id), ["u", "turn.t", "a"], "\(detail)")
-            guard case let .activityRun(run) = rows[1] else { return XCTFail("the turn's row") }
-            XCTAssertTrue(run.settled)
-            XCTAssertEqual(run.messages.filter { $0.kind == .text }.map(\.id), ["n1", "n2", "n3"])
-        }
+        XCTAssertEqual(transcriptRows(messages, detail: .hidden).map(\.id), ["u", "n1", "n2", "n3", "a"])
+        XCTAssertEqual(transcriptRows(messages, detail: .full).map(\.id), ["u", "n1", "run.s1", "n2", "run.s2", "n3", "a"])
     }
 
     func testAFailedHandOffStaysVisibleWhileTheTurnRuns() {

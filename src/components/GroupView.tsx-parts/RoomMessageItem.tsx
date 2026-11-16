@@ -23,7 +23,7 @@ import { RoomToolChip } from "./RoomToolChip";
 import { roomActivityVisible } from "@/lib/room-activity";
 import { DataResultChip } from "../DataResultChip";
 import { StatusActivityRow } from "../StatusActivityRow";
-import { isStatusActivity, type TurnFold } from "@/lib/activity-runs";
+import { isStatusActivity } from "@/lib/activity-runs";
 import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
 import { CompactionChip, DigestChip } from "../DigestChip";
@@ -36,8 +36,6 @@ import { RoomTextMessage } from "./RoomTextMessage";
 import { isCancelledTranscriptRow } from "../../../shared/client-cancel";
 import type { MentionPeer } from "@/lib/mentions";
 import { roomAuthor } from "@/lib/room-authors";
-import { ActivityRun } from "../ActivityRun";
-import { botNames } from "../ToolActivity";
 import { autoPausedRoutineToResume } from "@/lib/transient-notice";
 
 type RunMeta = {
@@ -73,8 +71,6 @@ export function RoomMessageItem({
   memberOf,
   state,
   dispatch,
-  fold,
-  focusedId,
 }: {
   message: Message;
   run: RunMeta;
@@ -102,8 +98,6 @@ export function RoomMessageItem({
   memberOf: (id?: string) => Bot | undefined;
   state: ReturnType<typeof useStore>["state"];
   dispatch: ReturnType<typeof useStore>["dispatch"];
-  fold?: TurnFold;
-  focusedId?: string | null;
 }): ReactNode {
   const user = m.role === "user";
   const { author, joinsAbove, joinsBelow } = run;
@@ -255,33 +249,6 @@ export function RoomMessageItem({
           <ClusterLabel bot={memberOf(m.from.botId)} name={m.from.name} color={m.from.color} />
         )}
         {person && newCluster && <RoomPersonLabel name={person.name} initials={person.initials} avatarUrl={person.avatarUrl} personId={person.personId} onOpen={(personId) => dispatch({ type: "openPersonPanel", personId })} />}
-        {fold && (
-          <ActivityRun
-            messages={fold.messages}
-            elapsedMs={fold.elapsedMs}
-            focusedId={focusedId}
-            nameOf={botNames(state.bots)}
-            renderStep={() => null}
-            renderMessage={(note) => (
-              <div className="contents" data-mid={note.id}>
-                <RoomTextMessage
-                  group={group}
-                  message={note}
-                  members={members}
-                  mentionPeers={mentionPeers}
-                  transcript={transcript}
-                  emerging={false}
-                  eager={false}
-                  mine={false}
-                  joinsAbove={false}
-                  joinsBelow={false}
-                  onReply={onReply}
-                  reactionSelf={reactionSelf}
-                />
-              </div>
-            )}
-          />
-        )}
         {row}
         {seen.has(m.id) && <SeenByRow faces={seen.get(m.id)!} end={mine} time={formatTime} />}
       </div>

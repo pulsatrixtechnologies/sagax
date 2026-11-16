@@ -421,6 +421,13 @@ describe("createOpenAIChatRuntime tool approvals", () => {
       return { requests: bodies.length, corrective: corrective.length, ok: completed.ok, stopReason: completed.stopReason };
     };
 
+    // upstream #5793: a tool with no parameters is often called with empty arguments.
+    it.each(["", " \t\n "])("treats whitespace-only tool arguments as an empty object (%j)", async (argumentsText) => {
+      const emptyArguments = `data: ${JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "fx_write", arguments: argumentsText } }] } }] })}\n\n`
+        + 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n';
+      expect(await run([emptyArguments, answer], undefined, { custom: { fx: toolServer() } })).toMatchObject({ requests: 2, ok: true });
+    }, 20_000);
+
     it("sends a failed call back once per round, then ends the turn as failed", async () => {
       expect(await run([toolCall("c1", "nope"), answer, toolCall("c2", "nope"), answer], 1))
         .toEqual({ requests: 4, corrective: 1, ok: false, stopReason: "tool_error" });

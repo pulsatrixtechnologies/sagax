@@ -552,7 +552,8 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
         let skipRepeatCount = false;
         try {
           let args: unknown;
-          try { args = JSON.parse(call.function.arguments); }
+          // A tool with no parameters is often called with empty arguments.
+          try { args = JSON.parse(call.function.arguments.trim() ? call.function.arguments : "{}"); }
           catch { throw new ChatProtocolError("tool arguments are not complete JSON"); }
           if (!object(args)) throw new ChatProtocolError("tool arguments must be a JSON object");
           const inputPreview = preview(args);

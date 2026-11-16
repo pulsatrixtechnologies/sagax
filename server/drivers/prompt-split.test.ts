@@ -7,6 +7,7 @@ import {
   readPromptSplitReceipt,
   sectionDelta,
   sectionFingerprints,
+  sentSectionIds,
   splitSessionPrompt,
   VOLATILE_SECTIONS_NOTE_PREFIX,
   volatileContextNote,
@@ -300,5 +301,32 @@ describe("volatileSectionsUpdate (only what changed)", () => {
     expect(sectionDelta(held, held)).toEqual({});
     const tagged = sectionFingerprints([mentions]);
     expect(sectionDelta(tagged, tagged, true)).toEqual({ mentions: tagged.mentions });
+  });
+});
+
+// #4456: the latency line names what of the opening block a follow-up resent
+describe("sentSectionIds", () => {
+  const stableSections = [{ id: "soul", text: "Soul." }, { id: "rules", text: " Rules." }];
+  const stable = stableSections.map((section) => section.text).join("");
+  const sections = [{ id: "recent", text: "Recent one." }, { id: "memory", text: "Memory one." }];
+  const volatile = sections.map((section) => section.text).join("");
+  const first = splitSessionPrompt(stable, volatile, null, stable + volatile, "hello", false, 0, sections, stableSections);
+
+  it("names nothing on the first prompt of a session, nor on a follow-up where nothing changed", () => {
+    expect(sentSectionIds(null, first.receipt)).toEqual([]);
+    const same = splitSessionPrompt(stable, volatile, first.receipt, stable + volatile, "again", false, 0, sections, stableSections);
+    expect(same.text).toBe("again");
+    expect(sentSectionIds(first.receipt, same.receipt)).toEqual([]);
+  });
+
+  it("names the volatile and stable sections that changed, and only them", () => {
+    const changed = [{ id: "recent", text: "Recent two." }, sections[1]!];
+    const changedVolatile = changed.map((section) => section.text).join("");
+    const next = splitSessionPrompt(stable, changedVolatile, first.receipt, stable + changedVolatile, "next", false, 0, changed, stableSections);
+    expect(sentSectionIds(first.receipt, next.receipt)).toEqual(["recent"]);
+    const rules = [stableSections[0]!, { id: "rules", text: " Rules two." }];
+    const rulesStable = rules.map((section) => section.text).join("");
+    const after = splitSessionPrompt(rulesStable, changedVolatile, next.receipt, rulesStable + changedVolatile, "more", false, 0, changed, rules);
+    expect(sentSectionIds(next.receipt, after.receipt)).toEqual(["rules"]);
   });
 });

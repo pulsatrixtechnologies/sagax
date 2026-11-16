@@ -229,10 +229,14 @@ export function openIfSealed(bytes: Buffer, path: string): Buffer {
  * for erased content, ContentKeyUnavailable (503) when its key is locked. */
 // Small sealed files a reader just opened (MEMORY.md is read at every turn):
 // kept opened in memory while the file is unchanged, at most 5 minutes and
-// 8 MB in all, emptied with the rest when a key changes or goes.
+// 8 MB in all, emptied with the rest when a key changes or goes. #4456: a
+// small plain file too: a turn read every memory topic and doc of the bot
+// several times over (recall, the semantic index, the memory journal), an
+// open, a read and a close each, on the server's main thread; an unchanged
+// one now costs the stat alone.
 const OPENED_MAX_FILE = 256 * 1024;
 const OPENED_BYTES = 8 * 1024 * 1024;
-const opened = new Map<string, { ino: number; size: number; mtimeMs: number; at: number; plain: Buffer }>();
+const opened = new Map<string, { ino: number; size: number; mtimeMs: number; ctimeMs: number; at: number; plain: Buffer }>();
 let openedBytes = 0;
 
 function forgetOpened(): void {
@@ -245,13 +249,14 @@ export function readAtRestSync(path: string, fd?: number): Buffer {
     let stat: Stats | null = null;
     try { stat = statSync(path); } catch { stat = null; }
     const known = stat ? opened.get(path) : undefined;
-    if (stat && known && known.ino === stat.ino && known.size === stat.size && known.mtimeMs === stat.mtimeMs && Date.now() - known.at < BLOCK_CACHE_MS) return known.plain;
+    if (stat && known && known.ino === stat.ino && known.size === stat.size && known.mtimeMs === stat.mtimeMs && known.ctimeMs === stat.ctimeMs && Date.now() - known.at < BLOCK_CACHE_MS) return known.plain;
     const bytes = readFileSync(path);
     const plain = openIfSealed(bytes, path);
-    if (stat && plain !== bytes && bytes.length === stat.size && bytes.length <= OPENED_MAX_FILE) {
+    if (stat && stat.isFile() && bytes.length === stat.size && bytes.length <= OPENED_MAX_FILE) {
       const old = opened.get(path);
       if (old) openedBytes -= old.plain.length;
-      opened.set(path, { ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, at: Date.now(), plain });
+      // ctime too: a file made unreadable (its mode changed) is read again
+      opened.set(path, { ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, at: Date.now(), plain });
       openedBytes += plain.length;
       for (const [name, entry] of opened) { if (openedBytes <= OPENED_BYTES) break; opened.delete(name); openedBytes -= entry.plain.length; }
     }

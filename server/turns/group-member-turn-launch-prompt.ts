@@ -204,8 +204,8 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     ? ensureTaskWorkspace(bot.id, threadId)
     : groupTurnCwd(workspace, () => store.pinGroupCwd(readyGroup.id, threadId));
   if (IDENTITY.kind === "perspicax" && roomPrincipal) {
-    // #4394: at most a second; the copy goes on beside the member's turn
-    await pluginCopyForTurnStart(syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id));
+    // #4456: the copy goes on beside the member's turn, never waited for here
+    pluginCopyForTurnStart(syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id));
   }
   {
     const drift = checkSoulDrift(bot.id, bot.soul ?? "", bot.soulHash ?? "");

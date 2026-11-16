@@ -13,7 +13,7 @@ export type { RecallPassage } from "./recall-types.ts";
 // are neutralised so a note cannot close the block; the block is capped.
 import { recallMessages, recallTerms, type MemoryHit, type RecallHit } from "../messages/message-db.ts";
 import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "../memory/memory-topics.ts";
-import { listMemoryTopics, loadMemory, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "../workspace/workspace.ts";
+import { listMemoryTopics, loadMemory, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, withMemoryListingOnce, workspaceDir } from "../workspace/workspace.ts";
 import { withoutExpired, withoutSuperseded } from "../memory/memory-entries.ts";
 import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "../memory/memory-audience.ts";
 import { fusePassages, semanticPassages } from "./semantic-recall.ts";
@@ -313,6 +313,12 @@ export function selectMemoryPassages(
 export function buildRecall(input: RecallInput): RecallResult | null {
   const query = recallQuery(input.message);
   if (!query) return null;
+  // #4456: the topics, the memory search and the semantic index each list
+  // the bot's topic files: one listing serves them all
+  return withMemoryListingOnce(() => recallFor(input, query));
+}
+
+function recallFor(input: RecallInput, query: string): RecallResult | null {
   const topics = topicPassages(input.botId, query, input.audience);
   // A matching passage beats a topic's opening: otherwise a name match hides
   // the actual answer later in that same file.

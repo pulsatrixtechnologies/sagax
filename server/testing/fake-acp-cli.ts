@@ -16,6 +16,21 @@
 //   FAKE_ACP_CACHED_LIVE_LOAD  acknowledge session/load of a live session but
 //                       keep its original MCP credentials, matching Qwen.
 //   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text.
+//   FAKE_ACP_MODEL_MS  #4456: a model's own timing and prompt cache. Each
+//                       prompt answers after this many ms (the model's time
+//                       to its first token) plus FAKE_ACP_PREFILL_MS_PER_KCHAR
+//                       per thousand characters of input the cache did not
+//                       hold. The input is the session's history plus the
+//                       prompt (this process's, since its session/new); the
+//                       cache holds the inputs of earlier prompts of any
+//                       process (FAKE_ACP_PROMPT_CACHE_FILE), and a prompt
+//                       hits it up to the longest common prefix. The result's _meta reports inputTokens and
+//                       cachedReadTokens (four characters a token). The
+//                       answer is FAKE_ACP_TEXT_REPLY (default "4"). With
+//                       FAKE_ACP_TOOL_FIRST_MS the model runs one tool that
+//                       long before it answers, and, when its input asks
+//                       for a sentence before the first tool call (the work
+//                       style rule), says FAKE_ACP_EARLY_WORDS first.
 //   FAKE_ACP_IDLE_EXIT_MS  end (code 0) once nothing reached the process for
 //                       this long: an engine that leaves between two turns.
 //   FAKE_ACP_IGNORE_CANCEL=1  session/cancel is ignored: a hanging prompt
@@ -674,6 +689,63 @@ const emitConfigUpdates = (after: string, sessionId: string) => {
 };
 // Send response and subsequent updates in one chunk to exercise wire ordering:
 // a promise continuation must not overwrite a newer notification with the ACK.
+// #4456: FAKE_ACP_MODEL_MS, a model with its own time to first token and a
+// prompt cache shared by every process of the fixture (one file)
+type PromptCache = { inputs: string[] };
+/** The session's history in this process: what its prompts and answers
+ * said since session/new (every fake session has the same id). */
+let timedHistory = "";
+const PROMPT_CACHE_INPUTS = 16;
+function readPromptCache(file: string): PromptCache {
+  try {
+    const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<PromptCache>;
+    return { inputs: Array.isArray(raw.inputs) ? raw.inputs : [] };
+  } catch {
+    return { inputs: [] };
+  }
+}
+function commonPrefix(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < max && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  return i;
+}
+/** The rule of the work style that asks for a sentence before the tools
+ * (server/system-prompt.ts WORK_STYLE_PROMPT). */
+const EARLY_WORDS_RULE = "before your first tool call, say in a sentence what you understood and do first";
+async function playTimedModel(msg: any): Promise<void> {
+  const sessionId = String(msg.params?.sessionId ?? "");
+  const prompt = (Array.isArray(msg.params?.prompt) ? msg.params.prompt : [])
+    .map((block: any) => (block?.type === "text" && typeof block.text === "string" ? block.text : "")).join("\n");
+  const file = process.env.FAKE_ACP_PROMPT_CACHE_FILE ?? "";
+  const cache = file ? readPromptCache(file) : { inputs: [] };
+  const input = timedHistory + prompt;
+  const cached = cache.inputs.reduce((best, earlier) => Math.max(best, commonPrefix(earlier, input)), 0);
+  const prefillMs = (envMs("FAKE_ACP_PREFILL_MS_PER_KCHAR") * (input.length - cached)) / 1_000;
+  const update = (u: unknown) => out({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: u } });
+  await pause(envMs("FAKE_ACP_MODEL_MS") + prefillMs);
+  const reply = process.env.FAKE_ACP_TEXT_REPLY ?? "4";
+  let said = "";
+  const toolMs = envMs("FAKE_ACP_TOOL_FIRST_MS");
+  if (toolMs > 0) {
+    if (input.includes(EARLY_WORDS_RULE) && process.env.FAKE_ACP_EARLY_WORDS) {
+      said = process.env.FAKE_ACP_EARLY_WORDS;
+      update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: said } });
+    }
+    update({ sessionUpdate: "tool_call", toolCallId: "timed-tool", title: "read", kind: "read", status: "pending", rawInput: { path: "notes.md" } });
+    await pause(toolMs);
+    update({ sessionUpdate: "tool_call_update", toolCallId: "timed-tool", status: "completed", rawOutput: "ok" });
+  }
+  update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: said ? `\n\n${reply}` : reply } });
+  if (file) {
+    const now = readPromptCache(file);
+    now.inputs = [...now.inputs.filter((earlier) => earlier !== input), input].slice(-PROMPT_CACHE_INPUTS);
+    writeFileSync(file, JSON.stringify(now));
+  }
+  timedHistory = `${input}\n${said}${reply}\n`;
+  result(msg.id, { stopReason: "end_turn", _meta: { inputTokens: Math.ceil(input.length / 4), outputTokens: Math.ceil(reply.length / 4), cachedReadTokens: Math.floor(cached / 4) } });
+}
+
 const resultAndConfigUpdates = (id: unknown, res: unknown, after: string, sessionId: string) => {
   const updates = configUpdates.filter((entry) => entry.after === after).map((update) => ({
     jsonrpc: "2.0", method: "session/update", params: {
@@ -1271,6 +1343,7 @@ function handle(msg: any) {
       const opts = configOptions();
       const mdls = sessionModels(newSessionModel(msg.params, "fake-acp-session"));
       liveSession = "fake-acp-session";
+      timedHistory = "";
       resultAndConfigUpdates(msg.id, {
         sessionId: "fake-acp-session",
         ...(opts ? { configOptions: opts } : {}),
@@ -1462,6 +1535,11 @@ function handle(msg: any) {
         // every later prompt answers normally.
         hangingPromptId = msg.id;
         hangKeepAlive = setInterval(() => {}, 1_000);
+        return;
+      }
+      // #4456: a model's own timing and prompt cache
+      if (process.env.FAKE_ACP_MODEL_MS !== undefined) {
+        void playTimedModel(msg);
         return;
       }
       // FAKE_ACP_TEXT_REPLY: a plain text answer and nothing else, the shape of

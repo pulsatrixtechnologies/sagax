@@ -118,7 +118,10 @@ export const VERIFY_FIRST_PROMPT =
  * every turn (direct, room, routine) reads the same work style; the soul
  * and RULES.md stay ahead of it and may sharpen it, never remove it. */
 export const WORK_STYLE_PROMPT =
-  "\nHow you work: for several steps, state a 1-2 line plan and complete it; report unfinished work and what remains."
+  // #4456: a turn that opened with tool calls showed the person nothing for
+  // 16 to 46 s; the reference app's model says first, in its own words, what
+  // it understood and what it does, and the person reads it at once.
+  "\nHow you work: before your first tool call, say in a sentence what you understood and do first; for several steps, state a 1-2 line plan and complete it; report unfinished work and what remains."
   + " Search memory/topic notes, session_search, files and tools before asking for a fact; never ask for what was already given."
   + " Discovery (sagax_help, skills_list, search_tool, session_search, workspace_read, workspace_search, a skill catalog) takes at most two calls per turn, never the same one twice, and none when the request is ambiguous; a known tool is called, not searched. A direct read or a clarifying question comes first; this wins over a skill's own \"catalog first\" or \"skill first\" rule, which applies once a routine or multi-step procedure starts."
   // #3221 / #3222: Today took 26 steps through act and run_command, Remote

@@ -42,6 +42,19 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   call to the update that says it completed or failed, however long it is silent), `quiet`
   (any other gap of a second or more between two updates). The engine's own start and its tool
   listing are setupBy's `init` and `tools`.
+- ttfc / shown / sent (#4456): ttfc is the prompt to the first tool call, on a turn that
+  called one (a ttfc under ttft: the model chose a tool before any words). shown is the
+  person's message to the first answer text Sagax streamed to them, queue and setup
+  included: the wait for words as the person lives it. sent, on a full=no prompt, names the
+  opening block's sections that rode it because they changed (nothing else of the block is
+  sent again; `cached` says how much of the input the engine's cache held). The work style
+  asks the model for one sentence of its own, saying what it understood and does, before its
+  first tool call, so a turn that starts with tools still shows words at once.
+  server/first-text-latency.e2e.test.ts (`pnpm vitest run server/first-text-latency.e2e.test.ts
+  --silent=false` prints each turn's line) holds the target with a fake engine that has a
+  model's timing and a prompt cache (fake-acp-cli.ts `FAKE_ACP_MODEL_MS`): a warm no-tool follow-up shows its first
+  text in under 3 s, and a second conversation of the same bot finds the stable part of its
+  opening block in the cache.
 - queueBy / setupBy (#3561): the parts of queue and setup in ms, from the turn's own step marks
   (server/turns/turn-trace.ts), each step closing the part it names; a part the turn did not
   reach is left out, and the parts add up to the stage.
@@ -49,7 +62,9 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
     the claim after them), prewarm (a warm being joined), engines (#3679: the engines' list
     read once after a start), compact (the fold check only, since #3679),
     context (selection, soul, skills), mcp (the tool servers' sign-in refresh and probe),
-    connector (the account's connection, and the turn's connectors plan), place (workspace, sandbox, mounts), prompt, recall,
+    connector (the account's connection, and the turn's connectors plan), place (workspace, sandbox, mounts), plugins
+    (starting the plugin copy into the person's environment: since #4456 the turn never waits
+    for it, what needs the plugins waits for the copy itself), prompt, recall,
     access (the turn's credentials, a typed command), slot (an engine start slot), send,
     dispatch (pictures, hand-off to the engine).
   - setupBy: prepare (sign-in check, command, spawn contract), init (process start and
@@ -292,6 +307,40 @@ the wait. The queue's other parts stay in tens of ms in the reproduction; a
 production queue of seconds reads `prewarm` (an engine start), `admit` (a
 first attempt on an engine that failed and handed the turn to its backup: the
 backup's run restarts the clock) or `queueBusy` (Sagax's own work).
+
+Queue on a hosted server (#4456): 1.4 to 3.7 s on every turn, `queueBusy`
+about the same, so the main thread was busy, not waiting on the network; its
+parts (recall, place, prompt, admit) a few hundred ms each. The benchmark
+`server/first-text-latency.e2e.test.ts` ("production-sized") runs a bot the
+size of a production one (a 62 KB opening block: an 11.5 KB soul, a 12 KB
+RULES.md, a full MEMORY.md, 120 topic notes, 40 earlier conversations, a long
+main chat), prints `queueBy` and `queueBusy` on every turn
+(SAGAX_TURN_LATENCY_BUSY_MS=0) and counts the server's synchronous file calls
+in each queue (server/testing/fs-sync-calls.mjs, `fsSync=`). On a laptop SSD
+the queue is 30 to 100 ms, all of it the turn's own synchronous work; what it
+is made of is about 2,750 synchronous file calls per queue, nine in ten on the
+bot's memory files: recall listed the topic folder four times, the memory
+journal resolved every topic, log and doc through a realpath and stat'ed it
+twice more, every unchanged plain file was opened, read and closed again, the
+memory section's cache was rebuilt at every turn (the daily log written after
+each turn changed its folder fingerprint) and read the head of every topic.
+Each call holds the main thread for as long as the disk answers: a round trip
+on a network disk, so the count grows with the person's notes and logs and
+the time with the disk. Now:
+- one topic listing per recall (workspace.ts withMemoryListingOnce);
+- the journal resolves a folder's real path once per pass and reuses the
+  listing's lstat (memory-store.ts memoryFileResolver);
+- an unchanged small plain file is served from the opened-files cache by its
+  stat (content-at-rest.ts readAtRestSync, as a sealed one already was), and a
+  topic's head by a stat (memory-topics.ts readTopicHead);
+- the memory section's fingerprint watches the topic files only;
+- a person with no saved connections is read once (person-connections.ts).
+Before and after, three measured turns each: `fsSync` 2,804, 2,726, 2,742 to
+737, 702, 735 (realpath 250 to 8, open 260 to 3, read file 200 to 38); queue
+41, 71, 105 ms to 32, 32, 30 ms, `queueBusy` equal to the queue in both. What
+stays is a stat per memory file per reader that must see a change made on
+the disk (the section's cache, the journal, the semantic index), the
+provider keys store (about 65 calls a turn) and the skill links.
 
 Memory and skills sized to the turn. A turn that can read MEMORY.md itself is
 shown its first lines up to 8 KB (MEMORY_TURN_BYTES, whole lines); a line past

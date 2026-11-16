@@ -18,6 +18,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     buildTurnContext,
     callLinesBlock,
     callLinesSince,
+    autoRecallEnabled,
     cfg,
     connectorPlanForTurn,
     checkSoulDrift,
@@ -49,6 +50,8 @@ export function createSetupStartTurn(host: StartTurnHost) {
     localPrincipalId,
     mcpServersAsPerson,
     prepareMcpServers,
+    prepareSemanticRecall,
+    recallQuery,
     messagesIntegration,
     messagesWanted,
     orgSpeakerPrincipal,
@@ -68,6 +71,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     sectionContextSystemPrompt,
     selectBundledSkills,
     selectReplay,
+    semanticEmbeddingEndpoint,
     sessionStart,
     settleDirectFollowup,
     skillAuthoringEnabled,
@@ -103,6 +107,15 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // #3679: the checks, the message's admission and the claim close their
     // own part, so compact names only the fold check
     if (!state.warmOnly) turnTrace(state.threadId, "admitted");
+    // #4456: an embedding endpoint the person runs reads this turn's recall
+    // query beside compaction, context selection and the mounts, instead of
+    // after them: the turn awaits what is left of it just before dispatch
+    // (start-turn-computer-mount.ts). Without an endpoint nothing starts, and
+    // a compaction-only run asks no model, so it reads no recall either.
+    if (!state.opts?.compactOnly && state.bot.memoryEnabled !== false && autoRecallEnabled(cfg) && semanticEmbeddingEndpoint(cfg)) {
+      state.semanticRecallPrepared = prepareSemanticRecall(state.bot.id, recallQuery(state.resolvedImages.text));
+      state.semanticRecallPrepared.catch(() => {});
+    }
     // Lot L2 of the connectors design: this turn's connectors, and whose,
     // computed once here and read by the prompt, the reach line, the
     // Connectors record and the dispatch (server/connectors/turn-plan.ts).
@@ -184,6 +197,17 @@ export function createSetupStartTurn(host: StartTurnHost) {
       drainDelegationWakes();
       return { kind: "return" };
     }
+    }
+    // #4456: the Proactive alerts section reads the person's watches over
+    // the network (up to PROACTIVE_ASK_WAIT_MS, 2 s, on every owner turn):
+    // it starts here, beside context selection, the prompt and the mounts,
+    // and is awaited where the tools are listed. Not earlier: when the first
+    // question is due, this call posts it in the person's chat, so only a
+    // turn past the compaction-only return and the stop during context
+    // setup starts it, as when it ran at the mounts.
+    if (state.agentsMounted) {
+      state.proactiveAskPrepared = host.proactiveAskForTurn(state.bot, state.threadId, state.commsDepth, { warm: Boolean(state.warmOnly) });
+      state.proactiveAskPrepared.catch(() => {});
     }
     // Keep the full branch order for delivery bookkeeping, but select actual
     // replay entries by bytes. A compacted prefix is represented by its record.

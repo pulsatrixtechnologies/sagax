@@ -1,5 +1,5 @@
 /** Compose ACP prompt halves and the session-split prompt input (#1383). */
-import { promptHalves, readPromptSplitReceipt, splitSessionPrompt } from "../prompt-split.ts";
+import { promptHalves, readPromptSplitReceipt, sentSectionIds, splitSessionPrompt } from "../prompt-split.ts";
 import { ACP_PROMPT_RE_ANCHOR_TURNS } from "./constants.ts";
 import { fitOpeningSystem, promptFitTarget } from "./prompt-fit.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
@@ -130,6 +130,8 @@ export function composeAcpPromptInput(ctx: AcpTurnCtx): {
     noteOpeningPrompt(DRIVER_KIND, threadId, fitted, [...(turn.systemStableSections ?? []), ...(volatileSections ?? [])], support.promptByteLimit);
   }
   promptInput = { ...promptTurn, system: "", text: composed.text };
+  // #4456: what of the opening block rode this prompt (latency line `sent`)
+  if (ctx.latency) ctx.latency.sent = sentSectionIds(previousReceipt, composed.receipt, Boolean(turn.mentionTurn));
   pendingSplitReceipt = { key: receiptKey, receipt: composed.receipt, previous: previousReceipt };
   // Visible to finishAcpTurnError if sendPrompt throws before this phase returns.
   ctx.pendingSplitReceipt = pendingSplitReceipt;

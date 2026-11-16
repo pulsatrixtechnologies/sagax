@@ -17,7 +17,7 @@
 // No knowledge of turns or HTTP here; the journal and the routes sit on top.
 import { spawnChild } from "../process/spawn-helper.ts";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, unlinkSync, type Stats } from "node:fs";
 import { dirname, join, sep } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
@@ -135,32 +135,62 @@ function relativeSegments(ref: MemoryDocRef): string[] {
  * through realpath and must sit under the real workspace, and the file
  * itself, when present, must be a regular file rather than a link. */
 export function resolveMemoryPath(botId: string, path: string): string {
+  return memoryPathResolver(botId)(path);
+}
+
+/** resolveMemoryPath for many documents of one bot in one pass (#4456: the
+ * memory journal's turn boundary resolves every topic, log and doc of the
+ * bot at each turn's start and end). The same checks, file by file; the
+ * real path of the workspace and of each folder is read once per pass
+ * instead of once per file (a realpath walks every folder of the path). */
+export function memoryPathResolver(botId: string): (path: string) => string {
+  const resolve = memoryFileResolver(botId);
+  return (path) => resolve(path).absolute;
+}
+
+/** memoryPathResolver, with the file's own lstat when it is there (a
+ * regular file, never a link): the journal's turn boundary compares it with
+ * the last one instead of a second stat of each file. */
+export function memoryFileResolver(botId: string): (path: string, listed?: boolean) => { absolute: string; stat: Stats | null } {
   assertBotId(botId);
-  const ref = parseMemoryPath(path);
   const root = workspaceDir(botId);
-  const absolute = join(root, ...relativeSegments(ref));
-  let realRoot: string;
-  try {
-    realRoot = realpathSync(root);
-  } catch {
-    // no workspace yet — nothing to escape from, nothing to read either
-    return absolute;
-  }
-  let ancestor = dirname(absolute);
-  while (!existsSync(ancestor) && ancestor !== root) ancestor = dirname(ancestor);
-  const realAncestor = realpathSync(ancestor);
-  if (realAncestor !== realRoot && !realAncestor.startsWith(realRoot + sep)) {
-    throw new MemoryStoreError("path", 400, `memory path escapes the workspace: ${JSON.stringify(path)}`);
-  }
-  try {
-    if (lstatSync(absolute).isSymbolicLink()) {
-      throw new MemoryStoreError("path", 400, `memory file is a link, not a file: ${JSON.stringify(path)}`);
+  let realRoot: string | null | undefined;
+  const realFolders = new Map<string, string>();
+  // `listed`: the file came from a listing that lstat'ed it a moment ago
+  // and kept it only as a regular file (listMarkdown): the folder is still
+  // checked, the file is not looked at a second time
+  return (path: string, listed = false) => {
+    const ref = parseMemoryPath(path);
+    const absolute = join(root, ...relativeSegments(ref));
+    if (realRoot === undefined) {
+      try { realRoot = realpathSync(root); } catch { realRoot = null; }
     }
-  } catch (error) {
-    if (error instanceof MemoryStoreError) throw error;
-    // missing is fine: a topic the person is about to create
-  }
-  return absolute;
+    // no workspace yet — nothing to escape from, nothing to read either
+    if (realRoot === null) return { absolute, stat: null };
+    const folder = dirname(absolute);
+    let realAncestor = realFolders.get(folder);
+    if (realAncestor === undefined) {
+      let ancestor = folder;
+      while (!existsSync(ancestor) && ancestor !== root) ancestor = dirname(ancestor);
+      realAncestor = realpathSync(ancestor);
+      realFolders.set(folder, realAncestor);
+    }
+    if (realAncestor !== realRoot && !realAncestor.startsWith(realRoot + sep)) {
+      throw new MemoryStoreError("path", 400, `memory path escapes the workspace: ${JSON.stringify(path)}`);
+    }
+    let stat: Stats | null = null;
+    if (listed) return { absolute, stat };
+    try {
+      stat = lstatSync(absolute);
+      if (stat.isSymbolicLink()) {
+        throw new MemoryStoreError("path", 400, `memory file is a link, not a file: ${JSON.stringify(path)}`);
+      }
+    } catch (error) {
+      if (error instanceof MemoryStoreError) throw error;
+      // missing is fine: a topic the person is about to create
+    }
+    return { absolute, stat };
+  };
 }
 
 export function hashMemoryText(text: string): string {

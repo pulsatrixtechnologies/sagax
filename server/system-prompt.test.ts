@@ -600,7 +600,8 @@ describe("work style: arithmetic and drafts (QA 0.8.66 F9 F12, #2912)", () => {
       expect(WORK_STYLE_PROMPT).not.toContain(cw);
     }
     // 0.8.66 shipped 2005 characters; #2905 added about 2040. Stay under half of that surplus.
-    expect(WORK_STYLE_PROMPT.length).toBeLessThan(2005 + 1020);
+    // #4456: plus the bot's first sentence before its tools (about 100).
+    expect(WORK_STYLE_PROMPT.length).toBeLessThan(2005 + 1120);
   });
 
   it("fits the cap without dropping the first calls of #3221 / #3222 or the one table rule (#3373)", () => {
@@ -613,6 +614,22 @@ describe("work style: arithmetic and drafts (QA 0.8.66 F9 F12, #2912)", () => {
     expect(WORK_STYLE_PROMPT).toContain("tables per the output style rule");
     expect(WORK_STYLE_PROMPT).not.toMatch(/never a table for a short answer|3 or more columns/);
     expect(WORK_STYLE_PROMPT).not.toMatch(/\(#\d+\)/);
-    expect(WORK_STYLE_PROMPT.length).toBeLessThan(2005 + 1020);
+    expect(WORK_STYLE_PROMPT.length).toBeLessThan(2005 + 1120);
+  });
+});
+
+// #4456: a turn that opened with tool calls showed the person nothing for 16
+// to 46 s. The bot's own first sentence comes before its first tool call, in
+// its words (no notice from the server), and every rule already there stays.
+describe("the bot's first words before its tools (#4456)", () => {
+  it("asks for one sentence of the bot's before its first tool call", () => {
+    expect(WORK_STYLE_PROMPT).toContain("before your first tool call, say in a sentence what you understood and do first");
+    // nothing removed from what the bot knows: the plan, the report, the
+    // answer's shape and its language (said once, by the Language rule)
+    expect(WORK_STYLE_PROMPT).toContain("for several steps, state a 1-2 line plan and complete it");
+    expect(WORK_STYLE_PROMPT).toContain("report unfinished work and what remains");
+    expect(WORK_STYLE_PROMPT).toContain("no preamble or stock opening or closing");
+    expect(WORK_STYLE_PROMPT).toContain("is in the language of the person's latest message");
+    expect(WORK_STYLE_PROMPT).toContain("General knowledge needs no tool: answer from what you know.");
   });
 });

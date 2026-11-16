@@ -24,8 +24,8 @@
 //   the turn's connectors plan),
 //   place (where it runs: workspace, sandbox, the computer, what is left of
 //   the stage), mounts (#3619: the person's and the plugins' tool servers),
-//   plugins (the plugin copy into the person's environment, at most
-//   PLUGIN_COPY_TURN_WAIT_MS since #4394: the copy goes on beside the turn), checkpoint
+//   plugins (starting the plugin copy into the person's environment; since
+//   #4456 the turn never waits for the copy, which goes on beside it), checkpoint
 //   (the project folder's snapshot), browser (the built-in browser), prompt, recall,
 //   access (the turn's credentials, a typed command), slot (an engine start
 //   slot), send, dispatch (pictures, hand-off to the engine).
@@ -86,6 +86,13 @@
 // the update that says it completed or failed, however long it stays
 // silent), quiet (any other gap of a second or more between two updates once
 // the stream began). Numbers only.
+// #4456: ttfc, prompt -> the first tool call (only on a turn that called
+// one: the model chose a tool before any words); shown, the person's message
+// stored -> the first answer text Sagax streamed to the person (what the
+// person waited for words, queue and setup included); sent, on a prompt
+// without the whole system block, the ids of the opening block's sections
+// that rode it because they changed (nothing else of the block is resent:
+// the engine's cache keeps it; `cached` says how much of the input it hit).
 
 export type TurnLatencyPath = "pooled" | "load" | "spawn";
 
@@ -98,6 +105,13 @@ export interface TurnLatency {
   promptAt?: number;
   firstActivityAt?: number;
   firstTextAt?: number;
+  /** #4456: the first tool call of the prompt (ttfc) */
+  firstToolAt?: number;
+  /** #4456: the first answer text streamed to the person (shown) */
+  shownAt?: number;
+  /** #4456: the opening block's sections that rode a prompt without the
+   * whole block, because they changed (sent) */
+  sent?: string[];
   tools: number;
   promptChars?: number;
   /** the prompt carried the full system block */
@@ -231,8 +245,18 @@ export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, a
   if (kind === "tool_call") noteToolState(trace, update, true);
   trace.firstActivityAt ??= at;
   if (kind === "agent_message_chunk") trace.firstTextAt ??= at;
-  if (kind === "tool_call") trace.tools += 1;
+  if (kind === "tool_call") { trace.tools += 1; trace.firstToolAt ??= at; }
 }
+
+/** #4456: answer text of the running prompt reached the person (the driver
+ * streamed it after its own filters). */
+export function noteTurnShown(trace: TurnLatency | undefined, at: number): void {
+  if (!trace || trace.promptAt === undefined) return;
+  trace.shownAt ??= at;
+}
+
+/** Sections named at most on the sent field. */
+const SENT_SECTIONS_MAX = 12;
 
 /** #4394: a tool call opens until an update of it says completed or failed;
  * one reported already ended opens nothing. A call with no id is one at a
@@ -420,6 +444,14 @@ export function turnLatencyParts(trace: TurnLatency, marks: readonly Mark[]): { 
   return { ...(queueBy ? { queueBy } : {}), ...(setupBy ? { setupBy } : {}) };
 }
 
+/** #4456: queueBusy is printed over 250 ms; a benchmark of the queue
+ * (server/first-text-latency.e2e.test.ts) sets SAGAX_TURN_LATENCY_BUSY_MS=0
+ * to read it on every turn. */
+function queueBusyFloorMs(): number {
+  const floor = Number(process.env.SAGAX_TURN_LATENCY_BUSY_MS);
+  return Number.isFinite(floor) && floor >= 0 && process.env.SAGAX_TURN_LATENCY_BUSY_MS !== "" ? floor : TOOLS_SLOW_MS;
+}
+
 export function turnLatencyLine(driver: string, threadId: string, trace: TurnLatency, end: number, outcome: string, marks: readonly Mark[] = []): string {
   const ms = (from: number | undefined, to: number | undefined) =>
     from === undefined || to === undefined ? "?" : `${Math.max(0, Math.round(to - from))}ms`;
@@ -442,7 +474,7 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
     if (queueBy) parts.push(`queueBy=${queueBy}`);
     if (setupBy) parts.push(`setupBy=${setupBy}`);
   }
-  if (trace.queueBusyMs !== undefined && trace.queueBusyMs > TOOLS_SLOW_MS) parts.push(`queueBusy=${Math.round(trace.queueBusyMs)}ms`);
+  if (trace.queueBusyMs !== undefined && trace.queueBusyMs > queueBusyFloorMs()) parts.push(`queueBusy=${Math.round(trace.queueBusyMs)}ms`);
   if (trace.starts && trace.starts.count > 0) parts.push(`starts=${trace.starts.count}:${Math.round(trace.starts.ms)}ms`);
   const toolsBy = turnToolsBy(trace.toolWait);
   if (toolsBy) parts.push(`toolsBy=${toolsBy}`);
@@ -456,6 +488,12 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
   if (trace.full && trace.fullWhy) parts.push(`fullWhy=${trace.fullWhy}`);
   const firstWords = turnFirstWords(trace);
   if (firstWords) parts.push(`firstWords=${firstWords}`);
+  if (trace.firstToolAt !== undefined) parts.push(`ttfc=${ms(trace.promptAt, trace.firstToolAt)}`);
+  if (trace.shownAt !== undefined) parts.push(`shown=${ms(trace.receivedAt ?? trace.start, trace.shownAt)}`);
+  if (trace.full === false && trace.sent?.length) {
+    const more = trace.sent.length - SENT_SECTIONS_MAX;
+    parts.push(`sent=${trace.sent.slice(0, SENT_SECTIONS_MAX).join(",")}${more > 0 ? `,+${more}` : ""}`);
+  }
   if (trace.stallMs !== undefined) parts.push(`stallGuard=${trace.stallMs}ms${trace.stallRetried ? " retried" : ""}`);
   parts.push(outcome);
   return parts.join(" ");

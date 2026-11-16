@@ -308,6 +308,28 @@ export function sensitiveHiddenSegment(segment: string): boolean {
   return (name === ".env" || name.startsWith(".env.")) && !ENV_EXAMPLE.test(name);
 }
 
+/** #4449: why a member's bot card still waits for an organization admin.
+ * Each one reaches past the person's own environment; everything in their
+ * own place (their sandbox, their computer, their own servers and
+ * connections, their own bots) is never an admin's. The list is asserted by
+ * member-own-place.test.ts so a new one cannot slip in unnoticed.
+ *   other-bot-act        act on a bot someone else owns, or on a route that
+ *                        reaches the organization (shared/grant-reach.ts)
+ *   host-shell           a shell on the shared organization host; a turn the
+ *                        member drives never waits for it (exec-target.ts
+ *                        orgServerExecRouting refuses it with what to do)
+ *   host-tool            a host-level Sagax tool that leaves the person's
+ *                        place: a pooled Local VM, someone else's computer,
+ *                        the server's shared MCP list, a file outside the
+ *                        bot's folders, the Perspicax admin tools
+ *   foreign-tool         a tool Sagax did not mount for this person this
+ *                        turn: a host-level built-in server, an engine tool
+ *                        of the host (a fetch from the host), an unknown one
+ *   outside-own-folders  a file tool on a path of the shared host outside
+ *                        the bot's own folders, or a sensitive hidden name */
+export const MEMBER_ADMIN_REASONS = ["other-bot-act", "host-shell", "host-tool", "foreign-tool", "outside-own-folders"] as const;
+export type MemberAdminReason = typeof MEMBER_ADMIN_REASONS[number];
+
 /** Whether a permission card of a member's bot on an organization server
  * waits for an organization admin (rule until per-owner containers). Every
  * bot shares one container, one user and one HOME, so a write to the shared
@@ -321,8 +343,14 @@ export function sensitiveHiddenSegment(segment: string): boolean {
  * owner's own rights (ownerScopedTool: a remote or personal MCP server, a
  * web search). Everything else, a shell command first, needs an admin. `tool` is the provider's own name for the tool, an MCP
  * tool qualified with its server (`agents__list_bots`), never the model's
- * arguments. */
-export function memberBotAdminApproval(input: {
+ * arguments. #4449: every server Sagax mounted for the person this turn
+ * (their plugins' servers, relayed into their own sandbox or remote as
+ * them, their Mac's apps) is theirs too (ownerScopedMcpServer). */
+export function memberBotAdminApproval(input: MemberBotAdminInput): boolean {
+  return memberBotAdminReason(input) !== null;
+}
+
+export interface MemberBotAdminInput {
   tool?: string;
   command?: unknown;
   paths?: string[];
@@ -368,8 +396,11 @@ export function memberBotAdminApproval(input: {
    * (engineAccountConnectorCall): it runs at the provider as that person,
    * never on the organization's server, whatever its gateway name spells. */
   ownAccountConnector?: boolean;
-}): boolean {
-  if (input.ownEnvironment || input.ownDestination || input.ownComputerChoice || input.ownerRunsServerCommands) return false;
+}
+
+/** Why a member's bot card waits for an admin, or null: the person's own. */
+export function memberBotAdminReason(input: MemberBotAdminInput): MemberAdminReason | null {
+  if (input.ownEnvironment || input.ownDestination || input.ownComputerChoice || input.ownerRunsServerCommands) return null;
   const builtin = !foreignToolSpelling(input.tool, input.foreignMcpServers ?? []);
   const toolName = input.tool?.trim();
   // #1269, #1098 (2026-10-28): act on the member's own bots and on routes
@@ -379,31 +410,39 @@ export function memberBotAdminApproval(input: {
   // Judged before the own-scope list, which would otherwise let every act
   // through.
   if (!input.command && builtin && builtinAgentToolName(toolName) === "act"
-    && !ownAct(toolName, input.rawInput, { ownsBot: input.ownsBot, callerBotId: input.callerBotId })) return true;
+    && !ownAct(toolName, input.rawInput, { ownsBot: input.ownsBot, callerBotId: input.callerBotId })) return "other-bot-act";
   // 2026-10-19 (member admin audit): a built-in tool of the member's own
   // scope is judged by its exact name before the shell pattern, which read
   // `agents__offer_shell_terminal` (a card the person approves) as a shell
   // command and sent the member's terminal offer to an admin.
-  if (!input.command && builtin && memberOwnScopeTool(toolName)) return false;
+  if (!input.command && builtin && memberOwnScopeTool(toolName)) return null;
   // 2026-10-28: vm_exec, shared_computer, attach_file and add_mcp_server
   // that stay in the member's own environment are the owner's card.
-  if (!input.command && builtin && input.hostPlace && memberOwnHostToolCall(toolName, input.rawInput, input.hostPlace)) return false;
+  if (!input.command && builtin && input.hostPlace && memberOwnHostToolCall(toolName, input.rawInput, input.hostPlace)) return null;
   // #1930: a Grok gateway tool (`cursor__user-<Service>-<tool>___<n>`) names
   // the gateway, not a server of the owner's list, and a connector tool name
   // may read like a shell one: the driver's own reading decides it.
-  if (!input.command && input.ownAccountConnector) return false;
-  if (serverCommandApproval(input)) return true;
+  if (!input.command && input.ownAccountConnector) return null;
+  // a host-level Sagax tool (vm_exec, shared_computer, ...) that left the
+  // person's place above; judged before the shell pattern, which reads
+  // `agents__vm_exec` as a shell
+  if (!input.command && builtin && builtinAgentToolName(toolName)) return "host-tool";
+  // #4449: a tool of a server mounted for the person (a plugin's server, one
+  // of their connections) runs remotely as them or in their own sandbox,
+  // whatever its name spells (`<server>__exec`): judged before the shell
+  // pattern, which would read it as a shell on the shared host.
+  if (!input.command && ownerScopedTool(toolName ?? "", input.ownerScopedMcpServer)) return null;
+  if (serverCommandApproval(input)) return "host-shell";
   // 2026-10-16: the Data tools are the bot's own database, confined to its
   // own folders on an organization server (sagax-internal-tools.ts).
-  if (builtin && dataToolName(input.tool)) return false;
-  if (ownerScopedTool(input.tool?.trim() ?? "", input.ownerScopedMcpServer)) return false;
+  if (builtin && dataToolName(input.tool)) return null;
   const tool = input.tool?.trim().toLowerCase() ?? "";
   // #1169: Sagax's own file views (read_file, list_files, search_files) only
   // read, like a native Read: inside the bot's own folders they are the
   // owner's card, so the bot's level (Full included) answers them.
   const fileView = MCP_FILE_VIEW_TOOL.test(tool);
-  if (!WORKSPACE_FILE_TOOLS.has(tool) && !fileView) return true;
-  if (!input.paths?.length) return true;
+  if (!WORKSPACE_FILE_TOOLS.has(tool) && !fileView) return "foreign-tool";
+  if (!input.paths?.length) return "outside-own-folders";
   // 2026-10-19 (bot quality, cause A): a read may open the bot's own skill
   // revisions and plugin manifests (READABLE_HIDDEN_SEGMENTS). #1098
   // (2026-10-28): any other hidden name of the bot's own workspace
@@ -412,7 +451,7 @@ export function memberBotAdminApproval(input: {
   // (sensitiveHiddenSegment) still wait for an admin.
   const reads = fileView || READ_ONLY_FILE_TOOLS.has(tool);
   const roots = [input.workspaceRoot, ...(reads ? input.readRoots ?? [] : [])].map(realLocation);
-  return !input.paths.every((path) => {
+  const inOwnFolders = input.paths.every((path) => {
     if (typeof path !== "string" || !isAbsolute(path)) return false;
     const real = realLocation(path);
     return roots.some((root) => {
@@ -422,6 +461,7 @@ export function memberBotAdminApproval(input: {
       return !rel.split(sep).some((segment) => sensitiveHiddenSegment(segment) && !(reads && READABLE_HIDDEN_SEGMENTS.has(segment)));
     });
   });
+  return inOwnFolders ? null : "outside-own-folders";
 }
 
 /** A setup error from a key-backed engine on an organization server (the

@@ -268,7 +268,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
       // ownComputerChoiceCall).
       const ownComputerChoice = Boolean(permission && asker && event.requestId && !host.foreignToolSpelling(event.mcpTool ?? event.tool, foreignServers)
         && host.ownComputerChoiceRequest(asker, event.threadId, event.mcpTool ?? event.tool, cardAnswerer, guestDriven));
-      const serverLevelCard = Boolean(memberAsker && asker && host.memberBotAdminApproval({
+      const serverLevelReason = memberAsker && asker ? host.memberBotAdminReason({
         tool: event.mcpTool ?? event.tool, command: event.command,
         // #1169: a file view names its path in its arguments
         paths: event.paths?.length ? event.paths : host.fileViewToolPaths(event.mcpTool ?? event.tool, typeof event.input === "string" ? event.input : undefined),
@@ -296,7 +296,8 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           const theirs = other ? host.recordedBotOwner(other) : undefined;
           return Boolean(mine && theirs && mine === theirs);
         }
-      }));
+      }) : null;
+      const serverLevelCard = serverLevelReason !== null;
       // Security review 2026-10-19: a holder of host.commands answers a
       // server-level card of their own bot only for their own turn, when the
       // card is theirs to answer (not a confidential thread of someone else),
@@ -379,29 +380,34 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
       }
       // 2026-10-22 a member bot runs on its OWN computer by default, and
       // only an admin targets the shared organization server. This covers the
-      // engine's native host shell (event.command: a Bash/shell call on the
-      // shared server), never the bot's own-computer tools (sagax-environment,
-      // sagax-desktop are already owner level) nor host MCP tools such as
-      // vm_exec, attach_file or shared_computer, which keep their own gating.
-      // When an admin (or a host.shell delegate) does not drive this turn and
-      // the bot has a computer of its own, that host-shell command no longer
-      // waits for an admin in a dead end (server/exec-target.ts
-      // orgServerExecRouting): the bot is told to run it on its own computer.
-      // With no computer of its own, the "runs on the server" card stays: only
-      // an admin runs on the shared server (its wording says the bot has none).
-      if (permission && asker && event.requestId && adminApproval && event.command
-        && orgServerExecRouting({
+      // engine's native host shell (event.command, or a shell-shaped tool:
+      // a Bash/shell call on the shared server), never the bot's own-computer
+      // tools (sagax-environment, sagax-desktop are already owner level) nor
+      // host MCP tools such as vm_exec, attach_file or shared_computer, which
+      // keep their own gating.
+      // #4449: a turn the member drives never waits for an admin on it
+      // (server/exec-target.ts orgServerExecRouting): with a computer of its
+      // own the bot is told to run there; with none (their computer pinned
+      // and not connected, no server environment, nobody asked) it is told so
+      // in plain words with what the person can do. Never a fallback to the
+      // shared host, never an admin card. Only a turn an admin (or a host.shell
+      // delegate) drives keeps the "runs on the server" card, theirs to answer.
+      if (permission && asker && event.requestId && adminApproval && serverLevelReason === "host-shell") {
+        const routing = orgServerExecRouting({
           callerMayDriveOrgServer: host.turnDrivesOrgServer(event.threadId),
           botHasOwnComputer: host.botHasOwnComputerForTurn(asker, event.threadId)
-        }) === "use-bot-computer") {
-        const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: host.EXEC_USE_BOT_COMPUTER }).catch(host.reportBackgroundError);
-        pushMessage({ role: "bot", kind: "activity", tool: { name: host.EXEC_USE_BOT_COMPUTER, ok: false } });
-        appendDecision(host.DATA_DIR, {
-          threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
-          tool: event.tool, decision: "auto-denied", source: "exec-target"
         });
-        break;
+        if (routing !== "admin-card") {
+          const message = routing === "use-bot-computer" ? host.EXEC_USE_BOT_COMPUTER : host.ownPlaceRefusalForTurn(event.threadId);
+          const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
+          void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message }).catch(host.reportBackgroundError);
+          pushMessage({ role: "bot", kind: "activity", tool: { name: message, ok: false } });
+          appendDecision(host.DATA_DIR, {
+            threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
+            tool: event.tool, decision: "auto-denied", source: "exec-target"
+          });
+          break;
+        }
       }
       decideRequestOpened(event, ctx, host, { adminApproval, asker, attachmentRead, cardAnswerer, destination, destinationAnswerer, destinationOrigin, effectiveApprovalMode, emailDraftCall, emailDraftRequest, foreignDestination, gateGrantBlocked, grantsOffered, guestDriven, internalTool, memberAsker, ownComputerChoice, ownDestination, ownEnvironment, ownSandboxCall, permission, perspicaxSelfKind, readOnlyCommand, readOnlyText, safetyEffect, safetyWho, selfAnswerStepUp, serverCommandHolder, speakerEnvironmentRules, strictCard, unattended });
       break;

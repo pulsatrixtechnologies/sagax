@@ -853,7 +853,7 @@ import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./triggers/webhook-ingress.ts";
 import { assertModelVariantSupported, memberTurnSelection } from "./turns/member-turn.ts";
 import { WebhookManager } from "./triggers/webhooks.ts";
-import { webhookExecTargetAdminOnly, workplaceIsBotComputer } from "./exec-target.ts";
+import { EXEC_USE_BOT_COMPUTER, ownPlaceRefusal, webhookExecTargetAdminOnly, workplaceIsBotComputer } from "./exec-target.ts";
 import { GraphSubscriptions, graphConnectorOptions, type GraphTokenSource } from "./graph-subscriptions.ts";
 import { TriggerPollers } from "./triggers/trigger-pollers.ts";
 import { TriggerPollerCredentials } from "./triggers/trigger-poller-credentials.ts";
@@ -1445,7 +1445,7 @@ import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAtt
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./media/office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachments/attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace } from "../shared/bot-workplace.ts";
-import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, perspicaxOwnerScopedServer, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engines/engine-access.ts";
+import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberBotAdminReason, memberOwnedBot, perspicaxOwnerScopedServer, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engines/engine-access.ts";
 import { assignBotHost, createTurnBell, createWorkerRoutes, destinationForBot, directMachinePlan, enqueueOfflineTurn, expireWorkers, failPulledOnAuthorCancel, selectionOnMachine, type DeviceQueuedTurn, type Worker } from "./workers.ts";
 import { createMachineRunRoutes, createMachineRuns } from "./machine-run.ts";
 import { createDeciderRoutes } from "./routes/decider.ts";
@@ -5956,6 +5956,7 @@ bindLeafHost({
   get masteryNightly() { return masteryNightly; },
   get workplacePreference() { return workplacePreference; },
   get turnWorkplaces() { return turnWorkplaces; },
+  get turnPluginMcpServers() { return turnPluginMcpServers; },
   get egressProxy() { return egressProxy; },
   get declaredToolProduct() { return declaredToolProduct; },
   get ruleProductsOf() { return ruleProductsOf; },
@@ -9048,8 +9049,15 @@ type TurnWorkplace = {
   /** Sagax mounted computer_select (`sagax-computer`) for this turn: how the
    * approval path recognizes it (member-environment.ts ownComputerChoiceCall). */
   computerChoice?: boolean;
+  /** #4449: the person whose own Mac apps (`messages`) Sagax mounted for
+   * this turn through their desktop app: their card, never an admin's. */
+  messagesPrincipal?: string;
 };
 const turnWorkplaces = new Map<string, TurnWorkplace>();
+/** #4449: the plugin MCP servers mounted for the person of a thread's
+ * current turn (mountPluginMcp): theirs, never the shared host's. Cleared
+ * with the turn's capabilities (revokeInternalCapabilityGeneration). */
+const turnPluginMcpServers = new Map<string, { generation: string; servers: Set<string> }>();
 let egressProxy: EgressProxy | null = null;
 
 /** The person a shared-computer call provably acts for
@@ -15787,11 +15795,6 @@ const ADMIN_APPROVAL_REQUIRED = {
   error: "This command would run on the organization's server: an organization admin has to approve it. To approve the server commands of your own bots yourself, ask an admin to give you \"Run commands on the organization's server\" in Perspicax (Bot rights > Who has what).",
   code: "admin_approval_required"
 } as const;
-/** 2026-10-22 a member bot's command would run on the shared
- * organization server (admin only), but the bot has its own computer: it runs
- * there instead, never in a wait-for-an-admin dead end. */
-const EXEC_USE_BOT_COMPUTER =
-  "Refused: this would run on the organization's server, which only an admin may use. Run it on this bot's own computer instead (its server environment, its Local VM, This computer or its cloud computer, for example sagax-environment run_command, sagax-desktop, vm_exec or the computer tools), not a shell on the host.";
 
 /** The server-command approvals waiting for an organization admin. */
 /** Slice 7: every pending approval card (not answered, dismissed or
@@ -18590,6 +18593,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get bookTurnUsage() { return bookTurnUsage; },
   get botForThread() { return botForThread; },
   get botHasOwnComputerForTurn() { return botHasOwnComputerForTurn; },
+  get ownPlaceRefusalForTurn() { return (threadId: string) => ownPlaceRefusal(turnWorkplaces.get(threadId)?.decision); },
   get botReplyQuoteId() { return botReplyQuoteId; },
   get botmailConfined() { return botmailConfined; },
   get broadcast() { return broadcast; },
@@ -18687,6 +18691,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get localVmLeaseFor() { return localVmLeaseFor; },
   get localVmThreadTargets() { return localVmThreadTargets; },
   get memberBotAdminApproval() { return memberBotAdminApproval; },
+  get memberBotAdminReason() { return memberBotAdminReason; },
   get memberHostToolPlace() { return memberHostToolPlace; },
   get memberOwnScopeTool() { return memberOwnScopeTool; },
   get memberOwnedInOrg() { return memberOwnedInOrg; },

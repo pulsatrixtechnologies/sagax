@@ -1,6 +1,9 @@
+// Groq's tool_use_failed; oMLX ends the stream with invalid_tool_call or
+// incomplete_tool_call when it cannot parse the model's tool call.
+const TOOL_CALL_FAILURES = new Set(["tool_use_failed", "invalid_tool_call", "incomplete_tool_call"]);
 const toolCallRefusal = (error: unknown) => {
   const body = object(error);
-  return body?.code === "tool_use_failed" ? body : undefined;
+  return typeof body?.code === "string" && TOOL_CALL_FAILURES.has(body.code) ? body : undefined;
 };
 import type { OpenAIChatMessage } from "./openai-chat-message.ts";
 import type { TextGenerationOptions } from "../contracts.ts";

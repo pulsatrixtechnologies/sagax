@@ -1,11 +1,11 @@
-// Settings > Usage > Plan usage: every row state, the row de-duplication,
-// and the refresh spinner (src/lib/plan-usage.ts, PlanUsageView).
+// Settings > Usage > Usage limits: one line per signed-in account (#4418),
+// the row de-duplication, and the refresh spinner (src/lib/plan-usage.ts,
+// PlanUsageView).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { connectedPlanRows, planRows, type PlanProvider, type PlanUsageReport } from "@/lib/plan-usage";
-import type { MyEngine } from "@/lib/perspicax-org";
 
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
@@ -28,73 +28,88 @@ function row(patch: Partial<PlanProvider>): PlanProvider {
 function render(report: PlanUsageReport | null, patch: Partial<PlanUsageViewProps> = {}): string {
   return renderToStaticMarkup(createElement(PlanUsageView, {
     report, loading: false, now: Date.parse("2026-10-02T09:00:00Z"),
-    onRefresh: () => {}, myEngines: null, issuer: "", onOpenEngines: () => {}, ...patch,
+    onRefresh: () => {}, ...patch,
   }));
 }
-
-const engine = (patch: Partial<MyEngine> = {}): MyEngine => ({
-  instanceId: "claude", driver: "claudeAgent", displayName: "Claude", installed: true,
-  subscription: { supported: true, signedIn: false }, myKey: false, orgKey: false, myTurns: "none", ...patch,
-});
 
 beforeEach(() => {
   setLocale("en");
   vi.stubGlobal("window", {});
 });
 
-describe("Plan usage rows", () => {
-  it("windows: each reported window, per-model usage under Details, plan name as subtitle; an unreported window is left out", () => {
+describe("Usage limits: each signed-in account's short window and week (#4418)", () => {
+  it("one line per signed-in account, under the name the person gave it, its short window with the vendor's hours and its week", () => {
+    const html = render({
+      providers: [
+        row({ id: "claude", name: "Personal", state: "windows", ok: true, plan: "Max",
+          fiveHour: { available: true, remainingPercent: 68, usedPercent: 32, resetsAt: "2026-10-02T12:00:00Z", hours: 5 },
+          weekly: { available: true, remainingPercent: 30, usedPercent: 70, resetsAt: "2026-10-08T12:00:00Z" } }),
+        row({ id: "work", name: "Work plan", instanceId: "work", state: "windows", ok: true,
+          fiveHour: { available: true, remainingPercent: 90, usedPercent: 10, resetsAt: null },
+          weekly: { available: true, remainingPercent: 80, usedPercent: 20, resetsAt: null } }),
+        row({ id: "codex", name: "Codex", driver: "codex", instanceId: "codex", state: "windows", ok: true,
+          fiveHour: { available: true, remainingPercent: 50, usedPercent: 50, resetsAt: null, hours: 4 },
+          weekly: { available: true, remainingPercent: 50, usedPercent: 50, resetsAt: null } }),
+      ],
+    });
+    expect(html.match(/data-plan-row=/g)).toHaveLength(3);
+    expect(html).toContain(">Personal<");
+    expect(html).toContain(">Work plan<");
+    expect(html).toContain(">Max<");
+    expect(html).toContain("5-hour session");
+    expect(html).toContain("4-hour session");
+    expect(html.match(/>Week</g)).toHaveLength(3);
+    expect(html).toContain('aria-valuenow="32"');
+    expect(html).toContain('aria-valuenow="70"');
+    expect(html).toContain("Renews ");
+    expect(html.match(/data-limit-figure=""/g)).toHaveLength(6);
+  });
+
+  it("nothing else: no second figure, no Details, no other window, no per-model detail", () => {
     const html = render({
       providers: [row({
-        state: "windows", ok: true, plan: "Pro",
+        state: "windows", ok: true,
         fiveHour: { available: true, remainingPercent: 68, usedPercent: 32, resetsAt: null },
+        weekly: { available: true, remainingPercent: 60, usedPercent: 40, resetsAt: null },
+        extra: [{ label: "Opus week", remainingPercent: 75, usedPercent: 25, resetsAt: null }],
         models: [{ name: "Sonnet", windows: [{ label: "Weekly", remainingPercent: 30, usedPercent: 70, resetsAt: null }] }],
       })],
     });
-    expect(html).toContain("68% left");
-    expect(html).toContain("70% used");
-    expect(html).toContain('data-plan-window-kind="fiveHour"');
-    expect(html).not.toContain('data-plan-window-kind="weekly"');
-    expect(html).toContain(">Pro<");
-    expect(html).toContain('aria-valuenow="32"');
-    expect(html).not.toContain("Sign in again");
+    expect(html).not.toContain("left");
+    expect(html).not.toContain("Details");
+    expect(html).not.toContain("Opus week");
+    expect(html).not.toContain("Sonnet");
+    expect(html.match(/role="meter"/g)).toHaveLength(2);
   });
 
-  it("no windows: the plan reports none, and an API key has none", () => {
+  it("a window the vendor does not report is absent, never a zero; the week keeps its column", () => {
+    const html = render({
+      providers: [row({ state: "windows", ok: true, weekly: { available: true, remainingPercent: 84, usedPercent: 16, resetsAt: null } })],
+    });
+    expect(html).not.toContain('data-plan-window-kind="fiveHour"');
+    expect(html).not.toContain("session");
+    expect(html).not.toContain(">0%<");
+    expect(html).not.toContain("Not reported");
+    expect(html).toMatch(/col-start-2[^>]*><div[^>]*data-plan-window-kind="weekly"/);
+  });
+
+  it("a provider with no signed-in account and an API key show nothing: no Connect, no Not signed in, no keys", () => {
     const html = render({
       providers: [
-        row({ id: "grok", name: "Grok", driver: "grok", instanceId: "grok", state: "no-windows", ok: true }),
-        row({ id: "claudeApi", name: "Claude (API key)", access: "api-key", instanceId: "claudeApi", state: "no-windows", error: "API key: no plan windows" }),
+        row({ state: "signed-out", error: "Not signed in" }),
+        row({ id: "claudeApi", name: "Claude (API key)", access: "api-key", instanceId: "claudeApi", state: "no-windows" }),
       ],
     });
-    expect(html).toContain("No plan windows for this provider");
-    expect(html).toContain("Claude (API key)");
-    expect(html).toContain("API key: no plan windows");
-    expect(html).not.toContain('role="meter"');
-    expect(html).not.toContain("Connect");
+    expect(html).not.toContain("data-plan-row");
+    expect(html).not.toContain("Connect Claude");
+    expect(html).not.toContain("Not signed in");
+    expect(html).not.toContain("API key");
+    expect(html).not.toContain("Manage my keys");
+    expect(html).not.toContain(">Keys<");
+    expect(html).toContain('data-plan-status="none"');
   });
 
-  it("not signed in, solo: Not signed in and a Connect button to Providers", () => {
-    const html = render({ providers: [row({ state: "signed-out", error: "Not signed in" })] });
-    expect(html).toContain('data-plan-row="claude"');
-    expect(html).toContain("Not signed in");
-    expect(html).toContain('data-plan-connect="claude"');
-    expect(html).toContain("Connect Claude");
-    expect(html).not.toContain("Sign in again");
-  });
-
-  it("not signed in, organization: the person's own engine card with its Connect button", () => {
-    const html = render(
-      { providers: [row({ state: "signed-out", error: "Not signed in" })] },
-      { myEngines: [engine()], issuer: "https://px.example.test" },
-    );
-    expect(html).toContain("Not signed in");
-    expect(html).toContain('data-engine-connect="claude"');
-    expect(html).toContain("Connect Claude");
-    expect(html).not.toContain("data-plan-connect");
-  });
-
-  it("error: the real reason in the person's language, with Try again", () => {
+  it("error: the signed-in account stays with the real reason in the person's language, with Try again", () => {
     const html = render({
       providers: [
         row({ state: "error", error: "Could not reach Claude: rate limited (429), try again in a minute", failure: { kind: "http", status: 429 } }),
@@ -112,33 +127,20 @@ describe("Plan usage rows", () => {
     expect(fr).toContain("Réessayer");
   });
 
-  // #1774: an expired access token next to a refresh token used to drop the
-  // row, so only the engine used most recently stayed listed.
-  it("expired token (renewing): the row stays with its reason and Try again, next to a working engine", () => {
-    const html = render({
-      providers: [
-        row({
-          id: "grok", name: "Grok", driver: "grok", instanceId: "grok",
-          state: "error", failure: { kind: "renewing" },
-        }),
-        row({
-          state: "windows", ok: true, plan: "Max",
-          weekly: { available: true, remainingPercent: 84, usedPercent: 16, resetsAt: null },
-        }),
-      ],
-    });
-    expect(html).toContain('data-plan-row="grok"');
-    expect(html).toContain('data-plan-row="claude"');
-    expect(html).toContain('data-plan-state="error"');
-    expect(html).toContain("Could not reach Grok: the sign-in token expired and renews on the next turn; refresh after it");
-    expect(html).toContain("Try again");
-    expect(html).toContain(">16%</span>");
-    expect(html).not.toContain('data-plan-status=');
+  it("in French: the short window in hours, the week, the renewal", () => {
+    setLocale("fr");
+    const html = render({ providers: [row({ state: "windows", ok: true,
+      fiveHour: { available: true, remainingPercent: 90, usedPercent: 10, resetsAt: "2026-10-02T12:00:00Z", hours: 5 },
+      weekly: { available: true, remainingPercent: 60, usedPercent: 40, resetsAt: "2026-10-08T12:00:00Z" } })] });
+    expect(html).toContain("Session de 5 h");
+    expect(html).toContain(">Semaine<");
+    expect(html).toContain("Se renouvelle le ");
+    expect(html).toContain(">utilisé</span>");
   });
 
   // 2026-10-16: the card vanished in these cases and the owner lost his 5-hour and
   // weekly limits; it now stays with one line saying why.
-  it("no provider row: the card stays with one line, also while loading and after a failed read", () => {
+  it("no account: the card stays with one line, also while loading and after a failed read", () => {
     expect(render({ providers: [] })).toContain("Connect a subscription");
     expect(render(null, { loading: true })).toContain('data-plan-status="loading"');
     expect(render(null, { failed: true })).toContain("Plan unavailable for this account.");
@@ -147,20 +149,12 @@ describe("Plan usage rows", () => {
     expect(noAccess).not.toContain("data-plan-refresh");
   });
 
-  it("organization: the card ends with Manage my keys in Perspicax; solo has no such link", () => {
-    const report = { providers: [row({ state: "no-windows", ok: true })] };
-    const org = render(report, { issuer: "https://px.example.test" });
-    expect(org).toContain("data-plan-keys-link");
-    expect(org).toContain("Manage my keys in Perspicax");
-    expect(render(report)).not.toContain("data-plan-keys-link");
-  });
-
-  it("refresh: a spinner while it fetches, the rows stay", () => {
+  it("refresh: a spinner while it fetches, the lines stay", () => {
     const report = { providers: [row({ state: "windows", ok: true, fiveHour: { available: true, remainingPercent: 50, usedPercent: 50, resetsAt: null } })] };
     const busy = render(report, { loading: true });
     expect(busy).toContain("data-plan-spinner");
     expect(busy).toContain('aria-busy="true"');
-    expect(busy).toContain("50% left");
+    expect(busy).toContain('aria-valuenow="50"');
     expect(render(report)).not.toContain("data-plan-spinner");
   });
 });
@@ -251,9 +245,13 @@ describe("Plan usage stars (2026-11-03)", () => {
     expect(html).not.toContain("self_serve");
   });
 
-  it("keeps the star of a favorite that signed out, so it can be cleared", () => {
+  // #4418: a signed-out account has no line on Usage; its star stays stored
+  // (the menu falls back until it is back, usage-favorite.ts) and starring
+  // another account replaces it.
+  it("a favorite that signed out has no line; the others offer their star", () => {
     const html = render(report, { favorite: { id: "claude", onToggle: () => {} } });
-    expect(html).toContain("Stop showing Claude in the Usage menu");
+    expect(html).not.toContain('data-plan-row="claude"');
+    expect(html.match(/data-usage-favorite="off"/g)).toHaveLength(2);
   });
 
   it("draws no star without a favorite store", () => {

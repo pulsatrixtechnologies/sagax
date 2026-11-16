@@ -96,7 +96,7 @@ function Gallery() {
     <div className="min-h-screen bg-app p-8 text-ink">
       <div data-gallery-sample="usage" className="w-[680px]">
         <div className="flex flex-col gap-6">
-          <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} myEngines={null} issuer="" onOpenEngines={() => {}} />
+          <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} />
           <UsageDetail
             planHistory={<PlanUsageHistoryView history={history} now={NOW} initialAccount={params.get("account") ?? undefined} initialOpen={[openWeek]} />}
           />

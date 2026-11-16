@@ -464,7 +464,10 @@ persona.rules.editorLabel
 persona.rules.over
 persona.rules.sets.title
 persona.searchLabel
+planUsage.connect
 planUsage.empty
+planUsage.noWindows
+planUsage.notSignedIn
 planUsage.subtitle
 planUsage.title
 pro.disclaimer

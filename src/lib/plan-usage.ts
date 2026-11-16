@@ -8,6 +8,9 @@ export interface PlanWindow {
   remainingPercent: number | null;
   usedPercent: number | null;
   resetsAt: string | null;
+  /** The short window's length in hours, as the vendor sets it (#4418).
+   * Absent from the week and from older servers (then five). */
+  hours?: number;
 }
 
 export interface PlanExtra {
@@ -219,6 +222,15 @@ export function planRows(report: PlanUsageReport | null): PlanRow[] {
  * (#1774: an expired token must stay listed with its reason). */
 export function connectedPlanRows(report: PlanUsageReport | null): PlanRow[] {
   return planRows(report).filter((row) => row.state === "windows" || row.state === "no-windows");
+}
+
+/** Settings > Usage > Usage limits (#4418): one line per account the person
+ * is signed in to, under the name they gave it. A provider with no
+ * signed-in account and an API key (no plan windows) show nothing there:
+ * connecting and keys live in Providers. A signed-in account whose read
+ * failed stays, with its reason and Try again (#1774). */
+export function accountLimitRows(report: PlanUsageReport | null): PlanRow[] {
+  return planRows(report).filter((row) => row.access === "subscription" && row.state !== "signed-out");
 }
 
 /** How long until a window resets ("2d 3h", "45m"); null once past. */

@@ -96,7 +96,7 @@ describe("the page's order (#4095: the reference's groups)", () => {
     const usage: PersonalUsage = { month: summary(3, 1), previous: summary(1, 1), days30: summary(3, 1), byBot: summary(3, 1), byModel: summary(3, 1) };
     const html = renderToStaticMarkup(createElement("div", null,
       createElement(UsagePlan, { usage, error: null, now: NOW.getTime() }),
-      createElement(PlanUsageView, { report: { providers: [] }, loading: false, now: NOW.getTime(), onRefresh: () => {}, myEngines: null, onOpenEngines: () => {}, issuer: "" }),
+      createElement(PlanUsageView, { report: { providers: [] }, loading: false, now: NOW.getTime(), onRefresh: () => {} }),
       createElement(UsageBreakdown, { usage }),
       createElement(UsageDetail, { planHistory: createElement("div", { "data-history": "" }), onOpenTraces: () => {} }),
     ));
@@ -221,39 +221,39 @@ describe("Plan card", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(PlanUsageView, {
       report: { providers: [provider({})] }, loading: false, now: NOW.getTime(),
-      onRefresh: () => {}, myEngines: null, onOpenEngines: () => {}, issuer: "",
+      onRefresh: () => {},
     }));
     expect(html.indexOf('data-plan-window-kind="fiveHour"')).toBeLessThan(html.indexOf('data-plan-window-kind="weekly"'));
     expect(html).toContain('aria-valuenow="10"');
     expect(html).toContain('aria-valuenow="40"');
     expect(html).toContain(">10\u00a0%</span>");
     expect(html).toContain(">utilisé</span>");
-    expect(html).toContain("90\u00a0% restant");
     expect(html).toContain(">40\u00a0%</span>");
-    expect(html).toContain("60\u00a0% restant");
+    // #4418: the percent used says it all, no second figure
+    expect(html).not.toContain("restant");
     expect(html).toMatch(/data-limit-footer=""[^>]*tabular-nums|tabular-nums[^>]*data-limit-footer=""/);
-    expect(html).toContain("Session de 5 heures");
+    expect(html).toContain("Session de 5 h");
     expect(html).toContain(">Semaine<");
     expect(html).toContain("Se renouvelle le ");
     expect(html).not.toContain(">Détails<");
     expect(html).toContain(">Limites d&#x27;utilisation</h3>");
   });
 
-  it("adds any other window the provider gives, and the 5-hour session alone when there is no week, in English", () => {
+  // #4418: the short window and the week, nothing else.
+  it("shows the 5-hour session alone when there is no week, and no other window, in English", () => {
     const html = renderToStaticMarkup(createElement(PlanUsageView, {
       report: { providers: [provider({
         weekly: { available: false, remainingPercent: null, usedPercent: null, resetsAt: null },
         extra: [{ label: "Opus week", remainingPercent: 75, usedPercent: 25, resetsAt: null }],
       })] },
-      loading: false, now: NOW.getTime(), onRefresh: () => {}, myEngines: null, onOpenEngines: () => {}, issuer: "",
+      loading: false, now: NOW.getTime(), onRefresh: () => {},
     }));
     expect(html).toContain('data-plan-window-kind="fiveHour"');
     expect(html).not.toContain('data-plan-window-kind="weekly"');
     expect(html).toContain(">10%</span>");
-    expect(html).toContain("90% left");
+    expect(html).not.toContain("90% left");
     expect(html).toContain("5-hour session");
-    expect(html).toContain('data-plan-window-kind="extra"');
-    expect(html).toContain("Opus week");
+    expect(html).not.toContain("Opus week");
   });
 
   it("never breaks a renewal between the day and its month, or inside 19 h 59", () => {
@@ -447,7 +447,7 @@ describe("the reference's Usage page (#4095)", () => {
         { id: "claude", name: "Claude", driver: "claude", plan: "Max", ok: true, error: null, state: "windows", fiveHour: { available: true, remainingPercent: 66, usedPercent: 34, resetsAt: "2026-10-14T18:00:00Z" }, weekly: { available: true, remainingPercent: 54, usedPercent: 46, resetsAt: "2026-10-18T18:00:00Z" } },
         { id: "grok", name: "Grok", driver: "grok", plan: null, ok: false, error: null, state: "error", failure: { kind: "timeout", seconds: 8 } },
       ] },
-      loading: false, now: NOW.getTime(), onRefresh: () => {}, myEngines: null, onOpenEngines: () => {}, issuer: "",
+      loading: false, now: NOW.getTime(), onRefresh: () => {},
     }));
     const title = html.indexOf(">Usage limits</h3>");
     const card = html.indexOf("data-settings-surface");

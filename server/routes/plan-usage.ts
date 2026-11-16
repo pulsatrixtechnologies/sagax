@@ -41,6 +41,9 @@ export interface PlanUsageRouteDeps {
   announcePlanThresholds: (report: PlanUsageReport, scope: string) => void;
   /** #2757: every report read is a snapshot of the plan history; absent, no history is kept. */
   planHistory?: PlanHistoryStore;
+  /** #4418: the name the person gave one of their accounts (server/engines/
+   * account-names.ts), so each account's limits read under that name. */
+  accountName?: (principalId: string, instanceId: string) => string | undefined;
   /** Defaults to server/usage/plan-usage.ts loadPlanUsage (tests inject a stub). */
   loadPlanUsage?: typeof loadPlanUsage;
 }
@@ -88,6 +91,9 @@ export function createPlanUsageRoutes(deps: PlanUsageRouteDeps): RouteHandler {
           const driver = instances[instanceId]?.driver ?? "";
           return providersOfInstance(instanceId, driver).some((provider) => held.includes(provider)) || planKeyConfigured(driver, instanceId);
         },
+      }).map((account) => {
+        const own = account.access !== "api-key" && account.instanceId ? deps.accountName?.(principalId, account.instanceId) : undefined;
+        return own ? { ...account, name: own } : account;
       });
       const report = await (deps.loadPlanUsage ?? loadPlanUsage)({ accounts, refresh });
       deps.announcePlanThresholds(report, principalId);

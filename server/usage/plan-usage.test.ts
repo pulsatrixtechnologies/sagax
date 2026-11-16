@@ -194,6 +194,26 @@ describe("plan usage parsers", () => {
   });
 });
 
+describe("the short window's length (#4418)", () => {
+  it("carries the vendor's hours on the short window only: Claude's five, Codex and Grok as reported", () => {
+    const claude = parseClaudeUsage({ five_hour: { utilization: 25, resets_at: null }, seven_day: { utilization: 40, resets_at: null } });
+    expect(claude.fiveHour.hours).toBe(5);
+    expect(claude.weekly.hours).toBeUndefined();
+    const codex = parseCodexUsage({
+      rate_limit: {
+        primary_window: { used_percent: 10, limit_window_seconds: 4 * 3600, reset_at: 1_800_000_000 },
+        secondary_window: { used_percent: 40, limit_window_seconds: 604800, reset_at: 1_800_000_000 },
+      },
+    });
+    expect(codex.fiveHour).toMatchObject({ available: true, usedPercent: 10, hours: 4 });
+    expect(codex.weekly.hours).toBeUndefined();
+    const grok = parseGrokUsage({ config: { creditUsagePercent: 30, currentPeriod: { type: "SIX_HOUR", start: "2026-09-26T00:00:00.000Z", end: "2026-09-26T06:00:00.000Z" } } });
+    expect(grok.fiveHour).toMatchObject({ available: true, usedPercent: 30, hours: 6 });
+    // a window the vendor does not report stays bare: no hours, no zero
+    expect(parseClaudeUsage({ seven_day: { utilization: 1, resets_at: null } }).fiveHour).toEqual({ available: false, remainingPercent: null, usedPercent: null, resetsAt: null });
+  });
+});
+
 describe("plan usage fetcher", () => {
   it("does not call fetch when the Claude token is expired", async () => {
     const fetchImpl = vi.fn<PlanFetch>();

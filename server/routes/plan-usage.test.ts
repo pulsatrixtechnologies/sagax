@@ -102,6 +102,24 @@ describe("GET /api/plan-usage", () => {
     expect(h.load).toHaveBeenCalledWith(expect.objectContaining({ refresh: true }));
   });
 
+  // #4418: each account's limits read under the name the person gave it.
+  it("names each of the person's accounts as they named it, never a key row", async () => {
+    let accounts: Array<{ id: string; name: string; driver: string; access?: string }> = [];
+    const load = vi.fn(async (input: { accounts: typeof accounts }) => { accounts = input.accounts; return emptyReport; });
+    const h = harness({
+      isOrganization: () => true,
+      cfg: () => ({ instances: {
+        claude: { driver: "claudeAgent", displayName: "Claude" },
+        work: { driver: "claudeAgent", displayName: "Second" },
+      } } as unknown as AppConfig),
+      engineLogins: () => ({ loginDir: (_id, _driver, _slot, instanceId) => `/tmp/ada/${instanceId}`, signedIn: () => true }),
+      accountName: (principalId, instanceId) => principalId === ADA ? ({ claude: "Personal", work: "Work plan" } as Record<string, string>)[instanceId] : undefined,
+      loadPlanUsage: load as never,
+    });
+    await h.call("/api/plan-usage", member);
+    expect(accounts.filter((account) => account.driver === "claude").map((account) => account.name)).toEqual(["Personal", "Work plan"]);
+  });
+
   it("passes other paths", async () => {
     const h = harness();
     expect((await h.call("/api/usage", admin)).out).toBe(PASS);

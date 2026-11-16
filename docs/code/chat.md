@@ -976,6 +976,10 @@ setting is the person's own (`sagax.voiceDashes.v1`, Settings > Models and
 voice > Voice), on by default for French. A solo server cannot read the
 browser's choice, so it follows the server language there.
 
+The bot reply surface takes a quiet tint from the current accent (#4486),
+including a theme colour or the live bot accent. GitHub reference links use
+the same accent-text token as other Markdown links.
+
 ## Record links in a bot's reply (2026-11-16, #4507)
 
 After the dashes, `pushAssistantText` passes the final text through

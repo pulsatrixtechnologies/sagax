@@ -4045,6 +4045,12 @@ html[data-animations-paused] *::after {
 .bg-success {
   color: var(--color-success-ink);
 }
+/* Bot replies follow the selected theme and the live bot accent, while
+   keeping the skin's quiet surface and readable ink (#4486). */
+.bg-bubble-bot {
+  background-color: color-mix(in srgb, var(--color-accent) 8%, var(--color-bubble-bot));
+}
+
 /* The person's own bubble is filled with the accent (src/styles/skin-bubble.css:
    white text as the reference, on the accent or the same hue a step deeper
    where white would not read at 4.5:1, in every skin, colour, duo-tone and

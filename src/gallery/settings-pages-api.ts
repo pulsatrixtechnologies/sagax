@@ -222,7 +222,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
     "/api/bots/bot-0/memory/semantic": { enabled: true, encoder: "built-in", memoryPassages: 42, conversationPassages: 7 },
   };
   const accounts = params.get("accounts");
-  if (accounts) Object.assign(API, accountScenes(accounts, API["/api/config"] as Record<string, unknown>));
+  if (accounts) Object.assign(API, accountScenes(accounts, API["/api/config"] as Record<string, unknown>, params.get("member") ? "member" : "admin"));
   return API;
 }
 
@@ -254,8 +254,9 @@ function accountProviders(accounts: string | null): { providers?: unknown[] } {
  * read by two engines (one row), a second sign-in of one engine, and the
  * answers a sign-in in progress gets (a pasted code, a device code, the
  * vendor's page alone). Removing answers that two bots still use it
- * (src/gallery/settings-pages.tsx). Made-up names only. */
-function accountScenes(scene: string, config: Record<string, unknown>): Record<string, unknown> {
+ * (src/gallery/settings-pages.tsx). &member=1 shows them to an organization
+ * member, who adds their own accounts too (#4435). Made-up names only. */
+function accountScenes(scene: string, config: Record<string, unknown>, role: "admin" | "member"): Record<string, unknown> {
   const id = (driver: string, n: number) => `${driver}-0000000${n}-aaaa-4bbb-8ccc-dddddddddddd`;
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
   const models = (prefix: string, label: string) => ({ default: `${prefix}-1`, options: [{ id: `${prefix}-1`, label }] });
@@ -271,8 +272,8 @@ function accountScenes(scene: string, config: Record<string, unknown>): Record<s
     instanceId, driver, displayName, installed: true, subscription: { supported: true, signedIn }, myKey: false, orgKey: false, myTurns: signedIn ? "subscription" : "none", ...extra,
   });
   const org = {
-    "/api/config": { ...config, personalSettings: true, viewer: { role: "admin", operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true } },
-    "/api/org": { org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://perspicax.example.com" } }, link: { state: "ok" }, viewerRole: "admin", settings: {} },
+    "/api/config": { ...config, personalSettings: true, viewer: { role, operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true } },
+    "/api/org": { org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://perspicax.example.com" } }, link: { state: "ok" }, viewerRole: role, settings: {} },
     "/api/me/voice-keys": { elevenlabs: { configured: false, last4: null }, fish: { configured: false, last4: null }, xai: { configured: false, last4: null }, openai: { configured: false, last4: null } },
   };
   const piMine = mine("pi", "piAgent", "pi", false, { subscription: { supported: false, signedIn: false }, myKey: true, keyWhere: "perspicax", myTurns: "key" });

@@ -50,7 +50,7 @@ import { groupOwnerId, ownsGroup, type GroupActor } from "./groups/group-ownersh
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { ToolGrantStore } from "./tools/tool-grants.ts";
 import { foreignToolSpelling, sagaxInternalSelfAnswers, sagaxInternalTool } from "./sagax-internal-tools.ts";
@@ -1509,7 +1509,9 @@ import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
-import { createInstancesRoutes, instancesInView } from "./routes/instances.ts";
+import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedAccountRemovalDeps } from "./routes/instances.ts";
+import { accountOwnerOf, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
+import { addedAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes } from "./routes/config-http.ts";
@@ -10101,7 +10103,10 @@ const personalProviderInstances = new PersonalProviderInstances({
     await registry.load(configs, decorateHostedProvider);
     bus.attach(Object.keys(configs).flatMap((id) => registry.get(id) ?? []));
   },
-  remove: async (id) => { bus.detach(id); await registry.dispose(id); }
+  remove: async (id) => { bus.detach(id); await registry.dispose(id); },
+  // #4435: an account a person added on an organization server is theirs
+  // (a solo server has one person: nothing to tell apart)
+  accountOwner: (id) => IDENTITY.kind === "perspicax" ? accountOwnerOf(cfg.instances, id) : undefined
 });
 const machineRuns = createMachineRuns({
   engine(instanceId) {
@@ -13398,6 +13403,23 @@ const engineLogins = IDENTITY.kind === "perspicax"
     }
   })
   : null;
+// #4435 point 4: accounts added before the server recorded who added them
+// stay the organization's (no owner is guessed); each one is listed once at
+// start with what the data says (who signed in to it, whose bots use it), so
+// the owner can decide. Ids only, never a name, an address or a secret.
+setTimeout(() => {
+  if (IDENTITY.kind !== "perspicax" || !engineLogins) return;
+  try {
+    const people = principals.list().map((principal) => principal.id.trim().toLowerCase());
+    const cases = unownedAddedAccounts(instanceConfigs(cfg), {
+      signedInAt: (instanceId, driver) => !isLoginDriver(driver) || !separateAccountInstance(instanceId) ? [] : people.flatMap((person) => {
+        try { return [{ principalId: person, at: statSync(join(engineLogins.loginDir(person, driver, "primary", instanceId), LOGIN_MARKER)).mtimeMs }]; } catch { return []; }
+      }),
+      botOwners: (instanceId) => store.bots.filter((bot) => accountUserNames([bot], (botId) => store.tasks(botId), instanceId).length > 0).map((bot) => effectiveBotOwner(bot)),
+    }, addedAccount, separateAccountInstance);
+    for (const entry of cases) console.warn(describeUnownedAccount(entry));
+  } catch (error) { reportBackgroundError(error); }
+}, 0).unref?.();
 /** Slice 4: shared sidebar sections (section-channels.ts), organization mode. */
 const sectionChannels: SectionChannels | null = IDENTITY.kind === "perspicax" ? new SectionChannels({ path: join(DATA_DIR, "section-channels.json") }) : null;
 // A person's teams changed (a refreshed id_token or a directory sync): every
@@ -23276,7 +23298,9 @@ function refusedModelsFor(person: string | null, instanceId: string): ReadonlySe
  * subscription sign-in or a key, #1098): the app offers it once theirs
  * serves it (shared/offered-engines.ts, GET /api/me/engines
  * `orgNotAllowed`), and Settings shows it to connect. */
-function orgOfferedEngines<T extends { instanceId: string }>(instances: readonly T[], person?: string | null): T[] {
+function orgOfferedEngines<T extends { instanceId: string }>(every: readonly T[], person?: string | null): T[] {
+  // #4435: another person's added account or own server is never offered
+  const instances = IDENTITY.kind === "perspicax" && person ? every.filter((instance) => personalProviderInstances.visible(instance.instanceId, person.trim().toLowerCase())) : every;
   const allowed = offeredEngines(instances, { organization: IDENTITY.kind === "perspicax", allowedEngines: orgAllowedEngines() }, "settings");
   if (!person || IDENTITY.kind !== "perspicax" || !orgOwnAccountsOutsideList() || allowed.length === instances.length) return allowed;
   return instances.filter((instance) => allowed.includes(instance) || personalEngine(instance.instanceId, person));
@@ -29053,6 +29077,8 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
       store.bots.filter((bot) => effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase()),
       (botId) => store.tasks(botId).filter((task) => !task.ownerPrincipalId || task.ownerPrincipalId.trim().toLowerCase() === principalId.trim().toLowerCase()),
       instanceId),
+    // #4435: the entry of a person's own account, removed with it
+    removeAccountEntry: (instanceId: string, beforeRemove: () => Promise<void>) => removeAddedAccount(addedAccountRemoval, instanceId, { beforeRemove }),
     engineDisplayName,
     secondLoginSupported,
     grokAccountsFor,
@@ -32938,8 +32964,10 @@ ROUTES.push(createBotRuntimeSettingsRoutes({
     return IDENTITY.kind === "perspicax" && callerCan(auth, area === "tools" ? "bots.tools" : "bots.behaviour");
   },
   isAdmin: (auth) => auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin"),
-  checkBackup: (selection) => {
-    const checked = checkedModelSelection(selection, undefined, true);
+  checkBackup: (selection, bot) => {
+    // #4435: the bot's owner may back it up with their own added account
+    const owner = store.bot(bot.id);
+    const checked = checkedModelSelection(selection, undefined, true, owner ? effectiveBotOwner(owner) : undefined);
     if (!checked.ok) return { ok: false, status: checked.status, error: checked.error };
     const target = registry.get(checked.selection.instanceId);
     if (!target?.enabled) return { ok: false, status: 400, error: "Enable the backup engine before selecting it for recovery." };
@@ -34009,7 +34037,9 @@ ROUTES.push(createOpenAiCompatServerRoutes({
 ROUTES.push(createAntigravityAccountRoutes({
   instances: () => persistableInstanceConfigs(cfg),
   persist: persistProviderInstance,
-  describe: describeInstances,
+  // #4435: the adder's own account on an organization server, listed as they see it
+  ownerPrincipalId: (auth) => IDENTITY.kind === "perspicax" && auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null,
+  describe: (auth) => instancesForViewer(auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null),
   exclusive: (work) => {
     if (providerConfigBusy) return null;
     providerConfigBusy = true;
@@ -35319,8 +35349,22 @@ ROUTES.push(createAdminActivityRoutes({
   adminPersonName: (principalId) => adminPerson(principalId).name,
   adminActivityRecording
 }));
-ROUTES.push(createInstancesRoutes({
+// The provider-account edits both the instance routes and a person's own
+// list (removeAccountEntry, #4435) go through.
+const addedAccountRemoval: AddedAccountRemovalDeps = {
   cfg,
+  getProviderConfigBusy: () => providerConfigBusy,
+  setProviderConfigBusy: (busy) => { providerConfigBusy = busy; },
+  providerInstancesChanging,
+  persistProviderInstance,
+  bots: () => store.bots,
+  tasks: (botId) => store.tasks(botId),
+  threadBusy,
+  botForThread,
+  activeGroupTurnForBot: (botId) => Boolean(activeGroupTurnForBot(botId))
+};
+ROUTES.push(createInstancesRoutes({
+  ...addedAccountRemoval,
   dataDir: DATA_DIR,
   hostedModels: Boolean(hostedModels),
   identityKind: () => IDENTITY.kind,
@@ -35340,6 +35384,8 @@ ROUTES.push(createInstancesRoutes({
   },
   providerAccounts,
   providerAccountOwner,
+  // #4435: a person's added account or own server, theirs alone
+  accountOwner: (id) => personalProviderInstances.ownerOf(id),
   providerAuthSessions,
   sessionsIsLive: (id) => sessions.isLive(id),
   saveConfig,
@@ -35347,19 +35393,10 @@ ROUTES.push(createInstancesRoutes({
   broadcast,
   configStatus,
   providerConfigs,
-  getProviderConfigBusy: () => providerConfigBusy,
-  setProviderConfigBusy: (busy) => { providerConfigBusy = busy; },
-  providerInstancesChanging,
   claudeUpdatesInFlight,
-  persistProviderInstance,
   reloadProviders,
   selfCheckedEngine,
-  cliProbeEnvironment,
-  bots: () => store.bots,
-  tasks: (botId) => store.tasks(botId),
-  threadBusy,
-  botForThread,
-  activeGroupTurnForBot: (botId) => Boolean(activeGroupTurnForBot(botId))
+  cliProbeEnvironment
 }));
 ROUTES.push(createCliTestRoutes({
   hostedModels: Boolean(hostedModels),

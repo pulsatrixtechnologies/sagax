@@ -756,6 +756,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // one off their own list (theirs alone; the organization's engine stays)
   { methods: ["PUT"], path: /^\/api\/me\/engines\/[\w.-]+\/name$/, feature: "orgDirectory" },
   { methods: ["DELETE"], path: /^\/api\/me\/engines\/[\w.-]+$/, feature: "orgDirectory" },
+  // #4435: a person adds an account of their own beside a provider's first
+  // one (theirs alone, server/engines/account-owner.ts); no administrator
+  { methods: ["POST"], path: /^\/api\/instances\/(?:claude|chatgpt|antigravity)-accounts$/, feature: "orgDirectory" },
   // The caller's own claude.ai connectors (server/harness-connectors.ts):
   // names and statuses of their own account only. The admin switch
   // (PUT /api/harness-connectors/settings) stays admin.

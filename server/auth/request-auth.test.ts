@@ -567,7 +567,12 @@ describe("resolveRequestAuth", () => {
     expect(routePermission("POST", "/api/marketplaces/acme/plugins/tool", org)).toBe("apps.marketplaces");
     expect(routePermission("POST", "/api/marketplaces/acme/plugins/tool/update", org)).toBe("apps.marketplaces");
     expect(routePermission("PUT", "/api/skills-library/my-skill", org)).toBe("skills.library");
-    expect(routePermission("POST", "/api/instances/claude-accounts", org)).toBe("engines.manage");
+    // #4435: a person adds their own account with no administrator
+    for (const kind of ["claude", "chatgpt", "antigravity"]) {
+      expect(routePermission("POST", `/api/instances/${kind}-accounts`, org)).toBeNull();
+      expect(requiredScope("POST", `/api/instances/${kind}-accounts`, org)).toBe("client");
+      expect(requiredScope("POST", `/api/instances/${kind}-accounts`, {})).toBe("admin");
+    }
     expect(routePermission("POST", "/api/instances/claude/leftover-files/remove", org)).toBeNull();
     // 2026-10-19: the four admin keys an admin gives in Perspicax
     expect(routePermission("PUT", "/api/mcp/servers/x", org)).toBe("host.shell");

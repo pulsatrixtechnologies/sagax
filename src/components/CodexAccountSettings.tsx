@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ChatGptPlanStatus } from "./ChatGptPlanStatus";
 import { readableError } from "@/lib/plain-error";
+import { providerAccountsChanged } from "@/lib/provider-accounts";
 import { InlineFold } from "./SettingsPrimitives";
 
 export function AddProviderAccount({ antigravityInstanceId }: { antigravityInstanceId?: string } = {}) {
@@ -24,6 +25,8 @@ export function AddProviderAccount({ antigravityInstanceId }: { antigravityInsta
     try {
       const { instances } = await api(`/api/instances/${antigravity ? "antigravity" : "chatgpt"}-accounts`, { method: "POST", body: JSON.stringify({ displayName: displayName.trim(), ...(antigravity ? { sourceInstanceId: antigravityInstanceId } : {}) }) });
       dispatch({ type: "instances", instances });
+      // #4435: a member's list is their own accounts: the new one joins it
+      providerAccountsChanged();
       setOpen(false);
       setDisplayName("");
     } catch (cause) { setError(readableError(cause)); }

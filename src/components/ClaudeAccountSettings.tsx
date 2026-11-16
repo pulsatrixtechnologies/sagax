@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { CommandLine, InlineFold } from "./SettingsPrimitives";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { readableError } from "@/lib/plain-error";
+import { providerAccountsChanged } from "@/lib/provider-accounts";
 
 export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
   instance?: InstanceInfo;
@@ -35,6 +36,8 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
       });
       // The save has succeeded even if the subsequent catalog refresh fails.
       await refreshInstances().catch(() => {});
+      // #4435: a member's list is their own accounts: the new one joins it
+      if (!instance) providerAccountsChanged();
       onSaved();
     } catch (cause) {
       setError(readableError(cause));

@@ -656,6 +656,36 @@ describe("Settings > Providers, in an organization", () => {
     expect(services.querySelector('[data-settings-row="providers.imageGen"]')).not.toBeNull();
   });
 
+  it("#4435: a member adds their own account beside the first one (Claude, the ChatGPT plan), no administrator", async () => {
+    fixture.config = { viewer: { operator: false, role: "member" } };
+    fixture.instances = [
+      instance("claude", "claudeAgent", "Claude Code", { access: "subscription" }),
+      instance("codex", "codex", "Codex", { access: "subscription", snapshot: { state: "available", authenticated: true, chatgptPlan: true } }),
+    ];
+    fixture.mine = [
+      mine("claude", "claudeAgent", "Claude Code", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+      mine("codex", "codex", "Codex", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+    ];
+    await page("anthropic");
+    const claude = host.querySelector('[data-settings-group="provider-accounts"] [data-provider-add-account]');
+    expect(claude, "Add account under Accounts").not.toBeNull();
+    expect(claude!.textContent).toBe("Add Claude account");
+    await page("openai");
+    const plan = host.querySelector('[data-settings-group="provider-accounts"] [data-provider-add-account]');
+    expect(plan, "Add another plan account under Accounts").not.toBeNull();
+    await click(plan!.querySelector("button"));
+    const input = plan!.querySelector<HTMLInputElement>("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "My plan");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.mocked(apiMock).mockClear();
+    await click(plan!.querySelector('button[type="submit"]'));
+    expect(apiCalls("POST")).toEqual([["/api/instances/chatgpt-accounts", JSON.stringify({ displayName: "My plan" })]]);
+    // providerAccountsChanged: the person's own accounts and engines load again
+    expect(vi.mocked(apiMock).mock.calls.some(([path]) => path === "/api/me/providers"), "the person's own list reloads").toBe(true);
+  });
+
   it("renames an account for this person alone: PUT /api/me/engines/:id/name (#4376)", async () => {
     await page("openai");
     await click(host.querySelector('[data-account-rename="account:codex"]'));

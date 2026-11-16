@@ -30,6 +30,13 @@ function checkedModelSelection(
     model: value.model.trim()
   };
   if (host.hostedModels && !host.hostedModels.allows(selection)) return { ok: false, status: 400, error: host.hostedModels.error() };
+  // #4435: a person's own server or added account is theirs alone: nobody
+  // else picks it, for a bot, a conversation, a backup or a default (it is
+  // not there for them, as an unknown one).
+  const accountOwner = host.IDENTITY.kind === "perspicax" ? host.personalProviderInstances.ownerOf(selection.instanceId) : undefined;
+  if (accountOwner && accountOwner !== (payer ?? "").trim().toLowerCase() && current?.selection.instanceId !== selection.instanceId) {
+    return { ok: false, status: 400, error: `model instance "${selection.instanceId}" is unavailable` };
+  }
   // The organization's allowed providers; the engine a bot already runs on
   // stays writable (its effort) until the fallback moves it.
   if ((!current || current.selection.instanceId !== selection.instanceId) && host.orgEngineAllowRefusal(selection.instanceId, payer)) {

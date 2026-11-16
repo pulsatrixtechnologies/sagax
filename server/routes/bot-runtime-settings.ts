@@ -68,8 +68,9 @@ export interface BotRuntimeSettingsRouteDeps {
   mayManage(auth: RequestAuth, bot: RuntimeBot, area: "behaviour" | "tools"): boolean;
   /** An admin (grants whose scope reaches past the person stay theirs). */
   isAdmin(auth: RequestAuth): boolean;
-  /** A backup model the server can run: the checked selection, or why not. */
-  checkBackup(selection: NonNullable<BotAutomaticRecovery["backup"]>): { ok: true; selection: NonNullable<BotAutomaticRecovery["backup"]> } | { ok: false; status: number; error: string; code?: string };
+  /** A backup model the server can run for this bot (its owner's own
+   * accounts included, #4435): the checked selection, or why not. */
+  checkBackup(selection: NonNullable<BotAutomaticRecovery["backup"]>, bot: RuntimeBot): { ok: true; selection: NonNullable<BotAutomaticRecovery["backup"]> } | { ok: false; status: number; error: string; code?: string };
   /** Store the fields on the bot and tell the clients. A field set to
    * undefined is cleared (turnPayer back to its default). */
   save(botId: string, patch: StoredRuntime): RuntimeBot | null;
@@ -140,7 +141,7 @@ export function createBotRuntimeSettingsRoutes(deps: BotRuntimeSettingsRouteDeps
       if (turnPayer !== undefined) patch.turnPayer = turnPayer ?? undefined;
       const recovery = parsed.data.automaticRecovery;
       if (recovery?.backup) {
-        const checked = deps.checkBackup(recovery.backup);
+        const checked = deps.checkBackup(recovery.backup, bot);
         // Turning recovery off never fails on a backup that went away.
         if (!checked.ok && recovery.enabled) return json(res, checked.status, { error: checked.error, ...(checked.code ? { code: checked.code } : {}) });
         patch.automaticRecovery = checked.ok ? { enabled: recovery.enabled, backup: checked.selection } : { enabled: false };

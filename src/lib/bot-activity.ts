@@ -10,6 +10,7 @@ import {
   type BotActivityList,
   type BotActivityStatus,
   type BotActivityStep,
+  type BotActivityText,
   type BotCodeBranch,
   type BotCodeCommit,
   type BotCodePullAction,
@@ -21,7 +22,7 @@ import type { CodingBranch } from "@/lib/code-branches";
 
 export type { BotLaunchedAgentItem };
 
-export type { BotActivityDetail, BotActivityItem, BotActivityList, BotActivityStatus, BotActivityStep, BotCodeBranch, BotCodeCommit, BotCodePullRequest };
+export type { BotActivityDetail, BotActivityItem, BotActivityList, BotActivityStatus, BotActivityStep, BotActivityText, BotCodeBranch, BotCodeCommit, BotCodePullRequest };
 export { activityStatusActive };
 
 type Api = <T>(path: string, init?: RequestInit) => Promise<T>;

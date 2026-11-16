@@ -1,9 +1,9 @@
-/** The real ChatView on a synthetic store, for captures of a turn that folds
- * its notes (#3581, scripts/capture/turn-fold.mjs): a long settled turn (its
- * notes and steps behind "Worked", the answer as the only bubble), a turn
- * that runs at three moments, and a heavy chat (five turns, one of them with
- * 17 notes and 40 steps). `pane=room` draws the neighbour: a room's "Worked"
- * row, the same ActivityRun a room draws over a member's answer. No server.
+/** The real ChatView on a synthetic store, for captures of a turn with
+ * several texts (#3581, #4437, scripts/capture/turn-fold.mjs): a long settled
+ * turn (each text its own bubble, the steps between two texts behind one
+ * row), a turn that runs at three moments, and a heavy chat (five turns, one
+ * of them with 17 texts and 40 steps). `pane=room` draws the neighbour: a
+ * room's turn, its texts as bubbles and its steps folded. No server.
  * Every name and text is synthetic. Not shipped.
  * ?skin=<id>&lang=en|fr&moment=settled|run1|run2|run3|heavy&tools=1&pane=chat|room&open=1 */
 import { StrictMode, useCallback, useMemo, useReducer } from "react";
@@ -12,7 +12,7 @@ import { createRoot } from "react-dom/client";
 import { ActivityRun } from "../components/ActivityRun";
 import { ChatView } from "../components/ChatView";
 import { ToolActivity } from "../components/ToolActivity";
-import { roomTurnFolds } from "../lib/activity-runs";
+import { groupActivityRuns } from "../lib/activity-runs";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, initialState, reducer, type Action, type AppState, type Bot, type InstanceInfo, type Message } from "../state/store";
@@ -150,31 +150,25 @@ function galleryReducer(current: AppState, action: Action | MomentAction): AppSt
   }
 }
 
-/** The neighbour: a room draws a member's settled turn as its "Worked" row
- * (RoomMessageItem) over the answer, from roomTurnFolds. */
+/** The neighbour: a room draws a member's turn as the room does (#4437):
+ * every text its own bubble, in order, the steps between two of them behind
+ * one row (groupActivityRuns). */
 function RoomPane() {
   const turn = [user("u", start, ask), ...longTurn("t", start, "settled")];
-  const folds = roomTurnFolds(turn);
   const nameOf = () => undefined;
   return (
     <div data-gallery-room="" className="mx-auto flex w-full max-w-[760px] flex-col gap-3 px-4 py-6">
-      {turn.filter((message) => !folds.hiddenIds.has(message.id) && message.kind !== "activity").map((message) => {
-        const fold = folds.byTerminalId.get(message.id);
-        return (
-          <div key={message.id} className="contents">
-            {fold && (
-              <ActivityRun
-                messages={fold.messages}
-                elapsedMs={fold.elapsedMs}
-                nameOf={nameOf}
-                renderStep={(row) => <ToolActivity tool={row.tool!} />}
-                renderMessage={(row) => <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[14px] text-ink">{row.text}</div>}
-              />
-            )}
-            <div className={message.role === "user" ? "self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[14px] text-ink" : "self-start text-[14px] text-ink"}>{message.text}</div>
-          </div>
-        );
-      })}
+      {groupActivityRuns(turn).map((item) => item.kind === "run" ? (
+        <ActivityRun
+          key={item.id}
+          messages={item.messages}
+          elapsedMs={item.elapsedMs}
+          nameOf={nameOf}
+          renderStep={(row) => <ToolActivity tool={row.tool!} />}
+        />
+      ) : item.message.kind === "activity" ? null : (
+        <div key={item.message.id} className={item.message.role === "user" ? "self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[14px] text-ink" : "self-start rounded-[18px] bg-bubble-bot px-3 py-2 text-[14px] text-ink"}>{item.message.text}</div>
+      ))}
     </div>
   );
 }

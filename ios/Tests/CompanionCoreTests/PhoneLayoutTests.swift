@@ -133,14 +133,12 @@ final class PhoneLayoutTests: XCTestCase {
         XCTAssertTrue(pane.contains("@Environment(\\.horizontalSizeClass)"))
     }
 
-    // #4066: the bot's note on the working line is never cut (at most
-    // `LiveTextPlace.lineTextMax` units, so it wraps as the desktop's does).
-    func testTheWorkingNoteIsNeverCut() throws {
+    // #4437: the working line never draws the bot's words: every text it
+    // writes is its own bubble, in the transcript once written.
+    func testTheWorkingLineNeverDrawsTheBotsWords() throws {
         let chat = try source("App/ChatView.swift")
-        let note = try XCTUnwrap(chat.range(of: "private func noteText(_ words: String) -> some View {"))
-        let body = chat[note.upperBound...].prefix(400)
-        XCTAssertFalse(body.contains(".lineLimit(2)"))
-        XCTAssertTrue(body.contains(".lineLimit(nil)"))
+        XCTAssertFalse(chat.contains("chat-working-note"))
+        XCTAssertFalse(chat.contains("lineNote"))
     }
 
     // #4066: the answer being written was flat text on the background until

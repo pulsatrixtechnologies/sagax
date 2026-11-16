@@ -11,7 +11,6 @@ import { peerLine } from "@/lib/peer-message";
 import { showWorkingDots } from "@/lib/turn-tail";
 import { lastNonReceipt } from "@/lib/receipts";
 import { liveActivityPhrases } from "@/lib/live-activity";
-import { LIVE_NOTE_PHASE, lineWords, liveLineNote } from "@/lib/live-text-place";
 import { useOnCall } from "@/lib/call";
 import { pendingApprovals } from "../PendingApproval";
 import { latestFailure, latestReply, type TranscriptSnapshot } from "@/lib/transcript-announcer";
@@ -89,16 +88,15 @@ export function useChatViewPresence({
   // The working line reads the last real message: a finished call's record
   // (and a turn's receipts) can trail a turn that is still working.
   const lastMessage = lastNonReceipt(messages);
-  // #3696: the bot's short note of the live turn stays in the line, in its
-  // look, until the next step's words replace it (src/lib/live-text-place.ts)
-  const lineNote = liveLineNote(lastMessage, liveTurns);
-  const activity = lineNote
-    ? { phase: LIVE_NOTE_PHASE, phrases: [lineWords(lineNote.text ?? "")] }
-    : liveActivityPhrases(lastMessage);
+  // #4437: a text the bot wrote while its turn still runs is a bubble of its
+  // own, and the turn still works under it: the working line stays
+  const interim = Boolean(lastMessage?.role === "bot" && lastMessage.kind === "text" && !lastMessage.turnTerminal &&
+    lastMessage.turnId && liveTurns.has(lastMessage.turnId));
+  const activity = liveActivityPhrases(lastMessage);
   const waiting = Boolean(
     bot.busy &&
       bot.activity !== "waiting-on-you" &&
-      (lineNote || showWorkingDots(bot.busy, lastMessage)),
+      (interim || showWorkingDots(bot.busy, lastMessage)),
   );
   const wasWaiting = useRef(false);
   // the reply was drawn as it was written (LiveReply): it settles in place
@@ -120,11 +118,8 @@ export function useChatViewPresence({
   useEffect(() => {
     if (waiting) wasWaiting.current = true;
   }, [waiting]);
-  // A note in the line is not a reply yet: when its turn ends with it as the
-  // answer, it settles in as one, from the line, like any reply.
-  const inLine = lineNote !== undefined;
   useLayoutEffect(() => {
-    if (inLine || lastMessage?.role !== "bot" || lastMessage.kind !== "text" || !wasWaiting.current) return;
+    if (lastMessage?.role !== "bot" || lastMessage.kind !== "text" || !wasWaiting.current) return;
     wasWaiting.current = false;
     if (liveShown.current) {
       liveShown.current = false;
@@ -137,7 +132,7 @@ export function useChatViewPresence({
       poppingTimer.current = null;
       setPopping((current) => current === messageId ? null : current);
     }, 520);
-  }, [lastMessage?.id, lastMessage?.role, lastMessage?.kind, inLine]);
+  }, [lastMessage?.id, lastMessage?.role, lastMessage?.kind]);
   const presenceVisible = waiting || popping !== null;
   const announcement = useMemo((): TranscriptSnapshot => {
     const approval = pendingApprovals(messages)[0];

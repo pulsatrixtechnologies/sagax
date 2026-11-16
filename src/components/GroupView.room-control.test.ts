@@ -54,7 +54,9 @@ afterEach(() => {
 });
 
 describe("a member's room reply", () => {
-  it("shows the final message and folds the turn's working notes above it", () => {
+  // #4437: what a member writes during its turn is a message: every text
+  // stays its own bubble, in order, above the final one, never folded
+  it("shows every text of a settled turn, in order, and the final message after them", () => {
     const messages = [
       ask,
       note("n1", "I'll check my own work history…", 2_000),
@@ -62,15 +64,11 @@ describe("a member's room reply", () => {
       { ...note("final", "Fixed: the title now reads Launch.", 9_000), turnTerminal: true },
     ];
     render(transcript(messages));
-    expect(host.textContent).toContain("Fixed: the title now reads Launch.");
-    // Sagax draws the fold as its quiet step row, "Worked 8s" (ActivityRun)
-    expect(host.textContent).toContain("Worked 8s");
-    expect(host.textContent).not.toContain("Good, correct layer id");
-    const toggle = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Worked 8s"))!;
-    flushSync(() => toggle.click());
-    expect(host.textContent).toContain("Good, correct layer id");
-    // the notes open above the answer
-    expect(host.textContent!.indexOf("Good, correct layer id")).toBeLessThan(host.textContent!.indexOf("Fixed: the title"));
+    const text = host.textContent!;
+    expect(text).not.toContain("Worked");
+    expect(text.indexOf("I'll check my own work history")).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("I'll check my own work history")).toBeLessThan(text.indexOf("Good, correct layer id"));
+    expect(text.indexOf("Good, correct layer id")).toBeLessThan(text.indexOf("Fixed: the title"));
   });
 
   it("keeps every line of a turn that is still running", () => {

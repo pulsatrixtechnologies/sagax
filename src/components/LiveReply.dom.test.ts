@@ -124,14 +124,11 @@ describe("LiveReply", () => {
     const shownRef = { current: false };
     draw({ shownRef });
     expect(shownRef.current).toBe(false);
-    // #3696: a short text is in the working line, not a bubble
+    // #4437: a short text is a bubble from its first word too
     streaming = { [THREAD]: "Oui." };
     draw({ shownRef });
-    expect(shownRef.current).toBe(false);
-    expect(bubble()).toBeNull();
-    streaming = { [THREAD]: "Oui.\n\n- le billet 1042\n- le billet 1040" };
-    draw({ shownRef });
     expect(shownRef.current).toBe(true);
+    expect(bubble()?.textContent).toContain("Oui.");
     draw({ hidden: true });
     expect(bubble()).toBeNull();
     streaming = { [THREAD]: "<SYSTEM_MESSAGE>internal" };

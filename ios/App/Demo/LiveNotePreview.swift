@@ -12,7 +12,7 @@ enum LiveNotePreview {
         "first-words", "short-sentence", "first-step", "second-step",
         "answer-first-words", "answer-opened", "turn-ended",
         // #4066: the note while the reasoning streams (Tool calls on), and a
-        // note of nearly `LiveTextPlace.lineTextMax` units on the line
+        // long note (each text is its own bubble since #4437)
         "note-reasoning", "long-note",
         // #4066: a long answer with Markdown, still streaming, and settled
         "answer-markdown", "answer-markdown-ended",

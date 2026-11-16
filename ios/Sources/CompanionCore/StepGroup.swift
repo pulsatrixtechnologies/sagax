@@ -12,24 +12,20 @@ public struct StepRun: Hashable, Sendable {
     public let messages: [Message]
     /// How long the bot worked, in milliseconds, when it is known.
     public let elapsed: Double?
-    /// The turn whose narration the run folds, if any.
-    public let turnId: String?
-    /// #3581: false while the turn has no final message (it may still run).
-    public let settled: Bool
+    /// #4437: the bot wrote after this stretch, so it is over even while its
+    /// turn still runs.
+    public let closed: Bool
 
-    public init(messages: [Message], elapsed: Double? = nil, turnId: String? = nil, settled: Bool = true) {
+    public init(messages: [Message], elapsed: Double? = nil, closed: Bool = false) {
         self.messages = messages
         self.elapsed = elapsed
-        self.turnId = turnId
-        self.settled = settled
+        self.closed = closed
     }
 
-    public var id: String { turnId.map { "turn.\($0)" } ?? "run.\(messages[0].id)" }
-    /// The bot's own words in the run (a settled turn's narration).
-    public var narrated: Bool { messages.contains { !StepGroup.isStep($0) } }
+    public var id: String { "run.\(messages[0].id)" }
     public var steps: [Message] { messages.filter(StepGroup.isStep) }
 
-    /// The roster's English line ("Worked for 15s"), as the narration fold said it.
+    /// The roster's English line ("Worked for 15s").
     public var englishLabel: String {
         guard let elapsed, elapsed >= 1_000 else { return "Worked" }
         let seconds = Int(elapsed / 1_000)

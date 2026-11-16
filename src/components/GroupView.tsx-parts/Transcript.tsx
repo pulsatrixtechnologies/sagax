@@ -20,7 +20,7 @@ import { personAvatarSrc } from "@/lib/profile-management";
 import type { MentionPeer } from "@/lib/mentions";
 import { personMentionPeers } from "@/lib/person-mentions";
 import { repeatedFailureIds } from "../../../shared/failure-dedup";
-import { groupActivityRuns, isHiddenStatusActivity, roomTurnFolds, type ActivityTranscriptItem } from "@/lib/activity-runs";
+import { groupActivityRuns, isHiddenStatusActivity, type ActivityTranscriptItem } from "@/lib/activity-runs";
 import { collapseBotExchanges, startsNewStretch, visibleEdge, type ExchangeRun } from "@/lib/bot-exchange";
 import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
 import { VoiceCallCard } from "../VoiceCallCard";
@@ -103,10 +103,8 @@ export const Transcript = memo(function Transcript({
   // Bot-to-bot lines become one chip per run first. A shared room's replies
   // to people stay inline; only a pair channel, a peer line, or a room
   // request collapses.
-  // A settled member turn reads as its final message: its working notes fold
-  // into one reversible row above it, so teammates never take a note for the
-  // answer.
-  const folds = useMemo(() => roomTurnFolds(messages), [messages]);
+  // #4437: every text a member writes during its turn is a bubble of its
+  // own, in order; only its tool steps fold (groupActivityRuns).
   const showDigests = showToolCallsEnabled(state.config);
   // #3681: an ask the room's pinned card holds is drawn there only while it waits
   const held = usePinnedHeld();
@@ -127,7 +125,6 @@ export const Transcript = memo(function Transcript({
       !isTransientChatNotice(message) &&
       // #3990: a run's row that only says how it went stays in the run log
       !routineRunRowOutOfChat(message, counted) &&
-      !folds.hiddenIds.has(message.id) &&
       (message.kind !== "digest" || showDigests) &&
       // one conversation (#2081): with threads off an opened thread's receipt
       // is a plain "Messaged <session>" step, never a "Go to conversation" link
@@ -164,7 +161,7 @@ export const Transcript = memo(function Transcript({
     return collapseGotoLines(listed, (item) =>
       item.kind === "run" && !showToolCalls && !item.messages.some((step) => shownCwWidget(step.tool)),
       showThreads ? gotoTargetOf : unifiedGotoTargetOf) as RoomItem[];
-  }, [messages, showToolCalls, showDigests, folds, pairChannel, members, transcript, owners, showThreads, held]);
+  }, [messages, showToolCalls, showDigests, pairChannel, members, transcript, owners, showThreads, held]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   // Seen by: each participant once, under the last line they have read.
   const seen = useMemo(() => {
@@ -419,8 +416,6 @@ export const Transcript = memo(function Transcript({
             memberOf={memberOf}
             state={state}
             dispatch={dispatch}
-            fold={folds.byTerminalId.get(item.message.id)}
-            focusedId={focusedId}
           />
         );
       })}

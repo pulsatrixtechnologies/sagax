@@ -33,7 +33,7 @@ public enum ActivityDetail: String, CaseIterable, Codable, Sendable {
 
     /// The desktop's Settings > Appearance > Tool calls ("Details",
     /// `features.showToolCalls`, off by default): on shows every step, off
-    /// the pared-down chat (steps gone, narration folded, failures kept).
+    /// the pared-down chat (steps gone, the bot's words kept, failures kept).
     /// The phone follows that one switch rather than a setting of its own.
     public static func forToolCalls(_ showToolCalls: Bool?) -> ActivityDetail {
         showToolCalls == true ? .full : .hidden
@@ -87,23 +87,6 @@ public struct QuickReply: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// A completed turn's intermediate replies. The terminal answer stays outside.
-public struct AssistantTurnFold: Hashable, Sendable {
-    public let turnId: String
-    public let messages: [Message]
-    public let elapsed: Double
-    /// #3581: the turn has its final message. A turn without one (it runs,
-    /// or ended without an answer) folds its notes too, all but the newest.
-    public var settled: Bool = true
-
-    public var label: String {
-        guard elapsed >= 1_000 else { return "Worked" }
-        let seconds = Int(elapsed / 1_000)
-        let duration = seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(String(format: "%02d", seconds % 60))s"
-        return "Worked for \(duration)"
-    }
-}
-
 /// Where the phone draws its "New" line when an unread conversation opens:
 /// above the first row that is not the person's own after their last
 /// message, the replies they have not read yet. Nil when they wrote last or
@@ -117,8 +100,8 @@ public enum NewMessagesDivider {
     }
 }
 
-/// A transcript entry: a message, or one stretch of work (tool steps and a
-/// settled turn's narration) read as a single line.
+/// A transcript entry: a message, or one stretch of work (tool steps) read
+/// as a single line.
 public enum TranscriptRow: Identifiable, Hashable, Sendable {
     case message(Message)
     case activityRun(StepRun)
@@ -174,7 +157,7 @@ public func rosterPreview(_ messages: [Message], detail: ActivityDetail) -> Stri
     // under a chat's name: it follows every reply, so it would be the
     // preview of every chat and say nothing about any of them.
     // Tool steps are never the line under a chat either: only the bot's
-    // words, or the "Worked for" of a turn whose narration folded.
+    // words, or the "Worked for" of a stretch of work.
     // A settled ask's receipt is not the line either (it stays in the chat
     // since issue #426; the roster said what came before it, as it did).
     let messages = messages.filter { $0.kind != .digest && !isToolActivityRow($0) && !isSettledPermission($0) }
@@ -384,10 +367,10 @@ public func settledPermissionLeavesChat(_ message: Message) -> Bool {
 
 /// Folds a transcript to the requested level of detail.
 ///
-/// Every stretch of one bot's work, its tool steps and a settled turn's
-/// narration, becomes one step line ("Worked 15s · 2 tools") that opens on
-/// the steps (src/lib/activity-runs.ts). Hidden drops the steps and keeps
-/// the narration folded. A status notice, a failed turn, a parallel task
+/// Every stretch of one bot's work, its tool steps, becomes one step line
+/// ("Worked 15s · 2 tools") that opens on the steps
+/// (src/lib/activity-runs.ts); the bot's texts between two stretches are
+/// rows of their own (#4437). Hidden drops the steps. A status notice, a failed turn, a parallel task
 /// card, and a chip that opens another conversation stay rows of their own.
 ///
 /// A digest is a row of its own, drawn as a chip: never folded into a run
@@ -403,14 +386,11 @@ public func settledPermissionLeavesChat(_ message: Message) -> Bool {
 /// engine refused before any prompt went out (PreSendRefusal) is not drawn;
 /// the composer says it instead. A room keeps it as a quiet line.
 ///
-/// `liveTurns` are the turns of this chat that still run
-/// (`TurnLiveness.liveTurnIds`) and `lineNoteId` the note the working line
-/// draws now (`LiveTextPlace.liveLineNote`, #3712): while a turn runs, where
-/// its text goes is read from the text, so nothing on screen goes from a
-/// bubble to hidden.
+/// #4437: every text the bot writes during a turn is a row of its own, in
+/// order, while the turn runs and after; only the steps between two of them
+/// fold into one run, so a run holds the work and never the bot's words.
 public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showThreads: Bool = true, threadBotId: String = "",
-                           hidesPreSendRefusals: Bool = false, liveTurns: Set<String> = [],
-                           lineNoteId: String? = nil) -> [TranscriptRow] {
+                           hidesPreSendRefusals: Bool = false) -> [TranscriptRow] {
     let voice = makeVoiceCallPlan(messages)
     // The same failure of the same bot, repeated since it last answered,
     // draws once: the last row (FailureDedup, desktop repeatedFailureIds).
@@ -418,63 +398,6 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
     // #3438: one card per request: the input request rows the card of the
     // same ask already draws
     let drawnElsewhere = InputRequestRules.drawnElsewhere(messages)
-    // Fold only explicitly completed turns; never guess that the last reply
-    // is final on an older server or while the bot is still working.
-    // Spoken call lines are already in the voice card, so they are not a
-    // second "Worked for" chip.
-    var narration: [String: [Message]] = [:]
-    var startedAt: [String: Double] = [:]
-    var lastUserAt: Double?
-    var folds: [String: AssistantTurnFold] = [:]
-    var hiddenIDs = Set<String>()
-    // #3581: the last row of each turn, so a turn without its final message
-    // folds every note a later row of the same turn follows
-    var lastOfTurn: [String: (index: Int, at: Double)] = [:]
-    for (index, message) in messages.enumerated() where message.role == .bot {
-        if let turnID = message.turnId, !turnID.isEmpty { lastOfTurn[turnID] = (index, message.at) }
-    }
-    var indexOf: [String: Int] = [:]
-    for (index, message) in messages.enumerated() { indexOf[message.id] = index }
-    for message in messages {
-        if voice.hidden.contains(message.id) { continue }
-        if message.role == .user { lastUserAt = message.at }
-        guard message.role == .bot, message.kind == .text,
-              let turnID = message.turnId, !turnID.isEmpty else { continue }
-        if message.turnTerminal == true {
-            guard let items = narration.removeValue(forKey: turnID), !items.isEmpty else { continue }
-            folds[items[0].id] = AssistantTurnFold(
-                turnId: turnID, messages: items,
-                elapsed: max(0, message.at - (startedAt[turnID] ?? items[0].at))
-            )
-            hiddenIDs.formUnion(items.map(\.id))
-        } else {
-            if narration[turnID] == nil { startedAt[turnID] = lastUserAt ?? message.at }
-            narration[turnID, default: []].append(message)
-        }
-    }
-    // #3581: a turn with no final message yet (it runs, or ended without
-    // one). #3712: while it runs, where its text goes is read from the text
-    // (LiveTextPlace): a short note folds (the working line draws the newest
-    // one, the turn's row the others) and a text that opened into a bubble
-    // stays one, even with steps after it. A turn that ended without its
-    // final message folds a note as soon as a later row of the same turn
-    // exists. The chat shows the turn's row, the bubbles and the working line.
-    var inLine: String?
-    for (turnID, items) in narration {
-        guard let last = lastOfTurn[turnID] else { continue }
-        let live = liveTurns.contains(turnID)
-        // in the working line: no row until a later row of its turn exists
-        if let lineNoteId, items.contains(where: { $0.id == lineNoteId }) { inLine = lineNoteId }
-        let folded = items.filter { item in
-            if item.id == inLine { return false }
-            return live ? LiveTextPlace.of(item.text) == .line : (indexOf[item.id] ?? last.index) < last.index
-        }
-        guard let first = folded.first else { continue }
-        var fold = AssistantTurnFold(turnId: turnID, messages: folded, elapsed: max(0, last.at - (startedAt[turnID] ?? first.at)))
-        fold.settled = false
-        folds[first.id] = fold
-        hiddenIDs.formUnion(folded.map(\.id))
-    }
     // #3581: requests received, folded per burst into one names line
     let incomingReplies = IncomingLines.replies(messages)
     let foldedReplies = Set(incomingReplies.values.map(\.id))
@@ -483,20 +406,13 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
 
     var rows: [TranscriptRow] = []
     var run: [Message] = []
-    var turnElapsed: Double?
-    var turnID: String?
-    var turnSettled = true
 
-    // One step on its own still reads as the step line; narration is
-    // folded even alone, the answer under it is what shows.
+    // One step on its own still reads as the step line.
     func flush() {
         if !run.isEmpty {
-            rows.append(.activityRun(StepRun(messages: run, elapsed: turnElapsed ?? StepGroup.span(run), turnId: turnID, settled: turnSettled)))
+            rows.append(.activityRun(StepRun(messages: run, elapsed: StepGroup.span(run))))
         }
         run.removeAll()
-        turnElapsed = nil
-        turnID = nil
-        turnSettled = true
     }
     // A run is one bot's work: another speaker starts a new one.
     func join(_ message: Message) {
@@ -558,23 +474,13 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
             continue
         }
         if repeatedFailures.contains(message.id) { continue }
-        if message.id == inLine { continue }
         if hidesPreSendRefusals, PreSendRefusal.kind(of: message) != nil { continue }
         // A failed routine run and a routine's access card pass as a
         // banner (TransientNotices), never a row.
         if TransientNotices.isTransient(message) { continue }
         if !showThreads, message.threadRef != nil, message.tool != nil { continue }
-        if hiddenIDs.contains(message.id) {
-            join(message)
-            if let fold = folds[message.id] {
-                turnElapsed = fold.elapsed
-                turnID = fold.turnId
-                turnSettled = fold.settled
-            }
-            continue
-        }
         // A tool step joins the stretch of work; with activity Hidden the
-        // steps go and a turn's narration stays folded.
+        // steps go.
         if isToolActivityRow(message) {
             if detail != .hidden { join(message) }
             continue
@@ -601,5 +507,19 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
         rows.append(.message(message))
     }
     flush()
+    // #4437: a stretch the bot wrote after is over, even while its turn runs
+    var wroteAfter = Set<String>()
+    for index in rows.indices.reversed() {
+        switch rows[index] {
+        case let .message(message):
+            if message.role == .bot, message.kind == .text, let turn = message.turnId, !turn.isEmpty { wroteAfter.insert(turn) }
+        case let .activityRun(stretch):
+            if stretch.messages.contains(where: { $0.turnId.map(wroteAfter.contains) == true }) {
+                rows[index] = .activityRun(StepRun(messages: stretch.messages, elapsed: stretch.elapsed, closed: true))
+            }
+        default:
+            break
+        }
+    }
     return rows
 }

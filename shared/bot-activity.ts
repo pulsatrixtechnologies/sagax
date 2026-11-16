@@ -166,6 +166,15 @@ export interface BotActivityStep {
   subagent?: { description?: string; prompt?: string; type?: string; result?: string };
 }
 
+/** A text the bot wrote to the person during the newest turn (#4437). */
+export interface BotActivityText {
+  id: string;
+  text: string;
+  at: number;
+  /** The turn's final message. */
+  final?: boolean;
+}
+
 export interface BotActivityDetail extends BotActivityItem {
   engine?: { instanceId: string; model: string };
   /** Whose credentials the newest turn ran with (TurnDigest.access). */
@@ -177,6 +186,10 @@ export interface BotActivityDetail extends BotActivityItem {
   /** Older steps exist beyond the ones listed (an earlier turn, or past the
    * page). */
   stepsTruncated: boolean;
+  /** #4437: every text the bot wrote during the newest turn, in order, each
+   * kept whole (a run's window draws each as its own bubble between the
+   * steps, while the turn runs and after). Absent when it wrote none. */
+  said?: BotActivityText[];
   files: string[];
   /** The sub-agents the newest turn started. */
   children: BotActivityItem[];

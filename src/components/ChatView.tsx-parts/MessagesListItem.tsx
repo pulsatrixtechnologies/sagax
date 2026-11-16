@@ -305,7 +305,8 @@ export function MessagesListItem({
             <ActivityRun
               messages={shown}
               elapsedMs={item.elapsedMs}
-              live={foldsLiveTurn(item.messages, use(LiveTurnsContext))}
+              // #4437: a stretch the bot wrote after is over, even mid-turn
+              live={!item.closed && foldsLiveTurn(item.messages, use(LiveTurnsContext))}
               focusedId={focusedId}
               nameOf={botNames(bots)}
               renderStep={(step) => (

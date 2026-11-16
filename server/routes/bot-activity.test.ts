@@ -161,6 +161,29 @@ describe("bot activity API", () => {
     expect(asked).toEqual([]);
   });
 
+  // #4437: a run's window draws every text the turn wrote, not the newest only
+  it("gives every text the newest turn wrote, in order, the final one marked, never a team note or an earlier turn's", async () => {
+    const thread: ActivityMessage[] = [
+      { id: "o1", role: "user", kind: "text", at: NOW - 90_000, text: "earlier ask" },
+      { id: "o2", role: "bot", kind: "text", at: NOW - 89_000, text: "Earlier answer.", turnTerminal: true },
+      { id: "q1", role: "user", kind: "text", at: NOW - 30_000, text: "check the queue" },
+      { id: "w1", role: "bot", kind: "text", at: NOW - 29_000, text: "I am checking these 4 tickets." },
+      { id: "s1", role: "bot", kind: "activity", at: NOW - 28_000, tool: { name: "Read", ok: true } },
+      { id: "n1", role: "bot", kind: "text", at: NOW - 27_500, text: "for the team", teamNote: { botId: "echo" } },
+      { id: "w2", role: "bot", kind: "text", at: NOW - 27_000, text: "Two of them are duplicates." },
+      { id: "s2", role: "bot", kind: "activity", at: NOW - 26_000, tool: { name: "Grep", ok: true } },
+      { id: "w3", role: "bot", kind: "text", at: NOW - 25_000, text: "Merge 1042 into 1040.", turnTerminal: true },
+    ];
+    const base = await serve(deps({ messages: (threadId, limit) => ({ messages: (threadId === "t-alice" ? thread : messages[threadId] ?? []).slice(-limit), hasMore: false }) }));
+    const { body } = await get(base, "/api/bots/pepper/activity/item?threadId=t-alice", "alice");
+    expect(body.item!.said).toEqual([
+      { id: "w1", text: "I am checking these 4 tickets.", at: NOW - 29_000 },
+      { id: "w2", text: "Two of them are duplicates.", at: NOW - 27_000 },
+      { id: "w3", text: "Merge 1042 into 1040.", at: NOW - 25_000, final: true },
+    ]);
+    expect(body.item!.steps.map((step) => step.id)).toEqual(["s1", "s2"]);
+  });
+
   it("opens the detail of one's own thread: steps with where they ran, files, payer, sub-agents", async () => {
     const base = await serve();
     const { status, body } = await get(base, "/api/bots/pepper/activity/item?threadId=t-alice", "alice");

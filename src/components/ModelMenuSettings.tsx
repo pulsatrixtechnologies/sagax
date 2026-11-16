@@ -20,8 +20,9 @@ import { SWITCH_OFF, SWITCH_ON } from "@/lib/status-tones";
 import { t } from "@/lib/i18n";
 import { ChoiceLine, ROW } from "./MenuChoiceLine";
 import { RunsWith, runsWithShown, type RunsWithChoice } from "./RunsWith";
+import { ContextSize, contextSizeShown, type ContextSizeChoice } from "./ContextSize";
 
-export type { RunsWithChoice };
+export type { ContextSizeChoice, RunsWithChoice };
 
 export interface ModelMenuSettingsProps {
   /** The model has a fast twin: the switch, on while it runs the twin. */
@@ -40,6 +41,9 @@ export interface ModelMenuSettingsProps {
   /** "Runs with" (src/components/RunsWith.tsx): what runs the bot with
    * its model; the line is drawn only with two or more choices. */
   runsWith?: readonly RunsWithChoice[];
+  /** #4417: "Context size" (src/components/ContextSize.tsx): the size the
+   * bot's model runs at, where it offers more than one. */
+  contextSize?: readonly ContextSizeChoice[];
   disabled?: boolean;
 }
 
@@ -49,11 +53,12 @@ function defaultWord(modelDefault?: EffortLevel): string {
   return modelDefault ? t("model.effort.defaultWith", { level: effortLabel(modelDefault) }) : t("model.defaultTag");
 }
 
-export function ModelMenuSettings({ fast, effort, variantRow, runsWith, disabled = false }: ModelMenuSettingsProps) {
-  const [open, setOpen] = useState<"effort" | "runsWith" | null>(null);
+export function ModelMenuSettings({ fast, effort, variantRow, runsWith, contextSize, disabled = false }: ModelMenuSettingsProps) {
+  const [open, setOpen] = useState<"effort" | "runsWith" | "contextSize" | null>(null);
   const shownRunsWith = runsWith && runsWithShown(runsWith) ? runsWith : undefined;
-  if (!fast && !effort && !variantRow && !shownRunsWith) return null;
-  const toggle = (line: "effort" | "runsWith") => setOpen((current) => (current === line ? null : line));
+  const shownContextSize = contextSize && contextSizeShown(contextSize) ? contextSize : undefined;
+  if (!fast && !effort && !variantRow && !shownRunsWith && !shownContextSize) return null;
+  const toggle = (line: "effort" | "runsWith" | "contextSize") => setOpen((current) => (current === line ? null : line));
   return (
     <div data-model-settings role="group" aria-label={t("model.settings.aria")} className="border-t border-popover-hairline px-1.5 py-1">
       {fast && (
@@ -83,6 +88,10 @@ export function ModelMenuSettings({ fast, effort, variantRow, runsWith, disabled
             dataName="effort" />
         </div>
       ))}
+      {shownContextSize && (
+        <ContextSize tone="menu" choices={shownContextSize} disabled={disabled}
+          open={open === "contextSize"} onToggle={() => toggle("contextSize")} onPicked={() => setOpen(null)} />
+      )}
       {shownRunsWith && (
         <RunsWith tone="menu" choices={shownRunsWith} disabled={disabled}
           open={open === "runsWith"} onToggle={() => toggle("runsWith")} onPicked={() => setOpen(null)} />

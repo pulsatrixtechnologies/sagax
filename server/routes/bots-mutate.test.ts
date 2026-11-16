@@ -183,6 +183,30 @@ describe("bots-mutate routes", () => {
     expect((state.patch as { proactiveModeSet: { at: number } }).proactiveModeSet.at).toBeGreaterThanOrEqual(before);
   });
 
+  // #4417: the bot's context size, kept like its model; null goes back to the default
+  it("saves the bot's context size, clears it with null and refuses a non-size", async () => {
+    const run = async (contextWindow: unknown) => {
+      const json = vi.fn();
+      const known: Record<string, unknown> = {
+        store: { bot: () => bot, tasks: () => [{ threadId: "thread-1" }] },
+        auth: { kind: "session", scopes: ["client"] }, req: { headers: {} },
+        parseBotProfilePatch: () => ({ ok: true, patch: {} }), lockedLookRefusal: () => null, json,
+      };
+      const env = new Proxy(known, { get: (target, key: string) => key in target ? target[key] : vi.fn(() => undefined) });
+      const state = { ...createBotPatchState(["/api/bots/osprey", "osprey"] as unknown as RegExpMatchArray), body: { contextWindow } } as unknown as BotPatchState;
+      const stopped = await buildBotPatchProfile(env as unknown as BotsMutateEnv, state);
+      return { stopped, patch: state.patch as Record<string, unknown>, json };
+    };
+    const set = await run(200_000);
+    expect(set.stopped).toBe(false);
+    expect(set.patch.contextWindow).toBe(200_000);
+    const cleared = await run(null);
+    expect("contextWindow" in cleared.patch && cleared.patch.contextWindow === undefined).toBe(true);
+    const refused = await run("1M");
+    expect(refused.stopped).toBe(true);
+    expect(refused.json).toHaveBeenCalledWith(expect.anything(), 400, expect.objectContaining({ error: expect.stringContaining("contextWindow") }));
+  });
+
   it("marks the open conversation read", async () => {
     const deps = baseDeps();
     const { ctx, json } = context("/api/bots/osprey/read", "POST", { threadId: "thread-1" });

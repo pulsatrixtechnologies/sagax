@@ -3123,7 +3123,11 @@ Sagax's values (`ProvidersSettings.tsx`, `ProviderPage.tsx`):
   value one 12px grey line naming the tool, the reference's grey line; absent
   where one engine only can; the same control is the model menu's line, a
   "Runs with" column of Bot models with the plain words and a row of the
-  bot's Model tab), Models (a fold row whose line is
+  bot's Model tab), Models (#4417: first a described row "Context size",
+  the same shape as Runs with, its pill menu "Each model's own", 200K, 1M,
+  absent where every model has one size; the same control is the model
+  menu's line beside Thinking effort and a row of the bot's Model tab, its
+  first value "Default (1M)"; then a fold row whose line is
   "75 of 75 on" and whose count pill unfolds the switches in place, a search
   from 12 models) and Advanced folded each time the page opens: who pays,
   the tool by its name (version, location, updates), a server's address,

@@ -57,7 +57,8 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       newBotDefaults: { profile: { modelSelection: { instanceId: "claude", model: "sonnet", effort: "medium" }, approvalMode: "ask" } },
     },
     "/api/instances": { instances: params.get("empty") ? [] : [
-      { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1" }, { id: "sonnet", label: "Claude Sonnet 4.5" }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
+      // #4417: the sizes Claude Code runs a 1M model at (server/drivers/claude/config.ts)
+      { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "sonnet", label: "Claude Sonnet 4.5", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // &noxai=1 (#4329 lot 2): no xAI account here, for the bots link alone under its provider
       { instanceId: "grok", displayName: "Grok", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // ?providers=1 (#2080): several accounts per provider (emails stay inside

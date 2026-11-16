@@ -563,6 +563,36 @@ describe("the composer's model menu (2026-10-12)", () => {
     });
   });
 
+  // #4417: "Context size", the sizes the bot's model runs at, drawn only
+  // where it offers more than one; a pick writes the bot's own size.
+  describe("Context size", () => {
+    const sized = () => claude({ state: "available", version: "2.1.300", authenticated: true }, [
+      { id: "claude-opus-5-5", label: "Opus 5.5", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] },
+      { id: "claude-haiku-4-5", label: "Haiku 4.5" },
+    ]);
+
+    it("offers Default (the model's own) and each size beside the effort, and a pick writes the bot's size", () => {
+      fixture.instances = [sized()];
+      const opened = open(bot("claude", "claude-opus-5-5"), composer);
+      const choices = settings(opened)!.props.contextSize!;
+      expect(choices.map((choice) => [choice.key, choice.label, choice.current])).toEqual([
+        ["default", "Default (1M)", true],
+        ["200000", "200K", false],
+        ["1000000", "1M", false],
+      ]);
+      expect(opened.html).toContain('data-context-size="menu"');
+      choices[1]!.onPick();
+      expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "updateBot", botId: "atlas", patch: { contextWindow: 200_000 } });
+    });
+
+    it("is not drawn for a model with one size, nor on Auto", () => {
+      fixture.instances = [sized()];
+      expect(open(bot("claude", "claude-haiku-4-5"), composer).html).not.toContain("data-context-size");
+      const onAuto = { ...bot("claude", "claude-opus-5-5"), modelSelection: { instanceId: "claude", model: "claude-opus-5-5", auto: true as const } };
+      expect(open(onAuto, composer).html).not.toContain("data-context-size");
+    });
+  });
+
   // #4329 (lot 3, lot 6 #4384): "Runs with", the engines that can run the
   // bot's model, drawn only when there is a choice; a pick writes the bot's
   // own choice (its harness), which the server resolves into its model.

@@ -77,4 +77,20 @@ describe("GET/PUT /api/me/models", () => {
     expect(defaults.get("p1")).toEqual({ openrouter: "openai-compat" });
     expect((await call(handler, "PUT", { harnessByProvider: { openai: "not a kind!" } }))?.status).toBe(400);
   });
+
+  // #4417: the person's default context size per provider, their own
+  it("reads and writes the default context size per provider; null clears one, a non-size is refused", async () => {
+    const sizes = new Map<string | "installation", Record<string, number>>();
+    const handler = createModelSwitchRoutes({
+      org: () => [], owner: (auth) => ((auth as { who?: string }).who ?? null), mine: () => [], save: () => {},
+      favorites: () => [], saveFavorites: () => {},
+      contextDefaults: { read: (owner) => sizes.get(owner) ?? {}, save: (owner, map) => { sizes.set(owner, map); } },
+    });
+    expect((await call(handler, "GET"))?.body).toMatchObject({ contextByProvider: {} });
+    expect((await call(handler, "PUT", { contextByProvider: { anthropic: 200_000, openai: 1_000_000 } }))?.body)
+      .toMatchObject({ contextByProvider: { anthropic: 200_000, openai: 1_000_000 } });
+    expect((await call(handler, "PUT", { contextByProvider: { openai: null } }))?.body).toMatchObject({ contextByProvider: { anthropic: 200_000 } });
+    expect((await call(handler, "PUT", { contextByProvider: { anthropic: "1M" } }))?.status).toBe(400);
+    expect(sizes.get("p1")).toEqual({ anthropic: 200_000 });
+  });
 });

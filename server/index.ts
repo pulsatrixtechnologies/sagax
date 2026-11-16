@@ -1057,6 +1057,7 @@ import { createProviderAccountsRoutes, providerCatalogFor, type ProviderCatalogD
 import type { ProviderCatalog } from "../shared/provider-catalog.ts";
 import type { EffortLevel } from "../shared/model-selection.ts";
 import { cleanHarnessDefaults } from "../shared/harness-matrix.ts";
+import { cleanContextDefaults, contextSizeForTurn } from "../shared/context-size.ts";
 import { createHarnessChoice, harnessChoices } from "./models/resolve-harness.ts";
 import { createPersonSettingsRoutes } from "./routes/person-settings.ts";
 import { isPersonalBrowserProfileId, type PersonalFeature } from "../shared/person-settings.ts";
@@ -4802,6 +4803,7 @@ bindLeafHost({
   get effortAcceptedByEngine() { return effortAcceptedByEngine; },
   get effortAcceptedByModel() { return effortAcceptedByModel; },
   get effortForModel() { return effortForModel; },
+  get turnContextWindow() { return turnContextWindow; },
   get encryptionOwnerForUpload() { return encryptionOwnerForUpload; },
   get endMemoryTurn() { return endMemoryTurn; },
   get endedToolOutput() { return endedToolOutput; },
@@ -30575,6 +30577,18 @@ ROUTES.push(createModelSwitchRoutes({
       await applyHarnessDefaults(owner, auth, cleared);
     },
   },
+  // #4417: the person's default context size per provider, read per turn
+  contextDefaults: {
+    read: (owner) => contextDefaultsOf(owner),
+    save: (owner, map) => {
+      if (owner === "installation") {
+        saveConfig({ contextByProvider: map });
+        cfg.contextByProvider = map;
+      } else {
+        personSettings.setContextDefaults(owner, map);
+      }
+    },
+  },
 }));
 ROUTES.push(createProviderAccountsRoutes({
   accounts: providerAccounts,
@@ -33169,6 +33183,26 @@ function personHarnessDefaults(principalId: string | null | undefined): Record<s
   if (IDENTITY.kind !== "perspicax") return cleanHarnessDefaults(cfg.harnessByProvider);
   const owner = personSettingsOwner(principalId);
   return owner ? personSettings.get(owner).harnessByProvider ?? {} : {};
+}
+/** #4417: the default context size per provider of a bot's owner (a
+ * turn's read, shared/context-size.ts). */
+function personContextDefaults(principalId: string | null | undefined): Record<string, number> {
+  if (IDENTITY.kind !== "perspicax") return cleanContextDefaults(cfg.contextByProvider);
+  const owner = personSettingsOwner(principalId);
+  return owner ? personSettings.get(owner).contextByProvider ?? {} : {};
+}
+/** #4417: the context size a bot's turn runs at on this model: its own
+ * choice, else its owner's default for the model's provider, when the model
+ * offers it; undefined for the model's own size. */
+function turnContextWindow(bot: Pick<BotRecord, "contextWindow" | "ownerUserId">, instance: { instanceId: string; driverKind: string; displayName: string; models: { options: ReadonlyArray<{ id: string; contextWindow?: number; contextWindows?: number[] }> } }, model: string): number | undefined {
+  return contextSizeForTurn({
+    instance, option: instance.models.options.find((option) => option.id === model),
+    chosen: bot.contextWindow, defaults: personContextDefaults(effectiveBotOwner(bot)),
+  });
+}
+/** #4417: the same map for a settings owner (GET/PUT /api/me/models). */
+function contextDefaultsOf(owner: string | "installation"): Record<string, number> {
+  return owner === "installation" ? cleanContextDefaults(cfg.contextByProvider) : { ...personSettings.get(owner).contextByProvider };
 }
 /** The default engine per provider kept for a settings owner. */
 function harnessDefaultsOf(owner: string | "installation"): Record<string, string> {

@@ -164,6 +164,7 @@ export type StartTurnHost = {
   effectiveBotOwner: any,
   effortAcceptedByEngine: any,
   effortForModel: any,
+  turnContextWindow: any,
   endMemoryTurn: any,
   engineAccessNotice: any,
   engineConnectorsPromptFor: any,

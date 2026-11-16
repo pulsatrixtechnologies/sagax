@@ -59,6 +59,8 @@ type BotPatchBody = {
   /** #4329 lot 6: what runs the bot ("Runs with"), a driver kind; the
    * server moves the bot's model to that engine. */
   harness: string;
+  /** #4417: the bot's context size, or null for the default. */
+  contextWindow: number | null;
   /** Prompt-cache keep-warm override: true/false, or null to follow the workspace. */
   cacheKeepWarm: boolean | null;
 };

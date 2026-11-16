@@ -3377,6 +3377,23 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
   });
 
+  it("runs a turn at the bot's context size: 200K turns the 1M window off, a new size is a new process (#4417)", async () => {
+    const dump = join(scratch, "context-size.json");
+    await create(undefined, { FAKE_CLAUDE_DUMP: dump, CLAUDE_CODE_DISABLE_1M_CONTEXT: "1" });
+    const small = await instance.adapter.sendTurn({ threadId: "t-context-size", text: "hi", model: "claude-opus-5-5", contextWindow: 200_000 });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === small.turnId);
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_DISABLE_1M_CONTEXT).toBe("1");
+    // the usage card reads the size in force
+    const usage = recorder.events.filter((e) => e.type === "thread.token-usage.updated" && e.turnId === small.turnId && e.contextTokens !== undefined);
+    expect(usage.length).toBeGreaterThan(0);
+    expect(usage.every((e) => e.type === "thread.token-usage.updated" && e.contextWindow === 200_000)).toBe(true);
+    const large = await instance.adapter.sendTurn({ threadId: "t-context-size", text: "again", model: "claude-opus-5-5", contextWindow: 1_000_000 });
+    expect(large.reused).not.toBe(true);
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === large.turnId);
+    // 1M chosen: the switch the environment carried is taken off
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_DISABLE_1M_CONTEXT).toBeUndefined();
+  });
+
   it("sets CLAUDE_CODE_SUBAGENT_MODEL from a per-routine override that differs from the main model (#2038)", async () => {
     const dump = join(scratch, "subagent-override.json");
     await create(undefined, { FAKE_CLAUDE_DUMP: dump });

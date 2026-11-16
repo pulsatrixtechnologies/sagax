@@ -217,6 +217,8 @@ add({
 botField("bot.fallback", "fallback", "array", "Fallback models", "Bot editor > Model > Fallback");
 // #4329 lot 5: what runs the bot, kept on its model (the same rights)
 botField("bot.harness", "harness", "string?", "Runs with: the engine that runs this bot's model (piAgent, opencodeGo, openai-compat, or its own tool's kind such as claudeAgent or codex; null for the provider's default). Only what the provider's connection allows", "Bot editor > Model > Runs with");
+// #4417: the bot's context size where its model offers more than one
+botField("bot.contextWindow", "contextWindow", "number?", "Context size in tokens (one of the sizes its model offers, such as 200000 or 1000000; null for the default)", "Bot editor > Model > Context size");
 // widening the bots a bot reaches carries the screen's own acknowledgement
 function botReach(key: string, field: string, label: string, where: string, classes?: SettingSpec["classes"]): void {
   add({
@@ -995,6 +997,14 @@ add({
   label: "Runs with, per provider ({<provider id>: <engine kind> or null}; provider ids from GET /api/me/providers/catalog)", where: "Settings > Providers > provider > Runs with",
   read: () => ({ path: "/api/me/models", field: "harnessByProvider" }),
   write: (_ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "PUT", path: "/api/me/models", body: { harnessByProvider: v } } : "value is {<provider id>: <engine kind> or null}.",
+});
+// #4417: the person's default context size for each provider (Models
+// section of a provider's page); a bot's own size wins
+add({
+  key: "models.contextDefault", family: "models", target: "none", value: "object",
+  label: "Context size, per provider ({<provider id>: <tokens> or null}; provider ids from GET /api/me/providers/catalog)", where: "Settings > Providers > provider > Models > Context size",
+  read: () => ({ path: "/api/me/models", field: "contextByProvider" }),
+  write: (_ids, v) => v && typeof v === "object" && !Array.isArray(v) ? { method: "PUT", path: "/api/me/models", body: { contextByProvider: v } } : "value is {<provider id>: <tokens> or null}.",
 });
 add({
   key: "models.claudeAccount", family: "models", target: "none", value: "object",

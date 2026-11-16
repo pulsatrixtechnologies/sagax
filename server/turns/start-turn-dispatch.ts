@@ -193,6 +193,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...(state.routineEffort ? { subagentEffort: turnEffort } : {}),
       effort: turnEffort,
       variant: state.variant,
+      ...(state.contextWindow ? { contextWindow: state.contextWindow } : {}),
       // a rewound thread never resumes the abandoned branch's session
       // the active task's own session — another task's cursor would
       // resume the wrong conversation and defeat the context bubble

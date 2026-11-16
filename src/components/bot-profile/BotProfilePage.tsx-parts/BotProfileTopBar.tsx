@@ -1,6 +1,8 @@
-// The page's top bar (#2313, split from BotProfilePage for #1383): the close
-// button and Share stay put while the page scrolls, centred like
-// the sidebar head's search and + circles. Grok Bot (JC 2026-11-08): the bar
+// The page's top bar (#2313, split from BotProfilePage for #1383): Share and
+// the round close button together at the top right, as the reference's
+// stage header (#4420), and on a sub-page its link back at the top left;
+// they stay put while the page scrolls, centred like the sidebar head's
+// search and + circles. Grok Bot (JC 2026-11-08): the bar
 // floats over the banner, clear, so the banner and the mascot scroll away
 // under it whole; once the name has scrolled under it, the bar turns into a
 // blurred strip of the page's ground with the small mascot and the name.
@@ -26,16 +28,19 @@ export function BotProfileInsetStrip() {
   return <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />;
 }
 
-export function BotProfileTopBar({ bot, onClose, back, shareShown, shareOpen, onShareOpenChange, condensed }: {
+export function BotProfileTopBar({ bot, onClose, back, shareShown, shareOpen, onShareOpenChange, condensed, floating = true }: {
   bot: Bot;
   onClose: () => void;
-  /** On a sub-page: the link back to its tab, beside the close button (#4078). */
+  /** On a sub-page: the link back to its tab, at the top left (#4078, #4420). */
   back: { tab: BotProfileTab; onBack: () => void } | null;
   shareShown: boolean;
   shareOpen: boolean;
   onShareOpenChange: (open: boolean) => void;
   /** The name has scrolled under the bar: show the small mascot and the name on a blurred ground. */
   condensed: boolean;
+  /** Floats over the banner (taking no room); false on a page drawn under
+   * it, such as Connect apps opened from this page (#4420). */
+  floating?: boolean;
 }) {
   const { noDragStyle, controlsShiftStyle, dragProps, dragStyle } = useCaptionChrome();
   // On the sidebar head's centre line with its circles' size: one 48px row
@@ -55,12 +60,13 @@ export function BotProfileTopBar({ bot, onClose, back, shareShown, shareOpen, on
       className={cn(
         // sticky in the scroll, taking no room in the flow: the banner starts under it
         "sticky top-0 z-20 flex shrink-0 items-center justify-between gap-2 px-3 transition-[background-color,box-shadow] duration-150",
-        titleBarHead ? "-mb-12 h-12" : "-mb-14 h-14",
+        floating ? (titleBarHead ? "-mb-12 h-12" : "-mb-14 h-14") : titleBarHead ? "h-12" : "h-14",
         condensed ? "bg-app/85 shadow-[0_1px_0_var(--color-hairline-weak)] backdrop-blur-md" : "bg-transparent",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <WindowCloseButton onClose={onClose} place="relative shrink-0 max-sm:ml-11" />
+      {/* the left: a sub-page's link back (the reference's leading back), then
+          the condensed header; on a phone it clears the sidebar's toggle */}
+      <div className="flex min-w-0 flex-1 items-center gap-2 max-sm:pl-11">
         {back && (
           <div className="flex shrink-0" style={noDragStyle}>
             <SubPageBack tab={back.tab} onBack={back.onBack} />
@@ -76,10 +82,12 @@ export function BotProfileTopBar({ bot, onClose, back, shareShown, shareOpen, on
           <span className="min-w-0 truncate text-[14px] font-medium leading-5 text-ink">{name}</span>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2" style={controlsShiftStyle ?? noDragStyle}>
+      <div data-bot-profile-topbar-actions="" className="flex shrink-0 items-center gap-2" style={controlsShiftStyle ?? noDragStyle}>
         {/* Share (Grok Bot): the popover where the people and groups the
-            bot is shared with are managed, the one place for it. */}
+            bot is shared with are managed, the one place for it; then the
+            round close button, the last control of the bar (#4420). */}
         {shareShown && <ShareBotButton bot={bot} open={shareOpen} onOpenChange={onShareOpenChange} />}
+        <WindowCloseButton onClose={onClose} place="relative shrink-0" />
       </div>
     </div>
   );

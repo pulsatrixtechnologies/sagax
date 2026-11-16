@@ -41,11 +41,11 @@ export function sectionLabel(id: BotSettingsSection): string {
   return entry.labelKey ? t(entry.labelKey) : entry.label;
 }
 
-/** The tabs' names (V6, #2612; Appearance is a row of General > Settings,
- * no tab any more, #4147). */
+/** The tabs' names (V6, #2612; Appearance its own tab, JC 2026-11-08). */
 export const TAB_LABEL: Record<BotProfileTab, LocaleKey> = {
   general: "botProfile.tab.general",
   outcomes: "botProfile.tab.outcomes",
+  appearance: "botProfile.tab.appearance",
   knowledge: "botProfile.tab.knowledge",
   stats: "botProfile.tab.stats",
 };
@@ -125,7 +125,8 @@ export function ProfileCard({ title, groupId, accessory, children }: {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} data-settings-group={groupId} className="flex flex-col gap-2">
-      <div className="flex min-w-0 items-center gap-1.5 px-1">
+      {/* the grey label on the page's left edge, 12px in, with the name and the tabs (#4420) */}
+      <div className="flex min-w-0 items-center gap-1.5 px-3">
         <h3 id={headingId} className="shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>
         {accessory}
       </div>
@@ -241,7 +242,8 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
               type="button"
               data-bot-profile-action="messages"
               onClick={() => {
-                dispatch({ type: "togglePlugins", open: true, surface: "apps" });
+                // #4420: Connect apps opens as a page of this page
+                dispatch({ type: "togglePlugins", open: true, surface: "apps", inProfile: true });
                 window.dispatchEvent(new CustomEvent("sagax:open-mac-messages"));
               }}
               className={cn(PILL, "shrink-0")}
@@ -304,7 +306,8 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
   useEffect(() => { if (adding) firstFieldRef.current?.focus(); }, [adding]);
 
   const connect = (surface: "apps" | "mcp") => {
-    dispatch({ type: "togglePlugins", open: true, surface, botId: bot.id });
+    // #4420: Connect apps opens as a page of this page, on this bot
+    dispatch({ type: "togglePlugins", open: true, surface, botId: bot.id, inProfile: true });
   };
 
   // The bot's own list of servers is the switch of a server (Plugins keeps

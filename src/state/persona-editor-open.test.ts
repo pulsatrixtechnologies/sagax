@@ -125,4 +125,36 @@ describe("Persona editor state", () => {
     // moving between the page's own sections keeps it open
     expect(reducer(opened, { type: "personaEditorSection", section: "soul" }).personaEditor?.section).toBe("soul");
   });
+
+  // #4420 (the owner 2026-11-15): an option of the bot page that opens
+  // another surface opens it as a page inside the bot page, never as the
+  // centred window that closed the page. Connect apps (Add > Apps or MCP
+  // servers, a Connect of the Access card, Mac Messages) is that surface.
+  it("regression #4420: Connect apps opened from the bot page is a page of it, with the way back", () => {
+    const base: AppState = { ...initialState, bots: [bot], selectedId: "pepper" };
+    const opened = reducer(base, { type: "openPersonaEditor", botId: "pepper", section: "access" });
+    const apps = reducer(opened, { type: "togglePlugins", open: true, surface: "apps", botId: "pepper", inProfile: true });
+    // the bot page stays open under it, on its view; Connect apps is open on the bot
+    expect(apps.personaEditor).toEqual(opened.personaEditor);
+    expect(apps.activeView).toBe(opened.activeView);
+    expect(apps).toMatchObject({ pluginsOpen: true, pluginsSurface: "apps", pluginsBotId: "pepper" });
+    // its way back (the link back, Escape at its first page) returns to the bot page
+    const back = reducer(apps, { type: "togglePlugins", open: false });
+    expect(back.personaEditor).toEqual(opened.personaEditor);
+    expect(back.pluginsOpen).toBe(false);
+    expect(back.activeView).toBe(opened.activeView);
+    // closing the bot page (X, Escape, its bot's chat) closes it too: no window left behind
+    for (const close of [{ type: "closePersonaEditor" }, { type: "select", id: "pepper" }] as const) {
+      const closed = reducer(apps, close);
+      expect(closed.personaEditor, close.type).toBeNull();
+      expect(closed.pluginsOpen, close.type).toBe(false);
+      expect(closed.activeView, close.type).not.toBe("apps");
+    }
+    // the sidebar's Connect apps is navigation: it still leaves the bot page for the window
+    const sidebar = reducer(opened, { type: "togglePlugins", open: true });
+    expect(sidebar.personaEditor).toBeNull();
+    expect(sidebar).toMatchObject({ pluginsOpen: true, activeView: "apps" });
+    // with no bot page open, the flag changes nothing: the window, as before
+    expect(reducer(base, { type: "togglePlugins", open: true, inProfile: true })).toMatchObject({ pluginsOpen: true, activeView: "apps" });
+  });
 });

@@ -1829,7 +1829,10 @@ export type Action =
    * notification of a routine run refused in another person's thread. */
   | { type: "openBotActivity"; botId: string; itemId: string }
   | { type: "botActivityOpened" }
-  | { type: "togglePlugins"; open?: boolean; surface?: "apps" | "mcp"; botId?: string | null; page?: "pages" | "providers" | "accounts" | "sources" | "bots" | null; focusApps?: string[] }
+  /** `inProfile`: opened from the bot's profile page, it opens as a page
+   * inside that page, which stays open behind it (#4420); ignored when no
+   * profile page is open. */
+  | { type: "togglePlugins"; open?: boolean; surface?: "apps" | "mcp"; botId?: string | null; page?: "pages" | "providers" | "accounts" | "sources" | "bots" | null; focusApps?: string[]; inProfile?: boolean }
   | { type: "toggleTriggers"; open?: boolean }
   | { type: "toggleMemoryManager"; open?: boolean }
   | { type: "toggleNewBot"; open?: boolean }

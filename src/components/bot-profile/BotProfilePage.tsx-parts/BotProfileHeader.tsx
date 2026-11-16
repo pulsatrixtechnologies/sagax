@@ -3,7 +3,7 @@
 // card around it (Grok Bot, the owner 2026-11-09), the bot's name with its label
 // under it, who sees it, who owns it and its description edited in place,
 // all aligned left and tight. The mascot editor
-// itself is the Appearance sub-page (General > Settings, #4147).
+// itself is the Appearance tab.
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 import { Lock, Star, UserRound, Users } from "lucide-react";
 
@@ -36,7 +36,7 @@ type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
 
 /** The header's hero: the mascot, small and bare over the banner, with the
- * name and label stacked under it. The Appearance sub-page's editor draws it
+ * name and label stacked under it. The Appearance tab's editor draws it
  * into this slot (so a character picked in its grid previews here), the
  * page draws it for the bot's own look otherwise. A picture dropped on it
  * or pasted becomes the bot's. */
@@ -57,21 +57,22 @@ export function useBotProfileHero({ bot, derived }: {
   const shown = splitBotNameTitle(bot.name, (bot.title ?? ""));
   const gluedTitle = shown.merged && !bot.title?.trim() ? { title: shown.title } : {};
   const heroTitle = (
-    // The name alone on its line at 28px, the label under it, smaller and
-    // secondary (JC: never "Name · Label" on one line).
-    <h2 id="bot-profile-title" data-bot-profile-title="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[28px] font-normal leading-9 text-ink">
+    // The name alone on its line, the reference's heading (26px over 32,
+    // medium, -0.015em, #4420), the label under it, smaller and secondary
+    // (JC: never "Name · Label" on one line).
+    <h2 id="bot-profile-title" data-bot-profile-title="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[26px] font-medium leading-8 tracking-[-0.015em] text-ink">
       <InlineEditableText
         value={shown.name}
         required
         maxLength={BOT_PROFILE_LIMITS.name}
         ariaLabel={t("botPanel.name.edit")}
         onSave={canName ? (name) => derived.patch({ name, ...gluedTitle }) : undefined}
-        className="min-w-0 justify-start text-left text-[28px] font-normal leading-9 text-ink"
+        className="min-w-0 justify-start text-left text-[26px] font-medium leading-8 tracking-[-0.015em] text-ink"
       />
     </h2>
   );
   const heroLabel = (shown.title || canLabel) ? (
-    <div data-bot-profile-label="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[14px] leading-5 text-ink-secondary">
+    <div data-bot-profile-label="" className="-ml-1.5 mt-1 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[14px] leading-5 text-ink-secondary">
       <InlineEditableText
         value={shown.title}
         maxLength={BOT_PROFILE_LIMITS.title}
@@ -146,7 +147,8 @@ export function useBotProfileHero({ bot, derived }: {
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
-        className={cn("relative -mt-[46px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
+        // the mascot's middle on the banner's lower edge (#4420)
+        className={cn("relative -mt-[50px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
         <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
         {!heroClaimed && (
@@ -191,9 +193,12 @@ export function BotProfileHeader({ bot, derived, hero }: {
   const canDescribe = canEditBotField(state.config, bot, "description");
 
   return (
-    <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" aria-label={sectionLabel("overview")} className="flex min-w-0 flex-col">
+    // #4420: the mascot, the name, the lines under it and the description
+    // share the reference's left edge, 12px into the column, with the tab
+    // labels and the cards' grey labels.
+    <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" aria-label={sectionLabel("overview")} className="flex min-w-0 flex-col px-3">
       {hero}
-      <div className="mt-2 flex flex-wrap items-center justify-start gap-x-3 gap-y-1 text-[13px] leading-5 text-ink-secondary">
+      <div className="mt-1 flex flex-wrap items-center justify-start gap-x-3 gap-y-1 text-[13px] leading-5 text-ink-secondary">
         {/* The mark says what the words say (#3402): people when someone
             else sees the bot, the lock only when it is private. */}
         <span data-bot-profile-audience={notShared ? "private" : "shared"} className="inline-flex items-center gap-1.5">

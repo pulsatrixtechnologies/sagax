@@ -26,9 +26,13 @@ export function reduceUiSurfaces(
           ...(state.botCatalogTarget && !state.botCatalogOpen ? { botCatalogTarget: null } : {}),
         };
       }
+      // #4420: opened from the bot's profile page, it is a page of that
+      // page: the view under it stays the profile's, so the profile is not
+      // left and closing it returns there.
+      const inProfile = Boolean(action.inProfile && state.personaEditor);
       return {
         ...state,
-        activeView: "apps",
+        activeView: inProfile ? state.activeView : "apps",
         pluginsOpen: true,
         // The surface is one-shot (#3910): a fresh open without one is the
         // home ("apps"), so a bot's Add > MCP servers never leaves the next

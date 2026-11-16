@@ -134,7 +134,8 @@ function ManageInConnectApps({ surface }: { surface: "apps" | "mcp" }) {
       data-manage-in-connect-apps={surface}
       onClick={() => {
         dispatch({ type: "toggleSettings", open: false });
-        dispatch({ type: "togglePlugins", open: true, surface });
+        // on the bot's profile page, a page of that page (#4420)
+        dispatch({ type: "togglePlugins", open: true, surface, inProfile: true });
       }}
       className={plain ? cn(PILL, "shrink-0 gap-1") : "flex items-center gap-1 rounded-lg px-1 py-1.5 text-[12.5px] font-medium text-accent-text hover:underline"}
     >

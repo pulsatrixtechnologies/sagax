@@ -350,7 +350,9 @@ export function BotAnalyticsView({ data, days, onDays, sort, onSort, loading = f
 
 interface Loaded { attempt: number; data: BotAnalytics | null; error: string | null }
 
-export function BotAnalyticsSection({ bot }: { bot: Bot }) {
+/** `onAllBots`: where "All bots" leads (the profile page opens it as its
+ * own page, #4420); without it, Settings > Usage. */
+export function BotAnalyticsSection({ bot, onAllBots }: { bot: Bot; onAllBots?: () => void }) {
   const { state, dispatch } = useStore();
   const [days, setDays] = useState<BotAnalyticsDays>(7);
   const [sort, setSort] = useState<BotAnalyticsSort>("messages");
@@ -394,7 +396,7 @@ export function BotAnalyticsSection({ bot }: { bot: Bot }) {
       loading={!answer || retrying}
       error={retrying ? null : answer?.error ?? null}
       onRetry={() => setAttempt((value) => value + 1)}
-      onAllBots={() => dispatch({ type: "toggleAppSettings", open: true, section: "usage" })}
+      onAllBots={onAllBots ?? (() => dispatch({ type: "toggleAppSettings", open: true, section: "usage" }))}
       billing={instance?.snapshot.billing}
       neverUsed={botUsage(bot).turns === 0}
       proactive={<BotProactiveMetricsGroup bot={bot} days={days} />}

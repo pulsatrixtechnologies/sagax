@@ -38,7 +38,7 @@ describe("routine effort at turn admission and dispatch", () => {
         effort: routine ? "low" : undefined, botInstanceId: "engine", turnInstanceId: engine.instanceId,
         takenOver, levels: ["low", "high"],
       }),
-      store: { activePath: () => [], appendMessage: noOp, isConfidentialThread: () => false },
+      store: { activePath: () => [], appendMessage: noOp, isConfidentialThread: () => false, taskByThread: () => undefined },
       coordinator: { answer: () => false }, voiceCalls: { active: () => false }, resolveTurnSpeaker: () => ({ origin: "owner-routine" }),
       remoteComputerForTurn: () => ({}), turnWorksOn: () => ({}), decideWorkplace: () => ({ principal: "person" }),
       workplaceTurnText: (text: string) => ({ text }), withWorkplaceNote: (text: string) => text,

@@ -1844,5 +1844,9 @@
   "model.step.models": "{count} मॉडल",
   "model.step.oneModel": "1 मॉडल",
   "connectApps.scope.server": "यह सर्वर",
-  "connectApps.scope.serverNote": "आपके अपने सर्वर पर इंस्टॉल किए गए ऐप, सर्वर और प्लगइन, आपके सभी बॉट के लिए।"
+  "connectApps.scope.serverNote": "आपके अपने सर्वर पर इंस्टॉल किए गए ऐप, सर्वर और प्लगइन, आपके सभी बॉट के लिए।",
+  "composer.commands.app.newChat": "इस बॉट के साथ नई बातचीत शुरू करें",
+  "composer.commands.app.model": "इस बॉट का मॉडल और प्रयास खोलें",
+  "composer.commands.app.permissions": "इस बॉट की स्वीकृतियाँ खोलें",
+  "composer.commands.app.settings": "इस बॉट की सेटिंग्स खोलें"
 }

@@ -68,6 +68,41 @@ const CLAUDE_MANAGED = new Set([
   "advisor", "agents", "plugin", "plugins", "reload-skills", "sandbox",
 ]);
 
+/** What the app does for a command it manages: its own equivalent, run when
+ * the command is picked or typed (#4450). A managed command without one is
+ * never listed. */
+export type HarnessCommandAppAction =
+  | "newChat"      // a fresh conversation with the bot (the chat's New chat)
+  | "model"        // the bot's model and effort
+  | "permissions"  // the bot's approvals
+  | "settings";    // the bot's settings
+
+const CLAUDE_APP_ACTIONS: Readonly<Record<string, HarnessCommandAppAction>> = {
+  clear: "newChat", reset: "newChat", new: "newChat",
+  model: "model", effort: "model", fast: "model",
+  permissions: "permissions", "allowed-tools": "permissions",
+  config: "settings", settings: "settings",
+};
+
+/** The app's own action for a command it manages, or null: an engine
+ * command that runs in the engine, or one the chat cannot run at all. */
+export function harnessCommandAppAction(command: Pick<HarnessCommand, "name" | "unavailable">): HarnessCommandAppAction | null {
+  if (command.unavailable !== "managed") return null;
+  return Object.hasOwn(CLAUDE_APP_ACTIONS, command.name) ? CLAUDE_APP_ACTIONS[command.name]! : null;
+}
+
+/** The app action a typed message asks for (`/clear` alone, with or
+ * without words after it), or null. Checked against the bot's engine list
+ * when one was read; before it is, the managed names alone answer. */
+export function typedCommandAppAction(message: string, commands: readonly HarnessCommand[]): HarnessCommandAppAction | null {
+  const typed = parseTypedCommand(message);
+  if (!typed || isSagaxCommandName(typed.name)) return null;
+  const name = typed.name.toLowerCase().startsWith(ENGINE_COMMAND_PREFIX) ? typed.name.slice(ENGINE_COMMAND_PREFIX.length) : typed.name;
+  if (commands.length === 0) return CLAUDE_MANAGED.has(name) ? harnessCommandAppAction({ name, unavailable: "managed" }) : null;
+  const command = findCommand(commands, name);
+  return command ? harnessCommandAppAction(command) : null;
+}
+
 function text(value: unknown, max: number): string {
   if (typeof value !== "string") return "";
   // one line, no control characters

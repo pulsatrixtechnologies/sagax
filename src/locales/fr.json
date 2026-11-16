@@ -2319,8 +2319,6 @@
   "composer.commands.loading": "Chargement des commandes du moteur…",
   "composer.commands.refresh": "Actualiser les commandes du moteur",
   "composer.commands.title": "Commandes",
-  "composer.commands.unavailable.interactive": "Exige le terminal du moteur, donc impossible à lancer depuis la conversation",
-  "composer.commands.unavailable.managed": "Géré par Sagax : le modèle, l'effort, les conversations, les approbations et les serveurs MCP ont leurs propres réglages",
   "composer.dictation.hint": "Dicter",
   "composer.dictation.macOnly": "La dictée n'est disponible que sur macOS pour l'instant.",
   "composer.dictation.permission": "La dictée a besoin de l'accès au Micro et à la Reconnaissance vocale : Réglages Système → Confidentialité et sécurité.",
@@ -15085,5 +15083,9 @@
   "settings.nav.installation": "Installation",
   "settings.section.servers": "Serveurs",
   "settings.intro.servers": "Ton serveur, et les serveurs auxquels tu te connectes.",
-  "botPanel.suggestions.setup.identity.subtitleAlone": "Pour reconnaître tes bots d'un coup d'œil"
+  "botPanel.suggestions.setup.identity.subtitleAlone": "Pour reconnaître tes bots d'un coup d'œil",
+  "composer.commands.app.newChat": "Commencer une nouvelle conversation avec ce bot",
+  "composer.commands.app.model": "Ouvrir le modèle et l'effort de ce bot",
+  "composer.commands.app.permissions": "Ouvrir les approbations de ce bot",
+  "composer.commands.app.settings": "Ouvrir les réglages de ce bot"
 }

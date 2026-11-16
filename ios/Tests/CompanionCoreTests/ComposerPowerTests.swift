@@ -105,7 +105,7 @@ final class ComposerCommandsTests: XCTestCase {
         XCTAssertEqual(LoopCommand.routineName(everyMinutes: 5, prompt: String(repeating: "a", count: 60)), "Loop 5m " + String(repeating: "a", count: 42))
     }
 
-    func testMenuOrdersSagaxThenGroupsClosestFirstUnavailableLast() {
+    func testMenuOrdersSagaxThenGroupsClosestFirstAndListsOnlyWhatRuns() {
         let engine = [
             HarnessCommand(name: "review", description: "Review a PR"),
             HarnessCommand(name: "compact", description: "Compact the context", argumentHint: "[focus]"),
@@ -116,11 +116,11 @@ final class ComposerCommandsTests: XCTestCase {
         ]
         let all = ComposerCommandMenu.items(sagax: [.learn, .setup], engine: engine, query: "")
         XCTAssertEqual(all.map(\.label), [
-            "/learn", "/setup", "/review", "/compact", "/engine:setup", "/theme",
+            "/learn", "/setup", "/review", "/compact", "/engine:setup",
             "/pulsatrix-flow:using-px-flow", "/mcp__docs__search",
-        ])
-        XCTAssertEqual(all.map(\.group), [.sagax, .sagax, .engine, .engine, .engine, .engine, .plugins, .mcp])
-        XCTAssertNil(all[5].insertion, "a command the chat cannot run inserts nothing")
+        ], "a command the chat cannot run is not listed (#4450)")
+        XCTAssertEqual(all.map(\.group), [.sagax, .sagax, .engine, .engine, .engine, .plugins, .mcp])
+        XCTAssertTrue(all.allSatisfy(\.runs))
         XCTAssertEqual(all[3].insertion, "/compact ")
         XCTAssertEqual(all[3].argumentHint, "[focus]")
         XCTAssertEqual(all[0].insertion, "/learn ")
@@ -131,6 +131,29 @@ final class ComposerCommandsTests: XCTestCase {
         XCTAssertEqual(byDescription.map(\.label), ["/compact"])
         let prefix = ComposerCommandMenu.items(sagax: [.setup], engine: engine, query: "se")
         XCTAssertEqual(prefix.first?.label, "/setup")
+    }
+
+    func testManagedCommandRunsTheAppsActionOrIsNotListed() {
+        let engine = [
+            HarnessCommand(name: "clear", description: "Clear conversation history", argumentHint: "[name]", unavailable: .managed),
+            HarnessCommand(name: "model", description: "Set the model", unavailable: .managed),
+            HarnessCommand(name: "login", description: "Sign in", unavailable: .managed),
+            HarnessCommand(name: "compact", description: "Compact the context"),
+        ]
+        let phone = ComposerCommandMenu.items(sagax: [], engine: engine, query: "")
+        XCTAssertEqual(phone.map(\.label), ["/clear", "/compact"], "the phone lists the managed commands it runs")
+        XCTAssertEqual(phone[0].appAction, .newChat)
+        XCTAssertNil(phone[0].insertion)
+        XCTAssertNil(phone[0].argumentHint)
+        XCTAssertTrue(phone[0].runs)
+        let room = ComposerCommandMenu.roomItems(sagax: [], sets: [
+            .init(bot: .init(id: "a", name: "Scout"), commands: engine, mention: false),
+        ], query: "")
+        XCTAssertEqual(room.map(\.label), ["/compact"], "a room's conversation is the room's")
+        XCTAssertEqual(HarnessCommand.typedAppAction("/clear", commands: engine), .newChat)
+        XCTAssertEqual(HarnessCommand.typedAppAction("/clear", commands: []), .newChat)
+        XCTAssertNil(HarnessCommand.typedAppAction("/compact", commands: engine))
+        XCTAssertNil(HarnessCommand.typedAppAction("/goal clear", commands: engine))
     }
 
     func testMenuListsTheBotsSkillsBetweenSagaxAndTheEngine() {

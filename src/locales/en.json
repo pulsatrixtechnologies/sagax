@@ -2895,8 +2895,6 @@
   "composer.commands.loading": "Loading engine commands…",
   "composer.commands.refresh": "Refresh engine commands",
   "composer.commands.title": "Commands",
-  "composer.commands.unavailable.interactive": "Needs the engine's own terminal, so it cannot run from the chat",
-  "composer.commands.unavailable.managed": "Managed by Sagax: model, effort, conversations, approvals and MCP servers have their own settings",
   "composer.dictation.disabled": "Turn on Dictation in System Settings → Keyboard, then try again.",
   "composer.dictation.failed": "Dictation couldn't start. Try again.",
   "composer.dictation.hint": "Dictate",
@@ -15085,5 +15083,9 @@
   "settings.nav.installation": "Installation",
   "settings.section.servers": "Servers",
   "settings.intro.servers": "Your server, and the servers you connect to.",
-  "botPanel.suggestions.setup.identity.subtitleAlone": "So you can tell your bots apart"
+  "botPanel.suggestions.setup.identity.subtitleAlone": "So you can tell your bots apart",
+  "composer.commands.app.newChat": "Start a new conversation with this bot",
+  "composer.commands.app.model": "Open this bot's model and effort",
+  "composer.commands.app.permissions": "Open this bot's approvals",
+  "composer.commands.app.settings": "Open this bot's settings"
 }

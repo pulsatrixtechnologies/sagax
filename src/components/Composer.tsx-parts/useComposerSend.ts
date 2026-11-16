@@ -79,6 +79,7 @@ export function useComposerSend({
   interruptTurn,
   runLoopCommand,
   runGoalSubcommand,
+  runTypedAppCommand,
   goalStatus,
   inputRef,
   setCaret,
@@ -123,6 +124,8 @@ export function useComposerSend({
   interruptTurn: () => void;
   runLoopCommand: (command: LoopCommand) => void;
   runGoalSubcommand: (sub: GoalSubcommand) => boolean;
+  /** `/clear` and the other commands the app manages, typed and sent: the app's own action (#4450). */
+  runTypedAppCommand: (message: string) => boolean;
   goalStatus: import("../../../shared/group-goal-run").GroupGoalRunStatus | undefined;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   setCaret: Dispatch<SetStateAction<number>>;
@@ -224,6 +227,8 @@ export function useComposerSend({
       refocusInput();
       return;
     }
+    // /clear, /model…: the app's own action, which needs no turn (#4450)
+    if (attachments.length === 0 && runTypedAppCommand(text)) return;
     if (locked || attachmentPending) return;
     // the bot cannot answer now: the draft stays, the line above says why
     // an advisory line (#2013) informs only: sending again is the retry

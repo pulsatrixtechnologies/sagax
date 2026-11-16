@@ -6,11 +6,13 @@ import {
   claudeInitializeCommands,
   engineCommandLabel,
   groupCommandTarget,
+  harnessCommandAppAction,
   leadingMention,
   normalizeClaudeCommands,
   normalizeCodexSkills,
   parseTypedCommand,
   resolveTypedCommand,
+  typedCommandAppAction,
 } from "./harness-commands.ts";
 
 // A trimmed answer of the real Claude Code CLI (2.1.287) to the stream-json
@@ -112,6 +114,35 @@ describe("resolveTypedCommand", () => {
     expect(resolveTypedCommand("/usr/bin is a path", commands)).toEqual({ kind: "none" });
     expect(resolveTypedCommand("/unknown thing", commands)).toEqual({ kind: "none" });
     expect(resolveTypedCommand("hello", commands)).toEqual({ kind: "none" });
+  });
+});
+
+describe("a command the app manages (#4450)", () => {
+  const commands = claudeInitializeCommands(fixture, "sagax-commands") ?? [];
+  const byName = (name: string) => commands.find((command) => command.name === name)!;
+
+  it("runs the app's own action, or is not listed", () => {
+    expect(harnessCommandAppAction(byName("clear"))).toBe("newChat");
+    expect(harnessCommandAppAction(byName("model"))).toBe("model");
+    expect(harnessCommandAppAction(byName("compact"))).toBeNull();
+    expect(harnessCommandAppAction(byName("color"))).toBeNull();
+    expect(harnessCommandAppAction({ name: "login", unavailable: "managed" })).toBeNull();
+    // a name the engine runs itself is never taken over
+    expect(harnessCommandAppAction({ name: "clear" })).toBeNull();
+  });
+
+  it("answers a typed /clear, with or without the engine's list", () => {
+    expect(typedCommandAppAction("/clear", commands)).toBe("newChat");
+    expect(typedCommandAppAction("  /clear  ", commands)).toBe("newChat");
+    expect(typedCommandAppAction("/engine:clear", commands)).toBe("newChat");
+    expect(typedCommandAppAction("/model opus", commands)).toBe("model");
+    expect(typedCommandAppAction("/clear", [])).toBe("newChat");
+    expect(typedCommandAppAction("/compact", commands)).toBeNull();
+    expect(typedCommandAppAction("/login", [])).toBeNull();
+    expect(typedCommandAppAction("clear the board", commands)).toBeNull();
+    expect(typedCommandAppAction("/goal clear", commands)).toBeNull();
+    // an engine that does not manage it (Codex lists only its skills)
+    expect(typedCommandAppAction("/clear", [{ name: "review", description: "", group: "engine" }])).toBeNull();
   });
 });
 

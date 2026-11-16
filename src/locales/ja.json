@@ -3688,5 +3688,9 @@
   "model.step.models": "{count} モデル",
   "model.step.oneModel": "1 モデル",
   "connectApps.scope.server": "このサーバー",
-  "connectApps.scope.serverNote": "自分のサーバーにインストールしたアプリ、サーバー、プラグイン。すべてのボットで使えます。"
+  "connectApps.scope.serverNote": "自分のサーバーにインストールしたアプリ、サーバー、プラグイン。すべてのボットで使えます。",
+  "composer.commands.app.newChat": "このボットと新しい会話を始める",
+  "composer.commands.app.model": "このボットのモデルと推論レベルを開く",
+  "composer.commands.app.permissions": "このボットの承認を開く",
+  "composer.commands.app.settings": "このボットの設定を開く"
 }

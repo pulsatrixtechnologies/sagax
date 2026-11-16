@@ -1875,7 +1875,11 @@
       "mcp.fixKeys.hint": "374216e1e4a509d796ad11e6dc0a2b28e568dbc7351d6f7eb9e1a60f2130f6e0",
       "mcp.fixKeys.placeholder": "8601d2f49d57ca5fc02019c531cdb28d17381b659a8d79a9d180fb7a3bc7dd1e",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "es": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -3733,7 +3737,11 @@
       "mcp.fixKeys.hint": "374216e1e4a509d796ad11e6dc0a2b28e568dbc7351d6f7eb9e1a60f2130f6e0",
       "mcp.fixKeys.placeholder": "8601d2f49d57ca5fc02019c531cdb28d17381b659a8d79a9d180fb7a3bc7dd1e",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "fr": {
       "routineEditor.goal.label": "cdbf6975e8a35b0d03558be6822dfae166482c24fb86b0433f60e8167f5c91e4",
@@ -5510,8 +5518,6 @@
       "composer.commands.loading": "90c2036129dd3523e6dfcb02db3a0b56ef1321c47d0bc12d10fa65b044261977",
       "composer.commands.refresh": "40084e1074298771f15c9d1ad651bde8de53055582807a16c30ce6739bf2e081",
       "composer.commands.title": "b269dc4e81a528a4d42e9e74101923514a626f55f8dd76b1461e0690e72d041a",
-      "composer.commands.unavailable.interactive": "43027f6556ad64efe3ddf1803c17226370a1a8a01cc8ae1f40f233c0e8b3ea4f",
-      "composer.commands.unavailable.managed": "252cc8e4ecc59a50573c7151d2b8623b2ef5709b84afc051e2ce8053d1ce575f",
       "composer.dictation.hint": "0b7004c8459afc3af4f4509f70882ebe107951ac2c21332fe85446cd8674712a",
       "composer.dictation.macOnly": "7ba038671dec23b3233fb1300406b1062e7b9ee91a33a574c817fb07ad5d01f3",
       "composer.dictation.permission": "b81201e29d79a1fb9524d2cf1b7baf8ee5a007bb54c49b163d6cf328a6d6a73b",
@@ -18822,7 +18828,11 @@
       "engines.account.removeHint": "33dba01e2376e40f2d06f0598e25fc60fb446adacb82c2187a233fa2d9a1b326",
       "usage.limits.session": "3621fb399dfba42d89d9d407ec9cdac09a17547c7c9752980c2fa2d166a1f56d",
       "botProfile.tab.appearance": "3907fa7f80722a6fc58cd8c1bd30abf7638095d6774f183b6e831b7093957d1b",
-      "question.next": "f7a9d7437e96463835a47a3a8332a40fa38870f56ff117c1cc0a041958c95beb"
+      "question.next": "f7a9d7437e96463835a47a3a8332a40fa38870f56ff117c1cc0a041958c95beb",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -20670,7 +20680,11 @@
       "mcp.fixKeys.hint": "374216e1e4a509d796ad11e6dc0a2b28e568dbc7351d6f7eb9e1a60f2130f6e0",
       "mcp.fixKeys.placeholder": "8601d2f49d57ca5fc02019c531cdb28d17381b659a8d79a9d180fb7a3bc7dd1e",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "ja": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -24362,7 +24376,11 @@
       "approval.held.read": "b5de5fbfb706f073fd6ef85c59c7b0b6ed272eeb8db22dcd6ebd4cc216561e90",
       "approval.held.write": "6bf9777e6090654bca39b704e42b70a7191c44f8d7d3af1765e29c6052e80089",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -27004,7 +27022,11 @@
       "mcp.fixKeys.hint": "374216e1e4a509d796ad11e6dc0a2b28e568dbc7351d6f7eb9e1a60f2130f6e0",
       "mcp.fixKeys.placeholder": "8601d2f49d57ca5fc02019c531cdb28d17381b659a8d79a9d180fb7a3bc7dd1e",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -29337,7 +29359,11 @@
       "mcp.fixKeys.hint": "374216e1e4a509d796ad11e6dc0a2b28e568dbc7351d6f7eb9e1a60f2130f6e0",
       "mcp.fixKeys.placeholder": "8601d2f49d57ca5fc02019c531cdb28d17381b659a8d79a9d180fb7a3bc7dd1e",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "zh": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -31933,7 +31959,11 @@
       "mcp.fixKeys.hint": "374216e1e4a509d796ad11e6dc0a2b28e568dbc7351d6f7eb9e1a60f2130f6e0",
       "mcp.fixKeys.placeholder": "8601d2f49d57ca5fc02019c531cdb28d17381b659a8d79a9d180fb7a3bc7dd1e",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     },
     "zh-tw": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -35510,7 +35540,11 @@
       "approval.held.read": "b5de5fbfb706f073fd6ef85c59c7b0b6ed272eeb8db22dcd6ebd4cc216561e90",
       "approval.held.write": "6bf9777e6090654bca39b704e42b70a7191c44f8d7d3af1765e29c6052e80089",
       "connectApps.scope.server": "524e9b6937a169a015ed68dd51692621cbfec79a97e46de443bb79592de4351f",
-      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad"
+      "connectApps.scope.serverNote": "c0d8fcaf76ee556dc4a99c569c77bd159a7743a2142111850bcd57c236da4fad",
+      "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
+      "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
+      "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
     }
   }
 }

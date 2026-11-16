@@ -1,11 +1,12 @@
 import {
   engineCommandLabel,
+  harnessCommandAppAction,
   leadingMention,
   type GroupCommandMember,
   type GroupCommandResponder,
   type HarnessCommand,
+  type HarnessCommandAppAction,
   type HarnessCommandGroup,
-  type HarnessCommandUnavailable,
 } from "../../shared/harness-commands";
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run";
 import { offersSkillCommand } from "../../shared/skill-command";
@@ -130,7 +131,9 @@ export type ComposerMenuItem =
     label: string;
     description: string;
     argumentHint?: string;
-    unavailable?: HarnessCommandUnavailable;
+    /** A command the app manages: picking it runs the app's own action
+     * (shared/harness-commands.ts harnessCommandAppAction), never the engine. */
+    appAction?: HarnessCommandAppAction;
     command: HarnessCommand;
     /** In a group: the bot whose engine lists it (the menu groups by bot). */
     bot?: { id: string; name: string };
@@ -172,8 +175,9 @@ export function skillMenuItems(skills: readonly SlashSkill[]): Array<Extract<Com
 
 /** The "/" menu for a query: Sagax's commands first (the goal's, then the
  * others), then the bot's skills, then the engine's by
- * group; within a group the closest names first, what the chat cannot run
- * last. An engine command a Sagax one shadows is offered as /engine:<name>;
+ * group; within a group the closest names first. A listed command runs
+ * (#4450): one the app manages runs the app's own action, one the chat
+ * cannot run at all is not listed. An engine command a Sagax one shadows is offered as /engine:<name>;
  * one a skill shadows is left out, since `/name` runs the skill (the server
  * expands it before the engine sees the turn). */
 export function composerCommandMenu(
@@ -198,6 +202,8 @@ export function composerCommandMenu(
     if (skillNames.has(engineCommandLabel(command).slice(1))) return;
     const label = engineCommandLabel(command);
     const names = [label.slice(1).toLowerCase(), command.name.toLowerCase(), ...(command.aliases ?? []).map((alias) => alias.toLowerCase())];
+    const appAction = harnessCommandAppAction(command);
+    if (command.unavailable && !appAction) return;
     const rank = matchRank(query, names, command.description);
     if (rank === null) return;
     ranked.push({
@@ -207,11 +213,12 @@ export function composerCommandMenu(
         group: command.group,
         label,
         description: command.description,
-        ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}),
-        ...(command.unavailable ? { unavailable: command.unavailable } : {}),
+        // the app's action takes no words
+        ...(command.argumentHint && !appAction ? { argumentHint: command.argumentHint } : {}),
+        ...(appAction ? { appAction } : {}),
         command,
       },
-      rank: rank + (command.unavailable ? 10 : 0),
+      rank,
       order,
     });
   });
@@ -308,6 +315,8 @@ export function composerGroupCommandMenu(
     for (const item of composerCommandMenu([], set.commands, query)) {
       if (shown >= perBot) break;
       if (item.kind !== "engine") continue;
+      // a group's conversation is the group's: no bot starts a new one there
+      if (item.appAction === "newChat") continue;
       items.push({
         ...item,
         key: `bot:${set.bot.id}:${item.key}`,

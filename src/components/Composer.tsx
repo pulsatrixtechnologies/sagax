@@ -132,6 +132,7 @@ export function Composer({
     interruptTurn: queue.interruptTurn,
     runLoopCommand: commands.runLoopCommand,
     runGoalSubcommand: commands.runGoalSubcommand,
+    runTypedAppCommand: commands.runTypedAppCommand,
     goalStatus: commands.goalStatus,
     inputRef: focus.inputRef,
     setCaret: focus.setCaret,

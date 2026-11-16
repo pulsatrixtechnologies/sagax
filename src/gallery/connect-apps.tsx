@@ -299,7 +299,7 @@ if (params.has("products")) {
     const real: Array<[string, string]> = [
       ["bookstack", "BookStack API (content scope)"], ["brightgauge", "ConnectWise BrightGauge (internal web API)"], ["cw_cpq", "ConnectWiseSellService"],
       ...family.map((part): [string, string] => [`cw_psa_${part}`, `Connectwise Manage Public Endpoints: ${part}`]),
-      ["cw_rmm", "ConnectWise Platform APIs"], ["sentinelone", "S1 MGMT API"], ["twilio_api", "Twilio - Api"], ["twilio_lookups", "Twilio - Lookups"],
+      ["cw_rmm", "ConnectWise Platform APIs"], ["edrtool", "S1 MGMT API"], ["twilio_api", "Twilio - Api"], ["twilio_lookups", "Twilio - Lookups"],
       ["twilio_messaging", "Twilio - Messaging"], ["twilio_monitor", "Twilio - Monitor"], ["x360recover", "X360Recover API"],
     ];
     products.splice(0, products.length, ...real.map(([id, name]) => ({ id, name, auth_state: "ok", setup, state: "connected", base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: "default", named: false, own: false }, form: null, actions: allowed("test"), console_url: "" } as never)));
@@ -340,7 +340,7 @@ if (params.has("bot") && params.has("products")) {
   const listed = (MANAGE_API["/api/me/perspicax/products"] as { products: Array<{ id: string; name: string; state: string }> }).products;
   const inventory = MANAGE_API["/api/bots/bot-a/capabilities"] as { items: unknown[] };
   inventory.items = [...inventory.items, ...listed.filter((product) => product.state !== "not_served").map((product) => {
-    const enabled = !["prod-edr", "cw_psa_service", "sentinelone"].includes(product.id);
+    const enabled = !["prod-edr", "cw_psa_service", "edrtool"].includes(product.id);
     return {
       key: `product:bot:${product.id}`, form: "product", name: product.name, product: product.id,
       source: { kind: "perspicax", label: "Example Org" }, scope: "bot", state: enabled ? "on" : "off", enabled, canToggle: true,

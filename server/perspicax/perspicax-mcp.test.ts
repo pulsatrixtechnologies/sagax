@@ -1128,16 +1128,16 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
   // shares its tools, whose names never start with a product id.
   const tools = [
     "cw_psa_query", "cw_psa_write", "cw_psa_action", "cw_psa_find_tickets", "cw_psa_log_time", "flow_action", "flow_filter",
-    "sentinelone_query", "twilio_api_query", "memory_recall", "api_search", "api_describe",
+    "edrtool_query", "twilio_api_query", "memory_recall", "api_search", "api_describe",
   ].map((name) => ({ name, inputSchema: { type: "object" } }));
   const family = (id: string, title: string) => ({ id, group: "cw_psa", title: `Connectwise Manage Public Endpoints: ${title}` });
   const listValue = {
     apis: [
       family("cw_psa_service", "service"), family("cw_psa_time", "time"), family("cw_psa_finance", "finance"), family("cw_psa_project", "project"),
-      { id: "cw_rmm", title: "ConnectWise Platform APIs" }, { id: "sentinelone", title: "S1 MGMT API" }, { id: "twilio_api", title: "Twilio - Api" },
+      { id: "cw_rmm", title: "ConnectWise Platform APIs" }, { id: "edrtool", title: "S1 MGMT API" }, { id: "twilio_api", title: "Twilio - Api" },
     ],
   };
-  const searchValue = { results: [{ api: "cw_psa_service", tool: "cw_psa_query", op_id: "getServiceTickets" }, { api: "cw_psa_finance", tool: "cw_psa_query", op_id: "getFinanceAgreements" }, { api: "sentinelone", tool: "sentinelone_query", op_id: "agents" }], total: 3 };
+  const searchValue = { results: [{ api: "cw_psa_service", tool: "cw_psa_query", op_id: "getServiceTickets" }, { api: "cw_psa_finance", tool: "cw_psa_query", op_id: "getFinanceAgreements" }, { api: "edrtool", tool: "edrtool_query", op_id: "agents" }], total: 3 };
   // Perspicax's own mapping (api_describe), as it answers live
   const described: Record<string, unknown> = {
     "service.tickets": { api: "cw_psa_service", resource: "tickets" },
@@ -1152,8 +1152,8 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
   const flowCards: Record<string, unknown> = {
     close_ticket: { action: { name: "close_ticket", tools: ["cw_psa_find_tickets", "cw_psa_update_ticket"], products: ["connectwise"] } },
     "time-entry-log": { action: { name: "time-entry-log", tools: ["cw_psa_log_time"], products: ["connectwise"] } },
-    "isolate-endpoint": { action: { name: "isolate-endpoint", tools: ["cw_psa_log_time", "sentinelone__write"], products: ["sentinelone", "connectwise"] } },
-    "threat-watch": { routine: { name: "threat-watch", server_profiles: ["watch"], steps: "1. List open threats with sentinelone_query.\n2. Log the time with cw_psa_log_time." } },
+    "isolate-endpoint": { action: { name: "isolate-endpoint", tools: ["cw_psa_log_time", "edrtool__write"], products: ["edrtool", "connectwise"] } },
+    "threat-watch": { routine: { name: "threat-watch", server_profiles: ["watch"], steps: "1. List open threats with edrtool_query.\n2. Log the time with cw_psa_log_time." } },
   };
   const ambiguous = { code: "params_invalid", details: { apis: ["cw_psa_project", "cw_psa_service", "cw_rmm"], status: 400 }, message: "tickets is found in 3 apis" };
   const answering = ({ body }: { body: any }) => {
@@ -1217,7 +1217,7 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
   });
 
   it("resolves a Flow action or routine by Perspicax's card of it: refused when it reaches an off product outside the family, let through when only an unrelated family product is off", async () => {
-    const h = await ready(["sentinelone"]);
+    const h = await ready(["edrtool"]);
     expect(refused(await call(h, 1, "flow_action", { name: "isolate-endpoint", params: {} }))).toBe(true);
     expect(refused(await call(h, 2, "flow_run", { command: "run.init", args: { routine: "threat-watch" } }))).toBe(true);
     expect(refused(await call(h, 3, "flow_action", { name: "time-entry-log", params: {} }))).toBe(false);
@@ -1239,7 +1239,7 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
   });
 
   it("leaves an off product's tools out of the list (a family's task tools too) and its search results, and marks it in api_list", async () => {
-    const h = await ready(["cw_psa_service", "sentinelone"]);
+    const h = await ready(["cw_psa_service", "edrtool"]);
     const listed = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
     expect((listed.body as any).result.tools.map((tool: { name: string }) => tool.name)).toEqual([
       "cw_psa_query", "cw_psa_write", "cw_psa_action", "cw_psa_log_time", "flow_action", "flow_filter", "twilio_api_query", "memory_recall", "api_search", "api_describe",
@@ -1248,15 +1248,15 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
     expect(JSON.parse((search.body as any).result.content[0].text).results.map((r: { api: string }) => r.api)).toEqual(["cw_psa_finance"]);
     const apis = await call(h, 3, "api_list");
     const value = JSON.parse((apis.body as any).result.content[0].text);
-    expect(value.apis.filter((api: { off_for_this_bot?: boolean }) => api.off_for_this_bot).map((api: { id: string }) => api.id)).toEqual(["cw_psa_service", "sentinelone"]);
-    expect(refused(await call(h, 4, "sentinelone_query", { resource: "agents" }))).toBe(true);
-    expect(called(h, "sentinelone_query")).toBe(0);
+    expect(value.apis.filter((api: { off_for_this_bot?: boolean }) => api.off_for_this_bot).map((api: { id: string }) => api.id)).toEqual(["cw_psa_service", "edrtool"]);
+    expect(refused(await call(h, 4, "edrtool_query", { resource: "agents" }))).toBe(true);
+    expect(called(h, "edrtool_query")).toBe(0);
   });
 
   it("drops the family's shared tools when every product of it is off", async () => {
     const h = await ready(["cw_psa_service", "cw_psa_time", "cw_psa_finance", "cw_psa_project"]);
     const listed = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
-    expect((listed.body as any).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["flow_action", "flow_filter", "sentinelone_query", "twilio_api_query", "memory_recall", "api_search", "api_describe"]);
+    expect((listed.body as any).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["flow_action", "flow_filter", "edrtool_query", "twilio_api_query", "memory_recall", "api_search", "api_describe"]);
     expect(refused(await call(h, 2, "cw_psa_query", {}))).toBe(true);
   });
 
@@ -1270,7 +1270,7 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
   });
 
   it("takes an off product out of an identity sweep: its apis, the served ones when it names none, an api_plan step, and the answer", async () => {
-    const h = await ready(["cw_psa_service", "sentinelone"]);
+    const h = await ready(["cw_psa_service", "edrtool"]);
     const sweptApis = () => h.mcpCalls.filter((c) => c.body?.params?.name === "identity").map((c) => c.body.params.arguments.apis);
     const answeredApis = (answer: { body?: unknown }) => JSON.parse((answer.body as any).result.content[0].text).matches.map((m: { api: string }) => m.api).sort();
     const served = ["cw_psa_finance", "cw_psa_project", "cw_psa_time", "cw_rmm", "twilio_api"];
@@ -1279,13 +1279,13 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
     expect(refused(all)).toBe(false);
     expect([...sweptApis()[0]].sort()).toEqual(served);
     expect(answeredApis(all)).toEqual(served);
-    expect(JSON.stringify((all.body as any).result.structuredContent)).not.toMatch(/sentinelone|cw_psa_service/);
+    expect(JSON.stringify((all.body as any).result.structuredContent)).not.toMatch(/edrtool|cw_psa_service/);
     // apis naming an off product: it is dropped, the others are swept
-    const some = await call(h, 2, "identity", { query: "host-123", apis: ["sentinelone", "twilio_api"] });
+    const some = await call(h, 2, "identity", { query: "host-123", apis: ["edrtool", "twilio_api"] });
     expect(sweptApis()[1]).toEqual(["twilio_api"]);
     expect(answeredApis(some)).toEqual(["twilio_api"]);
     // apis naming only off products: refused, nothing swept
-    const off = await call(h, 3, "identity", { query: "host-123", apis: ["SentinelOne"] });
+    const off = await call(h, 3, "identity", { query: "host-123", apis: ["edrtool"] });
     expect(refused(off)).toBe(true);
     expect((off.body as any).result.content[0].text).toMatch(/^S1 MGMT API is off for this bot/);
     expect(called(h, "identity")).toBe(2);
@@ -1298,10 +1298,10 @@ describe("PerspicaxMcp products off for one bot (#4359)", () => {
   it("drops an off product's rows from an identity answer even when the sweep reached it", async () => {
     const loose = ({ body }: { body: any }) => {
       if (body.params?.name !== "identity") return answering({ body });
-      const value = { matches: [{ api: "sentinelone", items: [{ id: 7 }] }, { api: "twilio_api", items: [{ id: 8 }] }], lookups: [{ api: "sentinelone", entries: [] }], errors: [{ api: "sentinelone", error: "x" }], calls: 3 };
+      const value = { matches: [{ api: "edrtool", items: [{ id: 7 }] }, { api: "twilio_api", items: [{ id: 8 }] }], lookups: [{ api: "edrtool", entries: [] }], errors: [{ api: "edrtool", error: "x" }], calls: 3 };
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: JSON.stringify(value) }] } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
     };
-    const h = harness({ mcp: loose, botProductsOff: offFor(["sentinelone"]) });
+    const h = harness({ mcp: loose, botProductsOff: offFor(["edrtool"]) });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
     const answer = await call(h, 1, "identity", { query: "host-123" });
     const value = JSON.parse((answer.body as any).result.content[0].text);

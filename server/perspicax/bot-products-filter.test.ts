@@ -107,21 +107,21 @@ describe("products off for one bot (#4359)", () => {
     expect(flowTargetOf("flow_run", { command: "run.init", args: { routine: "hourly-watch" } })).toBe("hourly-watch");
     expect(flowTargetOf("flow_run", { command: "status" })).toBeUndefined();
     expect(flowTargetOf("flow_filter", { name: "x" })).toBeUndefined();
-    expect(flowReachOf({ action: { name: "a", tools: ["sentinelone__query", "cw_psa_log_time"], products: ["sentinelone"] } }).sort()).toEqual(["cw_psa_log_time", "sentinelone", "sentinelone_query"]);
+    expect(flowReachOf({ action: { name: "a", tools: ["edrtool__query", "cw_psa_log_time"], products: ["edrtool"] } }).sort()).toEqual(["cw_psa_log_time", "edrtool", "edrtool_query"]);
     expect(flowReachOf({ routine: { name: "r", steps: "1. Read with cw_psa_find_tickets.\n2. Text with twilio_api_write." } })).toEqual(expect.arrayContaining(["cw_psa_find_tickets", "twilio_api_write"]));
     expect(flowReachOf({ status: "blocked" })).toEqual([]);
   });
 
   it("refuses a Flow action only when what it reaches is off, inside or outside a family", async () => {
-    const view: BotProductsView = { ...fam, off: new Set(["sentinelone"]), known: new Set([...fam.known, "sentinelone"]) };
+    const view: BotProductsView = { ...fam, off: new Set(["edrtool"]), known: new Set([...fam.known, "edrtool"]) };
     const mapping = async (_group: string, _members: readonly string[], name: string) => (name === "cw_psa_find_tickets" ? ["cw_psa_service"] : name === "cw_psa_log_time" ? ["cw_psa_time"] : []);
-    expect(await offProductOfReach(view, ["cw_psa_log_time", "sentinelone_query"], mapping)).toBe("sentinelone");
+    expect(await offProductOfReach(view, ["cw_psa_log_time", "edrtool_query"], mapping)).toBe("edrtool");
     expect(await offProductOfReach(fam, ["cw_psa_log_time"], mapping)).toBeUndefined();
     expect(await offProductOfReach(fam, ["cw_psa_find_tickets"], mapping)).toBe("cw_psa_service");
     expect(await offProductOfReach(fam, ["cw_psa_query"], mapping)).toBe("cw_psa_service");
-    expect(await offProductOfReach(fam, ["sentinelone_query", "memory_recall"], mapping)).toBeUndefined();
-    const flow = async (name: string) => (name === "edr-isolate" ? ["sentinelone_write"] : name === "time-log" ? ["cw_psa_log_time"] : null);
-    expect(await offProductOfFamilyCall(view, "flow_action", { name: "edr-isolate" }, mapping, flow)).toBe("sentinelone");
+    expect(await offProductOfReach(fam, ["edrtool_query", "memory_recall"], mapping)).toBeUndefined();
+    const flow = async (name: string) => (name === "edr-isolate" ? ["edrtool_write"] : name === "time-log" ? ["cw_psa_log_time"] : null);
+    expect(await offProductOfFamilyCall(view, "flow_action", { name: "edr-isolate" }, mapping, flow)).toBe("edrtool");
     expect(await offProductOfFamilyCall(fam, "flow_action", { name: "time-log" }, mapping, flow)).toBeUndefined();
     expect(await offProductOfFamilyCall(fam, "flow_action", { name: "unknown" }, mapping, flow)).toBeUndefined();
   });

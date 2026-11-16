@@ -108,7 +108,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
     // Providers > Advanced: the claude.ai connectors; Memes (Other services); the bots link (the xAI provider)
     "/api/me/harness-connectors": { manageUrl: "https://claude.ai/customize/connectors", canManage: true, enabled: true, claude: { available: true, connectors: [
       { name: "Gmail", status: "connected" }, { name: "Google Calendar", status: "connected" }, { name: "Notion", status: "needs_auth" }, { name: "Example Docs", status: "unknown" },
-    ] }, codex: { available: false } },
+    ] }, codex: { available: false }, ...accountProviders(params.get("accounts")) },
     // &botslink=none|off|org|paused-delivery (#4329): the bots link line of the xAI group not linked, paused, turned off by the organization, delivery paused
     "/api/me/grok-bridge": params.get("botslink") === "none"
       ? { linked: false, enabled: false, orgAllowed: true, keySet: false, bots: [], mayCallOwner: false, mayTextOwner: false }
@@ -221,4 +221,27 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
     "/api/bots/bot-0/memory/semantic": { enabled: true, encoder: "built-in", memoryPassages: 42, conversationPassages: 7 },
   };
   return API;
+}
+
+/** &accounts=1|2|3|25|out (#4408): the providers list of the account
+ * connectors, one to three providers signed in, one with 25 connectors, or
+ * (out, with &org=1) Claude and OpenAI not signed in beside SpaceXSI: Claude's
+ * sign-in expired, so its row on the page offers Sign in again and Advanced
+ * draws nothing for it; ChatGPT was never signed in (its row waits under Add a
+ * provider, the OpenAI row on the page is the person's key), so Advanced
+ * holds its one Connect. */
+function accountProviders(accounts: string | null): { providers?: unknown[] } {
+  if (!accounts) return {};
+  const claude = { provider: "claude-ai", vendor: "anthropic", manageUrl: "https://claude.ai/customize/connectors" };
+  const openai = { provider: "chatgpt-apps", vendor: "openai", manageUrl: "https://chatgpt.com/#settings/Connectors" };
+  const xai = { provider: "grok-com", vendor: "xai", manageUrl: "https://grok.com/connectors" };
+  const lists = [
+    { ...claude, available: true, connectors: [{ name: "Gmail", status: "connected" }, { name: "Google Calendar", status: "connected" }, { name: "Notion", status: "needs_auth" }, { name: "Example Docs", status: "unknown" }] },
+    { ...openai, available: true, connectors: [{ name: "Notes", status: "connected" }, { name: "Example Drive", status: "connected" }] },
+    { ...xai, available: true, connectors: [{ id: "outlook", name: "Outlook", status: "connected" }, { id: "microsoft-teams", name: "Microsoft Teams", status: "needs_auth" }] },
+  ];
+  // &accounts=25: one account with a real count, folded until opened
+  if (accounts === "25") return { providers: [{ ...claude, available: true, connectors: Array.from({ length: 25 }, (_, index) => ({ name: `Example connector ${index + 1}`, status: index % 7 === 3 ? "needs_auth" : "connected" })) }] };
+  if (accounts === "out") return { providers: [{ ...claude, available: false, reason: "not_signed_in", connectors: [] }, { ...openai, available: false, reason: "not_signed_in", connectors: [] }, lists[2]] };
+  return { providers: lists.slice(0, Math.max(1, Math.min(3, Number(accounts) || 1))) };
 }

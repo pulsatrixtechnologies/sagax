@@ -210,8 +210,9 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
 
 - Connected apps is experimental (`features.connectedApps`, off):
   off hides the sidebar entry, the Settings > Connected apps page and the tour's
-  apps steps. The claude.ai connectors status then shows in Settings > Model
-  providers (`HarnessConnectorsSection placement="settings"`).
+  apps steps. The connectors of the person's provider accounts then show in
+  Settings > Providers > Advanced, one section per provider
+  (`HarnessConnectorsSection`).
 - A person's own access lives on each engine card of Settings > Model
   providers (organization server only, 2026-10-02) and is minimal
   (2026-10-08, `EngineConnect.tsx`, the same card in the model picker): one

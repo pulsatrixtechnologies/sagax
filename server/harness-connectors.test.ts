@@ -300,6 +300,30 @@ describe("#3358: the pages read the person's Grok and ChatGPT sign-ins from the 
     expect(bob.claude.reason).toBe("not_signed_in");
     expect(bob.grok.accounts).toHaveLength(1);
   });
+  it("#4408: one list of providers in one shape, Claude, OpenAI then xAI, the older fields kept beside it", async () => {
+    const ada = await get(harness({ registry }), ADA);
+    expect(ada.providers).toEqual([
+      { provider: "claude-ai", vendor: "anthropic", manageUrl: "https://claude.ai/customize/connectors", available: true, connectors: [{ name: `M365 of person:${ADA}`, status: "connected" }] },
+      { provider: "chatgpt-apps", vendor: "openai", manageUrl: "https://chatgpt.com/#settings/Connectors", available: true, connectors: [{ name: "Notes", status: "connected" }] },
+      // both Grok sign-ins, each connector once
+      { provider: "grok-com", vendor: "xai", manageUrl: "https://grok.com/connectors", available: true, connectors: [
+        { id: "microsoft-teams", name: "Microsoft Teams", status: "needs_auth" }, { id: "outlook", name: "Outlook (Exchange)", status: "connected" },
+      ] },
+    ]);
+    // released apps still read these
+    expect(ada.claude.available).toBe(true);
+    expect(ada.codex.available).toBe(true);
+    expect(ada.grok.accounts).toHaveLength(2);
+    expect(JSON.stringify(ada.providers)).not.toMatch(/grok-pr_|codex-ada|outlook__send_mail|grok-com:|@/);
+  });
+  it("#4408: a provider the person is not signed in to says so in the same shape; a solo server lists no xAI entry", async () => {
+    const bob = await get(harness({ registry }), BOB);
+    expect(bob.providers.map((entry: { provider: string; available: boolean; reason?: string }) => [entry.provider, entry.available, entry.reason])).toEqual([
+      ["claude-ai", false, "not_signed_in"], ["chatgpt-apps", false, "not_signed_in"], ["grok-com", false, "unknown"],
+    ]);
+    const solo = await get(harness({ registry, organization: false, localPrincipalId: () => ADA }), ADA);
+    expect(solo.providers.map((entry: { provider: string }) => entry.provider)).toEqual(["claude-ai", "chatgpt-apps"]);
+  });
 });
 
 describe("PUT /api/harness-connectors/settings (retired)", () => {

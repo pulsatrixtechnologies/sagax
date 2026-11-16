@@ -104,10 +104,13 @@ export const HOSTED_CARDS: Partial<Record<AppSettingsSection, AppSettingsSection
  * is looking for what the card holds, so it should not stay folded. */
 export const CARD_KEYWORDS: Record<string, string[]> = {
   "general.aboutMe": ["about me"],
-  // #2295: the claude.ai connectors live in Providers > Advanced (the bots
-  // link is a line of the xAI provider since #4329, found by its own words)
-  "providers.advanced": ["claude.ai", "connectors", "connecteurs", "cloud agent", "cloud coding"],
-  "providers.advanced.connectors": ["claude.ai", "connectors", "connecteurs"],
+  // #2295, #4408: the connectors of the person's provider accounts live in
+  // Providers > Advanced, one card per provider (the bots link is a line of
+  // the xAI provider since #4329, found by its own words)
+  "providers.advanced": ["claude.ai", "chatgpt.com", "grok.com", "connectors", "connecteurs", "cloud agent", "cloud coding"],
+  "providers.advanced.connectors.anthropic": ["claude.ai", "connectors", "connecteurs"],
+  "providers.advanced.connectors.openai": ["chatgpt.com", "chatgpt apps", "connectors", "connecteurs"],
+  "providers.advanced.connectors.xai": ["grok.com", "connectors", "connecteurs"],
   "myApprovalRules": ["always allow", "always deny", "ask first", "approval rules", "règles d'approbation"],
   // #2636: these cards open on Developer (settings-sections.ts CARD_HOME)
   "general.threadCleanup": ["cleanup", "retention", "event log", "event-log", "log size", "nettoyage"],

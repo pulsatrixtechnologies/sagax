@@ -377,9 +377,10 @@ export function ProvidersSettings() {
             )}
         </SettingsGroup>
       </div>
-      {/* Advanced (#2295): the person's cloud agent keys and their claude.ai
-          connectors. Never a card in a card. The link to the person's bots in
-          the xAI provider's bot app is a line of that provider (#4329). */}
+      {/* Advanced (#2295): the person's cloud agent keys and the connectors of
+          their provider accounts, one section per provider (#4408). Never a
+          card in a card. The link to the person's bots in the xAI provider's
+          bot app is a line of that provider (#4329). */}
       <SettingsFoldSection cardId="providers.advanced" groupId="providers-advanced" title={t("providers.advanced.title")} description={t("providers.advanced.help")}>
         <div className="flex flex-col gap-6" data-providers-advanced="">
           {list.manageKeys && (
@@ -387,7 +388,7 @@ export function ProvidersSettings() {
               <CloudAgentKeys />
             </SettingsGroup>
           )}
-          <HarnessConnectorsSection placement="settings" />
+          <HarnessConnectorsSection />
         </div>
       </SettingsFoldSection>
       {/* a key asked for from another page with no line here yet */}

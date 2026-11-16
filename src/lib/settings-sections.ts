@@ -177,5 +177,6 @@ export function providerCardTarget(cardId: string | null | undefined): { kind: "
   const prefix = "providers.advanced.";
   if (!cardId.startsWith(prefix)) return null;
   const id = cardId.slice(prefix.length);
-  return id && id !== "connectors" ? { kind: "row", id } : null;
+  // the account connectors' cards (#4408: one per provider) stay on Providers
+  return id && id !== "connectors" && !id.startsWith("connectors.") ? { kind: "row", id } : null;
 }

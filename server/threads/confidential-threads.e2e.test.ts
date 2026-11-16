@@ -634,8 +634,12 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     expect(queue.text).not.toContain(SECRET);
     expect(JSON.stringify((await api("GET", "/api/org/approvals", bob)).body)).not.toContain(threadId);
     await sleep(500);
+    // #4493: the bot's waitingOn (sidebar "Waiting for you: ...") once carried
+    // this card's thread, message and plain sentence to every viewer of the bot
     expect(bobStream.text()).not.toContain(threadId);
+    expect(bobStream.text()).not.toContain(card.id);
     expect(bobStream.text()).not.toContain(SECRET);
+    expect(JSON.stringify((await api("GET", "/api/bots", bob)).body)).not.toContain(threadId);
     bobStream.close();
     // Ana answers it: before confidential threads only the bot owner could
     const answered = await api("POST", `/api/threads/${threadId}/respond`, ana, { requestId: card.card!.requestId, behavior: "allow" });

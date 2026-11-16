@@ -7246,6 +7246,8 @@ bindLeafHost({
   get ensureViewerThread() { return ensureViewerThread; },
   get routeThreadIdUnguarded() { return routeThreadIdUnguarded; },
   get viewerBotActivity() { return viewerBotActivity; },
+  get botWaitingOn() { return botWaitingOn; },
+  get botWaitingOnTeammates() { return botWaitingOnTeammates; },
   get botForViewer() { return botForViewer; },
   get bodyForThreadViewer() { return bodyForThreadViewer; },
   get hideEarlierAgentThreads() { return hideEarlierAgentThreads; },

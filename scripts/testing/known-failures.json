@@ -958,28 +958,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/threads/confidential-threads.e2e.test.ts",
-      "test": "confidential thread of a person on a team bot someone else owns > CT-7: an approval in it is its owner's alone",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/threads/confidential-threads.e2e.test.ts",
-      "test": "confidential thread of a person on a team bot someone else owns > CT-10: act from an ordinary thread never reaches a confidential one",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/voice/voice-fast-turn.e2e.test.ts",
       "test": "runs a call on the fast model from a short context in one warm session, and the conversation keeps its own",
       "platforms": [

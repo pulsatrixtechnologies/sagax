@@ -21,6 +21,7 @@ import { listenLiveFrames } from "@/lib/live-events";
 import { pendingApprovals, type Pending } from "@/components/PendingApproval";
 import { inputRequestCard, pendingOffers, pendingQuestions, type PinnedItem } from "@/lib/pending-question";
 import { waitingChangeFrame, type ServedWaitingItem } from "../../shared/waiting-items";
+import type { PersonAttentionCard } from "../../shared/person-attention";
 
 /** #3542: the safety net only; live frames read the list when it changes. */
 export const WAITING_ITEMS_POLL_MS = 10 * 60_000;
@@ -149,6 +150,37 @@ export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: s
     out.push({ key, at: item.at, item, kind: "question", message });
   }
   return out;
+}
+
+/** #4440: where an item the pinned card draws without its conversation's
+ * card (`other`) is answered in words or skipped: a routine run's form or a
+ * question in words, both settled by the server's one route for them
+ * (POST /api/approvals/handled). Undefined for a kind this app has no route
+ * for: that one is answered in its conversation. */
+export function servedItemPlace(item: ServedWaitingItem): { botId: string; threadId: string; messageId: string } | undefined {
+  if ((item.kind !== "form" && item.kind !== "request") || !item.messageId) return undefined;
+  return { botId: item.botId, threadId: item.threadId, messageId: item.messageId };
+}
+
+/** #4440 (a form card stayed pinned eleven hours with its text and no
+ * control): what the server allows on such an item, drawn as the standard
+ * question in words. Its text is the question, its options one-tap rows and
+ * the field in words always there; null when the server allows neither words
+ * nor an option, or this app has no route for it. */
+export function servedWordsCard(item: ServedWaitingItem): PersonAttentionCard | null {
+  const place = servedItemPlace(item);
+  if (!place || (!item.freeText && !item.options.length)) return null;
+  return {
+    kind: "question",
+    items: [{ text: item.text || item.title }],
+    ...(item.options.length ? { choices: item.options } : {}),
+    botId: item.workBotId ?? item.botId,
+    botName: item.botName,
+    threadId: item.workThreadId ?? item.threadId,
+    ...(item.threadTitle ? { threadTitle: item.threadTitle } : {}),
+    ...(item.routineName ? { routineName: item.routineName } : {}),
+    sourceMessageId: place.messageId,
+  };
 }
 
 /** #3681, the owner's rule (2026-11-11): while an ask waits and the pinned

@@ -150,6 +150,21 @@ extension Session {
         await skipOptionCard(pending.message, in: chat, threadId: pending.answerThread(conversation: chat.threadId))
     }
 
+    /// #4440: skip a routine run's form from the pinned card: the route a
+    /// question in words takes, the list read again once it lands.
+    func skipForm(_ entry: PinnedWaitingEntry) async {
+        guard let route = PinnedWaiting.skipRoute(entry) else { return }
+        await skipWaitingCard(entry.message, route: route, threadId: entry.threadId)
+    }
+
+    /// #4440: a routine run's form answered in words from the pinned card:
+    /// the words go to the bot, then the form is settled answered with them.
+    func answerForm(_ entry: PinnedWaitingEntry, card: PersonAttentionCard, text: String) async throws {
+        try await answerAttention(card, text: text)
+        guard let client = computerClient, let place = entry.formPlace else { return }
+        try? await client.markFormAnswered(botId: place.botId, threadId: place.threadId, messageId: place.messageId, answer: text)
+    }
+
     /// Skip a question in words of this conversation: an attention card or
     /// a parked teammate's input request (the desktop's `skipPlace`).
     func skipAttention(_ message: Message, in chat: Chat) async {

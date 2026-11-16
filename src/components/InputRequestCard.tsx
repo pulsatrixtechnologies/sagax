@@ -16,7 +16,9 @@ import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/stor
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import { inputRequestCard } from "@/lib/pending-question";
+import { servedItemPlace, servedWordsCard } from "@/lib/pinned-waiting";
 import type { PersonAttentionCard } from "../../shared/person-attention";
+import type { ServedWaitingItem } from "../../shared/waiting-items";
 
 /** Where a card sits: the conversation's thread, the bot that owns that
  * conversation (the server checks the thread against it, as Today does,
@@ -33,7 +35,8 @@ export interface CardPlace {
 export async function answerPersonRequest(card: PersonAttentionCard, text: string, where?: CardPlace): Promise<void> {
   await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
   if (where) {
-    void api("/api/approvals/handled", { method: "POST", body: JSON.stringify({ botId: where.botId, threadId: where.threadId, messageId: where.messageId, answered: true }) }).catch(() => undefined);
+    // #4440: with the words, which a routine run's form is drawn answered with
+    void api("/api/approvals/handled", { method: "POST", body: JSON.stringify({ botId: where.botId, threadId: where.threadId, messageId: where.messageId, answered: true, answer: text }) }).catch(() => undefined);
   }
 }
 
@@ -94,6 +97,18 @@ export function PersonRequestCard({ message, card, threadId, conversationBotId, 
       onReply={(text) => answerPersonRequest(card, text, cardPlace(card, message, threadId, conversationBotId))}
     />
   );
+}
+
+/** #4440: a served item the pinned card has no conversation card for (a
+ * routine run's form): the standard question in words, with what the
+ * server allows on it. The words go to the bot, then the item is settled
+ * answered with them; null when nothing can be answered here. */
+export function ServedItemCard({ item }: { item: ServedWaitingItem }) {
+  const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === item.botId));
+  const card = servedWordsCard(item);
+  const place = servedItemPlace(item);
+  if (!card) return null;
+  return <AttentionCard card={card} bot={owner} embedded onReply={(text) => answerPersonRequest(card, text, place)} />;
 }
 
 export function InputRequestCard({ message, threadId, conversationBotId }: { message: Message; threadId?: string; conversationBotId?: string }) {

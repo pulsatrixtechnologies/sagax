@@ -799,6 +799,12 @@ there.
 - A press or a submitted form is the person's next message, a reply to the
   widget row, never an approval: a write it leads to still goes through the
   bot's approval cards (`WIDGET_APPROVAL_PROMPT`).
+- #4440: a widget the person could never answer is refused to the bot with
+  one sentence (`widgetAnswerProblem` in `shared/widget.ts`, checked when
+  `server/widgets/chat-widgets.ts` stores a tree): a Button with no
+  `onClickAction` (one written under another key is dropped by the reader,
+  and the button drew disabled), or fields with nothing that sends them. A
+  display card with no field and no button stays fine.
 - No script and no network: unknown node types and props are refused or
   dropped, images are https only behind "Load image", `open_url` opens only
   http(s) on a press, and a `Markdown` node renders with

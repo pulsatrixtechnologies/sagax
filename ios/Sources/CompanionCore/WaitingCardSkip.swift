@@ -167,4 +167,13 @@ extension CompanionClient {
             body: ["botId": botId, "threadId": threadId, "messageId": messageId]
         ))
     }
+
+    /// #4440: a routine run's form answered in words from the pinned card,
+    /// settled answered with those words (desktop `answerPersonRequest`).
+    public func markFormAnswered(botId: String, threadId: String, messageId: String, answer: String) async throws {
+        try await send(try makeRequest(
+            "POST", "/api/approvals/handled",
+            body: ["botId": botId, "threadId": threadId, "messageId": messageId, "answered": true, "answer": answer]
+        ))
+    }
 }

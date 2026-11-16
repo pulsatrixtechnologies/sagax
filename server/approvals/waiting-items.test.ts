@@ -279,7 +279,7 @@ describe("a routine run's form waits on the person (#4234)", () => {
     expect(await counts()).toEqual({ today: 6, pinned: 6, connector: 6 });
     const listed = (await connector("GET", "approvals?status=pending")).body.approvals as any[];
     expect(listed.find((row) => row.id === "form:m-form")).toMatchObject({ threadId: "conv", waitingKind: "form", title: "Tonight's drafts", freeText: true, skippable: true });
-    expect((await pinned()).waiting.find((item: any) => item.id === "form:m-form")).toMatchObject({ kind: "form", messageId: "m-form" });
+    expect((await pinned()).waiting.find((item: any) => item.id === "form:m-form")).toMatchObject({ kind: "form", messageId: "m-form", routineName: "Evening drafts" });
   });
 
   it("leaves every surface once answered in the conversation, or answered or skipped through the connector", async () => {

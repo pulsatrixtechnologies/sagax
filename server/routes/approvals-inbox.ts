@@ -9,11 +9,13 @@
 //   GET  /api/approvals/journal  ?days=7|30: the Journal, every action of
 //                                this person's own bots with what decided it
 //                                (2026-10-26, shared/action-journal.ts)
-//   POST /api/approvals/handled { botId, threadId, messageId, skip?, answered? }:
+//   POST /api/approvals/handled { botId, threadId, messageId, skip?, answered?, answer? }:
 //                                a question in words marked handled (#2689),
 //                                the waiting work told so (#3543); with skip,
 //                                skipped (#3471); with answered, settled once
 //                                the person's own words went to the work
+//                                (`answer`: those words, a routine run's form
+//                                is drawn answered with them, #4440)
 //   POST /api/approvals/held/read { upTo }: what the signal gate held for
 //                                the person (the list's `held`, #4233),
 //                                read up to that time: cleared, so neither
@@ -79,7 +81,7 @@ export interface ApprovalsInboxDeps {
    * without an answer), `skipped` (told there is no answer) or `answered`
    * (the person's words already went to it). False when it is not one of
    * their open cards. */
-  settle?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }, how: PersonRequestSettle): boolean;
+  settle?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string; answer?: string }, how: PersonRequestSettle): boolean;
   /** #4233: what the signal gate held for this person, oldest first, not
    * cleared by the read. */
   held?(auth: RequestAuth, viewer: InboxViewer): InboxHeldSignal[];
@@ -179,7 +181,9 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
         return json(res, 400, { error: "botId, threadId and messageId are required" });
       }
       const how: PersonRequestSettle = body?.skip === true ? "skipped" : body?.answered === true ? "answered" : "handled";
-      if (!deps.settle(auth, viewer, { botId, threadId, messageId }, how)) return json(res, 404, { error: "no such card", code: "gone" });
+      // #4440: the person's words, which a routine run's form is drawn answered with
+      const answer = how === "answered" && typeof body?.answer === "string" && body.answer.trim() ? body.answer.trim().slice(0, 2_000) : undefined;
+      if (!deps.settle(auth, viewer, { botId, threadId, messageId, ...(answer ? { answer } : {}) }, how)) return json(res, 404, { error: "no such card", code: "gone" });
       return json(res, 200, { ok: true, outcome: how });
     }
     if (method === "POST" && path === "/api/approvals/held/read") {

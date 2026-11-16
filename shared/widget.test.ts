@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { WIDGET_SAMPLES } from "./widget-samples.ts";
 import {
-  dayList, parseWidgetInput, resolveWidgetAction, widgetAdvice, widgetActionByLabel, widgetActions, widgetFieldOptions, widgetFields, widgetInitialValues, widgetScope, widgetToText,
+  dayList, parseWidgetInput, resolveWidgetAction, widgetAdvice, widgetActionByLabel, widgetActions, widgetAnswerProblem, widgetFieldOptions, widgetFields, widgetInitialValues, widgetScope, widgetToText,
   WIDGET_LIMITS, WIDGET_NODE_TYPES, type WidgetNode, type WidgetPayload, type WidgetRoot,
 } from "./widget.ts";
 
@@ -143,6 +143,28 @@ describe("parseWidgetInput", () => {
     expect(refusal({ type: "Card", children: [{ type: "Button", label: "Go", onClickAction: { type: "a" } }, { type: "Button", label: "Go", onClickAction: { type: "b" } }] })).toBe('widget: two actions are both labelled "Go"; give each a distinct label.');
     expect(refusal({ type: "ListView", children: [{ type: "ListViewItem", onClickAction: { type: "open" }, children: [{ type: "Icon", name: "globe" }] }] })).toMatch(/has an action but no label/);
     expect(refusal({ type: "Card", children: [{ type: "Button", label: "Send", submit: true }] })).toMatch(/needs a Form with onSubmitAction around it\.$/);
+  });
+
+  // #4440: a form the person cannot answer (its buttons lost their action,
+  // its fields have nothing that sends them) is named, so show_widget refuses
+  // it to the bot, which asks again: never a card with no control
+  it("names a form the person could not answer", () => {
+    const problem = (input: unknown) => widgetAnswerProblem(parsed(input));
+    // the action written under another key is dropped by the reader
+    expect(problem({ type: "Card", children: [{ type: "Button", label: "Post selected", action: { type: "post" } }] }))
+      .toBe('widget: the Button "Post selected" has no onClickAction; give it onClickAction: {type, payload?}, or disabled: true.');
+    expect(problem({
+      type: "Card",
+      title: "Tonight's drafts",
+      children: [{ type: "Checkbox", name: "first", label: "First draft" }, { type: "Checkbox", name: "second", label: "Second draft" }],
+    })).toBe("widget: it has fields (first, second) and nothing sends them; add confirm: {label, action} or a Button with onClickAction.");
+    expect(problem({ type: "Card", children: [{ type: "Input", name: "q" }, { type: "Button", label: "Docs", onClickAction: { type: "open_url", payload: { url: "https://example.com" } } }] }))
+      .toMatch(/^widget: it has fields \(q\) and nothing sends them/);
+    // still fine: a display card, a disabled button, fields with a confirm, every sample
+    expect(problem({ type: "Card", children: [{ type: "Text", value: "Build passed" }] })).toBeUndefined();
+    expect(problem({ type: "Card", children: [{ type: "Button", label: "Soon", disabled: true }] })).toBeUndefined();
+    expect(problem({ type: "Card", children: [{ type: "Checkbox", name: "a", label: "A" }], confirm: { label: "Post selected", action: { type: "post" } } })).toBeUndefined();
+    for (const [name, sample] of Object.entries(WIDGET_SAMPLES)) expect([name, problem(sample)]).toEqual([name, undefined]);
   });
 });
 

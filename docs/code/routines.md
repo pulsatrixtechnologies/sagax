@@ -99,6 +99,17 @@ detail pane opens the chat. Through the connector, the
 person's words go to the bot and the form is drawn answered with them, or a
 skip draws it skipped (`settleRoutineForm`).
 
+#4440 (2026-11-16): the pinned row (desktop and phone) never draws such a
+form as its text alone. It draws what the server allows on it as the
+standard question in words (`servedWordsCard` in `src/lib/pinned-waiting.ts`,
+`PinnedWaitingEntry.wordsCard` on the phone): the field in words when
+`freeText`, its options as rows, the skip when `skippable`, and the routine
+that drew it (`WaitingItem.routineName`). The words go to the bot, then
+`POST /api/approvals/handled` with `answered` and `answer` draws the form
+answered with them; a skip goes the same route. The form itself stays drawn
+at the run's row. A form the person could never answer is refused to the bot
+at `show_widget` and `update_widget` (`widgetAnswerProblem`, below).
+
 ## What enters a bot's main chat (#3581, 2026-11-11)
 
 One rule, `shared/chat-relevance.ts` (`chatPlace`, `chatOrigin`,

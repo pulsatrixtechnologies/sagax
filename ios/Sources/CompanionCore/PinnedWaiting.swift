@@ -30,9 +30,20 @@ public struct WaitingItem: Decodable, Hashable, Sendable, Identifiable {
     public var text: String
     public var options: [String]
     public var threadTitle: String?
+    /// It also takes the person's own words (#4440: a form drawn with no
+    /// choice still takes them).
+    public var freeText: Bool
+    /// It can be closed without an answer.
+    public var skippable: Bool
+    /// A question in words: the thread and bot the answer goes to.
+    public var workThreadId: String?
+    public var workBotId: String?
+    /// #4440: a routine run's form: the routine that drew it.
+    public var routineName: String?
 
     public init(id: String, kind: String, botId: String, botName: String, threadId: String, messageId: String? = nil, at: Double,
-                title: String = "", text: String = "", options: [String] = [], threadTitle: String? = nil) {
+                title: String = "", text: String = "", options: [String] = [], threadTitle: String? = nil,
+                freeText: Bool = false, skippable: Bool = true, workThreadId: String? = nil, workBotId: String? = nil, routineName: String? = nil) {
         self.id = id
         self.kind = kind
         self.botId = botId
@@ -44,9 +55,16 @@ public struct WaitingItem: Decodable, Hashable, Sendable, Identifiable {
         self.text = text
         self.options = options
         self.threadTitle = threadTitle
+        self.freeText = freeText
+        self.skippable = skippable
+        self.workThreadId = workThreadId
+        self.workBotId = workBotId
+        self.routineName = routineName
     }
 
-    enum CodingKeys: String, CodingKey { case id, kind, botId, botName, threadId, messageId, at, title, text, options, threadTitle }
+    enum CodingKeys: String, CodingKey {
+        case id, kind, botId, botName, threadId, messageId, at, title, text, options, threadTitle, freeText, skippable, workThreadId, workBotId, routineName
+    }
 
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
@@ -61,6 +79,11 @@ public struct WaitingItem: Decodable, Hashable, Sendable, Identifiable {
         text = (try? box.decode(String.self, forKey: .text)) ?? ""
         options = (try? box.decode([String].self, forKey: .options)) ?? []
         threadTitle = try? box.decode(String.self, forKey: .threadTitle)
+        freeText = (try? box.decode(Bool.self, forKey: .freeText)) ?? false
+        skippable = (try? box.decode(Bool.self, forKey: .skippable)) ?? true
+        workThreadId = try? box.decode(String.self, forKey: .workThreadId)
+        workBotId = try? box.decode(String.self, forKey: .workBotId)
+        routineName = try? box.decode(String.self, forKey: .routineName)
     }
 
     /// The Today row it was read from (`${threadId}:${requestId}`).
@@ -154,6 +177,32 @@ public struct PinnedWaitingEntry: Hashable, Sendable, Identifiable {
         else { return nil }
         return PendingApproval(message: message, card: card, requestId: requestId, tool: card.tool ?? "", threadId: item.threadId)
     }
+
+    /// #4440 (a form card stayed pinned eleven hours with its text and no
+    /// control): a routine run's form, drawn here as the standard question
+    /// in words with what the server allows on it, the field in words and
+    /// the skip (the desktop's `servedWordsCard`). Nil for any other item,
+    /// or when the server allows no words.
+    public var wordsCard: PersonAttentionCard? {
+        guard PinnedWaiting.formWaits(item, message), item.freeText else { return nil }
+        return PersonAttentionCard(
+            kind: "question",
+            items: [PersonAttentionItem(text: item.text.isEmpty ? item.title : item.text)],
+            botId: item.workBotId ?? item.botId,
+            botName: item.botName,
+            threadId: item.workThreadId ?? item.threadId,
+            threadTitle: item.threadTitle,
+            sourceMessageId: message.id,
+            routineName: item.routineName
+        )
+    }
+
+    /// Where such a form is answered or skipped: the route a question in
+    /// words takes (`POST /api/approvals/handled`), on the conversation's bot.
+    public var formPlace: (botId: String, threadId: String, messageId: String)? {
+        guard PinnedWaiting.formWaits(item, message) else { return nil }
+        return (item.botId, item.threadId, message.id)
+    }
 }
 
 public enum PinnedWaiting {
@@ -169,7 +218,7 @@ public enum PinnedWaiting {
             .compactMap { item in
                 guard let listed = payload.messages[item.key] else { return nil }
                 let message = transcript(item.threadId)?.last(where: { $0.id == listed.id }) ?? listed
-                return WaitingCardSkip.waits(message) ? PinnedWaitingEntry(item: item, message: message) : nil
+                return WaitingCardSkip.waits(message) || formWaits(item, message) ? PinnedWaitingEntry(item: item, message: message) : nil
             }
     }
 
@@ -236,6 +285,12 @@ public enum PinnedWaiting {
         return out
     }
 
+    /// #4440: a routine run's form the person has not answered yet (its
+    /// widget row, still open). The pinned card takes it in words.
+    public static func formWaits(_ item: WaitingItem, _ message: Message) -> Bool {
+        item.kind == "form" && message.kind == .widget && message.widget?.root != nil && message.widget?.settled == nil
+    }
+
     /// The kinds the pinned card draws with the conversation's own card
     /// (shared/waiting-items.ts). An item of a kind this app does not know
     /// is not held: its card stays in the conversation.
@@ -298,7 +353,10 @@ public enum PinnedWaiting {
     /// takes. `botId` is the conversation's bot (the server checks the
     /// thread against it), else the item's.
     public static func skipRoute(_ entry: PinnedWaitingEntry, botId: String? = nil) -> WaitingCardSkip.Route? {
-        WaitingCardSkip.route(for: entry.message, threadId: entry.threadId, botId: botId ?? entry.item.botId)
+        if let place = entry.formPlace, entry.item.skippable {
+            return .handled(botId: botId ?? place.botId, threadId: place.threadId, messageId: place.messageId)
+        }
+        return WaitingCardSkip.route(for: entry.message, threadId: entry.threadId, botId: botId ?? entry.item.botId)
     }
 
     /// A live frame that may open or close an item waiting on the person in

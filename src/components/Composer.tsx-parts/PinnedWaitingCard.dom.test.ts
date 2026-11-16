@@ -363,7 +363,7 @@ describe("the pinned card holds every kind and every topic (#3438)", () => {
     expect(JSON.parse(String(sent![1].body))).toMatchObject({ text: "North first", threadId: "work-kiro" });
     const handled = calls.find(([url]) => String(url).includes("/api/approvals/handled"));
     // #3543: settled as answered, so the work that got the words hears nothing more
-    expect(JSON.parse(String(handled![1].body))).toEqual({ botId: "orla", threadId: "main", messageId: "handoff", answered: true });
+    expect(JSON.parse(String(handled![1].body))).toEqual({ botId: "orla", threadId: "main", messageId: "handoff", answered: true, answer: "North first" });
   });
 });
 
@@ -436,6 +436,43 @@ describe("the pinned card draws the server's items (#3543)", () => {
     // the conversation is not one this app holds: it falls back to the bot, then lands on the message
     expect(dispatched).toContainEqual({ type: "focusMessage", threadId: "elsewhere", messageId: "m-later" });
     expect(dispatched.some((action) => (action as { type?: string }).type === "notice" || (action as { type?: string }).type === "revealThread")).toBe(true);
+  });
+
+  // #4440: a routine run's form stayed pinned eleven hours with its text and
+  // no control (choices [], freeText, skippable). What the server allows is
+  // always drawn: the field in words and the skip, and answering settles it.
+  it("draws a form with no choice as a question in words, answers it and skips it", async () => {
+    const form = (id: string): ServedWaitingItem => ({
+      id: `form:${id}`, kind: "form", botId: "orla", botName: "Orla", threadId: "main", messageId: id, at: 1, ageMs: 0,
+      title: "Tonight's drafts", text: "Tonight's drafts\n\nPost selected or Skip tonight", options: [], answerWith: "text", freeText: true, skippable: true,
+      message: { id, role: "bot", kind: "widget", at: 1, text: "Tonight's drafts", widget: { v: 1, root: { type: "Card", id: "n1", children: [] } } } as unknown as Message,
+    });
+    const fetchMock = vi.mocked(fetch);
+    await renderItems([form("m-form")]);
+    const body = host.querySelector('[data-pinned-body="other"]')!;
+    expect(body.textContent).toContain("Post selected or Skip tonight");
+    const field = body.querySelector<HTMLTextAreaElement>("textarea[data-question-field]");
+    expect(field).not.toBeNull();
+    expect(host.querySelector("[data-pinned-waiting] [data-card-skip]")).not.toBeNull();
+    // the person's words go to the bot, then the form is settled answered with them
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setValue.call(field, "Post the first one");
+      field!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { body.querySelector<HTMLButtonElement>('button[aria-label="Send answer"]')!.click(); });
+    await flush();
+    const calls = fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), body: JSON.parse(String((init as RequestInit | undefined)?.body ?? "null")) }));
+    expect(calls).toContainEqual({ url: expect.stringContaining("/api/bots/orla/messages"), body: expect.objectContaining({ text: "Post the first one", threadId: "main" }) });
+    expect(calls).toContainEqual({ url: expect.stringContaining("/api/approvals/handled"), body: { botId: "orla", threadId: "main", messageId: "m-form", answered: true, answer: "Post the first one" } });
+    expect(body.querySelector("[data-attention-answered]")).not.toBeNull();
+    // the skip closes the next one through the same route
+    fetchMock.mockClear();
+    await renderItems([form("m-form-2")]);
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-pinned-waiting] [data-card-skip]")!.click(); });
+    await flush();
+    expect(fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), body: JSON.parse(String((init as RequestInit | undefined)?.body ?? "null")) })))
+      .toContainEqual({ url: expect.stringContaining("/api/approvals/handled"), body: { botId: "orla", threadId: "main", messageId: "m-form-2", skip: true } });
   });
 
   it("draws an item of a conversation the app has not loaded with that conversation's card", async () => {

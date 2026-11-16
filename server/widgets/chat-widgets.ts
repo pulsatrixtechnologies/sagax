@@ -9,7 +9,7 @@
 // the Watcher's legacy options card, unchanged.
 import type { PageSourceChange, PageSourceDigest } from "../pages/published-pages.ts";
 import {
-  parseWidgetInput, resolveWidgetAction, widgetActions, widgetFields, widgetToText, WIDGET_LIMITS,
+  parseWidgetInput, resolveWidgetAction, widgetActions, widgetAnswerProblem, widgetFields, widgetToText, WIDGET_LIMITS,
   type WidgetAction, type WidgetAppAction, type WidgetNode, type WidgetPayload, type WidgetRoot, type WidgetSettled,
 } from "../../shared/widget.ts";
 import { parsePageProposal, type PageKind, type PageReplace } from "../../shared/published-pages.ts";
@@ -123,6 +123,9 @@ type CanonicalWidget =
 function canonicalWidget(input: Record<string, unknown>): CanonicalWidget {
   const parsed = parseWidgetInput(input.widget);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  // #4440: a form the person could never answer is refused to the bot
+  const unanswerable = widgetAnswerProblem(parsed.value);
+  if (unanswerable) return { ok: false, status: 400, error: unanswerable };
   const given = input.fallback_text;
   if (given !== undefined && given !== null && typeof given !== "string") {
     return { ok: false, status: 400, error: "fallback_text: must be a string." };

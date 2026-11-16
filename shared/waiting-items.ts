@@ -100,6 +100,7 @@ export function waitingItemOf(row: InboxApproval, now: number): WaitingItem | nu
       options: [],
       answerWith: "text",
       freeText: true,
+      ...(textOf(row.routineName) ? { routineName: textOf(row.routineName) } : {}),
     };
   }
   const title = textOf(card?.title);

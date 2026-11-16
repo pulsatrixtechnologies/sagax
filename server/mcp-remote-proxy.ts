@@ -12,7 +12,7 @@
 // same setting carries the bot's tool selection, so search, describe and
 // call_tool only ever see the tools the bot may use.
 import { createInterface } from "node:readline";
-import { redactSecretsInText } from "../shared/redact.ts";
+import { maskValues, redactSecretsInText } from "../shared/redact.ts";
 import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
 import type { ValidateFunction } from "ajv";
@@ -143,7 +143,7 @@ const configured: string[] = (() => {
  * nothing secret-shaped left in it, and bounded. */
 function remoteErrorText(detail: string): string {
   let text = detail.slice(0, REMOTE_ERROR_CHARS * 8);
-  for (const value of configured) text = text.split(value).join("«redacted»");
+  text = maskValues(text, configured, "«redacted»");
   text = redactSecretsInText(text).trim();
   if (text.length > REMOTE_ERROR_CHARS) text = `${text.slice(0, REMOTE_ERROR_CHARS - 1)}…`;
   return text || "Remote MCP request failed";
@@ -366,6 +366,7 @@ async function handle(message: Json): Promise<void> {
     else if (failure instanceof McpHttpError && failure.status === 401) error(message.id, -32603, MCP_CREDENTIALS_REFUSED);
     else if (failure instanceof McpHttpError && failure.kind === "status" && !signal.aborted) error(message.id, -32603, remoteStatusText(failure.status, failure.retryAfterMs));
     else if (failure instanceof McpHttpError && failure.kind === "network" && failure.message === "request failed" && !signal.aborted) error(message.id, -32603, "Could not reach this MCP server. Check its URL and that it is online.");
+    else if (failure instanceof McpHttpError && failure.kind === "protocol" && !signal.aborted) error(message.id, -32603, remoteErrorText(failure.message));
     else error(message.id, signal.aborted ? -32800 : -32603, signal.aborted ? "MCP request cancelled" : "Remote MCP request failed");
   } finally { pending.delete(id); }
 }

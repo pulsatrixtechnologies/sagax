@@ -350,18 +350,25 @@ export function drainSteeredMessages(
     // message into one HTML block, which makes that attachment stop being a
     // native image when the combined follow-up is dispatched.
     const prompt = group[0]?.voiceCall ? voiceQueuePrompt(group.map((item) => item.prompt)) : joinQueuedPrompts(group.map((item) => item.prompt));
-    const running = run(
-      entry.botId,
-      threadId,
-      prompt,
-      last,
-      appended.map((message) => message.id),
-      // one unattended line makes the whole drained turn unattended: a
-      // person's words in the same group cannot re-attend a bot's own
-      group.some((item) => item.unattended === true),
-      // the first waiting line is the one that starts this turn
-      { trigger: group[0].trigger, sender: group[0].sender, peerAsk: group[0].peerAsk, speaker: group[0].speaker, origin: group[0].origin },
-    );
+    // A start that throws at once settles like one that rejects, so its
+    // follow-ups never stay "dispatching" and the other bots still run.
+    let running: void | Promise<void>;
+    try {
+      running = run(
+        entry.botId,
+        threadId,
+        prompt,
+        last,
+        appended.map((message) => message.id),
+        // one unattended line makes the whole drained turn unattended: a
+        // person's words in the same group cannot re-attend a bot's own
+        group.some((item) => item.unattended === true),
+        // the first waiting line is the one that starts this turn
+        { trigger: group[0].trigger, sender: group[0].sender, peerAsk: group[0].peerAsk, speaker: group[0].speaker, origin: group[0].origin },
+      );
+    } catch (error) {
+      running = Promise.reject(error);
+    }
     void Promise.resolve(running).then(
       () => settleChatFollowups(ids, null),
       () => settleChatFollowups(ids, "interrupted"),

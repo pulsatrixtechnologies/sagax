@@ -6,7 +6,9 @@ import type { Dispatch } from "react";
 import type { Action, Bot } from "@/state/store";
 import type { Phase } from "./types";
 
-const CALL_ENDPOINT_MS = 850;
+/** Quiet after speech that ends the person's turn in a group call: long
+ * enough for a short thinking pause mid-sentence (upstream #5557). */
+export const CALL_ENDPOINT_MS = 1_700;
 
 export function useGroupCallSpeech(args: {
   groupId: string;

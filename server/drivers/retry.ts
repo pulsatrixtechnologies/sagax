@@ -79,7 +79,8 @@ const TERMINAL_PATTERNS: Array<{ pattern: RegExp; reason: TerminalReason }> = [
   // "subscription" alone is config or prose, not a spent limit (#1758).
   { pattern: /\b402\b|\bquota\b|\bbilling (?:hard )?limit\b|\b(?:subscription|billing) (?:limit|exhausted|exceeded|reached)\b/i, reason: "quota" },
   { pattern: /\bmodel not found\b|\bunknown model\b|\bdoes not exist for model\b|\bunsupported model\b/i, reason: "unknown_model" },
-  { pattern: /\b400\b|\b422\b|\binvalid request\b|\bmalformed\b|\bunexpected status\b/i, reason: "invalid_request" },
+  // "unexpected status" alone is not a reason: its code decides (upstream #5273).
+  { pattern: /\b400\b|\b422\b|\binvalid request\b|\bmalformed\b/i, reason: "invalid_request" },
   { pattern: /\b404\b|\bno such thread\b|\bthread gone\b/i, reason: "not_found" },
   // interrupt/cancel vocabulary from the drivers' own stop paths — a turn the
   // user stopped must never come back as an auto-retry

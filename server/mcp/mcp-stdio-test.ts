@@ -21,6 +21,7 @@ import { probeEnvironment, STDIO_PROBE_TIMEOUT_MS } from "./mcp-probe.ts";
 import type { TestResult } from "../org/org-admin-ops.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { redactSecretsInText } from "../redact.ts";
+import { maskValues } from "../../shared/redact.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 export interface StdioTestServer {
@@ -47,8 +48,7 @@ interface Channel {
 }
 
 function scrub(text: string, secrets: string[]): string {
-  let out = text;
-  for (const secret of secrets) if (secret.length >= 3) out = out.split(secret).join("[redacted]");
+  const out = maskValues(text, secrets.filter((secret) => secret.length >= 3), "[redacted]");
   return redactSecretsInText(out).replace(/\s+/g, " ").trim().slice(0, 300);
 }
 

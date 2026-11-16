@@ -4,7 +4,7 @@ import { contextRenewedNotice } from "../../context/context-renewal.ts";
 import {
   INIT_TIMEOUT, LOAD_SESSION_TIMEOUT, NEW_SESSION_TIMEOUT, SESSION_CONFIG_TIMEOUT,
 } from "./constants.ts";
-import { offeredModels, skipSubscriptionAuthForLocalInject } from "./helpers.ts";
+import { acpMissingSession, offeredModels, skipSubscriptionAuthForLocalInject } from "./helpers.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
 import { turnTrace } from "../../turns/turn-trace.ts";
 
@@ -122,12 +122,9 @@ for (;;) {
       );
     } catch (error) {
       const classification = support.classifyError?.(error);
-      // OpenCode encodes ACPSessionNotFoundError as invalidParams
-      // with just the rejected sessionId. Other invalidParams
-      // responses (model/config errors) must not erase history.
-      const data = (error as any)?.data;
-      const missingSession = data && typeof data === "object" && !Array.isArray(data)
-        && data.sessionId === cursor && Object.keys(data).length === 1;
+      // The session is gone (OpenCode's or Cursor's shape). Other
+      // invalidParams responses (model/config errors) must not erase history.
+      const missingSession = acpMissingSession(error, cursor);
       if (classification === "invalid_credentials" || classification === "inactive_subscription"
           || ((error as any)?.code === -32602 && !missingSession)) throw error;
       /* session gone, load unsupported, or too slow — the

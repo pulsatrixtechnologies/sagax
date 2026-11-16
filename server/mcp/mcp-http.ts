@@ -135,7 +135,8 @@ function parseSseBlock(block: string): SseEvent | null {
     if (field === "event") event = value;
     else if (field === "data") data.push(value);
   }
-  return data.length ? { event, data: data.join("\n") } : null;
+  // An empty event type is the default one, as the event stream standard says.
+  return data.length ? { event: event || "message", data: data.join("\n") } : null;
 }
 
 /** Read an event stream until the handler says stop, the server ends it,
@@ -145,21 +146,36 @@ async function readSse(
   signal: AbortSignal,
   onEvent: (event: SseEvent) => "stop" | undefined,
   maxBytes = MAX_REMOTE_MCP_BYTES,
+  /** One POST's reply: a stateless server may hang up right after its last
+   * event, leaving off the closing blank line. */
+  lastEventAtEnd = false,
 ): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) throw new McpHttpError("protocol", "empty event stream");
   const decoder = new TextDecoder();
   let buffer = "";
   let bytes = 0;
+  // A CRLF split between two chunks: the LF that opens the next chunk ends
+  // the line the CR already ended, not a second (blank) line.
+  let afterCr = false;
   const onAbort = () => void reader.cancel().catch(reportBackgroundError);
   signal.addEventListener("abort", onAbort, { once: true });
   try {
     for (;;) {
       const { value, done } = await reader.read();
-      if (done) return;
+      if (done) {
+        const last = lastEventAtEnd ? parseSseBlock((buffer + decoder.decode()).replace(/\r\n?/g, "\n")) : null;
+        if (last) onEvent(last);
+        return;
+      }
       bytes += value.byteLength;
       if (bytes > maxBytes) throw new McpHttpError("protocol", "event stream too large");
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n?/g, "\n");
+      const chunk = decoder.decode(value, { stream: true });
+      if (chunk) {
+        const start = afterCr && chunk.startsWith("\n") ? 1 : 0;
+        afterCr = chunk.endsWith("\r");
+        buffer += chunk.slice(start).replace(/\r\n?/g, "\n");
+      }
       let separator: number;
       while ((separator = buffer.indexOf("\n\n")) !== -1) {
         const block = buffer.slice(0, separator);
@@ -354,7 +370,7 @@ export class RemoteMcpClient {
         if (!message) return undefined;
         found = message;
         return "stop";
-      }, this.maxBytes);
+      }, this.maxBytes, true);
       if (signal.aborted) throw new McpHttpError("network", "aborted");
       if (!found) throw new McpHttpError("protocol", "event stream ended without the response");
       return unwrap(found);

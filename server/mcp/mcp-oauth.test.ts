@@ -116,6 +116,17 @@ describe("probe and discovery", () => {
     });
   });
 
+  // upstream #6053: offline access the authorization server offers is asked
+  // for, so the sign-in gets a refresh token and renews itself.
+  it("asks for offline access when the authorization server offers it", async () => {
+    fake = await startFakeOAuthMcp({ offlineAccess: true });
+    const oauth = manager();
+    await oauth.probe("notes", remote(fake.mcpUrl));
+    expect(oauth.vault.get("notes")!.scope).toBe("notes:read offline_access");
+    const { authorizationUrl } = await oauth.start("notes", remote(fake.mcpUrl), { redirectUri: REDIRECT });
+    expect(new URL(authorizationUrl!).searchParams.get("scope")).toBe("notes:read offline_access");
+  });
+
   it("falls back to the well-known resource metadata and OpenID discovery", async () => {
     fake = await startFakeOAuthMcp({ metadataHint: "wellknown", asMetadata: "oidc" });
     const oauth = manager();

@@ -4,6 +4,7 @@
 // object form — so a change to either shape breaks the test, not the secret.
 import { describe, expect, it } from "vitest";
 
+import { maskValues } from "../shared/redact.ts";
 import { redactSecrets } from "./redact.ts";
 
 const flat = (value: unknown) => JSON.stringify(value);
@@ -175,6 +176,30 @@ describe("redactSecretsInText", () => {
       const out = redactSecretsInText(input);
       expect(out, input).not.toMatch(leak);
       expect(out).toMatch(/«redacted \d+ chars»/);
+    }
+  });
+
+  // upstream #5428
+  it("masks Notion integration tokens", () => {
+    // ntn_ plus 46 letters and digits, assembled at runtime like the cases above.
+    const token = `${"nt" + "n_"}${"0123456789A"}${"bcdefghijklmnopqrstuvwxyzABCDEFGHIJ"}`;
+    expect(redactSecretsInText(`notion ${token} connected`)).toBe(`notion «redacted ${token.length} chars» connected`);
+    expect(holdsCredential(`header Notion ${token}`)).toBe(true);
+    for (const ordinary of ["ntn_example", `${"nt" + "n_"}${"a".repeat(39)}`, `example_${"nt" + "n_"}${"a".repeat(46)}`]) {
+      expect(redactSecretsInText(ordinary)).toBe(ordinary);
+      expect(holdsCredential(ordinary)).toBe(false);
+    }
+  });
+
+  // upstream #5510
+  it("masks Perplexity API keys", () => {
+    // pplx- plus 48 letters and digits, assembled at runtime like the cases above.
+    const key = `${"pp" + "lx-"}${"0123456789ABCDEFGHIJKLMN"}${"opqrstuvwxyzabcdefghijkl"}`;
+    expect(redactSecretsInText(`perplexity ${key} search`)).toBe(`perplexity «redacted ${key.length} chars» search`);
+    expect(holdsCredential(`search via ${key}`)).toBe(true);
+    for (const ordinary of ["perplexity/pplx-decider-v1.1-27b", `${"pp" + "lx-"}${"a".repeat(47)}`, `${"pp" + "lx-"}${"a".repeat(49)}`, `example_${"pp" + "lx-"}${"a".repeat(48)}`]) {
+      expect(redactSecretsInText(ordinary)).toBe(ordinary);
+      expect(holdsCredential(ordinary)).toBe(false);
     }
   });
 
@@ -406,5 +431,16 @@ describe("#4081: the sandbox bridge token", () => {
     // a shorter look-alike is not a token
     const short = `${"sgx_" + "brg_"}abc`;
     expect(redactSecretsInText(`see ${short}`)).toContain(short);
+  });
+});
+
+// upstream #5282: values masked in one pass over the original text.
+describe("maskValues", () => {
+  it("masks crossing, nested and self-overlapping values whole", () => {
+    expect(maskValues("abcdefghi", ["abc", "bcdefghi"], "[r]")).toBe("[r]");
+    expect(maskValues("x ababa y", ["aba"], "[r]")).toBe("x [r] y");
+    expect(maskValues("prefix-sensitive-suffix / prefix", ["prefix", "prefix-sensitive-suffix"], "[r]")).toBe("[r] / [r]");
+    expect(maskValues("keep a.b+c here", ["a.b+c", ""], "[r]")).toBe("keep [r] here");
+    expect(maskValues("nothing", ["absent"], "[r]")).toBe("nothing");
   });
 });

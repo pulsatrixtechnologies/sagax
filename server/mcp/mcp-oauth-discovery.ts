@@ -107,6 +107,14 @@ async function authorizationServer(issuer: string, options: DiscoverOptions) {
   return null;
 }
 
+/** The resource's scopes, plus offline access when the authorization server
+ * offers it, so the sign-in gets a refresh token and renews itself instead
+ * of expiring. A resource that names no scope stays unspecified. */
+export function withOfflineAccess(resourceScopes: string[] | undefined, authorizationScopes: unknown): string[] | undefined {
+  if (!resourceScopes?.length || resourceScopes.includes("offline_access")) return resourceScopes;
+  return stringList(authorizationScopes)?.includes("offline_access") ? [...resourceScopes, "offline_access"] : resourceScopes;
+}
+
 /** The sign-in endpoints for an MCP server, or null when it does not
  * describe a usable OAuth sign-in (no metadata, no PKCE S256, or an
  * endpoint that is not https). */
@@ -140,7 +148,7 @@ export async function discoverMcpAuth(
   const optionalEndpoint = (value: unknown) => typeof value === "string" && isAllowedAuthUrl(value) ? value : undefined;
   const registrationEndpoint = optionalEndpoint(metadata.registration_endpoint);
   const revocationEndpoint = optionalEndpoint(metadata.revocation_endpoint);
-  const scopes = stringList(resource?.scopes_supported);
+  const scopes = withOfflineAccess(stringList(resource?.scopes_supported), metadata.scopes_supported);
   const tokenEndpointAuthMethods = stringList(metadata.token_endpoint_auth_methods_supported);
   target.hash = "";
   return {

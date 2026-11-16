@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CONSENT_RULE } from "../peers/peer-provenance.ts";
-import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, ENVELOPE_MARK, escapeEnvelope } from "./envelope.ts";
+import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, ENVELOPE_MARK, envelopeNote, escapeEnvelope } from "./envelope.ts";
 import type { Assignment, EnvelopeNames } from "./types.ts";
 
 const base: Assignment = {
@@ -200,6 +200,16 @@ describe("composeEnvelope: the person's answer", () => {
   it("stands without a recorded question, and is absent without an answer", () => {
     expect(composeEnvelope(assignment({ answer: "yes" }), names).endsWith('\n\nThe person answered: "yes".')).toBe(true);
     expect(composeEnvelope(assignment({ question: "Which?" }), names)).not.toContain("The person answered");
+  });
+
+  // upstream #4969: an answer reaches the next turn whole, not cut at 400 characters.
+  it("carries a long answer whole, also in the note the thread shows", () => {
+    const answer = `Use the fork. ${"You work best with a clear brief. ".repeat(120)}End of answer.`;
+    const envelope = composeEnvelope(assignment({ question: "Which repo?", answer }), names);
+    const line = `Your question was: "Which repo?". The person answered: "${answer.trim()}".`;
+    expect(answer.length).toBeGreaterThan(3_900);
+    expect(envelope.endsWith(`\n\n${line}`)).toBe(true);
+    expect(envelopeNote(envelope)).toContain(line);
   });
 
   it("is sanitised like every other quote", () => {

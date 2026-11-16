@@ -210,7 +210,11 @@ export function drainChannelMessages(
     settleChatFollowups(ids, "dispatching");
     entry.items.splice(0, group.length);
     if (entry.items.length === 0) queues.delete(threadId);
-    const running = run({ groupId: entry.groupId, threadId, items: group });
+    // A start that throws at once settles like one that rejects, so its
+    // follow-ups never stay "dispatching" and the other threads still run.
+    let running: void | Promise<void>;
+    try { running = run({ groupId: entry.groupId, threadId, items: group }); }
+    catch (error) { running = Promise.reject(error); }
     void Promise.resolve(running).then(
       () => settleChatFollowups(ids, null),
       () => settleChatFollowups(ids, "interrupted"),

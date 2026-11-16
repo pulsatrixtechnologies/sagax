@@ -24,7 +24,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "../atomic.ts";
 import type { McpServerSpec, RemoteMcpSpec } from "../contracts.ts";
 import { McpHttpError, RemoteMcpClient } from "./mcp-http.ts";
-import { discoverMcpAuth } from "./mcp-oauth-discovery.ts";
+import { discoverMcpAuth, withOfflineAccess } from "./mcp-oauth-discovery.ts";
 import { sendsCredentials, SIGN_IN_CHECK_TOOL } from "./mcp-sign-in-check.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import type { VaultKeySource } from "../vault/vault-key-source.ts";
@@ -1355,7 +1355,11 @@ export async function discover(
       if (methods && !methods.includes("S256")) continue;
       const responseTypes = stringList(metadata.response_types_supported);
       if (responseTypes && !responseTypes.includes("code")) continue;
-      const scope = challenge?.scope?.trim() || (scopes?.length ? scopes.join(" ") : undefined);
+      // The challenge's own scope comes first; offline access the
+      // authorization server offers is added either way.
+      const named = challenge?.scope?.trim() ? challenge.scope.trim().split(/\s+/) : scopes;
+      const asked = withOfflineAccess(named, metadata.scopes_supported);
+      const scope = asked?.length ? asked.join(" ") : undefined;
       return {
         resource,
         issuer: typeof metadata.issuer === "string" && safeEndpoint(metadata.issuer) ? metadata.issuer : issuer,

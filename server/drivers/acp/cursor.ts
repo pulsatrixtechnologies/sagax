@@ -545,32 +545,38 @@ const support = (run: typeof execCli): AcpSupport => ({
     // slug so a CLI that advertises nothing behaves exactly as before.
     const match = matchCursorAcpModel(sessionModels ?? [], wanted);
     const modelId = match?.modelId ?? wanted;
-    try {
-      await request("session/set_model", { sessionId, modelId });
-      if (match && !match.exact) {
-        notice(`Cursor offers ${modelId} rather than ${turn.model} in this session, so this conversation uses ${modelId}.`);
-      }
-    } catch (e) {
-      const err = e as Error & { code?: unknown };
-      // -32601: a CLI without set_model, which still honours the argv
-      // `--model` pin. -32602: the id is not in this session's namespace.
-      // Current CLIs ignore argv `--model` in ACP sessions, so the session
-      // stays on the model it started with: say so rather than fail a turn
-      // that still works.
-      if (err.code === -32601) return;
-      if (err.code === -32602) {
-        const current = sessionModels?.find((m) => m.modelId === currentModelId);
-        const running = current?.name ?? currentModelId;
-        notice(
-          `Cursor did not accept ${turn.model} in this session, so it runs ${running ?? "its default model"}. ` +
-            "Choose another model for this bot to stop seeing this.",
+    // A reused session already on this id rejects a second session/set_model
+    // (upstream #5809); Fast is a separate option, set below either way.
+    if (currentModelId !== modelId) {
+      try {
+        await request("session/set_model", { sessionId, modelId });
+      } catch (e) {
+        const err = e as Error & { code?: unknown };
+        // -32601: a CLI without set_model, which still honours the argv
+        // `--model` pin. -32602: the id is not in this session's namespace.
+        // Current CLIs ignore argv `--model` in ACP sessions, so the session
+        // stays on the model it started with: say so rather than fail a turn
+        // that still works.
+        if (err.code === -32601) return;
+        if (err.code === -32602) {
+          const current = sessionModels?.find((m) => m.modelId === currentModelId);
+          const running = current?.name ?? currentModelId;
+          notice(
+            `Cursor did not accept ${turn.model} in this session, so it runs ${running ?? "its default model"}. ` +
+              "Choose another model for this bot to stop seeing this.",
+          );
+          return;
+        }
+        throw new Error(
+          `Cursor rejected model "${turn.model}" (sent as "${modelId}") via session/set_model: ${err.message}. ` +
+            `Check that \`cursor-agent\` is current and that this account can use that model.`,
         );
-        return;
       }
-      throw new Error(
-        `Cursor rejected model "${turn.model}" (sent as "${modelId}") via session/set_model: ${err.message}. ` +
-          `Check that \`cursor-agent\` is current and that this account can use that model.`,
-      );
+    }
+    // About the model this conversation uses, including a later turn that
+    // does not call the setter.
+    if (match && !match.exact) {
+      notice(`Cursor offers ${modelId} rather than ${turn.model} in this session, so this conversation uses ${modelId}.`);
     }
     if (fastOption) await setCursorFast(request, sessionId, wantsFast);
   },

@@ -145,6 +145,12 @@ export const isAccountError = (code: ProviderErrorCode | undefined): code is Acc
 /** ACP vendors put the actionable cause in error.data while keeping the
  * JSON-RPC message generic. Only surface known text fields, never a response
  * body/config dump, and redact before bounding the displayed diagnostic. */
+/** The vendor's own message and the method called, kept before redaction. */
+const resumeRefusal = new WeakMap<object, { message: string; method: string }>();
+
+/** Cursor's refusal of a resume id: words around the id in any case, the id as written. */
+const MISSING_SESSION_MESSAGE = /^\s*(?:invalid params:\s*)?session\s+"([^"]+)"\s+not found\b(?:\s*\(session\/(?:load|resume)\))?[\s.]*$/i;
+
 export function acpRpcError(value: any, method: string): Error {
   const message = typeof value?.message === "string" ? value.message : "ACP request failed";
   const data = value?.data;
@@ -160,12 +166,30 @@ export function acpRpcError(value: any, method: string): Error {
   ].filter(Boolean).join(", ");
   const diagnostic = `${detail && detail !== message ? `${message}: ${detail}` : message} (${context})`;
   const error = new Error(redactSecretsInText(diagnostic).slice(0, 1500));
+  resumeRefusal.set(error, { message, method });
   return Object.assign(error, { code: value?.code, data,
     // -32603 is JSON-RPC's internal error. Invalid params, unsupported
     // methods and auth refusals are user/configuration issues, not evidence
     // of a broken process. Preserve their session instead of retrying them.
     acpSessionFailure: value?.code === -32603,
   });
+}
+
+/** Whether the provider refused this resume id because the session no
+ * longer exists (upstream #5063). OpenCode sends invalidParams with only the
+ * rejected sessionId; Cursor names it in the message of session/load:
+ * Invalid params: Session "<id>" not found. A bare invalidParams (a bad model
+ * or config) is not this, and must not erase history. */
+export function acpMissingSession(error: unknown, cursor: string): boolean {
+  const record = error && typeof error === "object" ? error as { data?: unknown } : undefined;
+  const data = record?.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const fields = data as Record<string, unknown>;
+    if (fields.sessionId === cursor && Object.keys(fields).length === 1) return true;
+  }
+  const refusal = record ? resumeRefusal.get(record) : undefined;
+  if (!refusal || (refusal.method !== "session/load" && refusal.method !== "session/resume")) return false;
+  return refusal.message.match(MISSING_SESSION_MESSAGE)?.[1] === cursor;
 }
 
 /** A continuation nudge sent after a reasoning-only empty response: the live

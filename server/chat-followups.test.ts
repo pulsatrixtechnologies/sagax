@@ -141,11 +141,32 @@ describe("durable accepted follow-ups", () => {
     settle.mockRestore();
   });
 
-  it("never restores a claim whose dispatch may have started", async () => {
+  // upstream #5281: a dispatch that throws at once settles like one that rejects.
+  it("settles failed dispatches before restoring durable follow-ups", async () => {
     const bot = queueSteeredMessage("bot", "thread", "possibly executed");
     const channel = queueChannelMessage("group", "channel", "possibly executed");
-    expect(() => drainSteeredMessages(storeFor("bot", "thread"), () => { throw new Error("lost dispatch"); })).toThrow();
-    drainChannelMessages(() => false, () => Promise.reject(new Error("lost channel dispatch")));
+    expect(() => drainSteeredMessages(storeFor("bot", "thread"), () => { throw new Error("lost dispatch"); })).not.toThrow();
+    expect(() => drainChannelMessages(() => false, () => { throw new Error("lost channel dispatch"); })).not.toThrow();
+    await Promise.resolve();
+    journal.closeMessageDb();
+    restoreSteeredMessages();
+    restoreChannelMessages();
+    const run = vi.fn();
+    drainSteeredMessages(storeFor("bot", "thread"), run);
+    drainChannelMessages(() => false, run);
+    expect(run).not.toHaveBeenCalled();
+    expect(journal.chatFollowups()).toEqual([
+      expect.objectContaining({ id: bot.id, status: "interrupted" }),
+      expect.objectContaining({ id: channel.id, status: "interrupted" }),
+    ]);
+  });
+
+  it("never restores an unsettled claim whose dispatch may have started", async () => {
+    const bot = queueSteeredMessage("bot", "thread", "possibly executed");
+    const channel = queueChannelMessage("group", "channel", "possibly executed");
+    const stillRunning = () => new Promise<void>(() => {});
+    drainSteeredMessages(storeFor("bot", "thread"), stillRunning);
+    drainChannelMessages(() => false, stillRunning);
     await Promise.resolve();
     journal.closeMessageDb();
     restoreSteeredMessages();
@@ -156,8 +177,44 @@ describe("durable accepted follow-ups", () => {
     expect(run).not.toHaveBeenCalled();
     expect(journal.chatFollowups()).toEqual([
       expect.objectContaining({ id: bot.id, status: "dispatching" }),
-      expect.objectContaining({ id: channel.id, status: "interrupted" }),
+      expect.objectContaining({ id: channel.id, status: "dispatching" }),
     ]);
+  });
+
+  it.each(["throw", "reject"] as const)("a failed channel dispatch (%s) is settled and other threads still run", async (failure) => {
+    const failed = queueChannelMessage("group", "failed", "first");
+    const next = queueChannelMessage("group", "next", "second");
+    const run = vi.fn(({ threadId }: { threadId: string }) => {
+      if (threadId !== "failed") return undefined;
+      if (failure === "throw") throw new Error("dispatch failed");
+      return Promise.reject(new Error("dispatch failed"));
+    });
+    expect(() => drainChannelMessages(() => false, run)).not.toThrow();
+    expect(run).toHaveBeenCalledTimes(2);
+    await Promise.resolve();
+    expect(journal.chatFollowups().find((row) => row.id === failed.id)?.status).toBe("interrupted");
+    expect(journal.chatFollowups().find((row) => row.id === next.id)).toBeUndefined();
+  });
+
+  it.each(["throw", "reject"] as const)("a failed bot dispatch (%s) is settled and other bots still run", async (failure) => {
+    let messageId = 0;
+    const store: SteerStore = {
+      bot: (id) => ["failed", "next"].includes(id) ? { id, threadId: id, busy: false } as BotRecord : null,
+      appendMessage: (_threadId, message) => ({ ...message, id: `m${++messageId}`, at: 0 }),
+      patchMessage: () => null,
+    };
+    const failed = queueSteeredMessage("failed", "failed", "first");
+    const next = queueSteeredMessage("next", "next", "second");
+    const run = vi.fn((botId: string) => {
+      if (botId !== "failed") return undefined;
+      if (failure === "throw") throw new Error("dispatch failed");
+      return Promise.reject(new Error("dispatch failed"));
+    });
+    expect(() => drainSteeredMessages(store, run)).not.toThrow();
+    expect(run).toHaveBeenCalledTimes(2);
+    await Promise.resolve();
+    expect(journal.chatFollowups().find((row) => row.id === failed.id)?.status).toBe("interrupted");
+    expect(journal.chatFollowups().find((row) => row.id === next.id)).toBeUndefined();
   });
 
   it("deleting a thread deletes pending work and cancellation tombstones", () => {

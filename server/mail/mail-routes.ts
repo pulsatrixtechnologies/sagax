@@ -19,6 +19,7 @@ import { applyMailSettingsPatch, mailSettingsPatchSchema, mailSettingsView, reso
 import type { Mailer } from "./mailer.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
+import { maskValues } from "../../shared/redact.ts";
 
 export const MAIL_SETTINGS_PATH = "/api/mail/settings";
 export const MAIL_TEST_PATH = "/api/mail/test";
@@ -59,8 +60,7 @@ function secretsOf(settings: MailSettings): string[] {
 }
 
 function scrub(text: string, secrets: string[]): string {
-  let out = text;
-  for (const secret of secrets) out = out.split(secret).join("[redacted]");
+  const out = maskValues(text, secrets, "[redacted]");
   return out.length > 500 ? `${out.slice(0, 500)}...` : out;
 }
 

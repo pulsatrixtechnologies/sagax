@@ -24,12 +24,24 @@ describe("refusesRequestSize", () => {
     [400, '{"error":{"message":"request entity too large","type":"entity.too.large"}}'],
     [400, '{"error":{"message":"Payload Too Large"}}'],
     [429, '{"error":{"message":"Request too large for gpt-4o in organization org-fixture on tokens per min (TPM): Limit 30000, Requested 45000."}}'],
+    // upstream #4548: the structured context length code on HTTP 400
+    [400, '{"error":{"code":"context_length_exceeded","message":"This model\'s maximum context length is 262142 tokens. Your messages resulted in 555619 tokens."}}'],
+    [400, '{"error":{"type":"context_length_exceeded","message":"prompt is too long: 300000 tokens > 262144 maximum"}}'],
   ])("reads HTTP %i %j as a size refusal", (status, body) => {
     expect(refusesRequestSize(status, body)).toBe(true);
   });
 
   it.each([
     [400, '{"error":{"message":"invalid model"}}'],
+    [400, '{"error":{"code":"invalid_api_key","message":"Invalid API key provided"}}'],
+    [400, "context_length_exceeded"],
+    [400, '{"code":"context_length_exceeded"}'],
+    [400, '{"error":[{"code":"context_length_exceeded"}]}'],
+    [400, '{"error":{"code":"context_length_exceeded_extra"}}'],
+    [400, "null"],
+    [400, '{"error":'],
+    [401, '{"error":{"code":"context_length_exceeded"}}'],
+    [500, '{"error":{"code":"context_length_exceeded"}}'],
     [412, "Precondition Failed"],
     [429, '{"error":{"message":"Rate limit reached for requests"}}'],
     [500, "Internal Server Error"],
@@ -158,6 +170,18 @@ describe("an OpenAI-compatible provider that refuses large requests", () => {
   const transcript = (count: number, bytes: number) => Array.from({ length: count }, (_, index) =>
     ({ role: index % 2 ? "assistant" as const : "user" as const, text: `earlier ${index} ${"x".repeat(bytes)}` }));
   const above = (limit: number) => (bytes: number) => bytes > limit ? { status: 413, body: NGINX_413 } : null;
+
+  it("resends once with the oldest history dropped on a structured HTTP 400 context length refusal", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const limit = 40_000;
+    const body = '{"error":{"code":"context_length_exceeded","message":"This model\'s maximum context length is 262142 tokens."}}';
+    const f = await provider((bytes) => bytes > limit ? { status: 400, body } : null);
+    const done = await f.run({ system: "Fixture system prompt.", transcript: transcript(20, 3_000) });
+    expect(done).toMatchObject({ ok: true });
+    expect(f.requests).toHaveLength(2);
+    expect(f.requests[1]!.bytes).toBeLessThanOrEqual(limit);
+    expect(f.retries()).toEqual([expect.objectContaining({ attempt: 1, delayMs: 0, reason: "request_too_large" })]);
+  });
 
   it("resends once with the oldest history dropped and finishes the turn", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

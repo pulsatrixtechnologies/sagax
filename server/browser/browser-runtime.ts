@@ -1,6 +1,6 @@
 import { killCliTree, spawnCli } from "../procs.ts";
 import { scrubHeldSecrets } from "../../shared/redact.ts";
-import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
+import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, verifiedBrowserNavigation, type PageState } from "./browser-tool-shape.ts";
 import { randomBytes } from "node:crypto";
 import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "../vault/credential-fill.ts";
 import { noteFilledSecret } from "../vault/filled-secret-guard.ts";
@@ -911,9 +911,7 @@ export class BrowserRuntime {
           beforeDispatch?.();
           const navigation = result as { content?: unknown[] };
           const page = observation as { content?: unknown[]; isError?: boolean } | null;
-          const observed = page?.isError !== true && Array.isArray(page?.content) && page.content.some((item) =>
-            item && typeof item === "object" && (item as { type?: unknown }).type === "text" &&
-            typeof (item as { text?: unknown }).text === "string" && (item as { text: string }).text.trim().length > 0);
+          const observed = verifiedBrowserNavigation(browserCallUrl(params), observation);
           result = {
             content: [
               ...(Array.isArray(navigation.content) ? navigation.content : []),

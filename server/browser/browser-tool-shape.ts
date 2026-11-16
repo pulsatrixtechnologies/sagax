@@ -37,6 +37,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Whether the snapshot taken after agent_browser_open shows the page loaded:
+ * some text, and not a blank page when a website was asked for (upstream
+ * #4633). A blank page asked for, or a redirect elsewhere, still counts. */
+export function verifiedBrowserNavigation(url: string, observation: unknown): boolean {
+  if (!isRecord(observation) || observation.isError === true || !Array.isArray(observation.content)) return false;
+  const structured = observation.structuredContent;
+  const response = isRecord(structured) ? structured.response : undefined;
+  const data = isRecord(response) ? response.data : undefined;
+  if (/^https?:\/\//i.test(url.trim()) && isRecord(data) && data.origin === "about:blank") return false;
+  return observation.content.some((item) => isRecord(item) && item.type === "text" &&
+    typeof item.text === "string" && item.text.trim().length > 0);
+}
+
 /** Remove harness-owned parameters from every advertised tool schema. */
 /** agent-browser fetches a `url` given to agent_browser_read with its own
  * HTTP client, around the browser and its egress gate, and ignores every

@@ -223,6 +223,7 @@ lines.on('line', line => {
   else if (m.params.name === 'agent_browser_snapshot' && process.env.HANG_VERIFICATION === '1') return;
   else if (m.params.name === 'agent_browser_snapshot' && process.env.EMPTY_VERIFICATION === '1') result = { content:[] };
   else if (m.params.name === 'agent_browser_snapshot' && process.env.FAIL_VERIFICATION === '1') result = { isError:true, content:[{type:'text',text:'Snapshot unavailable'}] };
+  else if (m.params.name === 'agent_browser_snapshot' && process.env.SNAPSHOT_ORIGIN) result = { content:[{type:'text',text:'(empty page)'}], structuredContent:{ response:{ success:true, data:{ origin:process.env.SNAPSHOT_ORIGIN, refs:{}, snapshot:'(empty page)' }, error:null } } };
   // LEAK: a page that shows a filled password back, in every kind of result.
   else if (process.env.LEAK && m.params.name !== 'agent_browser_get_url') result = { content:[{type:'text',text:'page says ' + process.env.LEAK},{type:'image',data:'AAAA',mimeType:'image/png'}], structuredContent:{ value: process.env.LEAK } };
   else if (m.params.name === 'agent_browser_eval' && process.env.FAIL_EVAL === '1') result = { isError:true, content:[{type:'text',text:'Evaluation failed'}] };
@@ -351,6 +352,33 @@ describe("server-owned browser MCP runtime", () => {
     }) as { isError: boolean; content: Array<{ text: string }> };
     expect(result.isError).toBe(true);
     expect(result.content[1].text).toContain("verification failed");
+  });
+  // upstream #4633: a blank page is not the website that was asked for.
+  it("rejects a website navigation whose verification observes about:blank", async () => {
+    const blank = spec();
+    blank.env.SNAPSHOT_ORIGIN = "about:blank";
+    const result = await runtime().agentRpc("lost-page", blank, "tools/call", {
+      name: "agent_browser_open", arguments: { url: "https://example.com" },
+    }) as { isError?: boolean; content: Array<{ text: string }> };
+    expect(result.isError).toBe(true);
+    expect(result.content[1].text).toContain("verification failed");
+    expect(result.content[1].text).not.toContain("Its refs are current");
+    expect(result.content[2].text).toBe("(empty page)");
+  });
+  it.each([
+    [{ url: "about:blank" }, "about:blank"],
+    [{}, "about:blank"],
+    [{ url: "https://example.com" }, "https://example.com/"],
+    [{ url: "https://example.com" }, "https://signin.example.net/login"],
+  ])("allows an intentional blank page, empty website or redirect: %j -> %s", async (args, origin) => {
+    const page = spec();
+    page.env.SNAPSHOT_ORIGIN = origin;
+    const result = await runtime().agentRpc("allowed-page", page, "tools/call", {
+      name: "agent_browser_open", arguments: args,
+    }) as { isError?: boolean; content: Array<{ text: string }> };
+    expect(result.isError).not.toBe(true);
+    expect(result.content[1].text).toContain("Its refs are current");
+    expect(result.content[2].text).toBe("(empty page)");
   });
   it("observes the same page after navigation without repeating the navigation", async () => {
     const value = runtime();

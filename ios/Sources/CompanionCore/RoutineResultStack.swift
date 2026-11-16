@@ -7,12 +7,14 @@
 import Foundation
 
 public enum RoutineResultStack {
-    /// The two forms a run takes in the chat.
+    /// The three forms a run takes in the chat.
     public enum Form: String, Sendable {
         /// The compact card: a finished result with something to read, and
-        /// any result that needs the person.
+        /// other successful results with content.
         case card
-        /// The one quiet row: a run in progress, queued, waiting, failed,
+        /// A failure, problem streak or result waiting on the person.
+        case problem
+        /// The one quiet row: a run in progress, queued, waiting,
         /// cancelled or with nothing to report, and a card a newer result folded.
         case row
     }
@@ -83,11 +85,11 @@ public enum RoutineResultStack {
     /// The form a run takes in the chat.
     public static func form(_ run: RoutineRunCard, attention: PersonAttentionCard?, folded: Bool) -> Form {
         // #3695, #4066: a repeating routine's one summary card is the one
-        // thing its runs say in the chat: a card whatever its run's status,
+        // thing its runs say in the chat: a problem row whatever its run's status,
         // so its count, since when and what is wrong are read whole
-        if run.isProblemStreak { return .card }
+        if run.isProblemStreak { return .problem }
         if folded { return .row }
-        if needsPerson(run, attention: attention) { return .card }
+        if (run.goalStatus == nil && ["failed", "missed"].contains(run.status)) || run.goalStatus == "failed" || needsPerson(run, attention: attention) { return .problem }
         if !isResult(run) { return .row }
         return !run.briefText.isEmpty || run.recovered != nil || !run.handedTo.isEmpty ? .card : .row
     }

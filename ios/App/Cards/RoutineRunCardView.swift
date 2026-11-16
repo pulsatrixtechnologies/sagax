@@ -79,7 +79,9 @@ struct RoutineRunCardView: View {
     var body: some View {
         let ink = ApprovalInk.of(desktop, accent: Theme.readable(tint))
         VStack(alignment: .leading, spacing: 4) {
-            if form == .card {
+            if form == .problem {
+                problemForm(ink)
+            } else if form == .card {
                 cardForm(ink)
             } else {
                 rowForm(ink)
@@ -90,6 +92,81 @@ struct RoutineRunCardView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text(verbatim: "\(routineName), \(card.stateLabel)"))
         .accessibilityIdentifier("routine-run-message")
+    }
+
+    private var problemFailed: Bool {
+        if card.status == "waiting" || ["needs-input", "limit-reached", "paused"].contains(card.goalStatus ?? "") { return false }
+        return ["failed", "missed"].contains(card.status) || ["failed", "blocked"].contains(card.goalStatus ?? "")
+    }
+
+    private var problemSentence: String {
+        if card.isFailedStreak { return brief }
+        if card.status == "blocked", card.goalStatus == nil { return blockedLine }
+        if card.goalStatus == nil, ["failed", "missed"].contains(card.status) {
+            return ReportBrief.of(card.error ?? card.summary, from: .start)
+        }
+        return brief
+    }
+
+    private var problemLabel: String {
+        if card.stateLabel == String(localized: "Done"),
+           let attention, !attention.items.isEmpty, attention.handledAt == nil {
+            return String(localized: "Needs your input")
+        }
+        return card.stateLabel
+    }
+
+    private func problemContent(_ ink: ApprovalInk) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: problemFailed ? "exclamationmark.circle" : "exclamationmark.triangle")
+                    .foregroundStyle(problemFailed ? ink.danger : Theme.warning)
+                    .accessibilityLabel(Text(verbatim: problemLabel))
+                Text(verbatim: routineName).lineLimit(1)
+                Text(verbatim: "·").accessibilityHidden(true)
+                Text(verbatim: posted).foregroundStyle(ink.tertiary).fixedSize()
+                if openRun != nil { Image(systemName: "chevron.right").foregroundStyle(ink.tertiary).accessibilityHidden(true) }
+            }
+            .font(ink.font(12.5, .medium))
+            .foregroundStyle(ink.secondary)
+            if !problemSentence.isEmpty {
+                Text(verbatim: problemSentence).font(ink.font(13, .regular))
+                    .foregroundStyle(ink.ink).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true).padding(.leading, 14)
+                    .accessibilityIdentifier("routine-run-brief")
+            }
+            let repeatLine = repeatText.hasPrefix(" · ") ? String(repeatText.dropFirst(3)) : repeatText
+            let paused = card.autoPausedAfter.map { RoutineWording.autoPaused($0) } ?? ""
+            if !repeatLine.isEmpty || !paused.isEmpty {
+                Text(verbatim: [repeatLine, paused].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(ink.font(12, .regular)).foregroundStyle(ink.tertiary)
+                    .padding(.leading, 14)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("routine-run-problem-row")
+    }
+
+    private func problemForm(_ ink: ApprovalInk) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let openRun {
+                Button(action: openRun) { problemContent(ink) }.buttonStyle(.plain)
+                    .accessibilityIdentifier("routine-run-open")
+            } else { problemContent(ink) }
+            HStack(spacing: 6) {
+                if let failures = card.autoPausedAfter, failures > 0, let resume {
+                    quietButton(String(localized: "Resume (routine paused after failures)"), id: "routine-run-resume", ink: ink, action: resume)
+                }
+                if live, let stop { quietButton(String(localized: "Stop"), id: "routine-run-stop", ink: ink, action: stop) }
+            }.padding(.leading, 14)
+            if let attention, !attention.items.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(attention.botName) needs you").font(ink.font(12, .medium)).foregroundStyle(ink.secondary)
+                    if attention.handledAt != nil { AttentionItemsView(items: attention.items) }
+                }.padding(.leading, 14)
+            }
+            asked(ink).padding(.leading, 14)
+        }
     }
 
     // MARK: The card

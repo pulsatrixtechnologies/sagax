@@ -132,4 +132,5 @@ ENV HOME=/workspace LANG=C.UTF-8 SAGAX_ENVIRONMENT=user-sandbox
 WORKDIR /workspace
 USER 1000:1000
 LABEL com.pulsatrix.sagax.sandbox.image="1"
-CMD ["sleep", "infinity"]
+# tini as PID 1 reaps the processes commands leave behind (#4463)
+CMD ["tini", "--", "sleep", "infinity"]

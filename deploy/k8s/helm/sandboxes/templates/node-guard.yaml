@@ -64,6 +64,12 @@ spec:
           env:
             - name: POD_INTERFACES
               value: {{ join " " $g.podInterfaces | quote }}
+            # #4463: the kernel key quota per uid (sysctl kernel.keys.*, not
+            # namespaced, not settable through the node pool's OS config).
+            - name: KEYS_MAX
+              value: {{ (($g.keysQuota | default dict).maxKeys | default 0) | int | quote }}
+            - name: KEYS_MAX_BYTES
+              value: {{ (($g.keysQuota | default dict).maxBytes | default 0) | int | quote }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -79,6 +85,11 @@ spec:
                 for i in $POD_INTERFACES; do
                   ipt -C INPUT -i "$i" -j "$chain" 2>/dev/null || ipt -I INPUT 1 -i "$i" -j "$chain"
                 done
+                # #4463: every exec's session keyring counts against the
+                # environment's own uid (200 keys by default on the node);
+                # raised, never lowered.
+                if [ "$KEYS_MAX" -gt 0 ] && [ "$(cat /proc/sys/kernel/keys/maxkeys)" -lt "$KEYS_MAX" ]; then echo "$KEYS_MAX" > /proc/sys/kernel/keys/maxkeys; fi
+                if [ "$KEYS_MAX_BYTES" -gt 0 ] && [ "$(cat /proc/sys/kernel/keys/maxbytes)" -lt "$KEYS_MAX_BYTES" ]; then echo "$KEYS_MAX_BYTES" > /proc/sys/kernel/keys/maxbytes; fi
               }
               build
               echo "sagax-node-guard: pod interfaces ($POD_INTERFACES) cannot open connections to this node"

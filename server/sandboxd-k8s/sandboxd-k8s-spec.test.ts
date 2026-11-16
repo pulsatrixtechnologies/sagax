@@ -446,3 +446,17 @@ describe("quantityToBytes (2026-11-02)", () => {
     expect(quantityToBytes("lots")).toBeNull();
   });
 });
+
+describe("the environment's first process (#4463)", () => {
+  it("starts tini as PID 1 so leftover background processes are reaped and their session keyrings freed", () => {
+    const config = sandboxdConfigFromEnv({ SAGAX_SANDBOX_IMAGE: IMAGE });
+    const docker = sandboxContainerSpec(config, key);
+    const pod = podFromDockerSpec(docker, k8sConfig()).spec as { containers: Array<{ command: string[] }> };
+    for (const command of [docker.Cmd as string[], pod.containers[0]!.command]) {
+      expect(command).not.toEqual(["sleep", "infinity"]);
+      expect(command.join(" ")).toContain("exec tini -- sleep infinity");
+      // an older image without tini still starts
+      expect(command.join(" ")).toContain("exec sleep infinity");
+    }
+  });
+});

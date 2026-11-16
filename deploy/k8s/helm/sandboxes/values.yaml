@@ -309,6 +309,14 @@ nodeGuard:
   # Pod interfaces on the node, as iptables -i patterns. Azure CNI: azv+.
   podInterfaces:
     - azv+
+  # #4463: kernel key quota per uid on the sandbox nodes (kernel.keys.maxkeys,
+  # kernel.keys.maxbytes). Each command's session keyring (70 bytes) counts
+  # against the environment's own uid while any process of that command
+  # lives; the node default (200 keys) stopped every command of an
+  # environment that kept many background processes. 0 leaves the node's value.
+  keysQuota:
+    maxKeys: 20000
+    maxBytes: 2000000
   nodeSelector:
     sagax.io/isolation: dedicated
   tolerations:

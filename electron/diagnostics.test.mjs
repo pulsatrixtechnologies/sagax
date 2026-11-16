@@ -31,6 +31,14 @@ describe("credential env parity with server/config.ts", () => {
   });
 });
 
+describe("redactSecretsInLine key formats", () => {
+  // upstream #5428
+  it("masks a Notion integration token", () => {
+    const token = `${"nt" + "n_"}${"0123456789A"}${"bcdefghijklmnopqrstuvwxyzABCDEFGHIJ"}`;
+    expect(redactSecretsInLine(`notion ${token} connected`)).not.toContain(token);
+  });
+});
+
 describe("buildDiagnosticsReport", () => {
   const appInfo = {
     version: "0.1.27",

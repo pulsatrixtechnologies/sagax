@@ -178,6 +178,18 @@ describe("redactSecretsInText", () => {
     }
   });
 
+  // upstream #5428
+  it("masks Notion integration tokens", () => {
+    // ntn_ plus 46 letters and digits, assembled at runtime like the cases above.
+    const token = `${"nt" + "n_"}${"0123456789A"}${"bcdefghijklmnopqrstuvwxyzABCDEFGHIJ"}`;
+    expect(redactSecretsInText(`notion ${token} connected`)).toBe(`notion «redacted ${token.length} chars» connected`);
+    expect(holdsCredential(`header Notion ${token}`)).toBe(true);
+    for (const ordinary of ["ntn_example", `${"nt" + "n_"}${"a".repeat(39)}`, `example_${"nt" + "n_"}${"a".repeat(46)}`]) {
+      expect(redactSecretsInText(ordinary)).toBe(ordinary);
+      expect(holdsCredential(ordinary)).toBe(false);
+    }
+  });
+
   it("masks SendGrid API keys", () => {
     // SG.<22-char key id>.<43-char secret>, assembled at runtime like the cases above.
     const key = `${"S" + "G."}${"abcdefghij0123456789_-"}.${"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij0123456"}`;

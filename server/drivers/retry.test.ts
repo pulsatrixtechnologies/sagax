@@ -3,6 +3,30 @@ import { describe, expect, it } from "vitest";
 import { BACKOFF_BASE_MS, RETRY_MAX_ATTEMPTS, classifyError, computeBackoff, mayResendTurn } from "./retry.ts";
 
 describe("classifyError", () => {
+  // upstream #5273
+  it.each([
+    [429, "rate_limited"],
+    [500, "server_error"],
+    [502, "server_error"],
+    [503, "server_error"],
+    [504, "server_error"],
+  ])("retries unexpected status %s from both streamed errors and CLI exits", (status, reason) => {
+    const text = `unexpected status ${status}`;
+    expect(classifyError(new Error(text))).toEqual({ transient: true, reason });
+    expect(classifyError({ text })).toEqual({ transient: true, reason });
+    expect(classifyError({ exitCode: 1, stderr: text })).toEqual({ transient: true, reason });
+  });
+
+  it.each([
+    [400, "invalid_request"],
+    [401, "auth"],
+    [403, "auth"],
+    [404, "not_found"],
+    [422, "invalid_request"],
+  ])("keeps unexpected status %s terminal", (status, reason) => {
+    expect(classifyError({ text: `unexpected status ${status}` })).toEqual({ transient: false, reason });
+  });
+
   it("does not retry a content-filter or length cut of a reply", () => {
     expect(classifyError({ text: "The reply was cut by the provider: content filter." })).toEqual({
       transient: false, reason: "provider_cut",

@@ -246,6 +246,7 @@ connectApps.mac.action.mac_reminders_list
 connectApps.mac.action.mac_reminders_list_lists
 connectApps.mac.action.mac_reminders_update
 connectApps.mac.action.mac_reminders_update_list
+connectApps.manage.tab.installed
 connectApps.status.notConnected
 connectApps.subtitle
 connectApps.unavailable.checking

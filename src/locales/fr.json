@@ -12123,6 +12123,7 @@
   "botWizard.recap.tools.appsFor": "Apps à connecter : {apps}",
   "botWizard.recap.tools.appsLater": "Apps connectées plus tard",
   "botWizard.recap.routines.none": "Aucune routine",
+  "connectApps.manage.tab.installed": "Installés",
   "connectApps.manage.tab.discover": "Découvrir",
   "connectApps.manage.tab.pages": "Pages",
   "connectApps.manage.tab.sources": "Sources",

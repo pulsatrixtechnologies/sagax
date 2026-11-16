@@ -11350,7 +11350,6 @@
   "usage.cap.set": "Fixer la limite",
   "usage.cap.invalid": "Saisis un montant d'au moins {min}, comme 25 ou 25,50.",
   "usage.cap.hint": "Compte chaque tour de bot et chaque requête vocale sur cet ordinateur ce mois-ci (la voix est estimée). La limite arrête le prochain tour : un tour déjà en cours peut se terminer et la dépasser. Tu es prévenu à 80 % et à la limite.",
-  "usage.group.plan": "Mon forfait",
   "usage.limits.title": "Limites d'utilisation",
   "usage.limits.figure": "{percent} %",
   "usage.limits.used": "utilisé",

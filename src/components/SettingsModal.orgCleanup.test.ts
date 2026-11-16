@@ -215,7 +215,7 @@ describe("an organization member", () => {
     fixture.section = "usage";
     const html = await render();
     expect(html).toContain('<option value="usage" selected="">Usage</option>');
-    expect(html).toContain('data-settings-card="usage.headline"');
+    expect(html).toContain('data-settings-card="usage.plan"');
     // no shortcut to Perspicax in Usage (2026-11-05)
     expect(html).not.toContain("Open Sagax Business");
     expect(html).not.toContain("data-usage-org-link");

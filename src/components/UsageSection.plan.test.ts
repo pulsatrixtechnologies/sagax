@@ -4,8 +4,8 @@
 // loaded, after a failed read and when no provider answered, so any of those
 // erased it. It is now always drawn under Cost, with the 5-hour session and
 // the week each on their own gauge, for an admin and a member, in an
-// organization and solo. Since #4095 it is the page's Usage limits group,
-// under My plan.
+// organization and solo. Since #4095 it is the page's Usage limits group;
+// since #4445 the first group of the page (My plan is gone).
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -84,17 +84,16 @@ const roles = [
   { name: "admin solo", org: null, config: { viewer: { role: "owner" } } },
 ];
 
-describe("Réglages > Utilisation : Limites d'utilisation, sous Mon forfait", () => {
+describe("Réglages > Utilisation : Limites d'utilisation en tête de page", () => {
   for (const role of roles) {
     it(`${role.name} : Forfait avec la session de 5 heures et la semaine`, async () => {
       scene.org = role.org;
       scene.config = role.config;
       const page = await mount();
       const html = page.innerHTML;
-      const head = html.indexOf('data-settings-card="usage.headline"');
-      const plan = html.indexOf('data-settings-card="usage.plan"');
-      expect(head).toBeGreaterThanOrEqual(0);
-      expect(plan).toBeGreaterThan(head);
+      // #4445: no My plan card above it any more
+      expect(html).not.toContain('data-settings-card="usage.headline"');
+      expect(html.indexOf('data-settings-card="usage.plan"')).toBeGreaterThanOrEqual(0);
       expect(page.querySelector("[data-usage-cycle-cost]")?.textContent).toContain("12,00");
       const card = page.querySelector('[data-settings-card="usage.plan"]')!;
       expect(card.textContent).toContain("Limites d'utilisation");
@@ -164,7 +163,7 @@ describe("Réglages > Utilisation : Limites d'utilisation, sous Mon forfait", ()
 // #4095 review: the page said the month's cost twice (My plan and the head
 // of the bots' usage) and the renewal twice (My plan and under the spending
 // limit). Each is now said once: the cost as the bots' usage large figure,
-// the renewal in My plan.
+// the renewal on the spending limit's row (#4445: My plan is gone).
 describe("Réglages > Utilisation : chaque état dit une seule fois (#4095)", () => {
   it("le coût du mois et le renouvellement n'apparaissent qu'une fois, limite de dépenses comprise", async () => {
     scene.org = null;
@@ -175,8 +174,8 @@ describe("Réglages > Utilisation : chaque état dit une seule fois (#4095)", ()
     expect(page.querySelectorAll("[data-usage-cost], [data-usage-cycle-cost]")).toHaveLength(1);
     const text = page.textContent ?? "";
     expect(text.match(/Se renouvelle le 1er/g)).toHaveLength(1);
-    const plan = page.querySelector('[data-settings-card="usage.headline"]')!;
-    expect(plan.textContent).toContain("Se renouvelle le 1er");
-    expect(plan.textContent).not.toContain("12,00");
+    expect(page.querySelector('[data-settings-card="usage.headline"]')).toBeNull();
+    const cap = page.querySelector('[data-settings-row="cap-state"]')!;
+    expect(cap.textContent).toContain("Se renouvelle le 1er");
   });
 });

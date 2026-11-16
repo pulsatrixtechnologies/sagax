@@ -27,9 +27,9 @@ describe("Settings placement (the owner 2026-11-08)", () => {
     expect(src).toMatch(/editing \? PRIMARY_PILL : PILL, "ml-auto"/);
   });
 
-  it("the Usage headline uses the Settings type scale", () => {
+  it("the Usage page's status lines use the Settings type scale", () => {
     const src = read("../UsageSection.tsx");
-    expect(src).toContain("text-[13px] font-normal leading-[18px] tabular-nums text-ink");
+    expect(src).toContain("text-[13px] text-ink-secondary");
   });
 
   it("search finds the moved options on Developer, not on their old pages", () => {

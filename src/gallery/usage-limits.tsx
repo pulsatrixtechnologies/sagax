@@ -1,12 +1,13 @@
-/** Isolated gallery for headless screenshots of Settings > Usage (#4418): My
- * plan, Usage limits (the spending limit, then one line per signed-in
- * account with its short window and its week) and the bots' usage beside it.
+/** Isolated gallery for headless screenshots of Settings > Usage (#4418,
+ * #4445): Usage limits (the spending limit, then one slim row per signed-in
+ * account with its short window and its week) and the bots' usage below it.
  * Mocked accounts only: a signed-out provider and an API key are in the
  * report and must draw nothing. No server. Not shipped in the app.
- * ?skin=<id>&lang=<code>&accounts=<1|3|6> */
+ * ?skin=<id>&lang=<code>&accounts=<1|3|6>&failed=1 (one account whose read
+ * failed)&width=<px> (375: phone width) */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { SpendCapRow, UsageBreakdown, UsagePlan, type PersonalUsage } from "../components/UsageSection";
+import { SpendCapRow, UsageBreakdown, type PersonalUsage } from "../components/UsageSection";
 import { PlanUsageView } from "../components/PlanUsage";
 import type { PlanProvider, PlanUsageReport, PlanWindow } from "../lib/plan-usage";
 import type { PersonalUsageSummary } from "../lib/usage-personal";
@@ -38,10 +39,16 @@ const ALL: PlanProvider[] = [
   account("lab", "Lab", "claude", "max_5x", open(63, 5, 5), open(71, 60)),
 ];
 const count = Math.min(6, Math.max(1, Number(params.get("accounts") ?? 3) || 3));
+const FAILED: PlanProvider = {
+  id: "backup", name: "Backup", driver: "codex", plan: "plus", ok: false, error: "Could not reach Codex: rate limited (429), try again in a minute", state: "error",
+  access: "subscription", instanceId: "backup", failure: { kind: "http", status: 429 }, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [],
+};
+const width = Number(params.get("width")) || 680;
 const report: PlanUsageReport = {
   fetchedAt: iso(NOW),
   providers: [
     ...ALL.slice(0, count),
+    ...(params.get("failed") === "1" ? [FAILED] : []),
     // must draw nothing on Usage (#4418): connecting and keys live in Providers
     { id: "grok-2", name: "Grok", driver: "grok", plan: null, ok: false, error: "Not signed in", state: "signed-out", access: "subscription", instanceId: "grok-2", failure: null, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [] },
     { id: "claudeApi", name: "Claude (API key)", driver: "claude", plan: null, ok: true, error: null, state: "no-windows", access: "api-key", instanceId: "claudeApi", failure: null, fiveHour: CLOSED, weekly: CLOSED, extra: [], models: [] },
@@ -65,11 +72,10 @@ const cap = { supported: true, minUsd: 1, cap: { month: "2026-11", monthlyUsd: 6
 
 function Gallery() {
   return (
-    <div className="min-h-screen bg-app p-8 text-ink">
-      <div data-gallery-sample="usage" className="w-[680px]">
+    <div className={width < 500 ? "min-h-screen bg-app px-4 py-8 text-ink" : "min-h-screen bg-app p-8 text-ink"}>
+      <div data-gallery-sample="usage" style={{ width }}>
         <div className="flex min-w-0 flex-col gap-6">
-          <UsagePlan usage={usage} error={null} hasPlan now={NOW} />
-          <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} favorite={{ id: "claude", onToggle: () => {} }} leading={<SpendCapRow data={cap} />} />
+          <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} favorite={{ id: "claude", onToggle: () => {} }} leading={<SpendCapRow data={cap} now={NOW} />} />
           <UsageBreakdown usage={usage} />
         </div>
       </div>

@@ -61,14 +61,11 @@ struct QuestionCardView: View {
         return id.isEmpty ? option.label : id
     }
 
-    /// An open "Other" field with nothing in it is not an answer.
     private func answers(for position: Int) -> [String] {
-        var chosen = Array(picked[position] ?? []).sorted()
-        if other.contains(position) {
-            let typed = (custom[position] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !typed.isEmpty { chosen.append(typed) }
-        }
-        return chosen
+        AskQuestionAnswer.answers(
+            for: questions[position], picked: picked[position] ?? [],
+            otherOpen: other.contains(position), typed: custom[position] ?? ""
+        )
     }
 
     private func isAnswered(_ position: Int) -> Bool { !answers(for: position).isEmpty }
@@ -169,8 +166,10 @@ struct QuestionCardView: View {
                     placeholder: current.options.isEmpty ? "Type your answer" : "Type your own answer",
                     text: binding(forCustom: index),
                     focus: $otherFocused,
-                    canSend: complete && !answering,
-                    send: send
+                    // #4468: this question's own answer sends as soon as it
+                    // holds text; in a set still owing answers it moves on
+                    canSend: !(custom[index] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !answering,
+                    send: fieldSend
                 )
             }
             if !oneTap && (current.allowsMultiple || !single) {
@@ -303,6 +302,17 @@ struct QuestionCardView: View {
         other.insert(index)
         if !question.allowsMultiple { picked[index] = [] }
         otherFocused = true
+    }
+
+    /// #4468: Return or the arrow on an answer in words: the set goes when
+    /// every question is answered, else the next question owed comes up,
+    /// the way a pick moves on.
+    private func fieldSend() {
+        guard !settled, !answering else { return }
+        if complete { send(); return }
+        if let next = questions.indices.first(where: { $0 != index && !isAnswered($0) }) {
+            active = next
+        }
     }
 
     /// #3471: skipped without an answer: folded at once, the bot told.

@@ -276,6 +276,19 @@ export function QuestionCard({
     if (complete) send(drafts);
   };
 
+  // #4468: an answer in words is this question's answer, so its field sends
+  // as soon as it holds text. In a set still owing answers, Enter and the
+  // arrow move on to the next one owed, the way a pick does; the last sends.
+  const typed = draft.custom.trim().length > 0;
+  const fieldSend = () => {
+    setFailed(false);
+    if (complete) { send(drafts); return; }
+    const next = questions.findIndex((_, index) => index !== currentIndex && !answered[index]);
+    if (next < 0) return;
+    setActive(next);
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-question-field="${message.id}"]`)?.focus());
+  };
+
   function send(final: Record<number, Draft>) {
     if (settled || !card?.requestId) return;
     const answers = questions.map((question, index) => answersOf(final[index] ?? initialDraft(question)));
@@ -425,10 +438,10 @@ export function QuestionCard({
           maxLength={MAX_CUSTOM_ANSWER}
           ariaLabel={current.options.length ? t("question.otherPlaceholder") : current.question}
           placeholder={current.options.length ? t("question.otherPlaceholder") : t("question.answerPlaceholder")}
-          canSend={complete}
-          sendLabel={single ? t("question.submit") : t("question.submitAll")}
+          canSend={typed}
+          sendLabel={single ? t("question.submit") : complete ? t("question.submitAll") : t("question.next")}
           onChange={type}
-          onSend={submit}
+          onSend={fieldSend}
           className={cn(current.options.length > 0 && "mt-2")}
           fieldId={message.id}
         />

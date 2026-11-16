@@ -5583,6 +5583,7 @@
   "question.status.waiting": "Waiting for your answer",
   "question.submit": "Submit answer",
   "question.submitAll": "Submit answers",
+  "question.next": "Next question",
   "pageTarget.question": "Where should I publish this?",
   "pageTarget.alwaysUse": "Always use this choice",
   "pageTarget.sagax_page.name": "Sagax page",

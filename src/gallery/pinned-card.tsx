@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of the card pinned over the
  * composer with what the bot waits on (#3214). Not shipped in the app.
- * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered&width=1440|390
+ * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|approval-only|org-approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered&width=1440|390
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -11,6 +11,8 @@ import { usePinnedWaiting } from "../components/Composer.tsx-parts/PinnedWaiting
 import type { ServedWaitingItem } from "../../shared/waiting-items";
 import type { Pending } from "../components/PendingApproval";
 import { QuestionCard } from "../components/QuestionCard";
+import { ApprovalCard } from "../components/ApprovalCard";
+import { RelayProvenance } from "../components/RelayViaLabel";
 import { CHAT_BUBBLE_WIDTH_CLASS } from "../lib/chat-bubble-width";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -138,7 +140,24 @@ const fixCard = (id: string, question: string): Message => {
 const fixBefore = fixCard("fb", `${fixLead}\n\n${fixReason.join(" ")}`);
 const fixAfter = fixCard("fa", `${fixLead} ${fixReason[0]}`);
 
-const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message }> = {
+// #4451: an organization approval in an admin's chat with their Primary Bot:
+// the same card as an ordinary approval, named by the asking bot and its person
+const nimbus = { id: "bot-nimbus", name: "Nimbus", color: "teal", threadId: "thread-member", messages: [], tasks: [] } as unknown as Bot;
+const ORG_COMMAND = "systemctl restart backup-agent";
+const orgMessage = {
+  id: "org1", role: "bot", kind: "options", at: 5, text: "", from: { botId: nimbus.id, name: nimbus.name, color: "teal" },
+  relayVia: "organization", relayAsk: { text: "", by: nimbus.name, botId: nimbus.id, for: "Erin" },
+  card: {
+    requestId: "admin:src1", tool: "Bash", title: "Approval needed", subtitle: ORG_COMMAND, toolInput: JSON.stringify({ command: ORG_COMMAND }), options: ["Allow", "Deny"], requestType: "permission", adminApproval: true,
+    ownerRule: { tool: "Bash", scope: { command: ORG_COMMAND }, description: fr ? `Rouler « ${ORG_COMMAND} » sur le serveur de l'organisation` : `Run "${ORG_COMMAND}" on the organization's server`, from: "admin" },
+    approvalOrigin: { threadId: "thread-member", messageId: "src1", requestId: "req-src1", admin: true },
+  },
+} as unknown as Message;
+const orgApproval: Pending = { message: orgMessage, requestId: "admin:src1", tool: "Bash", detail: ORG_COMMAND, threadId: "thread-member", askedBy: nimbus.name };
+
+const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message; org?: boolean }> = {
+  "approval-only": { approvals: [approval], questions: [] },
+  "org-approval": { approvals: [orgApproval], questions: [], org: true },
   "room-keyed": { approvals: [], questions: [roomOpen], room: true, inline: roomOpen },
   "room-keyed-other": { approvals: [], questions: [], room: true, inline: roomOpen },
   "room-answered": { approvals: [], questions: [], room: true, inline: roomAnswered },
@@ -175,12 +194,16 @@ function Gallery() {
     <div data-shot="chat" className="flex flex-col bg-canvas text-ink" style={{ width, minHeight: narrow ? 640 : 560 }}>
       <div className={`mx-auto flex w-full flex-1 flex-col justify-end gap-3 ${narrow ? "px-3 pt-4" : "max-w-[760px] px-6 pt-6"}`}>
         <Bubble>{fr ? "Orla : j'ai préparé la migration, il reste une décision avant de lancer." : "Orla: the migration is ready, one decision is left before I start."}</Bubble>
-        <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="thread-main" bot={chosen.room ? { id: quasar.id, name: quasar.name } : { id: bot.id, name: bot.name }} message={chosen.inline ?? q1} /></div>
+        {chosen.org ? (
+          <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><RelayProvenance message={orgMessage} bots={[bot]} self={bot} /><ApprovalCard bot={{ name: bot.name }} message={orgMessage} /></div>
+        ) : which === "approval-only" ? (
+          <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><ApprovalCard bot={{ name: bot.name }} message={approvalMessage} /></div>
+        ) : <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="thread-main" bot={chosen.room ? { id: quasar.id, name: quasar.name } : { id: bot.id, name: bot.name }} message={chosen.inline ?? q1} /></div>}
         {chosen.questions.length > 1 && !chosen.inline && <Bubble>{fr ? "Orla : et pour la suite de la semaine, trois projets attendent." : "Orla: and for the rest of the week, three projects wait."}</Bubble>}
         <div className="h-16" />
       </div>
       <div data-composer-dock className={`mx-auto w-full ${narrow ? "px-3 pb-3" : "max-w-[760px] px-6 pb-6"}`}>
-        <ComposerPendingStrip bot={chosen.room ? undefined : bot} pinned={pinned} threadId="thread-main" storeBots={chosen.room ? [bot, quasar] : [bot]} approvalBotFor={() => (chosen.room ? quasar : bot)} onCancelTurn={() => window.__decisions.push({ type: "cancelTurn" })} />
+        <ComposerPendingStrip bot={chosen.room ? undefined : bot} pinned={pinned} threadId="thread-main" storeBots={chosen.room ? [bot, quasar] : [bot]} approvalBotFor={(pending) => (chosen.room ? quasar : pending.message.card?.approvalOrigin?.admin ? undefined : bot)} onCancelTurn={() => window.__decisions.push({ type: "cancelTurn" })} />
         <div className="rounded-2xl border border-hairline bg-card px-4 py-3 text-[14px] text-ink-secondary">
           {pinned.current?.kind === "question" ? t("composer.placeholder.question") : t("composer.placeholder.approval")}
         </div>

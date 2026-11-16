@@ -35,6 +35,12 @@ describe("RelayViaLabel (#2901)", () => {
     expect(html).not.toContain("chat.askLine");
   });
 
+  it("names the bot and the person of an organization approval in an admin's chat (#4451)", () => {
+    const html = renderToStaticMarkup(createElement(RelayViaLabel, { message: { relayVia: "organization", relayAsk: { text: "", by: "Nimbus", botId: "n", for: "Erin" } } }));
+    expect(html).toContain('data-relay-via="organization"');
+    expect(html.replace(/<[^>]+>/g, " ")).toMatch(/Organization approval · Nimbus for Erin/);
+  });
+
   it("renders nothing for the person's own conversation", () => {
     expect(renderToStaticMarkup(createElement(RelayViaLabel, { message: {} }))).toBe("");
   });

@@ -1838,7 +1838,8 @@ import { createApprovalModeStepUpGate } from "./index-leaves/approvalModeStepUpG
 import { createScrubConfidentialThreads } from "./index-leaves/scrubConfidentialThreads.ts";
 import { createRunningTurnLevels } from "./index-leaves/runningTurnLevels.ts";
 import { createRouteThreadIdUnguarded } from "./index-leaves/routeThreadIdUnguarded.ts";
-import { createPendingAdminApprovals } from "./index-leaves/pendingAdminApprovals.ts";
+import { createAdminApprovalEntries, createPendingAdminApprovals } from "./index-leaves/pendingAdminApprovals.ts";
+import { createAdminApprovalViews } from "./approvals/admin-approval-views.ts";
 import { createPackageImportDeps } from "./index-leaves/packageImportDeps.ts";
 import { createNotifyRoomMentions } from "./index-leaves/notifyRoomMentions.ts";
 import { createMintInternalCapability } from "./index-leaves/mintInternalCapability.ts";
@@ -4191,6 +4192,7 @@ bindLeafHost({
   get createPeerSpeaker() { return createPeerSpeaker; },
   get createPeerThreadFor() { return createPeerThreadFor; },
   get createPendingAdminApprovals() { return createPendingAdminApprovals; },
+  get createAdminApprovalEntries() { return createAdminApprovalEntries; },
   get createPendingApprovalCards() { return createPendingApprovalCards; },
   get createPendingApprovalsFor() { return createPendingApprovalsFor; },
   get createPendingExpireDaysForPerson() { return createPendingExpireDaysForPerson; },
@@ -6513,6 +6515,10 @@ bindLeafHost({
   get EXEC_USE_BOT_COMPUTER() { return EXEC_USE_BOT_COMPUTER; },
   get pendingApprovalCards() { return pendingApprovalCards; },
   get pendingAdminApprovals() { return pendingAdminApprovals; },
+  get adminApprovalEntries() { return adminApprovalEntries; },
+  get adminApprovalViews() { return adminApprovalViews; },
+  get adminApprovalHomeBot() { return adminApprovalHomeBot; },
+  get orgAdminPrincipals() { return orgAdminPrincipals; },
   get orgAdminNames() { return orgAdminNames; },
   get adminApprovalsAnnounce() { return adminApprovalsAnnounce; }, set adminApprovalsAnnounce(value) { adminApprovalsAnnounce = value; },
   get announcedAdminApprovals() { return announcedAdminApprovals; }, set announcedAdminApprovals(value) { announcedAdminApprovals = value; },
@@ -7795,6 +7801,7 @@ const viewerForApproval = createViewerForApproval(getLeafHost);
 const approvalAnswerRefusal = createApprovalAnswerRefusal(getLeafHost);
 const adminApprovalCheck = createAdminApprovalCheck(getLeafHost);
 const pendingApprovalCards = createPendingApprovalCards(getLeafHost);
+const adminApprovalEntries = createAdminApprovalEntries(getLeafHost);
 const pendingAdminApprovals = createPendingAdminApprovals(getLeafHost);
 const orgAdminNames = createOrgAdminNames(getLeafHost);
 const scheduleAdminApprovalsAnnounce = createScheduleAdminApprovalsAnnounce(getLeafHost);
@@ -14886,6 +14893,38 @@ store.onChange((change) => {
   }
 });
 originApprovals.subscribe();
+/** #4451: each waiting organization approval as a card in every admin's
+ * conversation with their Primary Bot (server/approvals/admin-approval-views.ts),
+ * reconciled with the Settings > Organization list on each of its changes. */
+const adminApprovalViews = createAdminApprovalViews({
+  store,
+  enabled: () => IDENTITY.kind === "perspicax",
+  sources: () => (adminApprovalEntries() as Array<{ message: Message; row: { threadId: string; botId: string; botName: string; ownerName?: string; requestedBy?: string } }>)
+    .map(({ message, row }) => ({ threadId: row.threadId, message, botId: row.botId, botName: row.botName, personName: row.requestedBy ?? row.ownerName })),
+  openRows: () => openRequestCardRows(),
+  message: (threadId, messageId) => store.messagesFor(threadId).find((row) => row.id === messageId),
+  admins: () => orgAdminPrincipals(),
+  home: (principalId, start) => primaryBotPlace(principalId, start)?.threadId ?? null,
+  speaker: (threadId, message) => {
+    const bot = botForApproval(threadId, message);
+    return bot ? { botId: bot.id, name: bot.name, color: bot.color } : undefined;
+  },
+  withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId),
+  onAdminsChanged: (listener) => principals.onRoleChanged(() => listener()),
+});
+store.onChange((change) => { if (change.type === "thread.deleted") adminApprovalViews.schedule(); });
+// after the restart pass closed what no longer waits
+setTimeout(() => adminApprovalViews.schedule(), 2_000).unref?.();
+/** #4451: an organization admin's Primary Bot, where their approval cards
+ * wait: the target of the `org.approvals` notification on their stream. */
+function adminApprovalHomeBot(principalId: string): string | undefined {
+  return primaryBotPlace(principalId, false)?.botId;
+}
+/** #4451: the organization admins' principal ids (active, signed in with Perspicax). */
+function orgAdminPrincipals(): string[] {
+  if (IDENTITY.kind !== "perspicax") return [];
+  return principals.list().filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined).map((person) => person.id);
+}
 
 // ── message pages ──────────────────────────────────────────────────────
 // GET /api/bots hands back every bot with its entire transcript, which is
@@ -25087,7 +25126,7 @@ const inboundTelephony = createBotInboundTelephonyRoute({
 // `perspicax` triggers that are the person's.
 /** The person's Primary Bot (else their first visible bot), and its
  * conversation with them; `start` opens it when there is none. */
-function productFixPlace(principalId: string, start: boolean): (ProductFixPlace & { bot: BotRecord }) | null {
+function primaryBotPlace(principalId: string, start: boolean): (ProductFixPlace & { bot: BotRecord }) | null {
   const owner = principalId.trim().toLowerCase();
   const bot = store.primaryBotOf(owner) ?? store.bots.find((candidate) => !candidate.hidden && effectiveBotOwner(candidate) === owner);
   if (!bot || bot.hidden) return null;
@@ -25096,7 +25135,7 @@ function productFixPlace(principalId: string, start: boolean): (ProductFixPlace 
   return threadId ? { bot, botId: bot.id, threadId } : null;
 }
 const productFixCards = new ProductFixCards({
-  place: (principalId, start) => productFixPlace(principalId, start),
+  place: (principalId, start) => primaryBotPlace(principalId, start),
   pending: (place, key) => {
     const bot = store.bot(place.botId);
     return Boolean(bot && askKeyIndex.find(key, askKeyScope(bot, place.threadId, place.threadId)));

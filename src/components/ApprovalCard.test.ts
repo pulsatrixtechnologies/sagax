@@ -789,9 +789,9 @@ describe("ApprovalCard rule proposals (propose_rule)", () => {
 describe("a card waiting for an organization admin (2026-10-08)", () => {
   it("says what happens next and names the admins when known", () => {
     expect(adminWillAnswerLine(["Alice", "Owner"])).toBe(
-      "An admin (Alice, Owner) sees it in Settings > Organization. Your bot continues as soon as it is approved, or skips this step if it is denied.",
+      "An admin (Alice, Owner) gets it as a card in the chat of their Primary Bot. Your bot continues as soon as it is approved, or skips this step if it is denied.",
     );
-    expect(adminWillAnswerLine([" "])).toContain("The organization's admins see it in Settings > Organization.");
+    expect(adminWillAnswerLine([" "])).toContain("The organization's admins get it as a card in the chat of their Primary Bot.");
     expect(adminWillAnswerLine(undefined)).toContain("The organization's admins");
   });
   it("shows the member's waiting card with that line, and what happens next", () => {
@@ -802,7 +802,18 @@ describe("a card waiting for an organization admin (2026-10-08)", () => {
     const html = renderToStaticMarkup(createElement(ApprovalCard, { bot: { name: "Sprout" }, message }));
     expect(html).toContain("This command runs on the organization&#x27;s server: waiting for an admin to approve it.");
     expect(html).toContain("On the bot&#x27;s own computer (its server environment, Local VM or cloud computer) it needs no admin.");
-    expect(html).toContain("An admin (Alice) sees it in Settings &gt; Organization.");
+    expect(html).toContain("An admin (Alice) gets it as a card in the chat of their Primary Bot.");
+  });
+  it("is the admin's own card in their Primary Bot: no waiting line (#4451)", () => {
+    const message = {
+      id: "m-view", role: "bot", kind: "options", at: 1,
+      card: { title: "Approval needed", subtitle: "agents__vm_exec", options: ["Allow", "Deny"], requestId: "admin:m-admin", requestType: "permission", tool: "other", adminApproval: true,
+        approvalOrigin: { threadId: "t-member", messageId: "m-admin", requestId: "r-admin", admin: true } },
+    } as unknown as Message;
+    const html = renderToStaticMarkup(createElement(ApprovalCard, { bot: { name: "Sprout" }, message }));
+    expect(html).toContain('data-approval-waiting="admin:m-admin"');
+    expect(html).not.toContain("waiting for an admin");
+    expect(html).not.toContain("Primary Bot");
   });
   it("tells the admin whose request it is", () => {
     expect(approvalWho({ botName: "Sprout", requestedBy: "Erin", ownerName: "Erin" })).toBe("Sprout, asked by Erin");

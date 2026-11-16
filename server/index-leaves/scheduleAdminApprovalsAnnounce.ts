@@ -9,6 +9,8 @@ function scheduleAdminApprovalsAnnounce() {
   if (host.IDENTITY.kind !== "perspicax" || host.adminApprovalsAnnounce) return;
   host.adminApprovalsAnnounce = setTimeout(() => {
     host.adminApprovalsAnnounce = null;
+    // #4451: the admins' Primary Bot cards follow the same list
+    host.adminApprovalViews?.reconcile();
     const pending = host.pendingAdminApprovals();
     const keys = new Set(pending.map((entry) => `${entry.threadId}:${entry.requestId}`));
     const added = pending.filter((entry) => !host.announcedAdminApprovals.has(`${entry.threadId}:${entry.requestId}`));

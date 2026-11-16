@@ -6,10 +6,10 @@ export function createOrgAdminNames(getHost: () => Host): any {
 function orgAdminNames() {
   const host = getHost();
 
-  if (host.IDENTITY.kind !== "perspicax") return [];
-  return host.principals.list()
-    .filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined)
-    .map((person) => (person.name || person.login || "").trim())
+  // #4451: the same admins whose Primary Bot gets the approval cards
+  return host.orgAdminPrincipals()
+    .map((id) => host.principals.byId(id))
+    .map((person) => (person?.name || person?.login || "").trim())
     .filter(Boolean)
     .slice(0, 5);
 

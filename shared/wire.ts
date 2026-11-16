@@ -83,7 +83,8 @@ import type { SendReceipt } from "./send-receipt.ts";
 export type { LiveClient, LiveCallStatus, LiveEndReason, LiveCallState, LiveCallRecord, LiveSettings } from "./wire-live.ts";
 
 /** A role fact as a banner row (visible roles, 2026-11-05). */
-export type RelayVia = "mcp" | "routine" | "proactive" | "teammate";
+/** #4451: "organization": an organization approval in an admin's chat. */
+export type RelayVia = "mcp" | "routine" | "proactive" | "teammate" | "organization";
 /** #2915: why a background turn left nothing to copy. */
 export type RelayTrace = "failed" | "stopped" | "silent";
 /** #2915: the request a mirrored background reply answers. */
@@ -94,6 +95,8 @@ export interface RelayAsk {
   by?: string;
   /** #3289: the teammate bot that asked, so the chat draws its face. */
   botId?: string;
+  /** #4451: the person an organization approval is for. */
+  for?: string;
 }
 
 export interface RoleNotice {
@@ -1387,7 +1390,9 @@ export function nextOpenThread<T extends OpenThreadCandidate>(tasks: readonly T[
 export interface OptionCardData extends WaitCardField {
   /** Server-linked view of a teammate's card in the human initiating chat.
    * Answers resolve to this original message before any permission checks. */
-  approvalOrigin?: { threadId: string; messageId: string; requestId: string; allowKey?: string };
+  approvalOrigin?: { threadId: string; messageId: string; requestId: string; allowKey?: string;
+    /** #4451: an organization admin's view (server/approvals/admin-approval-views.ts). */
+    admin?: true };
   /** Original card's durable backlink. Its copy is never another decision. */
   approvalDestination?: { threadId: string; messageId: string };
   /** calls: one per outbound call the card covers, in subtitle order. Absent
@@ -1977,7 +1982,9 @@ export type ServerFrame =
   | { kind: "person.avatar"; principalId: string; avatarUrl: string | null }
   /** Organization server (2026-10-08), admins' streams only: how many
    * approvals wait for an organization admin, and the ones that just arrived. */
-  | { kind: "org.approvals"; count: number; added: Array<{ requestId: string; botName: string; ownerName?: string; requestedBy?: string; tool?: string; summary?: string }> }
+  | { kind: "org.approvals"; count: number; added: Array<{ requestId: string; botName: string; ownerName?: string; requestedBy?: string; tool?: string; summary?: string }>;
+    /** #4451: the admin's own Primary Bot, where the cards wait (set per stream). */
+    home?: { botId: string } }
   /** People whose presence changed (shared/presence.ts). The organization's
    * people only; with `audience`, that person's own real state (`hidden`
    * when others see them offline), to their streams only. */

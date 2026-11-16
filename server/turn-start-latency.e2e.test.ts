@@ -25,7 +25,7 @@ type Fixture = {
   release: () => void;
 };
 
-async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number; toolMs?: number; connectMcp?: boolean; idleExitMs?: number }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
+async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: boolean; coldMs?: number; toolMs?: number; connectMcp?: boolean; idleExitMs?: number; serverEnv?: Record<string, string> }, check: (fixture: Fixture) => Promise<void>): Promise<void> {
   const fixture = await launchVerificationServer();
   const { dataDir, url, logPath } = fixture.info;
   let server: ChildProcess | undefined;
@@ -68,7 +68,7 @@ async function withLatencyFixture(options: { claudeSignedOut?: boolean; busy?: b
     const log = openSync(logPath, "a", 0o600);
     server = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))], {
       cwd: fileURLToPath(new URL("..", import.meta.url)),
-      env: { ...verificationServerEnvironment({}, dataDir, Number(new URL(url).port)), SAGAX_ACP_REUSE_DIAG: "1", ...(process.env.SAGAX_TURN_TRACE === "1" ? { SAGAX_TURN_TRACE: "1" } : {}) },
+      env: { ...verificationServerEnvironment({}, dataDir, Number(new URL(url).port)), SAGAX_ACP_REUSE_DIAG: "1", ...options.serverEnv, ...(process.env.SAGAX_TURN_TRACE === "1" ? { SAGAX_TURN_TRACE: "1" } : {}) },
       stdio: ["ignore", log, log],
     });
     closeSync(log);
@@ -314,6 +314,42 @@ it("names the end of an engine that exited between two turns in the next spawn's
     expect(/ spawnWhy=(\S+)/.exec(lines[1]!)?.[1]).toMatch(/^exited:0$/);
     // the new process loads the conversation's own session: only the
     // request and what changed ride, not a second opening block
+    expect(/full=(\w+)/.exec(lines[1]!)?.[1]).toBe("no");
+  });
+}, 180_000);
+
+// #4394: on a hosted server the three conversations that had a second turn
+// all started a new engine for it, spawnWhy=closed:warm-budget, while the
+// server kept 0 to 2 idle engines of a capacity of 16. The shared warm
+// budget (server/resources/warm-resources.ts) charges an idle engine its
+// process tree's memory against 1 GiB per person: a grok tree fills most of
+// it, so the next conversation of the same person to finish (another bot,
+// a teammate, an AI client's ask) closed the engine the person had just used.
+// Here one engine fits the person's cap (a cap of 300 MiB against a 256 MiB
+// engine, the same ratio), and a second conversation of the same person
+// finishes between the two turns of the first.
+it("keeps the engine a conversation just used for its follow-up when another conversation of the person finishes (#4394)", async () => {
+  await withLatencyFixture({ serverEnv: { SAGAX_WARM_PERSON_MAX_BYTES: String(300 * 1024 * 1024), SAGAX_MAX_IDLE_ENGINE_SESSIONS: "16" } }, async (fixture) => {
+    const bots = [];
+    for (const name of ["Arithmetic bot", "Other bot"]) {
+      const { bot } = await fixture.control("new-bot", "--name", name);
+      await fixture.api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "grokfixture", model: "grok-4.7" } });
+      bots.push(bot);
+    }
+    const [first, other] = bots;
+    const turn = async (bot: any, text: string) => {
+      await fixture.control("send", "--bot", bot.id, "--task", bot.activeTaskId, "--text", text);
+      expect((await fixture.control("wait", "--bot", bot.id, "--task", bot.activeTaskId, "--timeout", "40")).status).toBe("settled");
+    };
+    await turn(first, "What is 2 plus 2?");
+    await turn(other, "What is 5 plus 5?");
+    await turn(first, "And 3 plus 3?");
+    const lines = timingLines(fixture.serverLog(), first.activeTaskId);
+    console.info(`[#4394] warm-budget timing lines:\n${lines.join("\n")}\n${timingLines(fixture.serverLog(), other.activeTaskId).join("\n")}`);
+    expect(lines).toHaveLength(2);
+    expect(fixture.serverLog()).not.toContain("closeSession thread=" + first.activeTaskId.slice(0, 8) + " why=warm budget");
+    expect(/path=(\w+)/.exec(lines[1]!)?.[1]).not.toBe("spawn");
+    expect(lines[1]).not.toContain("spawnWhy=");
     expect(/full=(\w+)/.exec(lines[1]!)?.[1]).toBe("no");
   });
 }, 180_000);

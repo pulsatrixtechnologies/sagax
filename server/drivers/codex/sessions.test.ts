@@ -64,6 +64,8 @@ describe("Codex retained app-server", () => {
 
   it("evicts a retained process at the shared cap, then resumes its next turn cold", async () => {
     vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+    // the caps\' mechanics: no follow-up window (#4394)
+    vi.stubEnv("SAGAX_WARM_FOLLOW_UP_MS", "0");
     await create(); await send({ principalId: "osprey" }); const firstPid = seen().pid;
     await send({ threadId: "thread-wren", principalId: "wren" });
     await warmResources.settled(); expect(alive(firstPid)).toBe(false);
@@ -73,6 +75,8 @@ describe("Codex retained app-server", () => {
 
   it("protects an active principal while another principal returns idle above the cap", async () => {
     vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+    // the caps\' mechanics: no follow-up window (#4394)
+    vi.stubEnv("SAGAX_WARM_FOLLOW_UP_MS", "0");
     await create({ FAKE_CODEX_MODE: "approval" });
     const first = await instance.adapter.sendTurn({ threadId: "thread-active", principalId: "osprey", text: "Fixture", model: "fixture-model", cwd: scratch });
     await events.until(e => e.type === "request.opened" && e.turnId === first.turnId); const activePid = seen().pid;

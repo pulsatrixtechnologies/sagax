@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { MiB, WarmResourceBudget, warmResourceLimits, warmResourcePerson, type WarmResourceLimits, type WarmResourceLease } from "./warm-resources.ts";
+import { FOLLOW_UP_MS, MiB, WarmResourceBudget, warmResourceLimits, warmResourcePerson, type WarmResourceLimits, type WarmResourceLease } from "./warm-resources.ts";
 
-const limits = (extra: Partial<WarmResourceLimits> = {}): WarmResourceLimits => ({ count: 100, bytes: 1000, personCount: 100, personBytes: 1000, ...extra });
+const limits = (extra: Partial<WarmResourceLimits> = {}): WarmResourceLimits => ({ count: 100, bytes: 1000, personCount: 100, personBytes: 1000, followUpMs: 0, ...extra });
 function fixture(extra: Partial<WarmResourceLimits> = {}) {
   const budget = new WarmResourceBudget({ limits: limits(extra), intervalMs: 0 });
   const closed: string[] = [], leases: WarmResourceLease[] = [];
@@ -97,6 +97,26 @@ describe("shared warm resource budget", () => {
     expect(f.closed).toEqual([]);
     expect(conversation.active()).toBe(true); f.cleanup();
   });
+  it("keeps the engine a conversation just used through its follow-up window, then applies the caps (#4394)", async () => {
+    // production: one grok process tree fills most of a person's 1 GiB; the
+    // person's next conversation to finish used to close the one just used
+    let now = 1_000_000;
+    const budget = new WarmResourceBudget({ limits: limits({ personBytes: 1024, followUpMs: undefined }), intervalMs: 0, now: () => now, sample: async () => [] });
+    const closed: string[] = [];
+    const add = (id: string) => { const lease = budget.register({ person: "osprey", kind: "acp", bytes: 700, evict: () => { closed.push(id); } }); lease.idle(); return lease; };
+    const conversation = add("conversation");
+    now += 30_000; add("other-conversation"); await budget.settled();
+    expect(closed).toEqual([]);
+    expect(conversation.active()).toBe(true); conversation.idle();
+    // past the window, the next sample reclaims the person's idle LRU as before
+    now += FOLLOW_UP_MS + 1; await budget.refresh(); await budget.settled();
+    expect(closed).toEqual(["other-conversation"]);
+    expect(budget.stats()).toMatchObject({ idle: 1, personEvictions: 1 });
+  });
+  it("retains nothing through the follow-up window when a cap is zero (#4394)", async () => {
+    const f = fixture({ personCount: 0, followUpMs: FOLLOW_UP_MS });
+    f.add("one"); await f.budget.settled(); expect(f.closed).toEqual(["one"]); f.cleanup();
+  });
   it("updates growing process trees and deduplicates concurrent samples", async () => {
     const sample = vi.fn(async () => [{ pid: 20, parent: 1, bytes: 30 }, { pid: 21, parent: 20, bytes: 30 }]);
     const budget = new WarmResourceBudget({ limits: limits({ bytes: 50 }), sample, intervalMs: 0 });
@@ -132,6 +152,6 @@ describe("shared warm resource budget", () => {
   it("uses speaker identity independently of payer and validates cap settings including zero", () => {
     expect(warmResourcePerson({ principalId: "osprey", access: { via: "org-key", identity: "shared" } })).toBe("osprey");
     expect(warmResourcePerson({})).toBe("solo");
-    expect(warmResourceLimits({ SAGAX_WARM_MAX_COUNT: "0", SAGAX_WARM_MAX_BYTES: "-1", SAGAX_WARM_PERSON_MAX_COUNT: "invalid" })).toMatchObject({ count: 0, bytes: 2048 * MiB, personCount: 12 });
+    expect(warmResourceLimits({ SAGAX_WARM_MAX_COUNT: "0", SAGAX_WARM_MAX_BYTES: "-1", SAGAX_WARM_PERSON_MAX_COUNT: "invalid" })).toMatchObject({ count: 0, bytes: 2048 * MiB, personCount: 12, followUpMs: FOLLOW_UP_MS });
   });
 });

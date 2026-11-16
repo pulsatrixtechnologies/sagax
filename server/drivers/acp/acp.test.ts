@@ -3623,6 +3623,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
     it("retires idle processes through the shared global cap across people", async () => {
       vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+      // the caps\' mechanics: no follow-up window (#4394)
+      vi.stubEnv("SAGAX_WARM_FOLLOW_UP_MS", "0");
       try {
         countFile = join(scratch, "budget-launches");
         process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;

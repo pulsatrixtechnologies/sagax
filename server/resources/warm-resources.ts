@@ -7,7 +7,20 @@ import { reportBackgroundError } from "../background-error.ts";
 
 export const MiB = 1024 * 1024;
 export type WarmResourceKind = "codex" | "acp" | "claude" | "pi" | "http-mcp" | "perspicax";
-export type WarmResourceLimits = { count: number; bytes: number; personCount: number; personBytes: number };
+export type WarmResourceLimits = { count: number; bytes: number; personCount: number; personBytes: number;
+  /** FOLLOW_UP_MS when absent; 0 lets the caps take a resource as it parks. */
+  followUpMs?: number };
+/** #4394: how long a resource that just went idle stays out of the caps'
+ * reach: the time a person's follow-up comes in. Before, the caps closed the
+ * engine a conversation had just used as soon as another conversation of the
+ * same person (another bot, a teammate, an AI client's ask) went idle after
+ * it: one grok process tree fills most of a person's 1 GiB, so a hosted
+ * server kept 0 to 2 idle engines of 16 and every follow-up started a new
+ * one (spawnWhy=closed:warm-budget). Past this window the caps reclaim it as
+ * before (idle LRU, on the next sample); the owner's own idle timer and the
+ * cgroup guard (server/memory/engine-memory-guard.ts) still close it at any
+ * time. A cap set to zero still retains nothing. */
+export const FOLLOW_UP_MS = 5 * 60_000;
 
 export function warmResourceLimits(env: NodeJS.ProcessEnv = process.env): WarmResourceLimits {
   const value = (key: string, fallback: number) => /^\d+$/.test(env[key] ?? "") && Number.isSafeInteger(Number(env[key])) ? Number(env[key]) : fallback;
@@ -16,6 +29,7 @@ export function warmResourceLimits(env: NodeJS.ProcessEnv = process.env): WarmRe
     bytes: value("SAGAX_WARM_MAX_BYTES", 2048 * MiB),
     personCount: value("SAGAX_WARM_PERSON_MAX_COUNT", 12),
     personBytes: value("SAGAX_WARM_PERSON_MAX_BYTES", 1024 * MiB),
+    followUpMs: value("SAGAX_WARM_FOLLOW_UP_MS", FOLLOW_UP_MS),
   };
 }
 
@@ -54,12 +68,12 @@ export interface WarmResourceLease {
   retiring(): void;
   forget(): void;
 }
-type Entry = WarmResourceSpec & { state: "active" | "idle" | "closing"; used: number; rss: number; reserved: number; units: number; pending: boolean };
+type Entry = WarmResourceSpec & { state: "active" | "idle" | "closing"; used: number; rss: number; reserved: number; units: number; pending: boolean; idleAt: number };
 type Totals = { count: number; memoryBytes: number; sampledRssBytes: number; active: number; idle: number; closing: number };
 const empty = (): Totals => ({ count: 0, memoryBytes: 0, sampledRssBytes: 0, active: 0, idle: 0, closing: 0 });
 
 export class WarmResourceBudget {
-  private readonly options: { limits?: WarmResourceLimits; sample?: () => Promise<ProcessMemory[]>; intervalMs?: number };
+  private readonly options: { limits?: WarmResourceLimits; sample?: () => Promise<ProcessMemory[]>; intervalMs?: number; now?: () => number };
   private readonly entries = new Set<Entry>();
   private clock = 0;
   private timer?: ReturnType<typeof setInterval>;
@@ -74,10 +88,11 @@ export class WarmResourceBudget {
     limits?: WarmResourceLimits;
     sample?: () => Promise<ProcessMemory[]>;
     intervalMs?: number;
+    now?: () => number;
   } = {}) { this.options = options; }
 
   register(spec: WarmResourceSpec): WarmResourceLease {
-    const entry: Entry = { ...spec, state: "active", used: ++this.clock, rss: 0, reserved: 0, units: 1, pending: false };
+    const entry: Entry = { ...spec, state: "active", used: ++this.clock, rss: 0, reserved: 0, units: 1, pending: false, idleAt: 0 };
     this.measure(entry);
     this.entries.add(entry);
     if (!this.timer && this.options.intervalMs !== 0) {
@@ -96,6 +111,7 @@ export class WarmResourceBudget {
         if (!this.entries.has(entry) || entry.state === "closing") return;
         entry.state = "idle";
         entry.used = ++this.clock;
+        entry.idleAt = (this.options.now ?? Date.now)();
         this.measure(entry);
         this.enforce();
       },
@@ -144,10 +160,15 @@ export class WarmResourceBudget {
     // is not retention; real memory pressure stays with the cgroup guard
     // (server/memory/engine-memory-guard.ts).
     const candidates = [...this.entries].filter(e => e.state === "idle").sort((a, b) => a.used - b.used);
+    // #4394: what a conversation just used waits out its follow-up window
+    // (FOLLOW_UP_MS); the timer's next sample reapplies the caps after it.
+    const now = (this.options.now ?? Date.now)(), followUpMs = limits.followUpMs ?? FOLLOW_UP_MS;
+    const waitsFollowUp = (entry: Entry, cap: number) => cap > 0 && now - entry.idleAt < followUpMs;
     // Local caps first, then the global cap.
     for (const scope of ["person", "global"] as const) {
       for (const entry of candidates) {
         if (entry.state !== "idle" || entry.protected?.()) continue;
+        if (waitsFollowUp(entry, scope === "person" ? Math.min(limits.personCount, limits.personBytes) : Math.min(limits.count, limits.bytes))) continue;
         const { total, people } = this.totals(true);
         const over = scope === "person" ? overPerson(people.get(entry.person) ?? empty())
           : total.count > limits.count || total.memoryBytes > limits.bytes;

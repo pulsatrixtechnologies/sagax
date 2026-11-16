@@ -12,6 +12,7 @@ resume history, idle timeouts and the cgroup emergency guard remain in place.
 | `SAGAX_WARM_MAX_BYTES` | 2147483648 | Global charged memory, bytes |
 | `SAGAX_WARM_PERSON_MAX_COUNT` | 12 | Count for one speaker |
 | `SAGAX_WARM_PERSON_MAX_BYTES` | 1073741824 | Charged memory for one speaker |
+| `SAGAX_WARM_FOLLOW_UP_MS` | 300000 | How long a resource that just went idle stays out of the caps' reach (#4394) |
 
 Zero retains no idle resources. Invalid values use the default. One engine
 process tree or Perspicax session is one resource; an HTTP MCP mount group
@@ -50,7 +51,15 @@ what is retained idle: active resources are charged in metrics but never make
 an idle one leave. Before #4215 they did, so a person or a server whose other
 engines were busy evicted each engine the moment its turn ended, and every
 next turn of that conversation started a new engine (path=spawn on each
-turn-latency line). These are retention caps, not a concurrency admission limit or a
+turn-latency line). #4394: a resource that just went idle waits out a follow-up window
+(`FOLLOW_UP_MS`, five minutes) before the caps may take it. On a hosted
+server one grok process tree filled most of a person's 1 GiB, so the next
+conversation of the same person to finish (another bot, a teammate, an AI
+client's ask) closed the engine the person had just used: the server kept 0
+to 2 idle engines of 16 and each follow-up started a new engine
+(`spawnWhy=closed:warm-budget`). Past the window the next sample applies the
+caps as before; the owner's idle timer and the cgroup guard still close it at
+any time, and a cap of zero still retains nothing. These are retention caps, not a concurrency admission limit or a
 hard OS memory limit. Growth between samples and asynchronous teardown can
 temporarily exceed the caps. The cgroup emergency guard still handles broader
 server pressure, including browsers and memory outside these pools.

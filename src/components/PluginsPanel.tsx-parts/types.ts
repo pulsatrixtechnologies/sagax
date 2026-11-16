@@ -5,6 +5,7 @@ import type { PluginScope } from "@/lib/plugin-scope";
 import type { PluginDetailProps } from "../plugins/PluginDetailView";
 import type { ClaudeUnavailable, HarnessConnectorStatus, RegistryGrokAccount } from "../plugins/HarnessConnectorGroups";
 import type { McpServers } from "../McpServersPanel";
+import type { AccountConnectorProvider } from "../../../shared/account-connectors";
 import type { DataCenter } from "../plugins/DataCenterDialog";
 
 export interface MarketplaceListing {
@@ -61,6 +62,9 @@ export interface HarnessAnswer {
   /** #3358: the person's own Grok sign-ins as the connector registry knows
    * them (an organization server); absent: an older or solo server. */
   grok?: { accounts: RegistryGrokAccount[] };
+  /** #4408: every provider's account connectors in one shape (absent: an
+   * older server; `accountConnectorProviders` builds it from the fields above) */
+  providers?: AccountConnectorProvider[];
 }
 
 export interface DetailContext {

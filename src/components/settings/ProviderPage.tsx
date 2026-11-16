@@ -345,7 +345,7 @@ function ConnectionAdvanced({ row, list, speakers }: { row: ProviderRow; list: P
 function PageAdvanced({ providerId, children }: { providerId: string; children: ReactNode }) {
   const [open, setOpen] = useState(() => {
     const card = peekRequestedSettingsCard();
-    return Boolean(card && ((card.startsWith("providers.advanced.") && card !== "providers.advanced.connectors") || card === "providers.linkedGrokBot.advanced"));
+    return Boolean(card && ((card.startsWith("providers.advanced.") && !card.startsWith("providers.advanced.connectors")) || card === "providers.linkedGrokBot.advanced"));
   });
   return (
     <SettingsGroup groupId="provider-advanced">

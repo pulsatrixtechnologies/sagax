@@ -1023,7 +1023,6 @@
   "connectApps.plugin.uninstallConfirm": "Desinstalar {name}? Seus servidores MCP e habilidades são removidos para todos os bots.",
   "connectApps.plugin.update": "Atualizar",
   "connectApps.plugin.updated": "{name} está atualizado.",
-  "connectApps.providers.connectors": "Conectores da sua conta claude.ai",
   "connectApps.providers.manage": "Gerenciar no {provider}",
   "connectApps.scope.aria": "Escopo da instalação",
   "connectApps.scope.bot": "Este bot",

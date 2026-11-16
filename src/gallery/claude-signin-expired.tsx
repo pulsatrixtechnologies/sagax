@@ -33,7 +33,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
       <aside data-gallery-panel="" className="flex w-[460px] flex-col gap-4 border-r border-hairline/40 bg-panel px-4 py-4 text-ink">
-        <HarnessConnectorsSection placement="settings" />
+        <HarnessConnectorsSection />
         <div className="rounded-xl border border-hairline/40 px-3.5 py-2.5">
           <div className="mb-1 text-[13px] font-medium">Claude</div>
           <EngineConnect engine={EXPIRED_CLAUDE} issuer="https://px.example.test" onChanged={() => undefined} />

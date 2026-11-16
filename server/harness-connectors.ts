@@ -45,6 +45,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CLAUDE_AI_CONNECTORS_URL } from "../shared/connector-setup.ts";
+import { accountConnectorEntry, ACCOUNT_CONNECTOR_PROVIDERS, type AccountConnectorProvider } from "../shared/account-connectors.ts";
 import type { TurnSpeaker } from "./engines/engine-access.ts";
 import { resolveCli } from "./procs.ts";
 import type { RequestAuth } from "./auth/request-auth.ts";
@@ -324,9 +325,16 @@ export interface HarnessGrokAccount {
 /** #3358: what the pages read from the registry beside Claude: the
  * person's Grok sign-ins (an organization server, where each person has
  * their own) and the ChatGPT apps of their Codex sign-in. */
-async function registryAccounts(registry: HarnessConnectorRouteDeps["registry"], principalId: string, organization: boolean, refresh: boolean): Promise<{ grok?: { accounts: HarnessGrokAccount[] }; codex: { available: boolean; reason?: "not_supported"; connectors?: ClaudeAiConnector[] } }> {
+interface RegistryAnswer {
+  grok?: { accounts: HarnessGrokAccount[] };
+  codex: { available: boolean; reason?: "not_supported"; connectors?: ClaudeAiConnector[] };
+  /** #4408: the same sign-ins as entries of the providers list */
+  entries: AccountConnectorProvider[];
+}
+
+async function registryAccounts(registry: HarnessConnectorRouteDeps["registry"], principalId: string, organization: boolean, refresh: boolean): Promise<RegistryAnswer> {
   const notSupported = { available: false, reason: "not_supported" as const };
-  if (!registry) return { codex: notSupported };
+  if (!registry) return { codex: notSupported, entries: [] };
   if (refresh) {
     await Promise.all([
       organization ? registry.refresh(principalId, { provider: "grok-com" }, true) : Promise.resolve(),
@@ -350,7 +358,22 @@ async function registryAccounts(registry: HarnessConnectorRouteDeps["registry"],
   const codex = chatgpt.length
     ? { available: true, connectors: chatgpt.flatMap((account) => entries(account.connectors).map(({ name, status }) => ({ name, status }))) }
     : notSupported;
-  return { ...(grok ? { grok } : {}), codex };
+  // #4408: each provider's sign-ins as one entry of the providers list, the
+  // ChatGPT apps of every Codex sign-in and (organization) every Grok sign-in
+  const signIns = (provider: "chatgpt-apps" | "grok-com") => registry.accountsOf(principalId, provider)
+    .map((account) => ({ auth: account.auth, connectors: account.auth === "subscription" ? entries(account.connectors) : [] }));
+  const list = [accountConnectorEntry("chatgpt-apps", signIns("chatgpt-apps"))];
+  if (organization) list.push(accountConnectorEntry("grok-com", signIns("grok-com")));
+  return { ...(grok ? { grok } : {}), codex, entries: list };
+}
+
+/** #4408: the providers list in the Providers page's order (Claude first). */
+function providerList(claude: { available: boolean; reason?: ClaudeAiUnavailable; connectors: ClaudeAiConnector[] }, others: AccountConnectorProvider[]): AccountConnectorProvider[] {
+  const head = ACCOUNT_CONNECTOR_PROVIDERS[0]!;
+  const first: AccountConnectorProvider = { provider: head.provider, vendor: head.vendor, manageUrl: head.manageUrl, available: claude.available,
+    ...(claude.reason ? { reason: claude.reason } : {}), connectors: claude.connectors };
+  const order = (entry: AccountConnectorProvider) => ACCOUNT_CONNECTOR_PROVIDERS.findIndex((known) => known.provider === entry.provider);
+  return [first, ...others].sort((a, b) => order(a) - order(b));
 }
 
 function isAdminScope(auth: RequestAuth): boolean {
@@ -359,7 +382,8 @@ function isAdminScope(auth: RequestAuth): boolean {
 }
 
 /** GET  /api/me/harness-connectors        the caller's own claude.ai connectors,
- *                                         Grok sign-ins and ChatGPT apps (#3358)
+ *                                         Grok sign-ins and ChatGPT apps (#3358),
+ *                                         and all of them as `providers` (#4408)
  *  PUT  /api/harness-connectors/settings  retired no-op (always on), kept for older clients
  * Nothing returned names the account (no email, no organization, no URL). */
 export function createHarnessConnectorRoutes(deps: HarnessConnectorRouteDeps): RouteHandler {
@@ -387,9 +411,13 @@ export function createHarnessConnectorRoutes(deps: HarnessConnectorRouteDeps): R
     const refresh = url.searchParams.get("refresh") === "1";
     // #3358: the other providers' sign-ins, read beside Claude's
     const others = registryAccounts(deps.registry, principalId, deps.organization, refresh)
-      .catch(() => ({ codex: { available: false, reason: "not_supported" } }));
-    const answer = async (claude: { available: boolean; reason?: ClaudeAiUnavailable; connectors: ClaudeAiConnector[] }) =>
-      json(res, 200, { ...base, claude, ...(await others) });
+      .catch((): RegistryAnswer => ({ codex: { available: false, reason: "not_supported" }, entries: [] }));
+    // #4408: `providers`, one entry per provider in the same shape; the
+    // older fields (claude, codex, grok) stay beside it for released apps
+    const answer = async (claude: { available: boolean; reason?: ClaudeAiUnavailable; connectors: ClaudeAiConnector[] }) => {
+      const { entries, ...older } = await others;
+      return json(res, 200, { ...base, claude, ...older, providers: providerList(claude, entries) });
+    };
     if (deps.restrictedByPolicy()) return answer({ available: false, reason: "managed_policy", connectors: [] });
     if (!deps.organization && principalId !== deps.localPrincipalId().trim().toLowerCase()) {
       return answer({ available: false, reason: "not_operator", connectors: [] });

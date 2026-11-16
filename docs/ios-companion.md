@@ -560,7 +560,7 @@ has. Added to `ALLOWED` in `companion/src/routes.ts`:
 | `POST /api/bots/:id/parallel/:threadId/stop` | Stop on a parallel task card |
 | `GET /api/bots/:id/activity`, `GET /api/bots/:id/activity/item` | what the bot is doing, its history and one item |
 | `POST /api/bots/:id/primary` | Make primary bot (the harness checks the owner) |
-| `GET /api/me/harness-connectors` | the owner's own claude.ai connectors (names, statuses) |
+| `GET /api/me/harness-connectors` | the connectors of the owner's provider accounts, one section per provider (`providers`; names, statuses) |
 | `GET /api/bots/:id/computer` | the bot computer's status and phase (read-only) |
 | `GET/PUT /api/groups/:id/memory` | a room's shared memory (D3): its people read, its owner edits or switches it off |
 | `PUT /api/tts/provider` | the voice engine alone (`{ provider }`, nothing else); `PUT /api/config` stays refused |

@@ -20,7 +20,6 @@ import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { bringsLabel, InstalledView, type InstalledViewProps } from "./InstalledView";
 import { ConnectAppsView, connectedCounts, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
 import { accountConnectorRows, connectedAccountRows, connectorGroups, noticeAction, type HarnessConnectorGroup, type RegistryGrokAccount } from "./HarnessConnectorGroups";
-import { harnessGroupsInput } from "../PluginsPanel.tsx-parts/useHarnessConnectors";
 import type { HarnessAnswer } from "../PluginsPanel.tsx-parts/types";
 import { DiscoverView } from "./DiscoverView";
 import { AccountsView } from "./AccountsView";
@@ -301,7 +300,7 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
   }));
 
   it("Discover: a \"From <provider>\" section per engine, From Claude and From xAI, with real logos and Manage on in the header", () => {
-    const html = discover(connectorGroups({ claude, grok: { connectors: GROK_CLOUD_CONNECTORS } }));
+    const html = discover(connectorGroups({ claude }, { grokConfigured: true }));
     expect(html).toMatch(/data-plugins-section="from-claude"[\s\S]*>From Claude<[\s\S]*Manage on Claude[\s\S]*data-plugins-section="from-grok"[\s\S]*>From xAI<[\s\S]*Manage on Grok/);
     expect(html).not.toContain("Connectors of your");
     for (const name of ["Gmail", "Google Drive", "Google Calendar", "Canva"]) expect(html).toContain(`data-plugin-row="account:claude:${name}"`);
@@ -320,7 +319,7 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
   });
 
   it("Discover: the category filter applies to the account rows too", () => {
-    const groups = connectorGroups({ claude, grok: null });
+    const groups = connectorGroups({ claude });
     const all = discover(groups);
     expect(all).toContain('data-plugin-row="account:claude:Gmail"');
     const communication = discover(groups, { filter: "communication" });
@@ -330,20 +329,20 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
   });
 
   it("a ChatGPT group shows only once the server lists that account's connectors", () => {
-    expect(connectorGroups({ codex: { available: false } }).map((group) => group.id)).toEqual(["claude", "grok"]);
+    expect(connectorGroups({ claude, codex: { available: false } }).map((group) => group.id)).toEqual(["claude", "grok"]);
     const groups = connectorGroups({ claude, codex: { available: true, connectors: [{ name: "Notion", status: "connected" }] } });
     expect(groups.map((group) => [group.id, group.name])).toEqual([["claude", "Claude"], ["grok", "Grok"], ["codex", "ChatGPT"]]);
     expect(discover(groups)).toMatch(/data-plugins-section="from-codex"[\s\S]*>From ChatGPT<[\s\S]*data-plugin-row="account:codex:Notion"/);
   });
 
   it("\"N connected\" counts the connected account rows with the plugins", () => {
-    const groups = connectorGroups({ claude, grok: { connectors: GROK_CLOUD_CONNECTORS } });
+    const groups = connectorGroups({ claude }, { grokConfigured: true });
     expect(connectedAccountRows(groups)).toBe(3);
     expect(connectedCounts({ entries: [], engineConnected: connectedAccountRows(groups) })).toEqual({ installed: 3 });
   });
 
   it("Manage: connected connectors are rows of the Installed list, with their state and a \"...\" menu; no separate account section", () => {
-    const groups = connectorGroups({ claude, grok: null });
+    const groups = connectorGroups({ claude });
     const html = renderToStaticMarkup(createElement(InstalledView, props({ entries: [], accounts: { sections: sections(groups), onSetUp: noop } })));
     expect(html).not.toContain("Connectors of your");
     expect(html).toMatch(/data-plugins-installed[\s\S]*data-installed-entry="account:claude:Gmail"[\s\S]*Connector · Claude account[\s\S]*Connected/);
@@ -360,7 +359,7 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
     document.body.append(host);
     const root = createRoot(host);
     try {
-      const groups = connectorGroups({ claude, grok: null });
+      const groups = connectorGroups({ claude });
       flushSync(() => root.render(createElement(InstalledView, props({ accounts: { sections: sections(groups) } }))));
       const more = host.querySelector<HTMLButtonElement>('[aria-label="More for Gmail"]')!;
       flushSync(() => more.click());
@@ -374,14 +373,14 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
   });
 
   it("Claude and Grok never vanish: a section with no connector says why and how to connect (2026-10-28)", () => {
-    const notice = (input: Parameters<typeof connectorGroups>[0]) => connectorGroups(input).map((group) => [group.id, group.notice ? (group.notice.kind === "unavailable" ? group.notice.reason : group.notice.kind) : group.connectors.length]);
-    expect(notice({ claude: null, claudeLoading: true, grok: null })).toEqual([["claude", "loading"], ["grok", "no_account"]]);
-    expect(notice({ claude: null, claudeLoading: false, grok: null })).toEqual([["claude", "unknown"], ["grok", "no_account"]]);
+    const notice = (answer: HarnessAnswer | null, options: Parameters<typeof connectorGroups>[1] = {}) => connectorGroups(answer, options).map((group) => [group.id, group.notice ? (group.notice.kind === "unavailable" ? group.notice.reason : group.notice.kind) : group.connectors.length]);
+    expect(notice(null, { loading: true })).toEqual([["claude", "loading"], ["grok", "no_account"]]);
+    expect(notice(null, { loading: false })).toEqual([["claude", "unknown"], ["grok", "no_account"]]);
     for (const reason of ["not_signed_in", "key", "no_engine", "not_operator", "managed_policy", "unknown"] as const) {
-      expect(notice({ claude: { available: false, reason, connectors: [] }, grok: { connectors: GROK_CLOUD_CONNECTORS } })[0]).toEqual(["claude", reason]);
+      expect(notice({ claude: { available: false, reason, connectors: [] } }, { grokConfigured: true })[0]).toEqual(["claude", reason]);
     }
-    expect(notice({ claude: { available: true, connectors: [] }, grok: null })[0]).toEqual(["claude", "empty"]);
-    expect(notice({ claude, grok: null })).toEqual([["claude", 4], ["grok", "no_account"]]);
+    expect(notice({ claude: { available: true, connectors: [] } })[0]).toEqual(["claude", "empty"]);
+    expect(notice({ claude })).toEqual([["claude", 4], ["grok", "no_account"]]);
     expect(noticeAction({ kind: "unavailable", reason: "not_signed_in" })).toBe("setup");
     expect(noticeAction({ kind: "unavailable", reason: "key" })).toBe("setup");
     expect(noticeAction({ kind: "unavailable", reason: "unknown" })).toBe("retry");
@@ -390,14 +389,14 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
   });
 
   it("a Grok account and a Claude sign-in the server could not read: both sections, the reason and the way to connect", () => {
-    const groups = connectorGroups({ claude: { available: false, reason: "not_signed_in", connectors: [] }, grok: { connectors: GROK_CLOUD_CONNECTORS } });
+    const groups = connectorGroups({ claude: { available: false, reason: "not_signed_in", connectors: [] } }, { grokConfigured: true });
     const html = discover(groups);
     expect(html).toMatch(/data-harness-group="claude"[\s\S]*?From Claude[\s\S]*?Manage on Claude[\s\S]*?data-harness-notice="not_signed_in"[\s\S]*?not signed in to Claude[\s\S]*?data-harness-setup="claude"[^>]*>Connect Claude</);
     expect(html).toMatch(/data-harness-group="grok"[\s\S]*?data-harness-connector="grok:/);
   });
 
   it("an account notice spans the whole grid row and never repeats the section head's Manage link (#3040)", () => {
-    const groups = connectorGroups({ claude: { available: true, connectors: [] }, grok: null });
+    const groups = connectorGroups({ claude: { available: true, connectors: [] } });
     const html = discover(groups);
     // its own row, so the text is not squeezed a word per line by the action
     expect(html).toMatch(/class="[^"]*col-span-full[^"]*"[^>]*data-harness-notice="empty"/);
@@ -413,7 +412,7 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
 
   describe("#3358: the pages read the connector registry", () => {
     const account = (over: Partial<RegistryGrokAccount> = {}): RegistryGrokAccount => ({ label: "Grok", slot: "primary", auth: "subscription", connectors: [], at: 5, ...over });
-    const fromServer = (answer: HarnessAnswer, grokConfigured = true) => connectorGroups(harnessGroupsInput(answer, false, grokConfigured));
+    const fromServer = (answer: HarnessAnswer, grokConfigured = true) => connectorGroups(answer, { grokConfigured });
 
     it("Grok rows carry their real state from the person's own sign-ins, not the xAI catalog", () => {
       const groups = fromServer({ claude, grok: { accounts: [
@@ -427,7 +426,6 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
         { id: "microsoft-teams", name: "Microsoft Teams", status: "connected" },
         { id: "gmail", name: "Gmail", status: "failed" },
       ]);
-      expect(grok.account).toBe("Grok, Grok (personal account)");
       const html = discover(groups);
       expect(html).not.toContain('data-harness-connector="grok:X"');
       expect(html).not.toContain("Not verifiable");
@@ -447,14 +445,30 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
       expect(reason([account({ auth: "unknown", at: 0 })])).toBe("unknown");
       expect(reason([account({ auth: "key" })])).toBe("key");
       expect(reason([account({ auth: "none" })])).toBe("not_signed_in");
-      // an organization server that lists no Grok sign-in of the person: none, even with a Grok engine set up
-      expect(reason([])).toBe("no_account");
+      // an organization server that lists no Grok sign-in of the person: not signed in, even with a Grok engine set up
+      expect(reason([])).toBe("not_signed_in");
     });
 
     it("a server that lists no Grok sign-in (older, solo) keeps the xAI catalog when Grok is set up", () => {
       const grok = fromServer({ claude }).find((group) => group.id === "grok")!;
       expect(grok.connectors.map((connector) => connector.name)).toEqual(GROK_CLOUD_CONNECTORS.map((connector) => connector.name));
       expect(fromServer({ claude }, false).find((group) => group.id === "grok")!.notice).toEqual({ kind: "no_account" });
+    });
+
+    it("#4408: the groups follow the answer's one providers list, the list Providers > Advanced reads; the older fields only for an older server", () => {
+      const answer: HarnessAnswer = {
+        claude, codex: { available: false }, grok: { accounts: [account({ connectors: [{ id: "outlook", name: "Outlook (Exchange)", status: "connected" }] })] },
+        providers: [
+          { provider: "claude-ai", vendor: "anthropic", manageUrl: "https://claude.ai/customize/connectors", available: false, reason: "not_signed_in", connectors: [] },
+          { provider: "chatgpt-apps", vendor: "openai", manageUrl: "https://chatgpt.com/#settings/Connectors", available: true, connectors: [{ name: "Notion", status: "needs_auth" }] },
+          { provider: "grok-com", vendor: "xai", manageUrl: "https://grok.com/connectors", available: true, connectors: [{ id: "gmail", name: "Gmail", status: "failed" }] },
+        ],
+      };
+      const groups = fromServer(answer);
+      expect(groups.map((group) => [group.id, group.notice?.kind === "unavailable" ? group.notice.reason : group.connectors.map((connector) => `${connector.name}:${connector.status}`).join()])).toEqual([
+        ["claude", "not_signed_in"], ["grok", "Gmail:failed"], ["codex", "Notion:needs_auth"],
+      ]);
+      expect(groups.find((group) => group.id === "codex")!.manageUrl).toBe("https://chatgpt.com/#settings/Connectors");
     });
 
     it("the ChatGPT group shows for a ChatGPT sign-in the registry lists, with its apps or that it has none yet", () => {

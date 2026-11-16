@@ -126,6 +126,7 @@ describe("sub-page navigation", () => {
     // Providers' own Advanced and its claude.ai connectors stay on the list
     expect(providerCardTarget("providers.advanced")).toBeNull();
     expect(providerCardTarget("providers.advanced.connectors")).toBeNull();
+    expect(providerCardTarget("providers.advanced.connectors.xai")).toBeNull();
     expect(providerCardTarget(null)).toBeNull();
   });
 

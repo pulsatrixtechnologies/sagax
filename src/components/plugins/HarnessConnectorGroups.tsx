@@ -3,10 +3,11 @@
 // label: Claude, xAI, ChatGPT) in the very rows of "From Sagax", and
 // Installed folds the connected ones into its list, the same row and "..."
 // menu as a plugin. They come from GET /api/me/harness-connectors, which
-// reads the person's connector registry (#3358): Claude's (the caller's own
-// claude.ai account: a name and a status), Grok's (each of the person's own
-// Grok sign-ins, with the real state of each connector) and the ChatGPT apps
-// of their Codex sign-in. A server that lists no Grok sign-in (older, solo)
+// reads the person's connector registry (#3358), through its one providers
+// list (#4408, shared/account-connectors.ts, the list Providers > Advanced
+// reads too): Claude's (the caller's own claude.ai account), Grok's (each of
+// the person's own Grok sign-ins, with the real state of each connector) and
+// the ChatGPT apps of their Codex sign-in. A server that lists no Grok sign-in (older, solo)
 // leaves Grok on the xAI catalog, managed on grok.com (not verifiable: no
 // status). Claude and Grok always have their section
 // (2026-10-28): a section the server cannot fill says why, in a row with
@@ -20,20 +21,25 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { categoryFromTags, providerMark, type PluginCategory, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
-import { GROK_CONNECTORS_URL } from "../../../shared/grok-cloud-connectors";
+import { GROK_CLOUD_CONNECTORS, GROK_CONNECTORS_URL } from "../../../shared/grok-cloud-connectors";
+import { CLAUDE_AI_CONNECTORS_URL } from "../../../shared/connector-setup";
 import { ClaudeMark, GrokMark, CodexMark } from "../ProviderIcons";
 import { PluginIcon } from "./PluginParts";
 import { CapabilityTags } from "./EngineCapabilities";
 import { PLUGINS, pluginActionClass } from "./plugins-style";
-import { claudeAiConnectorCapabilities, grokConnectorCapabilities, type ConnectorCapability } from "../../../shared/engine-connectors";
+import type { ConnectorCapability } from "../../../shared/engine-connectors";
+import {
+  accountConnectorCapabilities, accountConnectorProviders,
+  type AccountConnectorProvider, type AccountConnectorProviderId, type AccountConnectorsUnavailable,
+} from "../../../shared/account-connectors";
 
 export type HarnessConnectorStatus = "connected" | "needs_auth" | "failed" | "unknown";
 
 export type HarnessEngine = "claude" | "grok" | "codex";
 
-/** Why the server lists no claude.ai connector for this person
- * (server/harness-connectors.ts ClaudeAiUnavailable). */
-export type ClaudeUnavailable = "managed_policy" | "no_engine" | "not_signed_in" | "not_operator" | "key" | "unknown";
+/** Why the server lists no connector of an account
+ * (shared/account-connectors.ts). */
+export type ClaudeUnavailable = AccountConnectorsUnavailable;
 
 /** A section without its connectors: what the person reads instead, and
  * whether it offers to set the engine up or to read again. */
@@ -63,8 +69,6 @@ export interface HarnessConnectorGroup {
   /** the provider's label of its Discover section: "From xAI" */
   source: string;
   manageUrl: string;
-  /** the engine account's line: an email or "Signed in" (absent: none) */
-  account?: string;
   /** `id`: a Grok connector's id (its capabilities) */
   connectors: Array<{ name: string; id?: string; status?: HarnessConnectorStatus; tag?: string }>;
   /** no connector to list: why, in the section's place */
@@ -112,73 +116,48 @@ const STATUS_KEY: Record<HarnessConnectorStatus, LocaleKey> = {
   unknown: "harnessConnectors.status.unknown",
 };
 
-/** The sections to show: Claude and Grok always (their connectors, or why
- * there are none and how to connect), ChatGPT when the person has a
- * ChatGPT sign-in the server lists. */
-export function connectorGroups(input: {
-  claude?: { available: boolean; reason?: ClaudeUnavailable; connectors: Array<{ name: string; status: HarnessConnectorStatus }>; manageUrl?: string; account?: string } | null;
-  /** the person's Claude connectors are still being read */
-  claudeLoading?: boolean;
-  /** `accounts`: the person's Grok sign-ins from the registry (#3358);
-   * `connectors`: the xAI catalog, when the server lists no sign-in */
-  grok?: { accounts: readonly RegistryGrokAccount[] } | { connectors: readonly { id: string; name: string; tag?: string }[]; account?: string } | null;
-  /** ChatGPT apps of a Codex sign-in (the server says `available: false` today) */
-  codex?: { available: boolean; connectors?: Array<{ name: string; status: HarnessConnectorStatus }>; manageUrl?: string } | null;
-}): HarnessConnectorGroup[] {
-  const groups: HarnessConnectorGroup[] = [];
-  const claude = input.claude;
-  const claudeUrl = claude?.manageUrl ?? "https://claude.ai/customize/connectors";
-  const claudeConnectors = claude?.available ? claude.connectors.filter((connector) => connector.name.trim() !== "") : [];
-  let claudeNotice: HarnessGroupNotice | undefined;
-  if (claudeConnectors.length) claudeNotice = undefined;
-  else if (!claude) claudeNotice = input.claudeLoading === false ? { kind: "unavailable", reason: "unknown" } : { kind: "loading" };
-  else if (claude.available) claudeNotice = { kind: "empty" };
-  else claudeNotice = { kind: "unavailable", reason: claude.reason ?? "unknown" };
-  groups.push({ id: "claude", name: "Claude", source: "Claude", manageUrl: claudeUrl, ...(claude?.account ? { account: claude.account } : {}), connectors: claudeConnectors, ...(claudeNotice ? { notice: claudeNotice } : {}) });
-  const grokBase = { id: "grok" as const, name: "Grok", source: t("providerKeys.xai"), manageUrl: GROK_CONNECTORS_URL };
-  if (input.grok && "accounts" in input.grok) {
-    groups.push({ ...grokBase, ...registryGrokGroup(input.grok.accounts) });
-  } else if (input.grok && input.grok.connectors.length) {
-    groups.push({ ...grokBase, ...(input.grok.account ? { account: input.grok.account } : {}), connectors: input.grok.connectors.map((connector) => ({ id: connector.id, name: connector.name, ...(connector.tag ? { tag: connector.tag } : {}) })) });
-  } else {
-    groups.push({ ...grokBase, connectors: [], notice: { kind: "no_account" } });
-  }
-  const codex = input.codex;
-  if (codex?.available) {
-    // a ChatGPT sign-in the registry lists: its apps, or that it has none yet
-    const connectors = (codex.connectors ?? []).filter((connector) => connector.name.trim() !== "");
-    groups.push({ id: "codex", name: "ChatGPT", source: "ChatGPT", manageUrl: codex.manageUrl ?? "https://chatgpt.com/#settings/Connectors", connectors, ...(connectors.length ? {} : { notice: { kind: "empty" } as const }) });
-  }
-  return groups;
+/** Each registry provider's group id and name in Connect Apps. */
+const GROUP_OF: Readonly<Record<AccountConnectorProviderId, { id: HarnessEngine; name: string; source: () => string }>> = {
+  "claude-ai": { id: "claude", name: "Claude", source: () => "Claude" },
+  "chatgpt-apps": { id: "codex", name: "ChatGPT", source: () => "ChatGPT" },
+  "grok-com": { id: "grok", name: "Grok", source: () => t("providerKeys.xai") },
+};
+
+/** One provider's entry (#4408, the answer's one providers list) as its
+ * group: its connectors, that it has none yet, or why there are none. */
+function providerGroup(entry: AccountConnectorProvider): HarnessConnectorGroup {
+  const head = GROUP_OF[entry.provider];
+  const connectors = entry.available ? entry.connectors.filter((connector) => connector.name.trim() !== "")
+    .map((connector) => ({ ...(connector.id ? { id: connector.id } : {}), name: connector.name, status: connector.status })) : [];
+  const notice: HarnessGroupNotice | undefined = connectors.length ? undefined
+    : entry.available ? { kind: "empty" } : { kind: "unavailable", reason: entry.reason ?? "unknown" };
+  return { id: head.id, name: head.name, source: head.source(), manageUrl: entry.manageUrl, connectors, ...(notice ? { notice } : {}) };
 }
 
-const STATUS_RANK: Record<HarnessConnectorStatus, number> = { connected: 3, needs_auth: 2, failed: 1, unknown: 0 };
-
-/** #3358: the Grok section from the person's own sign-ins: every connector
- * once (the same one on two sign-ins keeps its best state), with its real
- * state; with none, why (not read yet, a key, signed out, none added). */
-export function registryGrokGroup(accounts: readonly RegistryGrokAccount[]): Pick<HarnessConnectorGroup, "connectors" | "account" | "notice"> {
-  if (!accounts.length) return { connectors: [], notice: { kind: "no_account" } };
-  const byKey = new Map<string, HarnessConnectorGroup["connectors"][number]>();
-  for (const account of accounts) {
-    if (account.auth !== "subscription") continue;
-    for (const connector of account.connectors) {
-      if (connector.name.trim() === "") continue;
-      const key = (connector.id ?? connector.name).trim().toLowerCase();
-      const known = byKey.get(key);
-      if (known && STATUS_RANK[known.status ?? "unknown"] >= STATUS_RANK[connector.status]) continue;
-      byKey.set(key, { ...(connector.id ? { id: connector.id } : {}), name: connector.name, status: connector.status });
-    }
-  }
-  const account = accounts.length > 1 ? { account: accounts.map((entry) => entry.label).join(", ") } : {};
-  const connectors = [...byKey.values()];
-  if (connectors.length) return { connectors, ...account };
-  const auths = new Set(accounts.map((entry) => entry.auth));
-  const notice: HarnessGroupNotice = auths.has("subscription") ? { kind: "empty" }
-    : auths.has("unknown") ? { kind: "unavailable", reason: "unknown" }
-      : auths.has("key") ? { kind: "unavailable", reason: "key" }
-        : { kind: "unavailable", reason: "not_signed_in" };
-  return { connectors: [], ...account, notice };
+/** The sections to show, from the answer's one providers list (#4408;
+ * `accountConnectorProviders` builds it from an older server's fields):
+ * Claude and Grok always (their connectors, or why there are none and how to
+ * connect), ChatGPT when the person has a ChatGPT sign-in. A server that
+ * lists no Grok sign-in (older, solo) leaves Grok on the xAI catalog when a
+ * Grok engine is set up (`grokConfigured`). */
+export function connectorGroups(answer: Parameters<typeof accountConnectorProviders>[0], options: { loading?: boolean; grokConfigured?: boolean } = {}): HarnessConnectorGroup[] {
+  const providers = accountConnectorProviders(answer);
+  const entryOf = (provider: AccountConnectorProviderId) => providers.find((entry) => entry.provider === provider);
+  const groups: HarnessConnectorGroup[] = [];
+  const claude = entryOf("claude-ai");
+  groups.push(claude ? providerGroup(claude) : {
+    id: "claude", name: "Claude", source: "Claude", manageUrl: CLAUDE_AI_CONNECTORS_URL, connectors: [],
+    notice: options.loading && !answer ? { kind: "loading" } : { kind: "unavailable", reason: "unknown" },
+  });
+  const grok = entryOf("grok-com");
+  const grokBase = { id: "grok" as const, name: "Grok", source: t("providerKeys.xai"), manageUrl: GROK_CONNECTORS_URL };
+  if (grok) groups.push(providerGroup(grok));
+  else if (options.grokConfigured) groups.push({ ...grokBase, connectors: GROK_CLOUD_CONNECTORS.map((connector) => ({ id: connector.id, name: connector.name, ...(connector.tag ? { tag: connector.tag } : {}) })) });
+  else groups.push({ ...grokBase, connectors: [], notice: { kind: "no_account" } });
+  // a ChatGPT sign-in the registry lists: its apps, or that it has none yet
+  const codex = entryOf("chatgpt-apps");
+  if (codex?.available) groups.push(providerGroup(codex));
+  return groups;
 }
 
 /** One connector of an engine account, read as a plugin row. */
@@ -204,7 +183,7 @@ const CAPABILITY_TAG: Record<ConnectorCapability, string> = { mail: "email", cal
  * own row of the same name, else its tag, else what it reaches). */
 export function accountConnectorRows(group: HarnessConnectorGroup, catalog: readonly Pick<PluginItem, "name" | "category">[] = []): AccountConnectorRow[] {
   return group.connectors.map((connector) => {
-    const capabilities = group.id === "grok" ? grokConnectorCapabilities(connector.id ?? "") : claudeAiConnectorCapabilities(connector.name);
+    const capabilities = accountConnectorCapabilities(group.id === "grok" ? "grok-com" : "claude-ai", connector);
     const known = catalog.find((item) => item.name.trim().toLowerCase() === connector.name.trim().toLowerCase());
     const category = known?.category ?? categoryFromTags([connector.tag, ...capabilities.map((capability) => CAPABILITY_TAG[capability])]);
     return {

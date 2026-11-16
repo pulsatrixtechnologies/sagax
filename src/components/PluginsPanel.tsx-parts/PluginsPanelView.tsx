@@ -39,7 +39,6 @@ import { MarketplacesSection } from "../plugins/MarketplacesSection";
 import { DataCenterDialog } from "../plugins/DataCenterDialog";
 import { ScopeToggle } from "../plugins/ScopeToggle";
 import { MacAppsInstalledSection } from "../plugins/MacAppsView";
-import { harnessGroupsInput } from "./useHarnessConnectors";
 import { pluginSourceLabel } from "./helpers";
 import { pageLabel, PluginsPanelSubpage } from "./PluginsPanelSubpage";
 import type { PluginsPanelState } from "./usePluginsPanelState";
@@ -162,7 +161,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     />
   );
 
-  const groups = connectorGroups(harnessGroupsInput(harness.answer, harness.loading, grokConfigured));
+  const groups = connectorGroups(harness.answer, { loading: harness.loading, grokConfigured });
   // the engine accounts' connectors as rows (#2306): "From <provider>" in
   // Discover, rows of the Installed list in Manage, counted in "N connected"
   const accountSections = groups.map((group) => ({ group, rows: accountConnectorRows(group, items) }));

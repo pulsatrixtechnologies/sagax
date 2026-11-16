@@ -1,3 +1,4 @@
+import { useBotReplyBubbleClass } from "@/lib/bot-reply-bubbles";
 // The reply a bot is writing right now, growing in its bubble (Settings >
 // Appearance > Conversation > "Show replies as they are written",
 // src/lib/stream-replies-preference.ts). It reads the store's per-frame
@@ -52,6 +53,7 @@ export function LiveReply({
    * without the pop-in a finished reply makes */
   shownRef?: MutableRefObject<boolean>;
 }) {
+  const botReplyClass = useBotReplyBubbleClass();
   const enabled = useStreamReplies();
   // this thread's text only: another bot's stream does not render it (#3624)
   const raw = useStreamSelector((stream) => (threadId ? stream.streaming[threadId] ?? "" : ""));
@@ -73,7 +75,7 @@ export function LiveReply({
         data-chat-bubble
         aria-busy="true"
         className={cn(
-          "rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5 text-ink",
+          "rounded-[18px] text-[13px] leading-5 text-ink", botReplyClass,
           room && !wide ? roomFit : bubbleWidths[wide ? "wide" : "fit"],
         )}
       >

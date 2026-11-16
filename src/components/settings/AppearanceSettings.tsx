@@ -1,3 +1,4 @@
+import { botReplyBubbles } from "@/lib/bot-reply-bubbles";
 // Settings > Appearance, laid out as the reference design's settings pages (0.5.6):
 // grey headings outside the cards, compact rows (label at the left, control
 // at the right), pill menus rather than native selects, no help text but a
@@ -493,6 +494,7 @@ export function AppearanceSettings() {
   const allHistory = useShowAllHistory();
   const permissions = useShowPermissions();
   const streamReplies = useStreamReplies();
+  const replyBubbles = botReplyBubbles.use() === "on";
   return (
     <>
       <div data-settings-card="appearance.skin">
@@ -505,6 +507,7 @@ export function AppearanceSettings() {
       </div>
       <SettingsGroup title={t("settings.group.conversation")} groupId="conversation">
         <ChatWidthRow />
+        <SwitchLine label={t("settings.botReplyBubbles.title")} checked={replyBubbles} onChange={(on) => botReplyBubbles.set(on ? "on" : "off")} rowId="botReplyBubbles" />
         <ThreadsViewRow />
         <FreshTopicRow />
         <SwitchLine label={t("settings.streamReplies.title")} ariaLabel={t("settings.streamReplies.show")} checked={streamReplies} onChange={setStreamReplies} rowId="streamReplies" />

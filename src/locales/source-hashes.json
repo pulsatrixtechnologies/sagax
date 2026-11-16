@@ -18895,7 +18895,8 @@
       "routine.problemCard.alreadyFixed": "807ebd30de1a11883e9bc3998ba70bee84ce3f4f7dc25b98734aa2f40b945e06",
       "routine.problemCard.gone": "32dcb22d5cbb53167eb93acb3b457657af2881d57c0812c77e4d170fe57d1bf6",
       "routine.problemCard.openWhere": "746b3a1872460d777222b00fcbf319f43ca767882ef6a17fb1ef3c7d4b9a15c8",
-      "question.factsAsOf": "2ae4fdd5dfbf7101fdc1455d138f87186aa1894b2f0e3b56fd9dcea469928898"
+      "question.factsAsOf": "2ae4fdd5dfbf7101fdc1455d138f87186aa1894b2f0e3b56fd9dcea469928898",
+      "settings.botReplyBubbles.title": "a33984e0fd18892b54c4baaa08e05bf71c079b3c64a6d3bef08cd405a8539a06"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

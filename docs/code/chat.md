@@ -976,6 +976,13 @@ setting is the person's own (`sagax.voiceDashes.v1`, Settings > Models and
 voice > Voice), on by default for French. A solo server cannot read the
 browser's choice, so it follows the server language there.
 
+Settings > Appearance > Conversation offers Show bot replies in bubbles
+(`sagax.botReplyBubbles.v1`, on by default). Turning it off removes the fill
+and horizontal bubble padding from settled and streaming bot replies in
+direct conversations and rooms. Human messages and structured cards keep
+their existing presentation. The choice follows the person's preferences
+and is exposed as `appearance.botReplyBubbles` to the settings tool.
+
 ## Record links in a bot's reply (2026-11-16, #4507)
 
 After the dashes, `pushAssistantText` passes the final text through

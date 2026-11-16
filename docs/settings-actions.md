@@ -353,6 +353,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | The open bot's colour as the accent (1 on, 0 off) | Settings > Appearance | `sagax_settings` get, set `appearance.botAccent` | simple |
 | Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}}) | Settings > Appearance > Hidden from the sidebar | `sagax_settings` get, set `appearance.sidebarHidden` | simple |
 | Sending to a busy bot | Settings > Appearance | `sagax_settings` get, set `appearance.busySend` | simple |
+| Show bot replies in bubbles (on by default; off leaves reply text on the conversation background) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.botReplyBubbles` | simple |
 | Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
 | Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 

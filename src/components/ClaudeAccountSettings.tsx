@@ -7,13 +7,16 @@ import { CommandLine, InlineFold } from "./SettingsPrimitives";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { readableError } from "@/lib/plain-error";
 import { providerAccountsChanged } from "@/lib/provider-accounts";
+import { viewerCan } from "@/lib/viewer";
 
 export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
   instance?: InstanceInfo;
   onSaved: () => void;
   onCancel?: () => void;
 }) {
-  const { refreshInstances } = useStore();
+  const { state, refreshInstances } = useStore();
+  // #4435: a folder of the server's own is host.shell; hidden from whoever cannot pick one
+  const pickFolder = viewerCan(state.config, "host.shell");
   const [displayName, setDisplayName] = useState(instance?.displayName ?? "");
   const [configDir, setConfigDir] = useState(instance?.claudeAccount?.configDir ?? "");
   const [saving, setSaving] = useState(false);
@@ -60,7 +63,7 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
           className="w-full rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[13px] text-ink focus:outline-none disabled:opacity-50"
         />
       </label>}
-      <InlineFold label={t("engines.account.advanced")}>
+      {pickFolder && <InlineFold label={t("engines.account.advanced")}>
         <label className="mt-2 flex flex-col gap-1 text-[12px] text-ink-secondary">
           {t("engines.account.configDir")}
           <input
@@ -75,7 +78,7 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
         </label>
         <p className="mt-1 text-[11.5px] leading-relaxed text-ink-secondary">{t("engines.account.configDirHint")}</p>
         {instance && <p className="mt-1 text-[11.5px] leading-relaxed text-warning">{t("engines.account.changeDirHint")}</p>}
-      </InlineFold>
+      </InlineFold>}
       {!instance && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("engines.account.addHint")}</p>}
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       <div className="flex justify-end gap-2">

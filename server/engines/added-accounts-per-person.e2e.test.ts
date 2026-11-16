@@ -60,6 +60,27 @@ describe.skipIf(process.platform === "win32")("added provider accounts belong to
       expect((await org.api("PATCH", `/api/instances/${samId}`, admin, { displayName: "Mine now" })).status).toBe(404);
       expect((await org.api("POST", `/api/instances/${samId}/auth/start`, admin, {})).status).toBe(404);
       expect((await org.api("DELETE", `/api/instances/${samId}`, admin)).status).toBe(404);
+      // nor in the administrator's console: its Connections list the
+      // organization's engines, never an account a person added
+      const consoleCall = (method: string, sub: string, body?: unknown) => fetch(`${org.base}/api/org/admin/${sub}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${org.idp.consoleAssertion({ sub: person("ada", "admin").sub, aud: org.base, role: "admin", teams: [] })}`,
+          ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+      const connections = await consoleCall("GET", "connections");
+      const view = await connections.json() as { engines: Array<{ id: string; name: string }>; people: Array<{ engines: Array<{ id: string }> }> };
+      expect(connections.status, JSON.stringify(view)).toBe(200);
+      const consoleIds = [...view.engines.map((engine) => engine.id), ...view.people.flatMap((entry) => entry.engines.map((engine) => engine.id))];
+      expect(consoleIds).toContain("grok");
+      for (const owned of [alexId, samId, samPlan]) expect(consoleIds).not.toContain(owned);
+      expect(JSON.stringify(view)).not.toContain("Sam work");
+      expect((await (await consoleCall("POST", "connections/test", { kind: "engine", id: samId })).json())).toMatchObject({ ok: false, reason: "engine_not_installed" });
+      const settings = await (await consoleCall("GET", "settings")).json() as { policies: { engineModels: Record<string, unknown> } };
+      expect(Object.keys(settings.policies.engineModels)).toContain("grok");
+      for (const owned of [alexId, samId, samPlan]) expect(Object.keys(settings.policies.engineModels)).not.toContain(owned);
       // and a bot of Alex cannot be set on it
       const created = await org.api("POST", "/api/bots", alex, { name: "Alex helper" });
       expect(created.status, JSON.stringify(created.body)).toBe(201);

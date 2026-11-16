@@ -15,6 +15,7 @@
 // answers carry sizes and counts, never paths.
 import type { LeftoverRemoval, LeftoverScan } from "../drivers/antigravity-temp.ts";
 import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
+import { accountOwnedBy } from "../engines/account-owner.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface AntigravityLeftoverRouteDeps {
@@ -22,6 +23,9 @@ export interface AntigravityLeftoverRouteDeps {
   hosted: boolean;
   /** Only an Antigravity instance offers this. */
   isAntigravity(instanceId: string): boolean;
+  /** #4435: the person an added account belongs to (organization server),
+   * else undefined. Another person's account is not there for the caller. */
+  accountOwner?(instanceId: string): string | undefined;
   find(): Promise<LeftoverScan>;
   remove(): Promise<LeftoverRemoval>;
 }
@@ -32,7 +36,7 @@ export const BUSY_LEFTOVER_ERROR = "Already looking for leftover files. Try agai
 export function createAntigravityLeftoverRoutes(deps: AntigravityLeftoverRouteDeps): RouteHandler {
   // One scan or delete at a time: both walk thousands of files.
   let busy = false;
-  return async ({ req, res, path, method, json, readBody }) => {
+  return async ({ req, res, path, method, auth, json, readBody }) => {
     const match = ROUTE.exec(path);
     if (!match) return PASS;
     const removing = Boolean(match[2]);
@@ -45,6 +49,8 @@ export function createAntigravityLeftoverRoutes(deps: AntigravityLeftoverRouteDe
       }
       await readBody(req, 4096);
     }
+    const viewer = auth.kind === "session" ? auth.session.principalId ?? null : null;
+    if (!accountOwnedBy(deps.accountOwner?.(match[1]!), viewer)) return json(res, 404, { error: "unknown instance" });
     if (!deps.isAntigravity(match[1]!)) return json(res, 404, { error: "Only Antigravity has leftover files to clear." });
     if (busy) return json(res, 409, { error: BUSY_LEFTOVER_ERROR });
     busy = true;

@@ -32327,7 +32327,9 @@ function orgMcpServers(): Array<{ name: string; transport: "remote" | "stdio"; u
 const orgOpsDeps: OpsDeps = {
   connections: async (): Promise<ConnectionsView> => {
     const people = orgPeopleDeps.people().filter((person) => !person.perspicaxDisabled && !person.consoleDisabled);
-    const engines = registry.entries().map((entry) => {
+    // #4435: an account a person added is theirs alone: not in the console either
+    const personal = (id: string) => Boolean(personalProviderInstances.ownerOf(id));
+    const engines = registry.entries().filter((entry) => !personal(entry.instanceId)).map((entry) => {
       const driver = entry.shadow?.driverKind ?? entry.live?.driverKind ?? "";
       return {
         id: entry.instanceId,
@@ -32352,7 +32354,7 @@ const orgOpsDeps: OpsDeps = {
       engines,
       people: people.map((person) => ({
         person: adminPerson(person.principalId),
-        engines: person.engines.map((engine) => ({ id: engine.id, via: engine.via, ok: null, checkedAt: null })),
+        engines: person.engines.filter((engine) => !personal(engine.id)).map((engine) => ({ id: engine.id, via: engine.via, ok: null, checkedAt: null })),
         mcpServers: Object.keys(personConnections.servers(person.principalId)).length
       })),
       mcpServers,
@@ -32373,7 +32375,8 @@ const orgOpsDeps: OpsDeps = {
   },
   test: async (kind, id, principalId) => {
     if (kind === "engine") {
-      const live = registry.get(id);
+      // #4435: an account a person added is not the console's to test
+      const live = personalProviderInstances.ownerOf(id) ? undefined : registry.get(id);
       if (!live) return { ok: false, reason: "engine_not_installed", label: `No engine ${id} on this server.` };
       const snapshot = await live.snapshot();
       if (snapshot.state !== "available") return { ok: false, reason: "engine_unavailable", label: redactSecretsInText(snapshot.reason ?? "The engine is not available.").slice(0, 300) };
@@ -32425,7 +32428,8 @@ const orgOpsDeps: OpsDeps = {
         ownAccountsOutsideList: cfg.organization?.ownAccountsOutsideList === true,
         // 2026-10-30 (lot 2): per model, `<engine>/<model>`, and each engine's models to switch
         disabledModels: orgDisabledModels(),
-        engineModels: Object.fromEntries(registry.instances().map((instance) => [instance.instanceId,
+        // #4435: never an account a person added
+        engineModels: Object.fromEntries(registry.instances().filter((instance) => !personalProviderInstances.ownerOf(instance.instanceId)).map((instance) => [instance.instanceId,
           instance.models.options.filter((option) => !option.local).map((option) => ({ id: option.id, label: option.label || option.id }))])),
         defaults: { engine: selection?.instanceId ?? null, model: selection?.model ?? null, approvalMode: cfg.newBotDefaults?.profile.approvalMode ?? null }
       },
@@ -32435,7 +32439,7 @@ const orgOpsDeps: OpsDeps = {
   saveSettings: (changes, adminPrincipalId) => {
     const actor: AdminActor = { kind: "person", principalId: adminPrincipalId, via: "console" };
     if (changes.allowedEngines !== undefined) {
-      const unknown = (changes.allowedEngines ?? []).find((id) => !registry.entries().some((entry) => entry.instanceId === id));
+      const unknown = (changes.allowedEngines ?? []).find((id) => personalProviderInstances.ownerOf(id) || !registry.entries().some((entry) => entry.instanceId === id));
       if (unknown) throw new ConsoleRefusal(400, "engine_not_installed", `No engine ${unknown} on this server.`);
     }
     if (changes.defaults && (changes.defaults.engine !== undefined || changes.defaults.model !== undefined)) {
@@ -33989,6 +33993,7 @@ ROUTES.push(createDeciderRoutes({ decider }));
 ROUTES.push(createAntigravityLeftoverRoutes({
   hosted: Boolean(hostedModels),
   isAntigravity: (instanceId) => registry.get(instanceId)?.driverKind === "antigravityAgent",
+  accountOwner: (instanceId) => personalProviderInstances.ownerOf(instanceId),
   find: () => findAntigravityLeftovers(),
   remove: () => removeAntigravityLeftovers()
 }));

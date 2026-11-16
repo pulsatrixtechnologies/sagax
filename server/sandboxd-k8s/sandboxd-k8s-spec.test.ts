@@ -457,6 +457,8 @@ describe("the environment's first process (#4463)", () => {
       expect(command.join(" ")).toContain("exec tini -- sleep infinity");
       // an older image without tini still starts
       expect(command.join(" ")).toContain("exec sleep infinity");
+      // and says so in its log
+      expect(command.join(" ")).toMatch(/tini is missing[^;]*>&2; exec sleep infinity/);
     }
   });
 });

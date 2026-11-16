@@ -2,7 +2,7 @@
 // capacity, removal, and the refusal to run without the egress policy.
 import { describe, expect, it } from "vitest";
 
-import { ENVIRONMENT_BROKEN_CODE, ENVIRONMENT_BROKEN_MESSAGE, EXEC_FAILED_CODE, EXEC_NOT_RUN_MESSAGE, SANDBOX_TTY_ARGV, SandboxError, SandboxService, parseKeyUsers, ttyArgv } from "./sandboxd-core.ts";
+import { ENVIRONMENT_BROKEN_CODE, ENVIRONMENT_BROKEN_MESSAGE, ENVIRONMENT_BUSY_MESSAGE, ENVIRONMENT_RECENTLY_REPAIRED_MESSAGE, ENVIRONMENT_REPAIRED_NOTICE, EXEC_FAILED_CODE, EXEC_NOT_RUN_MESSAGE, SANDBOX_TTY_ARGV, SandboxError, SandboxService, parseKeyUsers, ttyArgv } from "./sandboxd-core.ts";
 import { FakeDocker } from "../testing/fake-docker.ts";
 import { sandboxIsolationProblems, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
 
@@ -322,9 +322,97 @@ describe("an environment that cannot start any command (#4463)", () => {
     await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toMatchObject({ code: ENVIRONMENT_BROKEN_CODE, message: expect.stringContaining(ENVIRONMENT_BROKEN_MESSAGE) });
     await expect(service.exec(alice, { argv: ["echo", "again"] })).rejects.toThrow(/session keyring/);
     expect(docker.calls.filter((call) => call.startsWith("create "))).toHaveLength(2);
-    // within the cooldown: the runtime's own reason, no second restart
-    await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toMatchObject({ code: EXEC_FAILED_CODE });
+    // within the cooldown: plain words and the runtime's reason, no second restart
+    await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toMatchObject({ code: ENVIRONMENT_BROKEN_CODE, message: expect.stringMatching(/session keyring/) });
+    await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toThrow(ENVIRONMENT_RECENTLY_REPAIRED_MESSAGE);
     expect(docker.calls.filter((call) => call.startsWith("create "))).toHaveLength(2);
+  });
+
+  it("tells the bot, on the command's own stderr, that the environment was restarted", async () => {
+    const { service } = broken(2);
+    await service.installEgressPolicy();
+    const result = await service.exec(alice, { argv: ["echo", "ok"] });
+    expect(result.stderr.startsWith(ENVIRONMENT_REPAIRED_NOTICE)).toBe(true);
+    const next = await service.exec(alice, { argv: ["echo", "ok"] });
+    expect(next.stderr).toBe("");
+  });
+
+  it("never restarts an environment while another command still runs in it", async () => {
+    const { docker, service } = setup();
+    await service.installEgressPolicy();
+    await service.ensure(alice);
+    let finishBuild: () => void = () => {};
+    const plain = docker.exec.bind(docker);
+    docker.exec = async (name, exec, maxBytes, stdin) => {
+      if (exec.Cmd.includes("build")) {
+        await new Promise<void>((resolve) => { finishBuild = resolve; });
+        return { exitCode: 0, stdout: Buffer.from("built"), stderr: Buffer.alloc(0), truncated: false };
+      }
+      await plain(name, exec, maxBytes, stdin);
+      throw refusal();
+    };
+    const build = service.exec(alice, { argv: ["build"] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toMatchObject({ code: ENVIRONMENT_BROKEN_CODE, message: expect.stringContaining(ENVIRONMENT_BUSY_MESSAGE) });
+    expect(docker.calls.filter((call) => call.startsWith("rm "))).toEqual([]);
+    finishBuild();
+    await expect(build).resolves.toMatchObject({ exitCode: 0, stdout: "built" });
+    // once nothing runs, the next refused command restarts it
+    docker.exec = async (name, exec, maxBytes, stdin) => {
+      if (docker.calls.filter((call) => call.startsWith("create ")).length < 2) throw refusal();
+      return plain(name, exec, maxBytes, stdin);
+    };
+    await expect(service.exec(alice, { argv: ["echo", "ok"] })).resolves.toMatchObject({ exitCode: 0 });
+    expect(docker.calls.filter((call) => call.startsWith("rm "))).toHaveLength(1);
+  });
+
+  it("never restarts an environment while a terminal is open in it", async () => {
+    const { docker, service } = broken(2);
+    await service.installEgressPolicy();
+    await service.ttyStream(alice, { cols: 80, rows: 24 });
+    await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toThrow(ENVIRONMENT_BUSY_MESSAGE);
+    expect(docker.calls.filter((call) => call.startsWith("rm "))).toEqual([]);
+  });
+
+  it("restarts nothing and runs nothing again for a failure that is not the key quota", async () => {
+    const { docker, service } = setup();
+    await service.installEgressPolicy();
+    await service.ensure(alice);
+    const cuts = [
+      `${EXEC_NOT_RUN_MESSAGE}: the connection to the environment closed before the command answered (close 1006); it may have run in part`,
+      `${EXEC_NOT_RUN_MESSAGE}: error dialing backend: context deadline exceeded`,
+    ];
+    for (const cut of cuts) {
+      let runs = 0;
+      docker.execResult = (exec) => {
+        if (exec.Cmd.includes("push")) { runs += 1; throw new SandboxError(502, EXEC_FAILED_CODE, cut); }
+        // the probe fails too, the way a node in trouble would
+        throw refusal();
+      };
+      await expect(service.exec(alice, { argv: ["push"] })).rejects.toMatchObject({ code: EXEC_FAILED_CODE, message: cut });
+      expect(runs).toBe(1);
+    }
+    expect(docker.calls.filter((call) => call.startsWith("rm "))).toEqual([]);
+  });
+
+  it("restarts nothing when the check itself fails another way", async () => {
+    const { docker, service } = setup();
+    await service.installEgressPolicy();
+    await service.ensure(alice);
+    docker.execResult = (exec) => {
+      if (exec.Cmd.includes("echo")) throw refusal();
+      throw new SandboxError(502, EXEC_FAILED_CODE, `${EXEC_NOT_RUN_MESSAGE}: error dialing backend`);
+    };
+    await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toMatchObject({ code: EXEC_FAILED_CODE });
+    expect(docker.calls.filter((call) => call.startsWith("rm "))).toEqual([]);
+  });
+
+  it("gives the reason the restart was refused, not the key quota", async () => {
+    const { docker, service } = broken(99);
+    await service.installEgressPolicy();
+    await service.ensure(alice);
+    docker.images.clear();
+    await expect(service.exec(alice, { argv: ["echo", "ok"] })).rejects.toMatchObject({ code: ENVIRONMENT_BROKEN_CODE, message: expect.stringMatching(/image is not on this host/) });
   });
 
   it("leaves a healthy environment alone when only that command was not run", async () => {

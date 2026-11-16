@@ -86,13 +86,34 @@ export const EXEC_NOT_RUN_MESSAGE = "the server environment did not run the comm
  * starting it again on its disk did not fix it. */
 export const ENVIRONMENT_BROKEN_CODE = "environment_broken";
 export const ENVIRONMENT_BROKEN_MESSAGE = "Your server environment could not start any command, and restarting it on its disk did not fix it. Your files are kept. Try again in a few minutes; if it keeps failing, tell your administrator";
-/** The plain words, then the cluster's own reason (#3440). */
-function brokenMessage(cause: Error): string {
-  return `${ENVIRONMENT_BROKEN_MESSAGE}. Cause: ${cause.message.slice(0, 400)}`;
+/** Not restarted: something still runs in it, and a restart would end it. */
+export const ENVIRONMENT_BUSY_MESSAGE = "Your server environment cannot start new commands, and it was not restarted because commands, terminals or MCP servers are still running in it (a restart would stop them). Your files are kept. Once they end, the next command restarts it";
+/** Not restarted again: it already was, a short while ago. */
+export const ENVIRONMENT_RECENTLY_REPAIRED_MESSAGE = "Your server environment cannot start new commands. It was already restarted on its disk less than 10 minutes ago, so it is not restarted again yet. Your files are kept. Try again in a few minutes; if it keeps failing, tell your administrator";
+/** Put first on the stderr of a command run again after a repair. */
+export const ENVIRONMENT_REPAIRED_NOTICE = "sagax: your server environment could not start commands any more, so it was restarted on its disk before this command ran. Your files are kept; processes left running in the background and open terminals were stopped.\n";
+/** The plain words, then the reason (#3440). */
+function brokenMessage(lead: string, cause: Error): string {
+  return `${lead}. Cause: ${cause.message.slice(0, 400)}`;
 }
 /** A broken environment is restarted at most once in this period. */
 export const ENVIRONMENT_REPAIR_COOLDOWN_MS = 10 * 60_000;
 const HEALTH_PROBE_TIMEOUT_MS = 20_000;
+/** #4463: the runtime's refusal when the uid's kernel key quota is spent,
+ * e.g. "unable to start container process: unable to join session keyring:
+ * unable to create session key: disk quota exceeded". The runtime creates
+ * the session keyring before the command starts: a command refused so never
+ * ran. Nothing else triggers a restart. */
+const KEYRING_REFUSAL_RE = /unable to (?:join session keyring|create session key)|session key(?:ring)?\b[^\n]*disk quota exceeded/i;
+/** A transport cut after the start: the command may have run. */
+const MAY_HAVE_RUN_RE = /may have run in part/i;
+
+/** True for an exec the runtime refused at its start because the
+ * environment's key quota is full: the command certainly never ran. */
+export function isKeyringRefusal(error: unknown): error is SandboxError {
+  return error instanceof SandboxError && error.code === EXEC_FAILED_CODE
+    && KEYRING_REFUSAL_RE.test(error.message) && !MAY_HAVE_RUN_RE.test(error.message);
+}
 /** Above this share of its key quota, an environment is reported in the log. */
 const KEYS_WARN_RATIO = 0.75;
 
@@ -169,6 +190,9 @@ export class SandboxService {
   private readonly repairedAt = new Map<string, number>();
   /** A repair under way: the other commands that failed meanwhile wait for it. */
   private readonly repairing = new Map<string, Promise<boolean>>();
+  /** Commands whose exec is under way right now (busy also counts those
+   * waiting for the environment or for a repair). */
+  private readonly inFlight = new Map<string, number>();
   private readonly keys = new Map<string, { used: number; max: number }>();
   private readonly keysWarned = new Set<string>();
   egress: EgressPolicyState;
@@ -379,23 +403,29 @@ export class SandboxService {
   remove(key: string, options: { keepWorkspace?: boolean } = {}): Promise<SandboxStatus> {
     this.checkKey(key);
     return this.withLock(key, async () => {
-      const names = sandboxNames(key);
-      const container = await this.docker.inspectContainer(names.container);
-      if (container && !this.owned(container.labels, key)) throw new SandboxError(409, "conflict", "a container with this name is not managed by this provisioner");
-      if (container) await this.docker.removeContainer(names.container);
-      const network = await this.docker.inspectNetwork(names.network);
-      if (network && this.owned(network.labels, key)) await this.docker.removeNetwork(names.network);
-      if (!options.keepWorkspace) {
-        const volume = await this.docker.inspectVolume(names.volume);
-        if (volume && this.owned(volume.labels, key)) await this.docker.removeVolume(names.volume);
-        this.usage.delete(key);
-      }
-      this.lastUsed.delete(key);
-      this.hibernated.delete(key);
-      this.osInfo.delete(key);
-      this.keys.delete(key);
+      await this.removeLocked(key, options);
       return this.status(key);
     });
+  }
+
+  /** remove() without the lock: the caller holds it. */
+  private async removeLocked(key: string, options: { keepWorkspace?: boolean }): Promise<void> {
+    const names = sandboxNames(key);
+    const container = await this.docker.inspectContainer(names.container);
+    if (container && !this.owned(container.labels, key)) throw new SandboxError(409, "conflict", "a container with this name is not managed by this provisioner");
+    if (container) await this.docker.removeContainer(names.container);
+    const network = await this.docker.inspectNetwork(names.network);
+    if (network && this.owned(network.labels, key)) await this.docker.removeNetwork(names.network);
+    if (!options.keepWorkspace) {
+      const volume = await this.docker.inspectVolume(names.volume);
+      if (volume && this.owned(volume.labels, key)) await this.docker.removeVolume(names.volume);
+      this.usage.delete(key);
+    }
+    this.lastUsed.delete(key);
+    this.hibernated.delete(key);
+    this.osInfo.delete(key);
+    this.keys.delete(key);
+    this.keysWarned.delete(key);
   }
 
   private touch(key: string): void {
@@ -443,19 +473,32 @@ export class SandboxService {
         Env: env.map(([name, value]) => `${name}=${value}`),
         WorkingDir: SANDBOX_WORKSPACE,
       }, maxOutput, stdin);
+      const tracked = async () => {
+        this.inFlight.set(key, (this.inFlight.get(key) ?? 0) + 1);
+        try {
+          return await run();
+        } finally {
+          const left = (this.inFlight.get(key) ?? 1) - 1;
+          if (left > 0) this.inFlight.set(key, left);
+          else this.inFlight.delete(key);
+        }
+      };
       let result: Awaited<ReturnType<typeof run>>;
+      let notice = "";
       try {
-        result = await run();
+        result = await tracked();
       } catch (error) {
-        // #4463: an environment that cannot start any command is restarted
-        // on its disk, then the command runs once more.
-        if (!(await this.repairIfBroken(key, error))) throw error;
-        result = await run();
+        // #4463: only a refusal at the start for a full key quota (the
+        // command never ran) restarts the environment, then runs it once
+        // more. Any other failure, the command may have run: as is.
+        if (!isKeyringRefusal(error) || !(await this.repairIfBroken(key, error))) throw error;
+        result = await tracked();
+        notice = ENVIRONMENT_REPAIRED_NOTICE;
       }
       return {
         exitCode: result.exitCode,
         stdout: result.stdout.toString("utf8"),
-        stderr: result.stderr.toString("utf8"),
+        stderr: notice + result.stderr.toString("utf8"),
         truncated: result.truncated,
         timedOut: result.exitCode === 124 || result.exitCode === 137,
       };
@@ -466,8 +509,10 @@ export class SandboxService {
     }
   }
 
-  /** True when a trivial command runs in the environment. */
-  private async probe(key: string): Promise<boolean> {
+  /** Whether a trivial command runs: "ok", "refused" (the same key quota
+   * refusal) or "unknown" (any other failure, or too slow: not a reason to
+   * restart anything). */
+  private async probe(key: string): Promise<"ok" | "refused" | "unknown"> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), HEALTH_PROBE_TIMEOUT_MS); });
     try {
@@ -475,56 +520,68 @@ export class SandboxService {
         this.docker.exec(sandboxNames(key).container, { Cmd: ["true"], User: `${SANDBOX_UID}:${SANDBOX_UID}`, Env: [], WorkingDir: "/" }, 1024),
         late,
       ]);
-      return result?.exitCode === 0;
-    } catch {
-      return false;
+      return result?.exitCode === 0 ? "ok" : "unknown";
+    } catch (error) {
+      return isKeyringRefusal(error) ? "refused" : "unknown";
     } finally {
       clearTimeout(timer);
     }
   }
 
-  /** #4463: after a command the environment did not run (exec_failed: the
-   * runtime refused it, say "unable to join session keyring: disk quota
-   * exceeded"), check whether even `true` runs. When it does not, restart
-   * the environment on its disk (Kubernetes: a new Pod on the same claim;
-   * every process in it ends, /workspace stays) and check again. True when
-   * it was repaired (the caller runs its command again); false when the
-   * failure was not the environment's (it runs `true`), not an exec
-   * failure, or the environment was repaired less than the cooldown ago.
-   * Throws ENVIRONMENT_BROKEN_CODE, in plain words, when the restart did
+  /** #4463: after a command the runtime refused because the environment's
+   * key quota is full ("unable to join session keyring: disk quota
+   * exceeded"), check that even `true` is refused the same way. Then, when
+   * nothing else runs in it (no other command, terminal, MCP server or
+   * desktop view), restart it on its disk (Kubernetes: a new Pod on the
+   * same claim; every process in it ends, /workspace stays) and check
+   * again. True when it was repaired (the caller runs its command again);
+   * false when `true` runs or fails some other way (the original error
+   * stands). Throws ENVIRONMENT_BROKEN_CODE, in plain words, when it is
+   * occupied, was repaired less than the cooldown ago, or the restart did
    * not help. */
-  private repairIfBroken(key: string, error: unknown): Promise<boolean> {
-    if (!(error instanceof SandboxError) || error.code !== EXEC_FAILED_CODE) return Promise.resolve(false);
+  private repairIfBroken(key: string, error: SandboxError): Promise<boolean> {
     const running = this.repairing.get(key);
     if (running) return running;
-    const last = this.repairedAt.get(key);
-    if (last !== undefined && this.now() - last < ENVIRONMENT_REPAIR_COOLDOWN_MS) return Promise.resolve(false);
     const work = this.repair(key, error).finally(() => { this.repairing.delete(key); });
     this.repairing.set(key, work);
     return work;
   }
 
+  /** Something that a restart would end is open in the environment. */
+  private occupied(key: string): boolean {
+    return (this.inFlight.get(key) ?? 0) > 0 || (this.ttyStreams.get(key) ?? 0) > 0
+      || (this.stdioStreams.get(key) ?? 0) > 0 || (this.desktopStreams.get(key) ?? 0) > 0;
+  }
+
   private async repair(key: string, error: SandboxError): Promise<boolean> {
-    if (await this.probe(key)) return false;
-    this.repairedAt.set(key, this.now());
     const short = key.slice(0, 8);
-    console.warn(`sandboxd: environment ${short} cannot start any command (${error.message.slice(0, 200)}); restarting it on its disk`);
-    try {
-      await this.withLock(key, async () => {
-        const container = await this.docker.inspectContainer(sandboxNames(key).container);
-        if (container && !this.owned(container.labels, key)) throw new SandboxError(409, "conflict", "a container with this name is not managed by this provisioner");
-        if (container) await this.docker.removeContainer(sandboxNames(key).container);
-      });
-      this.keys.delete(key);
-      this.keysWarned.delete(key);
-      await this.ensure(key);
-    } catch (repair) {
-      console.error(`sandboxd: environment ${short} restart failed: ${repair instanceof Error ? repair.message : String(repair)}`);
-      throw new SandboxError(503, ENVIRONMENT_BROKEN_CODE, brokenMessage(error));
+    if ((await this.probe(key)) !== "refused") return false;
+    const last = this.repairedAt.get(key);
+    if (last !== undefined && this.now() - last < ENVIRONMENT_REPAIR_COOLDOWN_MS) {
+      throw new SandboxError(503, ENVIRONMENT_BROKEN_CODE, brokenMessage(ENVIRONMENT_RECENTLY_REPAIRED_MESSAGE, error));
     }
-    if (!(await this.probe(key))) {
+    let restarted = false;
+    try {
+      restarted = await this.withLock(key, async () => {
+        if (this.occupied(key)) return false;
+        this.repairedAt.set(key, this.now());
+        console.warn(`sandboxd: environment ${short} cannot start any command (${error.message.slice(0, 200)}); restarting it on its disk`);
+        await this.removeLocked(key, { keepWorkspace: true });
+        return true;
+      });
+      if (restarted) await this.ensure(key);
+    } catch (repair) {
+      const cause = repair instanceof Error ? repair : new Error(String(repair));
+      console.error(`sandboxd: environment ${short} restart failed: ${cause.message}`);
+      throw new SandboxError(503, ENVIRONMENT_BROKEN_CODE, brokenMessage(ENVIRONMENT_BROKEN_MESSAGE, cause));
+    }
+    if (!restarted) {
+      console.warn(`sandboxd: environment ${short} cannot start any command, not restarted: something still runs in it`);
+      throw new SandboxError(503, ENVIRONMENT_BROKEN_CODE, brokenMessage(ENVIRONMENT_BUSY_MESSAGE, error));
+    }
+    if ((await this.probe(key)) !== "ok") {
       console.error(`sandboxd: environment ${short} still cannot start a command after its restart`);
-      throw new SandboxError(503, ENVIRONMENT_BROKEN_CODE, brokenMessage(error));
+      throw new SandboxError(503, ENVIRONMENT_BROKEN_CODE, brokenMessage(ENVIRONMENT_BROKEN_MESSAGE, error));
     }
     console.warn(`sandboxd: environment ${short} restarted on its disk and runs commands again`);
     return true;

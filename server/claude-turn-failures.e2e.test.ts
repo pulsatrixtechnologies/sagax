@@ -203,7 +203,13 @@ it("goes on in a new session started from the chat when Claude cannot reopen the
     // the rebuilt session is a technical note: the log has it, the chat does not (the maintainer, 2026-10-26)
     expect(after.filter((m) => m.kind === "activity" && (m.tool?.name ?? "").startsWith("notice: ")).map((m) => m.tool.name)).toEqual([]);
     expect(after.some((m) => (m.tool?.name ?? "").includes(rebuiltSessionNotice("Claude Code")))).toBe(false);
-    expect(after.some((m) => m.kind === "activity" && m.tool?.ok === false)).toBe(false);
+    // a failed row names itself: this step failed once on the automatic runner and never here (#4370)
+    const failed = after.filter((m) => m.kind === "activity" && m.tool?.ok === false);
+    expect(failed.length, `failed activity rows after the stale resume: ${JSON.stringify(failed.map((m) => ({
+      kind: m.kind,
+      tool: m.tool?.name,
+      error: String(m.tool?.output ?? m.text ?? "").slice(0, 600),
+    })))}`).toBe(0);
     expect(after.some((m) => m.role === "bot" && m.kind === "text" && m.text)).toBe(true);
   } finally {
     await close();

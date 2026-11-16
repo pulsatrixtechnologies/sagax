@@ -1424,6 +1424,14 @@ export class Store {
     this.botsFile.writeSoon(() => this.botsText());
   }
 
+  /** The bookkeeping still waiting for its deferred save (engine sessions,
+   * what each was handed), written now on the loop: for a step a restart
+   * reads it back for, such as a queued send claimed for its turn
+   * (server/turns/steer-queue.ts). Nothing waiting: nothing written. */
+  persistEngineSessions() {
+    this.botsFile.flushSync();
+  }
+
   /** A change a person asked for and an answer confirms (a bot created or deleted, a new thread, access, a secret
    * reference, ownership, a profile edit): written on the event loop before it returns, and it throws when the write
    * fails, so the caller refuses the change. These are rare; what turns change often is bookkeeping (saveBotsSoon). */

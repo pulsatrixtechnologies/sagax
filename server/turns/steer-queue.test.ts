@@ -17,7 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { saveChatFollowup } from "../messages/message-db.ts";
+import { chatFollowups, saveChatFollowup } from "../messages/message-db.ts";
 import {
   cancelSteeredMessage,
   drainSteeredMessages,
@@ -656,6 +656,22 @@ describe("steer-queue module", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  // A restart that finds a claimed send keeps its words out of the model's
+  // next turn from the engine bookkeeping on disk, saved later off the loop:
+  // the drain puts it on disk before the claim (#4370).
+  it("saves the engine sessions to disk before it claims a waiting send", () => {
+    const bot = fakeBot("bot-claim", "thread-claim", false);
+    const store = fakeStore([bot]);
+    const queued = queueSteeredMessage(bot.id, bot.threadId, "deploy it");
+    const statusAtSave: Array<string | undefined> = [];
+    store.persistEngineSessions = () => { statusAtSave.push(chatFollowups().find((row) => row.id === queued.id)?.status); };
+    const run = vi.fn();
+    drainSteeredMessages(store, run);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(statusAtSave).toEqual(["pending"]);
+    expect(chatFollowups().find((row) => row.id === queued.id)?.status).toBe("dispatching");
+  });
+
   // A Live call waits for a spoken request it saw queued; it asks here
   // whether that one send still waits, since an edit or cancel removes it
   // without ever delivering it.
@@ -815,8 +831,11 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
   const groupById = async (id: string) =>
     (await api("GET", "/api/bots?messages=0")).body.groups.find((g: any) => g.id === id);
 
+  // The fake engine echoes the whole prompt, which opens on a blank line (the
+  // security policy section): the reply keeps "echo:" and loses the space
+  // before that line break, so the match is on "echo:" and any white space.
   const echoes = (bot: any): any[] =>
-    bot.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && m.text?.startsWith("echo: "));
+    bot.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && /^echo:\s/.test(m.text ?? ""));
 
   const until = async (probe: () => Promise<boolean>, what: string, timeoutMs = 30_000) => {
     const deadline = Date.now() + timeoutMs;

@@ -4,9 +4,9 @@
 // design, secrets redacted, a bot of the plan resolved like bot_ids, and
 // a call without them reads exactly as before.
 import { describe, expect, it, vi } from "vitest";
-import { TEAM_PLAN_STEPS, TEAM_STEP_NAME_CHARS, TEAM_WORK_NAME_CHARS } from "../../../shared/team-work.ts";
+import { TEAM_PLAN_STEPS, TEAM_STEP_NAME_CHARS, TEAM_WORK_NAME_CHARS, TEAM_WORK_WHY_CHARS } from "../../../shared/team-work.ts";
 import { resolveTeammate } from "../../peers/peer-roster.ts";
-import { workLabel } from "../../team-work/work-label.ts";
+import { workEnd, workLabel } from "../../team-work/work-label.ts";
 import type { ToolCallContext } from "../agents-call-types.ts";
 import { DEF_COORDINATE_BOTS, DEF_SEND_TO_BOT, callCoreTool } from "./core.ts";
 
@@ -109,5 +109,44 @@ describe("workLabel: what the runtime row stores (#3463)", () => {
   it("keeps a plan only with a name for the work, and one entry per step name", () => {
     expect(workLabel({ step: "Write the fix", plan: [{ step: "Write the fix" }] }, resolve)).toEqual({ step: "Write the fix" });
     expect(workLabel({ work: "Login fix", plan: [{ step: "Review" }, { step: " review " }] }, resolve)!.plan).toEqual([{ name: "Review" }]);
+  });
+});
+
+// #4421: the orchestrator ends a piece of work with the tool it declares the
+// plan with, though steps of the plan were never handed out.
+describe("end_work on coordinate_bots (#4421)", () => {
+  it("is an optional field: done or dropped, with one line why; bot_ids and message are not required with it", () => {
+    const props = DEF_COORDINATE_BOTS.inputSchema.properties as Record<string, { properties?: Record<string, { enum?: string[] }>; required?: string[] }>;
+    expect(props.end_work?.properties?.outcome?.enum).toEqual(["done", "dropped"]);
+    expect(props.end_work?.required).toEqual(["outcome"]);
+    expect(DEF_COORDINATE_BOTS.inputSchema.required).not.toContain("end_work");
+    expect(DEF_COORDINATE_BOTS.inputSchema.required).not.toContain("bot_ids");
+  });
+
+  it("sends only the work and its end to the coordination route, and says what became of it", async () => {
+    const api = vi.fn(async (_path: string, _init?: RequestInit) => ({ message: "Ended \"Release\" as done; it shows under Done today on the person's panel. Nothing was sent to a teammate.", openWork: ["Login fix"] }));
+    const result = await callCoreTool("coordinate_bots", { work: "Release", end_work: { outcome: "done", why: "Merged by another session" } }, context(api));
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(api.mock.calls[0]![0]).toBe("/api/internal/coordinate-bots");
+    expect(body(api)).toEqual({ work: "Release", endWork: { outcome: "done", why: "Merged by another session" } });
+    expect(result?.isError).toBeFalsy();
+    expect(result?.text).toContain("Done today");
+    expect(result?.text).toContain('"Login fix"');
+  });
+
+  it("without work, says what it needs and sends nothing; a refusal reads as an error", async () => {
+    const api = vi.fn(async () => ({ error: "No piece of work named \"Nope\"" }));
+    expect((await callCoreTool("coordinate_bots", { end_work: { outcome: "dropped" } }, context(api)))?.isError).toBe(true);
+    expect(api).not.toHaveBeenCalled();
+    expect((await callCoreTool("coordinate_bots", { work: "Nope", end_work: { outcome: "dropped" } }, context(api)))?.isError).toBe(true);
+  });
+
+  it("workEnd: done or dropped, one line why, redacted and cut; anything else is no end", () => {
+    expect(workEnd({ outcome: "done", why: "Merged\nby another   session" }, 5)).toEqual({ at: 5, outcome: "done", why: "Merged by another session" });
+    expect(workEnd({ outcome: "dropped" }, 5)).toEqual({ at: 5, outcome: "dropped" });
+    expect(workEnd("done", 5)).toEqual({ at: 5, outcome: "done" });
+    expect(workEnd({ outcome: "cleared" }, 5)).toBeUndefined();
+    expect(workEnd({}, 5)).toBeUndefined();
+    expect(workEnd({ outcome: "done", why: "w".repeat(500) }, 5)!.why!.length).toBeLessThanOrEqual(TEAM_WORK_WHY_CHARS);
   });
 });

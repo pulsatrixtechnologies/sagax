@@ -4,9 +4,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { openRuntimeStore, type RuntimeStore } from "../runtime/store.ts";
 import type { Assignment } from "../runtime/types.ts";
-import { handedOver } from "../runtime-coordinator.ts";
+import { endWorkRows, handedOver } from "../runtime-coordinator.ts";
+import { teamWorkClearSteps } from "../../shared/team-work.ts";
 import type { TurnPeek } from "../turns/turn-watchdog.ts";
-import { createTeamWorkReader, openWorkNames, stepTitle, type TeamWorkDeps, type TeamWorkMessage, type TeamWorkThread } from "./team-work.ts";
+import { createTeamWorkReader, openWorkNames, stepTitle, workRowsNamed, type TeamWorkDeps, type TeamWorkMessage, type TeamWorkThread } from "./team-work.ts";
 
 const NOW = 10_000_000;
 
@@ -230,5 +231,49 @@ describe("named work and its plan (#3463)", () => {
     expect(openWorkNames(rows, "orc", "ana", NOW).sort()).toEqual(["Login fix", "Release"]);
     expect(openWorkNames(rows, "orc", "ben", NOW)).toEqual(["Ben's work"]);
     expect(openWorkNames(rows, "orc", "ana", NOW, (row) => row.id !== "h1")).toEqual(["Release"]);
+  });
+
+  // #4421: where the state lives and why nothing could clear it. A piece of
+  // work is read from the runtime rows of its hand-overs (their work label);
+  // it was listed until no step was live AND every plan step was handed out,
+  // and nothing could say otherwise: a plan step never handed out kept it
+  // "next step not handed out yet" until the row left the 7-day window. The
+  // end now rides on those same rows' label.
+  it("a plan of three, one step handed out, then the orchestrator closes the work: the row leaves (#4421)", () => {
+    const r = rig();
+    const ana = named(r);
+    const plan = [{ name: "Build" }, { name: "Test" }, { name: "Ship" }];
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work", { status: "completed", outcome: "done", finishedAt: NOW - 300_000, work: { name: "Release", step: "Build", plan } }), { kind: "enqueued" });
+    expect(r.reader.read("orc", "ana", 0).live[0]).toMatchObject({ key: "work:release", done: 1, total: 3, toCome: [{ name: "Test" }, { name: "Ship" }] });
+    const rows = r.runtime.handedOutBy("orc", 0).map(handedOver);
+    // only that person's rows of that name; not another person's work of the same name
+    expect(workRowsNamed(rows, "orc", "ana", " release ")).toEqual(["h1"]);
+    expect(workRowsNamed(rows, "orc", "ben", "Release")).toEqual([]);
+    expect(endWorkRows(r.runtime, ["h1"], { at: NOW - 1_000, outcome: "dropped", why: "Taken over elsewhere" })).toHaveLength(1);
+    // the end survives the store's own read
+    expect(r.runtime.get("h1")!.work).toMatchObject({ name: "Release", ended: { outcome: "dropped", why: "Taken over elsewhere" } });
+    const after = r.reader.read("orc", "ana", 0);
+    expect(after.live).toEqual([]);
+    expect(after.doneToday).toEqual([]);
+    expect(openWorkNames(r.runtime.handedOutBy("orc", 0).map(handedOver), "orc", "ana", NOW)).toEqual([]);
+  });
+
+  it("the person clears a row and Clear finished, as they read them, and nothing else (#4421)", () => {
+    const r = rig();
+    const ana = named(r);
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work", { status: "completed", outcome: "done", finishedAt: NOW - 300_000, work: { name: "Release", step: "Build", plan: [{ name: "Build" }, { name: "Ship" }] } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h2", ana, "rev", "rev-work", { createdAt: NOW - 200_000, startedAt: NOW - 200_000, work: { name: "Login fix" } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h3", ana, "dev", "dev-ship", { status: "cancelled", outcome: "stopped", createdAt: NOW - 150_000, finishedAt: NOW - 100_000, work: { name: "Docs", plan: [{ name: "Write" }, { name: "Publish" }] } }), { kind: "enqueued" });
+    const clear = (what: Parameters<typeof teamWorkClearSteps>[1]) =>
+      endWorkRows(r.runtime, teamWorkClearSteps(r.reader.read("orc", "ana", 0), what), { at: NOW, outcome: "cleared" }).map((row) => row.id);
+    expect(r.reader.read("orc", "ana", 0).live.map((item) => item.key).sort()).toEqual(["work:docs", "work:login fix", "work:release"]);
+    // one row by its key
+    expect(clear({ keys: ["work:release"] })).toEqual(["h1"]);
+    expect(r.reader.read("orc", "ana", 0).live.map((item) => item.key).sort()).toEqual(["work:docs", "work:login fix"]);
+    // every row nothing runs in: the running one stays
+    expect(clear({ finished: true })).toEqual(["h3"]);
+    expect(r.reader.read("orc", "ana", 0).live.map((item) => item.key)).toEqual(["work:login fix"]);
+    // another person reads nothing of Ana's, so their clear touches nothing
+    expect(teamWorkClearSteps(r.reader.read("orc", "ben", 0), { finished: true, keys: ["work:login fix"] })).toEqual([]);
   });
 });

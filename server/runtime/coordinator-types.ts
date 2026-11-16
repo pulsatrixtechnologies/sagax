@@ -1,5 +1,5 @@
 import type { WorkOrigin } from "../peers/peer-provenance.ts";
-import type { TeamWorkLabel } from "../../shared/team-work.ts";
+import type { TeamWorkEnded, TeamWorkLabel } from "../../shared/team-work.ts";
 import type { LegacyThreadResolver } from "./import-legacy.ts";
 import type {
   EnvelopeNames,
@@ -292,6 +292,9 @@ export interface Coordinator {
    * threads), created since `since` or still live, no room work. Indexed
    * store read (RuntimeStore.handedOutBy). */
   handedOutBy(botId: string, since: number): HandedOver[];
+  /** #4421: end a piece of work on these hand-overs (their work label
+   * carries the end; nothing is stopped). Answers how many rows took it. */
+  endWork(ids: readonly string[], ended: TeamWorkEnded): number;
   /** Hand work on from a running node: the requester's own root (its turn's
    * generation, begun by beginTurn) or a teammate's node (`parentId`).
    * `joined`: the request joined another tree's identical live request for

@@ -973,3 +973,30 @@ Covered by `shared/bot-task-list.test.ts` and `server/bots/bot-task-list.test.ts
 - Each hand-over's answer carries `openWork`, the names of the person's
   open pieces of work of that bot (none from a confidential conversation),
   so the next call can reuse a name (`openWorkEcho`).
+
+## Orchestrator work view: work that ends early, clear and stale (2026-11-16, #4421)
+
+- Where the state lives: a piece of work is read from the runtime rows of
+  its hand-overs (`Assignment.work`, the label of #3463). It was listed until
+  no step was live and every plan step was handed out; a plan step that was
+  never handed out (the work finished another way, or was stopped) kept the
+  row on "next step not handed out yet" until it left the 7-day window, and
+  nothing could say otherwise: no tool, no route and no button wrote an end.
+- The end rides on the same rows: `TeamWorkLabel.ended` (`at`, `outcome`
+  done, dropped or cleared, one line `why`), written by `endWorkRows`
+  (`server/runtime-coordinator.ts`, `Coordinator.endWork`) on each row of
+  the piece of work, then the ids-only `team.work` frame. The newest end
+  wins; a hand-over made after it opens the work again. Display only:
+  nothing is stopped.
+- The orchestrator closes a piece of work with `coordinate_bots` itself:
+  `work` plus `end_work: { outcome: "done" | "dropped", why }`, no
+  `bot_ids` or `message`; nothing is sent. Done shows under Done today
+  (finished, nothing to come, its words why); dropped leaves the list.
+- The person clears rows from the panel, no administrator and no approval:
+  `POST /api/bots/:id/team-work/clear` with `keys` (the row's X, the button
+  the coding rows already have) or `finished: true` ("Clear finished": every
+  row nothing runs in). Only the rows of that person's own read are touched
+  (`teamWorkClearSteps`); the answer is the list read again.
+- A listed piece of work with no step live that nothing touched for
+  `TEAM_WORK_STALE_MS` (12 h) carries `staleSince` and reads "stale since
+  <when>" instead of "next step not handed out yet".

@@ -84,6 +84,8 @@ export interface CodingSessionRowProps {
   /** Ignore on a finished row: replaces the chevron on hover or focus. */
   onIgnore?: () => void;
   ignoreId?: string;
+  /** The words of that button, when they are not "Ignore" (#4421: Clear). */
+  ignoreText?: { label: string; aria: string };
   /** Stop on a live row: replaces the chevron on hover or focus. */
   onStop?: () => void;
   stopId?: string;
@@ -103,7 +105,7 @@ export interface CodingSessionRowProps {
   inset?: boolean;
 }
 
-export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onIgnore, ignoreId, onStop, stopId, stopping = false, subtitle, subtitleHint, expanded, current = false, openLabel, inset = false }: CodingSessionRowProps) {
+export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onIgnore, ignoreId, ignoreText, onStop, stopId, stopping = false, subtitle, subtitleHint, expanded, current = false, openLabel, inset = false }: CodingSessionRowProps) {
   const state = codingRowState(status, pull);
   const number = state.pr ? prNumberText(state.pr) : "";
   return (
@@ -178,8 +180,8 @@ export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onI
           type="button"
           data-agent-ignore={ignoreId}
           onClick={onIgnore}
-          aria-label={t("botPanel.coding.ignoreAria", { title })}
-          title={t("botPanel.coding.ignore")}
+          aria-label={ignoreText?.aria ?? t("botPanel.coding.ignoreAria", { title })}
+          title={ignoreText?.label ?? t("botPanel.coding.ignore")}
           className="absolute right-3 z-10 flex size-6 items-center justify-center rounded-full text-ink-tertiary opacity-0 transition-opacity hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100"
         >
           <X size={12} aria-hidden="true" />

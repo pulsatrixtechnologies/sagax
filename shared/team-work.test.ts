@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   TEAM_SILENT_MS,
   TEAM_WORK_FRAME,
+  TEAM_WORK_STALE_MS,
   buildTeamWork,
   strongestLive,
   teamLive,
   teamWorkFrameAllowed,
+  teamWorkClearSteps,
   teamWorkName,
+  teamWorkSettled,
   type TeamLive,
   type TeamStepStatus,
   type TeamOpenTurn,
@@ -96,5 +99,67 @@ describe("team work frame", () => {
     expect(teamWorkFrameAllowed(frame, undefined, "ana")).toBe(true);
     expect(teamWorkFrameAllowed({ kind: TEAM_WORK_FRAME, botId: "orc" }, "ben", "local")).toBe(true);
     expect(teamWorkFrameAllowed({ kind: "other", audience: "ana" }, "ben", "local")).toBe(true);
+  });
+});
+
+// #4421: a piece of work ends without every planned step handed out (the
+// orchestrator's close, or the person's clear), and a row nothing touched
+// for long says it is stale instead of "next step not handed out yet".
+describe("a piece of work that ends before its plan is handed out (#4421)", () => {
+  const plan = [{ name: "Build" }, { name: "Test" }, { name: "Ship" }];
+  const built = { id: "h1", botId: "dev", requesterBotId: "orc", threadId: "t1", title: "Build", work: "Release", step: "Build", plan,
+    mode: "work" as const, status: "completed" as const, createdAt: 100_000, startedAt: 100_000, finishedAt: 200_000, coding: true };
+  const read = (ended?: { at: number; outcome: "done" | "dropped" | "cleared"; why?: string }, extra: TeamWorkInput["steps"] = [], now = 1_000_000) =>
+    buildTeamWork({ orchestratorId: "orc", now, since: 0, steps: [{ ...built, ...(ended ? { ended } : {}) }, ...extra] });
+
+  it("a plan of three, one handed out: listed, 1/3, two to come", () => {
+    const work = read();
+    expect(work.live).toHaveLength(1);
+    expect(work.live[0]).toMatchObject({ key: "work:release", done: 1, total: 3, finished: false });
+    expect(work.live[0]!.toCome.map((step) => step.name)).toEqual(["Test", "Ship"]);
+  });
+
+  it("closed as dropped by the orchestrator: the row leaves", () => {
+    const work = read({ at: 300_000, outcome: "dropped", why: "Taken over elsewhere" });
+    expect(work.live).toEqual([]);
+    expect(work.doneToday).toEqual([]);
+  });
+
+  it("cleared by the person: the row leaves", () => {
+    const work = read({ at: 300_000, outcome: "cleared" });
+    expect(work.live).toEqual([]);
+    expect(work.doneToday).toEqual([]);
+  });
+
+  it("closed as done: it leaves the live list for Done today, nothing to come, with the words why", () => {
+    const work = read({ at: 300_000, outcome: "done", why: "Merged by another session" });
+    expect(work.live).toEqual([]);
+    expect(work.doneToday).toHaveLength(1);
+    expect(work.doneToday[0]).toMatchObject({ finished: true, endedAt: 300_000, toCome: [], closed: { why: "Merged by another session" } });
+  });
+
+  it("a step handed out after the end opens the work again", () => {
+    const test = { ...built, id: "h2", threadId: "t2", title: "Test", step: "Test", plan: undefined, status: "running" as const, createdAt: 400_000, startedAt: 400_000, finishedAt: undefined };
+    const work = read({ at: 300_000, outcome: "dropped" }, [test]);
+    expect(work.live).toHaveLength(1);
+    expect(work.live[0]).toMatchObject({ done: 1, total: 3 });
+  });
+
+  it("nothing touched for TEAM_WORK_STALE_MS with no step live: stale since its newest action", () => {
+    expect(read(undefined, [], 200_000 + TEAM_WORK_STALE_MS - 1).live[0]!.staleSince).toBeUndefined();
+    expect(read(undefined, [], 200_000 + TEAM_WORK_STALE_MS).live[0]!.staleSince).toBe(200_000);
+    // a step still running is never stale
+    const running = { ...built, id: "h2", threadId: "t2", title: "Test", step: "Test", plan: undefined, status: "running" as const, createdAt: 150_000, startedAt: 150_000, finishedAt: undefined,
+      turn: { startedAt: 150_000, lastActionAt: 150_000, toolSince: 150_000 } };
+    expect(read(undefined, [running], 200_000 + 2 * TEAM_WORK_STALE_MS).live[0]!.staleSince).toBeUndefined();
+  });
+
+  it("Clear finished takes the settled rows, a named clear takes its row, and nothing that runs", () => {
+    const running = { id: "h9", botId: "dev", requesterBotId: "orc", threadId: "t9", title: "Hotfix", mode: "work" as const, status: "running" as const, createdAt: 500_000, startedAt: 500_000, coding: true };
+    const work = read(undefined, [running]);
+    expect(work.live.map((item) => teamWorkSettled(item))).toEqual([false, true]);
+    expect(teamWorkClearSteps(work, { finished: true })).toEqual(["h1"]);
+    expect(teamWorkClearSteps(work, { keys: ["step:h9"] })).toEqual(["h9"]);
+    expect(teamWorkClearSteps(work, { keys: ["work:unknown"] })).toEqual([]);
   });
 });

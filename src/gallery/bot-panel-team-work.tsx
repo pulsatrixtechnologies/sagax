@@ -72,6 +72,8 @@ const W2 = fr ? "Cartes d'approbation compactes" : "Compact approval cards";
 const W3 = fr ? "Connecteurs entre moteurs" : "Connectors between engines";
 const W4 = fr ? "Profil du bot : onglet Knowledge" : "Bot profile: Knowledge tab";
 const W5 = fr ? "Coupe de version" : "Version cut";
+const W6 = fr ? "Notes de version" : "Release notes";
+const W7 = fr ? "Écran d'accueil" : "Welcome screen";
 const steps: TeamStepFacts[] = [
   step("architect", fr ? "Conception" : "Design", W1, "completed", 25, 21, { did: fr ? "plan en 6 fichiers" : "a plan of 6 files", tokens: 9_000 }),
   step("tester", fr ? "Tests" : "Tests", W1, "completed", 21, 12, { did: fr ? "14 tests, rouges avant" : "14 tests, red before", tokens: 13_000 }),
@@ -83,6 +85,13 @@ const steps: TeamStepFacts[] = [
   step("core", fr ? "Paquet" : "Package", W5, "running", 7, undefined, { turn: { startedAt: ago(7), lastActionAt: ago(2), waitingOnComputer: true }, tokens: 69_000 }),
   ...Array.from({ length: 6 }, (_, index) => step(index % 2 ? "server" : "interface", fr ? `Correctif ${index + 1}` : `Fix ${index + 1}`, fr ? `Correctif ${index + 1}` : `Fix ${index + 1}`, "completed", 300 - index * 30, 280 - index * 30, { merged: true, did: fr ? "fusionné" : "merged" })),
   step("architect", fr ? "Plan" : "Plan", fr ? "Nettoyage des branches" : "Branch cleanup", "completed", 600, 590),
+  // #4421: a plan of three, one step handed out and done 14 h ago, nothing since: stale
+  step("server", fr ? "Construction" : "Build", W6, "completed", 15 * 60, 14 * 60, { step: fr ? "Construction" : "Build",
+    plan: [{ name: fr ? "Construction" : "Build" }, { name: "Tests" }, { name: fr ? "Livraison" : "Ship" }], did: fr ? "construit" : "built" }),
+  // #4421: closed as done by the orchestrator before its plan was handed out
+  step("interface", fr ? "Écran" : "Screen", W7, "completed", 180, 120, { step: fr ? "Écran" : "Screen",
+    plan: [{ name: fr ? "Écran" : "Screen" }, { name: fr ? "Relecture" : "Review" }],
+    ended: { at: ago(60), outcome: "done", why: fr ? "Fusionné par une autre session" : "Merged by another session" } }),
 ];
 const built = buildTeamWork({ orchestratorId: "lead", now: NOW, since: ago(12 * 60), steps, names });
 // lot 3 (the declared plan): two steps of the first piece of work to come
@@ -119,7 +128,7 @@ function Panel({ kind, openThreadId }: { kind: "today" | "team"; openThreadId?: 
           <AgentRows items={today} onOpen={() => {}} onStop={() => {}} onIgnore={() => {}} />
         </section>
       ) : (
-        <TeamWorkSection work={work} now={NOW} streaming bots={bots} orchestrator={{ botId: lead.id, name: lead.name, title: lead.title }} openThreadId={openThreadId} onOpenStep={() => {}} onOpenHistory={() => {}}>
+        <TeamWorkSection work={work} now={NOW} streaming bots={bots} orchestrator={{ botId: lead.id, name: lead.name, title: lead.title }} openThreadId={openThreadId} onOpenStep={() => {}} onOpenHistory={() => {}} onClear={() => {}}>
           {(rows) => <AgentRows lead={rows} items={today} onOpen={() => {}} onStop={() => {}} onIgnore={() => {}} />}
         </TeamWorkSection>
       )}

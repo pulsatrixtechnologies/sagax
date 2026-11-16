@@ -442,6 +442,7 @@ export function ActivitySectionBody({ bot, panel, codeWork = true, streaming, op
         openThreadId={openStepThreadId}
         onOpenStep={(step) => openTeamStep(dispatch, bot.id, step)}
         onOpenHistory={setAll}
+        onClear={teamView.clear}
       >
         {rows}
       </TeamWorkSection>

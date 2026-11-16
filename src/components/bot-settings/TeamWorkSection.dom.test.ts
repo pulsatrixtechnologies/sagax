@@ -323,3 +323,92 @@ describe("the work view", () => {
     expect(onOpenStep).toHaveBeenCalledWith(expect.objectContaining({ botId: "rev", threadId: "t2", name: "Review it", work: "Login fix", index: 2, total: 2 }));
   });
 });
+
+// #4421: the person clears a row themselves (the row's X, the button the
+// coding rows already have) or every row nothing runs in ("Clear finished"),
+// with no administrator and no approval; a row nothing touched for long says
+// it is stale instead of "next step not handed out yet".
+describe("clearing and stale rows (#4421)", () => {
+  const plan = [{ name: "Build" }, { name: "Test" }, { name: "Ship" }];
+  const release: TeamStepFacts = { id: "h1", botId: "dev", requesterBotId: "orc", threadId: "t1", title: "Build", work: "Release", step: "Build", plan,
+    mode: "work", status: "completed", createdAt: 100_000, startedAt: 100_000, finishedAt: 200_000, coding: true };
+  const hotfix: TeamStepFacts = { id: "h2", botId: "rev", requesterBotId: "orc", threadId: "t2", title: "Hotfix", mode: "work", status: "running",
+    createdAt: 900_000, startedAt: 900_000, turn: { startedAt: 900_000, lastActionAt: 990_000 }, coding: true };
+  const read = (now = NOW): TeamWork => buildTeamWork({ orchestratorId: "orc", now, since: 0, steps: [release, hotfix], names: NAMES });
+
+  function Clearing({ load, clearWork }: { load: () => Promise<TeamWork>; clearWork: (botId: string, since: number, clear: unknown) => Promise<TeamWork> }) {
+    const view = useTeamWork("orc", { load, clearWork: clearWork as never });
+    if (!view.work) return null;
+    return createElement(TeamWorkSection, {
+      work: view.work, now: view.now, streaming: true, bots: [], onOpenStep, onOpenHistory: () => {},
+      orchestrator: { botId: "orc", name: "Lead" }, onClear: view.clear,
+    });
+  }
+  const keys = () => [...host.querySelectorAll("[data-team-work-item]")].map((row) => row.getAttribute("data-team-work-item"));
+
+  it("a row's X clears that row at once and asks the server for that key only", async () => {
+    const after: TeamWork = { ...read(), live: read().live.filter((item) => item.key !== "work:release") };
+    const clearWork = vi.fn(async () => after);
+    await act(async () => { root.render(createElement(Clearing, { load: async () => read(), clearWork })); });
+    await act(async () => { await Promise.resolve(); });
+    expect(keys().sort()).toEqual(["step:h2", "work:release"]);
+    const x = host.querySelector<HTMLButtonElement>('[data-team-work-item="work:release"] [data-agent-ignore="work:release"]')!;
+    expect(x.title).toBe("Clear");
+    expect(x.getAttribute("aria-label")).toBe("Clear Release");
+    await act(async () => { x.click(); await Promise.resolve(); });
+    expect(clearWork).toHaveBeenCalledWith("orc", expect.any(Number), { keys: ["work:release"] });
+    expect(keys()).toEqual(["step:h2"]);
+  });
+
+  it("Clear finished shows only while a row nothing runs in is listed, and keeps the running one", async () => {
+    const clearWork = vi.fn(async () => ({ ...read(), live: read().live.filter((item) => item.key === "step:h2") }));
+    await act(async () => { root.render(createElement(Clearing, { load: async () => read(), clearWork })); });
+    await act(async () => { await Promise.resolve(); });
+    const button = host.querySelector<HTMLButtonElement>("[data-team-clear-finished]")!;
+    expect(button.textContent).toBe("Clear finished");
+    expect(button.getAttribute("data-team-clear-finished")).toBe("1");
+    await act(async () => { button.click(); await Promise.resolve(); });
+    expect(clearWork).toHaveBeenCalledWith("orc", expect.any(Number), { finished: true });
+    expect(keys()).toEqual(["step:h2"]);
+    expect(host.querySelector("[data-team-clear-finished]")).toBeNull();
+  });
+
+  it("a row nothing touched for long says stale since when, not next step not handed out yet, in English and French", async () => {
+    const later = 200_000 + 13 * 60 * 60_000;
+    vi.setSystemTime(later);
+    const stale = buildTeamWork({ orchestratorId: "orc", now: later, since: 0, steps: [release], names: NAMES });
+    await act(async () => { root.render(createElement(Clearing, { load: async () => stale, clearWork: vi.fn() })); });
+    await act(async () => { await Promise.resolve(); });
+    const row = () => host.querySelector('[data-team-work-item="work:release"]')!;
+    expect(row().getAttribute("data-team-work-state")).toBe("stale");
+    expect(row().querySelector("[data-team-line]")!.textContent).toMatch(/^Lead · 1\/3 · stale since /);
+    expect(row().textContent).not.toContain("not handed out");
+    act(() => setLocale("fr"));
+    await act(async () => { root.render(createElement(Clearing, { load: async () => ({ ...stale }), clearWork: vi.fn() })); });
+    expect(row().querySelector("[data-team-line]")!.textContent).toMatch(/inactif depuis /);
+  });
+
+  it("a row the orchestrator closed as done keeps its name in a narrow row: its words why give way first", async () => {
+    const WHY = "Merged by another session while the plan was still open";
+    const closed = buildTeamWork({ orchestratorId: "orc", now: NOW, since: 0, names: NAMES,
+      steps: [{ ...release, ended: { at: 300_000, outcome: "done", why: WHY } }] });
+    const CHAR = 7;
+    const box = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const width = this.hasAttribute("data-team-line") ? 320 : this.hasAttribute("data-team-probe") ? [...(this.textContent ?? "")].length * CHAR : 0;
+      return { x: 0, y: 0, top: 0, left: 0, bottom: 20, right: width, width, height: 20, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      await act(async () => { root.render(createElement(Clearing, { load: async () => closed, clearWork: vi.fn() })); });
+      await act(async () => { await Promise.resolve(); });
+      act(() => host.querySelector<HTMLButtonElement>("[data-team-done-today] [data-coding-open]")!.click());
+      const row = host.querySelector('[data-team-work-item="work:release"]')!;
+      expect(row.querySelector('[data-team-line] [data-team-part="who"]')?.textContent).toBe("Lead");
+      const why = row.querySelector('[data-team-line] [data-team-part="action"]')!.textContent!;
+      expect(why).toMatch(/…$/);
+      expect(WHY.startsWith(why.slice(0, -1))).toBe(true);
+      expect(row.querySelector("[data-coding-subtitle]")?.getAttribute("title")).toContain(WHY);
+    } finally {
+      box.mockRestore();
+    }
+  });
+});

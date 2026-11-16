@@ -19,7 +19,7 @@ import {
   type TeamWorkStep,
 } from "../../shared/team-work";
 import { formatTokens } from "@/lib/usage";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 
 export type { TeamLive, TeamNote, TeamWork, TeamWorkBot, TeamWorkItem, TeamWorkStep };
 
@@ -38,6 +38,18 @@ export function teamAge(ms: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest === 0 ? t("teamWork.age.hours", { hours }) : t("teamWork.age.hoursMinutes", { hours, minutes: String(rest).padStart(2, "0") });
+}
+
+/** When something happened, short: its time today, else its day ("Nov 12"). */
+export function teamWhen(at: number, now: number): string {
+  const day = new Date(at);
+  const today = new Date(now);
+  const same = day.getFullYear() === today.getFullYear() && day.getMonth() === today.getMonth() && day.getDate() === today.getDate();
+  try {
+    return new Intl.DateTimeFormat(activeLocale(), same ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric" }).format(day);
+  } catch {
+    return day.toISOString().slice(0, same ? 16 : 10).replace("T", " ");
+  }
 }
 
 /** A live state read again at `now`: an open turn turns silent once its
@@ -201,6 +213,8 @@ export interface TeamLine {
   action?: number;
   /** The index in `parts` of the part that may step aside, whole, last. */
   spare?: number;
+  /** The last action gives way before the name (a closed piece of work). */
+  keepWho?: boolean;
 }
 
 /** The line as one string (tooltips, accessible names, tests). */
@@ -232,14 +246,30 @@ function lastAction(live: TeamLive, now: number, doing?: string): string[] {
 /** A work row's grey line: "<bot> · 2/5 · 20 s ago", "<bot> · 3/3 · merged 8 min ago". */
 export function teamWorkLine(item: TeamWorkItem, nameOf: (botId: string) => TeamName | undefined, now: number, orchestrator?: TeamName & { botId?: string }): TeamLine {
   const progress = `${item.done}/${item.total}`;
+  const last = [...item.steps].sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt))[0];
+  if (item.closed) {
+    // closed as done by the orchestrator (#4421): its line and its words why
+    const phrase = endPhrase("completed", item.merged, item.endedAt, now);
+    const why = item.closed.why?.trim();
+    const parts = why ? [progress, phrase, why] : [progress, phrase];
+    const who = orchestrator ? { ...(orchestrator.botId ? { botId: orchestrator.botId } : {}), who: teamBotName(orchestrator) } : {};
+    return { ...who, parts, ...(why ? { action: 2, keepWho: true } : {}), spare: 0 };
+  }
   if (item.finished) {
-    const last = [...item.steps].sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt))[0];
     const phrase = endPhrase(last?.status ?? "completed", item.merged, item.endedAt, now);
     return last ? { botId: last.botId, who: teamBotName(nameOf(last.botId)), parts: [progress, phrase], spare: 0 } : { parts: [progress, phrase], spare: 0 };
   }
   const step = currentStep(item);
-  if (!step && item.toCome.length > 0 && orchestrator) {
-    return { ...(orchestrator.botId ? { botId: orchestrator.botId } : {}), who: teamBotName(orchestrator), parts: [progress, t("teamWork.phrase.nextStep")], spare: 0 };
+  const next = !step && item.toCome.length > 0 && orchestrator;
+  if (item.staleSince !== undefined) {
+    // nothing runs and nothing touched it for long (#4421): it says so
+    const stale = t("teamWork.phrase.stale", { when: teamWhen(item.staleSince, now) });
+    if (next) return { ...(next.botId ? { botId: next.botId } : {}), who: teamBotName(next), parts: [progress, stale], spare: 0 };
+    const by = step ?? last;
+    return { ...(by ? { botId: by.botId } : {}), who: teamBotName(by ? nameOf(by.botId) : undefined), parts: [progress, stale], spare: 0 };
+  }
+  if (next) {
+    return { ...(next.botId ? { botId: next.botId } : {}), who: teamBotName(next), parts: [progress, t("teamWork.phrase.nextStep")], spare: 0 };
   }
   const said = lastAction(item.live, now, step?.doing);
   return { ...(step ? { botId: step.botId } : {}), who: teamBotName(step ? nameOf(step.botId) : undefined), parts: [progress, ...said], ...(said.length > 1 ? { action: 1 } : {}), spare: 0 };

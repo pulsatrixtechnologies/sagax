@@ -18832,7 +18832,11 @@
       "composer.commands.app.newChat": "8169371a544a9fdede0ee7316aa940d97a8a875ee97505d7269671826b2cd32a",
       "composer.commands.app.model": "cf93b31e419efa80621646457ac9d91575273a09b3c5ad992402d2bd5744c20f",
       "composer.commands.app.permissions": "5c8b6c0b5ffdea91766689ff743e3107f171e072155fad61e674208405dc3fbf",
-      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c"
+      "composer.commands.app.settings": "a7028fbdd3ba3d5f63599eec0e31fb4d534450cdb0fe406c029f7a76f86fb07c",
+      "teamWork.clear.finished": "2a16b4f86f58cd2c48188531ddfef20e47834dc0268cb286d7fb5042fd419e1a",
+      "teamWork.clear.row": "83b12c2216efb4fdc924e1deb5182e905e4926ed0c1c324d467107f46d5a26a9",
+      "teamWork.clear.rowAria": "c83ca98005e2d590d784242d9a70bab2285f92b69f1088c93bff09a7da0071af",
+      "teamWork.phrase.stale": "d6765c52601f22c6f3b1d4bcb475f7cf34d5b65e16389cc80a47002aa4272210"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

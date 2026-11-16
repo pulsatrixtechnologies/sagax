@@ -151,6 +151,9 @@ async function readSse(
   const decoder = new TextDecoder();
   let buffer = "";
   let bytes = 0;
+  // A CRLF split between two chunks: the LF that opens the next chunk ends
+  // the line the CR already ended, not a second (blank) line.
+  let afterCr = false;
   const onAbort = () => void reader.cancel().catch(reportBackgroundError);
   signal.addEventListener("abort", onAbort, { once: true });
   try {
@@ -159,7 +162,12 @@ async function readSse(
       if (done) return;
       bytes += value.byteLength;
       if (bytes > maxBytes) throw new McpHttpError("protocol", "event stream too large");
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n?/g, "\n");
+      const chunk = decoder.decode(value, { stream: true });
+      if (chunk) {
+        const start = afterCr && chunk.startsWith("\n") ? 1 : 0;
+        afterCr = chunk.endsWith("\r");
+        buffer += chunk.slice(start).replace(/\r\n?/g, "\n");
+      }
       let separator: number;
       while ((separator = buffer.indexOf("\n\n")) !== -1) {
         const block = buffer.slice(0, separator);

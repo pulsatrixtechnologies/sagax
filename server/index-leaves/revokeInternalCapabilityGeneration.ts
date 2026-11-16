@@ -23,7 +23,9 @@ function revokeInternalCapabilityGeneration(threadId: string, generation: string
   }
   if (host.turnWorkplaces.get(threadId)?.generation === generation) host.turnWorkplaces.delete(threadId);
   // #4449: the plugin servers mounted for that turn's person go with it
-  if (host.turnPluginMcpServers?.get(threadId)?.generation === generation) host.turnPluginMcpServers.delete(threadId);
+  const pluginServers = host.turnPluginMcpServers?.get(threadId);
+  for (const [botId, mounted] of pluginServers ?? []) if (mounted.generation === generation) pluginServers.delete(botId);
+  if (pluginServers && !pluginServers.size) host.turnPluginMcpServers.delete(threadId);
   // #3296: the turn is over (done, failed or stopped): so is its wait row
   host.endSandboxWakeRows?.({ threadId, generation });
   host.internalGenerationByProviderTurn.deleteGeneration(threadId, generation);

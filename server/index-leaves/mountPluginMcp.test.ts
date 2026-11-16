@@ -65,6 +65,8 @@ function host(kind: "solo" | "perspicax", token: string | undefined) {
     localPrincipalId: () => "me",
     store: { bot: () => ({ id: "b1", builtinPlugins: { rea: false } }) },
     managedPolicy: { filterMcp: (servers: Record<string, unknown>) => servers },
+    // the real host records the servers mounted for the turn's person (#4449)
+    turnPluginMcpServers: new Map(),
     userSandbox: {},
     personalHostRefusalCached: async () => false,
     githubAccountToken: (person: string) => (person === "me" ? token : undefined),

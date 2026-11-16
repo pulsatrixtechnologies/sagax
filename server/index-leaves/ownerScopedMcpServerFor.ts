@@ -14,8 +14,9 @@ function ownerScopedMcpServerFor(bot: BotRecord, threadId: string) {
     const has = (names: Iterable<string>) => [...names].some((candidate) => candidate.toLowerCase() === name);
     // #4449: a plugin server Sagax mounted for the person this turn, and
     // the person's own Mac apps (their desktop app)
-    if (has(host.turnPluginMcpServers.get(threadId)?.servers ?? [])) return true;
-    if ((name === "messages" || name === "sagax_messages") && host.turnWorkplaces.get(threadId)?.messagesPrincipal) return true;
+    if (has(host.turnPluginMcpServers.get(threadId)?.get(bot.id)?.servers ?? [])) return true;
+    const workplace = host.turnWorkplaces.get(threadId);
+    if ((name === "messages" || name === "sagax_messages") && workplace?.botId === bot.id && workplace.messagesPrincipal) return true;
     try {
       if (has(Object.entries(host.engineMcpServers(bot)).filter(([, spec]) => "url" in spec).map(([key]) => key))) return true;
     } catch {

@@ -6,7 +6,7 @@
 // Sharing section (useBotSharing + useGrantEditor, GET/PUT/DELETE
 // /api/bots/:id/grants); the server decides who may change what.
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { Check, ChevronRight, Link2, Loader2, Share2, UserPlus, Users } from "lucide-react";
+import { Check, ChevronRight, Link2, Loader2, UserPlus, Users } from "lucide-react";
 
 import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PillSelect, PLAIN_FIELD } from "../SettingsPrimitives";
@@ -326,7 +326,7 @@ export function ShareBotButton({ bot, open, onOpenChange, style, className }: {
         style={style}
         className={cn(CIRCLE_LABEL_BUTTON, className)}
       >
-        <Share2 size={14} aria-hidden="true" />
+        {/* the word alone, as the reference's Share of its stage header (#4420) */}
         {t("botProfile.share")}
       </button>
       {open && (

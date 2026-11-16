@@ -38,6 +38,7 @@ import { PublishedPagesSettings } from "../PublishedPages";
 import { MarketplacesSection } from "../plugins/MarketplacesSection";
 import { DataCenterDialog } from "../plugins/DataCenterDialog";
 import { ScopeToggle } from "../plugins/ScopeToggle";
+import { usePageHost } from "../page-host";
 import { MacAppsInstalledSection } from "../plugins/MacAppsView";
 import { pluginSourceLabel } from "./helpers";
 import { pageLabel, PluginsPanelSubpage } from "./PluginsPanelSubpage";
@@ -386,6 +387,45 @@ function PluginsPanelFrame({
 }) {
   const dataCenterAnchor = useRef<HTMLElement | null>(null);
   dataCenterAnchor.current = dataCenterFor?.anchor ?? null;
+  const host = usePageHost();
+  const dataCenter = dataCenterFor && (
+    <DataCenterDialog
+      name={dataCenterFor.item.name}
+      regions={dataCenterFor.regions}
+      defaultUrl={dataCenterFor.defaultUrl}
+      anchorRef={dataCenterAnchor}
+      onCancel={() => setDataCenterFor(null)}
+      onChoose={(region) => {
+        const { item } = dataCenterFor;
+        setDataCenterFor(null);
+        void installFeatured(item, region);
+      }}
+    />
+  );
+
+  if (host) {
+    // #4420: a page inside the host page (the bot's profile page), under
+    // the host's top bar (its link back, Share and close), in the same
+    // column, never the centred window. Escape steps back, then returns to
+    // the host page (usePluginsPanelState).
+    return (
+      <div
+        ref={dialogRef}
+        data-tour="apps-panel"
+        data-plugins-page={page.page}
+        data-plugins-depth={stackDepth}
+        data-plugins-presentation="page"
+        role="region"
+        aria-labelledby="plugins-title"
+        tabIndex={-1}
+        className="absolute inset-0 z-30 flex min-h-0 flex-col bg-app outline-none"
+      >
+        {host.header}
+        <div className={cn(CATEGORY_MODAL.content, "mx-auto w-full max-w-[920px]")}>{content}</div>
+        {dataCenter}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -419,20 +459,7 @@ function PluginsPanelFrame({
           {content}
         </div>
       </div>
-      {dataCenterFor && (
-        <DataCenterDialog
-          name={dataCenterFor.item.name}
-          regions={dataCenterFor.regions}
-          defaultUrl={dataCenterFor.defaultUrl}
-          anchorRef={dataCenterAnchor}
-          onCancel={() => setDataCenterFor(null)}
-          onChoose={(region) => {
-            const { item } = dataCenterFor;
-            setDataCenterFor(null);
-            void installFeatured(item, region);
-          }}
-        />
-      )}
+      {dataCenter}
     </div>
   );
 }

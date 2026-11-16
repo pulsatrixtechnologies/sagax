@@ -316,7 +316,8 @@ export function SettingsGroup({
   const section = (
     <section aria-labelledby={title ? headingId : undefined} data-settings-group={groupId} data-settings-advanced={advanced ? "" : undefined} className="flex flex-col gap-2 has-[>div:empty]:hidden">
       {(title || accessory) && (
-        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-1">
+        // the bot page (plain): the grey label on its left edge, 12px in, with the name and the tabs (#4420)
+        <div className={cn("flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1", surface === "plain" ? "px-3" : "px-1")}>
           {title && <h3 id={headingId} className="shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>}
           {accessory}
         </div>

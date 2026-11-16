@@ -52,6 +52,12 @@ export function reducer(state: AppState, action: Action): AppState {
     const back = action.type === "select" && action.id === state.personaEditor.botId ? state.personaEditor.panel : undefined;
     next = { ...next, ...back, personaEditor: null };
   }
+  // #4420: Connect apps open while the profile page is open is a page of
+  // that page; the page closing (X, Escape, another bot) closes it too,
+  // unless this action opened Connect apps elsewhere.
+  if (state.personaEditor && state.pluginsOpen && !next.personaEditor && next.pluginsOpen && action.type !== "togglePlugins") {
+    next = { ...next, pluginsOpen: false, pluginsBotId: null, pluginsPage: null, pluginsFocusApps: null, activeView: next.activeView === "apps" ? "chat" : next.activeView };
+  }
   // A section's panel lasts as long as the panel: closed, it is gone.
   return next.panelOwner && !next.settingsOpen && !next.computerOpen ? { ...next, panelOwner: null } : next;
 }
@@ -63,6 +69,7 @@ function leavesProfile(state: AppState, next: AppState, action: Action): boolean
     next.activeView !== state.activeView ||
     next.selectedId !== state.selectedId ||
     (next.memoryManagerOpen && !state.memoryManagerOpen) ||
-    (next.pluginsOpen && !state.pluginsOpen)
+    // #4420: Connect apps opened from the profile page is a page of it
+    (next.pluginsOpen && !state.pluginsOpen && !(action.type === "togglePlugins" && action.inProfile))
   );
 }

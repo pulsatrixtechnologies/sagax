@@ -190,7 +190,7 @@ const scope = (node: HTMLElement, view: View) =>
   node.querySelector<HTMLElement>("tab" in view ? `[data-bot-profile-panel="${view.tab}"]` : `[data-bot-profile-subpage="${view.page}"]`)!;
 
 /** The mascot editor (preview, moves, character grid, Reset/Randomize),
- * now the Appearance sub-page (#4147), keeps its own chips and fields (the editor's
+ * now the Appearance tab, keeps its own chips and fields (the editor's
  * scope, fix/bot-appearance-scope); HelpTip and menu popovers are closed
  * surfaces, not cards of the column. Before/after captures of the
  * profile (tabs, bare mascot, condensed bar):
@@ -209,7 +209,8 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     await mount("en");
     for (const view of VIEWS) {
       const node = await column(view);
-      expect(node.className, viewName(view)).toMatch(/max-w-\[760px\]/);
+      // #4420: the reference's reading width
+      expect(node.className, viewName(view)).toMatch(/max-w-\[920px\]/);
       expect(node.querySelector("[data-bot-profile-column-side]")).toBeNull();
       expect(scope(node, view), viewName(view)).not.toBeNull();
       for (const panel of Array.from(node.querySelectorAll("[role='tabpanel']"))) expect(panel.className).not.toMatch(/grid-cols-2/);
@@ -226,8 +227,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
         const sub = node.querySelector<HTMLElement>(`[data-bot-profile-subpage="${id}"]`);
         expect(sub, `sub-page ${id}`).not.toBeNull();
         expect(sub!.querySelector("[data-bot-profile-subpage-title]")?.textContent).toBe(t(`botProfile.v6.page.${id}.title` as never));
-        // the page's tab row is gone (the mascot editor keeps its own tabs, #4147)
-        expect(node.querySelector("[data-bot-profile-tabs]"), `no tabs on ${id}`).toBeNull();
+        expect(node.querySelector("[role='tablist']"), `no tabs on ${id}`).toBeNull();
         // #3398: the link back names the tab it returns to, and has the focus;
         // #4078: it is in the top bar beside the close button, not in the column
         expect(sub!.querySelector("[data-bot-profile-back]"), `no back in the column of ${id}`).toBeNull();
@@ -244,8 +244,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     // General: the rows that open a page (the channels and the accounts are
     // cards in place, #3398; Shared with is under More), Knowledge its work.
     expect(Array.from((await home("general")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(
-      // #4147: Appearance is a row of Settings, right after Personality and Model
-      ["personality", "model", "appearance", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"],
+      ["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"],
     );
     expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(["routines", "folder"]);
   });
@@ -288,7 +287,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
         seen.add(id);
       }
     }
-    expect([...seen].sort()).toEqual(["access", "appearance", "files", "history", "model", "permissions", "rules", "sharing", "skills", "soul", "summary", "usage", "voice", "worksOn"]);
+    expect([...seen].sort()).toEqual(["access", "files", "history", "model", "permissions", "rules", "sharing", "skills", "soul", "summary", "usage", "voice", "worksOn"]);
   });
 
   it("names every section and sub-page in French too", async () => {
@@ -748,6 +747,63 @@ describe("bot profile page: Analytics tab (#3401)", () => {
     await mount("fr");
     await home("general");
     expect(host.querySelector(`[data-bot-profile-tab="stats"]`)?.textContent).toBe("Analytique");
+  });
+
+  // #4420 (the owner 2026-11-15): every option of the bot page that opens
+  // another surface opens it as a page of the bot page, with the way back.
+  // All bots used to open the centred Settings window over the page.
+  it("regression #4420: All bots opens every bot's usage as a page of the bot page, and Back returns to Analytics", async () => {
+    await mount("en");
+    const node = await home("stats");
+    await click(node.querySelector<HTMLElement>("[data-bot-analytics-all-bots]"), "All bots");
+    const store = latest as unknown as { appSettingsOpen: boolean; personaEditor: unknown };
+    expect(store.appSettingsOpen, "no Settings window").toBeFalsy();
+    expect(store.personaEditor, "the bot page stays").not.toBeNull();
+    const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
+    expect(page.getAttribute("data-bot-profile-subpage-current")).toBe("usage");
+    const usage = page.querySelector<HTMLElement>('[data-bot-profile-subpage="usage"]');
+    expect(usage, "the usage page in the column").not.toBeNull();
+    expect(usage!.querySelector("[data-bot-profile-subpage-title]")?.textContent).toBe("Usage");
+    // the tab row gives way to the page, as on a sub-page; its link back names the tab
+    expect(page.querySelector("[data-bot-profile-tab]")).toBeNull();
+    const back = page.querySelector<HTMLElement>("[data-bot-profile-back]");
+    expect(back?.getAttribute("aria-label")).toContain("Analytics");
+    await click(back, "Back");
+    expect(page.getAttribute("data-bot-profile-tab-current")).toBe("stats");
+    expect(page.querySelector('[data-bot-profile-subpage="usage"]')).toBeNull();
+    expect(document.activeElement?.hasAttribute("data-bot-analytics-all-bots"), "focus back on All bots").toBe(true);
+    // Escape steps back too
+    await click(page.querySelector<HTMLElement>("[data-bot-analytics-all-bots]"), "All bots");
+    await act(async () => { page.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await settle();
+    expect(page.querySelector('[data-bot-profile-subpage="usage"]')).toBeNull();
+    expect((latest as unknown as { personaEditor: unknown }).personaEditor).not.toBeNull();
+  });
+
+  it("regression #4420: Folder and memory's Memory row opens the Memory page as a page of the bot page, with the way back", async () => {
+    await mount("en");
+    const node = await home("knowledge");
+    await click(node.querySelector<HTMLElement>('[data-bot-profile-subpage-open="folder"]'), "row folder");
+    await click(host.querySelector<HTMLElement>("[data-bot-profile-memory]"), "Memory row");
+    const store = latest as unknown as { activeView: string; memoryManagerOpen: boolean; personaEditor: unknown };
+    expect(store.personaEditor, "the bot page stays").not.toBeNull();
+    expect(store.activeView, "the main column stays the bot page").not.toBe("memory");
+    expect(store.memoryManagerOpen).toBeFalsy();
+    const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
+    const hosted = page.querySelector<HTMLElement>('[data-bot-profile-hosted="memory"]');
+    expect(hosted, "Memory drawn in the bot page").not.toBeNull();
+    // the Memory page is a lazy screen: wait for its chunk
+    for (let round = 0; round < 40 && !hosted!.querySelector("[data-memory-manager-presentation]"); round += 1) await settle();
+    const memory = hosted!.querySelector<HTMLElement>('[data-memory-manager-presentation="page"]');
+    expect(memory, "the Memory page under the bot page's top bar").not.toBeNull();
+    // one way out each: the bot page's link back and close, not Memory's own X
+    expect(memory!.querySelector(`[aria-label="${t("memoryManager.close")}"]`)).toBeNull();
+    expect(memory!.querySelector("[data-bot-profile-topbar]")).not.toBeNull();
+    expect(page.querySelector("[data-bot-profile-scroll]")!.hasAttribute("inert"), "the page under it is inert").toBe(true);
+    await click(memory!.querySelector<HTMLElement>("[data-bot-profile-back]"), "Back");
+    expect(page.querySelector('[data-bot-profile-hosted="memory"]')).toBeNull();
+    expect(page.getAttribute("data-bot-profile-subpage-current"), "back on Folder and memory").toBe("folder");
+    expect(document.activeElement?.hasAttribute("data-bot-profile-memory"), "focus back on the Memory row").toBe(true);
   });
 
   it("draws the analytics block before the cost breakdown", async () => {

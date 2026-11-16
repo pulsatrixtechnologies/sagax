@@ -6,6 +6,7 @@ import { buildPluginItems, type PluginItem } from "@/lib/plugins-model";
 import { GROK_CLOUD_CONNECTORS } from "../../shared/grok-cloud-connectors";
 import { grokConnectorDetail, grokRowAction, openGrokConnectors } from "./PluginsPanel";
 import { ConnectAppsView, type ConnectAppsViewProps } from "./plugins/ConnectAppsView";
+import { PageHostProvider } from "./page-host";
 import { DiscoverView, type DiscoverViewProps } from "./plugins/DiscoverView";
 import { discoverItems } from "@/lib/installed-model";
 import { PluginDetailView } from "./plugins/PluginDetailView";
@@ -32,6 +33,23 @@ describe("Plugins panel views", () => {
     tab: "discover", onTab: noop, counts: { installed: 2 }, refreshing: false, onRefresh: noop,
     discover: createElement(DiscoverView, discoverProps), installed: "INSTALLED", pages: "PAGES", sources: "SOURCES", ...overrides,
   }));
+
+  // #4420 review: as a page of the bot page (bg-app ground), the sticky
+  // search row kept the window's tinted ground (bg-inset), a grey strip
+  // wider than the column's text edge. Under a host it takes the host's
+  // ground; the window keeps its own.
+  it("regression #4420: under a host page the sticky search row takes the page's ground, not the window's tint", () => {
+    const search = createElement("input", { "data-plugins-search": "" });
+    const row = (html: string) => html.match(/<div class="([^"]*)"[^>]*data-plugins-search-row/)?.[1] ?? "";
+    const windowed = page({ search, connected: { count: 1, icons: [] } });
+    expect(row(windowed)).toContain("bg-inset");
+    const hosted = renderToStaticMarkup(createElement(PageHostProvider, { value: { header: null } }, createElement(ConnectAppsView, {
+      tab: "discover", onTab: noop, counts: { installed: 2 }, refreshing: false, onRefresh: noop, search,
+      connected: { count: 1, icons: [] }, discover: "DISCOVER", installed: "INSTALLED", pages: "PAGES", sources: "SOURCES",
+    })));
+    expect(row(hosted)).not.toContain("bg-inset");
+    expect(row(hosted)).toContain("bg-app");
+  });
 
   it("the reference app's Connect Apps: the home (title, N connected, the sticky search row), then Manage, Bots and the views behind a back bar (#2104)", () => {
     const html = page({ connected: { count: 2, icons: [] } });

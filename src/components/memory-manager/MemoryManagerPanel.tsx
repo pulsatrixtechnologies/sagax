@@ -17,6 +17,7 @@ import type { MemoryBrowse, MemoryManagerSource, MemoryNoteDetail, MemoryNoteRow
 import { canDecideRow, type PageRow } from "@/lib/memory-page";
 import type { LinkBot } from "@/lib/memory-folders";
 import { useCaptionChrome } from "../DesktopCapabilities";
+import { usePageHost } from "../page-host";
 import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PAGE_MENU, PAGE_MENU_ITEM, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
 import { MENU_FIT_ROW } from "../menu-look";
 import { fetchCollections, MemoryCollections, type CollectionItem, type CollectionSummary } from "./MemoryCollections";
@@ -64,6 +65,10 @@ export function MemoryManagerPanel() {
   const linkRoutines = state.routines;
   const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const close = useCallback(() => dispatch({ type: "toggleMemoryManager", open: false }), [dispatch]);
+  // #4420: opened from the bot's profile page, Memory is a page of that
+  // page: the host's top bar (its link back, Share and close) replaces the
+  // window strip and this page's own close.
+  const host = usePageHost();
   const mac = useMemo(() => isMacPlatform(), []);
 
   const scopeKey = memoryScopeKey(state.config?.viewer?.principalId);
@@ -201,6 +206,9 @@ export function MemoryManagerPanel() {
 
   // ---- render ----------------------------------------------------------------------------
 
+  // the host page is the <main>: hosted, this page is a region of it
+  const Shell = host ? "section" : "main";
+
   const viewOptions = [
     { value: "notes" as const, label: t("memoryManager.viewNotes"), icon: FileText },
     { value: "map" as const, label: t("memoryManager.viewMap"), icon: Network },
@@ -209,8 +217,8 @@ export function MemoryManagerPanel() {
   ];
 
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink" data-memory-manager-page="" data-memory-manager-panel="">
-      <PageTopStrip />
+    <Shell className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink" data-memory-manager-page="" data-memory-manager-panel="" data-memory-manager-presentation={host ? "page" : undefined} aria-label={host ? t("memoryManager.title") : undefined}>
+      {host ? host.header : <PageTopStrip />}
       <PageHeader
         name="memory"
         icon={Brain}
@@ -253,9 +261,11 @@ export function MemoryManagerPanel() {
               )}
             </div>
           </details>
-          <button type="button" aria-label={t("memoryManager.close")} title={t("memoryManager.close")} className={PAGE_HEADER_BUTTON} onClick={close}>
-            <X size={16} />
-          </button>
+          {!host && (
+            <button type="button" aria-label={t("memoryManager.close")} title={t("memoryManager.close")} className={PAGE_HEADER_BUTTON} onClick={close}>
+              <X size={16} />
+            </button>
+          )}
         </>}
         primaryStyle={noDragStyle}
         primary={<>
@@ -447,6 +457,6 @@ export function MemoryManagerPanel() {
           )}
         </div>
       </div>
-    </main>
+    </Shell>
   );
 }

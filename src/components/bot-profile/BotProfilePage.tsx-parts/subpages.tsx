@@ -2,7 +2,7 @@
 // canvas): a row under a grey label opens its own sub-page (a title, one line
 // of intro, then the section bodies), for a setting too long for a card
 // (#3398: the channels and the accounts are cards in place). The link back
-// to the tab sits in the page's top bar beside the close button (#4078).
+// to the tab sits at the top left of the page's top bar (#4078, #4420).
 import type { ReactNode } from "react";
 import {
   AudioLines,
@@ -11,7 +11,6 @@ import {
   Cpu,
   FolderOpen,
   History,
-  Palette,
   Repeat,
   ScrollText,
   ShieldCheck,
@@ -36,7 +35,6 @@ const meta = (icon: ReactNode, title: LocaleKey, desc: LocaleKey, intro: LocaleK
 export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
   personality: meta(<UserRound />, "botProfile.v6.page.personality.title", "botProfile.v6.page.personality.desc", "botProfile.v6.page.personality.intro"),
   model: meta(<Cpu />, "botProfile.v6.page.model.title", "botProfile.v6.page.model.desc", "botProfile.v6.page.model.intro"),
-  appearance: meta(<Palette />, "botProfile.v6.page.appearance.title", "botProfile.v6.page.appearance.desc", "botProfile.v6.page.appearance.intro"),
   beforeActing: meta(<ShieldCheck />, "botProfile.v6.page.beforeActing.title", "botProfile.v6.page.beforeActing.desc", "botProfile.v6.page.beforeActing.intro"),
   sharing: meta(<Users />, "botProfile.v6.page.sharing.title", "botProfile.v6.page.sharing.desc", "botProfile.v6.page.sharing.intro"),
   rules: meta(<ScrollText />, "botProfile.v6.page.rules.title", "botProfile.v6.page.rules.desc", "botProfile.v6.page.rules.intro"),
@@ -80,7 +78,7 @@ export function SubPageRow({ page, value, onOpen, title }: { page: BotProfileSub
 }
 
 /** The link back of every sub-page, named after the tab it returns to: one
- * control, drawn in the page's top bar beside the close button (#4078) as
+ * control, drawn at the top left of the page's top bar (#4078, #4420) as
  * the bar's labelled pill (Share's look). It takes the focus when a
  * sub-page opens (#3398). */
 export function SubPageBack({ tab, onBack }: { tab: BotProfileTab; onBack: () => void }) {
@@ -99,16 +97,21 @@ export function SubPageBack({ tab, onBack }: { tab: BotProfileTab; onBack: () =>
   );
 }
 
+/** A page the bot page opens that is not one of its rows (#4420: every
+ * bot's usage from Analytics) names its own title and intro. */
+export type ElsewhereSubPage = { id: string; title: LocaleKey; intro: LocaleKey };
+
 /** A sub-page: its title in the Settings page title style where the tab
  * row was, one line of intro, then its cards. Its link back is in the top
  * bar (SubPageBack). The scroll margin keeps the title clear of the sticky
  * bar when the page opens scrolled to it. */
-export function SubPage({ page, children, title }: { page: BotProfileSubPage; children: ReactNode; title?: LocaleKey }) {
-  const entry = { ...SUBPAGE_META[page], ...(title ? { title } : {}) };
+export function SubPage({ page, children, title }: { page: BotProfileSubPage | ElsewhereSubPage; children: ReactNode; title?: LocaleKey }) {
+  const entry = typeof page === "string" ? { id: page, ...SUBPAGE_META[page], ...(title ? { title } : {}) } : page;
   return (
-    <div data-bot-profile-subpage={page} className="mt-4 flex min-w-0 scroll-mt-16 flex-col">
-      <h2 data-bot-profile-subpage-title="" className="text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink">{t(entry.title)}</h2>
-      <p className="mt-1 text-[13px] leading-5 text-ink-secondary">{t(entry.intro)}</p>
+    <div data-bot-profile-subpage={entry.id} className="mt-4 flex min-w-0 scroll-mt-16 flex-col">
+      {/* on the page's left edge, 12px in, with the name and the labels (#4420) */}
+      <h2 data-bot-profile-subpage-title="" className="px-3 text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink">{t(entry.title)}</h2>
+      <p className="mt-1 px-3 text-[13px] leading-5 text-ink-secondary">{t(entry.intro)}</p>
       <div className="mt-5 flex min-w-0 flex-col gap-6">{children}</div>
     </div>
   );

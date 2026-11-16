@@ -133,9 +133,8 @@ const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exe
 const tabsOf = (html: string) => [...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1]);
 
 // #4098: Outcomes is the second tab, read from the routines (no Updates tab).
-// #4147: Appearance is a row of General > Settings, no tab any more.
-const TABS_ALL = ["general", "outcomes", "knowledge", "stats"];
-const TABS_SIMPLE = ["general", "outcomes", "knowledge"];
+const TABS_ALL = ["general", "outcomes", "appearance", "knowledge", "stats"];
+const TABS_SIMPLE = ["general", "outcomes", "appearance", "knowledge"];
 // The V6 page (#2612): the sub-page a link opens, and the rows of a tab.
 const subPageOf = (html: string) => /data-bot-profile-subpage-current="(\w+)"/.exec(html)?.[1];
 const rowsOf = (html: string) => [...html.matchAll(/data-bot-profile-subpage-open="(\w+)"/g)].map((match) => match[1]);
@@ -162,7 +161,7 @@ describe("bot profile page shell", () => {
     // #3398: General is section cards with their controls in place; a row
     // opens a sub-page only for a long setting; no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
-    expect(rowsOf(html)).toEqual(["personality", "model", "appearance", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"]);
+    expect(rowsOf(html)).toEqual(["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"]);
     for (const label of [">Settings<", ">Channels<", ">Access<", ">More<"]) expect(html).toContain(label);
     expect(html).not.toContain(">Identity<");
     expect(selectedTab(html)).toBe("general");
@@ -204,30 +203,23 @@ describe("bot profile page shell", () => {
     expect(html).not.toContain("overflow-x-auto whitespace-nowrap");
   });
 
-  it("regression #4147 (the owner 2026-11-13): Appearance is a row of General > Settings right after Personality and Model, opening its sub-page; no Appearance tab", () => {
+  it("regression #4420 (the owner 2026-11-15): Appearance is its own tab, after General and Outcomes (#4098), never a row of General > Settings", () => {
     const rest = render("overview");
     expect(tabsOf(rest)).toEqual(TABS_ALL);
-    expect(tabsOf(rest)).not.toContain("appearance");
-    expect(rest).not.toContain('id="bot-profile-panel-appearance"');
+    expect(rest).not.toContain('data-bot-profile-row="page-appearance"');
+    expect(tabsOf(rest).indexOf("outcomes")).toBe(1);
+    expect(tabsOf(rest).indexOf("appearance")).toBe(2);
     expect(rest).not.toContain("data-bot-profile-appearance-toggle");
     expect(rest).not.toContain('data-section-body="appearance"');
-    // the row: in the Settings card, after Model and before Before it acts, with its name, grey line, value and chevron
-    const card = rest.slice(at(rest, 'data-settings-group="bot-profile-group-settings"'), at(rest, 'data-settings-group="bot-profile-channels"'));
-    expect(rowsOf(card)).toEqual(["personality", "model", "appearance", "beforeActing"]);
-    const row = card.slice(at(card, 'data-bot-profile-row="page-appearance"'), at(card, 'data-bot-profile-row="page-beforeActing"'));
-    expect(row).toContain(">Appearance<");
-    expect(row).toContain(">Mascot, shape, color, skin<");
-    expect(row).toMatch(/data-bot-profile-value=""[^>]*>Owl</);
-    expect(row).toContain("lucide-chevron-right");
-    // a link to the appearance opens General's Appearance sub-page, the whole editor in it
+    // a link to the appearance opens its tab, the whole editor in the tab's panel
     const html = render("appearance");
-    expect(selectedTab(html)).toBe("general");
-    expect(subPageOf(html)).toBe("appearance");
-    expect(html).not.toContain('role="tablist"');
-    expect(html).toMatch(/data-bot-profile-back=""[^>]*>[\s\S]*?General<\/button>/);
+    expect(selectedTab(html)).toBe("appearance");
+    expect(subPageOf(html)).toBeUndefined();
     expect(sectionHtml(html, "appearance").open).toBe(true);
     expect(bodiesOf(sectionHtml(html, "appearance").html)).toEqual(["appearance"]);
-    expect(at(html, 'data-bot-profile-section="appearance"')).toBeGreaterThan(at(html, 'data-bot-profile-subpage="appearance"'));
+    const panel = at(html, 'id="bot-profile-panel-appearance"');
+    expect(panel).toBeGreaterThan(at(html, 'data-bot-profile-tabs=""'));
+    expect(at(html, 'data-bot-profile-section="appearance"')).toBeGreaterThan(panel);
     expect(html).not.toContain("data-bot-profile-appearance-toggle");
   });
 
@@ -237,7 +229,7 @@ describe("bot profile page shell", () => {
       expect(html).not.toContain(marker);
     }
     for (const word of [">Generate<", ">Upload<", ">Reset<", ">Randomize<"]) expect(html).not.toContain(word);
-    // straight from the description to the General / Outcomes / Knowledge / Analytics tabs
+    // straight from the description to the General / Appearance / Knowledge / Stats tabs
     const description = at(html, 'data-bot-profile-description=""');
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(description).toBeGreaterThan(0);
@@ -261,9 +253,9 @@ describe("bot profile page shell", () => {
     const banner = at(html, 'data-bot-profile-banner=""');
     expect(banner).toBeGreaterThan(0);
     expect(banner).toBeLessThan(hero);
-    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner h-\[112px\] /i);
+    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner h-\[124px\] /i);
     // the mascot over the banner's lower edge, at the left of the column
-    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[46px\] flex flex-col items-start/);
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[50px\] flex flex-col items-start/);
     const heroHtml = html.slice(hero, audience);
     expect(heroHtml).toContain("data-mascot-hero");
     // no card: no border, no panel, no tinted ground around the mascot
@@ -272,11 +264,11 @@ describe("bot profile page shell", () => {
     for (const cls of ["border", "rounded-2xl", "radial-gradient", "bg-panel", "p-4"]) expect(card).not.toContain(cls);
     expect(card).toContain("items-start");
     expect(card).not.toContain("items-center");
-    // small (84px mascot in an 88px frame) and clipped to it
+    // the hero size (#4420: 96px mascot in a 100px frame) and clipped to it
     const stage = /<button[^>]*data-mascot-stage=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
     expect(stage).toContain(`width:${MASCOT_HERO_SIZE + 4}px`);
     expect(stage).toContain("overflow-hidden");
-    // name (28px) then the label, left-aligned, inside the hero, before who sees it
+    // name (26px, #4420) then the label, left-aligned, inside the hero, before who sees it
     const heading = at(html, "data-mascot-heading");
     const title = at(html, 'data-bot-profile-title=""');
     const label = at(html, 'data-bot-profile-label=""');
@@ -284,14 +276,14 @@ describe("bot profile page shell", () => {
     expect(heading).toBeLessThan(title);
     expect(title).toBeLessThan(label);
     expect(label).toBeLessThan(audience);
-    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-start text-left text-\[28px\]/);
-    // no button row nor summary in the header: they head the Appearance sub-page
+    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-start text-left text-\[26px\] font-medium/);
+    // no button row nor summary in the header: they head the Appearance tab
     for (const marker of ["data-mascot-play", "data-mascot-randomize", "data-mascot-summary", "data-mascot-action", "data-bot-profile-appearance-toggle"]) expect(heroHtml).not.toContain(marker);
     // nothing lost under it: who sees it, the description, left-aligned
     expect(html.slice(audience - 200, audience)).toContain("justify-start");
     expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*class="[^"]*text-left/);
-    // the column a reading width with a 16px gutter on a phone
-    expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[760px\] flex-col px-4 pb-10 sm:px-6"/);
+    // the column the reference's reading width (#4420) with a 16px gutter on a phone
+    expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[920px\] flex-col px-4 pb-12 sm:px-8"/);
   });
 
   it("regression (2026-11-08, « why is it cutting like that »): X and Share float on a clear sticky bar in the scroll, no opaque coloured band", () => {
@@ -318,7 +310,7 @@ describe("bot profile page shell", () => {
     expect(barHtml).toContain(">Pepper<");
   });
 
-  it("regression #4078 (« the back section should be moved to the top next to the X »): a sub-page's link back is in the top bar beside the close button", () => {
+  it("regression #4078, #4420: a sub-page's link back is in the top bar, at its top left (the reference's leading back), the close button at the right after Share", () => {
     for (const section of ["permissions", "soul", "model", "rules"] as const) {
       const html = render(section);
       const bar = at(html, "data-bot-profile-topbar");
@@ -327,10 +319,11 @@ describe("bot profile page shell", () => {
       const banner = at(html, 'data-bot-profile-banner=""');
       const sub = at(html, "data-bot-profile-subpage=");
       expect(sub, section).toBeGreaterThan(0);
-      // in the bar, right after the X, before the condensed name and Share
-      expect(back, section).toBeGreaterThan(close);
-      expect(close, section).toBeGreaterThan(bar);
+      // in the bar, first, before the condensed name; the X last, after Share (#4420)
+      expect(back, section).toBeGreaterThan(bar);
       expect(back, section).toBeLessThan(at(html, 'data-bot-profile-condensed=""'));
+      expect(close, section).toBeGreaterThan(at(html, 'data-bot-profile-share=""'));
+      expect(close, section).toBeLessThan(banner);
       expect(back, section).toBeLessThan(banner);
       // one link back on the page: none left in the column above the title
       expect(html.split('data-bot-profile-back=""').length - 1, section).toBe(1);
@@ -338,7 +331,7 @@ describe("bot profile page shell", () => {
       const tag = html.slice(html.lastIndexOf("<", back), html.indexOf(">", back) + 1);
       for (const cls of CIRCLE_LABEL.split(" ")) expect(tag, section).toContain(cls);
       // the place it left is closed up: the title opens the sub-page
-      expect(html, section).toMatch(/data-bot-profile-subpage="[^"]+" class="mt-4 [^"]*"><h2 data-bot-profile-subpage-title="" class="text-\[20px\]/);
+      expect(html, section).toMatch(/data-bot-profile-subpage="[^"]+" class="mt-4 [^"]*"><h2 data-bot-profile-subpage-title="" class="px-3 text-\[20px\]/);
     }
     // the tabs themselves have no link back
     expect(render("overview")).not.toContain("data-bot-profile-back");
@@ -364,8 +357,7 @@ describe("bot profile page shell", () => {
 
   it("opens a link on the sub-page that holds its section, shown in place (V6, #2612)", () => {
     expect(botProfileTabFor("overview")).toBe("general");
-    expect(botProfileTabFor("appearance")).toBe("general");
-    expect(botProfileSubPageFor("appearance")).toBe("appearance");
+    expect(botProfileTabFor("appearance")).toBe("appearance");
     expect(botProfileTabFor("slack")).toBe("general");
     expect(botProfileTabFor("summary")).toBe("general");
     expect(botProfileTabFor("soul")).toBe("general");
@@ -428,6 +420,45 @@ describe("bot profile page shell", () => {
     const x = html.slice(html.indexOf(">", html.indexOf("data-window-close")) + 1, html.indexOf("</button>", html.indexOf("data-window-close")));
     expect(x).toContain('width="18"');
     expect(x).toContain('stroke-width="1.75"');
+  });
+});
+
+// #4420 (the owner 2026-11-15, a capture of the reference above Sagax:
+// "il manque des subtilités pour avoir un look identique"): the header
+// measured on the reference app's bot page.
+describe("regression #4420: the bot page's header is the reference's", () => {
+  it("puts Share then the round close button together at the top right, nothing at the top left of the home", () => {
+    const html = render("overview");
+    const bar = at(html, "data-bot-profile-topbar");
+    const banner = at(html, 'data-bot-profile-banner=""');
+    const actions = at(html, 'data-bot-profile-topbar-actions=""');
+    const share = at(html, 'data-bot-profile-share=""');
+    const close = at(html, "data-window-close");
+    expect(actions).toBeGreaterThan(bar);
+    // the right group holds Share, then the X, its last control
+    expect(share).toBeGreaterThan(actions);
+    expect(close).toBeGreaterThan(share);
+    expect(close).toBeLessThan(banner);
+    // the left group: no X there any more (the condensed name only)
+    expect(html.slice(bar, actions)).not.toContain("data-window-close");
+    // Share is the word alone, as the reference's
+    const shareButton = html.slice(share, html.indexOf("</button>", share));
+    expect(shareButton).not.toContain("<svg");
+    expect(shareButton).toContain(">Share");
+  });
+
+  it("draws a 124px banner, the mascot on its lower edge, the name at 26px medium, and one left edge for the name, the tabs and the cards' labels", () => {
+    const html = render("overview");
+    expect(html).toMatch(/class="bot-profile-banner h-\[124px\] w-full shrink-0"/);
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[50px\] /);
+    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*text-\[26px\] font-medium leading-8 tracking-\[-0\.015em\]/);
+    // the header 12px into the column; the cards' grey labels on the same edge
+    expect(html).toMatch(/<header data-bot-profile-header=""[^>]*class="flex min-w-0 flex-col px-3"/);
+    const settings = at(html, 'data-settings-group="bot-profile-group-settings"');
+    const labelRow = html.slice(settings, html.indexOf("</h3>", settings));
+    expect(labelRow).toMatch(/class="flex min-w-0 items-center gap-1\.5 px-3"/);
+    // what Sagax shows beyond the reference stays: the label, who sees it, the description, the search, Outcomes
+    for (const marker of ['data-bot-profile-label=""', "data-bot-profile-audience", 'data-bot-profile-description=""', "data-bot-profile-search-toggle", 'data-bot-profile-tab="outcomes"']) expect(html).toContain(marker);
   });
 });
 
@@ -507,7 +538,7 @@ describe("General cards and sub-pages", () => {
   it("each row carries its name, description and value; the permissions and access pieces each live in one sub-page", () => {
     fixture.state = {};
     const html = render("overview");
-    for (const id of ["personality", "model", "appearance", "beforeActing", "sharing", "actsAlone"]) expect(html).toContain(`data-bot-profile-row="page-${id}"`);
+    for (const id of ["personality", "model", "beforeActing", "sharing", "actsAlone"]) expect(html).toContain(`data-bot-profile-row="page-${id}"`);
     expect(html).toContain(">Before it acts<");
     expect(html).toContain(">What it does alone, what it asks<");
     expect(html).toContain("data-bot-profile-value");

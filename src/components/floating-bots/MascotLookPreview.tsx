@@ -18,9 +18,10 @@ import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
 import type { OwlMove } from "./moves";
 
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
-/** The mascot's size in the profile page's hero (Grok Bot's avatar size,
- * the owner 2026-11-09: smaller, on the left). */
-export const MASCOT_HERO_SIZE = 84;
+/** The mascot's size in the profile page's hero (Grok Bot's avatar, on the
+ * left, the owner 2026-11-09): the reference's avatar reads larger than the
+ * owl drawn at 84px, whose art leaves room around it (#4420). */
+export const MASCOT_HERO_SIZE = 96;
 /** The preview card's Randomize button (and the tab row's, beside Reset). */
 export const MASCOT_HERO_BUTTON = cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing);
 
@@ -130,7 +131,7 @@ export function MascotLookPreview({
         data-mascot-detail={shown}
         data-mascot-hero=""
         aria-label={t("appearance.preview", { name: shownName })}
-        className="relative flex w-full flex-col items-start gap-1.5 text-left"
+        className="relative flex w-full flex-col items-start gap-1 text-left"
       >
         <MascotStage {...stage} size={MASCOT_HERO_SIZE} pad={4} clip />
         <div data-mascot-heading="" className="flex min-w-0 max-w-full flex-col items-start">

@@ -371,14 +371,32 @@ Code : `src/components/bot-profile/` (bureau et web, une seule page). Audit côt
 avec l'app de référence : #3388 ; ce patron : #3398.
 
 - La page remplit le panneau principal à la place du chat, à côté de la barre latérale
-  inchangée. Une colonne centrée de 760 px, gouttières de 24 px (16 px sur un téléphone).
-- En-tête : une bannière basse dans la couleur de la mascotte, la mascotte petite à
-  gauche sur son bord bas, le nom à 28 px avec le titre du bot dessous, qui le voit et
-  son propriétaire, la description éditée en place. Fermer en haut à gauche, Partager en
-  haut à droite (la seule porte du partage des personnes et des groupes) ; la barre
-  devient floue avec la petite mascotte et le nom quand le nom passe dessous.
-- Onglets en pilules : Général, Apparence, Connaissances, Analytique (Simple masque
-  Analytique). La loupe à droite cherche dans tous les réglages.
+  inchangée. Une colonne centrée de 920 px, gouttières de 32 px (16 px sur un téléphone),
+  mesurées sur la page du bot de la référence (#4420).
+- En-tête (#4420, mesuré sur la référence) : une bannière de 124 px dans la couleur de la
+  mascotte, la mascotte à gauche, son milieu sur le bord bas de la bannière, le nom à
+  26 px (interligne 32, medium, -0,015 em) avec le titre du bot dessous, qui le voit et
+  son propriétaire, la description éditée en place. La mascotte, le nom, ces lignes, le
+  texte des onglets et les étiquettes grises des cartes partagent un même bord gauche,
+  12 px dans la colonne. Partager (le mot seul) puis le bouton rond Fermer ensemble en
+  haut à droite (Partager reste la seule porte du partage des personnes et des
+  groupes) ; le lien de retour d'une sous-page en haut à gauche ; la barre devient floue
+  avec la petite mascotte et le nom quand le nom passe dessous.
+- Onglets en pilules : Général, Objectifs, Apparence, Connaissances, Analytique (Simple
+  masque Analytique). Apparence est un onglet (#4420), plus une rangée de Général. La
+  loupe à droite cherche dans tous les réglages.
+- Une option de la page qui ouvre une autre surface l'ouvre comme une page de la page,
+  avec son retour, jamais comme une fenêtre (#4420) : Connecter des apps (Ajouter >
+  Applications ou Serveurs MCP, Connecter d'une rangée d'Accès, Messages sur ce Mac)
+  s'ouvre sous la barre de la page (retour, Partager, Fermer) ; Échap recule d'un pas,
+  puis revient à la page. La barre latérale ouvre toujours la fenêtre. « Tous les bots »
+  d'Analytique ouvre l'utilisation de tous les bots comme une sous-page (retour vers
+  Analytique), plus la fenêtre des Réglages. La rangée Mémoire de Dossier et mémoire
+  ouvre la page Mémoire sous la barre de la page (retour vers Connaissances, Partager,
+  Fermer), plus en quittant la page. La référence n'a ni l'un ni l'autre : sa mémoire
+  partagée est une section de son onglet Connaissances, son Analytique n'a pas de lien
+  vers tous les bots. Les routines (Connaissances > Routines, Objectifs) étaient déjà
+  une sous-page ; Répondre, Demander et Ouvrir l'exécution mènent au chat du bot.
 - Général est fait de cartes de section avec leurs contrôles sur place, comme la
   référence : une étiquette grise de 13 px au-dessus d'une carte pleine sans bordure,
   24 px entre les groupes.
@@ -443,7 +461,7 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   Réglages avancés, Versions ; dans Connaissances : Routines, Dossier et mémoire). Elle
   garde à droite sa valeur courte et un chevron.
 - Une sous-page : le lien de retour nommé d'après l'onglet où il revient (« ‹ Général »),
-  qui reçoit le focus à l'ouverture ; le titre dans le style des titres de page des
+  en haut à gauche de la barre, qui reçoit le focus à l'ouverture ; le titre dans le style des titres de page des
   Réglages (20 px, semi-gras) ; une ligne d'intro ; puis ses cartes. Échap revient à la
   rangée qui l'a ouverte.
 - Chaque changement s'applique sur place (voir 2.4) ; Versions restaure.

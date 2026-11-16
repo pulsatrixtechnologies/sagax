@@ -152,21 +152,18 @@ describe("Settings split: every moved setting at its new place", () => {
     await settings("providers");
     const line = (id: string) => host.querySelector<HTMLElement>(`[data-provider-line="account:${id}"]`)!;
     const signIn = (id: string) => line(id).querySelector<HTMLButtonElement>('[data-provider-action="signIn"]')!;
+    // #4415: the row's Sign in starts the sign-in itself; the row shows its
+    // state in place of the button, the code under it
+    vi.useFakeTimers();
     await act(async () => signIn("codex").click());
     expect(line("codex").getAttribute("data-open")).toBe("true");
-    vi.useFakeTimers();
-    const start = [...line("codex").querySelectorAll("button")].find((button) => button.textContent?.includes("Connect ChatGPT"))!;
-    await act(async () => start.click());
-    const detail = line("codex").querySelector<HTMLElement>("[data-provider-panel]")!;
-    expect(detail.textContent).toContain("ABCD-EFGH");
+    const steps = line("codex").querySelector<HTMLElement>("[data-sign-in-steps]")!;
+    expect(steps.textContent).toContain("ABCD-EFGH");
     await act(async () => signIn("other").click());
-    expect(detail.hidden).toBe(true);
+    expect(line("codex").querySelector("[data-sign-in-steps]"), "still there: it lives in its own row").toBe(steps);
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(api).toHaveBeenCalledWith("/api/instances/codex/auth/status?flowId=flow-a", expect.anything());
-    await act(async () => signIn("codex").click());
-    expect(line("codex").querySelector("[data-provider-panel]")).toBe(detail);
-    expect(detail.hidden).toBe(false);
-    expect(detail.textContent).toContain("ABCD-EFGH");
+    expect(steps.textContent).toContain("ABCD-EFGH");
     expect(vi.mocked(api).mock.calls.filter(([path]) => path === "/api/instances/codex/auth/start")).toHaveLength(1);
   });
 

@@ -28,6 +28,11 @@ export interface AccountNames {
   get(person: string | null | undefined, instanceId: string): string | undefined;
   /** Keeps a name ("" removes it, back to the engine's own). */
   set(person: string, instanceId: string, name: string): void;
+  /** #4415: the person removed this account from their own list (an
+   * organization's account stays everyone else's). */
+  removed(person: string | null | undefined, instanceId: string): boolean;
+  /** Takes the account off the person's own list (its name goes with it). */
+  remove(person: string, instanceId: string): void;
 }
 
 type Stored = Record<string, Record<string, string>>;
@@ -47,7 +52,20 @@ export function createAccountNames(dataDir: string): AccountNames {
     }
     return data;
   };
-  return {
+  // #4415: the accounts each person removed, beside their names
+  const removedFile = join(dataDir, "removed-accounts.json");
+  let removedData: Record<string, string[]> | null = null;
+  const readRemoved = (): Record<string, string[]> => {
+    if (removedData) return removedData;
+    try {
+      const raw: unknown = JSON.parse(readFileSync(removedFile, "utf8"));
+      removedData = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, string[]> : {};
+    } catch {
+      removedData = {};
+    }
+    return removedData;
+  };
+  const names: AccountNames = {
     get(person, instanceId) {
       if (!person) return undefined;
       const name = read()[personKey(person)]?.[instanceId];
@@ -65,5 +83,22 @@ export function createAccountNames(dataDir: string): AccountNames {
       writeFileAtomic(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
       data = next;
     },
+    removed(person, instanceId) {
+      if (!person) return false;
+      const own = readRemoved()[personKey(person)];
+      return Array.isArray(own) && own.includes(instanceId);
+    },
+    remove(person, instanceId) {
+      const all = readRemoved();
+      const key = personKey(person);
+      const own = Array.isArray(all[key]) ? all[key] : [];
+      if (!own.includes(instanceId)) {
+        const next = { ...all, [key]: [...own, instanceId] };
+        writeFileAtomic(removedFile, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+        removedData = next;
+      }
+      if (names.get(person, instanceId)) names.set(person, instanceId, "");
+    },
   };
+  return names;
 }

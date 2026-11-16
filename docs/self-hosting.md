@@ -142,7 +142,7 @@ pull or build a new release.
 A browser paired with Full access can connect an installed Codex CLI without opening a
 terminal: **Settings → Engines → Codex → Connect ChatGPT**. OMB starts
 `codex login --device-auth` on the server and shows a one-time code. Choose
-**Open ChatGPT sign-in**, enter the code on OpenAI's page, and complete sign-in
+**Open sign-in page**, enter the code on OpenAI's page, and complete sign-in
 with your own account. OMB checks for completion and refreshes the model list.
 You can cancel or request a fresh code after it expires.
 

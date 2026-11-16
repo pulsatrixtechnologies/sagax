@@ -19,14 +19,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Copy, Cpu, KeyRound, Pencil, Server } from "lucide-react";
 
-import { api, useStore, type InstanceInfo } from "@/state/store";
+import { ApiError, api, useStore, type InstanceInfo } from "@/state/store";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { copyText } from "@/lib/copy-text";
 import { readableError } from "@/lib/plain-error";
 import { useOfferedInstances } from "@/lib/offered-instances";
-import { perspicaxKeysUrl, reloadMyEngines } from "@/lib/perspicax-org";
+import { perspicaxKeysUrl, reloadMyEngines, type MyEngine } from "@/lib/perspicax-org";
 import {
   connectionAction,
   connectionLabel,
@@ -37,9 +37,12 @@ import {
 } from "@/lib/provider-rows";
 import { COMPUTER_PROVIDER_ID } from "../../../shared/model-provider";
 import { PERSONAL_PROVIDER_NAMES } from "../../../shared/provider-accounts";
+import { addedAccount } from "../../../shared/added-account";
 import { AddAnotherAccount, EngineRow } from "../EnginesSettings";
 import { EngineApiKeyField } from "../EngineApiKeyField";
 import { engineReady } from "../EngineLibrary";
+import { EngineSetup } from "../EngineSetup";
+import { signOutMyEngine } from "../EngineConnect";
 import { InstanceProviderMark, PresetProviderMark } from "../ProviderIcons";
 import { PROVIDER_ICON_PRESETS, type ProviderIconPreset } from "../../../shared/provider-icon";
 import { ConfirmPill, CountPill, DescribedRow, FIELD, HelpTip, PILL, SettingsGroup, peekRequestedSettingsCard } from "../SettingsPrimitives";
@@ -54,6 +57,7 @@ import { BotsLinkAdvanced, BotsLinkSection, botsLinkOnPage, useBotsLink } from "
 import { ProviderModels, activeModelProviders, useModelSwitches } from "./ModelSwitchesSettings";
 import { RunsWith, runsWithShown, useProviderRunsWith } from "../RunsWith";
 import { accountAddress, accountName, accountRows } from "./provider-summary";
+import { SignInState, SignInSteps, signInWay, useAccountSignIn } from "./AccountSignIn";
 import {
   PI_SERVER_PREFIX,
   focusProviderLine,
@@ -109,10 +113,18 @@ export function lineWords(row: ProviderRow, group: ProviderGroup, instances: Pro
  * an organization server; the server's when the engine can sign out). */
 export function canSignOut(row: ProviderRow, list: Pick<ProviderList, "organization" | "mine" | "instances">): boolean {
   if (row.kind !== "account") return false;
-  const mine = list.organization ? list.mine?.find((engine) => row.instanceIds.includes(engine.instanceId)) : undefined;
+  const mine = mineOfRow(row, list);
+  // the person's second sign-in on the engine (Grok) has its own state
+  if (mine && row.slot) return mine.accounts?.find((account) => account.slot === row.slot)?.signedIn === true;
   if (mine) return mine.subscription.signedIn;
   return list.instances.some((instance) => row.instanceIds.includes(instance.instanceId)
     && instance.authentication?.signOut === true && instance.snapshot.authenticated === true);
+}
+
+/** On an organization server, the person's own access behind an account
+ * row (its first engine: a row of one sign-in may stand for two engines). */
+function mineOfRow(row: ProviderRow, list: Pick<ProviderList, "organization" | "mine">): MyEngine | undefined {
+  return list.organization ? list.mine?.find((engine) => row.instanceIds.includes(engine.instanceId)) : undefined;
 }
 
 const PRESETS: ReadonlySet<string> = new Set(PROVIDER_ICON_PRESETS);
@@ -252,20 +264,6 @@ function VendorKeyForm({ vendorKey, group, onClose }: { vendorKey: VendorKey; gr
     : <ProviderKeyEditor id={vendorKey.server} onClose={onClose} />;
 }
 
-/** What an account's button opens in place: its sign-in card or its
- * sign-out (the key has its own section, #4376). */
-function ConnectionPanel({ row, list }: { row: ProviderRow; list: ProviderList }) {
-  const instances = rowInstances(row, list.instances);
-  const mineOf = (instance: InstanceInfo) => (list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined);
-  return (
-    <>
-      {instances.map((instance) => (
-        <EngineRow key={instance.instanceId} instance={instance} mine={mineOf(instance)} member={list.member} issuer={list.issuer} bare keysManaged part="access" />
-      ))}
-    </>
-  );
-}
-
 /** What a key line's Add, Replace or the provider's offered key opens in place. */
 function KeyForm({ row, group, list, onClose }: { row: ProviderRow; group: ProviderGroup; list: ProviderList; onClose: () => void }) {
   if (row.accountProvider) return <PersonalProviderKey provider={row.accountProvider} name={groupName(group)} onDone={onClose} />;
@@ -325,7 +323,7 @@ function ConnectionAdvanced({ row, list, speakers }: { row: ProviderRow; list: P
             <button type="button" className={PILL} onClick={() => setEditing(true)}>{t("compatServers.edit")}</button>
           </div>)}
       {/* a connected account with no button on its line (no sign-out here):
-          its account part (check, manage, Remove) is reached here */}
+          its account part (check, manage) is reached here; Remove is on its row */}
       {row.kind === "account" && !lineAction(row, list) && instances.map((instance) => (
         <EngineRow key={`access:${instance.instanceId}`} instance={instance} mine={list.issuer ? list.mine?.find((engine) => engine.instanceId === instance.instanceId) : undefined}
           member={list.member} issuer={list.issuer} bare keysManaged part="access" />
@@ -469,9 +467,123 @@ function useRenameAccount(list: ProviderList) {
   };
 }
 
-/** The account rows (#4376): the name, the address and state under it, one button. */
-function AccountsSection({ group, list, open, visited, show }: { group: ProviderGroup; list: ProviderList; open: string | null; visited: readonly string[]; show: (rowId: string | null) => void }) {
+/** Why an account could not be removed, in the person's words (#4415):
+ * which bots still use it, so they know what to move. */
+export function accountRemovalError(cause: unknown): string {
+  const body = cause instanceof ApiError ? cause.body : undefined;
+  if (body?.code === "account_in_use") {
+    const bots = Array.isArray(body.bots) ? body.bots.filter((name): name is string => typeof name === "string" && name.length > 0) : [];
+    const parts = [
+      bots.length ? t("providers.account.inUse", { bots: new Intl.ListFormat(activeLocale(), { type: "conjunction" }).format(bots) }) : "",
+      body.defaultModel === true ? t("providers.account.inUseDefault") : "",
+    ].filter(Boolean);
+    if (parts.length) return parts.join(" ");
+  }
+  if (body?.code === "account_busy") return t("providers.account.busy");
+  return readableError(cause);
+}
+
+/** One account (#4376, #4415): its name (renamed in place), the address and
+ * state under it, ONE way in or out (Sign in, Sign out), and Remove for an
+ * account added beside the provider's first one. A sign-in runs in the row
+ * itself: its state takes the button's place, its one step sits under it. */
+function AccountLine({ row, group, list, index, total, open, show }: {
+  row: ProviderRow; group: ProviderGroup; list: ProviderList; index: number; total: number; open: boolean; show: (rowId: string | null) => void;
+}) {
+  const { dispatch, refreshInstances, refreshModels } = useStore();
   const rename = useRenameAccount(list);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const instance = rowInstances(row, list.instances)[0];
+  const mine = mineOfRow(row, list);
+  const name = accountName(row, group, list.instances, index, total);
+  // the second sign-in of an engine is told apart by its name only
+  const address = row.slot ? null : accountAddress(row, list.instances);
+  const state = row.state === "connected" ? t("providers.state.connected") : t(STATE_KEY[row.state]);
+  const tone = row.state === "connected" ? "success" : row.state === "reconnect" ? "warning" : "neutral";
+  const action = lineAction(row, list);
+  const way = signInWay(instance, mine, row.slot);
+  const refresh = async () => {
+    await Promise.all([
+      Promise.resolve(refreshInstances()).catch(() => {}),
+      list.organization ? reloadMyEngines().catch(() => {}) : null,
+      instance && !list.organization ? Promise.resolve(refreshModels(instance.instanceId)).catch(() => {}) : null,
+    ]);
+  };
+  const flow = useAccountSignIn(way, refresh);
+  // a member removes their own added account from their list; who manages
+  // the server's accounts removes it from the server (the same people as Add)
+  const lead = mine?.instanceId ?? instance?.instanceId;
+  const driver = mine?.driver ?? instance?.driverKind ?? "";
+  const removable = Boolean(lead) && !row.slot && addedAccount(lead!, driver) && (list.organization || !list.member);
+  const run = (work: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    work().then(refresh).catch((cause: unknown) => setError(accountRemovalError(cause))).finally(() => setBusy(false));
+  };
+  const signOut = () => run(async () => {
+    if (mine) { await signOutMyEngine(mine.instanceId, row.slot); return; }
+    const { instances } = await api(`/api/instances/${encodeURIComponent(lead!)}/auth/sign-out`, { method: "POST", body: "{}" });
+    if (instances) dispatch({ type: "instances", instances });
+  });
+  const remove = () => run(async () => {
+    if (list.organization) { await api(`/api/me/engines/${encodeURIComponent(lead!)}`, { method: "DELETE" }); return; }
+    const { instances } = await api(`/api/instances/${encodeURIComponent(lead!)}`, { method: "DELETE" });
+    if (instances) dispatch({ type: "instances", instances });
+  });
+  const press = () => {
+    setError(null);
+    if (action === "signOut") { signOut(); return; }
+    // a sign-in made in the app runs in the row; anything else (an install,
+    // a terminal command) is the engine's own setup, opened under the row
+    if (way) { void flow.start(); return; }
+    show(open ? null : row.id);
+  };
+  const label = action ? `${t(ACTION_KEY[action])} · ${name}` : "";
+  const setup = !way && open && action && action !== "signOut" ? instance : undefined;
+  return (
+    <li data-provider-line={row.id} data-provider-account="" data-open={open || flow.running ? "true" : "false"} className="min-w-0">
+      <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
+        <span className="min-w-0 flex-1">
+          <AccountName rowId={row.id} name={name} onRename={instance && !row.slot ? rename(instance) : undefined} clearable={list.organization} />
+          <span className="block text-[12px] leading-4 text-ink-secondary [overflow-wrap:anywhere]" data-provider-account-line={row.id}>
+            {address && <><span data-provider-account-address="">{address}</span> · </>}
+            <StatusText tone={tone}>{state}</StatusText>
+          </span>
+        </span>
+        {flow.running
+          ? <SignInState flow={flow} name={name} />
+          : (action || removable) && (
+            <span className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {action && (
+                <button type="button" data-provider-action={action} data-provider-action-row={row.id} disabled={busy} onClick={press} aria-label={label} className={pluginActionClass("fill")}>
+                  {t(ACTION_KEY[action])}
+                </button>
+              )}
+              {removable && (
+                <span data-provider-action="remove" data-provider-action-row={row.id} className="flex">
+                  <ConfirmPill label={t(ACTION_KEY.remove)} confirmLabel={t("common.confirmRemove")} ariaLabel={`${t(ACTION_KEY.remove)} · ${name}`}
+                    // what a Claude account's removal keeps (its folder and login on disk), said as before
+                    {...(!list.organization && driver === "claudeAgent" ? { title: t("engines.account.removeHint") } : {})}
+                    onConfirm={remove} disabled={busy} pillClass={pluginActionClass("fill")} />
+                </span>
+              )}
+            </span>
+          )}
+      </div>
+      {error && <p role="alert" data-account-error={row.id} className="px-3.5 pb-2.5 text-[12px] leading-4 text-danger">{error}</p>}
+      {way && <SignInSteps flow={flow} way={way} rowId={row.id} />}
+      {setup && (
+        <div data-provider-panel={row.id} className="flex min-w-0 flex-col gap-2 px-3.5 pb-3">
+          <EngineSetup instance={setup} intent={setup.access === "custom" ? "inject" : "cloud"} unframed keysManaged />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** The account rows (#4376): the name, the address and state under it, one button. */
+function AccountsSection({ group, list, open, show }: { group: ProviderGroup; list: ProviderList; open: string | null; show: (rowId: string | null) => void }) {
   const accounts = accountRows(group);
   const lineInstances = accounts.flatMap((row) => rowInstances(row, list.instances));
   const adders = list.member ? [] : lineInstances.filter((instance, index) => lineInstances.findIndex((other) => other.driverKind === instance.driverKind) === index);
@@ -479,33 +591,7 @@ function AccountsSection({ group, list, open, visited, show }: { group: Provider
   return (
     <SettingsGroup title={t("providers.page.accounts")} groupId="provider-accounts">
       <ul className="flex flex-col" data-provider-lines="">
-        {accounts.map((row, index) => {
-          const shown = open === row.id;
-          const instance = rowInstances(row, list.instances)[0];
-          const name = accountName(row, group, list.instances, index, accounts.length);
-          const address = accountAddress(row, list.instances);
-          const state = row.state === "connected" ? t("providers.state.connected") : t(STATE_KEY[row.state]);
-          const tone = row.state === "connected" ? "success" : row.state === "reconnect" ? "warning" : "neutral";
-          return (
-            <li key={row.id} data-provider-line={row.id} data-provider-account="" data-open={shown ? "true" : "false"} className="min-w-0">
-              <div className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
-                <span className="min-w-0 flex-1">
-                  <AccountName rowId={row.id} name={name} onRename={instance && row.instanceIds.length === 1 ? rename(instance) : undefined} clearable={list.organization} />
-                  <span className="block text-[12px] leading-4 text-ink-secondary [overflow-wrap:anywhere]" data-provider-account-line={row.id}>
-                    {address && <><span data-provider-account-address="">{address}</span> · </>}
-                    <StatusText tone={tone}>{state}</StatusText>
-                  </span>
-                </span>
-                <LineButton row={row} group={group} list={list} name={name} onOpen={() => show(shown ? null : row.id)} />
-              </div>
-              {(shown || visited.includes(row.id)) && lineAction(row, list) && (
-                <div data-provider-panel={row.id} hidden={!shown} className={cn("min-w-0 flex-col gap-2 px-3.5 pb-3", shown ? "flex" : "hidden")}>
-                  <ConnectionPanel row={row} list={list} />
-                </div>
-              )}
-            </li>
-          );
-        })}
+        {accounts.map((row, index) => <AccountLine key={row.id} row={row} group={group} list={list} index={index} total={accounts.length} open={open === row.id} show={show} />)}
       </ul>
       {adders.map((instance) => <div key={instance.instanceId} data-provider-add-account="" className="px-3.5 pb-2"><AddAnotherAccount instance={instance} /></div>)}
     </SettingsGroup>
@@ -583,13 +669,9 @@ export function ProviderPage({ providerId }: { providerId: string }) {
   const list = useProviderList();
   const focus = useProviderFocus();
   const [open, setOpen] = useState<string | null>(focus);
-  // A line opened once keeps its panel mounted (hidden when closed): a
-  // sign-in in progress and its polling outlast opening another line.
-  const [visited, setVisited] = useState<readonly string[]>(focus ? [focus] : []);
-  const show = (rowId: string | null) => {
-    setOpen(rowId);
-    if (rowId) setVisited((prev) => (prev.includes(rowId) ? prev : [...prev, rowId]));
-  };
+  // #4415: a sign-in in progress lives in its own row (AccountLine), so it
+  // outlasts opening another line
+  const show = (rowId: string | null) => setOpen(rowId);
   useEffect(() => {
     if (!focus) return;
     show(focus);
@@ -618,7 +700,7 @@ export function ProviderPage({ providerId }: { providerId: string }) {
   const speakers = toolSpeakers(group.rows, list);
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-provider-page={group.id}>
-      <AccountsSection group={group} list={list} open={open} visited={visited} show={show} />
+      <AccountsSection group={group} list={list} open={open} show={show} />
       <ServerSection group={group} list={list} />
       <KeySection group={group} list={list} open={open} show={show} />
       {/* #4329 lot 2 (B3): the link to the person's bots in this provider's bot app */}

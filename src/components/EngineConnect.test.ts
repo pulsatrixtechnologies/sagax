@@ -163,7 +163,8 @@ describe("EngineConnect", () => {
       // it is clickable.
       const html = render(grok({ installed: false }));
       expect(html).toContain("<button");
-      expect(html).not.toContain("disabled");
+      // the attribute, not the `disabled:` style the button carries
+      expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
     });
 
     it("the image genuinely not carrying Grok still reads Not available, with no Connect", () => {

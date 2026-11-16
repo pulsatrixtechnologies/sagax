@@ -119,4 +119,82 @@ describe("createMeEnginesRoutes", () => {
     expect(long.sent[0]?.status).toBe(400);
     expect(set).toHaveBeenCalledTimes(2);
   });
+
+  const personDeps = (over: Record<string, unknown> = {}) => ({
+    localPrincipalId: () => "pr_1",
+    isPrincipalId: (id: string) => id === "pr_1",
+    principals: { byId: () => ({ id: "pr_1" }) },
+    IDENTITY: { issuer: "iss" },
+    providerAccountOwner: () => null,
+    orgOfferedEngines: () => [
+      { instanceId: "codex", live: { driverKind: "codex" } },
+      { instanceId: "chatgpt", live: { driverKind: "codex" } },
+      { instanceId: "chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd", live: { driverKind: "codex" } },
+    ],
+    registry: { entries: () => [], get: () => null },
+    personalProviderInstances: { visible: () => true, get: () => null },
+    consoleEngineAllowed: () => true,
+    engineInstalled: () => true,
+    isLoginDriver: () => true,
+    keyOnlyInstance: () => false,
+    providersOfInstance: () => [],
+    fileKeyConfigured: () => false,
+    DATA_DIR: "/tmp",
+    driverKeyBacked: () => false,
+    cfg: {},
+    serverEngineAllowedFor: () => false,
+    engineNotAvailableReason: () => undefined,
+    engineNameForPerson: (_i: string, name: string) => name,
+    engineDisplayName: () => "E",
+    secondLoginSupported: () => false,
+    perspicaxKeysUrl: () => undefined,
+    // the person's one Codex folder, and an added account's own
+    logins: {
+      loginDir: (_p: string, _d: string, _s: string, id: string) => (id.includes("-0000") ? `/data/accounts/${id}/codex` : "/data/codex"),
+      signedIn: () => true,
+      expired: () => false,
+      signOut: vi.fn(async () => undefined),
+    },
+    accountNames: { removed: () => false, remove: vi.fn() },
+    ...over,
+  });
+
+  it("says when an engine reads the same sign-in as one listed before it: one account (#4415)", async () => {
+    const route = createMeEnginesRoutes(personDeps());
+    const call = ctx("/api/me/engines", "GET");
+    await route(call.context);
+    const engines = (call.sent[0]!.body as { engines: Array<{ instanceId: string; sharesSignInWith?: string }> }).engines;
+    expect(engines.map((engine) => [engine.instanceId, engine.sharesSignInWith ?? null])).toEqual([
+      ["codex", null], ["chatgpt", "codex"], ["chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd", null],
+    ]);
+  });
+
+  it("takes an added account off the person's own list, signs them out of it, and leaves the first account (#4415)", async () => {
+    const deps = personDeps();
+    const route = createMeEnginesRoutes(deps);
+    const id = "chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd";
+    const removed = ctx(`/api/me/engines/${id}`, "DELETE");
+    await route(removed.context);
+    expect(removed.sent[0]).toEqual({ status: 200, body: { ok: true } });
+    expect(deps.logins.signOut).toHaveBeenCalledWith("pr_1", id, "loopback");
+    expect(deps.accountNames.remove).toHaveBeenCalledWith("pr_1", id);
+    const first = ctx("/api/me/engines/chatgpt", "DELETE");
+    await route(first.context);
+    expect(first.sent[0]?.status).toBe(400);
+    expect(deps.accountNames.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses with the person's bots that still use it, and lists no removed account (#4415)", async () => {
+    const id = "chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd";
+    const remove = vi.fn();
+    const route = createMeEnginesRoutes(personDeps({ accountUsers: () => ["Scout"], accountNames: { removed: () => false, remove } }));
+    const refused = ctx(`/api/me/engines/${id}`, "DELETE");
+    await route(refused.context);
+    expect(refused.sent[0]).toEqual({ status: 409, body: { error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout"] } });
+    expect(remove).not.toHaveBeenCalled();
+    const hidden = createMeEnginesRoutes(personDeps({ accountNames: { removed: (_p: string, instanceId: string) => instanceId === id, remove } }));
+    const listed = ctx("/api/me/engines", "GET");
+    await hidden(listed.context);
+    expect((listed.sent[0]!.body as { engines: Array<{ instanceId: string }> }).engines.map((engine) => engine.instanceId)).toEqual(["codex", "chatgpt"]);
+  });
 });

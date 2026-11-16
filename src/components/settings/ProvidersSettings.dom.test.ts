@@ -28,9 +28,13 @@ const fixture = vi.hoisted(() => ({
   keys: [] as { provider: string; last4: string | null }[],
   accountsDown: false,
   harnessByProvider: {} as Record<string, string>,
+  /** #4415: the answers of one test (a sign-in's verbs, a refused removal) */
+  answer: null as null | ((path: string, init?: RequestInit) => unknown),
 }));
 
 const answers = (path: string, init?: RequestInit): unknown => {
+  const own = fixture.answer?.(path, init);
+  if (own !== undefined) return own;
   if (path === "/api/me/models") {
     const body = JSON.parse(String(init?.body ?? "{}")) as { disabledModels?: string[]; harnessByProvider?: Record<string, string> };
     if (body.harnessByProvider) fixture.harnessByProvider = { ...fixture.harnessByProvider, ...body.harnessByProvider };
@@ -68,11 +72,17 @@ vi.mock("@/lib/desktop-local-models", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/desktop-local-models")>(),
   loadLocalModels: vi.fn(async () => fixture.local),
 }));
+// #4415: the vendor's sign-in page a browser sign-in opens at once
+const opened = vi.hoisted(() => ({ links: [] as string[] }));
+vi.mock("@/lib/app-links", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/app-links")>(),
+  openExternalLink: vi.fn(async (url: string) => { opened.links.push(url); }),
+}));
 vi.mock("../DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
 vi.mock("../HarnessConnectorsSection", () => ({ HarnessConnectorsSection: () => createElement("div", { "data-harness-connectors": "" }) }));
 
 const { ProvidersSettings, addChoices } = await import("./ProvidersSettings");
-const { api: apiMock } = await import("@/state/store");
+const { api: apiMock, ApiError } = await import("@/state/store");
 const apiCalls = (method: string) => vi.mocked(apiMock).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === method).map(([path, init]) => [path, (init as RequestInit).body ?? null]);
 const { ProviderPage } = await import("./ProviderPage");
 const { resetSettingsCards, requestSettingsCard } = await import("../SettingsPrimitives");
@@ -121,6 +131,7 @@ beforeEach(() => {
   fixture.keys = [];
   fixture.accountsDown = false;
   fixture.harnessByProvider = {};
+  fixture.answer = null;
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
   host = document.createElement("div");
   document.body.append(host);
@@ -430,7 +441,7 @@ describe("One provider's page (#4329 B3)", () => {
     expect(host.querySelector("[data-provider-page-advanced]")!.textContent).toContain("Codex");
   });
 
-  it("keeps a second Claude account's Remove in reach when its line has no button (no sign-out on this computer)", async () => {
+  it("removes a second Claude account from its own row, never from Advanced too (#4415)", async () => {
     const account = (configDir: string, isDefault: boolean) => ({ configDir, signInCommand: "claude auth login", signInShell: "sh" as const, isDefault });
     fixture.instances = [
       instance("claude", "claudeAgent", "Claude Code", { access: "subscription", claudeAccount: account("~/.claude", true), snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }),
@@ -438,13 +449,14 @@ describe("One provider's page (#4329 B3)", () => {
     ];
     await page("anthropic");
     const line = host.querySelector<HTMLElement>('[data-provider-line="account:claude-alex"]')!;
-    expect(line).not.toBeNull();
-    expect(line.querySelector("[data-provider-action]"), "no sign-out on this computer: no button").toBeNull();
+    expect(line.querySelector('[data-provider-action="remove"]'), "Remove on the account's row").not.toBeNull();
+    expect(line.querySelector('[data-provider-action="signOut"]'), "no sign-out on this computer").toBeNull();
+    expect(host.querySelector('[data-provider-line="account:claude"] [data-provider-action="remove"]'), "the provider's first account stays").toBeNull();
     await click(host.querySelector('[data-settings-card="providers.page.advanced.anthropic"] button[aria-expanded]'));
     const advanced = host.querySelector<HTMLElement>('[data-provider-advanced="account:claude-alex"]')!;
     expect(advanced.textContent).toContain("Check account");
     await click([...advanced.querySelectorAll<HTMLElement>("[data-inline-fold] > button")].find((button) => button.textContent?.includes("Manage account")));
-    expect([...advanced.querySelectorAll("button")].some((button) => button.textContent === "Remove account")).toBe(true);
+    expect([...advanced.querySelectorAll("button")].some((button) => /Remove/.test(button.textContent ?? "")), "said once, on the row").toBe(false);
   });
 
   it("draws no empty block in Advanced for an account with nothing of its own to show", async () => {
@@ -725,5 +737,277 @@ describe("Runs with on a provider's page (#4384)", () => {
     fixture.instances = [openaiKey()];
     await page("openai");
     expect(host.querySelector('[data-settings-group="provider-runs-with"]')).toBeNull();
+  });
+});
+
+// #4415 (the owner 2026-11-15, on a provider's Accounts: "I should be able to
+// delete accounts", "why does the first one says connect claude ?? I already
+// have the sign in button", "This looks awful.", "I signed into one account
+// for chatgpt and it shows two rows"): one sign-in is one row; one state and
+// one way in or out per row, the older per-engine blocks never drawn in it; a
+// sign-in runs in the row, its state in place of the button, its step under
+// it with no card; an added account is removed from its row, and a refusal
+// names the bots to move. The states of each provider with accounts.
+describe("A provider's accounts: sign in, sign out and remove in the row (#4415)", () => {
+  const uuid = (n: number) => `0000000${n}-aaaa-4bbb-8ccc-dddddddddddd`;
+  const later = () => new Date(Date.now() + 10 * 60_000).toISOString();
+  const signedOut = { access: "subscription" as const, snapshot: { state: "available" as const, authenticated: false } };
+  const posts = () => apiCalls("POST");
+  const line = (rowId: string) => host.querySelector<HTMLElement>(`[data-provider-line="${rowId}"]`)!;
+  const type = async (input: HTMLInputElement, value: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  /** No older block of one engine inside an account row: its own Connect, Connected or Disconnect. */
+  const noOldBlocks = (root: Element) => {
+    expect(root.querySelector("[data-engine-connect], [data-engine-connected], [data-claude-sign-in], [data-device-sign-in], [data-chatgpt-plan-sign-in], [data-my-engine], [data-grok-accounts]")).toBeNull();
+    expect(visibleText(root)).not.toMatch(/Connect (Claude|ChatGPT|Grok)|Disconnect/);
+  };
+  /** The flow's step sits in the row: no card in a card, no brand colour, no full-width button. */
+  const quietSteps = (steps: HTMLElement) => {
+    // no card: nothing framed inside the row
+    for (const node of [steps, ...steps.querySelectorAll<HTMLElement>("div, form, p")]) {
+      expect(node.className.toString(), node.outerHTML.slice(0, 80)).not.toMatch(/\bborder\b|\bborder-hairline|\bbg-app\b|\brounded-(lg|xl)\b/);
+    }
+    // no brand-coloured or full-width button
+    for (const node of steps.querySelectorAll<HTMLElement>("button, a")) {
+      expect(node.className.toString(), node.outerHTML.slice(0, 80)).not.toMatch(/\bbg-accent\b|\bw-full\b|\bbg-white\b/);
+    }
+    expect(steps.querySelector<HTMLElement>("[data-sign-in-open]")!.className).toContain("rounded-full");
+    expect(steps.querySelectorAll("button, a").length, "never a stack of buttons").toBeLessThanOrEqual(3);
+  };
+  afterEach(() => { vi.useRealTimers(); });
+
+  describe("in an organization (the person's own sign-ins)", () => {
+    beforeEach(() => {
+      fixture.org = ORG;
+      fixture.config = { viewer: { operator: false, role: "admin" } };
+    });
+
+    it("Claude, four accounts all signed out: one Sign in per account, Remove on the added ones, no 'Connect Claude' anywhere", async () => {
+      const ids = ["claude", `claude-${uuid(1)}`, `claude-${uuid(2)}`, `claude-${uuid(3)}`];
+      const names = ["Claude Code", "Work", "Lab", "Side"];
+      fixture.instances = ids.map((id, at) => instance(id, "claudeAgent", names[at]!, signedOut));
+      fixture.mine = ids.map((id, at) => mine(id, "claudeAgent", names[at]!, { subscription: { supported: true, signedIn: false } }));
+      await page("anthropic");
+      const accounts = host.querySelector<HTMLElement>('[data-settings-group="provider-accounts"]')!;
+      const rows = [...accounts.querySelectorAll<HTMLElement>("[data-provider-account]")];
+      expect(rows).toHaveLength(4);
+      for (const row of rows) {
+        expect(row.querySelectorAll('[data-provider-action="signIn"]'), row.dataset.providerLine).toHaveLength(1);
+        expect(row.querySelector("[data-provider-account-line]")!.textContent).toContain("Not connected");
+      }
+      expect(rows.map((row) => Boolean(row.querySelector('[data-provider-action="remove"]')))).toEqual([false, true, true, true]);
+      noOldBlocks(accounts);
+    });
+
+    it("Claude, a sign-in in progress: the row's button becomes the flow's state; one sentence, the page, the code field, Finish; Cancel is quiet", async () => {
+      const id = `claude-${uuid(1)}`;
+      fixture.instances = [instance("claude", "claudeAgent", "Claude Code", signedOut), instance(id, "claudeAgent", "Work", signedOut)];
+      fixture.mine = [
+        mine("claude", "claudeAgent", "Claude Code", { subscription: { supported: true, signedIn: false } }),
+        mine(id, "claudeAgent", "Work", { subscription: { supported: true, signedIn: false } }),
+      ];
+      fixture.answer = (path) => path === `/api/me/engines/${id}/login/start`
+        ? { auth: { phase: "waiting", flowId: "flow-1", authorizationUrl: "https://claude.ai/oauth/authorize?code=true", expiresAt: later() } }
+        : path.startsWith(`/api/me/engines/${id}/login/`) ? { ok: true } : undefined;
+      await page("anthropic");
+      vi.mocked(apiMock).mockClear();
+      await click(line(`account:${id}`).querySelector('[data-provider-action="signIn"]'));
+      expect(posts()).toEqual([[`/api/me/engines/${id}/login/start`, "{}"]]);
+      const row = line(`account:${id}`);
+      expect(row.querySelector('[data-provider-action="signIn"]'), "replaced, not shown beside it").toBeNull();
+      expect(row.querySelector("[data-sign-in-state]")!.textContent).toContain("Waiting for sign-in");
+      const steps = row.querySelector<HTMLElement>(`[data-sign-in-steps="account:${id}"]`)!;
+      expect(visibleText(steps)).toContain("Paste only a code from a sign-in started here; your bots share this subscription's limits.");
+      expect(visibleText(steps)).toMatch(/Expires at /);
+      expect(steps.querySelector<HTMLAnchorElement>("[data-sign-in-open]")!.href).toBe("https://claude.ai/oauth/authorize?code=true");
+      quietSteps(steps);
+      noOldBlocks(host.querySelector('[data-settings-group="provider-accounts"]')!);
+      // the other account keeps its own Sign in
+      expect(line("account:claude").querySelector('[data-provider-action="signIn"]')).not.toBeNull();
+      await type(steps.querySelector<HTMLInputElement>("[data-sign-in-code-input]")!, " pasted-code-123 ");
+      await click(steps.querySelector("[data-sign-in-finish]"));
+      expect(posts().at(-1)).toEqual([`/api/me/engines/${id}/login/complete`, JSON.stringify({ flowId: "flow-1", code: "pasted-code-123" })]);
+      expect(line(`account:${id}`).querySelector("[data-sign-in-state], [data-sign-in-steps]"), "done: the row says it").toBeNull();
+      // the server now says it is signed in: one state, one way out
+      fixture.mine = [fixture.mine[0]!, mine(id, "claudeAgent", "Work", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" })];
+      await page("anthropic");
+      const done = line(`account:${id}`);
+      expect(done.querySelector("[data-provider-account-line]")!.textContent).toBe("Connected");
+      expect([...done.querySelectorAll("[data-provider-action]")].map((node) => node.getAttribute("data-provider-action"))).toEqual(["signOut", "remove"]);
+      noOldBlocks(done);
+    });
+
+    it("Cancel ends the sign-in and gives the row its Sign in back", async () => {
+      fixture.instances = [instance("claude", "claudeAgent", "Claude Code", signedOut)];
+      fixture.mine = [mine("claude", "claudeAgent", "Claude Code", { subscription: { supported: true, signedIn: false } })];
+      fixture.answer = (path) => path === "/api/me/engines/claude/login/start"
+        ? { auth: { phase: "waiting", flowId: "flow-2", authorizationUrl: "https://claude.ai/oauth/authorize", expiresAt: later() } }
+        : path.startsWith("/api/me/engines/claude/login/") ? { ok: true } : undefined;
+      await page("anthropic");
+      await click(line("account:claude").querySelector('[data-provider-action="signIn"]'));
+      const cancel = line("account:claude").querySelector<HTMLElement>("[data-sign-in-cancel]")!;
+      expect(cancel.className, "a quiet action").not.toMatch(/bg-control|bg-accent|w-full/);
+      await click(cancel);
+      expect(posts().at(-1)).toEqual(["/api/me/engines/claude/login/cancel", JSON.stringify({ flowId: "flow-2" })]);
+      expect(line("account:claude").querySelector('[data-provider-action="signIn"]')).not.toBeNull();
+      expect(line("account:claude").querySelector("[data-sign-in-steps], [data-sign-in-state]")).toBeNull();
+    });
+
+    it("OpenAI, one sign-in read by two engines (Codex and the ChatGPT plan) is ONE account: one row, one state, Sign out", async () => {
+      fixture.instances = [instance("codex", "codex", "Codex", { access: "subscription" }), instance("chatgpt", "codex", "ChatGPT plan", { access: "subscription" })];
+      fixture.mine = [
+        mine("codex", "codex", "Codex", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+        mine("chatgpt", "codex", "ChatGPT plan", { subscription: { supported: true, signedIn: true }, myTurns: "subscription", sharesSignInWith: "codex" }),
+      ];
+      await render();
+      expect(host.querySelector('[data-provider="openai"] [data-provider-summary]')!.textContent, "never '2 accounts connected'").toBe("Connected");
+      await page("openai");
+      const accounts = host.querySelector<HTMLElement>('[data-settings-group="provider-accounts"]')!;
+      const rows = accounts.querySelectorAll<HTMLElement>("[data-provider-account]");
+      expect(rows).toHaveLength(1);
+      expect([...rows[0]!.querySelectorAll("[data-provider-action]")].map((node) => node.getAttribute("data-provider-action"))).toEqual(["signOut"]);
+      noOldBlocks(accounts);
+      vi.mocked(apiMock).mockClear();
+      fixture.answer = (path) => path === "/api/me/engines/codex/login/sign-out" ? { ok: true } : undefined;
+      await click(rows[0]!.querySelector('[data-provider-action="signOut"]'));
+      expect(posts()).toEqual([["/api/me/engines/codex/login/sign-out", "{}"]]);
+    });
+
+    it("OpenAI, a device code: the code to enter, the page, no paste field; done once the server says so", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: false, toFake: ["setTimeout", "clearTimeout"] });
+      fixture.instances = [instance("codex", "codex", "Codex", signedOut)];
+      fixture.mine = [mine("codex", "codex", "Codex", { subscription: { supported: true, signedIn: false } })];
+      let phase = "waiting";
+      fixture.answer = (path) => path === "/api/me/engines/codex/login/start"
+        ? { auth: { phase: "waiting", flowId: "flow-3", authorizationUrl: "https://auth.openai.com/codex/device", userCode: "ABCD-EFGH", expiresAt: later() } }
+        : path.startsWith("/api/me/engines/codex/login/status") ? { auth: { phase, flowId: "flow-3", authorizationUrl: null, expiresAt: null } } : undefined;
+      await page("openai");
+      await click(line("account:codex").querySelector('[data-provider-action="signIn"]'));
+      const steps = line("account:codex").querySelector<HTMLElement>("[data-sign-in-steps]")!;
+      expect(steps.querySelector("[data-sign-in-code]")!.textContent).toContain("ABCD-EFGH");
+      expect(steps.querySelector("[data-sign-in-code-input]")).toBeNull();
+      expect(visibleText(steps)).toContain("Enter this code on the sign-in page; your bots share this subscription's limits.");
+      quietSteps(steps);
+      phase = "succeeded";
+      await act(async () => { vi.advanceTimersByTime(2100); });
+      await settle();
+      expect(apiCalls("GET").length + vi.mocked(apiMock).mock.calls.filter(([path]) => String(path).includes("/login/status")).length).toBeGreaterThan(0);
+      expect(line("account:codex").querySelector("[data-sign-in-state], [data-sign-in-steps]"), "signed in: the row says it").toBeNull();
+    });
+
+    it("xAI, two sign-ins of one engine are two rows; the second signs in with its own code", async () => {
+      fixture.instances = [instance("grok", "grokAgent", "Grok", signedOut)];
+      fixture.mine = [mine("grok", "grokAgent", "Grok", { subscription: { supported: true, signedIn: false }, accounts: [{ slot: "primary", signedIn: false }, { slot: "second", signedIn: false }] })];
+      fixture.answer = (path) => path === "/api/me/engines/grok/login/start?account=second"
+        ? { auth: { phase: "waiting", flowId: "flow-4", authorizationUrl: "https://accounts.x.ai/device?user_code=WXYZ-1234", userCode: "WXYZ-1234", expiresAt: later() } }
+        : undefined;
+      await page("xai");
+      const accounts = host.querySelector<HTMLElement>('[data-settings-group="provider-accounts"]')!;
+      const rows = [...accounts.querySelectorAll<HTMLElement>("[data-provider-account]")];
+      expect(rows.map((row) => row.dataset.providerLine)).toEqual(["account:grok", "account:grok#second"]);
+      for (const row of rows) expect(row.querySelectorAll('[data-provider-action="signIn"]')).toHaveLength(1);
+      noOldBlocks(accounts);
+      await click(line("account:grok#second").querySelector('[data-provider-action="signIn"]'));
+      expect(posts().at(-1)).toEqual(["/api/me/engines/grok/login/start?account=second", "{}"]);
+      const steps = line("account:grok#second").querySelector<HTMLElement>("[data-sign-in-steps]")!;
+      expect(steps.querySelector("[data-sign-in-code]")!.textContent).toContain("WXYZ-1234");
+      quietSteps(steps);
+      expect(line("account:grok").querySelector('[data-provider-action="signIn"]'), "the first keeps its own").not.toBeNull();
+    });
+
+    it("removes an added account from the person's own list (DELETE /api/me/engines/:id)", async () => {
+      const id = `chatgpt-${uuid(4)}`;
+      fixture.instances = [instance("codex", "codex", "Codex", signedOut), instance(id, "codex", "Side plan", signedOut)];
+      fixture.mine = [mine("codex", "codex", "Codex", { subscription: { supported: true, signedIn: false } }), mine(id, "codex", "Side plan", { subscription: { supported: true, signedIn: false } })];
+      fixture.answer = (path, init) => path === `/api/me/engines/${id}` && init?.method === "DELETE" ? { ok: true } : undefined;
+      await page("openai");
+      expect(line("account:codex").querySelector('[data-provider-action="remove"]')).toBeNull();
+      const remove = line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
+      await click(remove);
+      expect(remove.textContent, "armed first, as a key's Remove").toBe("Confirm removal");
+      await click(remove);
+      expect(vi.mocked(apiMock).mock.calls.some(([path, init]) => path === `/api/me/engines/${id}` && (init as RequestInit | undefined)?.method === "DELETE")).toBe(true);
+    });
+  });
+
+  describe("on a solo server (the server's own sign-ins)", () => {
+    it("OpenAI, several accounts all signed out: one Sign in each, Remove on the added plan only", async () => {
+      fixture.instances = [
+        instance("codex", "codex", "Codex", { ...signedOut, authentication: { method: "device-code" } }),
+        instance("chatgpt", "codex", "ChatGPT plan", { ...signedOut, authentication: { method: "browser-pkce" } }),
+        instance(`chatgpt-${uuid(5)}`, "codex", "Side plan", { ...signedOut, authentication: { method: "browser-pkce" } }),
+      ];
+      await page("openai");
+      const accounts = host.querySelector<HTMLElement>('[data-settings-group="provider-accounts"]')!;
+      const rows = [...accounts.querySelectorAll<HTMLElement>("[data-provider-account]")];
+      expect(rows).toHaveLength(3);
+      for (const row of rows) expect(row.querySelectorAll('[data-provider-action="signIn"]')).toHaveLength(1);
+      expect(rows.map((row) => Boolean(row.querySelector('[data-provider-action="remove"]')))).toEqual([false, false, true]);
+      noOldBlocks(accounts);
+    });
+
+    it("OpenAI, the ChatGPT plan signs in on its page: it opens at once, the row waits, nothing to paste", async () => {
+      opened.links = [];
+      fixture.instances = [instance("chatgpt", "codex", "ChatGPT plan", { ...signedOut, authentication: { method: "browser-pkce" } })];
+      const url = "https://auth.openai.com/api/accounts/authorize?client_id=app_example";
+      fixture.answer = (path) => path === "/api/instances/chatgpt/auth/start" ? { auth: { phase: "waiting", flowId: "flow-5", authorizationUrl: url, expiresAt: later() } } : undefined;
+      await page("openai");
+      await click(line("account:chatgpt").querySelector('[data-provider-action="signIn"]'));
+      expect(opened.links).toEqual([url]);
+      const steps = line("account:chatgpt").querySelector<HTMLElement>("[data-sign-in-steps]")!;
+      expect(visibleText(steps)).toContain("Finish signing in on the page that opened; your bots share this subscription's limits.");
+      expect(steps.querySelector("[data-sign-in-code-input], [data-sign-in-code]")).toBeNull();
+      quietSteps(steps);
+      expect(line("account:chatgpt").querySelector("[data-sign-in-state]")).not.toBeNull();
+    });
+
+    it("Claude, a refused removal says which bots to move, in plain words", async () => {
+      const id = `claude-${uuid(6)}`;
+      fixture.instances = [
+        instance("claude", "claudeAgent", "Claude Code", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ada@example.com" } } }),
+        instance(id, "claudeAgent", "Work", { access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "work@example.com" } } }),
+      ];
+      fixture.answer = (path, init) => {
+        if (path === `/api/instances/${id}` && init?.method === "DELETE") {
+          throw new ApiError("refused", 409, { error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout", "Atlas"], defaultModel: true });
+        }
+        return undefined;
+      };
+      await page("anthropic");
+      const remove = line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
+      await click(remove);
+      await click(remove);
+      const refusal = line(`account:${id}`).querySelector<HTMLElement>(`[data-account-error="account:${id}"]`)!;
+      expect(refusal.textContent).toBe("Scout and Atlas still use this account. Choose another account for them, then remove it. It is also the default model for new bots: choose another one first.");
+      // the row stays usable: never a dead button
+      expect((line(`account:${id}`).querySelector('[data-provider-action="remove"] button') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("says the refusal and the sign-in in Quebec French", async () => {
+      setLocale("fr");
+      const id = `claude-${uuid(7)}`;
+      fixture.instances = [
+        instance("claude", "claudeAgent", "Claude Code", { ...signedOut, authentication: { method: "paste-code" } }),
+        instance(id, "claudeAgent", "Travail", { access: "subscription", snapshot: { state: "available", authenticated: true } }),
+      ];
+      fixture.answer = (path, init) => {
+        if (path === "/api/instances/claude/auth/start") return { auth: { phase: "waiting", flowId: "flow-6", authorizationUrl: "https://claude.ai/oauth/authorize", expiresAt: later() } };
+        if (path === `/api/instances/${id}` && init?.method === "DELETE") throw new ApiError("refused", 409, { error: "x", code: "account_in_use", bots: ["Scout", "Atlas"] });
+        return undefined;
+      };
+      await page("anthropic");
+      await click(line("account:claude").querySelector('[data-provider-action="signIn"]'));
+      const steps = line("account:claude").querySelector<HTMLElement>("[data-sign-in-steps]")!;
+      expect(visibleText(steps)).toContain("Colle seulement un code d'une connexion lancée ici; tes bots partagent les limites de cet abonnement.");
+      expect(line("account:claude").querySelector("[data-sign-in-state]")!.textContent).toContain("En attente de la connexion");
+      const remove = line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
+      await click(remove);
+      await click(remove);
+      expect(line(`account:${id}`).querySelector(`[data-account-error]`)!.textContent).toBe("Scout et Atlas utilisent encore ce compte. Choisis-leur un autre compte, puis retire celui-ci.");
+    });
   });
 });

@@ -11,6 +11,7 @@
  * &subPage=<id> (#4329): a sub-page of the section, e.g. providers.provider:anthropic
  * &empty=1 (#4329): no engine and no key, Providers' empty list
  * &keyonly=1 (#4376): a key engine with no key row and no key; &expired=1 (with org=1): a second xAI account to sign in again
+ * &accounts=claude|openai|openai-solo|xai (#4415): a provider's Accounts in each state (with subPage=providers.provider:<id>)
  * &firstKey=1 (#4360): Security with no key and no recent proof; &vault=unpaired|noperson: the vault refused
  * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu; ?picker=chip: the chat head's chip
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
@@ -81,6 +82,10 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const refusedVault = params.get("vault");
   if (url.pathname === "/api/me/credentials/list" && (refusedVault === "unpaired" || refusedVault === "noperson")) {
     return json(refusedVault === "unpaired" ? { error: "Pair this device.", code: "not_paired" } : { error: "Sign in to use your credential vault.", code: "no_person" }, 403);
+  }
+  // &accounts= (#4415): removing an account answers that two bots still use it
+  if (params.get("accounts") && (init?.method ?? "GET").toUpperCase() === "DELETE" && /^\/api\/(me\/engines|instances)\/[\w.-]+$/.test(url.pathname)) {
+    return json({ error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout", "Atlas"] }, 409);
   }
   // #4376: a rename, a model switch, a key change the page's data in memory
   const written = answerGalleryWrite(API, url, init);

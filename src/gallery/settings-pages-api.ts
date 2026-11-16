@@ -6,7 +6,8 @@
  * `many=1` with providers=1: a realistic Providers list, eleven rows and more,
  * `botslink=none|off|org|paused-delivery`: the bots link's states, `noxai=1`:
  * no xAI account, `people=alone|others` (#4360): a server with no organization
- * whose owner is alone on it, or that has let one more person in). */
+ * whose owner is alone on it, or that has let one more person in,
+ * `accounts=claude|openai|openai-solo|xai` (#4415): a provider's Accounts). */
 export function settingsPagesApi(params: URLSearchParams): Record<string, unknown> {
   const DAY = 86_400_000;
   const NOW = Date.UTC(2026, 9, 28, 14);
@@ -220,6 +221,8 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
     },
     "/api/bots/bot-0/memory/semantic": { enabled: true, encoder: "built-in", memoryPassages: 42, conversationPassages: 7 },
   };
+  const accounts = params.get("accounts");
+  if (accounts) Object.assign(API, accountScenes(accounts, API["/api/config"] as Record<string, unknown>));
   return API;
 }
 
@@ -231,7 +234,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
  * provider, the OpenAI row on the page is the person's key), so Advanced
  * holds its one Connect. */
 function accountProviders(accounts: string | null): { providers?: unknown[] } {
-  if (!accounts) return {};
+  if (!accounts || !/^(\d+|out)$/.test(accounts)) return {};
   const claude = { provider: "claude-ai", vendor: "anthropic", manageUrl: "https://claude.ai/customize/connectors" };
   const openai = { provider: "chatgpt-apps", vendor: "openai", manageUrl: "https://chatgpt.com/#settings/Connectors" };
   const xai = { provider: "grok-com", vendor: "xai", manageUrl: "https://grok.com/connectors" };
@@ -244,4 +247,77 @@ function accountProviders(accounts: string | null): { providers?: unknown[] } {
   if (accounts === "25") return { providers: [{ ...claude, available: true, connectors: Array.from({ length: 25 }, (_, index) => ({ name: `Example connector ${index + 1}`, status: index % 7 === 3 ? "needs_auth" : "connected" })) }] };
   if (accounts === "out") return { providers: [{ ...claude, available: false, reason: "not_signed_in", connectors: [] }, { ...openai, available: false, reason: "not_signed_in", connectors: [] }, lists[2]] };
   return { providers: lists.slice(0, Math.max(1, Math.min(3, Number(accounts) || 1))) };
+}
+
+/** &accounts=claude|openai|openai-solo|xai (#4415): a provider's Accounts in
+ * each state the owner met: several accounts all signed out, one sign-in
+ * read by two engines (one row), a second sign-in of one engine, and the
+ * answers a sign-in in progress gets (a pasted code, a device code, the
+ * vendor's page alone). Removing answers that two bots still use it
+ * (src/gallery/settings-pages.tsx). Made-up names only. */
+function accountScenes(scene: string, config: Record<string, unknown>): Record<string, unknown> {
+  const id = (driver: string, n: number) => `${driver}-0000000${n}-aaaa-4bbb-8ccc-dddddddddddd`;
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  const models = (prefix: string, label: string) => ({ default: `${prefix}-1`, options: [{ id: `${prefix}-1`, label }] });
+  const engine = (instanceId: string, driverKind: string, displayName: string, signedIn: boolean, method?: string) => ({
+    instanceId, displayName, driverKind, cliDefault: driverKind, access: "subscription",
+    ...(method ? { authentication: { method } } : {}),
+    snapshot: { state: "available", authenticated: signedIn }, models: models(instanceId, `${displayName} model`),
+  });
+  const pi = { instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "anthropic/opus", options: [
+    { id: "anthropic/opus", label: "Claude Opus 4.1" }, { id: "openai/gpt-5", label: "GPT-5" }, { id: "xai/grok-4", label: "Grok 4" },
+  ] } };
+  const mine = (instanceId: string, driver: string, displayName: string, signedIn: boolean, extra: Record<string, unknown> = {}) => ({
+    instanceId, driver, displayName, installed: true, subscription: { supported: true, signedIn }, myKey: false, orgKey: false, myTurns: signedIn ? "subscription" : "none", ...extra,
+  });
+  const org = {
+    "/api/config": { ...config, personalSettings: true, viewer: { role: "admin", operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true } },
+    "/api/org": { org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://perspicax.example.com" } }, link: { state: "ok" }, viewerRole: "admin", settings: {} },
+    "/api/me/voice-keys": { elevenlabs: { configured: false, last4: null }, fish: { configured: false, last4: null }, xai: { configured: false, last4: null }, openai: { configured: false, last4: null } },
+  };
+  const piMine = mine("pi", "piAgent", "pi", false, { subscription: { supported: false, signedIn: false }, myKey: true, keyWhere: "perspicax", myTurns: "key" });
+  const waiting = (extra: Record<string, unknown>) => ({ auth: { phase: "waiting", flowId: "gallery-flow", expiresAt, ...extra } });
+  if (scene === "claude") {
+    const names = ["Claude", "Work", "Lab", "Side"];
+    const ids = ["claude", id("claude", 1), id("claude", 2), id("claude", 3)];
+    return {
+      ...org,
+      "/api/instances": { instances: [...ids.map((instanceId, at) => engine(instanceId, "claudeAgent", names[at]!, false)), pi] },
+      "/api/me/engines": { engines: [...ids.map((instanceId, at) => mine(instanceId, "claudeAgent", names[at]!, false)), piMine] },
+      "/api/me/providers": { keys: [], servers: [] },
+      [`/api/me/engines/${ids[1]}/login/start`]: waiting({ authorizationUrl: "https://claude.ai/oauth/authorize?code=true" }),
+      [`/api/me/engines/${ids[1]}/login/status`]: waiting({ authorizationUrl: "https://claude.ai/oauth/authorize?code=true" }),
+    };
+  }
+  if (scene === "openai") {
+    const added = id("chatgpt", 4);
+    return {
+      ...org,
+      "/api/instances": { instances: [engine("codex", "codex", "Codex", true), engine("chatgpt", "codex", "ChatGPT plan", true), engine(added, "codex", "Side plan", false), pi] },
+      "/api/me/engines": { engines: [mine("codex", "codex", "Codex", true), mine("chatgpt", "codex", "ChatGPT plan", true, { sharesSignInWith: "codex" }), mine(added, "codex", "Side plan", false), piMine] },
+      "/api/me/providers": { keys: [], servers: [] },
+      [`/api/me/engines/${added}/login/start`]: waiting({ authorizationUrl: "https://auth.openai.com/codex/device", userCode: "ABCD-EFGH" }),
+      [`/api/me/engines/${added}/login/status`]: waiting({ authorizationUrl: "https://auth.openai.com/codex/device", userCode: "ABCD-EFGH" }),
+    };
+  }
+  if (scene === "openai-solo") {
+    const added = id("chatgpt", 5);
+    return {
+      "/api/instances": { instances: [engine("codex", "codex", "Codex", false, "device-code"), engine("chatgpt", "codex", "ChatGPT plan", false, "browser-pkce"), engine(added, "codex", "Side plan", false, "browser-pkce"), pi] },
+      "/api/me/providers": { keys: [], servers: [] },
+      "/api/instances/chatgpt/auth/start": waiting({ authorizationUrl: "https://auth.openai.com/api/accounts/authorize?client_id=app_example" }),
+      "/api/instances/chatgpt/auth/status": waiting({ authorizationUrl: "https://auth.openai.com/api/accounts/authorize?client_id=app_example" }),
+    };
+  }
+  if (scene === "xai") {
+    return {
+      ...org,
+      "/api/instances": { instances: [engine("grok", "grokAgent", "Grok", false), pi] },
+      "/api/me/engines": { engines: [mine("grok", "grokAgent", "Grok", false, { accounts: [{ slot: "primary", signedIn: false }, { slot: "second", signedIn: false }] }), piMine] },
+      "/api/me/providers": { keys: [], servers: [] },
+      "/api/me/engines/grok/login/start": waiting({ authorizationUrl: "https://accounts.x.ai/device?user_code=WXYZ-1234", userCode: "WXYZ-1234" }),
+      "/api/me/engines/grok/login/status": waiting({ authorizationUrl: "https://accounts.x.ai/device?user_code=WXYZ-1234", userCode: "WXYZ-1234" }),
+    };
+  }
+  return {};
 }

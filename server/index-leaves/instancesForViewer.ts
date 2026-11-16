@@ -19,6 +19,8 @@ async function instancesForViewer(person: string | null) {
     : undefined;
   const instances = withoutRefusedModels(await host.describeInstances(), (instanceId) => host.refusedModelsFor(person, instanceId))
     .filter((instance) => host.personalProviderInstances.visible(instance.instanceId, host.IDENTITY.kind === "perspicax" ? person ?? "" : "solo"))
+    // #4415: an account the person took off their own list
+    .filter((instance) => !(host.IDENTITY.kind === "perspicax" && host.accountNames?.removed?.(person, instance.instanceId)))
     // #2054: a named OpenAI-compatible server owned by someone else stays out
     // of this viewer's picker (org-wide servers have no owner and stay).
     .filter((instance) => {

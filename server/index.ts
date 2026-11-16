@@ -1297,7 +1297,7 @@ import { createPersonProductsRoutes, createSaveProductKeyCard, createSetProductK
 import { productKeyCardShownText, productKeyResumeText } from "../shared/person-products.ts";
 import { createPersonProductsClient } from "./perspicax/person-products.ts";
 import { botProductEnabled, botProductsOff, normalProductId } from "../shared/bot-products.ts";
-import { createMeEnginesRoutes } from "./routes/me-engines.ts"; import { createAccountNames } from "./engines/account-names.ts";
+import { createMeEnginesRoutes } from "./routes/me-engines.ts"; import { createAccountNames } from "./engines/account-names.ts"; import { accountUserNames } from "./engines/account-users.ts";
 import { createOrgBotsRoutes } from "./routes/org-bots.ts";
 import { createPeopleAvatarRoutes } from "./routes/people-avatar.ts";
 import { createRoutineDelegationStubRoutes } from "./routes/routine-delegation-stub.ts";
@@ -28996,6 +28996,11 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
     serverEngineAllowedFor,
     engineNotAvailableReason,
     engineNameForPerson, accountNames,
+    // #4415: the person's own bots that still use one of their accounts
+    accountUsers: (principalId: string, instanceId: string) => accountUserNames(
+      store.bots.filter((bot) => effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase()),
+      (botId) => store.tasks(botId).filter((task) => !task.ownerPrincipalId || task.ownerPrincipalId.trim().toLowerCase() === principalId.trim().toLowerCase()),
+      instanceId),
     engineDisplayName,
     secondLoginSupported,
     grokAccountsFor,

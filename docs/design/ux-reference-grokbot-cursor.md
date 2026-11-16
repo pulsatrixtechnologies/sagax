@@ -3057,6 +3057,21 @@ Sagax's values (`ProvidersSettings.tsx`, `ProviderPage.tsx`):
   the tool by its name (version, location, updates), a server's address,
   the model list problem, Copy the identifier.
 
+#4415, Accounts: one sign-in is one line (two engines reading the same
+sign-in folder, Codex and the ChatGPT plan, are one account); a line has
+one way in or out (Sign in, Sign in again, Sign out, the 26px grey pill)
+and, for an account added beside the provider's first one, Remove, armed
+in red on a first click as the API key's Remove. No older block of one
+engine is drawn in a line. A sign-in runs in its line
+(`src/components/settings/AccountSignIn.tsx`, the one flow of every
+provider): the pill is replaced by the flow's state, a 12px spinner and
+"Waiting for sign-in..." in the secondary ink, with Cancel as a quiet 12px
+text action; under the line, with no card, one 12px sentence with the
+expiry, then the one step left: the device code (13px mono, a 24px copy
+button) and "Open sign-in page" (the grey pill with its external-link
+glyph), or the code field (26px) and Finish. A refused removal is one 12px
+line under the row naming the bots to move.
+
 Captures: `scripts/capture`-style headless Chrome of the gallery
 `src/gallery/settings-pages.html` (`&subPage=providers.provider:<id>`,
 `&empty=1`) beside `src/gallery/connect-apps.html`.

@@ -28,6 +28,31 @@ const base = (input: Partial<ProviderInput>): ProviderInput => ({
 });
 
 describe("providerRows", () => {
+  it("lists one sign-in read by two engines as ONE account row, both engines behind it (#4415)", () => {
+    const instances = [instance("codex", "codex", "subscription"), instance("chatgpt", "codex", "subscription"), instance("chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd", "codex", "subscription")];
+    const rows = providerRows(base({ organization: true, instances, allInstances: instances, manageKeys: false, mine: [
+      mine("codex", "codex", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+      mine("chatgpt", "codex", { subscription: { supported: true, signedIn: true }, myTurns: "subscription", sharesSignInWith: "codex" }),
+      mine("chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd", "codex", { subscription: { supported: true, signedIn: false } }),
+    ] }));
+    const accounts = rows.filter((row) => row.kind === "account");
+    expect(accounts.map((row) => [row.id, row.instanceIds, row.state])).toEqual([
+      ["account:codex", ["codex", "chatgpt"], "connected"],
+      ["account:chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd", ["chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd"], "available"],
+    ]);
+    // the list's row and count follow: one connected account
+    expect(providerGroups(pageProviderRows(rows), instances).find((group) => group.id === "openai")!.rows.filter((row) => row.kind === "account" && row.state === "connected")).toHaveLength(1);
+  });
+  it("gives an engine's second sign-in (Grok) a row of its own with its own state (#4415)", () => {
+    const instances = [instance("grok", "grokAgent", "subscription")];
+    const rows = providerRows(base({ organization: true, instances, allInstances: instances, manageKeys: false, mine: [
+      mine("grok", "grokAgent", { subscription: { supported: true, signedIn: true }, myTurns: "subscription", accounts: [{ slot: "primary", signedIn: true }, { slot: "second", signedIn: true, expired: true }] }),
+    ] }));
+    expect(rows.filter((row) => row.kind === "account").map((row) => [row.id, row.state, row.slot ?? null])).toEqual([
+      ["account:grok", "connected", null],
+      ["account:grok#second", "reconnect", "second"],
+    ]);
+  });
   it("merges a personal key with its engines and lists own voice keys and compatible servers", () => {
     const server = { instanceId: "lab", name: "Lab", url: "https://api.example.com/v1", protocol: "anthropic" as const, models: [{ id: "vendor/model", label: "Model" }] };
     const instances = [instance("codex", "codex", "subscription"), instance("personal-lab", "openai-compat", "api", { providerAccount: { serverId: "lab", provider: "compat:lab" } })];

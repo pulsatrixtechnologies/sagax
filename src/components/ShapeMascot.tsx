@@ -508,11 +508,11 @@ export function ShapeMascot({
       ref={root}
       className={cn("shape-mascot relative inline-flex shrink-0 items-center justify-center", live && full && "skin-fx-live", burst && moveBody && `fx-body-move fx-body-${burst.move}`, equip && "fx-equip-pop", className)}
       style={{ width: size, height: size }}
-      onPointerDown={!reduced && (live || animated) && !playing ? (event) => {
-        // a poke winks
-        if (event.pointerType === "mouse" && event.button !== 0) return;
-        play("wink", Date.now());
-      } : undefined}
+      // a poke winks, on the click and never on the press (#4433): a move
+      // turns a still image into the moving drawing, and doing it on
+      // pointerdown took the pressed element off the page, so what holds the
+      // mascot (a sidebar row, a pinned tile) never got its click
+      onClick={!reduced && (live || animated) && !playing ? () => play("wink", Date.now()) : undefined}
       data-shape={known}
       data-shape-skin={knownSkin}
       data-skin-tier={paint.tier}

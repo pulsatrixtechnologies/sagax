@@ -16,7 +16,8 @@ import {
   type MyConnections, type PersonalServer,
 } from "@/lib/my-connections";
 import { PersonalImportForm, PersonalServerForm, stateLabel, useMyConnections } from "../settings/MyConnectionsSettings";
-import { EntryMenu, RowSwitch, ScopePill, type EntryActions } from "./InstalledView";
+import { ITEM_ROW_ATTR, ItemTrailer } from "./ItemTrailer";
+import type { EntryActions } from "./InstalledView";
 import { PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
@@ -84,7 +85,7 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
     return {
       key: server.name,
       node: (
-        <div className="group flex items-center gap-2 py-3" data-installed-entry={`personal:${server.name}`} data-personal-server={server.name}>
+        <div className="group flex items-center gap-2 py-3" data-installed-entry={`personal:${server.name}`} data-personal-server={server.name} {...{ [ITEM_ROW_ATTR]: "" }}>
           <button type="button" onClick={() => setForm({ kind: "edit", name: server.name })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
             aria-label={t("connectApps.openAria", { name: server.name })}>
             <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><Server size={18} aria-hidden="true" /></span>
@@ -95,17 +96,16 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
                 {/* "connected" is the status on the right already */}
                 {server.authState !== "connected" && <>{" · "}{stateLabel(server)}</>}
               </span>
-              {server.kind === "remote" && server.authError && <span className="block truncate text-[11.5px] text-danger">{server.authError}</span>}
+              {server.kind === "remote" && server.authError && <span className="block truncate text-[12px] leading-4 text-danger">{server.authError}</span>}
             </span>
-            {!(server.enabled && waitsForSignIn(server)) && <PluginStatusLabel status={status} className="text-[13px] font-normal" />}
+            {!(server.enabled && waitsForSignIn(server)) && <PluginStatusLabel status={status} className="text-[12px] font-normal" />}
           </button>
           {server.enabled && waitsForSignIn(server) && (
             <button type="button" className="ui-button shrink-0" data-personal-sign-in={server.name} disabled={busy !== null} onClick={() => void signIn(server.name)}>{t("myConnections.servers.signIn")}</button>
           )}
-          <ScopePill label={t("capabilities.scope.me")} />
-          <EntryMenu name={server.name} actions={actions} updateWaiting={false} hoverOnly />
-          <RowSwitch name={server.name} on={server.enabled} busy={busy !== null}
-            onChange={(next) => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, next))} />
+          <ItemTrailer name={server.name} where={server.enabled ? { kind: "all" } : { kind: "none" }} whereKind={server.enabled ? "all" : "none"} on={server.enabled} busy={busy !== null}
+            onToggle={(next) => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, next))}
+            actions={{ allBots: () => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, true)), offEverywhere: () => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, false)), links: actions.links, remove: actions.remove }} />
         </div>
       ),
     };

@@ -10,17 +10,16 @@
 // (recommended-picks.ts) that this person can connect and does not have.
 // #4453: Discover of one kind (Skills, Connectors or Plugins); "From Sagax"
 // left the home, it repeated Yours.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { kindOf, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { mainSections, SECTION_PREVIEW, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
 import { PICK_WHY, recommendedPicks } from "@/lib/recommended-picks";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
-import { ConnectedMark, PluginRow, categoryPills, filterLabel, moreCategoryPills, sectionTitle } from "./ConnectAppsView";
-import { PLUGINS, pluginChipClass } from "./plugins-style";
+import { ConnectedMark, PluginRow, filterLabel, sectionTitle } from "./ConnectAppsView";
+import { PLUGINS } from "./plugins-style";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, accountRowMatches, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
 
 const PAGE = 60;
@@ -91,10 +90,6 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
     : [];
   const recommended = listsPicks ? picks : picks.slice(0, SECTION_PREVIEW);
   const sections = listsPicks ? [] : mainSections(items, "", filter, type, extraSources, focus, recommended.map((row) => row.item.key));
-  // the account rows' categories have their pill too
-  const categorized = [...items, ...accounts.flatMap((section) => section.rows)];
-  const pills = categoryPills(categorized, filter);
-  const more = moreCategoryPills(categorized, filter);
   // a category or a type keeps the account rows it matches; the notices
   // (no account, nothing read yet) show on All only
   const accountSections = accounts
@@ -102,22 +97,11 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
     .filter((section) => section.rows.length > 0 || section.notice);
   return (
     <div data-plugins-discover>
-      {(pills.length > 1 || more.length > 0) && (
-        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={t("connectApps.filtersAria")} data-plugins-chips>
-          {pills.map((chip) => (
-            <button key={chip} type="button" aria-pressed={filter === chip && type === "any"} data-plugins-chip={chip}
-              onClick={() => { onFilter(chip); onType("any"); }} className={pluginChipClass(filter === chip && type === "any")}>
-              {filterLabel(chip, sourceLabel)}
-            </button>
-          ))}
-          {more.length > 0 && (
-            <MoreChips chips={more} chosen={type === "any" && more.includes(filter) ? filter : null} label={(chip) => filterLabel(chip, sourceLabel)} onPick={(chip) => { onFilter(chip); onType("any"); }} />
-          )}
-          {type !== "any" && (
-            <button type="button" aria-pressed data-plugins-type={type} onClick={() => onType("any")} className={pluginChipClass(true)}>
-              {filterLabel(type, sourceLabel)} ×
-            </button>
-          )}
+      {type !== "any" && (
+        <div className="flex flex-wrap items-center gap-2" data-plugins-chips="">
+          <button type="button" aria-pressed data-plugins-type={type} onClick={() => onType("any")} className={cn(PLUGINS.fillPill, "h-7 px-3 text-[13px]")}>
+            {filterLabel(type, sourceLabel)} ×
+          </button>
         </div>
       )}
       {recommended.length > 0 && (
@@ -217,31 +201,6 @@ function SectionHead({ title, id, onViewAll, link }: { title: string; id?: strin
         <button type="button" data-plugins-view-all={id ?? ""} className={PLUGINS.sectionLink} onClick={onViewAll}>
           {t("connectApps.viewAll")}
         </button>
-      )}
-    </div>
-  );
-}
-
-/** "More ▾": the categories past the main ones, in a small menu. */
-function MoreChips({ chips, chosen, label, onPick }: { chips: readonly PluginFilter[]; chosen: PluginFilter | null; label: (chip: PluginFilter) => string; onPick: (chip: PluginFilter) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  usePopoverDismiss(open, ref, () => setOpen(false));
-  return (
-    <div ref={ref} className="relative" data-plugins-more-chips>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={pluginChipClass(chosen !== null)} data-plugins-chip={chosen ?? "more"}>
-        {chosen ? label(chosen) : t("connectApps.filter.more")}
-        <ChevronDown size={14} aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="menu" className="absolute left-0 top-full z-20 mt-1.5 min-w-[180px] rounded-xl border border-border bg-raised p-1 shadow-lg">
-          {chips.map((chip) => (
-            <button key={chip} type="button" role="menuitemradio" aria-checked={chosen === chip} onClick={() => { setOpen(false); onPick(chip); }}
-              className={cn("flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-hover", chosen === chip && "bg-hover")} data-plugins-chip={chip}>
-              {label(chip)}
-            </button>
-          ))}
-        </div>
       )}
     </div>
   );

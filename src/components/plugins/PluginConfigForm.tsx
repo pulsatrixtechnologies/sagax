@@ -57,11 +57,11 @@ export function PluginConfigForm({ config, canChange, onSave }: {
       setState("idle");
     }
   };
-  const field = "mt-1 w-full rounded-lg border border-hairline/60 bg-inset px-3 py-1.5 text-[12.5px] text-ink disabled:opacity-60";
+  const field = "mt-1 w-full rounded-lg border border-hairline/60 bg-inset px-3 py-1.5 text-[13px] text-ink disabled:opacity-60";
   return (
     <section data-plugin-config className="mt-3 rounded-xl border border-hairline/50 px-3.5 py-3">
-      <h4 className="text-[12.5px] font-semibold text-ink">{t("plugins.config.title")}</h4>
-      <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("plugins.config.intro")}</p>
+      <h4 className="text-[13px] font-semibold text-ink">{t("plugins.config.title")}</h4>
+      <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("plugins.config.intro")}</p>
       <div className="mt-2 space-y-2.5">
         {config.fields.map((entry) => entry.sensitive ? (
           <div key={entry.key} data-plugin-config-secret={entry.key} className="flex items-start gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">
@@ -69,18 +69,18 @@ export function PluginConfigForm({ config, canChange, onSave }: {
             <span><span className="font-medium text-ink">{entry.title}</span> · {t("plugins.config.secret")}</span>
           </div>
         ) : entry.type === "boolean" ? (
-          <div key={entry.key} className="flex items-center justify-between gap-3 text-[12.5px] text-ink">
+          <div key={entry.key} className="flex items-center justify-between gap-3 text-[13px] text-ink">
             <span className="min-w-0">
               <span className="block">{entry.title}</span>
-              {entry.description && <span className="block text-[11.5px] text-ink-secondary">{entry.description}</span>}
+              {entry.description && <span className="block text-[12px] text-ink-secondary">{entry.description}</span>}
             </span>
             <Switch checked={Boolean(draft[entry.key])} disabled={!canChange} aria-label={entry.title}
               onClick={() => setDraft({ ...draft, [entry.key]: !draft[entry.key] })} />
           </div>
         ) : (
-          <label key={entry.key} className="block text-[12.5px] text-ink">
+          <label key={entry.key} className="block text-[13px] text-ink">
             {entry.title}{entry.required && <span aria-hidden="true" className="text-danger"> *</span>}
-            {entry.description && <span className="block text-[11.5px] text-ink-secondary">{entry.description}</span>}
+            {entry.description && <span className="block text-[12px] text-ink-secondary">{entry.description}</span>}
             <input
               type={entry.type === "number" ? "number" : "text"}
               data-plugin-config-field={entry.key}

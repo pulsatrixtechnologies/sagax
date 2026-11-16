@@ -31,7 +31,7 @@ import { changeGithubCredential, useGithubCredentials, type GithubCredentialPubl
 import { MAX_ORG_GITHUB_TOKENS, ORG_GITHUB_TOKEN_HINT_SAVED } from "../../../shared/org-github-tokens";
 import { MAX_PERSON_GITHUB_CREDENTIALS } from "../../../shared/github-credentials";
 
-const fieldClass = "w-full min-w-0 rounded-lg border border-border bg-raised px-3 py-2 text-[12.5px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent";
+const fieldClass = "w-full min-w-0 rounded-lg border border-border bg-raised px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent";
 
 function hintText(hint: string): string {
   return hint === ORG_GITHUB_TOKEN_HINT_SAVED ? t("organization.githubTokens.savedHint") : `•••• ${hint}`;
@@ -57,7 +57,7 @@ export function GithubAccountSection({ connection }: {
       <p className="mb-4 text-[12px] leading-relaxed text-ink-secondary">{t("sources.github.intro")}</p>
       {connection && (
         <div className="mb-5 flex flex-col gap-1.5" data-github-connection>
-          <span className="text-[12.5px] font-medium text-ink">{t("sources.github.connection")}</span>
+          <span className="text-[13px] font-medium text-ink">{t("sources.github.connection")}</span>
           {connection}
         </div>
       )}
@@ -116,7 +116,7 @@ function GithubCredentialList() {
   return (
     <div className="flex flex-col gap-2" data-github-credentials={view.credentials.length ? "list" : "empty"}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-[12.5px] font-medium text-ink">{t("sources.github.credentials")}</span>
+        <span className="text-[13px] font-medium text-ink">{t("sources.github.credentials")}</span>
         {!adding && (
           <button type="button" className="ui-button" disabled={busy} data-github-credential-add-open onClick={() => { close(); setAdding(true); setAddScope("mine"); }}>
             {t("sources.github.add")}
@@ -140,7 +140,7 @@ function GithubCredentialList() {
                   {entry.onlyWhereChosen && <span className="rounded-full bg-hover px-2 py-0.5 text-[11px] text-ink-secondary" title={t("sources.github.onlyWhereChosenHint")}>{t("sources.github.onlyWhereChosen")}</span>}
                   <span className="shrink-0 font-mono text-[11px] text-ink-secondary" data-github-credential-hint>{hintText(entry.hint)}</span>
                 </div>
-                <div className="text-[11.5px] text-ink-secondary">
+                <div className="text-[12px] text-ink-secondary">
                   {entry.chosenBy > 0 ? t("sources.github.chosenBy", { count: entry.chosenBy }) : entry.onlyWhereChosen ? t("sources.github.chosenByNone") : t("sources.github.automatic")}
                 </div>
                 {mayChange(entry) && open === null && (
@@ -193,13 +193,13 @@ function GithubCredentialList() {
           <input value={addLabel} onChange={(event) => setAddLabel(event.target.value)} maxLength={80} placeholder={t("organization.githubTokens.labelPlaceholder")} aria-label={t("organization.githubTokens.label")} className={fieldClass} />
           <input type="password" autoComplete="off" spellCheck={false} value={addSecret} onChange={(event) => setAddSecret(event.target.value)} placeholder={t("plugins.tokenPlaceholder")} aria-label={t("organization.githubTokens.secret")} className={`${fieldClass} font-mono`} />
           {view.canManageOrg && (
-            <div role="radiogroup" aria-label={t("sources.github.whose")} className="flex flex-wrap items-center gap-3 text-[12.5px]" data-github-credential-scope={addScope}>
+            <div role="radiogroup" aria-label={t("sources.github.whose")} className="flex flex-wrap items-center gap-3 text-[13px]" data-github-credential-scope={addScope}>
               <span className="text-ink-secondary">{t("sources.github.whose")}</span>
               <label className="flex items-center gap-1.5"><input type="radio" name="github-credential-scope" checked={addScope === "mine"} onChange={() => setAddScope("mine")} />{t("sources.github.whoseMine")}</label>
               <label className="flex items-center gap-1.5"><input type="radio" name="github-credential-scope" checked={addScope === "org"} onChange={() => setAddScope("org")} />{t("sources.github.whoseOrg")}</label>
             </div>
           )}
-          <p className="text-[11.5px] leading-relaxed text-ink-secondary">{addScope === "org" ? t("sources.github.addHintOrg") : t("sources.github.addHint")}</p>
+          <p className="text-[12px] leading-relaxed text-ink-secondary">{addScope === "org" ? t("sources.github.addHintOrg") : t("sources.github.addHint")}</p>
           {full && <p className="text-[12px] text-ink-secondary">{t("organization.githubTokens.limit", { max: addScope === "org" ? MAX_ORG_GITHUB_TOKENS : MAX_PERSON_GITHUB_CREDENTIALS })}</p>}
           <div className="flex flex-wrap gap-2">
             <button type="submit" className="ui-button ui-button-primary" disabled={busy || full || !addLabel.trim() || addSecret.trim().length < 8}>{t("organization.githubTokens.add")}</button>

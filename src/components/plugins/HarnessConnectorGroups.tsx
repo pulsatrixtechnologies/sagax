@@ -279,7 +279,7 @@ export function AccountNoticeRow({ group, refreshing, onRefresh, onSetUp, manage
       </span>
       <span className="min-w-[min(100%,12rem)] flex-1">
         <span className={PLUGINS.rowName}>{group.name}</span>
-        <span className="block text-[12.5px] leading-5 text-ink-secondary">{text}</span>
+        <span className="block text-[13px] leading-5 text-ink-secondary">{text}</span>
       </span>
       {action === "setup" && onSetUp && (
         <button type="button" className={pluginActionClass("fill")} data-harness-setup={group.id} onClick={() => onSetUp(group.id)}>

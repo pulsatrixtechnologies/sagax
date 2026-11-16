@@ -121,7 +121,12 @@ export function usePluginsPanelState() {
   const scopeBot = pluginScopeBot({ pluginsBotId: state.pluginsBotId, selectedId: state.selectedId, bots: state.bots });
   const scopeBotId = scopeBot?.id ?? null;
   const [scopeChoice, setScopeChoice] = useState<PluginScope>(() => initialPluginScope(state.pluginsBotId, scopeBot, state.pluginsSurface));
-  const scope: PluginScope = (scopeChoice === "bot" && !scopeBot) || (scopeChoice === "workspace" && !mayManageOrganization) ? "me" : scopeChoice;
+  // #4453 (2026-11-16): the window has no scope control; the scope is chosen
+  // on each item. Opened from a bot it is that bot's; otherwise it is the
+  // person's own (Me). On a server with no organization the person is the
+  // installation: their own server is what "Me" lists there.
+  const wantedScope: PluginScope = scopeChoice === "me" && !organization && mayManageOrganization ? "workspace" : scopeChoice;
+  const scope: PluginScope = (wantedScope === "bot" && !scopeBot) || (wantedScope === "workspace" && !mayManageOrganization) ? "me" : wantedScope;
   const [botView, setBotView] = useState<BotPluginsView | null>(null);
   const [personalView, setPersonalView] = useState<BotPluginsView | null>(null);
   const scopeBotIdRef = useRef(scopeBotId);
@@ -211,7 +216,8 @@ export function usePluginsPanelState() {
       return;
     }
     if (requestedTab === null || (requestedTab !== "pages" && !providersLink && requestedTab !== "sources" && requestedTab !== "bots")) return;
-    if (requestedTab !== "bots") setScopeChoice("workspace");
+    // the organization-wide scope is the console's, not the window's (#4453)
+    if (requestedTab !== "bots") setScopeChoice((current) => current === "bot" ? "bot" : "me");
     setStack([{ page: "main" }]);
     setSearch("");
     setTab(requestedTab);

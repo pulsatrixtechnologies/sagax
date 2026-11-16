@@ -6,7 +6,7 @@
 // "What <bot> receives (engine: X)" with the prompt index's cap when it cuts
 // (#1748). Never an id on screen.
 import { useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, LoaderCircle, Plus, RotateCcw, TriangleAlert } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronRight, Copy, LoaderCircle, Plug, Plus, Puzzle, RotateCcw, TriangleAlert } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -28,8 +28,9 @@ import {
   type Capability,
 } from "@/lib/capabilities";
 import { Switch } from "../SettingsPrimitives";
+import { ItemTrailer, ITEM_ROW_ATTR, type ItemMenuActions } from "../plugins/ItemTrailer";
 
-const CHIP = "shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-[15px]";
+const CHIP = "shrink-0 rounded-full px-2 py-0.5 text-[12px] leading-4";
 const TONE: Record<"good" | "accent" | "warn" | "muted", string> = {
   good: "bg-success/10 text-success",
   accent: "bg-accent/12 text-accent-text",
@@ -39,7 +40,7 @@ const TONE: Record<"good" | "accent" | "warn" | "muted", string> = {
 
 /** Everything the tab shows, given the loaded list (tests and the gallery
  * render it). */
-export function CapabilitiesBody({ botName, data, error = null, actionError = null, busy = null, switchable = (item) => item.canToggle, onToggle = () => {}, onRetry = () => {}, onAdd, openAll = false, rowActions, showReceived = true, title, fold, lockedReason }: {
+export function CapabilitiesBody({ botName, data, error = null, actionError = null, busy = null, switchable = (item) => item.canToggle, onToggle = () => {}, onRetry = () => {}, onAdd, openAll = false, rowActions, showReceived = true, title, fold, lockedReason, menuActions }: {
   botName: string;
   /** null while the first load is in flight */
   data: BotCapabilities | null;
@@ -66,6 +67,10 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
    * gives its reason (set by the organization, the engine account, another
    * person's bot) */
   lockedReason?: (item: Capability) => string | undefined;
+  /** #4453: Connect Apps' rows: the reference's one row (an icon tile, the
+   * name, one grey line, the state, where it is on, the switch and "..."),
+   * no card around the list. The menu's lines per row. */
+  menuActions?: (item: Capability) => ItemMenuActions | undefined;
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [all, setAll] = useState(false);
@@ -103,7 +108,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
     <div className="flex flex-col gap-4 px-4 pb-6 pt-2" data-capabilities="">
       {actionError && <p role="alert" className="text-[12px] text-danger">{actionError}</p>}
       <section className="flex flex-col gap-1.5" data-capabilities-list="">
-        <div className="flex items-center gap-2 px-0.5">
+        {title !== "" && <div className="flex items-center gap-2 px-0.5">
           <h3 className="flex-1 text-[12px] font-medium text-ink-secondary">
             {title ?? t("capabilities.panel.title")}
             <span className="text-ink-tertiary"> · {t(activeCount === 1 ? "capabilities.panel.activeOne" : "capabilities.panel.activeMany", { count: activeCount })}</span>
@@ -114,13 +119,13 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
               <Plus size={13} aria-hidden="true" /> {t("capabilities.panel.add")}
             </button>
           )}
-        </div>
+        </div>}
         {items.length === 0 ? (
-          <div data-capabilities-empty="" className="rounded-2xl border border-hairline-weak bg-elevated px-3 py-4 text-center text-[12.5px] text-ink-secondary">
+          <div data-capabilities-empty="" className="rounded-2xl border border-hairline-weak bg-elevated px-3 py-4 text-center text-[13px] text-ink-secondary">
             {t("capabilities.panel.empty", { name: botName })}
           </div>
         ) : (
-          <ul className="flex flex-col overflow-hidden rounded-2xl border border-hairline-weak bg-elevated">
+          <ul className={menuActions ? "flex flex-col gap-0.5" : "flex flex-col overflow-hidden rounded-2xl border border-hairline-weak bg-elevated"}>
             {(fold !== undefined && !all ? items.slice(0, fold) : items).map((item) => (
               <CapabilityRow
                 key={item.key}
@@ -133,6 +138,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
                 onToggle={(next) => onToggle(item, next)}
                 actions={rowActions?.(item)}
                 lockedReason={lockedReason?.(item)}
+                {...(menuActions ? { plain: true, menu: menuActions(item) ?? {} } : {})}
               />
             ))}
           </ul>
@@ -149,7 +155,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
         <h3 className="px-0.5 text-[12px] font-medium text-ink-secondary">
           {t("capabilities.received.title", { name: botName, engine: data.engine.label })}
         </h3>
-        <dl className="grid grid-cols-[minmax(88px,auto)_1fr] gap-x-3 gap-y-2 rounded-2xl border border-hairline-weak bg-elevated px-3 py-2.5 text-[12.5px] leading-[18px]">
+        <dl className="grid grid-cols-[minmax(88px,auto)_1fr] gap-x-3 gap-y-2 rounded-2xl border border-hairline-weak bg-elevated px-3 py-2.5 text-[13px] leading-[18px]">
           <ReceivedRow id="skills" label={t("capabilities.received.skills")}>
             {groups.native.length === 0 && groups.prompt.length === 0 ? <None engine={data.engine.label} /> : (
               <>
@@ -202,7 +208,7 @@ function ReceivedRow({ id, label, children }: { id: string; label: string; child
 
 /** One capability: name, form and source, scope, state, its switch; open,
  * its detail. */
-function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onToggle, actions, lockedReason }: {
+function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onToggle, actions, lockedReason, plain = false, menu }: {
   item: Capability;
   expanded: boolean;
   onExpand: () => void;
@@ -212,6 +218,8 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   onToggle: (next: boolean) => void;
   actions?: ReactNode;
   lockedReason?: string;
+  plain?: boolean;
+  menu?: ItemMenuActions;
 }) {
   const name = capabilityName(item);
   const tone = stateTone(item.state);
@@ -220,6 +228,45 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   const brings = item.brings;
   // a Sagax built-in (REA): translated description, shown in the detail like every row
   const about = builtinDescription(item) ?? item.description;
+  if (plain) {
+    const Glyph = item.form === "plugin" || item.form === "flow" ? Puzzle : item.form === "skill" ? BookOpen : Plug;
+    return (
+      <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} {...(item.product ? { "data-capability-product": item.product } : {})} data-capability-scope={item.scope} data-capability-state={item.state} {...{ [ITEM_ROW_ATTR]: "" }}
+        className="rounded-2xl px-3 transition-colors hover:bg-ink/[0.05] motion-reduce:transition-none">
+        <div className={cn("flex min-w-0 items-center gap-3 py-3", item.supersededBy && "flex-wrap")}>
+          <button type="button" aria-expanded={expanded} onClick={onExpand} aria-label={t("capabilities.row.openAria", { name })}
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><Glyph size={18} aria-hidden="true" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>
+              <span className="mt-px block truncate text-[12px] leading-4 text-ink-secondary" title={source}>{source}</span>
+            </span>
+            {tone && <span className={cn("shrink-0 text-[12px] leading-4", tone === "good" ? "text-success" : tone === "warn" ? "text-warning" : "text-ink-secondary")} data-capability-state-chip="" title={reason ?? undefined}>{stateWord(item.state)}</span>}
+          </button>
+          {actions}
+          <ItemTrailer name={name} where={scopeWord(item.scope)} on={switchable || lockedReason ? item.enabled : undefined}
+            onToggle={switchable && !busy ? onToggle : undefined} busy={busy || locked && switchable} lockedReason={lockedReason} actions={menu} />
+        </div>
+        {item.supersededBy && <p data-capability-superseded="" className="pb-2.5 pl-[52px] text-[12px] leading-4 text-ink-secondary">{reason}</p>}
+        {expanded && (
+          <dl data-capability-detail="" className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-3 gap-y-1 pb-3 pl-[52px] text-[12px] leading-4">
+            {about && <Detail label={t("capabilities.detail.about")} value={about} />}
+            <Detail label={t("capabilities.detail.state")} value={reason ? `${stateWord(item.state)} \u00b7 ${reason}` : stateWord(item.state)} />
+            {brings && brings.skills.length > 0 && <Detail label={t("capabilities.detail.skills")} value={brings.skills.join(", ")} />}
+            {brings && brings.commands.length > 0 && <Detail label={t("capabilities.detail.commands")} value={brings.commands.join(", ")} />}
+            {brings && brings.agents.length > 0 && <Detail label={t("capabilities.detail.agents")} value={brings.agents.join(", ")} />}
+            {brings && brings.mcpServers.length > 0 && <Detail label={t("capabilities.detail.servers")} value={brings.mcpServers.join(", ")} />}
+            <Detail label={t("capabilities.detail.engine")} value={receiptWords(item.engine)} />
+            {item.promptIndex && <Detail label={t("capabilities.detail.promptBudget")} value={t("capabilities.detail.promptBudgetValue", { count: item.promptIndex.skills, max: item.promptIndex.maxSkills, kb: kilobytes(item.promptIndex.bytes), maxKb: kilobytes(item.promptIndex.maxBytes), omitted: item.promptIndex.omitted })} />}
+            {item.source.pack && <PackDetail digest={item.source.pack} version={item.source.version} />}
+            {item.updateAvailable && <Detail label={t("capabilities.detail.version")} value={t("capabilities.detail.updateOffered")} />}
+            {item.installedBy && <Detail label={t("capabilities.detail.installedBy")} value={item.installedBy} />}
+            {!item.canToggle && <Detail label={t("capabilities.detail.switch")} value={t(`capabilities.detail.where.${item.scope}`)} />}
+          </dl>
+        )}
+      </li>
+    );
+  }
   return (
     <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} {...(item.product ? { "data-capability-product": item.product } : {})} data-capability-scope={item.scope} data-capability-state={item.state} className="border-b border-hairline-weak last:border-b-0">
       <div className={cn("flex min-w-0 items-center gap-2 px-2.5 py-1.5", item.supersededBy && "flex-wrap")}>
@@ -229,7 +276,7 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
           {expanded ? <ChevronDown size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" /> : <ChevronRight size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" />}
           <span className="min-w-0 flex-1">
             <span className="block break-words text-[13px] text-ink" title={name}>{name}</span>
-            <span className="block truncate text-[11.5px] text-ink-secondary" title={source}>{source}</span>
+            <span className="block truncate text-[12px] text-ink-secondary" title={source}>{source}</span>
           </span>
         </button>
         {/* #4359: at a phone's width the chips stack before a long name breaks a word */}

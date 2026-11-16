@@ -73,3 +73,39 @@ export function entryKind(entry: { primary: { kind: PluginKind } }): ConnectApps
 export function fromOrganization(item: { scope: string; source: { kind: string } }): boolean {
   return item.source.kind === "perspicax" || item.scope === "organization";
 }
+
+/** Where an item is on, for the label at a row's right (#4453, decided
+ * 2026-11-16): the person's bots it reaches. `total` is how many of their
+ * bots could have it; none (0 of 0) reads as "No bot". */
+export type WhereLabel = { kind: "all" } | { kind: "none" } | { kind: "some"; count: number };
+export function whereLabel(on: number, total: number): WhereLabel {
+  if (on <= 0 || total <= 0) return { kind: "none" };
+  return on >= total ? { kind: "all" } : { kind: "some", count: on };
+}
+
+/** One vendor row of the organization section: every product of a vendor
+ * under one name. A product with no vendor is a vendor of one. */
+export interface ProductVendor<P> {
+  key: string;
+  name: string;
+  products: P[];
+}
+
+/** Groups products by the vendor the console names (`group`), in the order
+ * the first product of each vendor appears. A product with no vendor stands
+ * alone, so nothing is guessed from a name. */
+export function groupByVendor<P extends { id: string; name: string; group?: { id: string; name: string } }>(products: readonly P[]): Array<ProductVendor<P>> {
+  const vendors: Array<ProductVendor<P>> = [];
+  const byKey = new Map<string, ProductVendor<P>>();
+  for (const product of products) {
+    const key = product.group ? `vendor:${product.group.id}` : `product:${product.id}`;
+    let vendor = byKey.get(key);
+    if (!vendor) {
+      vendor = { key, name: product.group?.name ?? product.name, products: [] };
+      byKey.set(key, vendor);
+      vendors.push(vendor);
+    }
+    vendor.products.push(product);
+  }
+  return vendors;
+}

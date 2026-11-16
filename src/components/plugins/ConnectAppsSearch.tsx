@@ -125,7 +125,7 @@ export function ConnectAppsSearchResults({ query, groups, opened, onOpenGroup, a
   return (
     <div ref={listRef} id={LISTBOX_ID} role="listbox" aria-label={t("connectApps.search.resultsAria")} data-plugins-search-results>
       {groups.length === 0 ? (
-        <p className="mt-2 rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary" role="status" data-plugins-search-empty>
+        <p className="mt-2 rounded-xl bg-inset px-4 py-3 text-[13px] text-ink-secondary" role="status" data-plugins-search-empty>
           {loading ? t("connectors.loadingCatalog") : t("connectApps.search.empty", { query: query.trim() })}
         </p>
       ) : groups.map((group) => {

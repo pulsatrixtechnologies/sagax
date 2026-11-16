@@ -305,6 +305,19 @@ if (params.has("products")) {
     ];
     products.splice(0, products.length, ...real.map(([id, name]) => ({ id, name, auth_state: "ok", setup, state: "connected", base_url: null, reason_code: null, takes_key_kind: null, profiles: [{ name: "Technicians", mode: "group", personal: false }], key: { source: "default", named: false, own: false }, form: null, actions: allowed("test"), console_url: "" } as never)));
   }
+  // #4453: the console files products under their vendor (invented names):
+  // one vendor row unfolds into its products; a product of no vendor stands alone
+  if (params.get("products") === "many") {
+    const filed: Record<string, { group: { id: string; name: string }; endpoints?: string[] }> = {
+      "prod-psa": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Tickets", "Time entries", "Projects", "Agreements", "Invoices", "Companies", "Contacts", "Schedule", "Configurations", "Reports"] },
+      "prod-more-0": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Devices", "Alerts", "Scripts"] },
+      "prod-more-6": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Quotes", "Catalog", "Orders"] },
+      "prod-more-7": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Gauges", "Dashboards"] },
+      "prod-edr": { group: { id: "beacon", name: "Beacon Security" } },
+      "prod-more-1": { group: { id: "beacon", name: "Beacon Security" } },
+    };
+    for (const product of products as Array<{ id: string }>) Object.assign(product, filed[product.id] ?? {});
+  }
   // what Perspicax answers, read as the Sagax server reads it
   const served = parsePersonProducts(products);
   MANAGE_API["/api/me/perspicax/products"] = { products: served };

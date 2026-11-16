@@ -20,6 +20,11 @@ vi.mock("@/state/store", async () => {
 });
 
 const { productRows } = await import("./ProductRows");
+type RowsContext = import("./ProductRows").ProductRowsContext;
+/** the person's two bots, the write recorded, the page opener */
+const ctx = (onOpen: (product: PersonProduct) => void = () => {}, extra: Partial<RowsContext> = {}): RowsContext => ({
+  bots: [{ id: "bot-a", name: "Rocket" }, { id: "bot-b", name: "Orbit" }], setProducts: vi.fn(), onOpen, ...extra,
+});
 const { ProductDetailView } = await import("./ProductDetailView");
 const { ProductKeyCard } = await import("../ProductKeyCard");
 
@@ -61,7 +66,7 @@ afterEach(() => {
 
 describe("product rows", () => {
   it("keep the name readable at phone width: the state wraps beside it, never shrink-0", async () => {
-    const rows = productRows([px({ name: "Endpoint Security", state: "key_refused" })], () => {});
+    const rows = productRows([px({ name: "Endpoint Security", state: "key_refused" })], ctx());
     const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
     const state = view.querySelector("[data-person-product] [data-plugin-status]")!;
     // the state never holds its width against the name: it may go to its own line under it
@@ -72,7 +77,7 @@ describe("product rows", () => {
 
   it("say each state in words, at the row's right, once", async () => {
     const states: PersonProduct["state"][] = ["connected", "key_missing", "key_refused", "not_served"];
-    const rows = productRows(states.map((state, index) => px({ id: `p${index}`, name: `Product ${index}`, state })), () => {});
+    const rows = productRows(states.map((state, index) => px({ id: `p${index}`, name: `Product ${index}`, state })), ctx());
     const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
     const words = [...view.querySelectorAll("[data-person-product]")].map((row) => row.querySelector("[data-plugin-status]")?.textContent?.trim());
     expect(words).toEqual(["Connected", "Key missing", "Key refused by the vendor", "Not served on this deployment"]);
@@ -84,14 +89,14 @@ describe("product rows", () => {
 
   it("line up with the Installed rows: the neighbours' state text and their trailing \"...\"", async () => {
     const states: PersonProduct["state"][] = ["connected", "key_missing", "key_refused", "not_served"];
-    const rows = productRows(states.map((state, index) => px({ id: `p${index}`, name: `Product ${index}`, state, console_url: "https://console.example/p" })), () => {});
+    const rows = productRows(states.map((state, index) => px({ id: `p${index}`, name: `Product ${index}`, state, console_url: "https://console.example/p" })), ctx());
     const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
     for (const row of view.querySelectorAll("[data-person-product]")) {
       // the same trailing slot as every neighbour row, so the states sit in one column
       expect(row.lastElementChild?.querySelector("[data-entry-menu]")).not.toBeNull();
       const state = row.querySelector<HTMLElement>("[data-product-state]");
       if (state) {
-        expect(state.className).toContain("text-[13px]");
+        expect(state.className).toContain("text-[12px]");
         expect(state.className).toContain("font-normal");
         expect(state.className).not.toContain("font-medium");
       }
@@ -101,24 +106,96 @@ describe("product rows", () => {
   });
 
   it("offer the page's own \"...\" actions in the row: open in Perspicax, copy the id", async () => {
-    const view = await render(createElement("div", null, productRows([px({ console_url: "https://console.example/p" })], () => {})[0]!.node));
+    const view = await render(createElement("div", null, productRows([px({ console_url: "https://console.example/p" })], ctx())[0]!.node));
     await act(async () => { view.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
     const ids = [...view.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
-    expect(ids).toEqual(["open-console", "copy-id"]);
+    // the product's menu: the bots it is on, its detail, then the console's links
+    expect(ids).toEqual(["choose", "off", "detail", "open-console", "copy-id"]);
   });
 
   it("hide Open in Perspicax when Perspicax names no console page", async () => {
-    const view = await render(createElement("div", null, productRows([base], () => {})[0]!.node));
+    const view = await render(createElement("div", null, productRows([base], ctx())[0]!.node));
     await act(async () => { view.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
     const ids = [...view.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
-    expect(ids).toEqual(["copy-id"]);
+    expect(ids).toEqual(["choose", "off", "detail", "copy-id"]);
   });
 
   it("open the product's page", async () => {
     const opened = vi.fn();
-    const view = await render(createElement("div", null, productRows([base], opened)[0]!.node));
+    const view = await render(createElement("div", null, productRows([base], ctx(opened))[0]!.node));
     await act(async () => { view.querySelector<HTMLButtonElement>("button")!.click(); });
     expect(opened).toHaveBeenCalledWith(base);
+  });
+});
+
+describe("vendor rows (#4453, 2026-11-16: one row per vendor, its products under it)", () => {
+  const filed = (id: string, name: string, vendor?: { id: string; name: string }) => px({ id, name, ...(vendor ? { group: vendor } : {}) } as never);
+  const suite = { id: "harbor", name: "Harbor Suite" };
+
+  it("files the products of one vendor under one row; a product with no vendor stands alone", async () => {
+    const products = [filed("desk", "Service Desk", suite), filed("rmm", "Remote Monitoring", suite), filed("wiki", "Team Wiki")];
+    const rows = productRows(products.map((product) => ({ ...product, ...(product.id === "wiki" ? {} : { group: suite }) })), ctx());
+    expect(rows.map((row) => row.key)).toEqual(["vendor:harbor", "product:wiki"]);
+    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
+    // the vendor row reads its count; its products are folded
+    expect(view.querySelector("[data-vendor] .truncate")?.textContent).toContain("Harbor Suite");
+    expect(view.textContent).toContain("2 products");
+    expect(view.querySelector("[data-vendor-products]")).toBeNull();
+    // the single product has no chevron level
+    expect(view.querySelector("[data-person-product='wiki']")).not.toBeNull();
+    expect(view.querySelectorAll("[data-vendor-toggle]")).toHaveLength(1);
+  });
+
+  it("unfolds into its products, each with its own switch, and its endpoints on one line", async () => {
+    const desk = { ...filed("desk", "Service Desk", suite), endpoints: ["Tickets", "Time entries", "Projects"] };
+    const view = await render(createElement("div", null, productRows([desk, filed("rmm", "Remote Monitoring", suite)], ctx())[0]!.node));
+    await act(async () => { view.querySelector<HTMLButtonElement>("[data-vendor-toggle]")!.click(); });
+    const inner = view.querySelectorAll("[data-vendor-products] [data-person-product]");
+    expect([...inner].map((row) => row.getAttribute("data-person-product"))).toEqual(["desk", "rmm"]);
+    expect(inner[0]!.textContent).toContain("Tickets, Time entries, Projects");
+    for (const row of inner) expect(row.querySelector("[data-row-switch]")).not.toBeNull();
+    // a second press folds it again
+    await act(async () => { view.querySelector<HTMLButtonElement>("[data-vendor-toggle]")!.click(); });
+    expect(view.querySelector("[data-vendor-products]")).toBeNull();
+  });
+
+  it("the vendor's switch turns every product on or off for all the person's bots", async () => {
+    const setProducts = vi.fn();
+    const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk", suite), filed("rmm", "Remote Monitoring", suite)], ctx(() => {}, { setProducts }))[0]!.node));
+    const row = view.querySelector("[data-vendor] > div")!;
+    const toggle = row.querySelector<HTMLButtonElement>("[data-row-switch]")!;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(row.textContent).toContain("All your bots");
+    await act(async () => { toggle.click(); });
+    expect(setProducts).toHaveBeenCalledWith(["bot-a", "bot-b"], ["desk", "rmm"], false);
+  });
+
+  it("says where it is on: a bot that switched one product off shortens the label, and the switch reads off", async () => {
+    const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk", suite)], ctx(() => {}, { bots: [{ id: "bot-a", name: "Rocket", products: { desk: false } }, { id: "bot-b", name: "Orbit" }] }))[0]!.node));
+    const row = view.querySelector("[data-vendor] > div")!;
+    expect(row.querySelector("[data-row-scope]")?.textContent).toBe("1 bot");
+    expect(row.querySelector("[data-row-switch]")?.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("opened from a bot's page the switch stands for that bot, labelled This bot", async () => {
+    const setProducts = vi.fn();
+    const bot = { id: "bot-a", name: "Rocket", products: { desk: false } };
+    const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk")], ctx(() => {}, { forBot: bot, setProducts }))[0]!.node));
+    expect(view.querySelector("[data-row-scope]")?.textContent).toBe("This bot");
+    const toggle = view.querySelector<HTMLButtonElement>("[data-row-switch]")!;
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    await act(async () => { toggle.click(); });
+    expect(setProducts).toHaveBeenCalledWith(["bot-a"], ["desk"], true);
+  });
+
+  it("parses the vendor, the description and the endpoints the console sends, and ignores their absence", () => {
+    const withGroup = parsePersonProduct({ id: "desk", name: "Service Desk", state: "connected", group: { id: "harbor", name: "Harbor Suite" }, description: "Tickets and time", endpoints: ["Tickets", { name: "Time entries" }, 3] });
+    expect(withGroup?.group).toEqual({ id: "harbor", name: "Harbor Suite" });
+    expect(withGroup?.description).toBe("Tickets and time");
+    expect(withGroup?.endpoints).toEqual(["Tickets", "Time entries"]);
+    const plain = parsePersonProduct({ id: "wiki", name: "Team Wiki", state: "connected" });
+    expect(plain).not.toHaveProperty("group");
+    expect(plain).not.toHaveProperty("endpoints");
   });
 });
 
@@ -141,7 +218,7 @@ describe("product page", () => {
     const access = [...view.querySelectorAll("[data-person-product-roles] li")].map((item) => item.textContent);
     expect(access).toEqual(["TechniciansGrouped tools and recipes", "Given to you directlyCompact tools"]);
     expect(view.textContent).not.toContain("user-7f3a");
-    const row = await render(createElement("div", null, productRows([px({ profiles })], () => {})[0]!.node));
+    const row = await render(createElement("div", null, productRows([px({ profiles })], ctx())[0]!.node));
     expect(row.textContent).toContain("Technicians");
     expect(row.textContent).not.toContain("user-7f3a");
   });

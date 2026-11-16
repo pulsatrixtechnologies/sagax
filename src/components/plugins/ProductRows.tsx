@@ -4,15 +4,17 @@
 // right, the "..." on hover). The rows join Installed through its `personal`
 // slot; a row opens the product's page. No row at all when the server has
 // none to show.
-import type { ReactNode } from "react";
-import { Copy, ExternalLink } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ChevronRight, Copy, ExternalLink } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { productRowSub, productStateLabel, productStateTone, type PersonProduct } from "@/lib/person-products";
 import { cn } from "@/lib/cn";
-import { EntryMenu, ScopePill } from "./InstalledView";
+import { groupByVendor, whereLabel, type ProductVendor } from "@/lib/capability-kinds";
+import { botProductEnabled } from "../../../shared/bot-products";
+import { ITEM_ROW_ATTR, ItemTrailer, type ItemMenuActions } from "./ItemTrailer";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
@@ -40,7 +42,7 @@ export function productMenuActions(product: Pick<PersonProduct, "id" | "consoleU
 export function ProductStateLabel({ product, wrap = false }: { product: Pick<PersonProduct, "state" | "stateCode">; wrap?: boolean }) {
   const tone = productStateTone(product.state);
   if (tone === "connected") {
-    const mark = <PluginStatusLabel status="connected" className="text-[13px] font-normal" />;
+    const mark = <PluginStatusLabel status="connected" className="text-[12px] font-normal" />;
     return wrap ? <span className="ml-auto flex">{mark}</span> : mark;
   }
   return (
@@ -49,7 +51,7 @@ export function ProductStateLabel({ product, wrap = false }: { product: Pick<Per
       data-product-state={product.state}
       title={product.stateCode}
       className={cn(
-        "text-[13px] font-normal",
+        "text-[12px] font-normal",
         wrap ? "ml-auto min-w-0 max-w-full text-right leading-[18px]" : "shrink-0",
         tone === "attention" ? "text-warning" : "text-ink-secondary",
       )}
@@ -59,31 +61,132 @@ export function ProductStateLabel({ product, wrap = false }: { product: Pick<Per
   );
 }
 
-/** The rows; `scope` is the pill at their right (#4453: kept by the
- * organization). A product's switch is per bot only: none here. */
-export function productRows(products: readonly PersonProduct[], onOpen: (product: PersonProduct) => void, scope?: string): Array<{ key: string; node: ReactNode }> {
-  return products.map((product) => {
-    const sub = productRowSub(product);
-    return {
-      key: `product:${product.id}`,
-      node: (
-        <div className="group flex items-center gap-2 py-3" data-installed-entry={`product:${product.id}`} data-person-product={product.id}>
-          <button type="button" onClick={() => onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
-            aria-label={t("connectApps.openAria", { name: product.name })}>
-            <PluginIcon item={productIcon(product)} className="size-10 rounded-[10px]" />
-            {/* the name keeps its whole width; the state goes under it when both do not fit */}
-            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1" data-person-product-line>
-              <span className="min-w-0 max-w-full flex-[1_0_auto]">
-                <span className={PLUGINS.rowName}>{product.name}</span>
-                {sub && <span className={PLUGINS.rowSub}>{sub}</span>}
+/** The bots a product row reads and writes: the person's own, with each
+ * one's switches (WireBot.products). */
+export interface ProductBot {
+  id: string;
+  name: string;
+  products?: Record<string, boolean>;
+}
+
+/** What the rows need of the window: the person's bots, the bot the window
+ * was opened from (the switch then stands for that bot), and the write. */
+export interface ProductRowsContext {
+  bots: readonly ProductBot[];
+  /** the bot the window was opened from; absent: every one of the person's */
+  forBot?: ProductBot;
+  /** the person's switches written: these bots, these products, on or off */
+  setProducts: (botIds: readonly string[], productIds: readonly string[], next: boolean) => void;
+  onOpen: (product: PersonProduct) => void;
+  /** a bot the person may not change (another person's): locked, with this */
+  lockedReason?: string;
+}
+
+const reachedBots = (ctx: ProductRowsContext, ids: readonly string[]) =>
+  ctx.bots.filter((bot) => ids.length > 0 && ids.every((id) => botProductEnabled(bot, id)));
+
+/** The control at a product's (or a vendor's) right: where it is on, its
+ * switch for every bot (or the one bot), the "..." menu, the Choose the bots
+ * checklist. */
+function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly string[], extra: ItemMenuActions) {
+  if (ctx.forBot) {
+    const on = ids.every((id) => botProductEnabled(ctx.forBot, id));
+    return <ItemTrailer name={name} where="bot" on={on} onToggle={ctx.lockedReason ? undefined : (next) => ctx.setProducts([ctx.forBot!.id], ids, next)} lockedReason={ctx.lockedReason} actions={extra} />;
+  }
+  const reached = reachedBots(ctx, ids);
+  const where = whereLabel(reached.length, ctx.bots.length);
+  const actions: ItemMenuActions = {
+    allBots: () => ctx.setProducts(ctx.bots.map((bot) => bot.id), ids, true),
+    offEverywhere: () => ctx.setProducts(ctx.bots.map((bot) => bot.id), ids, false),
+    ...(ctx.bots.length > 1 ? {
+      choose: {
+        load: () => ctx.bots.map((bot) => ({ id: bot.id, name: bot.name, on: ids.every((id) => botProductEnabled(bot, id)) })),
+        save: (next: Record<string, boolean>) => {
+          for (const on of [true, false]) {
+            const to = Object.entries(next).filter(([, value]) => value === on).map(([id]) => id);
+            if (to.length > 0) ctx.setProducts(to, ids, on);
+          }
+        },
+      },
+    } : {}),
+    ...extra,
+  };
+  return <ItemTrailer name={name} where={where} whereKind={where.kind} on={where.kind === "all"} onToggle={(next) => ctx.setProducts(ctx.bots.map((bot) => bot.id), ids, next)} actions={actions} />;
+}
+
+/** The worst state of a vendor's products, for its one line. */
+function worstState(products: readonly PersonProduct[]): PersonProduct {
+  const rank = (product: PersonProduct) => productStateTone(product.state) === "attention" ? 0 : productStateTone(product.state) === "quiet" ? 1 : 2;
+  return [...products].sort((a, b) => rank(a) - rank(b))[0]!;
+}
+
+/** One product's row: the mark, the name, one grey line (its endpoints on
+ * one line), the state, then its own trailer. The name opens its page. */
+function ProductRow({ product, ctx, nested = false }: { product: PersonProduct; ctx: ProductRowsContext; nested?: boolean }) {
+  const sub = product.endpoints && product.endpoints.length > 0 ? product.endpoints.join(", ") : product.description ?? productRowSub(product);
+  return (
+    <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
+      <button type="button" onClick={() => ctx.onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
+        aria-label={t("connectApps.openAria", { name: product.name })}>
+        <PluginIcon item={productIcon(product)} className={cn("shrink-0 rounded-[10px]", nested ? "size-8" : "size-10")} />
+        {/* the name keeps its whole width; the state goes under it when both do not fit */}
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1" data-person-product-line>
+          <span className="min-w-0 max-w-full flex-[1_1_16rem]">
+            <span className={PLUGINS.rowName}>{product.name}</span>
+            {sub && <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={sub}>{sub}</span>}
+          </span>
+          <ProductStateLabel product={product} wrap />
+        </span>
+      </button>
+      {productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) })}
+    </div>
+  );
+}
+
+/** A vendor: one row that unfolds into its products (each with its own
+ * switch). Its switch turns all of them on or off. */
+function VendorRow({ vendor, ctx }: { vendor: ProductVendor<PersonProduct>; ctx: ProductRowsContext }) {
+  const [open, setOpen] = useState(false);
+  const ids = vendor.products.map((product) => product.id);
+  const worst = worstState(vendor.products);
+  const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
+  const sub = [vendor.products.length === 1 ? t("connectApps.vendor.productOne") : t("connectApps.vendor.productMany", { count: vendor.products.length }), t("connectApps.vendor.on", { count: on })].join(" \u00b7 ");
+  return (
+    <div data-vendor={vendor.key} data-vendor-open={open ? "" : undefined}>
+      <div className="group flex items-center gap-3 py-3" {...{ [ITEM_ROW_ATTR]: "" }}>
+        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} data-vendor-toggle=""
+          aria-label={t(open ? "connectApps.vendor.fold" : "connectApps.vendor.unfold", { name: vendor.name })}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+          <PluginIcon item={productIcon({ id: vendor.key, name: vendor.name, icon: vendor.products[0]?.icon })} className="size-10 shrink-0 rounded-[10px]" />
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="min-w-0 max-w-full flex-[1_0_auto]">
+              <span className={cn(PLUGINS.rowName, "flex items-center gap-1")}>
+                <span className="truncate">{vendor.name}</span>
+                <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform duration-100 motion-reduce:transition-none", open && "rotate-90")} />
               </span>
-              <ProductStateLabel product={product} wrap />
+              <span className={PLUGINS.rowSub}>{sub}</span>
             </span>
-          </button>
-          {scope && <ScopePill label={scope} />}
-          <EntryMenu name={product.name} actions={{ links: productMenuActions(product, 14) }} updateWaiting={false} hoverOnly />
+            <ProductStateLabel product={worst} wrap />
+          </span>
+        </button>
+        {productTrailer(ctx, vendor.name, ids, {})}
+      </div>
+      {open && (
+        <div className="mb-1" data-vendor-products="">
+          {vendor.products.map((product) => <ProductRow key={product.id} product={product} ctx={ctx} nested />)}
         </div>
-      ),
-    };
-  });
+      )}
+    </div>
+  );
+}
+
+/** The rows of the console's section: one per vendor (a product with no
+ * vendor stands alone). */
+export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext): Array<{ key: string; node: ReactNode }> {
+  return groupByVendor(products).map((vendor) => ({
+    key: vendor.key,
+    node: vendor.products.length === 1 && !vendor.products[0]!.group
+      ? <ProductRow product={vendor.products[0]!} ctx={ctx} />
+      : <VendorRow vendor={vendor} ctx={ctx} />,
+  }));
 }

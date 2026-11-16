@@ -43,7 +43,7 @@ export interface SkillPageProps {
 }
 
 const fieldClass = cn(PLUGINS.field, "min-h-[46px] rounded-[14px] px-[17px] py-3 text-[14px] leading-[22px]");
-const labelClass = "px-2 text-[12.5px] leading-5 text-ink-secondary";
+const labelClass = "px-2 text-[13px] leading-5 text-ink-secondary";
 
 export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDeleted, basePath = "/api/skills-library" }: SkillPageProps) {
   const confirm = useConfirm();
@@ -151,7 +151,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
         <div className="flex flex-wrap items-center gap-3" data-skill-head>
           <div className="flex size-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-ink/10 bg-card text-ink-secondary"><FileText size={20} aria-hidden="true" /></div>
           <div className="min-w-0 flex-[1_1_200px] pl-0.5">
-            <div className="truncate text-[16px] leading-6 text-ink">{creating ? t("connectApps.skill.new") : skill.name}</div>
+            <div className="truncate text-[18px] leading-7 text-ink">{creating ? t("connectApps.skill.new") : skill.name}</div>
             <div className="truncate text-[13px] leading-5 text-ink-secondary">{t("connectApps.skill.private")}</div>
           </div>
           {skill && (
@@ -174,7 +174,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
 
         {skill?.description && <p className="text-[14px] leading-[20px] text-ink-secondary" data-skill-summary>{skill.description}</p>}
         {skill && !enabled && <p className="text-[12px] text-ink-secondary">{t("connectApps.skill.reviewHint")}</p>}
-        {readOnlyReason && <p role="note" className="rounded-[12px] bg-card px-3.5 py-2.5 text-[12.5px] text-ink-secondary">{readOnlyReason}</p>}
+        {readOnlyReason && <p role="note" className="rounded-[12px] bg-card px-3.5 py-2.5 text-[13px] text-ink-secondary">{readOnlyReason}</p>}
         {skill && skill.warnings.length > 0 && <ul className="list-disc pl-5 text-[12px] text-warning">{skill.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
 
         <form
@@ -213,7 +213,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
           <p className="px-2 text-[12px] text-ink-secondary" data-skill-engines>
             <span className="text-ink">{t("capabilities.detail.engines")}</span>{t("capabilities.engines.colon")}{enginesLine("skill", { skills: true, indexOnly: true })}
           </p>
-          {error && <p role="alert" className="rounded-[12px] bg-danger/10 px-3.5 py-2.5 text-[12.5px] text-danger">{error}</p>}
+          {error && <p role="alert" className="rounded-[12px] bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">{error}</p>}
         </form>
         {/* on or off: a row below the form, Grok Bot's header has no switch (#2146) */}
         {skill && (
@@ -228,7 +228,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
       </div>
       {!readOnly && (
         <div className="flex shrink-0 items-center justify-end gap-3 border-t border-hairline-weak px-4 py-3" data-skill-savebar>
-          {saved && !error && !dirty && <span role="status" className="text-[12.5px] text-success">{t("connectApps.skill.saved")}</span>}
+          {saved && !error && !dirty && <span role="status" className="text-[13px] text-success">{t("connectApps.skill.saved")}</span>}
           <button type="submit" form="skill-form" disabled={!canSave} className={cn(PLUGINS.primaryPill, "h-9 px-6 text-[14px] disabled:bg-card disabled:text-ink-tertiary disabled:opacity-100")}>{busy === "save" ? <Loader2 size={14} className="animate-spin" /> : t("connectApps.skill.save")}</button>
         </div>
       )}

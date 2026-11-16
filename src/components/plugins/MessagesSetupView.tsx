@@ -182,7 +182,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
       <PluginPageHeader title={t("connectApps.mac.messages.title")} trail={trail} onBack={onBack} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-7 pt-3 sm:px-8" data-messages-setup="">
         {busy === "load" && !status && (
-          <div className="flex items-center gap-2 text-[12.5px] text-ink-secondary">
+          <div className="flex items-center gap-2 text-[13px] text-ink-secondary">
             <Loader2 size={14} className="animate-spin" /> {t("connectApps.mac.messages.loading")}
           </div>
         )}
@@ -190,14 +190,14 @@ export function MessagesSetupView({ onBack, trail }: Props) {
         {status && !status.available && (
           <div className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-messages-setup-unavailable="">
             <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.unavailableTitle")}</p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">
               {status.reason === "organization_server"
                 ? t("connectApps.mac.messages.unavailableOrg")
                 : status.reason === "not_darwin"
                   ? t("connectApps.mac.messages.unavailablePlatform")
                   : t("connectApps.mac.messages.unavailableGeneric")}
             </p>
-            <p className="mt-3 text-[12.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.useOnMac")}</p>
+            <p className="mt-3 text-[13px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.useOnMac")}</p>
           </div>
         )}
 
@@ -209,8 +209,8 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                   <MessageSquare size={20} aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-[15px] font-semibold text-ink">{t("connectApps.mac.messages.headline")}</h2>
-                  <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.intro")}</p>
+                  <h2 className="text-[14px] font-semibold text-ink">{t("connectApps.mac.messages.headline")}</h2>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.intro")}</p>
                 </div>
               </div>
               <ul className="mt-4 space-y-3">
@@ -238,7 +238,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.fdaTitle")}</p>
-                      <span className={cn("text-[11.5px]", permissionTone(permissions.fullDiskAccess) === "ok" ? "text-success" : permissionTone(permissions.fullDiskAccess) === "warn" ? "text-danger" : "text-ink-secondary")}>
+                      <span className={cn("text-[12px]", permissionTone(permissions.fullDiskAccess) === "ok" ? "text-success" : permissionTone(permissions.fullDiskAccess) === "warn" ? "text-danger" : "text-ink-secondary")}>
                         {permissionLabel(permissions.fullDiskAccess)}
                       </span>
                     </div>
@@ -249,7 +249,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                         data-messages-open-fda
                         disabled={busy !== null}
                         onClick={() => void openPane("fullDiskAccess")}
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-raised disabled:opacity-50"
                       >
                         {busy === "open" && <Loader2 size={13} className="animate-spin" />}
                         {t("connectApps.mac.messages.openSettings")}
@@ -263,7 +263,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.automationTitle")}</p>
-                      <span className={cn("text-[11.5px]", permissionTone(permissions.automation) === "ok" ? "text-success" : permissionTone(permissions.automation) === "warn" ? "text-danger" : "text-ink-secondary")}>
+                      <span className={cn("text-[12px]", permissionTone(permissions.automation) === "ok" ? "text-success" : permissionTone(permissions.automation) === "warn" ? "text-danger" : "text-ink-secondary")}>
                         {permissionLabel(permissions.automation)}
                       </span>
                     </div>
@@ -275,23 +275,23 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                           data-messages-ask-automation
                           disabled={busy !== null}
                           onClick={() => void askAccess()}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-panel hover:opacity-90 disabled:opacity-50"
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[13px] font-medium text-panel hover:opacity-90 disabled:opacity-50"
                         >
                           {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
                           {t("connectApps.mac.askAccess")}
                         </button>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
+                        <p className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
                       </>
                     )}
                     {automationAction(permissions.automation) === "openSettings" && (
                       <>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-messages-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
+                        <p className="mt-1.5 text-[12px] leading-relaxed text-danger" data-messages-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
                         <button
                           type="button"
                           data-messages-open-automation
                           disabled={busy !== null}
                           onClick={() => void openPane("automation")}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-raised disabled:opacity-50"
                         >
                           {busy === "open" && <Loader2 size={13} className="animate-spin" />}
                           {t("connectApps.mac.messages.openSettings")}
@@ -311,7 +311,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                       data-messages-test
                       disabled={busy !== null || permissions.fullDiskAccess !== "granted"}
                       onClick={() => void runTest()}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-raised disabled:opacity-50"
                     >
                       {busy === "test" && <Loader2 size={13} className="animate-spin" />}
                       {t("connectApps.mac.messages.testRun")}
@@ -322,7 +322,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                       </p>
                     )}
                     {test && (
-                      <p className="mt-2 text-[12.5px] text-ink" data-messages-test-result="" data-messages-conversation-count={test.conversationCount}>
+                      <p className="mt-2 text-[13px] text-ink" data-messages-test-result="" data-messages-conversation-count={test.conversationCount}>
                         {test.conversationCount === 1
                           ? t("connectApps.mac.messages.testResultOne")
                           : t("connectApps.mac.messages.testResultMany", { count: test.conversationCount })}
@@ -341,7 +341,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                       disabled={busy === "enable"}
                       onChange={(next) => void toggle(next)}
                     />
-                    <p className="mt-2 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.enableNote")}</p>
+                    <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.enableNote")}</p>
                   </div>
                 </li>
               </ol>
@@ -352,8 +352,8 @@ export function MessagesSetupView({ onBack, trail }: Props) {
         {!status && busy !== "load" && (
           <div className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-messages-load-error="">
             <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.loadFailed")}</p>
-            <p role="alert" className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{error ?? t("connectApps.mac.notOnThisMac")}</p>
-            <button type="button" onClick={() => void load()} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised">
+            <p role="alert" className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{error ?? t("connectApps.mac.notOnThisMac")}</p>
+            <button type="button" onClick={() => void load()} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-raised">
               <RotateCw size={13} aria-hidden="true" /> {t("connectApps.mac.retry")}
             </button>
           </div>

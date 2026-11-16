@@ -170,12 +170,17 @@ afterEach(async () => {
 const open = async (personal = false) => {
   await act(async () => { root.render(createElement(PluginsPanel)); });
   await settle();
-  // the organization's scope, then back to Yours
   if (personal) return;
   await go("installed");
-  if ($('[data-plugins-scope-option="workspace"]')) await click($('[data-plugins-scope-option="workspace"]'));
   await home();
 };
+/** Opened from a bot's page: the window works on that bot (#4453: no scope control, the bot is the scope). */
+const openFromBot = async () => {
+  await act(async () => root.render(createElement("div")));
+  (state as { pluginsBotId: string | null }).pluginsBotId = "bot-a";
+  await open(true);
+};
+const fromBotDone = () => { (state as { pluginsBotId: string | null }).pluginsBotId = null; };
 
 describe("Plugins, driven like the owner does", () => {
   it("opens on Me without an organization permission and keeps its installs separate", async () => {
@@ -183,8 +188,9 @@ describe("Plugins, driven like the owner does", () => {
     await open(true);
     await go("installed");
     expect($('[data-plugins-scope-note="me"]')).not.toBeNull();
-    expect($('[data-plugins-scope-option="workspace"]')).toBeNull();
-    expect($('[data-plugins-scope-option="me"]')?.getAttribute("aria-checked")).toBe("true");
+    // #4453: no scope control at all; the window works on the person's own
+    expect($("[data-plugins-scope-option]")).toBeNull();
+    expect($("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("me");
     await kind("plugins");
     expect(host.textContent).toContain("Personal Review");
     await kind("skills");
@@ -198,10 +204,42 @@ describe("Plugins, driven like the owner does", () => {
     expect($('[data-plugins-add-action="skill"]')).toBeTruthy();
     await click($("[data-plugins-add]"));
     await kind("plugins");
-    await click($('[data-plugins-scope-option="bot"]'));
-    expect(host.textContent).not.toContain("Personal Review");
-    await click($('[data-plugins-scope-option="me"]'));
     expect(host.textContent).toContain("Personal Review");
+    // opened from a bot's page the window works on that bot alone: the title carries its name
+    try {
+      await openFromBot();
+      await go("installed");
+      expect($("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("bot");
+      expect(title()).toBe("Connect Apps \u00b7 Rocket");
+      await kind("plugins");
+      expect(host.textContent).not.toContain("Personal Review");
+    } finally {
+      fromBotDone();
+    }
+  });
+
+  it("#4453: a person's plugin says where it is on, has its switch, and a right click opens its menu", async () => {
+    owner = false;
+    await open(true);
+    await go("installed");
+    await kind("plugins");
+    const row = $('[data-installed-entry="plugin:personal-review@my-tools"]')!;
+    expect(row).not.toBeNull();
+    // where it is on, the switch, then "...": no pill for the scope
+    expect(row.querySelector("[data-row-scope]")?.textContent).toBe("All your bots");
+    expect(row.querySelector("[data-row-switch]")?.getAttribute("aria-checked")).toBe("true");
+    expect(row.querySelector("[data-entry-menu]")).not.toBeNull();
+    // a right click anywhere on the row opens the same menu
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 30, clientY: 30 });
+    await act(async () => { row.querySelector("span.truncate")!.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
+    const lines = [...row.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"));
+    expect(lines).toEqual(expect.arrayContaining(["off", "detail", "remove"]));
+    // a person's plugin is on for all their bots already: no Turn on
+    expect(lines).not.toContain("all");
+    // See the detail opens the plugin's page
+    await click(row.querySelector('[data-entry-action="detail"]'));
+    expect($("[data-plugins-subpage]")).not.toBeNull();
   });
 
   it("#4453: three kind tabs, Yours and Discover; every other view one click away under \"...\" with its way back", async () => {
@@ -341,11 +379,11 @@ describe("Plugins, driven like the owner does", () => {
     expect($("[data-plugins-scope-slot]")).toBeNull();
   });
 
-  it("every option once: one scope bar, one refresh, one + Add by kind, no service pills, one Manage per engine (#2104, #4453)", async () => {
+  it("every option once: no scope bar, one refresh, one + Add by kind, no service pills, one Manage per engine (#2104, #4453)", async () => {
     await open();
     await go("installed");
     await kind("connectors");
-    expect(host.querySelectorAll("[data-plugins-scope-bar]")).toHaveLength(1);
+    expect(host.querySelectorAll("[data-plugins-scope-bar]")).toHaveLength(0);
     expect(host.querySelectorAll('button[aria-label^="Refresh"]')).toHaveLength(1);
     expect(host.querySelectorAll("[data-plugins-add]")).toHaveLength(1);
     expect(host.querySelectorAll("[data-plugins-add-server]")).toHaveLength(0);
@@ -418,14 +456,22 @@ describe("Plugins, driven like the owner does", () => {
     }
   });
 
-  it("keeps the scope in the head on Yours and under the big title on Sources", async () => {
+  it("keeps one row of controls in the head on Yours, with no scope anywhere, Sources included (#4453)", async () => {
     await open();
     await go("installed");
-    expect($("[data-plugins-scope-bar]")).not.toBeNull();
-    expect($("[data-plugins-view-row] [data-plugins-scope-slot] [data-plugins-scope-bar]")).not.toBeNull();
+    expect($("[data-plugins-scope-bar]")).toBeNull();
+    expect($("[data-plugins-scope-slot]")).toBeNull();
+    // the kinds, the search and Add on one row; Yours | Discover and the refresh under it
+    const row = $("[data-plugins-kind-row]")!;
+    expect(row.querySelector("[data-plugins-kinds]")).not.toBeNull();
+    expect(row.querySelector("[data-plugins-search]")).not.toBeNull();
+    expect(row.querySelector("[data-plugins-add]")).not.toBeNull();
+    expect($("[data-plugins-view-row] [data-plugins-views]")).not.toBeNull();
+    // the filter is Discover's alone
+    expect($("[data-plugins-filter]")).toBeNull();
     await go("sources");
-    expect($("[data-plugins-scope-bar]")).not.toBeNull();
-    expect($("[data-plugins-scope-slot]")?.previousElementSibling?.id).toBe("plugins-title");
+    expect($("[data-plugins-scope-bar]")).toBeNull();
+    expect($("[data-plugins-scope-slot]")).toBeNull();
   });
 
   it("Yours: one row per installed thing in its kind, each with its real mark; the puzzle only without one", async () => {
@@ -467,9 +513,13 @@ describe("Plugins, driven like the owner does", () => {
     await click($("[data-plugins-back]"));
     expect($("[data-plugins-subpage]")).toBeNull();
     expect($('[data-plugins-manage="installed"]')).not.toBeNull();
-    // the scope of the bot: its main action beside the name
-    await click($('[data-plugins-scope-option="bot"]'));
-    await home();
+    // opened from a bot's page: its main action beside the name
+    try {
+      await openFromBot();
+      await home();
+    } finally {
+      fromBotDone();
+    }
     await type("github");
     await click($('[data-plugins-search-group="plugins"] [role="option"]'));
     expect($("[data-plugins-detail-primary]")?.textContent).toBe("Install for Rocket");

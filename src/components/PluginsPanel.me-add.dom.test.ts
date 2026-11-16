@@ -205,10 +205,10 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     await open();
     const row = host.querySelector<HTMLElement>("[data-personal-server=\"notes\"]")!;
     await act(async () => { row.querySelector<HTMLButtonElement>("[data-entry-menu]")!.click(); });
-    expect([...row.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"))).toEqual(["edit", "signout", "remove"]);
-    // #4453: on or off is the row's own switch, beside its scope pill (Me)
+    expect([...row.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"))).toEqual(["off", "edit", "signout", "remove"]);
+    // #4453: on or off is the row's own switch, after where it is on (all the person's bots)
     expect(row.querySelector("[data-row-switch]")?.getAttribute("role")).toBe("switch");
-    expect(row.querySelector("[data-row-scope]")?.textContent).toBe("Me");
+    expect(row.querySelector("[data-row-scope]")?.textContent).toBe("All your bots");
     await act(async () => { row.querySelector<HTMLButtonElement>("[data-entry-action=\"edit\"]")!.click(); });
     const form = host.querySelector<HTMLFormElement>("[data-edit-personal-server=\"notes\"]")!;
     expect(form).not.toBeNull();
@@ -299,7 +299,9 @@ describe("Connect Apps > Me: Recommended for you first, from the catalog", () =>
 
   it("Connect adds the app as the person's own server, then opens its sign-in", async () => {
     await home();
-    await act(async () => { host.querySelector<HTMLButtonElement>('[data-personal-connect="slack"]')!.click(); });
+    // #4453: Install; a person's own server has no "one bot" (it serves all of their bots), so no menu to open
+    expect(host.querySelector('[data-plugin-row="featured:slack"] [data-install-button]')?.textContent).toBe("Install");
+    await act(async () => { host.querySelector<HTMLButtonElement>('[data-plugin-row="featured:slack"] [data-install-button]')!.click(); });
     await settle();
     const posts = vi.mocked(api).mock.calls.filter(([, init]) => (init as { method?: string } | undefined)?.method === "POST");
     const add = posts.find(([path]) => path === "/api/me/mcp/servers");

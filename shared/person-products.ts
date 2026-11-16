@@ -100,6 +100,13 @@ export interface PersonProduct {
   /** the whole authority: Sagax draws exactly these */
   actions: ProductAction[];
   consoleUrl?: string;
+  /** the vendor the console files it under (#4453): products of one vendor
+   * sit under one row; absent, the product stands alone */
+  group?: { id: string; name: string };
+  /** what it does, one line */
+  description?: string;
+  /** the endpoints it serves, by name, for one grey line */
+  endpoints?: string[];
 }
 
 /** The reason a product key card was raised for. */
@@ -210,8 +217,18 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const signInFields = parseFields(record(product.sign_in)?.fields);
   const actions = parseActions(product.actions);
   const consoleUrl = text(product.console_url);
+  const groupRaw = record(product.group);
+  const groupId = text(groupRaw?.id, 256) ?? (typeof product.group === "string" ? text(product.group, 256) : undefined);
+  const groupName = text(groupRaw?.name, 256) ?? groupId;
+  const description = text(product.description, 512);
+  const endpoints = Array.isArray(product.endpoints)
+    ? product.endpoints.flatMap((entry): string[] => { const value = typeof entry === "string" ? text(entry, 128) : text(record(entry)?.name, 128); return value ? [value] : []; }).slice(0, 64)
+    : [];
   return {
     id, name, state, roles, actions,
+    ...(groupId && groupName ? { group: { id: groupId, name: groupName } } : {}),
+    ...(description ? { description } : {}),
+    ...(endpoints.length > 0 ? { endpoints } : {}),
     ...(domain ? { icon: { domain } } : {}),
     ...(stateCode ? { stateCode } : {}),
     ...(address ? { address } : {}),

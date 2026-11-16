@@ -8,6 +8,8 @@ import { installedEntries } from "./installed-model";
 import type { CapabilityForm } from "../../shared/capabilities";
 import {
   CONNECT_APPS_KINDS,
+  groupByVendor,
+  whereLabel,
   declarationForms,
   entryKind,
   fromOrganization,
@@ -83,5 +85,42 @@ describe("the three kinds of Connect Apps", () => {
     expect(declarationForms("skills")).toEqual(["skill"]);
     expect(declarationForms("plugins")).toEqual(["plugin"]);
     expect(declarationForms("connectors")).toEqual(["mcp"]);
+  });
+});
+
+describe("where an item is on (#4453)", () => {
+  it("reads all, some or none of the person's bots", () => {
+    expect(whereLabel(3, 3)).toEqual({ kind: "all" });
+    expect(whereLabel(2, 3)).toEqual({ kind: "some", count: 2 });
+    expect(whereLabel(1, 3)).toEqual({ kind: "some", count: 1 });
+    expect(whereLabel(0, 3)).toEqual({ kind: "none" });
+    // no bot at all is never "all"
+    expect(whereLabel(0, 0)).toEqual({ kind: "none" });
+    expect(whereLabel(1, 0)).toEqual({ kind: "none" });
+  });
+});
+
+describe("one row per vendor (#4453)", () => {
+  const product = (id: string, name: string, group?: { id: string; name: string }) => ({ id, name, ...(group ? { group } : {}) });
+  const suite = { id: "harbor", name: "Harbor Suite" };
+
+  it("files the products of one vendor under it, in the order the first of each appears", () => {
+    const vendors = groupByVendor([product("desk", "Service Desk", suite), product("wiki", "Team Wiki"), product("rmm", "Remote Monitoring", suite), product("voice", "Phone Lines")]);
+    expect(vendors.map((vendor) => [vendor.key, vendor.name, vendor.products.map((item) => item.id)])).toEqual([
+      ["vendor:harbor", "Harbor Suite", ["desk", "rmm"]],
+      ["product:wiki", "Team Wiki", ["wiki"]],
+      ["product:voice", "Phone Lines", ["voice"]],
+    ]);
+  });
+
+  it("never guesses a vendor from a name: without one a product is a vendor of one", () => {
+    const vendors = groupByVendor([product("psa_company", "Harbor Manage: company"), product("psa_time", "Harbor Manage: time")]);
+    expect(vendors).toHaveLength(2);
+  });
+
+  it("loses no product and shows none twice", () => {
+    const products = [product("a", "A", suite), product("b", "B"), product("c", "C", suite), product("d", "D", { id: "beacon", name: "Beacon" })];
+    const ids = groupByVendor(products).flatMap((vendor) => vendor.products.map((item) => item.id));
+    expect([...ids].sort()).toEqual(["a", "b", "c", "d"]);
   });
 });

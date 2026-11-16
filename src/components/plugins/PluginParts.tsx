@@ -160,7 +160,7 @@ export function PluginCard({ title, children, action }: { title?: ReactNode; chi
     <section>
       {(title || action) && (
         <div className="mb-2.5 flex items-center justify-between gap-3 px-[14px]">
-          {title && <h3 className="min-w-0 text-[12.5px] font-normal leading-5 text-ink-secondary">{title}</h3>}
+          {title && <h3 className="min-w-0 text-[13px] font-normal leading-5 text-ink-secondary">{title}</h3>}
           {action}
         </div>
       )}

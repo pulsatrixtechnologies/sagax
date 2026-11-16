@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 // Plugins (Capabilities before #2104), regressions kept through the the reference app
 // Connect Apps redesign (2026-11-06):
-//   - the install scope sits under Manage's title, once, beside + Add (it
-//     vanished on Providers before); on Pages it shows turned off, with the
-//     reason;
+//   - #4453 (2026-11-16): no scope control in the window's header (the
+//     scope is chosen on each item); the ScopeToggle itself stays for
+//     Tailscale's modes;
 //   - #4453: the kind tabs (Skills, Connectors, Plugins) and the view
 //     (Yours, Discover); "..." opens Bots, Pages and Sources; the close
 //     button keeps clear of the title row;
@@ -49,18 +49,16 @@ afterEach(() => {
 
 const view = (tab: ConnectAppsTab, extra: Record<string, unknown> = {}) => renderToStaticMarkup(createElement(ConnectAppsView, {
   tab, onTab: noop, refreshing: false, onRefresh: noop,
-  scope: createElement("div", { "data-test-scope": "" }, "SCOPE"),
   installed: "I", discover: "D", pages: "G", sources: "S", ...extra,
 }));
 
-describe("the scope bar on Manage and Sources", () => {
-  it("draws the scope once under the title, on Yours, Discover (the install scope) and Sources; Pages has none", () => {
-    for (const tab of TABS) {
+describe("no scope bar in the window (#4453, 2026-11-16: the scope is chosen on the item)", () => {
+  it("draws no scope control under the title on any view", () => {
+    for (const tab of [...TABS, "pages" as const]) {
       const html = view(tab);
-      expect(html, tab).toMatch(/id="plugins-title"[\s\S]*?data-plugins-scope-slot[\s\S]*?data-test-scope/);
-      expect(html.match(/data-plugins-scope-slot/g), tab).toHaveLength(1);
+      expect(html, tab).not.toContain("data-plugins-scope-slot");
+      expect(html, tab).not.toContain("data-plugins-scope-option");
     }
-    expect(view("pages")).not.toContain("data-test-scope");
   });
 
   it("on Pages the toggle is shown turned off, with the line that says why", () => {
@@ -97,10 +95,10 @@ describe("the header", () => {
     expect(onTab).toHaveBeenCalledWith("pages");
   });
 
-  it("Yours: one refresh button, one scope slot; Pages' back row returns to the view it came from", () => {
+  it("Yours: one refresh button, no scope slot; Pages' back row returns to the view it came from", () => {
     const onTab = vi.fn();
     const html = view("installed");
-    expect(html.match(/data-plugins-scope-slot/g)).toHaveLength(1);
+    expect(html).not.toContain("data-plugins-scope-slot");
     expect(html.match(/aria-label="Refresh[^"]*"/g)).toHaveLength(1);
     flushSync(() => root.render(createElement(ConnectAppsView, { tab: "pages", onTab, home: "discover", refreshing: false, onRefresh: noop })));
     flushSync(() => host.querySelector<HTMLButtonElement>("[data-plugins-home]")!.click());
@@ -117,7 +115,6 @@ describe("a plugin's page in its tab", () => {
   it("takes the whole pane: the view's list and scope are not drawn under it, the title stays for screen readers", () => {
     const html = view("installed", { page: createElement("div", { "data-test-page": "" }, "PAGE") });
     expect(html).toMatch(/data-plugins-main="installed"[^>]*data-plugins-subpage=""[\s\S]*?data-test-page/);
-    expect(html).not.toContain("data-test-scope");
     // the window keeps its accessible name, hidden from view
     expect(html).toMatch(/<h2 id="plugins-title" class="sr-only">Connect Apps<\/h2>/);
     expect(html).not.toMatch(/>I</);

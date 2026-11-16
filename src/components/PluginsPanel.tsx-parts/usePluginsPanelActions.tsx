@@ -61,7 +61,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     push({ page: "detail", key });
   };
 
-  const installFeatured = async (item: PluginItem, region?: string, anchor?: HTMLElement | null) => {
+  const installFeatured = async (item: PluginItem, region?: string, anchor?: HTMLElement | null, afterInstall?: (serverName: string) => void) => {
     const listing = featured?.find((entry) => entry.id === item.id);
     if (region === undefined && listing?.regions?.length) {
       if (!anchor) return;
@@ -75,7 +75,10 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       await mcp.load();
       await loadFeatured();
       if (typeof result.authorizationUrl === "string") await openExternalLink(result.authorizationUrl);
-      if (typeof result.name === "string") showDetail(`mcp:${result.name}`);
+      if (typeof result.name === "string") {
+        afterInstall?.(result.name);
+        showDetail(`mcp:${result.name}`);
+      }
     } catch (cause) {
       setPanelError(readableError(cause));
     } finally {

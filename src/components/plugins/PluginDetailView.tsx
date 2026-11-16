@@ -132,10 +132,10 @@ export function PluginDetailView(props: PluginDetailProps) {
         <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
           <PluginIcon item={icon ?? item} className="size-14 rounded-[14px]" />
           <div className="min-w-0 flex-[1_1_220px] pl-0.5">
-            <h2 className="truncate text-[16px] font-normal leading-6 tracking-[-0.008em] text-ink" data-plugins-detail-name>{name}</h2>
+            <h2 className="truncate text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink" data-plugins-detail-name>{name}</h2>
             {(technical || subtitle) && (
               <div className="truncate text-[13px] leading-5 text-ink-secondary" data-plugins-detail-meta title={[technical, subtitle].filter(Boolean).join(" · ")}>
-                {technical && <span className="font-mono text-[12.5px]">{technical}</span>}
+                {technical && <span className="font-mono text-[13px]">{technical}</span>}
                 {technical && subtitle && <span aria-hidden="true"> · </span>}
                 {subtitle}
               </div>
@@ -172,9 +172,9 @@ export function PluginDetailView(props: PluginDetailProps) {
                 <li key={account.id} className="flex min-h-[38px] items-center gap-3 py-1.5">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] leading-5 text-ink">{account.label}</div>
-                    {account.detail && <div className="truncate text-[12.5px] leading-[18px] text-ink-secondary">{account.detail}</div>}
+                    {account.detail && <div className="truncate text-[13px] leading-[18px] text-ink-secondary">{account.detail}</div>}
                   </div>
-                  <PluginStatusLabel status={account.status} className="text-[13px] font-normal" />
+                  <PluginStatusLabel status={account.status} className="text-[12px] font-normal" />
                   {account.action}
                   {account.onRemove && (
                     <button type="button" disabled={busy} onClick={account.onRemove} aria-label={account.removeLabel} title={account.removeLabel}
@@ -206,7 +206,7 @@ export function PluginDetailView(props: PluginDetailProps) {
             </button>
             {toolsOpen && (
               <div>
-                {tools.note && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{tools.note}</p>}
+                {tools.note && <p className="mb-2 text-[13px] leading-relaxed text-ink-secondary">{tools.note}</p>}
                 {tools.error && <p role="alert" className="mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{tools.error}</p>}
                 {tools.loading && !toolList && (
                   <div className="flex items-center gap-2 py-2 text-[12px] text-ink-secondary"><Loader2 size={13} className="animate-spin" /> {t("connectApps.detail.toolsLoading")}</div>
@@ -223,7 +223,7 @@ export function PluginDetailView(props: PluginDetailProps) {
                           {tool.status === "connected" ? (
                             <span data-plugin-status="installed" className="shrink-0 text-[13px] font-normal text-ink-secondary">{t("connectApps.status.installed")}</span>
                           ) : tool.status ? (
-                            <PluginStatusLabel status={tool.status} className="text-[13px] font-normal" />
+                            <PluginStatusLabel status={tool.status} className="text-[12px] font-normal" />
                           ) : null}
                           <ChevronRight size={15} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
                         </button>
@@ -290,14 +290,14 @@ export function PluginDetailView(props: PluginDetailProps) {
             {details.map((row) => (
               <div key={row.label} className="contents">
                 <dt className="py-[9px] text-ink-tertiary">{row.label}</dt>
-                <dd className={cn("min-w-0 break-all py-[9px] text-right text-ink-secondary", row.mono && "font-mono text-[12.5px]")}>{row.value}</dd>
+                <dd className={cn("min-w-0 break-all py-[9px] text-right text-ink-secondary", row.mono && "font-mono text-[13px]")}>{row.value}</dd>
               </div>
             ))}
           </dl>
           {onUpdate && (
             <div className="flex min-h-[38px] items-center justify-between gap-3 border-t-[0.5px] border-ink/10 py-1.5" data-plugin-update-row>
               <span className="text-[13px] text-ink-secondary">{t("connectApps.plugin.updateAvailable")}</span>
-              <button type="button" disabled={busy || updating} onClick={onUpdate} data-plugin-action="update-details" className={cn(PLUGINS.fillPill, "h-7 px-3.5 text-[12.5px]")}>
+              <button type="button" disabled={busy || updating} onClick={onUpdate} data-plugin-action="update-details" className={cn(PLUGINS.fillPill, "h-7 px-3.5 text-[13px]")}>
                 {updating ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
                 {t("connectApps.plugin.update")}
               </button>

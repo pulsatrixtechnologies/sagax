@@ -15,7 +15,7 @@ export const SEGMENT_GROUP = "flex w-fit max-w-full items-center gap-0.5 rounded
 
 export function segmentOptionClass(active: boolean, disabled = false): string {
   return cn(
-    "flex h-7 min-w-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none disabled:cursor-default",
+    "flex h-7 min-w-0 items-center gap-1.5 rounded-full px-3 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none disabled:cursor-default",
     active
       ? disabled ? "bg-ink/10 text-ink-secondary" : "bg-accent text-accent-ink"
       : disabled ? "text-ink-tertiary" : "text-ink-secondary hover:bg-hover hover:text-ink",

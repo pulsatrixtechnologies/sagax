@@ -106,7 +106,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
         <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
           <PluginIcon item={productIcon(product)} className="size-14 rounded-[14px]" />
           <div className="min-w-0 flex-[1_1_220px] pl-0.5">
-            <h2 className="truncate text-[16px] font-normal leading-6 tracking-[-0.008em] text-ink" data-plugins-detail-name>{product.name}</h2>
+            <h2 className="truncate text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink" data-plugins-detail-name>{product.name}</h2>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <ProductStateLabel product={product} />
@@ -119,7 +119,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
           {copied && <p role="status" className="basis-full text-right text-[12px] text-success">{t("personProducts.idCopied")}</p>}
         </div>
 
-        {error && <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
+        {error && <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[13px] text-danger">{error}</p>}
 
         <PluginCard title={t("personProducts.key.title")}>
           {key ? (
@@ -199,7 +199,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
                 return (
                   <li key={`${index}:${role.name}`} className="flex min-h-[38px] items-center gap-3 py-1.5" data-person-product-role={role.personal ? "direct" : "role"}>
                     <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink">{role.personal ? t("personProducts.access.direct") : role.name}</span>
-                    {mode && <span className="shrink-0 text-[12.5px] text-ink-secondary" data-person-product-mode>{mode}</span>}
+                    {mode && <span className="shrink-0 text-[13px] text-ink-secondary" data-person-product-mode>{mode}</span>}
                   </li>
                 );
               })}

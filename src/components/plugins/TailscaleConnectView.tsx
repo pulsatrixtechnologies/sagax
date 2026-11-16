@@ -26,8 +26,8 @@ import { PluginCard, PluginIcon, PluginPageHeader } from "./PluginParts";
 import { SEGMENT_GROUP, segmentOptionClass } from "./ScopeToggle";
 
 // Sentences wrap inside the column at any width, a long token included.
-const prose = "min-w-0 text-[12.5px] leading-relaxed text-ink-secondary [overflow-wrap:anywhere]";
-const hint = "text-[11.5px] leading-relaxed text-ink-secondary [overflow-wrap:anywhere]";
+const prose = "min-w-0 text-[13px] leading-relaxed text-ink-secondary [overflow-wrap:anywhere]";
+const hint = "text-[12px] leading-relaxed text-ink-secondary [overflow-wrap:anywhere]";
 const label = "text-[12px] font-medium text-ink";
 const primaryButton = "ui-button ui-button-primary font-medium";
 const secondaryButton = "ui-button";
@@ -96,13 +96,13 @@ export function TailscaleConnectView({ onBack, trail }: { onBack: () => void; tr
         <div className="flex min-w-0 items-center gap-3 px-1" data-tailscale-head>
           <PluginIcon item={TAILSCALE_ICON} className="size-12" />
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink">{t("connectApps.tailscale.title")}</h2>
+            <h2 className="truncate text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink">{t("connectApps.tailscale.title")}</h2>
             <p className={prose} data-tailscale-subtitle>{subtitle}</p>
           </div>
         </div>
-        {loadError && <p role="alert" className="text-[12.5px] text-danger [overflow-wrap:anywhere]">{loadError}</p>}
+        {loadError && <p role="alert" className="text-[13px] text-danger [overflow-wrap:anywhere]">{loadError}</p>}
         {!view && !loadError && (
-          <p className="flex items-center gap-2 px-1 text-[12.5px] text-ink-secondary">
+          <p className="flex items-center gap-2 px-1 text-[13px] text-ink-secondary">
             <Loader2 size={14} className="animate-spin" aria-hidden />
             {t("connectApps.tailscale.loading")}
           </p>
@@ -146,9 +146,9 @@ export function TailscaleConnectView({ onBack, trail }: { onBack: () => void; tr
         {view && phase === "connected" && (
           <ConnectedCard view={view} busy={busy} onDisconnect={() => run(() => disconnectBotTailscale())} />
         )}
-        {error && <p role="alert" className="px-1 text-[12.5px] text-danger [overflow-wrap:anywhere]">{error}</p>}
+        {error && <p role="alert" className="px-1 text-[13px] text-danger [overflow-wrap:anywhere]">{error}</p>}
         {view?.error && phase === "error" && (
-          <p role="alert" className="px-1 text-[12.5px] text-danger [overflow-wrap:anywhere]">{view.error}</p>
+          <p role="alert" className="px-1 text-[13px] text-danger [overflow-wrap:anywhere]">{view.error}</p>
         )}
       </div>
     </>
@@ -404,7 +404,7 @@ function WaitingCard({ view, busy, onDisconnect }: {
       <PluginCard title={<CardTitle icon={<Loader2 size={16} className="shrink-0 animate-spin text-accent" aria-hidden />}>{t("connectApps.tailscale.waitingTitle")}</CardTitle>}>
         <p className={`${prose} mb-3`}>{t("connectApps.tailscale.waitingHelp")}</p>
         {view.device && (
-          <p className="mb-4 text-[12.5px] text-ink [overflow-wrap:anywhere]">
+          <p className="mb-4 text-[13px] text-ink [overflow-wrap:anywhere]">
             {t("connectApps.tailscale.waitingDevice", { name: view.device.name })}
           </p>
         )}
@@ -431,7 +431,7 @@ function ConnectedCard({ view, busy, onDisconnect }: {
   return (
     <div data-tailscale-connected>
       <PluginCard title={<CardTitle icon={<span className="inline-block size-2 shrink-0 rounded-full bg-success" aria-hidden />}>{t("connectApps.tailscale.connectedTitle")}</CardTitle>}>
-        <dl className="mb-4 mt-3 space-y-2 text-[12.5px]">
+        <dl className="mb-4 mt-3 space-y-2 text-[13px]">
           <div className={row}>
             <dt className="shrink-0 text-ink-secondary">{t("connectApps.tailscale.deviceName")}</dt>
             <dd className={value} data-tailscale-device-name>{device.name}</dd>

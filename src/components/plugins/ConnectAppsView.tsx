@@ -6,7 +6,7 @@
 // skill, a custom connector) takes the whole pane under its own bar. The
 // shared row parts (pills, section titles, PluginRow) live here too.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bot, ChevronLeft, FileText, Library, MoreHorizontal, RefreshCw } from "lucide-react";
+import { Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -22,13 +22,12 @@ import {
 } from "@/lib/plugins-model";
 import { CONNECT_APPS_KINDS, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
-import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look";
 import { BackButton } from "../Breadcrumb";
-import { QUIET_SEGMENT_GROUP, quietSegmentClass } from "./ScopeToggle";
 import { ConnectedMark, PluginIcon, PluginStatusLabel } from "./PluginParts";
 
 export { ConnectedMark };
-import { PLUGINS, pluginChipClass } from "./plugins-style";
+import { PLUGINS } from "./plugins-style";
 
 /** The pills: All, then each category in the section order (only those with
  * a row, and the chosen one). Kinds and sources are not pills. */
@@ -50,6 +49,12 @@ export function categoryPills(items: readonly Pick<PluginItem, "category">[], fi
 export function moreCategoryPills(items: readonly Pick<PluginItem, "category">[], filter: PluginFilter): PluginFilter[] {
   const present = new Set<string>(items.map((item) => item.category));
   return CATEGORY_CHIPS.filter((chip) => MORE_CATEGORY_SET.has(chip) && (present.has(chip) || chip === filter));
+}
+
+/** Every category the filter lists: All, then the ones with a row (and the
+ * chosen one), main first. */
+export function filterChips(items: readonly Pick<PluginItem, "category">[], filter: PluginFilter): PluginFilter[] {
+  return [...categoryPills(items, filter), ...moreCategoryPills(items, filter)];
 }
 
 const FILTER_KEY: Record<string, LocaleKey> = {
@@ -116,8 +121,8 @@ export function normalizeConnectAppsTab(value: string | null | undefined): Conne
  * first (what a person has), Discover (the catalog), Bots (Browse Bots),
  * Pages (the published pages) and Sources (where plugins come from), as the
  * Grok Bot reference lays them out (docs/design 2.8). A deep link selects
- * its tab; the tab row never hides. The install scope is drawn only where
- * it applies (SCOPELESS_TABS do not depend on it); the one search covers
+ * its tab; the tab row never hides. The window has no scope control
+ * (#4453, 2026-11-16): each item says where it is on. The one search covers
  * every tab. */
 export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["installed", "discover", "bots", "pages", "sources"];
 export const SCOPELESS_TABS: readonly ConnectAppsTab[] = ["bots", "pages"];
@@ -133,6 +138,27 @@ const TAB_KEY = {
 /** A tab's name, for the tab itself and the back row of a page opened from it. */
 export function connectAppsTabLabel(tab: ConnectAppsTab): string {
   return t(TAB_KEY[tab]);
+}
+
+/** An underlined tab (#4453): the reference's tab metrics (13px, 6px between
+ * the label and its count, 10px by 5px), the chosen one in the primary ink
+ * with a 2px line under it. */
+export function kindTabClass(active: boolean): string {
+  return cn(
+    "relative -mb-px inline-flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[13px] font-medium leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
+    "after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:rounded-full",
+    active ? "text-ink after:bg-ink" : "text-ink-secondary after:bg-transparent hover:text-ink",
+  );
+}
+
+/** Yours | Discover: the window's one two-position switch, a gray track with
+ * a raised chosen segment (the tabs are lines, this is a switch). */
+export const SEGMENT_TRACK = "flex w-fit items-center gap-0.5 rounded-full bg-ink/[0.06] p-0.5";
+export function segmentTrackOption(active: boolean): string {
+  return cn(
+    "flex h-6 min-w-0 items-center rounded-full px-3 text-[12px] leading-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
+    active ? "bg-ink/[0.14] font-medium text-ink" : "text-ink-secondary hover:text-ink",
+  );
 }
 
 export interface ConnectAppsViewProps {
@@ -151,8 +177,10 @@ export interface ConnectAppsViewProps {
   /** where "< Connect Apps" of Bots, Pages and Sources leads: the view the
    * person came from */
   home?: "installed" | "discover";
-  /** the install scope (this bot, me, organization): beside Yours and Discover */
-  scope?: ReactNode;
+  /** the bot the window was opened from: the title carries its name */
+  botName?: string;
+  /** the filter button, Discover only: the categories live in it */
+  filterControl?: ReactNode;
   /** what the scope does here, over the list */
   scopeNote?: ReactNode;
   /** the one "+ Add" menu, beside the search */
@@ -205,13 +233,13 @@ const MORE_VIEWS: ReadonlyArray<{ id: Extract<ConnectAppsTab, "bots" | "pages" |
 /** Connect Apps (#4453, the reference's Customize, JC 2026-11-16): the title
  * and "..." (Bot templates, Published pages, Sources); the three kind tabs
  * (Skills, Connectors, Plugins) with their counts, the one search and the
- * one "+ Add"; Yours or Discover and the scope (This bot, Me, Organization)
- * with the refresh; then the list of the chosen kind, view and scope, which
+ * one "+ Add"; Yours or Discover with the refresh, and no scope (it is
+ * chosen on each item, #4453); then the list of the chosen kind, which
  * alone scrolls. Bots, Pages and Sources open alone under "< Connect Apps".
  * A page (a plugin, a skill, a custom connector) takes the whole pane under
  * its own bar. */
 export function ConnectAppsView(props: ConnectAppsViewProps) {
-  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, kindCounts, home = "installed", scope, scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh } = props;
+  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, kindCounts, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   const [stuck, setStuck] = useState(false);
   // each view opens at its top: the hairline of a scrolled list goes with it
@@ -242,47 +270,47 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               room at the right is the close button's */}
           <header className="flex min-h-8 items-center gap-2 pr-9" data-plugins-head="">
             {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
-            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-0 flex-1 break-words")}>{t("connectApps.title")}</h2>
+            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-0 flex-1 break-words")}>
+              {botName ? t("connectApps.titleForBot", { name: botName }) : t("connectApps.title")}
+            </h2>
             {moreViews.length > 0 && <MoreViewsMenu views={moreViews} onPick={onTab} />}
           </header>
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2" data-plugins-kind-row="">
-            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex flex-wrap items-center gap-1.5" data-plugins-kinds="">
+          {/* one row of controls (#4453, 2026-11-16): the kinds as underlined
+              tabs with their counts, then the search, the filter (Discover
+              only) and Add. No scope here: it is chosen on each item. */}
+          <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-hairline-weak" data-plugins-kind-row="">
+            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex items-end gap-1" data-plugins-kinds="">
               {CONNECT_APPS_KINDS.map((id) => {
                 const count = kindCounts?.[id];
                 return (
                   <button key={id} type="button" role="tab" aria-selected={kind === id} data-plugins-kind-tab={id}
-                    onClick={() => onKind?.(id)} className={pluginChipClass(kind === id)}>
+                    onClick={() => onKind?.(id)} className={kindTabClass(kind === id)}>
                     {connectAppsKindLabel(id)}
                     {count !== undefined && count > 0 && (
-                      <span className={cn("tabular-nums", kind === id ? "text-app/60" : "text-ink-tertiary")} data-plugins-kind-count={count}>{count}</span>
+                      <span className="text-[12px] tabular-nums text-ink-tertiary" data-plugins-kind-count={count}>{count}</span>
                     )}
                   </button>
                 );
               })}
             </div>
-            <div className="ml-auto flex min-w-0 flex-[1_1_240px] items-center justify-end gap-2">
+            <div className="ml-auto flex min-w-0 flex-[1_1_240px] items-center justify-end gap-2 pb-1">
               {search && <div className="min-w-0 max-w-[260px] flex-1" data-plugins-search-slot="">{search}</div>}
+              {shown === "discover" && filterControl}
               {manageActions}
             </div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2" data-plugins-view-row="">
-            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={QUIET_SEGMENT_GROUP} data-plugins-views="">
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2" data-plugins-view-row="">
+            <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")} data-plugins-refresh="">
+              <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
+            </button>
+            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={SEGMENT_TRACK} data-plugins-views="">
               {(["installed", "discover"] as const).map((id) => (
                 <button key={id} type="button" role="radio" aria-checked={shown === id} data-plugins-view={id}
-                  onClick={() => onTab(id)} className={quietSegmentClass(shown === id)}>
+                  onClick={() => onTab(id)} className={segmentTrackOption(shown === id)}>
                   {t(id === "installed" ? "connectApps.view.yours" : "connectApps.manage.tab.discover")}
                 </button>
               ))}
             </div>
-            {scope && (
-              <>
-                <span aria-hidden="true" className="mx-1 h-5 w-px bg-ink/10" />
-                <div className="min-w-0" data-plugins-scope-slot="">{scope}</div>
-              </>
-            )}
-            <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "ml-auto w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")} data-plugins-refresh="">
-              <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
-            </button>
           </div>
         </div>
         <div
@@ -340,7 +368,6 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
           <h2 id="plugins-title" className={cn(PLUGINS.bigTitle, "min-w-0 flex-1")}>{t(BIG_TITLE_KEY[shown])}</h2>
-          {shown !== "pages" && scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
           {shown !== "pages" && (
             <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
               <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
@@ -364,6 +391,36 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The filter button of the one control row, Discover only (#4453): the
+ * categories (All, Productivity, ...) live in its menu, not in a row of
+ * pills. The chosen category shows on the button. */
+export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readonly PluginFilter[]; filter: PluginFilter; onPick: (filter: PluginFilter) => void; label: (chip: PluginFilter) => string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  usePopoverDismiss(open, ref, () => setOpen(false));
+  if (chips.length <= 1) return null;
+  return (
+    <div ref={ref} className="relative shrink-0" data-plugins-filter="">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-filter-button="" onClick={() => setOpen((value) => !value)}
+        className={cn(PLUGINS.quietPill, "h-8 gap-1.5 px-3 text-[13px]", filter !== "all" && "text-ink")}>
+        <ListFilter size={13} aria-hidden="true" />
+        {filter === "all" ? t("connectApps.filter.button") : label(filter)}
+      </button>
+      {open && (
+        <div role="menu" aria-label={t("connectApps.filtersAria")} className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+          {chips.map((chip) => (
+            <button key={chip} type="button" role="menuitemradio" aria-checked={filter === chip} data-plugins-chip={chip}
+              onClick={() => { setOpen(false); onPick(chip); }} className={filter === chip ? MENU_ROW_ACTIVE : MENU_ROW}>
+              <span className="min-w-0 flex-1 truncate">{label(chip)}</span>
+              {filter === chip && <Check size={14} className="shrink-0" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -418,7 +475,7 @@ export function PluginRow({ item, onOpen, action, below, meta, sub }: { item: Pl
             </span>
           </span>
         </button>
-        {action ?? (item.installed ? (item.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={item.status} className="text-[13px] font-normal" />) : null)}
+        {action ?? (item.installed ? (item.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={item.status} className="text-[12px] font-normal" />) : null)}
       </div>
       {below}
     </div>

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { buildPluginItems, CATEGORY_ORDER } from "@/lib/plugins-model";
 import { PluginDetailView } from "./PluginDetailView";
-import { categoryPills, filterLabel, moreCategoryPills } from "./ConnectAppsView";
+import { categoryPills, DiscoverFilter, filterChips, filterLabel, moreCategoryPills } from "./ConnectAppsView";
 import { DiscoverView, type DiscoverViewProps } from "./DiscoverView";
 import { Breadcrumb } from "../Breadcrumb";
 import { isBackShortcut, pageKeyAction } from "@/lib/back-shortcut";
@@ -77,16 +77,27 @@ describe("plugin detail menu", () => {
   });
 });
 
-describe("Category pills", () => {
-  it("All, then each category that has a row, and a click filters on it", () => {
-    const onFilter = vi.fn();
-    const rows = buildPluginItems({
-      featured: [
-        { id: "notion", name: "Notion", description: "Pages", url: "https://mcp.notion.com/mcp", domain: "notion.so", auth: "oauth", category: "productivity" },
-        { id: "figma", name: "Figma", description: "Files", url: "https://mcp.figma.com/mcp", domain: "figma.com", auth: "oauth", category: "design" },
-      ],
-    });
-    flushSync(() => root.render(createElement(DiscoverView, discover({ items: rows, onFilter }))));
+describe("The filter button (#4453: the categories left the row of pills)", () => {
+  const rows = buildPluginItems({
+    featured: [
+      { id: "notion", name: "Notion", description: "Pages", url: "https://mcp.notion.com/mcp", domain: "notion.so", auth: "oauth", category: "productivity" },
+      { id: "figma", name: "Figma", description: "Files", url: "https://mcp.figma.com/mcp", domain: "figma.com", auth: "oauth", category: "design" },
+    ],
+  });
+
+  it("Discover draws no row of category pills", () => {
+    flushSync(() => root.render(createElement(DiscoverView, discover({ items: rows }))));
+    expect(host.querySelector("[data-plugins-chip]")).toBeNull();
+    expect(host.querySelector("[data-plugins-chips]")).toBeNull();
+  });
+
+  it("All, then each category that has a row, in the button's menu; a click filters on it", () => {
+    const onPick = vi.fn();
+    flushSync(() => root.render(createElement(DiscoverFilter, { chips: filterChips(rows, "all"), filter: "all", onPick, label: (chip) => filterLabel(chip) })));
+    const button = host.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
+    expect(button.textContent).toBe("Filter");
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    click(button);
     const pills = [...host.querySelectorAll("[data-plugins-chip]")].map((node) => node.getAttribute("data-plugins-chip"));
     expect(pills[0]).toBe("all");
     expect(pills).toEqual([...categoryPills(rows, "all"), ...moreCategoryPills(rows, "all")]);
@@ -95,20 +106,23 @@ describe("Category pills", () => {
     expect(pills).not.toContain("finance");
     expect(pills.filter((pill) => pill !== "all").every((pill) => (CATEGORY_ORDER as readonly string[]).includes(pill!))).toBe(true);
     click(host.querySelector('[data-plugins-chip="design"]'));
-    expect(onFilter).toHaveBeenCalledWith("design");
+    expect(onPick).toHaveBeenCalledWith("design");
+    // the menu closes on a pick
+    expect(host.querySelector('[role="menu"]')).toBeNull();
   });
 
-  it("a chosen category stays on the row: pressed on the row, or named and white on More (#2104)", () => {
-    flushSync(() => root.render(createElement(DiscoverView, discover({ filter: "finance" }))));
-    expect(host.querySelector("[data-plugins-more]")).toBeNull();
-    const chip = host.querySelector<HTMLElement>('[data-plugins-chip="finance"]')!;
-    expect(chip).not.toBeNull();
-    if (chip.getAttribute("aria-haspopup") === "menu") {
-      expect(chip.textContent).toContain(filterLabel("finance"));
-      expect(chip.className).toContain("bg-ink");
-    } else {
-      expect(chip.getAttribute("aria-pressed")).toBe("true");
-    }
+  it("a chosen category is named on the button and checked in its menu", () => {
+    flushSync(() => root.render(createElement(DiscoverFilter, { chips: filterChips(rows, "design"), filter: "design", onPick: noop, label: (chip) => filterLabel(chip) })));
+    const button = host.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
+    expect(button.textContent).toBe(filterLabel("design"));
+    click(button);
+    expect(host.querySelector('[data-plugins-chip="design"]')?.getAttribute("aria-checked")).toBe("true");
+    expect(host.querySelector('[data-plugins-chip="all"]')?.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("no button when there is nothing to filter (only All)", () => {
+    flushSync(() => root.render(createElement(DiscoverFilter, { chips: ["all"], filter: "all", onPick: noop, label: (chip) => filterLabel(chip) })));
+    expect(host.querySelector("[data-plugins-filter]")).toBeNull();
   });
 });
 

@@ -77,5 +77,5 @@ export function usePluginsInstalledEntries(s: PluginsPanelState, a: PluginsPanel
     };
   };
   const botsForEntry = page.page === "botsFor" ? entries.find((entry) => entry.key === page.key) : undefined;
-  return { entries, botsForRows, toggleBotServers, toggleBotServerNames, entryActions, botsForEntry };
+  return { entries, botsForRows, toggleBotServers, toggleBotServerNames, entryActions, botsForEntry, editableBots };
 }

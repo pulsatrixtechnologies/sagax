@@ -58,18 +58,19 @@ describe("Plugins tabs", () => {
     installed: createElement(InstalledView, props()), discover: "D", bots: "B", pages: "G", sources: "S",
   }));
 
-  it("#4453: one head on Yours and Discover: the title, \"...\", the kinds, the search, Add, the view, the scope", () => {
+  it("#4453: one head on Yours and Discover: the title, \"...\", the kinds (underlined tabs), the search, Add, then the view; no scope", () => {
     for (const tab of ["installed", "discover"] as const) {
       const html = renderToStaticMarkup(createElement(ConnectAppsView, {
         tab, onTab: noop, refreshing: false, onRefresh: noop, kind: "skills",
-        search: createElement("input", { "data-plugins-search": "" }), scope: createElement("div", { "data-test-scope": "" }),
+        search: createElement("input", { "data-plugins-search": "" }),
         manageActions: createElement("button", { "data-test-add": "" }), installed: "I", discover: "D",
       }));
       expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps</);
       // the title is never cut (French at phone width, #4153)
       const title = html.match(/<h2 [^>]*id="plugins-title"[^>]*>/)?.[0] ?? "";
       expect(title).not.toMatch(/\btruncate\b|\bline-clamp|\bwhitespace-nowrap\b/);
-      expect(html).toMatch(/id="plugins-title"[\s\S]*?data-plugins-more-button[\s\S]*?role="tablist"[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-add[\s\S]*?data-plugins-views[\s\S]*?data-plugins-scope-slot[\s\S]*?data-test-scope/);
+      expect(html).toMatch(/id="plugins-title"[\s\S]*?data-plugins-more-button[\s\S]*?role="tablist"[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-add[\s\S]*?data-plugins-views/);
+      expect(html).not.toContain("data-plugins-scope-slot");
       expect(html).toContain(tab === "installed" ? ">I<" : ">D<");
       expect(html).not.toContain("Manage plugins and skills");
     }
@@ -82,13 +83,13 @@ describe("Plugins tabs", () => {
       const root = createRoot(host);
       flushSync(() => root.render(createElement(ConnectAppsView, {
         tab, onTab: noop, refreshing: false, onRefresh: noop,
-        scope: createElement("div", { "data-test-scope": "" }), installed: "I", pages: "G", sources: "S",
+        installed: "I", pages: "G", sources: "S",
       })));
       const bar = host.querySelector("[data-plugins-manage-bar]");
       const titleRow = host.querySelector("[data-plugins-title-row]");
       const list = host.querySelector("[data-plugins-list]");
       expect(titleRow?.querySelector("#plugins-title")).toBeTruthy();
-      if (tab !== "pages") expect(titleRow?.querySelector("[data-plugins-scope-slot]")).toBeTruthy();
+      expect(titleRow?.querySelector("[data-plugins-scope-slot]")).toBeNull();
       // bar, then the title row, then the list: siblings, the list alone scrolls
       expect(bar?.nextElementSibling).toBe(titleRow);
       expect(titleRow?.className).toContain("shrink-0");
@@ -135,7 +136,7 @@ describe("Plugins tabs", () => {
   it("Bots and Pages open alone under \"< Plugins\"; the home keeps the one search (#2104)", () => {
     for (const tab of ["bots", "pages"] as const) {
       const html = renderToStaticMarkup(createElement(ConnectAppsView, {
-        tab, onTab: noop, refreshing: false, onRefresh: noop, scope: createElement("div", { "data-test-scope": "" }),
+        tab, onTab: noop, refreshing: false, onRefresh: noop,
         search: createElement("input", { "data-plugins-search": "" }), bots: "BOTS", pages: "PAGES",
       }));
       expect(html).toContain("data-plugins-home");
@@ -600,14 +601,14 @@ describe("#4453: Yours and Discover of one kind", () => {
       const wanted = [["skill"], ["mcp", "connector", "product", "role"], ["plugin", "flow"]][index]!;
       expect(forms.every((form) => wanted.includes(form!)), forms.join()).toBe(true);
     }
-    // the list's title says whose rows they are, never "Capabilities"
-    expect(perKind[1]).toContain("What Scout receives");
+    // the organization console's rows sit apart at the top; the rest is "Added by you", never "Capabilities"
+    expect(perKind[1]).toContain("data-plugins-console-section");
     expect(perKind[1]).not.toMatch(/>Capabilities</);
   });
 
   it("a row the person may not switch shows a locked switch with the reason: set by the organization, the engine account", () => {
     const html = renderToStaticMarkup(createElement(InstalledView, props({ resolved: capabilityFixture(), botName: "Scout", kind: "connectors" })));
-    expect(html).toMatch(/data-capability-scope="account"[\s\S]*?data-capability-locked=""/);
+    expect(html).toMatch(/data-capability-scope="account"[\s\S]*?data-row-switch="locked"/);
     // another person's bot: every switch locked, with that reason
     const other = renderToStaticMarkup(createElement(InstalledView, props({ resolved: capabilityFixture(), botName: "Scout", kind: "connectors", readOnlyReason: "READ ONLY" })));
     expect(other).toContain('title="READ ONLY"');
@@ -659,5 +660,52 @@ describe("#4453: Yours and Discover of one kind", () => {
     expect(discover("connectors")).toContain('data-harness-group="claude"');
     expect(discover("plugins")).not.toContain("data-plugins-add-custom");
     expect(discover("plugins")).not.toContain("data-harness-group");
+  });
+});
+
+describe("#4453 (2026-11-16): the organization console's own section, apart, at the top of each kind", () => {
+  const consoleRow = { key: "vendor:harbor", node: createElement("div", { "data-test-vendor": "" }, "VENDOR") };
+  const own = { key: "mine", node: createElement("div", { "data-test-own": "" }, "OWN") };
+
+  it("is titled \"<Console> · <Organization>\", lists the console's rows first and \"Added by you\" below", () => {
+    const html = renderToStaticMarkup(createElement(InstalledView, props({
+      kind: "connectors", consoleTitle: "Perspicax · Example Org", products: [consoleRow], personal: [own], entries: [], skills: [],
+    })));
+    expect(html).toContain("data-plugins-console-section");
+    expect(html).toMatch(/Perspicax · Example Org[\s\S]*?data-test-vendor[\s\S]*?Added by you[\s\S]*?data-test-own/);
+    // never a second copy of the organization's rows under the person's
+    expect(html.match(/data-test-vendor/g)).toHaveLength(1);
+  });
+
+  it("is in each of the three kinds when the console offers something of that kind", () => {
+    for (const kind of ["skills", "connectors", "plugins"] as const) {
+      const html = renderToStaticMarkup(createElement(InstalledView, props({
+        kind, consoleTitle: "Perspicax · Example Org", consoleHasExtras: true, consoleExtras: createElement("div", { "data-test-extras": "" }, "EXTRAS"),
+      })));
+      expect(html, kind).toMatch(/data-plugins-console-section[\s\S]*?Perspicax · Example Org[\s\S]*?data-test-extras/);
+    }
+  });
+
+  it("is absent when the console has nothing of that kind: no empty title, and the person's own rows are \"Yours\"", () => {
+    const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "connectors", consoleTitle: "Perspicax · Example Org", personal: [own] })));
+    expect(html).not.toContain("data-plugins-console-section");
+    expect(html).not.toContain("Perspicax");
+    expect(html).not.toContain("Added by you");
+    expect(html).toMatch(/>Yours</);
+  });
+
+  it("folds past six rows behind Show all N", () => {
+    const rows = Array.from({ length: 9 }, (_, index) => ({ key: `vendor:${index}`, node: createElement("div", { "data-test-vendor": "" }, `V${index}`) }));
+    const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "connectors", consoleTitle: "Console", products: rows })));
+    expect(html.match(/data-test-vendor/g)).toHaveLength(6);
+    expect(html).toContain("Show all 9");
+  });
+
+  it("at a bot, the organization's resolved rows sit in the section and the bot's own rows below it", () => {
+    const html = renderToStaticMarkup(createElement(InstalledView, props({ resolved: capabilityFixture(), botName: "Scout", kind: "connectors", consoleTitle: "Perspicax · Example Org" })));
+    const section = html.slice(html.indexOf("data-plugins-console-section"));
+    // the gateway's roles are the console's: in its section, before the person's own account rows
+    expect(section).toMatch(/Perspicax · Example Org[\s\S]*?data-capability="role"/);
+    expect(html.indexOf("data-plugins-console-section")).toBeLessThan(html.indexOf('data-capability-scope="account"'));
   });
 });

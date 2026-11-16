@@ -49,7 +49,7 @@ describe("Plugins panel views", () => {
   });
 
   it("#4453: Connect Apps is three kind tabs with their counts, Yours and Discover, the scope, the one search and Add; Bots, Pages and Sources under \"...\"", () => {
-    const html = page({ tab: "installed", scope: createElement("div", null, "SCOPE"), search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }), manageActions: createElement("button", { "data-test-add": "" }) });
+    const html = page({ tab: "installed", search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }), manageActions: createElement("button", { "data-test-add": "" }) });
     expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps<\/h2>/);
     expect(html).not.toContain("Manage plugins and skills");
     // the kinds, in the reference's order, the chosen one pressed, a count only where there is one
@@ -60,7 +60,13 @@ describe("Plugins panel views", () => {
     // the search and the one Add on the kinds' row; Yours, Discover, the scope and the refresh under it
     expect(html).toMatch(/data-plugins-kind-row[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-test-add/);
     expect(html.match(/data-plugins-search=""/g)).toHaveLength(1);
-    expect(html).toMatch(/data-plugins-view-row[\s\S]*?data-plugins-view="installed"[^>]*>Yours<[\s\S]*?data-plugins-view="discover"[^>]*>Discover<[\s\S]*?data-plugins-scope-slot[\s\S]*?SCOPE[\s\S]*?data-plugins-refresh/);
+    expect(html).toMatch(/data-plugins-view-row[\s\S]*?data-plugins-refresh[\s\S]*?data-plugins-view="installed"[^>]*>Yours<[\s\S]*?data-plugins-view="discover"[^>]*>Discover</);
+    // #4453 (2026-11-16): no scope control in the header: it is chosen on the item
+    expect(html).not.toContain("data-plugins-scope-slot");
+    expect(html).not.toContain("SCOPE");
+    // one row of controls: underlined tabs (not pills), the search, Add
+    expect(html).toMatch(/data-plugins-kinds=""[\s\S]*?after:h-0\.5/);
+    for (const tab of html.matchAll(/data-plugins-kind-tab="[a-z]+"[^>]*class="([^"]*)"/g)) expect(tab[1]).not.toMatch(/(^|\s)bg-/);
     expect(html).toMatch(/role="radio" aria-checked="true" data-plugins-view="installed"/);
     expect(html).toContain("INSTALLED");
     // the title row stays out of the list, which alone scrolls
@@ -70,21 +76,24 @@ describe("Plugins panel views", () => {
     expect(html).not.toContain("data-plugins-bot-templates");
     expect(html).not.toContain("data-plugins-connected");
     // Discover: the same head, its list
-    const discover = page({ scope: createElement("div", null, "SCOPE") });
+    const discover = page({});
     expect(discover).toContain("data-plugins-discover");
     expect(discover).toMatch(/role="radio" aria-checked="true" data-plugins-view="discover"/);
-    expect(discover).toContain("SCOPE");
+    // the filter button of Discover sits on the same row when the panel gives one
+    const filtered = page({ search: createElement("input"), filterControl: createElement("button", { "data-test-filter": "" }) });
+    expect(filtered).toMatch(/data-plugins-search-slot[\s\S]*?data-test-filter[\s\S]*?data-plugins-view-row/);
+    // ...and Yours has none
+    expect(page({ tab: "installed", filterControl: createElement("button", { "data-test-filter": "" }) })).not.toContain("data-test-filter");
     // with text, the results take the list's place
     const results = page({ results: "RESULTS" });
     expect(results).toContain("data-plugins-results");
     expect(results).toContain("RESULTS");
     expect(results).not.toContain("data-plugins-discover");
     // Bots: its pane under the back bar to Connect Apps, no scope
-    const bots = page({ tab: "bots", bots: "BOTS", scope: createElement("div", null, "SCOPE") });
+    const bots = page({ tab: "bots", bots: "BOTS" });
     expect(bots).toContain("BOTS");
     expect(bots).toMatch(/data-plugins-manage="bots"/);
     expect(bots).toMatch(/data-plugins-home[^>]*>[\s\S]*?Connect Apps/);
-    expect(bots).not.toContain("SCOPE");
     expect(bots).not.toContain("data-apps-back");
     expect(page({ tab: "sources" })).toContain("SOURCES");
     expect(page({ tab: "pages" })).toContain("PAGES");
@@ -97,10 +106,9 @@ describe("Plugins panel views", () => {
     expect(html).not.toContain("placeholder=");
     expect(html).not.toContain("data-plugins-search");
     expect(html).not.toContain("Browse Bots");
-    const chips = [...html.matchAll(/data-plugins-chip="([^"]+)"/g)].map((match) => match[1]);
-    expect(chips[0]).toBe("all");
-    // the categories past the row wait behind More (the reference app's More chip)
-    expect(html).toContain("data-plugins-more-chips");
+    // #4453: the categories are no row of pills: they live in the filter button of the header
+    expect(html).not.toContain("data-plugins-chip=");
+    expect(html).not.toContain("data-plugins-more-chips");
     expect(html).toContain('data-plugins-section="recommended"');
     expect(html).toContain("Recommended for you");
     // two columns of borderless rows, one when the list is narrow (#4097)

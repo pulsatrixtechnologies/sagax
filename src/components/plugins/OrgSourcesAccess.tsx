@@ -33,7 +33,7 @@ type Block = "marketplaces";
 type Status = { block: Block; kind: "saved" | "error"; text: string } | null;
 type Save = (block: Block, body: Record<string, unknown>) => Promise<boolean>;
 
-const fieldClass = "w-full rounded-lg border border-border bg-raised px-3 py-2 text-[12.5px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent";
+const fieldClass = "w-full rounded-lg border border-border bg-raised px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-secondary focus:border-accent";
 
 function policyList(policy: Policy): string {
   return policy.mode === "list" ? policy.allow.join("\n") : "";
@@ -107,21 +107,21 @@ export function PerspicaxSources() {
     <div className="flex flex-col gap-1.5" data-org-access="marketplaces" data-org-access-owner="perspicax">
       <span className="font-medium text-ink">{t("organization.plugins.marketplaces")}</span>
       <p className="text-[12px] leading-relaxed text-ink-secondary">{t("orgCapabilities.sources.owner")}</p>
-      <label className="flex items-center gap-2 text-[12.5px]">
+      <label className="flex items-center gap-2 text-[13px]">
         <input type="radio" name="org-marketplaces" checked={mode === "any"} disabled={busy || !inventory} onChange={() => void run(() => setMarketplacePolicy("any"))} />
         {t("organization.plugins.any")}
       </label>
-      <label className="flex items-center gap-2 text-[12.5px]">
+      <label className="flex items-center gap-2 text-[13px]">
         <input type="radio" name="org-marketplaces" checked={mode === "list"} disabled={busy || !inventory} onChange={() => void run(() => setMarketplacePolicy("list"))} />
         {t("organization.plugins.list")}
       </label>
       {inventory && mode === null && <p className="text-[12px] text-ink-secondary">{t("orgCapabilities.sources.noPolicy")}</p>}
       <ul className="divide-y divide-hairline/60 rounded-xl border border-border" data-org-marketplaces="">
         {(inventory?.marketplaces ?? []).map((market) => (
-          <li key={market.id} className="flex items-center gap-2 px-3 py-1.5 text-[12.5px]">
+          <li key={market.id} className="flex items-center gap-2 px-3 py-1.5 text-[13px]">
             <span className="min-w-0 flex-1">
               <span className="block text-ink">{market.name}</span>
-              <span className="block break-all font-mono text-[11.5px] text-ink-secondary">{market.source}</span>
+              <span className="block break-all font-mono text-[12px] text-ink-secondary">{market.source}</span>
             </span>
             <Switch checked={market.enabled} disabled={busy} aria-label={t("orgCapabilities.sources.enabledAria", { name: market.name })}
               onClick={() => void run(() => saveMarketplace({ name: market.name, source: market.source, enabled: !market.enabled }, market.id))} />
@@ -191,11 +191,11 @@ export function OrgSourcesAccess({ initial, flat = false }: { initial: Settings;
         {settings.pluginMarketplacesOwner === "perspicax" ? <PerspicaxSources /> : (
         <div className="flex flex-col gap-1.5" data-org-access="marketplaces">
           <span className="font-medium text-ink">{t("organization.plugins.marketplaces")}</span>
-          <label className="flex items-center gap-2 text-[12.5px]">
+          <label className="flex items-center gap-2 text-[13px]">
             <input type="radio" name="org-marketplaces" checked={mode === "any"} onChange={() => setMode("any")} />
             {t("organization.plugins.any")}
           </label>
-          <label className="flex items-center gap-2 text-[12.5px]">
+          <label className="flex items-center gap-2 text-[13px]">
             <input type="radio" name="org-marketplaces" checked={mode === "list"} onChange={() => setMode("list")} />
             {t("organization.plugins.list")}
           </label>

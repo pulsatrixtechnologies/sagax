@@ -34,7 +34,7 @@ function Names({ label, names }: { label: string; names: string[] }) {
   return (
     <div className="contents">
       <dt className="text-ink-secondary">{label}</dt>
-      <dd className="min-w-0 break-words text-right font-mono text-[11.5px] text-ink">{names.join(", ")}</dd>
+      <dd className="min-w-0 break-words text-right font-mono text-[12px] text-ink">{names.join(", ")}</dd>
     </div>
   );
 }
@@ -52,13 +52,13 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
           <Switch checked={installed.enabled} disabled={busy !== null} aria-label={t("plugins.enabled", { name: plugin.plugin })} onClick={() => onToggle(!installed.enabled)} />
         ) : undefined}
       >
-        <p className="text-[12.5px] leading-relaxed text-ink-secondary">
+        <p className="text-[13px] leading-relaxed text-ink-secondary">
           {personal ? t(installed ? "connectApps.mePlugin.installed" : "connectApps.mePlugin.notInstalled") : installed ? t("connectApps.botPlugin.installed", { name: botName }) : t("connectApps.botPlugin.notInstalled", { name: botName })}
         </p>
         {!view.engine.loadsPlugins && <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("plugins.claudeOnly")}</p>}
         {contents ? (
           empty ? <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.botPlugin.nothing")}</p> : (
-            <dl className="mt-2 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 gap-y-1.5 text-[12.5px]">
+            <dl className="mt-2 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 gap-y-1.5 text-[13px]">
               <Names label={t("connectApps.botPlugin.agents")} names={contents.agents} />
               <Names label={t("connectApps.botPlugin.commands")} names={contents.commands} />
               <Names label={t("connectApps.botPlugin.skills")} names={contents.skills} />
@@ -67,8 +67,8 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
         ) : (
           <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.botPlugin.readAtInstall")}</p>
         )}
-        {installed && installed.removed.length > 0 && <p className="mt-2 text-[11.5px] text-ink-secondary">{t("plugins.removed", { parts: installed.removed.join(", ") })}</p>}
-        {installed && installed.declaredMcpServers.length > 0 && <p className="mt-1 text-[11.5px] text-ink-secondary">{t("plugins.declaredMcp", { names: installed.declaredMcpServers.join(", ") })}</p>}
+        {installed && installed.removed.length > 0 && <p className="mt-2 text-[12px] text-ink-secondary">{t("plugins.removed", { parts: installed.removed.join(", ") })}</p>}
+        {installed && installed.declaredMcpServers.length > 0 && <p className="mt-1 text-[12px] text-ink-secondary">{t("plugins.declaredMcp", { names: installed.declaredMcpServers.join(", ") })}</p>}
         {installed?.config && installed.config.fields.length > 0 && (
           <PluginConfigForm config={installed.config} canChange={change && Boolean(onSaveConfig)} onSave={(values) => onSaveConfig ? onSaveConfig(values) : Promise.resolve()} />
         )}

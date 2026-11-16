@@ -141,7 +141,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
       };
     })],
     accountAction,
-    accountExtra: noAccount ? (server.managedBy ? <p className="py-1.5 text-[11.5px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p> : undefined) : (
+    accountExtra: noAccount ? (server.managedBy ? <p className="py-1.5 text-[12px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p> : undefined) : (
       <>
         {mcpAccountDraft?.server === name && (
           <form
@@ -191,7 +191,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
             {typeof oauthError === "string" ? oauthError : t(oauthError.key, oauthError.params)}
           </div>
         )}
-        {server.managedBy && <p className="mt-2 text-[11.5px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p>}
+        {server.managedBy && <p className="mt-2 text-[12px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p>}
       </>
     ),
     tools: {
@@ -246,7 +246,7 @@ function conversionSection(item: PluginItem): ReactNode {
   return (
     <section data-plugin-conversion={item.convertedFrom}>
       <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.converted.title")}</h3>
-      <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{t("connectApps.plugin.converted.from")}</p>
+      <p className="mb-2 text-[13px] leading-relaxed text-ink-secondary">{t("connectApps.plugin.converted.from")}</p>
       {notes.length === 0
         ? <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.converted.all")}</p>
         : (
@@ -342,7 +342,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
       ],
       more: (
         <>
-          {item.description && <p className="px-1 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
+          {item.description && <p className="px-1 text-[13px] leading-relaxed text-ink-secondary">{item.description}</p>}
           {botCard}
           {conversionSection(item)}
         </>
@@ -365,9 +365,9 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
         {botCard}
         <section>
           <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.brings")}</h3>
-          {item.description && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
+          {item.description && <p className="mb-2 text-[13px] leading-relaxed text-ink-secondary">{item.description}</p>}
           {children.length === 0 && <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.bringsNothing")}</p>}
-          <p className="mt-2 text-[11.5px] text-ink-secondary">{t("connectApps.plugin.note")}</p>
+          <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.plugin.note")}</p>
         </section>
         {conversionSection(item)}
       </>

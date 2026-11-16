@@ -182,14 +182,14 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
 
   const autoTone = automation === "granted" ? "ok" : automation === "denied" ? "warn" : "todo";
   const testTone = test ? "ok" : testFailed ? "warn" : "todo";
-  const button = "mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50";
+  const button = "mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-raised disabled:opacity-50";
 
   return (
     <>
       <PluginPageHeader title={macAppTitle(app)} trail={trail} onBack={onBack} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-7 pt-3 sm:px-8" data-mac-app-setup={app}>
         {busy === "load" && !status && (
-          <div className="flex items-center gap-2 text-[12.5px] text-ink-secondary" data-mac-app-loading="">
+          <div className="flex items-center gap-2 text-[13px] text-ink-secondary" data-mac-app-loading="">
             <Loader2 size={14} className="animate-spin" /> {t("connectApps.mac.app.loading", { app: name })}
           </div>
         )}
@@ -197,7 +197,7 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
         {!status && busy !== "load" && error && (
           <div className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-mac-app-load-error="">
             <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.loadFailed")}</p>
-            <p role="alert" className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{error}</p>
+            <p role="alert" className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{error}</p>
             <button type="button" className={button} onClick={() => void load(false)}>
               <RotateCw size={13} aria-hidden="true" /> {t("connectApps.mac.retry")}
             </button>
@@ -207,7 +207,7 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
         {status && !status.available && (
           <div className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-mac-app-unavailable="">
             <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.app.unavailableTitle", { app: name })}</p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.app.unavailableBody")}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{t("connectApps.mac.app.unavailableBody")}</p>
           </div>
         )}
 
@@ -219,8 +219,8 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                   <Icon size={20} aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-[15px] font-semibold text-ink">{t("connectApps.mac.app.headline", { app: name })}</h2>
-                  <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{t(copy.intro)}</p>
+                  <h2 className="text-[14px] font-semibold text-ink">{t("connectApps.mac.app.headline", { app: name })}</h2>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{t(copy.intro)}</p>
                 </div>
               </div>
               <ul className="mt-4 space-y-3">
@@ -250,7 +250,7 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.app.automationTitle", { app: name })}</p>
-                      <span className={cn("text-[11.5px]", permissionTone(automation) === "ok" ? "text-success" : permissionTone(automation) === "warn" ? "text-danger" : "text-ink-secondary")}>
+                      <span className={cn("text-[12px]", permissionTone(automation) === "ok" ? "text-success" : permissionTone(automation) === "warn" ? "text-danger" : "text-ink-secondary")}>
                         {permissionLabel(automation)}
                       </span>
                     </div>
@@ -261,12 +261,12 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                           {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
                           {t("connectApps.mac.askAccess")}
                         </button>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
+                        <p className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
                       </>
                     )}
                     {automationAction(automation) === "openSettings" && (
                       <>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-mac-app-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
+                        <p className="mt-1.5 text-[12px] leading-relaxed text-danger" data-mac-app-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
                         <button type="button" data-mac-app-open-automation disabled={busy !== null} onClick={() => void run("open", () => openMacAppPermissionPane("automation"))} className={button}>
                           {busy === "open" && <Loader2 size={13} className="animate-spin" />}
                           {t("connectApps.mac.messages.openSettings")}
@@ -291,7 +291,7 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                       </p>
                     )}
                     {test && (
-                      <p className="mt-2 text-[12.5px] text-ink" data-mac-app-test-result="" data-mac-app-test-count={test.count}>
+                      <p className="mt-2 text-[13px] text-ink" data-mac-app-test-result="" data-mac-app-test-count={test.count}>
                         {test.count === 1 ? t("connectApps.mac.app.testResultOne") : t("connectApps.mac.app.testResultMany", { count: test.count })}
                       </p>
                     )}
@@ -308,7 +308,7 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                       disabled={busy === "enable"}
                       onChange={(next) => void toggle(next)}
                     />
-                    <p className="mt-2 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.app.enableNote")}</p>
+                    <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.app.enableNote")}</p>
                   </div>
                 </li>
               </ol>

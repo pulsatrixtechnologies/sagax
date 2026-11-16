@@ -12,7 +12,7 @@
 // same setting carries the bot's tool selection, so search, describe and
 // call_tool only ever see the tools the bot may use.
 import { createInterface } from "node:readline";
-import { redactSecretsInText } from "../shared/redact.ts";
+import { maskValues, redactSecretsInText } from "../shared/redact.ts";
 import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
 import type { ValidateFunction } from "ajv";
@@ -143,7 +143,7 @@ const configured: string[] = (() => {
  * nothing secret-shaped left in it, and bounded. */
 function remoteErrorText(detail: string): string {
   let text = detail.slice(0, REMOTE_ERROR_CHARS * 8);
-  for (const value of configured) text = text.split(value).join("«redacted»");
+  text = maskValues(text, configured, "«redacted»");
   text = redactSecretsInText(text).trim();
   if (text.length > REMOTE_ERROR_CHARS) text = `${text.slice(0, REMOTE_ERROR_CHARS - 1)}…`;
   return text || "Remote MCP request failed";

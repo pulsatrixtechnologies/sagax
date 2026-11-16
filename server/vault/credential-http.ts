@@ -28,6 +28,7 @@ import { isIP, type LookupFunction } from "node:net";
 import { injectionHeader, vaultDomainMatches, type VaultApiInjection } from "../../shared/credential-vault.ts";
 import { addressClass, REFUSAL_TEXT, type AddressClass, type Refusal } from "../browser/egress/policy.ts";
 import { variants } from "./credential-fill.ts";
+import { maskValues } from "../../shared/redact.ts";
 
 export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;
 export type CredentialHttpMethod = (typeof HTTP_METHODS)[number];
@@ -114,9 +115,7 @@ export function secretVariants(secret: Pick<InjectedSecret, "value" | "username"
 
 /** Removes every variant from a text. */
 export function redactWith(text: string, secrets: readonly string[]): string {
-  let out = text;
-  for (const secret of secrets) if (secret && out.includes(secret)) out = out.split(secret).join(REDACTED);
-  return out;
+  return maskValues(text, secrets, REDACTED);
 }
 
 function refusal(code: CredentialHttpRefusal, message: string): CredentialHttpOutcome {

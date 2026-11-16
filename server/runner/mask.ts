@@ -4,6 +4,8 @@
 // them) and the run token. A value shorter than MIN_MASKED_LENGTH is not
 // masked (it would blank ordinary words); the runner warns about it once.
 
+import { maskValues } from "../../shared/redact.ts";
+
 export const MASK = "[secret masqué]";
 export const MIN_MASKED_LENGTH = 6;
 
@@ -34,11 +36,7 @@ export class Masker {
 
   mask(text: string): string {
     if (!text || this.values.length === 0) return text;
-    let out = text;
-    for (const value of this.values) {
-      if (out.includes(value)) out = out.split(value).join(MASK);
-    }
-    return out;
+    return maskValues(text, this.values, MASK);
   }
 
   /** Mask every string inside a JSON-like value. */

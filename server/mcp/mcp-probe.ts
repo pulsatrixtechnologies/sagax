@@ -1,4 +1,5 @@
 import { augmentedPath } from "../env-path.ts";
+import { maskValues } from "../../shared/redact.ts";
 import {
   PROVIDER_CREDENTIAL_ENV,
   stripWorkspaceCredentialEnv,
@@ -92,11 +93,7 @@ function publicProbeError(kind: "spawn" | "timeout" | "protocol" | "closed" | "c
 }
 
 function redactConfiguredValues(value: string, secrets: Record<string, string>): string {
-  let redacted = value;
-  for (const secret of Object.values(secrets)) {
-    if (secret) redacted = redacted.split(secret).join("[redacted]");
-  }
-  return redacted;
+  return maskValues(value, Object.values(secrets), "[redacted]");
 }
 
 /** The bounded, redacted tool list the renderer may see, and how many tools

@@ -13,6 +13,31 @@ const REDACTION_MARKER = /^«redacted \d+ chars»$/;
 
 export const mask = (value: string) => (REDACTION_MARKER.test(value) ? value : `«redacted ${value.length} chars»`);
 
+/** Replace every occurrence of the given values with `replacement`, in one
+ * pass over the original text: crossing or nested matches (one value inside
+ * another, or a value whose occurrences overlap) merge into one masked range,
+ * so masking one value first can never leave part of another visible
+ * (upstream #5282). Empty values are ignored. */
+export function maskValues(text: string, values: Iterable<string>, replacement: string): string {
+  const ranges: [number, number][] = [];
+  for (const value of new Set(values)) {
+    if (!value) continue;
+    for (let start = text.indexOf(value); start !== -1; start = text.indexOf(value, start + 1)) ranges.push([start, start + value.length]);
+  }
+  if (!ranges.length) return text;
+  ranges.sort((a, b) => a[0] - b[0]);
+  let out = "";
+  let cursor = 0;
+  for (let i = 0; i < ranges.length; i++) {
+    const start = ranges[i]![0];
+    let end = ranges[i]![1];
+    while (i + 1 < ranges.length && ranges[i + 1]![0] < end) end = Math.max(end, ranges[++i]![1]);
+    out += text.slice(cursor, start) + replacement;
+    cursor = end;
+  }
+  return out + text.slice(cursor);
+}
+
 // ── content-shaped secrets ────────────────────────────────────────────
 // High precision on purpose: a generic "long hex/base64" heuristic would
 // rewrite real code in the transcript, so only shapes that are unmistakably

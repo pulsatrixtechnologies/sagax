@@ -5,6 +5,7 @@ import { newId } from "../contracts.ts";
 import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQuestions, questionChoices } from "../../shared/ask-question.ts";
 import { allowsTool, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
+import { maskValues } from "../../shared/redact.ts";
 import { cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../shared/phone-tools.ts";
 import { ChatToolSessionError, mountChatTools, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
@@ -334,7 +335,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
           let combined = pending[streamKind] + text;
           // Mask complete matches before holding a suffix: otherwise a key
           // such as "abab" could be split at its own repeated prefix.
-          for (const secret of secrets) if (secret) combined = combined.split(secret).join("[redacted]");
+          combined = maskValues(combined, secrets, "[redacted]");
           let hold = 0;
           // A configured credential can straddle chunks. Hold any suffix
           // that could be its prefix until the next chunk disambiguates it.
@@ -723,9 +724,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
       }
     }
     const safeText = (text: string) => {
-      let safe = text;
-      for (const secret of secrets) if (secret) safe = safe.split(secret).join("[redacted]");
-      return redactSecretsInText(safe);
+      return redactSecretsInText(maskValues(text, secrets, "[redacted]"));
     };
     const preview = (value: unknown) => toolDetailPreview(JSON.parse(JSON.stringify(value, (_key, part) =>
       typeof part === "string" ? safeText(part) : part)));

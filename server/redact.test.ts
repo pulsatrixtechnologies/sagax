@@ -4,6 +4,7 @@
 // object form — so a change to either shape breaks the test, not the secret.
 import { describe, expect, it } from "vitest";
 
+import { maskValues } from "../shared/redact.ts";
 import { redactSecrets } from "./redact.ts";
 
 const flat = (value: unknown) => JSON.stringify(value);
@@ -430,5 +431,16 @@ describe("#4081: the sandbox bridge token", () => {
     // a shorter look-alike is not a token
     const short = `${"sgx_" + "brg_"}abc`;
     expect(redactSecretsInText(`see ${short}`)).toContain(short);
+  });
+});
+
+// upstream #5282: values masked in one pass over the original text.
+describe("maskValues", () => {
+  it("masks crossing, nested and self-overlapping values whole", () => {
+    expect(maskValues("abcdefghi", ["abc", "bcdefghi"], "[r]")).toBe("[r]");
+    expect(maskValues("x ababa y", ["aba"], "[r]")).toBe("x [r] y");
+    expect(maskValues("prefix-sensitive-suffix / prefix", ["prefix", "prefix-sensitive-suffix"], "[r]")).toBe("[r] / [r]");
+    expect(maskValues("keep a.b+c here", ["a.b+c", ""], "[r]")).toBe("keep [r] here");
+    expect(maskValues("nothing", ["absent"], "[r]")).toBe("nothing");
   });
 });

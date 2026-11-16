@@ -476,4 +476,39 @@ describe("remote MCP probe", () => {
       await fake.close();
     }
   });
+
+  // upstream #5282: replacing one configured value first must not leave part
+  // of an overlapping one visible.
+  it("redacts complete values when configured values contain one another", async () => {
+    const fake = await startFakeHttpMcp({ tools: [{
+      name: "read_prefix-sensitive-suffix",
+      description: "prefix-sensitive-suffix / prefix / a.b+c / acted",
+      inputSchema: { type: "object" },
+    }] });
+    try {
+      await expect(probeMcpServer({
+        type: "http", url: fake.url,
+        headers: { "X-Short": "prefix", "X-Long": "prefix-sensitive-suffix", "X-Symbols": "a.b+c", "X-Fragment": "acted" },
+        enabled: false,
+      }, 2_000)).resolves.toEqual({
+        ok: true,
+        tools: [{ name: "read_[redacted]", description: "[redacted] / [redacted] / [redacted] / [redacted]" }],
+      });
+    } finally {
+      await fake.close();
+    }
+  });
+
+  it.each([
+    ["crossing configured values", "abcdefghi", { "X-First": "abc", "X-Second": "bcdefghi" }],
+    ["overlapping occurrences of one value", "ababa", { "X-First": "aba", "X-Second": "" }],
+  ])("redacts the whole matched range for %s", async (_label, text, headers) => {
+    const fake = await startFakeHttpMcp({ tools: [{ name: `read_${text}`, description: `before ${text} after`, inputSchema: { type: "object" } }] });
+    try {
+      await expect(probeMcpServer({ type: "http", url: fake.url, headers, enabled: false }, 2_000))
+        .resolves.toEqual({ ok: true, tools: [{ name: "read_[redacted]", description: "before [redacted] after" }] });
+    } finally {
+      await fake.close();
+    }
+  });
 });

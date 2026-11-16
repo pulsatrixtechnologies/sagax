@@ -9,7 +9,7 @@
 # A few minutes. The full suite is deliberately NOT here: it runs once, at
 # the version cut.
 #
-# Under nice, through a one-at-a-time, first come first served queue (mkdir
+# At normal priority (SAGAX_VERIFY_NICE lowers it), through a one-at-a-time, first come first served queue (mkdir
 # lock and waiter tickets in the common git dir), and with every GIT_* the hook inherited stripped so a test cannot
 # commit into the branch being pushed via a leaked GIT_DIR (issue #1705).
 # Skips at once, before taking a ticket or the lock, when a verify:merge OK
@@ -184,20 +184,22 @@ if [ -z "$BASE" ]; then
   done
 fi
 BASE="${BASE:-origin/main}"
+# Priority. One gate runs at a time and every waiting push sits behind it, so
+# it runs at normal priority: under nice -n 19 on a machine where other
+# worktrees test at the same time, the head of the queue was starved and each
+# push took about 20 minutes. SAGAX_VERIFY_NICE=<0..19> lowers it again.
+NICE=""
+case "${SAGAX_VERIFY_NICE:-}" in
+  ''|0) ;;
+  *[!0-9]*) ;;
+  *) command -v nice >/dev/null 2>&1 && NICE="nice -n $SAGAX_VERIFY_NICE" ;;
+esac
 if [ -f "$STAMP" ]; then
   TEST_SIDE="tests,related,extra-source-text,extra-parity-pairs"
-  echo "pre-push: the stamp for $SHA_SHORT is not verify:merge's (no tests ran): nice -n 19 scripts/fast-gate.sh --base $BASE --only $TEST_SIDE"
-  if command -v nice >/dev/null 2>&1; then
-    nice -n 19 bash "$ROOT/scripts/fast-gate.sh" --base "$BASE" --only "$TEST_SIDE"
-  else
-    bash "$ROOT/scripts/fast-gate.sh" --base "$BASE" --only "$TEST_SIDE"
-  fi
+  echo "pre-push: the stamp for $SHA_SHORT is not verify:merge's (no tests ran): ${NICE:+$NICE }scripts/fast-gate.sh --base $BASE --only $TEST_SIDE"
+  $NICE bash "$ROOT/scripts/fast-gate.sh" --base "$BASE" --only "$TEST_SIDE"
   exit 0
 fi
-echo "pre-push: nice -n 19 pnpm verify:merge --base $BASE (git push --no-verify to skip)"
-if command -v nice >/dev/null 2>&1; then
-  nice -n 19 pnpm verify:merge --base "$BASE"
-else
-  pnpm verify:merge --base "$BASE"
-fi
+echo "pre-push: ${NICE:+$NICE }pnpm verify:merge --base $BASE (git push --no-verify to skip)"
+$NICE pnpm verify:merge --base "$BASE"
 # Stamp is written by verify-merge.mjs on OK (shared across worktrees).

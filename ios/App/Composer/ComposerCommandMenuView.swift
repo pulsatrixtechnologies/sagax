@@ -1,8 +1,8 @@
 // The composer's "/" menu (CO9, CO10, CO24), drawn above the field the way
 // the desktop's ComposerCommandMenu.tsx is: Sagax's own commands, then the
 // engine's (Claude Code, Codex) grouped Engine, Plugins, MCP (in a room:
-// under each bot's name), each with its argument hint. What the chat cannot
-// run stays listed, dimmed, with its reason. Layout-agnostic: the iPhone
+// under each bot's name), each with its argument hint. Every row runs: one
+// the app manages runs the app's own action (#4450). Layout-agnostic: the iPhone
 // composer stacks it above the field; the iPad pill can float it.
 import SwiftUI
 import CompanionCore
@@ -187,9 +187,9 @@ struct ComposerCommandMenuView: View {
     }
 
     private func desktopRow(_ item: ComposerMenuItem, desktop: DesktopTheme, highlighted: Bool) -> some View {
-        let reason = item.unavailable.map(Self.reason)
+        let action = item.appAction.map(Self.actionDescription)
         return Button {
-            guard item.insertion != nil else { return }
+            guard item.runs else { return }
             pick(item)
         } label: {
             HStack(spacing: 12) {
@@ -212,7 +212,7 @@ struct ComposerCommandMenuView: View {
                     }
                     .lineLimit(1)
                     Group {
-                        if let reason { Text(reason) } else { Text(verbatim: item.description) }
+                        if let action { Text(action) } else { Text(verbatim: item.description) }
                     }
                     .font(desktop.font(12))
                     .foregroundStyle(desktop.inkSecondary)
@@ -226,16 +226,15 @@ struct ComposerCommandMenuView: View {
             .frame(height: 53)
             .background(highlighted ? desktop.raisedHover : .clear)
             .contentShape(Rectangle())
-            .opacity(reason == nil ? 1 : 0.55)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("slash-\(item.label)")
     }
 
     private func phoneRow(_ item: ComposerMenuItem) -> some View {
-        let reason = item.unavailable.map(Self.reason)
+        let action = item.appAction.map(Self.actionDescription)
         return Button {
-            guard item.insertion != nil else { return }
+            guard item.runs else { return }
             Haptics.selection()
             pick(item)
         } label: {
@@ -259,7 +258,7 @@ struct ComposerCommandMenuView: View {
                         }
                     }
                     Group {
-                        if let reason { Text(reason) } else { Text(verbatim: item.description) }
+                        if let action { Text(action) } else { Text(verbatim: item.description) }
                     }
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
@@ -270,11 +269,10 @@ struct ComposerCommandMenuView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
-            .opacity(reason == nil ? 1 : 0.55)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("slash-\(item.label)")
-        .accessibilityHint(reason.map { Text($0) } ?? Text(verbatim: ""))
+        .accessibilityHint(action.map { Text($0) } ?? Text(verbatim: ""))
     }
 
     static func icon(_ item: ComposerMenuItem) -> String {
@@ -308,10 +306,13 @@ struct ComposerCommandMenuView: View {
         }
     }
 
-    static func reason(_ unavailable: HarnessCommandUnavailable) -> LocalizedStringKey {
-        switch unavailable {
-        case .interactive: return "Needs the engine's own terminal, so it cannot run from the chat"
-        case .managed: return "Managed by Sagax: model, effort, conversations, approvals and MCP servers have their own settings"
+    /// What a row the app runs itself does (`composer.commands.app.*`).
+    static func actionDescription(_ action: HarnessCommandAppAction) -> LocalizedStringKey {
+        switch action {
+        case .newChat: return "Start a new conversation with this bot"
+        case .model: return "Open this bot's model and effort"
+        case .permissions: return "Open this bot's approvals"
+        case .settings: return "Open this bot's settings"
         }
     }
 

@@ -1,8 +1,8 @@
 // The composer's "/" menu: Sagax's own commands and the engine's (Claude
 // Code, Codex), grouped Objective (a room's /goal and its subcommands),
 // Sagax, Skills (the bot's own commands), Engine, Plugins, MCP (in a group: under each bot's name), each with
-// its argument hint. What the chat cannot run stays listed, dimmed, with the
-// reason. Esc closes it, said in the footer (the reference design's prompt editor).
+// its argument hint. Every engine row runs: one the app manages runs the
+// app's own action (#4450). Esc closes it, said in the footer (the reference design's prompt editor).
 import type { RefObject } from "react";
 import { Activity, BookOpen, MessageSquareWarning, Pause, Play, Plug, Puzzle, RefreshCw, Repeat, Sparkles, Square, Target, Terminal, Wand2 } from "lucide-react";
 
@@ -71,10 +71,8 @@ export function ComposerCommandMenu({ items, highlight, loading, onPick, onHighl
         )}
       </div>
       {items.map((item, index) => {
-        const unavailable = item.kind === "engine" ? item.unavailable : undefined;
-        const reason = unavailable
-          ? t(`composer.commands.unavailable.${unavailable}`)
-          : item.kind === "sagax" ? item.command.unavailableReason : undefined;
+        const reason = item.kind === "sagax" ? item.command.unavailableReason : undefined;
+        const description = item.kind === "engine" && item.appAction ? t(`composer.commands.app.${item.appAction}`) : item.description;
         const argumentHint = item.kind === "engine" ? item.argumentHint : item.kind === "sagax" ? item.command.argumentHint : undefined;
         const section = composerMenuSection(item);
         const previous = items[index - 1];
@@ -114,7 +112,7 @@ export function ComposerCommandMenu({ items, highlight, loading, onPick, onHighl
                     <span className="truncate font-mono text-[11px] text-ink-tertiary">{argumentHint}</span>
                   )}
                 </span>
-                <span className="block truncate text-xs text-ink-secondary">{reason ?? item.description}</span>
+                <span className="block truncate text-xs text-ink-secondary">{reason ?? description}</span>
               </span>
             </button>
           </div>

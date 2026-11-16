@@ -1,7 +1,9 @@
 /** Isolated gallery for Playwright screenshots of the composer's "/" menu
  * with the bot's own commands (skills) listed. Not shipped in the app.
- * ?skin=<id>&lang=<code>&q=<typed after the slash>&mode=after|before
- * `before` builds the menu without the bot's skills, as origin/main did. */
+ * ?skin=<id>&lang=<code>&q=<typed after the slash>&mode=after|before&engine=managed
+ * `before` builds the menu without the bot's skills, as origin/main did.
+ * `engine=managed` lists the engine's commands Sagax manages (#4450): /clear,
+ * /model, a sign-in and a terminal-only one beside /compact. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ComposerCommandMenu } from "../components/ComposerCommandMenu";
@@ -23,7 +25,13 @@ const sagax: ComposerSlashCommand[] = [
   ...(TEACH_TASK_OFFERED ? [{ id: "learn" as const, label: "/learn", description: t("composer.command.learnDesc") }] : []),
   { id: "setup", label: "/setup", description: t("composer.command.setupDesc") },
 ];
-const engine: HarnessCommand[] = [
+const engine: HarnessCommand[] = params.get("engine") === "managed" ? [
+  { name: "clear", description: "Clear conversation history and free up context", group: "engine", argumentHint: "[name]", unavailable: "managed" },
+  { name: "compact", description: "Free up context", group: "engine", argumentHint: "<instructions>" },
+  { name: "model", description: "Set the AI model", group: "engine", unavailable: "managed" },
+  { name: "login", description: "Sign in", group: "engine", unavailable: "managed" },
+  { name: "doctor", description: "Diagnose the install", group: "engine", unavailable: "interactive" },
+] : [
   { name: "compact", description: "Free up context", group: "engine", argumentHint: "<instructions>" },
   { name: "context", description: "Show context usage", group: "engine" },
 ];

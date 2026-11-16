@@ -1052,9 +1052,16 @@ the bot engine's (`shared/harness-commands.ts`, `server/harness-commands.ts`,
   with `$name`. Without a session to resume, the next turn still gets the
   replay. Peer hops and card continuations never run one.
 - Sagax's commands (`goal`, `learn`, `setup`) win a name collision; the
-  engine's is `/engine:<name>`. What the chat cannot run (terminal-only, or
-  managed by Sagax: model, effort, sessions, approvals, MCP) is listed dimmed
-  with its reason and refused at send (409).
+  engine's is `/engine:<name>`. A listed command runs (#4450): a command
+  Sagax manages runs the app's own action when picked or typed
+  (`harnessCommandAppAction`): `/clear`, `/new`, `/reset` start a new
+  conversation with the bot (the chat's New chat; not in a group),
+  `/model`, `/effort`, `/fast` open its Model settings, `/permissions`,
+  `/allowed-tools` its approvals, `/config`, `/settings` its settings, the
+  same for a member on their own bot as for an admin. Any other command the
+  chat cannot run (terminal-only, or managed without an equivalent) is not
+  listed, and a typed one is refused at send (409). The phone lists and
+  runs `/clear` (New topic) the same way.
 - In a group (not a bot-to-bot channel, not a goal) a command is for ONE
   bot (`groupCommandTarget`): the bot the message starts by mentioning
   (`@Scout /compact ...`), else the lead when the group answers with one

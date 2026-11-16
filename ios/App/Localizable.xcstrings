@@ -44635,28 +44635,6 @@
         }
       }
     },
-    "Managed by Sagax: model, effort, conversations, approvals and MCP servers have their own settings": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Managed by Sagax: model, effort, conversations, approvals and MCP servers have their own settings"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Géré par Sagax : le modèle, l'effort, les conversations, les approbations et les serveurs MCP ont leurs propres réglages"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gerenciado pelo Sagax: modelo, esforço, conversas, aprovações e servidores MCP têm seus próprios ajustes"
-          }
-        }
-      }
-    },
     "Managed in Admin": {
       "localizations": {
         "fr": {
@@ -47905,28 +47883,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Requer login"
-          }
-        }
-      }
-    },
-    "Needs the engine's own terminal, so it cannot run from the chat": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Needs the engine's own terminal, so it cannot run from the chat"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Exige le terminal du moteur, donc impossible à lancer depuis la conversation"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Precisa do terminal do próprio motor, por isso não pode rodar pela conversa"
           }
         }
       }
@@ -118275,6 +118231,94 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mascote, forma, cor, skin"
+          }
+        }
+      }
+    },
+    "Start a new conversation with this bot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a new conversation with this bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commencer une nouvelle conversation avec ce bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Começar uma nova conversa com este bot"
+          }
+        }
+      }
+    },
+    "Open this bot's model and effort": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open this bot's model and effort"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le modèle et l'effort de ce bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir o modelo e o esforço deste bot"
+          }
+        }
+      }
+    },
+    "Open this bot's approvals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open this bot's approvals"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir les approbations de ce bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir as aprovações deste bot"
+          }
+        }
+      }
+    },
+    "Open this bot's settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open this bot's settings"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir les réglages de ce bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir as configurações deste bot"
           }
         }
       }

@@ -91,7 +91,9 @@ function replyLine(a: Assignment, requester: string): string {
  * harness-written quote: the "yes" never travels as pasted text. */
 function answerLine(a: Assignment): string {
   const question = quote(a.question, QUOTE_MAX);
-  return `${question ? `Your question was: "${question}". ` : ""}The person answered: "${quote(a.answer, QUOTE_MAX)}".`;
+  // The answer travels whole (stored already bounded and masked); only the
+  // question keeps the short quote (upstream #4969).
+  return `${question ? `Your question was: "${question}". ` : ""}The person answered: "${quote(a.answer, Number.POSITIVE_INFINITY)}".`;
 }
 
 /** The opening of an assignee's turn: assignment (person, routine or outside

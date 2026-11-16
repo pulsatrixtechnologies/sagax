@@ -479,7 +479,7 @@ labels), who may do it, limits. The system prompt only says to call it
   permissions, Settings, menus, engines or guides changed without
   regenerating. `server/self-knowledge/self-knowledge.test.ts` holds the 20 bench questions
   (`server/self-knowledge/bench-questions.json`). Adding a tool or a
-  Settings card: rerun `pnpm gen:self-knowledge` and commit the JSON.
+  Settings card: rerun `pnpm gen:self-knowledge` without committing the JSON. Development, tests and packaging generate it locally.
 
 ## Journal of a person's bot actions and their own tool access (2026-10-26)
 

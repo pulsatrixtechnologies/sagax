@@ -1,10 +1,10 @@
 // Writes server/self-knowledge/knowledge.generated.json (sagax_help).
 //   node --experimental-strip-types scripts/self-knowledge/generate.ts          write it
 //   node --experimental-strip-types scripts/self-knowledge/generate.ts --check  exit 1 when stale
-// Run by `pnpm build:server` (so every build and release carries a fresh
-// base) and by hand after a change to the tools, Settings, docs or notes.
+// Run by development, test setup and bundling. The output stays local,
+// never committed. Every package carries the generated file.
 // The day in the file moves only when the content changes.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { auditKnowledgeText, buildKnowledge, KNOWLEDGE_FILE, serializeKnowledge } from "./build.ts";
@@ -33,6 +33,8 @@ if (process.argv.includes("--check")) {
   }
   console.log(`${KNOWLEDGE_FILE} is up to date (${base.sections.length} sections, ${base.hash}).`);
 } else {
-  writeFileSync(path, text);
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, text);
+  renameSync(temporary, path);
   console.log(`${KNOWLEDGE_FILE}: ${base.sections.length} sections, ${Math.round(text.length / 1024)} KiB, ${base.hash}, ${base.generated}.`);
 }

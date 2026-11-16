@@ -87,7 +87,7 @@ import { useOrgPeople } from "@/lib/perspicax-org";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { BotRoleTag, PersonLabelTag } from "./LabelTag";
 import { nudgeLineText } from "@/lib/nudge-line";
-import { ChevronsRight, Layers, LogOut, UserRound } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Layers, LogOut, UserRound } from "lucide-react";
 import { backgroundThreads, personThreads } from "../../shared/background-threads";
 import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
@@ -2654,17 +2654,17 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           >
             <Archive size={20} />          </button>
         )}
-        {density === "icons" && !autoRail && (
+        {!autoRail && (
           <button
             type="button"
             data-sidebar-compact-toggle
-            aria-pressed="true"
-            onClick={() => setSidebarCollapsed(false)}
+            aria-pressed={density === "icons"}
+            onClick={() => setSidebarCollapsed(density !== "icons")}
             aria-label={t("sidebar.compact.toggle")}
-            title={t("sidebar.compact.turnOff")}
+            title={t(density === "icons" ? "sidebar.compact.turnOff" : "sidebar.compact.toggle")}
             className="flex h-9 w-full items-center justify-center rounded-lg px-2 text-sidebar-ink-secondary outline-none hover:bg-sidebar-hover hover:text-sidebar-ink focus-visible:ring-1 focus-visible:ring-accent/60"
           >
-            <ChevronsRight size={20} aria-hidden="true" />
+            {density === "icons" ? <ChevronsRight size={20} aria-hidden="true" /> : <ChevronsLeft size={20} aria-hidden="true" />}
           </button>
         )}
         {density === "icons" && (

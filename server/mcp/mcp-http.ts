@@ -135,7 +135,8 @@ function parseSseBlock(block: string): SseEvent | null {
     if (field === "event") event = value;
     else if (field === "data") data.push(value);
   }
-  return data.length ? { event, data: data.join("\n") } : null;
+  // An empty event type is the default one, as the event stream standard says.
+  return data.length ? { event: event || "message", data: data.join("\n") } : null;
 }
 
 /** Read an event stream until the handler says stop, the server ends it,

@@ -57,3 +57,20 @@ describe("the last event of a streamable HTTP reply", () => {
     await expect(answer('event: message\ndata: {"jsonrpc":"2.0","id":1,"res', false)).rejects.toMatchObject({ kind: "protocol" });
   });
 });
+
+describe("an event with an empty type", () => {
+  const reply = 'data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"read_notes"}]}}\n\n';
+  it.each([
+    ["empty event", "event:\n"],
+    ["empty event after its optional space", "event: \r\n"],
+    ["colonless event field", "event\r"],
+    ["empty last event field", "event: custom\nevent:\n"],
+  ])("is read as a message (%s)", async (_label, fields) => {
+    await expect(answer(`${fields}${reply}`, false)).resolves.toEqual({ tools: [{ name: "read_notes" }] });
+  });
+
+  it("while a custom type is still skipped for the message after it", async () => {
+    const custom = 'event: custom\ndata: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"wrong_event"}]}}\n\n';
+    await expect(answer(`${custom}event: message\n${reply}`, false)).resolves.toEqual({ tools: [{ name: "read_notes" }] });
+  });
+});

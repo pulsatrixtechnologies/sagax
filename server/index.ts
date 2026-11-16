@@ -9048,9 +9048,9 @@ type TurnWorkplace = {
 };
 const turnWorkplaces = new Map<string, TurnWorkplace>();
 /** #4449: the plugin MCP servers mounted for the person of a thread's
- * current turn (mountPluginMcp): theirs, never the shared host's. Cleared
- * with the turn's capabilities (revokeInternalCapabilityGeneration). */
-const turnPluginMcpServers = new Map<string, { generation: string; servers: Set<string> }>();
+ * current turn, per bot (mountPluginMcp): theirs, never the shared host's.
+ * Cleared with the turn's capabilities (revokeInternalCapabilityGeneration). */
+const turnPluginMcpServers = new Map<string, Map<string, { generation: string; servers: Set<string> }>>();
 let egressProxy: EgressProxy | null = null;
 
 /** The person a shared-computer call provably acts for

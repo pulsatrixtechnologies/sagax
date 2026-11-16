@@ -35,7 +35,7 @@ function fakeHost(overrides: Record<string, unknown> = {}) {
     effectiveBotOwner: () => "bob",
     turnSpeakerPrincipals: new Map([["t1", "bob"]]),
     personConnections: { servers: () => ({}) },
-    turnPluginMcpServers: new Map<string, { generation: string; servers: Set<string> }>(),
+    turnPluginMcpServers: new Map<string, Map<string, { generation: string; servers: Set<string> }>>(),
     turnWorkplaces: new Map(),
     ...overrides,
   } as Record<string, any>;
@@ -62,7 +62,7 @@ describe("a code host's plugin server mounted for the person", () => {
     const host = fakeHost();
     const integrations = await mountGithubPlugin(host);
     expect(Object.keys(integrations.custom ?? {})).toEqual(["github"]);
-    expect([...host.turnPluginMcpServers.get("t1")?.servers ?? []]).toEqual(["github"]);
+    expect([...host.turnPluginMcpServers.get("t1")?.get(bot.id)?.servers ?? []]).toEqual(["github"]);
     const owned = createOwnerScopedMcpServerFor(() => host)(bot, "t1");
     expect(owned("github")).toBe(true);
     // a read of issues on the code host: the person's own card
@@ -107,8 +107,23 @@ describe("a code host's plugin server mounted for the person", () => {
     expect(createOwnerScopedMcpServerFor(() => host)(bot, "t1")("github")).toBe(false);
   });
 
+  it("is kept per bot: another bot's turn in the same thread neither shares nor clears it", async () => {
+    const host = fakeHost();
+    await mountGithubPlugin(host);
+    const other = { id: "bot-2", ownerUserId: "bob" };
+    expect(createOwnerScopedMcpServerFor(() => host)(other, "t1")("github")).toBe(false);
+    await createMountPluginMcp(() => host)({}, { botId: other.id, threadId: "t1", generation: "g9", customMcp: false, principal: "bob" });
+    expect(createOwnerScopedMcpServerFor(() => host)(bot, "t1")("github")).toBe(true);
+    Object.assign(host, {
+      standInRoots: new Map(), endForeignTurns: () => {}, guestDrivenTurns: new Map(), internalCapabilities: new Map(),
+      activeInternalGenerationByThread: new Map(), internalGenerationByProviderTurn: { deleteGeneration: () => {} },
+    });
+    await createRevokeInternalCapabilityGeneration(() => host)("t1", "g9");
+    expect(createOwnerScopedMcpServerFor(() => host)(bot, "t1")("github")).toBe(true);
+  });
+
   it("the person's own Mac apps are theirs while Sagax mounted them for the turn", () => {
-    const host = fakeHost({ turnWorkplaces: new Map([["t1", { messagesPrincipal: "bob" }]]) });
+    const host = fakeHost({ turnWorkplaces: new Map([["t1", { botId: bot.id, messagesPrincipal: "bob" }]]) });
     const owned = createOwnerScopedMcpServerFor(() => host)(bot, "t1");
     expect(memberBotAdminApproval({ tool: "messages__mac_notes_search", workspaceRoot: root, ownerScopedMcpServer: owned })).toBe(false);
     const other = createOwnerScopedMcpServerFor(() => fakeHost())(bot, "t1");

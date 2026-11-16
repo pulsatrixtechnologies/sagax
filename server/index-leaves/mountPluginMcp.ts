@@ -14,7 +14,9 @@ async function mountPluginMcp(   integrations: NonNullable<SendTurnInput["integr
   // (remote as them, or a command relayed into their own sandbox): never
   // the shared host, so their cards are never an admin's
   // (ownerScopedMcpServerFor). A turn that mounts none leaves none behind.
-  host.turnPluginMcpServers.delete(input.threadId);
+  const previous = host.turnPluginMcpServers.get(input.threadId);
+  previous?.delete(input.botId);
+  if (previous && !previous.size) host.turnPluginMcpServers.delete(input.threadId);
   if (!input.customMcp) return { githubWithheld };
   const bot = host.store.bot(input.botId);
   if (!bot) return { githubWithheld };
@@ -44,7 +46,11 @@ async function mountPluginMcp(   integrations: NonNullable<SendTurnInput["integr
     integrations.custom = { ...integrations.custom, [server.name]: spec };
     mounted.add(server.name);
   }
-  if (mounted.size) host.turnPluginMcpServers.set(input.threadId, { generation: input.generation, servers: mounted });
+  if (mounted.size) {
+    const byBot = host.turnPluginMcpServers.get(input.threadId) ?? new Map();
+    byBot.set(input.botId, { generation: input.generation, servers: mounted });
+    host.turnPluginMcpServers.set(input.threadId, byBot);
+  }
   return { githubWithheld };
 }
   return mountPluginMcp;

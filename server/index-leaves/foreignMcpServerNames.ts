@@ -14,7 +14,7 @@ function foreignMcpServerNames(bot: BotRecord, threadId: string) {
     // an unreadable configuration names no server
   }
   // #4449: the plugin servers mounted for this turn are not Sagax's own
-  for (const name of host.turnPluginMcpServers.get(threadId)?.servers ?? []) out.add(name);
+  for (const name of host.turnPluginMcpServers.get(threadId)?.get(bot.id)?.servers ?? []) out.add(name);
   for (const person of [host.effectiveBotOwner(bot), host.turnSpeakerPrincipals.get(threadId)]) {
     if (!person || !isPrincipalId(person)) continue;
     try {

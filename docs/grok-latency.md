@@ -25,6 +25,12 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   `envFingerprint`, `cwd`, `spawnArgs`...), `budget`, `tools` (an engine that restarts for
   changed tool servers) or `reset`. Every way a process goes leaves its reason, so `none`
   (the reading of 0.8.125, which also covered a process that had exited on its own) is gone.
+- conv (#4394, on the turn's `[omb-turn]` start line, joined to this line by `thread=`): which
+  conversation the turn runs in: `chat` (a person's message in the bot's one conversation),
+  `routine`, `hidden` (an AI client's conversation; each of its asks opens a new one),
+  `opened` (a thread a bot opened: a teammate's job, a pair conversation), `parallel`,
+  `confidential`, `closed` or `unknown`. Only `chat` turns are a person's follow-ups; the
+  others start their own engine and opening block by design.
 - fullWhy (#4394): on a full=yes turn, why the whole opening block rode: `new:<why>` (a new
   native session: `no-cursor`, or the conversation's session could not be loaded:
   `load-failed`, `load-timeout`, `load-empty`, `load-model` when it was kept on another

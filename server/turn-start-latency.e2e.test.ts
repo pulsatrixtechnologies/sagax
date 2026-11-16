@@ -351,5 +351,7 @@ it("keeps the engine a conversation just used for its follow-up when another con
     expect(/path=(\w+)/.exec(lines[1]!)?.[1]).not.toBe("spawn");
     expect(lines[1]).not.toContain("spawnWhy=");
     expect(/full=(\w+)/.exec(lines[1]!)?.[1]).toBe("no");
+    // the turn's start line says it is a message in the bot's one conversation
+    expect(fixture.serverLog()).toContain(`thread=${first.activeTaskId.slice(0, 8)} conv=chat `);
   });
 }, 180_000);

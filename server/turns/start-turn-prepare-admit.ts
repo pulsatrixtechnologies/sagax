@@ -6,6 +6,7 @@ import { turnLanguage } from "./turn-language.ts";
 import { turnClockIn } from "./turn-clock.ts";
 import { withHelpPrefetch } from "../self-knowledge/help-prefetch.ts";
 import { turnTrace } from "./turn-trace.ts";
+import { conversationKind } from "./turn-log.ts";
 import { effortForEngine } from "../../shared/ultracode-effort.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
@@ -174,7 +175,8 @@ export function createPrepareAdmitStartTurn(
   if (state.warmOnly) console.error(`[voice-call] warming thread ${state.threadId}`);
   else console.error(turnStartLogLine({
     botId: state.botId, text: state.resolvedImages.text, images: state.turnImages.length, depth: state.commsDepth, card: Boolean(state.opts?.cardContinuation), spoken: state.spoken,
-    confidential: store.isConfidentialThread(state.threadId)
+    confidential: store.isConfidentialThread(state.threadId),
+    threadId: state.threadId, conversation: conversationKind(store.taskByThread(state.botId, state.threadId)),
   }));
   state.instanceId = state.instance.instanceId;
   // A turn always runs on the bot's own engine, model, effort and variant,

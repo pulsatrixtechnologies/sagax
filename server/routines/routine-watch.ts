@@ -762,7 +762,16 @@ export async function readWatch(deps: RoutineWatchDeps, routine: WatchRoutine, w
   const command = source.type === "files" ? remoteListingCommand(source.path, source.recursive === true) : source.command;
   const result = await place.exec(command, budget);
   if (result.timedOut) throw new RoutineWatchError(`The command ran past ${Math.round(budget.timeoutMs / 1000)} s`);
-  if (source.type === "files") return { probe: parseRemoteListing(result.stdout, source.path) };
+  if (source.type === "files") {
+    // #4463: the listing always prints the watched path itself, or
+    // "@@missing". Nothing at all, or a failed exit, means it never ran
+    // there (an environment that could not start a command answered
+    // "exit 1" with no output): a failed check, never an empty folder.
+    if (result.exitCode !== 0 || result.stdout.trim() === "") {
+      throw new RoutineWatchError(`The listing did not run in ${place.label}${result.exitCode === null ? "" : ` (exit code ${result.exitCode})`}`);
+    }
+    return { probe: parseRemoteListing(result.stdout, source.path) };
+  }
   if (result.exitCode === null) throw new RoutineWatchError("The command could not start");
   return { probe: { kind: "output", text: result.stdout, exitCode: result.exitCode, truncated: result.truncated } };
 }

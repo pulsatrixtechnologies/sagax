@@ -277,6 +277,22 @@ describe("the evaluator", () => {
     expect(ran).toContain("p='reports'");
   });
 
+  it("#4463: a listing that did not run in the environment fails the check, never reads as an empty folder", async () => {
+    const broken = (result: { exitCode: number | null; stdout: string }): WatchPlace => ({
+      kind: "remote", label: "Your server environment", awake: async () => true,
+      exec: async () => ({ ...result, truncated: false, timedOut: false }),
+    });
+    // what an environment that could not start the command answered: exit 1, nothing printed
+    await expect(createRoutineWatchEvaluator(deps(broken({ exitCode: 1, stdout: "" })))(routine, files("reports"))).rejects.toThrow(/did not run in Your server environment/);
+    await expect(createRoutineWatchEvaluator(deps(broken({ exitCode: null, stdout: "" })))(routine, files("reports"))).rejects.toThrow(/did not run/);
+    // nor a command the environment refused to start
+    const refused: WatchPlace = {
+      kind: "remote", label: "Your server environment", awake: async () => true,
+      exec: async () => { throw new Error("Your server environment could not start any command, and restarting it on its disk did not fix it."); },
+    };
+    await expect(createRoutineWatchEvaluator(deps(refused))(routine, command("ls"))).rejects.toThrow(/could not start any command/);
+  });
+
   it("a tool watch never touches the computer and refuses a write tool even if stored", async () => {
     let placed = 0;
     const evaluate = createRoutineWatchEvaluator(deps({ kind: "refuse", reason: "no" }, { at: 0 }, {

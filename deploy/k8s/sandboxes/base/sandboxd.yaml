@@ -196,7 +196,8 @@ data:
       containers:
         - name: sandbox
           image: REPLACE_SANDBOX_IMAGE
-          command: ["sleep", "infinity"]
+          # PID 1 reaps leftover background processes (#4463)
+          command: ["/bin/sh", "-c", "if command -v tini >/dev/null 2>&1; then exec tini -- sleep infinity; fi; echo \"sagax-sandbox: warning: tini is missing from this image, leftover background processes are not reaped (#4463)\" >&2; exec sleep infinity"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

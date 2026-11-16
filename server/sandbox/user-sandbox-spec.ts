@@ -21,6 +21,18 @@ export const SANDBOX_USER_LABEL = "com.pulsatrix.sagax.sandbox.user";
 export const SANDBOX_INSTANCE_LABEL = "com.pulsatrix.sagax.sandbox.instance";
 export const SANDBOX_UID = 1000;
 export const SANDBOX_WORKSPACE = "/workspace";
+/** #4463: the environment's first process. `sleep` as PID 1 never reaps:
+ * every process a command leaves in the background is reparented to it and
+ * stays a zombie when it ends. Each zombie keeps the session keyring the
+ * runtime created for its exec, and the kernel charges those keyrings to
+ * the environment's own uid (200 keys by default): after about 200 such
+ * leftovers no command could start at all ("unable to join session keyring:
+ * disk quota exceeded"). tini (in the image since 2026-10-01) reaps them;
+ * an older image without it keeps the plain sleep, and says so on its
+ * stderr (the container's or Pod's log). */
+export const SANDBOX_PID1_COMMAND: readonly string[] = [
+  "/bin/sh", "-c", "if command -v tini >/dev/null 2>&1; then exec tini -- sleep infinity; fi; echo \"sagax-sandbox: warning: tini is missing from this image, leftover background processes are not reaped (#4463)\" >&2; exec sleep infinity",
+];
 
 export function sandboxKeyForPrincipal(instance: string, principalId: string): string {
   if (!SANDBOX_INSTANCE_RE.test(instance)) throw new Error("invalid sandbox instance");
@@ -286,7 +298,7 @@ export function sandboxContainerSpec(config: Pick<SandboxdConfig, "instance" | "
       "PATH=/workspace/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       "SAGAX_ENVIRONMENT=user-sandbox",
     ],
-    Cmd: ["sleep", "infinity"],
+    Cmd: [...SANDBOX_PID1_COMMAND],
     Labels: sandboxLabels(config, key),
     NetworkDisabled: false,
     StopSignal: "SIGTERM",

@@ -12,7 +12,10 @@
 # Under nice, through a one-at-a-time, first come first served queue (mkdir
 # lock and waiter tickets in the common git dir), and with every GIT_* the hook inherited stripped so a test cannot
 # commit into the branch being pushed via a leaked GIT_DIR (issue #1705).
-# Skips when a verify:merge OK stamp already exists for this HEAD sha. The
+# Skips at once, before taking a ticket or the lock, when a verify:merge OK
+# stamp already exists for this HEAD sha or for every commit the push sends
+# (read from the hook's stdin, tags peeled; #4392); the check runs again after
+# the wait, in case another agent stamped the sha meanwhile. The
 # stamp means HEAD itself (#3684): verify-merge.mjs takes the diff from the
 # commit and refuses while a tracked file differs from HEAD or the diff imports
 # an untracked file; ignored files and untracked scratch files never block.
@@ -50,10 +53,37 @@ STAMP_DIR="$COMMON/sagax-verify-merge"
 STAMP="$STAMP_DIR/ok-$SHA"
 LOCK_DIR="$STAMP_DIR/queue.lock"
 
+# The commits this push sends (#4392): git feeds one line per ref on stdin,
+# "<local ref> <local sha> <remote ref> <remote sha>". A tag is peeled to its
+# commit; a deleted ref (all-zero sha) sends nothing.
+PUSHED=""
+if [ ! -t 0 ]; then
+  while read -r _lref lsha _rref _rsha; do
+    case "$lsha" in
+      "" | *[!0]*) ;;
+      *) continue ;;
+    esac
+    [ -n "$lsha" ] || continue
+    c="$(git rev-parse --verify -q "$lsha^{commit}" 2>/dev/null)" || c="$lsha"
+    PUSHED="$PUSHED $c"
+  done
+fi
+
 # A stamp verify-merge.mjs wrote: its first line is "ok <time>".
-verified_stamp() {
-  [ -f "$STAMP" ] && head -n 1 "$STAMP" | grep -q '^ok '
+ok_stamp() {
+  [ -f "$STAMP_DIR/ok-$1" ] && head -n 1 "$STAMP_DIR/ok-$1" | grep -q '^ok '
 }
+# HEAD is verified, or every pushed commit is (a release tag whose commit the
+# cut verified, a re-push of a verified commit, from any checkout).
+verified_stamp() {
+  ok_stamp "$SHA" && return 0
+  [ -n "$PUSHED" ] || return 1
+  for c in $PUSHED; do
+    ok_stamp "$c" || return 1
+  done
+  SHA_SHORT="$(git rev-parse --short $PUSHED | tr '\n' ' ' | sed 's/ $//')"
+}
+# Before the ticket and the lock: a verified commit never waits in line.
 if verified_stamp; then
   echo "pre-push: verify:merge already OK for $SHA_SHORT (stamp)"
   exit 0

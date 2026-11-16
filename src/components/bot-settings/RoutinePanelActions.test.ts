@@ -7,13 +7,14 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
 import type { Routine } from "@/lib/routines";
 
-vi.hoisted(() => {
+const fixture = vi.hoisted(() => {
   vi.stubGlobal("window", {});
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {} });
+  return { routineRuns: [] as unknown[] };
 });
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
-  return { ...original, useStore: () => ({ state: original.initialState, dispatch: vi.fn() }) };
+  return { ...original, useStore: () => ({ state: { ...original.initialState, routineRuns: fixture.routineRuns }, dispatch: vi.fn() }) };
 });
 afterAll(() => vi.unstubAllGlobals());
 
@@ -52,6 +53,36 @@ describe("a routine's action bar", () => {
     // Run now keeps its words longest; Enable and Delete fold first
     expect(all[0]).toContain(ACTION_LABEL_MAIN);
     for (const button of all.slice(1)) expect(button).toContain(`class="${ACTION_LABEL}"`);
+  });
+
+  it("keeps the same buttons in the same places while a run is in flight (#4436)", () => {
+    for (const enabled of [true, false]) {
+      fixture.routineRuns = [];
+      const idle = buttons(panel(enabled));
+      fixture.routineRuns = [{ id: "x1", routineId: "r1", status: "running" }];
+      const running = buttons(panel(enabled));
+      fixture.routineRuns = [];
+      expect(running).toHaveLength(idle.length);
+      const classOf = (button: string) => /class="([^"]+)"/.exec(button)?.[1];
+      expect(running.map(classOf)).toEqual(idle.map(classOf));
+      // only the run slot changes: it says Running in its own box
+      expect(running.slice(1)).toEqual(idle.slice(1));
+      expect(running[0]).toContain("data-run-now");
+      expect(running[0]).toContain(`<span class="${ACTION_LABEL_MAIN}">Running</span>`);
+    }
+  });
+
+  it("the routine's page keeps Run now's pill in place while a run is in flight, saying Running (#4436)", () => {
+    const render = (inFlight: boolean) => buttons(renderToStaticMarkup(createElement(RoutineDetail, {
+      routine: routine(true), runs: [], bots: [bot], canRun: true, inFlight, onOpenRun: noop, onRunNow: noop, onToggle: noop, onDelete: noop,
+    })).split("data-routine-actions")[1] ?? "");
+    const idle = render(false);
+    const running = render(true);
+    expect(running).toHaveLength(idle.length);
+    expect(running.slice(1)).toEqual(idle.slice(1));
+    expect(running[0]).toContain("data-run-now");
+    expect(running[0]).toContain("Running");
+    expect(running[0]).toContain('aria-disabled="true"');
   });
 
   it("never draws two actions with the same icon (Run now and Resume differ)", () => {

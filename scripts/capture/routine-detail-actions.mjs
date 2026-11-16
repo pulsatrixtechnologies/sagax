@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Headless screenshots of a routine page's action bar (2026-10-28): narrow
- * (icons) and wide (labels) panels, light and dark. Headless Chromium only.
- * Usage: node scripts/capture/routine-detail-actions.mjs [--out DIR] [--port N]
+ * (icons) and wide (labels) panels, light and dark, idle and with a run in
+ * flight (#4436), in each --langs (default fr). Headless Chromium only.
+ * Usage: node scripts/capture/routine-detail-actions.mjs [--out DIR] [--port N] [--langs fr,en]
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -14,6 +15,8 @@ const arg = (name) => { const index = process.argv.indexOf(name); return index >
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "routine-detail-actions"));
 const port = Number(arg("--port") ?? 5297);
 const skins = [{ id: "daylight", label: "light" }, { id: "pulsatrix", label: "dark" }];
+const states = [{ query: "", label: "idle" }, { query: "&running=1", label: "running" }];
+const langs = (arg("--langs") ?? "fr").split(",");
 const widths = [{ px: 300, label: "narrow" }, { px: 380, label: "medium" }, { px: 680, label: "wide" }];
 
 const vite = spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
@@ -33,13 +36,13 @@ try {
   await mkdir(outDir, { recursive: true });
   browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_VERIFY_BROWSER_CHROME ? { executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME } : {}) });
   const page = await browser.newPage({ viewport: { width: 760, height: 460 }, deviceScaleFactor: 2 });
-  for (const { id, label } of skins) for (const { px, label: size } of widths) {
-    await page.goto(`${base}?skin=${id}&lang=fr&width=${px}`, { waitUntil: "load" });
+  for (const lang of langs) for (const state of states) for (const { id, label } of skins) for (const { px, label: size } of widths) {
+    await page.goto(`${base}?skin=${id}&lang=${lang}&width=${px}${state.query}`, { waitUntil: "load" });
     await page.waitForSelector("[data-routine-detail-actions]");
     await page.waitForTimeout(300);
     const info = await page.$$eval("[data-routine-detail-actions] button", (bs) => bs.map((b) => ({ label: b.getAttribute("aria-label"), text: b.textContent?.trim(), shown: b.querySelector("span") ? getComputedStyle(b.querySelector("span")).display !== "none" : false, w: Math.round(b.getBoundingClientRect().width), h: Math.round(b.getBoundingClientRect().height) })));
-    console.log(label, size, JSON.stringify(info));
-    await page.screenshot({ path: join(outDir, `actions-${size}-${label}.png`) });
+    console.log(lang, state.label, label, size, JSON.stringify(info));
+    await page.screenshot({ path: join(outDir, `actions-${lang}-${state.label}-${size}-${label}.png`) });
   }
   console.log(`screenshots in ${outDir}`);
 } catch (error) {

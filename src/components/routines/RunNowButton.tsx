@@ -2,8 +2,10 @@
 // scheduler's own path (POST /api/routines/:id/run), with the routine's
 // Run as person; the schedule and the Active switch stay as they are, and a
 // paused routine stays paused. Shown to the bot's owner, the person the
-// routine runs as and an admin (the server checks it again); disabled while
-// a run of the routine is in flight.
+// routine runs as and an admin (the server checks it again). While a run of
+// the routine is in flight the same box stays in its place and says Running,
+// as the reference app's run button does (#4436): the bar keeps the same
+// buttons in the same places in both states.
 import { useRef, useState } from "react";
 import { Loader2, Play } from "lucide-react";
 
@@ -47,13 +49,14 @@ export function RunNowButton({ routine, bot, className, labelClassName, onStarte
   const [starting, setStarting] = useState(false);
   if (!canRunRoutineNow(state.config, routine, bot)) return null;
   // #3294: while a run of this routine is queued, running or waiting, Run
-  // now cannot apply (the server answers 409 run_in_flight): hidden, never
-  // shown greyed. The click's own start keeps its spinner.
-  const inFlight = routineRunInFlight(state.routineRuns, routine.id);
-  if (inFlight && !starting) return null;
+  // now cannot apply (the server answers 409 run_in_flight), never shown
+  // greyed. #4436: the box keeps its place (the other actions never move) and
+  // says Running with a spinner, a state and not an action, so a click does
+  // nothing. The click's own start keeps its spinner and its words.
+  const running = routineRunInFlight(state.routineRuns, routine.id) && !starting;
   const disabled = starting;
   const run = () => {
-    if (disabled || pending.current) return;
+    if (running || disabled || pending.current) return;
     pending.current = true;
     setStarting(true);
     dispatch({
@@ -67,10 +70,11 @@ export function RunNowButton({ routine, bot, className, labelClassName, onStarte
       onSettled: () => { pending.current = false; setStarting(false); },
     });
   };
+  const label = running ? t("routines.status.running") : t("routines.runNow");
   return (
-    <button type="button" data-run-now onClick={run} disabled={disabled} aria-label={t("routines.runNow")} title={t("routines.runNow")} className={className}>
-      {starting ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} fill="currentColor" />}
-      <span className={labelClassName}>{starting ? t("routines.runNow.starting") : t("routines.runNow")}</span>
+    <button type="button" data-run-now data-run-in-flight={running ? "" : undefined} onClick={run} disabled={disabled} aria-disabled={running || undefined} aria-label={label} title={label} className={className}>
+      {starting || running ? <Loader2 size={15} className="animate-spin motion-reduce:animate-none" /> : <Play size={15} fill="currentColor" />}
+      <span className={labelClassName}>{starting ? t("routines.runNow.starting") : label}</span>
     </button>
   );
 }

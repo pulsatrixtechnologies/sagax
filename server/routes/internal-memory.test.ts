@@ -188,6 +188,18 @@ describe("createInternalMemoryRoutes", () => {
     expect(sent).toEqual([{ status: 201, body: { messageId: "m-card" } }]);
   });
 
+  // #4475: the card tool's result reads what the card call returned: a bot
+  // whose turn ends with its first card is told so (and to raise its other
+  // items with wait false), never asked to call ask_choice again into a turn
+  // that is already over
+  it("POST /api/internal/options-card passes on what the card call says to the bot", async () => {
+    const createCard = vi.fn(() => ({ ok: true as const, messageId: "m-card", turnEnds: true as const, holds: false as const, replaced: true as const, addressedTo: "Sam" }));
+    const route = createInternalMemoryRoutes(deps({ createCard: createCard as unknown as InternalMemoryDeps["createCard"] }));
+    const { sent, run } = call(route, { path: "/api/internal/options-card", body: { tool: "ask_choice", question: "Which?", options: ["A", "B"] } });
+    await run();
+    expect(sent).toEqual([{ status: 201, body: { messageId: "m-card", turnEnds: true, holds: false, replaced: true, addressedTo: "Sam" } }]);
+  });
+
   describe("propose_page replace (#4099): the bot changes the selected words in place", () => {
     const source = "# Report\n\nClosed tickets, response times and backlog.\n\nClosed tickets again.\n";
     const page = { id: "page_12345678", botId: "bot-1", threadId: "t-1", versions: [{ n: 1 }, { n: 2 }] };

@@ -64,6 +64,7 @@ import { sameModelSelection } from "../shared/thread-model.ts";
 import { nextOpenThread } from "../shared/wire.ts";
 import { namesEngine } from "./bots/bot-engine.ts";
 import { introTaskCard } from "./intro-tour.ts";
+import { isFirstRunQuizCard } from "../shared/options-card.ts";
 import { newBotGreeting } from "./bots/new-bot-greeting.ts";
 // Re-exported under their historical names so server-side importers keep working.
 export type {
@@ -2345,11 +2346,13 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return true;
   }
 
-  /** Hide the first-run quiz on this thread, if it is still open. */
+  /** Hide the first-run quiz on this thread, if it is still open. #4475:
+   * never a bot's question card (a person's answer to one of two cards must
+   * not put the other away), a proposal or a role transition. */
   dismissOnboardingCard(threadId: string): Message | null {
     const t = this.thread(threadId);
     const card = t.messages.find(
-      (message) => message.kind === "options" && message.card && !message.card.requestId && !message.card.dismissed,
+      (message) => message.kind === "options" && isFirstRunQuizCard(message.card) && !message.card!.dismissed,
     );
     if (!card?.card) return null;
     return this.patchMessage(threadId, card.id, { card: { ...card.card, dismissed: true } });

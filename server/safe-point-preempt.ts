@@ -9,6 +9,30 @@
 // owns the interrupt. A tool that runs past the ceiling is cut there, so the
 // message never waits for minutes.
 
+import { isPersistentQuestionCard } from "../shared/ask-question.ts";
+
+type RequestCard = Parameters<typeof isPersistentQuestionCard>[0] & {
+  requestId?: string; approvalOrigin?: unknown; answered?: string; dismissed?: boolean;
+};
+
+/** An open request card of this turn that a Stop of the turn settles
+ * (closeOpenApprovals): not answered or put away, not another origin's
+ * approval, not a durable proposal (routine, skill). */
+export function openTurnRequestCard(card: RequestCard | null | undefined): boolean {
+  return Boolean(card?.requestId) && !card!.approvalOrigin && !card!.answered && !card!.dismissed
+    && !card!.routineRequest && !card!.skillRequest;
+}
+
+/** #4475: an open card a Stop of its turn would close unanswered (a
+ * permission and the like; a persistent question survives the Stop). While
+ * one waits on the person, their words never interrupt the turn at a safe
+ * point: the answer to a sibling question card would close it silently.
+ * The words wait in the queue for the turn, which goes on once the card is
+ * answered. */
+export function stopClosesCard(card: RequestCard | null | undefined): boolean {
+  return openTurnRequestCard(card) && !isPersistentQuestionCard(card);
+}
+
 /** How long a running tool may hold a waiting message before the turn is
  * interrupted anyway. */
 export const SAFE_POINT_CEILING_MS = 45_000;

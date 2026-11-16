@@ -114,6 +114,25 @@ describe("what the pinned card holds, the conversation does not draw (#3681)", (
     expect(pinnedItemsFrom([], "conv", [ask("q-live", 700, { answered: "answer", answeredText: "A" })])).toEqual([]);
   });
 
+  // #4475 (beside #4438's "an answered card closes at once"): two questions
+  // of one turn, raised as requests; the person answers the first and the
+  // pinned card closes it at once, never its sibling, which stays pinned,
+  // held from the conversation and answerable
+  it("answering one of two cards of a turn closes that card only", () => {
+    const [first] = servedList();
+    const one = ask("q1", 700);
+    const two = ask("q2", 701);
+    const served: ServedWaitingItem[] = [one, two].map((message) => ({ ...first!, id: message.card!.requestId!, kind: "question", messageId: message.id, threadId: "conv", message }));
+    expect(pinnedItemsFrom(served, "conv", [one, two]).map((item) => item.key)).toEqual(["conv:req-q1", "conv:req-q2"]);
+    // answered here, before the list is read again
+    const answered = ask("q1", 700, { answered: "answer", answeredText: "A" });
+    const after = pinnedItemsFrom(served, "conv", [answered, two]);
+    expect(after.map((item) => [item.kind, item.key])).toEqual([["question", "conv:req-q2"]]);
+    expect([...pinnedHeldIds(after)]).toEqual(["q2"]);
+    // and once the list is read again
+    expect(pinnedItemsFrom(served.slice(1), "conv", [answered, two]).map((item) => item.key)).toEqual(["conv:req-q2"]);
+  });
+
   it("lands See in the conversation on the words before the ask, past cards it also holds", () => {
     const words = { id: "w", role: "bot", kind: "text", at: 1, text: "Two things first." } as Message;
     const step = { id: "s", role: "bot", kind: "activity", at: 2, tool: { name: "Read", ok: true } } as Message;

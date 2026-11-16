@@ -103,7 +103,7 @@ extension Session {
         switch OptionCardRules.dismissal(for: card) {
         case .patch:
             guard case let .bot(bot) = chat else { return }
-            await perform { try await $0.dismissCard(botId: bot.id, messageId: message.id) }
+            await perform { try await $0.dismissCard(botId: bot.id, messageId: message.id, threadId: chat.threadId) }
         case let .respond(behavior, words):
             guard let requestId = card.requestId else { return }
             let decision = ApprovalDecision(
@@ -112,6 +112,18 @@ extension Session {
             )
             await perform { try await $0.respond(threadId: chat.threadId, decision: decision) }
         }
+    }
+
+    /// #4475: a pick on a bot's question drawn in the chat, as the desktop
+    /// answers it: this card alone is marked answered (here at once, then
+    /// in its own thread on the computer), then the pick goes out as the
+    /// person's message. Every other card of the turn stays open.
+    func answerChatQuestion(_ message: Message, in chat: Chat, pick: String) async {
+        applyLocalCard(OptionCardRules.answeredLocally(message, with: pick), threadId: chat.threadId)
+        if case let .bot(bot) = chat {
+            await perform { try await $0.answerChatCard(botId: bot.id, messageId: message.id, threadId: chat.threadId, answer: pick) }
+        }
+        await send(pick, to: chat)
     }
 
     // MARK: Skip a waiting card (#3471)

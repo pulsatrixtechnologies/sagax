@@ -427,9 +427,12 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     return recordPeer({ ok: true, messageId: raised.messageId, waitsForPerson: true, ...addressed, ...roomPeopleResult, ...(holds ? {} : { holds: false as const }) });
   }
   // a direct thread replays a bot row that carries `from` as another bot's line
+  // #4475: the card is a bot's question (requestType), never the first-run
+  // quiz a later message of the person puts away: a second card of the
+  // same turn stays drawn while the first is answered
   // full-access: ask-choice
   const message = args.store.appendMessage(args.threadId, {
-    role: "bot", kind: "options", card: { ...shownCard, ...keyed, ...learned },
+    role: "bot", kind: "options", card: { ...shownCard, ...keyed, ...learned, requestType: "question" },
     ...from,
   });
   if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, message.id);

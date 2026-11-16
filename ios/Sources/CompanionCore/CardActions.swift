@@ -478,10 +478,12 @@ public enum ApprovalOutcome: Hashable, Sendable {
 
 public enum OptionCardRules {
     /// A first-run quiz, not a live ask (those carry a request id).
+    /// `isFirstRunQuizCard` in shared/options-card.ts.
     public static func isOnboardingCard(_ message: Message) -> Bool {
-        // a proactive proposal stays until answered, like a live ask
+        // a proactive proposal stays until answered, like a live ask;
+        // #4475: so does a bot's question drawn in the chat
         message.kind == .options && message.card != nil && message.card?.requestId == nil && message.card?.proactiveProposal == nil
-            && message.card?.roleTransition == nil
+            && message.card?.roleTransition == nil && message.card?.requestType != "question"
     }
 
     /// Hidden once picked, dismissed, or talked past (a later user text).
@@ -490,6 +492,40 @@ public enum OptionCardRules {
         if card.dismissed == true || card.answered != nil { return true }
         guard let index = transcript.firstIndex(where: { $0.id == message.id }) else { return false }
         return transcript[(index + 1)...].contains { $0.role == .user && $0.kind == .text }
+    }
+
+    /// #4475: a bot's question drawn in the chat (ask_choice): no request
+    /// id, answered by a tap that becomes the person's next message
+    /// (`isChatAskCard` in OptionCard.tsx).
+    public static func isChatQuestion(_ card: OptionCard) -> Bool {
+        card.requestId == nil && card.requestType == "question" && card.proactiveProposal == nil && card.roleTransition == nil
+    }
+
+    /// #4475: a chat question still waiting for a pick: its choices are
+    /// offered, whatever the person wrote or answered elsewhere since.
+    public static func waitsForPick(_ card: OptionCard) -> Bool {
+        isChatQuestion(card) && card.answered == nil && card.dismissed != true && card.expired != true && card.skipped != true
+    }
+
+    /// #4475: a chat question put away without an answer leaves the chat;
+    /// an answered one keeps its card with the pick marked.
+    public static func hidesChatQuestion(_ card: OptionCard) -> Bool {
+        isChatQuestion(card) && card.dismissed == true && card.answered == nil
+    }
+
+    /// #4475: the pick a settled chat question marks (nil while it waits).
+    public static func pick(_ card: OptionCard) -> String? {
+        guard isChatQuestion(card), let answered = card.answered else { return nil }
+        return answered
+    }
+
+    /// #4475: the card settled here with the person's pick before the
+    /// server's frame lands (desktop `answerCard`): answered, never put
+    /// away, so the card stays with its pick marked.
+    public static func answeredLocally(_ message: Message, with pick: String) -> Message {
+        var settled = message
+        settled.card?.answered = pick
+        return settled
     }
 
     /// Closing a card: a quiz is patched dismissed; a live ask is answered

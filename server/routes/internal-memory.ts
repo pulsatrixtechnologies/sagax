@@ -23,6 +23,19 @@ import { PASS } from "./table.ts";
 
 const MAX_MEMORY_REFUSALS_PER_TURN = 3;
 
+/** #4475: the outcome fields of an ask_choice the card tool's result reads
+ * (server/drivers/agents-call-cards.ts, server/widgets/chat-card-types.ts
+ * AgentCardResult): passed on as the card call returned them. */
+const CARD_OUTCOME_FIELDS = ["replaced", "retired", "holds", "turnEnds", "addressedTo", "people", "inRoom", "told", "note", "toPerson", "alreadyAnswered"] as const;
+function cardOutcomeFields(result: object): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const field of CARD_OUTCOME_FIELDS) {
+    const value = (result as Record<string, unknown>)[field];
+    if (value !== undefined) out[field] = value;
+  }
+  return out;
+}
+
 export interface InternalMemoryBot {
   id: string;
   name: string;
@@ -290,6 +303,11 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           ...(result.answered ? { answered: result.answered } : {}),
           // 2026-11-03: raised as a real question card the run waits on
           ...("waitsForPerson" in result && result.waitsForPerson ? { waitsForPerson: true } : {}),
+          // #4475: what the tool result tells the bot (agents-call-cards.ts):
+          // above all `turnEnds`, so a bot whose turn ends with its first
+          // card is told to raise its other items with wait false instead of
+          // calling ask_choice again into a turn that is already over
+          ...cardOutcomeFields(result),
           // #2048: choose_page_target auto-pick or listed offers
           ...("auto" in result && result.auto ? { auto: result.auto } : {}),
           ...("targets" in result && result.targets ? { targets: result.targets } : {}),

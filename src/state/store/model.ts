@@ -9,6 +9,7 @@ import type { AppSettingsSection, BotSettingsSection } from "../settings-section
 import type { BotUpdatePatch } from "../bot-patch-queue";
 import type { BotVisibility, CloudBackend, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, GroupThreadUsage, SteerQueueReason, VoiceCallMark, WaitingOnCard, WireBotConversation, WireTurnTiming, WireWaitingApproval } from "../../../shared/wire";
 import { type DataSheet, type DataTable } from "../../../shared/data-surface";
+import { isFirstRunQuizCard } from "../../../shared/options-card";
 import type { ModelListIssue } from "../../../shared/azure-openai";
 import type { TurnDigest } from "../../../shared/digest";
 import type { MessageReaction } from "../../../shared/reactions";
@@ -2380,8 +2381,11 @@ export function patchGroupCard(state: AppState, groupId: string, messageId: stri
 
 /** First-run quiz still sitting on this bot's thread. */
 export function openOnboardingCard(bot: Bot): Message | undefined {
+  // #4475: never a bot's question drawn in the chat, a proposal or a role
+  // transition: the person's message (an answer to another card included)
+  // puts the first-run quiz away, nothing else
   return bot.messages.find(
-    (message) => message.kind === "options" && message.card && !message.card.requestId && !message.card.dismissed,
+    (message) => message.kind === "options" && isFirstRunQuizCard(message.card) && !message.card!.dismissed,
   );
 }
 

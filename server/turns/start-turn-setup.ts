@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
+import { withOpenAsksNote } from "../messages/open-asks.ts";
 
 export function createSetupStartTurn(host: StartTurnHost) {
   const {
@@ -297,11 +298,18 @@ export function createSetupStartTurn(host: StartTurnHost) {
           !resolveBotSkills(state.bot.id, assignedForTurn).some((entry: { name: string; enabled: boolean }) => entry.name === skill.name && !entry.enabled)),
       );
     const setupText = state.peerToolsMounted ? expandSetupTurnText(skillCommandText) : skillCommandText;
-    const userTurnText = promptWithReply(
+    const repliedText = promptWithReply(
       state.skillAuthoring ? expandLearnTurnText(setupText) : setupText,
       state.opts?.replyTo,
       botUserName(state.bot),
     );
+    // #4475: a person's turn (an answer to one card, or other words) while
+    // other questions of the bot still wait is told which, so the bot goes
+    // on with what is answered and leaves the open cards to the person
+    const personTurn = state.speaker?.origin === "person" || state.speaker?.origin === "operator";
+    const userTurnText = personTurn
+      ? withOpenAsksNote(repliedText, store.messagesFor(state.threadId), state.opts?.replyTo?.id)
+      : repliedText;
     // Decided again at dispatch when setup outlasted a soul edit (config).
     state.decideContext = (config: string) => {
       // A Codex thread keeps the last effort it was sent and no turn can clear

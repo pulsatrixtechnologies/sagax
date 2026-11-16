@@ -112,8 +112,10 @@
 //                     marker the prompt holds, as a model reads its ask,
 //                     and makes no call when none is there; an entry's
 //                     "reply" is said instead of the call lines, "delayMs"
-//                     waits first, and "hold" keeps the prompt open after
-//                     the reply until session/cancel)
+//                     waits first, "hold" keeps the prompt open after
+//                     the reply until session/cancel, and "ask" lists the
+//                     calls that first wait on a permission to run a shell
+//                     command (`echo hi`))
 //                   | lend-question (call list_shared_computers through the
 //                     injected agents MCP, ask a question card, call it again
 //                     once the card is answered, and reply
@@ -1850,7 +1852,9 @@ function handle(msg: any) {
         // `hold` keeps the prompt open after them until session/cancel, the
         // way grok went on after a card it was told to end its turn on;
         // `delayMs` waits that long first
-        type WhenEntry = { calls?: string; args?: Record<string, Record<string, unknown>>; reply?: string; hold?: boolean; delayMs?: number };
+        // `ask` (#4475): the calls this entry first asks to run a shell
+        // command for (a permission card)
+        type WhenEntry = { calls?: string; args?: Record<string, Record<string, unknown>>; reply?: string; hold?: boolean; delayMs?: number; ask?: string[] };
         let byPrompt: WhenEntry | undefined;
         if (process.env.FAKE_ACP_MCP_CALLS_WHEN) {
           try {
@@ -1868,12 +1872,27 @@ function handle(msg: any) {
           const results: string[] = [];
           if (byPrompt?.delayMs) await new Promise((resolve) => setTimeout(resolve, byPrompt?.delayMs));
           for (const call of calls) {
-            const [server, tool] = call.split(":");
+            // "server:tool#2": the same tool again with its own arguments
+            // (keyed by the whole call), as a model asking two things
+            const [server, named] = call.split(":");
+            const tool = named?.split("#")[0];
             const entry = sessionMcp.find((candidate) => candidate.name === server);
             if (!entry?.command || !tool) { results.push(`${call} -> error not mounted`); continue; }
             // FAKE_ACP_ASK_BEFORE_MCP=use_tool: ask first the way grok 1.0.46
             // does in default mode when its MCP tools sit behind use_tool
-            if (process.env.FAKE_ACP_ASK_BEFORE_MCP === "use_tool") {
+            // `ask` (#4475): this call waits first on a shell command the
+            // agent asks to run, the permission card a person answers
+            if (byPrompt?.ask?.includes(call)) {
+              const allowed = await new Promise<boolean>((resolve) => {
+                pendingPermissionId = 9300 + results.length;
+                onPermissionAnswered = resolve;
+                out({ jsonrpc: "2.0", id: pendingPermissionId, method: "session/request_permission", params: {
+                  toolCall: { toolCallId: `call-ask-${results.length}`, kind: "execute", rawInput: { command: "echo hi" }, title: "echo hi" },
+                  options: [{ optionId: "allow-once", kind: "allow_once" }, { optionId: "reject", kind: "reject_once" }],
+                } });
+              });
+              if (!allowed) { results.push(`${call} -> refused at the agent's prompt`); continue; }
+            } else if (process.env.FAKE_ACP_ASK_BEFORE_MCP === "use_tool") {
               const allowed = await new Promise<boolean>((resolve) => {
                 pendingPermissionId = 9200 + results.length;
                 onPermissionAnswered = resolve;

@@ -45,6 +45,15 @@ function flat(id: string, more: Partial<NonNullable<Message["card"]>> = {}): Mes
   } as Message;
 }
 
+// #4475: a bot's ask_choice drawn in the person's own chat (no request: the
+// pick is their next message), as the server stores it
+function chatAsk(id: string, question: string, options: string[], more: Partial<NonNullable<Message["card"]>> = {}): Message {
+  return {
+    id, role: "bot", kind: "options", at: 1,
+    card: { title: "Your bot has a question", subtitle: question, options, requestType: "question", ...more },
+  } as Message;
+}
+
 // Answered here, settled elsewhere (409): the optimistic local answer, then
 // the server's real outcome merged on top the way the reducer does it.
 function settledElsewhere(id: string, outcome: string): Message {
@@ -184,6 +193,12 @@ function Preview() {
         </Row>
         <Row id="person-answered" label="ask_person, répondue">
           <OptionCard botId="preview-bot" threadId="t" message={flat("g", { answered: "Non, garde-les actifs", answeredText: "Non, garde-les actifs" })} />
+        </Row>
+        <Row id="chat-asks-two" label="ask_choice dans le chat, deux cartes d'un même tour : la première répondue, la deuxième attend encore (#4475)">
+          <div className="flex w-full flex-col gap-3">
+            <OptionCard botId="preview-bot" threadId="t" message={chatAsk("ca1", FR ? "Quelle couleur ?" : "Which color?", FR ? ["Rouge", "Bleu"] : ["Red", "Blue"], { answered: FR ? "Rouge" : "Red" })} />
+            <OptionCard botId="preview-bot" threadId="t" message={chatAsk("ca2", FR ? "Quelle taille ?" : "Which size?", FR ? ["Petite", "Grande"] : ["Small", "Large"])} />
+          </div>
         </Row>
         <Row id="legacy-question" label="Carte d'avant 0.8.78 (#3515) : titre et Oui / Non dans la langue de l'app">
           <OptionCard botId="preview-bot" threadId="t" message={{ id: "lq", role: "bot", kind: "options", at: 1, card: { title: "Your bot has a question", subtitle: FR ? "Je continue avec la facture de mars ?" : "Do I go on with the March invoice?", options: ["Yes", "No"], requestId: "req-lq", requestType: "question" } } as Message} />

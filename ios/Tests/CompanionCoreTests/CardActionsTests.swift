@@ -300,6 +300,60 @@ final class CardActionsTests: XCTestCase {
         XCTAssertEqual(OptionCardRules.dismissal(for: quiz.card!), .patch)
     }
 
+    /// #4475: two questions a bot drew in the chat in one turn: the person's
+    /// answer to the first never hides the second.
+    func testABotQuestionInTheChatStaysWhenAnotherIsAnswered() throws {
+        let second = try decode(Message.self, #"""
+        {"id":"q2","role":"bot","kind":"options","at":2,"card":{"title":"Size","subtitle":"Which size?","options":["Small","Large"],"requestType":"question"}}
+        """#)
+        XCTAssertFalse(OptionCardRules.isOnboardingCard(second))
+        XCTAssertFalse(OptionCardRules.hidesOnboardingCard(second, in: [second, try text("u", .user)]))
+    }
+
+    /// #4475: on the phone, the waiting chat question offers its choices
+    /// (it has no request id), the answered one settles with its pick
+    /// marked, and answering one never settles nor hides the other.
+    func testAChatQuestionOffersItsChoicesAndSettlesAloneWithItsPick() throws {
+        let first = try decode(Message.self, #"""
+        {"id":"q1","role":"bot","kind":"options","at":1,"card":{"title":"Color","subtitle":"Which color?","options":["Red","Blue"],"requestType":"question"}}
+        """#)
+        let second = try decode(Message.self, #"""
+        {"id":"q2","role":"bot","kind":"options","at":2,"card":{"title":"Size","subtitle":"Which size?","options":["Small","Large"],"requestType":"question"}}
+        """#)
+        let firstCard = try XCTUnwrap(first.card)
+        XCTAssertTrue(OptionCardRules.isChatQuestion(firstCard))
+        XCTAssertTrue(OptionCardRules.waitsForPick(firstCard))
+        XCTAssertFalse(firstCard.isPending)
+        XCTAssertNil(OptionCardRules.pick(firstCard))
+
+        let answered = OptionCardRules.answeredLocally(first, with: "Blue")
+        let answeredCard = try XCTUnwrap(answered.card)
+        XCTAssertEqual(OptionCardRules.pick(answeredCard), "Blue")
+        XCTAssertFalse(OptionCardRules.waitsForPick(answeredCard))
+        XCTAssertFalse(OptionCardRules.hidesChatQuestion(answeredCard))
+        XCTAssertNotEqual(answeredCard.dismissed, true)
+        XCTAssertEqual(OptionCardRules.dismissal(for: answeredCard), .patch)
+
+        // the pick goes out as the person's message: the second still waits
+        let transcript = [answered, second, try text("u", .user, "Blue")]
+        let secondCard = try XCTUnwrap(second.card)
+        XCTAssertTrue(OptionCardRules.waitsForPick(secondCard))
+        XCTAssertFalse(OptionCardRules.hidesOnboardingCard(second, in: transcript))
+        XCTAssertFalse(OptionCardRules.hidesChatQuestion(secondCard))
+        XCTAssertFalse(OptionCardRules.hidesOnboardingCard(answered, in: transcript))
+
+        // put away without an answer: it leaves the chat
+        var closed = second
+        closed.card?.dismissed = true
+        XCTAssertTrue(OptionCardRules.hidesChatQuestion(try XCTUnwrap(closed.card)))
+        XCTAssertFalse(OptionCardRules.waitsForPick(try XCTUnwrap(closed.card)))
+
+        // a live ask and the first-run quiz are not chat questions
+        XCTAssertFalse(OptionCardRules.isChatQuestion(try XCTUnwrap(try ask("r", tool: "Bash").card)))
+        let quiz = try decode(Message.self, #"{"id":"z","role":"bot","kind":"options","at":1,"card":{"title":"Hi","subtitle":"","options":["A"]}}"#)
+        XCTAssertFalse(OptionCardRules.isChatQuestion(try XCTUnwrap(quiz.card)))
+    }
+
     func testClosingALiveAskAnswersIt() throws {
         let tool = try XCTUnwrap(try ask("a", tool: "Read").card)
         XCTAssertEqual(OptionCardRules.dismissal(for: tool), .respond(behavior: "deny", message: "Dismissed by user."))

@@ -26,8 +26,19 @@ extension CompanionClient {
     }
 
     /// A first-run option card put away (`PATCH /api/bots/:id/cards/:m`).
-    public func dismissCard(botId: String, messageId: String) async throws {
-        try await send(try makeRequest("PATCH", "/api/bots/\(botId)/cards/\(messageId)", body: ["dismissed": true]))
+    public func dismissCard(botId: String, messageId: String, threadId: String? = nil) async throws {
+        var body: [String: Any] = ["dismissed": true]
+        if let threadId { body["threadId"] = threadId }
+        try await send(try makeRequest("PATCH", "/api/bots/\(botId)/cards/\(messageId)", body: body))
+    }
+
+    /// #4475: a bot's question drawn in the chat settled with the person's
+    /// pick, in the thread it lives in, before the pick goes out as their
+    /// message (`PATCH /api/bots/:id/cards/:m`, the desktop's `answerCard`).
+    public func answerChatCard(botId: String, messageId: String, threadId: String, answer: String) async throws {
+        try await send(try makeRequest(
+            "PATCH", "/api/bots/\(botId)/cards/\(messageId)", body: ["answered": answer, "threadId": threadId]
+        ))
     }
 
     /// Stop one parallel task (`POST /api/bots/:id/parallel/:t/stop`).

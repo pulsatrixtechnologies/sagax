@@ -16649,6 +16649,8 @@ type HarnessChoice = {
   /** #4238: raised without ringing (the start-up back-fill rings its one
    * grouped line instead). */
   quiet?: true;
+  /** #4490: a form's or a checklist's rows, each with its control. */
+  questions?: import("../shared/ask-question.ts").AskQuestion[];
 };
 
 /** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
@@ -24148,7 +24150,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const cardThread = runRoom ?? personThread ?? threadId;
       const cardRoom = store.groupByThread(cardThread);
       const room = cardRoom && !cardRoom.dm && !cardRoom.peopleDm ? { people: roomPeopleOf(cardRoom), name: cardRoom.name, ...(runRoom ? { fromRun: true } : {}) } : undefined;
-      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk) || Boolean(personThread) || Boolean(reception);
+      // #4490: a form or a checklist is always a real question card: its rows
+      // are answered on it, which a passive card cannot carry
+      const formAsk = Boolean(ask && (ask.questions !== undefined || ask.items !== undefined));
+      const raises = harnessQuestionThread(cardThread) || Boolean(room && keyedAsk) || Boolean(personThread) || Boolean(reception) || formAsk;
       const posted = createAgentCard({
         store,
         bot,

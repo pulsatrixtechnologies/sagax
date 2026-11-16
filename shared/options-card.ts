@@ -1,4 +1,5 @@
-import { MAX_QUESTION_TEXT } from "./ask-question.ts";
+import { ANSWER_KINDS, CHOICE_KINDS, FORM_MAX_QUESTIONS, MAX_ACTION_LABEL, MAX_ACTIONS, MAX_ITEMS, MAX_QUESTION_TEXT, type AnswerKind, type AskQuestion, type AskQuestionOption } from "./ask-question.ts";
+import { CARD_LIMITS, cardRefusalText, cardRuleBreak } from "./card-rules.ts";
 import { CHOICE_LABEL_MAX, choiceQuestionMismatch } from "./notification-context.ts";
 
 /** The one bot allowed to create passive choice cards for the Watcher flow. */
@@ -64,6 +65,10 @@ export interface AskChoiceInput extends OptionsCardInput {
   /** #4238: something the person should know, no answer needed (the same
    * family as a keyed card: the same key replaces it). No options. */
   tell?: true;
+  /** #4490: a form (one row per thing to decide, each with its control) or
+   * a checklist (one multi-select row of items with its action buttons);
+   * `subtitle` is then the card's one line of context, `options` empty. */
+  questions?: AskQuestion[];
 }
 
 export type ParsedAskChoiceInput =
@@ -153,6 +158,12 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
   }
   // #4238: a fact for the person, no choices to offer
   if (value.tell === true) return { ok: true, value: { title, subtitle: question, options: [], ...extra, tell: true } };
+  // #4490: a form or a checklist
+  if (value.questions !== undefined || value.items !== undefined) {
+    const rows = parseAskChoiceRows(value, question);
+    if (!rows.ok) return rows;
+    return { ok: true, value: { title, subtitle: question, options: [], ...extra, decision: true, questions: rows.questions } };
+  }
   // #2909: an option is a short answer, or {label, detail}: the label is the
   // button and the answer, the detail says what it does
   if (!Array.isArray(value.options)) return { ok: false, error: "options must be an array of strings or {label, detail} objects." };
@@ -188,5 +199,113 @@ export function parseAskChoiceInput(value: unknown): ParsedAskChoiceInput {
   // #2909: "A or B?" answered with Yes / No cannot be answered at all
   const mismatch = choiceQuestionMismatch(question, parsed.value.options);
   if (mismatch) return { ok: false, error: mismatch };
+  // #4490: one question, its answers as buttons, never a wall of text
+  const broken = cardRuleBreak({ questions: [{ question, options: parsed.value.options.map((label) => ({ label })) }] });
+  if (broken) return { ok: false, error: cardRefusalText(broken, "ask_choice") };
   return { ok: true, value: { ...parsed.value, ...(details.some(Boolean) ? { details } : {}), ...extra } };
+}
+
+/** #4490: the longest header of a form row (its short name). */
+export const FORM_HEADER_MAX = 40;
+
+const YES_NO: AskQuestionOption[] = [{ label: "Yes", id: "yes" }, { label: "No", id: "no" }];
+
+/** #4490: a checklist item's text (a draft to post). */
+export const ITEM_DETAIL_MAX = 600;
+
+function rowOptions(raw: unknown, field: string, detailMax: number = ASK_CHOICE_DETAIL_MAX): AskQuestionOption[] | { error: string } {
+  if (!Array.isArray(raw)) return { error: `${field}: an array of short answers.` };
+  const options: AskQuestionOption[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < raw.length; index += 1) {
+    const entry = raw[index];
+    const label = boundedText(record(entry) ? entry.label : entry, `${field}[${index}]`, OPTIONS_CARD_LIMITS.option);
+    if (typeof label !== "string") return label;
+    if (seen.has(label)) return { error: `${field}: "${label}" is repeated.` };
+    seen.add(label);
+    let description: string | undefined;
+    if (record(entry) && entry.detail !== undefined) {
+      const detail = boundedText(entry.detail, `${field}[${index}].detail`, detailMax);
+      if (typeof detail !== "string") return detail;
+      description = detail;
+    }
+    options.push({ label, ...(description ? { description } : {}) });
+  }
+  return options;
+}
+
+/** #4490: ask_choice `questions` (a form) or `items` with `actions` (a
+ * checklist) -> the rows of one question card, then the card rules. */
+export function parseAskChoiceRows(value: Record<string, unknown>, context: string): { ok: true; questions: AskQuestion[] } | { ok: false; error: string } {
+  const fail = (error: string) => ({ ok: false as const, error: `${error} A form: questions [{question, kind, options for a choice}]. A checklist: items [{label, detail, checked}] and actions ["Post selected", "Skip tonight"].` });
+  if (value.questions !== undefined && value.items !== undefined) return fail("Give questions (a form) or items (a checklist), not both.");
+  if (Array.isArray(value.options) && value.options.length) return fail("Leave options out: each row of a form carries its own, and a checklist's buttons are its actions.");
+  if (context.length > CARD_LIMITS.context) {
+    const broken = cardRuleBreak({ context, questions: [] });
+    if (broken) return { ok: false, error: cardRefusalText(broken, "ask_choice") };
+  }
+  let questions: AskQuestion[];
+  if (value.items !== undefined) {
+    if (!Array.isArray(value.items) || value.items.length < 2 || value.items.length > MAX_ITEMS) return fail(`items: 2-${MAX_ITEMS} rows the person checks.`);
+    const options = rowOptions(value.items, "items", ITEM_DETAIL_MAX);
+    if (!Array.isArray(options)) return fail(options.error);
+    // proposed checked unless the bot says otherwise
+    const items: unknown[] = value.items;
+    const checked = options.filter((_, index) => {
+      const item = items[index];
+      return !(record(item) && item.checked === false);
+    }).map((option) => option.label);
+    if (!Array.isArray(value.actions) || value.actions.length < 1 || value.actions.length > MAX_ACTIONS) return fail(`actions: 1-${MAX_ACTIONS} buttons (the first is the main one), such as ["Post selected", "Skip tonight"].`);
+    const actions: string[] = [];
+    for (let index = 0; index < value.actions.length; index += 1) {
+      const action = boundedText(value.actions[index], `actions[${index}]`, MAX_ACTION_LABEL);
+      if (typeof action !== "string") return fail(action.error);
+      if (actions.includes(action)) return fail(`actions: "${action}" is repeated.`);
+      actions.push(action);
+    }
+    questions = [{ question: context, kind: "multi", multiSelect: true, options, ...(checked.length ? { checked } : {}), actions }];
+  } else {
+    if (!Array.isArray(value.questions) || value.questions.length < 1 || value.questions.length > FORM_MAX_QUESTIONS) return fail(`questions: 1-${FORM_MAX_QUESTIONS} rows, one per thing to decide.`);
+    questions = [];
+    const seen = new Set<string>();
+    for (let index = 0; index < value.questions.length; index += 1) {
+      const row = value.questions[index];
+      const field = `questions[${index}]`;
+      if (!record(row)) return fail(`${field}: an object {question, kind, options}.`);
+      const asked = boundedText(row.question, `${field}.question`, MAX_QUESTION_TEXT);
+      if (typeof asked !== "string") return fail(asked.error);
+      if (seen.has(asked)) return fail(`${field}.question: "${asked}" is asked twice.`);
+      seen.add(asked);
+      let header: string | undefined;
+      if (row.header !== undefined) {
+        const given = boundedText(row.header, `${field}.header`, FORM_HEADER_MAX);
+        if (typeof given !== "string") return fail(given.error);
+        header = given;
+      }
+      const given = row.options;
+      const hasOptions = Array.isArray(given) && given.length > 0;
+      if (row.kind !== undefined && !(ANSWER_KINDS as readonly unknown[]).includes(row.kind)) return fail(`${field}.kind: one of ${ANSWER_KINDS.join(", ")}.`);
+      const kind = (row.kind as AnswerKind | undefined) ?? (hasOptions ? "choice" : "text");
+      let options: AskQuestionOption[] = [];
+      if (kind === "yes_no") {
+        if (hasOptions) return fail(`${field}: a yes_no row takes no options.`);
+        options = YES_NO;
+      } else if (CHOICE_KINDS.has(kind)) {
+        const parsed = rowOptions(given ?? [], `${field}.options`);
+        if (!Array.isArray(parsed)) return fail(parsed.error);
+        if (parsed.length < 2 || parsed.length > 8) return fail(`${field}.options: 2-8 short answers for a ${kind} row.`);
+        options = parsed;
+      } else if (hasOptions) {
+        return fail(`${field}: a ${kind} row takes no options; make it kind choice to offer answers.`);
+      }
+      questions.push({
+        question: asked, ...(header ? { header } : {}), kind, options,
+        ...(kind === "multi" ? { multiSelect: true } : {}),
+        ...(row.optional === true ? { optional: true as const } : {}),
+      });
+    }
+  }
+  const broken = cardRuleBreak({ context, questions });
+  if (broken) return { ok: false, error: cardRefusalText(broken, "ask_choice") };
+  return { ok: true, questions };
 }

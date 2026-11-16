@@ -2,7 +2,7 @@
   "tools": [
     {
       "name": "ask_choice",
-      "description": "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool, routine runs and MCP-started turns included; never end with a plain-text confirmation request. Then end your turn. A write the request or an exact quoted GO covers: use its approval gate, never re-ask. Not for may-I permission on in-scope work, nor teammate contact when Ask before contacting bots is off. Several items: one call and card each (no maximum), a key to replace or retire one later; only wait false cards can follow one another in one turn.",
+      "description": "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool, routine runs and MCP-started turns included; never end with a plain-text confirmation request. Then end your turn. A write the request or an exact quoted GO covers: use its approval gate, never re-ask. Not for may-I permission on in-scope work, nor teammate contact when Ask before contacting bots is off. One question per control: several things to decide are ONE form (questions, e.g. [{\"question\":\"Standup\",\"kind\":\"choice\",\"options\":[\"Done\",\"Move\"]},{\"question\":\"Review length\",\"kind\":\"duration\"}]); a list to pick from is a checklist (items, actions [\"Post selected\",\"Skip tonight\"]); question is then one line of context. Several questions in one text, a list in prose or answers named only in the text: refused, with how to ask again. Separate items: one call and card each (no maximum), a key to replace or retire one later; only wait false cards can follow one another in one turn.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -11,7 +11,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 8000,
-            "description": "The question, what happened and why you wait: enough to answer from a notification at a glance."
+            "description": "The question, what happened and why you wait: enough to answer from a notification at a glance. With questions or items: one line of context."
           },
           "title": {
             "type": "string",
@@ -29,7 +29,7 @@
               "minLength": 1,
               "maxLength": 120
             },
-            "description": "2-6 answers of a few words, the recommended one first. \"A or B?\" takes A and B, never Yes / No."
+            "description": "2-6 answers of a few words, the recommended one first. \"A or B?\" takes A and B, never Yes / No. Not with questions or items."
           },
           "details": {
             "type": "array",
@@ -39,6 +39,92 @@
               "maxLength": 300
             },
             "description": "Optional, same order: what each answer does."
+          },
+          "questions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "description": "A form: a row per thing to decide.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "question": {
+                  "type": "string",
+                  "maxLength": 240
+                },
+                "header": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "choice",
+                    "multi",
+                    "yes_no",
+                    "duration",
+                    "time",
+                    "date",
+                    "number",
+                    "text",
+                    "long_text"
+                  ],
+                  "description": "text only when the answer is truly free."
+                },
+                "options": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "description": "choice and multi: 2-8."
+                },
+                "optional": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 20,
+            "description": "A checklist: a row per item to pick; needs actions.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 600
+                },
+                "checked": {
+                  "type": "boolean",
+                  "description": "Default true."
+                }
+              },
+              "required": [
+                "label"
+              ]
+            }
+          },
+          "actions": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "description": "With items: the buttons, main first."
           },
           "key": {
             "type": "string",
@@ -70,8 +156,7 @@
           }
         },
         "required": [
-          "question",
-          "options"
+          "question"
         ]
       }
     },

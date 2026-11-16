@@ -145,6 +145,7 @@ export function SheetChoices({
   multi = false,
   settled = false,
   disabled = false,
+  quietPicked = false,
   ariaLabel,
   onPick,
 }: {
@@ -153,6 +154,9 @@ export function SheetChoices({
   multi?: boolean;
   settled?: boolean;
   disabled?: boolean;
+  /** #4490: a checklist's rows: the box says it all, no tint and no
+   * trailing check on a checked row */
+  quietPicked?: boolean;
   ariaLabel: string;
   onPick: (label: string) => void;
 }) {
@@ -179,9 +183,9 @@ export function SheetChoices({
             className={cn(
               "flex w-full items-center gap-3 rounded-[10px] px-2 py-[7px] text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default",
               settled
-                ? on ? "bg-ink/[0.06]" : "opacity-45"
+                ? on ? quietPicked ? "" : "bg-ink/[0.06]" : "opacity-45"
                 : choice.disabled ? "opacity-45"
-                : on ? "bg-ink/[0.07]" : "hover:bg-ink/[0.05]",
+                : on && !quietPicked ? "bg-ink/[0.07]" : "hover:bg-ink/[0.05]",
             )}
           >
             {multi ? <SheetBox on={on} /> : <SheetKey letter={sheetKey(index)} on={on} />}
@@ -193,7 +197,7 @@ export function SheetChoices({
                 <span className="block break-words text-[12.5px] leading-snug text-ink-secondary [unicode-bidi:plaintext]">{choice.description}</span>
               )}
             </span>
-            {settled && on && <Check size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
+            {settled && on && !quietPicked && <Check size={15} strokeWidth={2.4} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
           </button>
         );
       })}

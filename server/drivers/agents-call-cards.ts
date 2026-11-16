@@ -94,7 +94,11 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     // #4219: an unaddressed room card waits on the room's people, any of them
     const waiting = to ? `${to} (the room's other people see it; only ${to}'s answer counts, and the answer names who answered)`
       : people ? "the room's people (any of them may answer; the answer names who answered)" : "the person";
-    const placed = (body.replaced === true ? `Your pending card${named} now asks this, in its place${to ? `, addressed to ${waiting}` : ""}.` : `The question card${named} is waiting for ${waiting}.`) + people;
+    // #4490: a form's answers come back row by row
+    const rows = args?.questions !== undefined || args?.items !== undefined
+      ? " Its answer comes back per row (Q: the row, A: its answer; a checklist adds Action: the button pressed)."
+      : "";
+    const placed = (body.replaced === true ? `Your pending card${named} now asks this, in its place${to ? `, addressed to ${waiting}` : ""}.` : `The question card${named} is waiting for ${waiting}.`) + people + rows;
     // #4205: wait false holds nothing: the turn and the run go on
     if (body.holds === false) {
       // #4219: a routine run's card raised in its source room is answered

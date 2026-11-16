@@ -21,12 +21,15 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
     tool: choice.pageTargetChoice ? "choose_page_target" : "ask_choice",
     summary: choice.question,
     choices: choice.options,
-    questions: [{
+    // #4490: a form's or a checklist's rows, each with its control; the
+    // context line is the card's summary
+    questions: choice.questions?.length ? choice.questions : [{
       ...(header ? { header } : {}),
       question: choice.question,
       options: questionOptions,
       ...(choice.pageTargetChoice ? { custom: false as const } : {}),
     }],
+    ...(choice.questions?.length && choice.title !== "Your bot has a question" ? { askTitle: choice.title } : {}),
     origin, harnessAsk: true,
     // #4238: a card raised quiet shows and waits, without a notification
     ...(choice.quiet ? { quietAsk: true } : {}),

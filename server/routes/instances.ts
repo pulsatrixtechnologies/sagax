@@ -79,6 +79,7 @@ export interface InstancesRouteDeps {
   clientInstanceView: (instance: unknown) => unknown;
   registry: {
     get(instanceId: string): ProviderInstance | null;
+    knowsDriver(driverKind: string): boolean;
     refreshModels(instanceId: string): Promise<boolean>;
     installRuntime(instanceId: string): Promise<boolean>;
     forgetSnapshots(): void;
@@ -481,6 +482,11 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
         const instances = persistableInstanceConfigs(result.config);
         if (!result.ok || !Object.hasOwn(instances, instanceId)) return json(res, 404, { error: `unknown instance "${instanceId}"` });
         const entry = instances[instanceId];
+        // #4391: an entry whose driver this server does not have is not an
+        // account a person sees; it is kept as configured, never renamed.
+        if (body.displayName !== undefined && !deps.registry.knowsDriver(entry.driver)) {
+          return json(res, 400, { error: `This server has no "${entry.driver}" provider; the entry is kept as configured.` });
+        }
         // #4376: every account can be renamed (Providers > a provider >
         // Accounts); its configuration folder stays a Claude setting.
         if (body.configDir !== undefined && entry.driver !== "claudeAgent") {

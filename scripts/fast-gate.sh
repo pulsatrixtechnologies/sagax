@@ -100,7 +100,7 @@ fi
 
 TOUCHED="$LOG_DIR/touched.txt"
 # (a reused log folder keeps no cut list of an earlier run)
-rm -f "$LOG_DIR/related-cut.txt"
+rm -f "$LOG_DIR/related-cut.txt" "$LOG_DIR/related-skip.txt"
 {
   [ -n "$SINCE" ] && git diff --name-only --diff-filter=ACMR "$SINCE" HEAD
   git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null
@@ -178,13 +178,16 @@ if [ -f package.json ]; then
     # cut, and writes the cut ones to related-cut.txt in its log folder: they
     # run after the merge. A type-only import is no dependency. A test in the
     # repository's known failures list (scripts/testing/known-failures.json)
-    # is not related work.
+    # is not related work: it is skipped (-t), the rest of its file runs.
+    # A test that starts a source by its path (the server's index.ts) counts
+    # as importing it, and one that calls a route a touched source serves
+    # comes first at its distance (#4391).
     TESTS="$LOG_DIR/tests.txt"
     RELATED="$LOG_DIR/related.txt"
     : > "$TESTS"
     : > "$RELATED"
     # (the import graph is read only when one of the two checks runs)
-    if wanted tests || wanted related; then FAST_GATE_TOUCHED_JS="$JS" FAST_GATE_RELATED_OUT="$RELATED" FAST_GATE_RELATED_CUT="$LOG_DIR/related-cut.txt" node -e '
+    if wanted tests || wanted related; then FAST_GATE_TOUCHED_JS="$JS" FAST_GATE_RELATED_OUT="$RELATED" FAST_GATE_RELATED_CUT="$LOG_DIR/related-cut.txt" FAST_GATE_RELATED_SKIP="$LOG_DIR/related-skip.txt" node -e '
       const fs = require("fs"), path = require("path").posix;
       const { execFileSync } = require("child_process");
       const isTest = (f) => /\.(test|spec)\.[^/]+$/.test(f);
@@ -224,16 +227,47 @@ if [ -f package.json ]; then
         const typeOnly = /\b(?:import|export)\s+type\s+[^;]*?\bfrom\s*["\x27][^"\x27]+["\x27]/g;
         const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27]([^"\x27]+)["\x27]/g;
         const importers = new Map();
+        const link = (target, f) => {
+          if (!importers.has(target)) importers.set(target, new Set());
+          importers.get(target).add(f);
+        };
+        // #4391: a test that starts a source by its path, join(<its own
+        // folder>, "..", "index.ts"), runs it as much as one importing it
+        // does (the tests that start the server and call its routes).
+        const ownDir = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:dirname\(\s*fileURLToPath\(\s*import\.meta\.url\s*\)\s*\)|import\.meta\.dirname)\s*;/g;
+        const quoted = /["\x27]([^"\x27]+)["\x27]/g;
+        const testText = new Map();
         for (const f of files) {
           let text;
           try { text = fs.readFileSync(f, "utf8"); } catch { continue; }
           for (const m of text.replace(typeOnly, "").matchAll(spec)) {
             const target = resolve(f, m[1]);
             if (!target || target === f) continue;
-            if (!importers.has(target)) importers.set(target, new Set());
-            importers.get(target).add(f);
+            link(target, f);
+          }
+          if (!isTest(f)) continue;
+          testText.set(f, text);
+          const own = ["import\\.meta\\.dirname", ...[...text.matchAll(ownDir)].map((m) => m[1].replace(/\$/g, "\\$"))];
+          const joins = new RegExp(`\\bjoin\\(\\s*(?:${own.join("|")})\\s*((?:,\\s*["\x27][^"\x27]+["\x27]\\s*)+)\\)`, "g");
+          for (const m of text.matchAll(joins)) {
+            const target = path.normalize(path.join(path.dirname(f), ...[...m[1].matchAll(quoted)].map((s) => s[1])));
+            if (target !== f && CODE.test(target) && byStem.get(noExt(target)) === target) link(target, f);
           }
         }
+        // The routes a touched source serves (/api/instances): a test that
+        // calls them is the nearest of its distance, the most calls first.
+        const roots = new Set();
+        for (const s of sources) {
+          let text = "";
+          try { text = fs.readFileSync(s, "utf8"); } catch { /* deleted */ }
+          for (const m of text.matchAll(/\\?\/api\\?\/([A-Za-z][\w-]*)/g)) roots.add(`/api/${m[1]}`);
+        }
+        const calls = (t) => {
+          const text = testText.get(t) ?? "";
+          let n = 0;
+          for (const r of roots) n += text.split(r).length - 1;
+          return n;
+        };
         // A source that a large part of the suite imports (a store, a test
         // helper) would bring hundreds of files: past the bound its importers
         // wait for the run after the merge, and the gate says so.
@@ -259,8 +293,18 @@ if [ -f package.json ]; then
         const e2eSeconds = Object.entries(weights).filter(([f]) => E2E.test(f)).map(([, s]) => Number(s) || 1).sort((a, b) => a - b);
         const unlistedE2e = e2eSeconds.length ? e2eSeconds[Math.floor(e2eSeconds.length / 2)] : 1;
         const estimate = (f) => Number(weights[f]) || (E2E.test(f) ? unlistedE2e : 1);
-        let known = new Set();
-        try { known = new Set(JSON.parse(fs.readFileSync("scripts/testing/known-failures.json", "utf8")).tests.map((t) => t.file)); } catch { /* no list */ }
+        // A known failure (scripts/testing/known-failures.json) does not
+        // belong to the lot: its test is skipped, the other tests of its file still run
+        // (#4391: the whole file was left out for two listed tests, and a
+        // third one turned red unseen). A file listed as a whole stays out.
+        const known = new Map();
+        try {
+          for (const t of JSON.parse(fs.readFileSync("scripts/testing/known-failures.json", "utf8")).tests) {
+            if (!known.has(t.file)) known.set(t.file, []);
+            known.get(t.file).push(t.test);
+          }
+        } catch { /* no list */ }
+        const wholeFileKnown = (f) => (known.get(f) ?? []).includes("(whole file)");
         const dirs = [...new Set(sources.map((s) => path.dirname(s)))];
         const nearness = (t) => Math.max(...dirs.map((d) => (t.startsWith(d + "/") ? d.split("/").length : 0)));
         const seen = new Set(sources);
@@ -272,9 +316,9 @@ if [ -f package.json ]; then
             if (seen.has(importer)) continue;
             seen.add(importer);
             if (!isTest(importer)) next.push(importer);
-            else if (!out.has(importer) && !known.has(importer)) level.push(importer);
+            else if (!out.has(importer) && !wholeFileKnown(importer)) level.push(importer);
           }
-          level.sort((a, b) => nearness(b) - nearness(a) || (a < b ? -1 : 1));
+          level.sort((a, b) => calls(b) - calls(a) || nearness(b) - nearness(a) || (a < b ? -1 : 1));
           // nearest first; a file that does not fit is cut, a lighter one
           // after it may still fit
           for (const t of level) {
@@ -291,6 +335,9 @@ if [ -f package.json ]; then
         }
         fs.writeFileSync(process.env.FAST_GATE_RELATED_CUT, cut.sort().map((f) => f + "\n").join(""));
         fs.writeFileSync(process.env.FAST_GATE_RELATED_OUT, related.sort().map((f) => f + "\n").join(""));
+        // vitest names a test "<describe> > <test>", as the list does
+        const skip = related.flatMap((f) => known.get(f) ?? []).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        fs.writeFileSync(process.env.FAST_GATE_RELATED_SKIP, skip.length ? `^(?!(?:.* )?(?:${skip.join("|")})$)` : "");
       }
       process.stdout.write([...out].sort().map((f) => f + "\n").join(""));
     ' > "$TESTS"; fi
@@ -298,7 +345,9 @@ if [ -f package.json ]; then
       add_check tests "$(q "$BIN/vitest") run --reporter=dot$(qlist < "$TESTS")"
     fi
     if [ -s "$RELATED" ] && [ -x "$BIN/vitest" ]; then
-      add_check related "$(q "$BIN/vitest") run --reporter=dot --passWithNoTests$(qlist < "$RELATED")"
+      SKIP_KNOWN=""
+      [ -s "$LOG_DIR/related-skip.txt" ] && SKIP_KNOWN=" -t $(q "$(cat "$LOG_DIR/related-skip.txt")")"
+      add_check related "$(q "$BIN/vitest") run --reporter=dot --passWithNoTests$SKIP_KNOWN$(qlist < "$RELATED")"
     fi
   fi
 fi

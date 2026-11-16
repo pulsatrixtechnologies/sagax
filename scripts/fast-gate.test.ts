@@ -196,7 +196,11 @@ describe("fast-gate.sh", () => {
     write("src/far.test.ts", 'import { Win } from "./window";\n');
     write("src/types-only.test.ts", 'import { P } from "./types-only";\n');
     write("src/known.test.ts", 'import { Chat } from "./chat";\n');
-    write("scripts/testing/known-failures.json", JSON.stringify({ tests: [{ file: "src/known.test.ts", test: "red on main" }] }));
+    write("src/whole.test.ts", 'import { Chat } from "./chat";\n');
+    write("scripts/testing/known-failures.json", JSON.stringify({ tests: [
+      { file: "src/known.test.ts", test: "Known > red on main" },
+      { file: "src/whole.test.ts", test: "(whole file)" },
+    ] }));
     git("add", "-A");
     git("commit", "-q", "-m", "tests");
     write("src/pill.tsx", "export const Pill = 2;\n");
@@ -205,12 +209,34 @@ describe("fast-gate.sh", () => {
     const related = out.split("\n").find((l) => l.startsWith("[related]")) ?? "";
     expect(tests).toContain("'src/pill.dom.test.ts'");
     expect(tests).toContain("'tests/direct.test.ts'");
-    expect(related).toMatch(/vitest' run --reporter=dot --passWithNoTests 'src\/chat\/chat\.dom\.test\.ts' 'src\/window\.dom\.test\.ts' 'tests\/bar\.test\.ts'$/);
-    // four files away, a type-only import, a known failure: not this lot's
+    // #4391: a file with a known failure runs, its listed test skipped
+    expect(related).toMatch(/vitest' run --reporter=dot --passWithNoTests -t '\^\(\?!\(\?:\.\* \)\?\(\?:Known > red on main\)\$\)' 'src\/chat\/chat\.dom\.test\.ts' 'src\/known\.test\.ts' 'src\/window\.dom\.test\.ts' 'tests\/bar\.test\.ts'$/);
+    // four files away, a type-only import, a file failing as a whole: not this lot's
     expect(out).not.toContain("far.test.ts");
     expect(out).not.toContain("types-only.test.ts");
-    expect(out).not.toContain("known.test.ts");
-    expect(out).toContain("fast-gate: related: 3 test file(s) reach the touched sources through imports");
+    expect(out).not.toContain("whole.test.ts");
+    expect(out).toContain("fast-gate: related: 4 test file(s) reach the touched sources through imports");
+  });
+
+  // #4391: a route change left red a test that starts the server by its path
+  // (join(SERVER_DIR, "..", "index.ts")) and calls the route: no import
+  // reached it, and its two known failures had kept the whole file out.
+  it("counts a test that starts a source by its path, and runs first the tests that call a touched route", () => {
+    write("server/routes/things.ts", 'export const route = (p: string) => /^\\/api\\/things\\/(\\w+)$/.exec(p);\n');
+    write("server/index.ts", 'import { route } from "./routes/things.ts";\nexport const r = route;\n');
+    write("server/a/aaa.e2e.test.ts", 'const SERVER_DIR = dirname(fileURLToPath(import.meta.url));\nspawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")]);\nfetch("/api/other");\n');
+    write("server/b/calls.e2e.test.ts", 'const HERE = import.meta.dirname;\nspawn(process.execPath, [join(HERE, "..", "index.ts")]);\nfetch("/api/things/1");\nfetch("/api/things/2");\n');
+    write("server/c/fixture.test.ts", 'const DIR = dirname(fileURLToPath(import.meta.url));\nreadFileSync(join(DIR, "data.json"));\n');
+    write("server/c/data.json", "{}\n");
+    write("scripts/testing/vitest-shard-weights.json", JSON.stringify({ "server/a/aaa.e2e.test.ts": 100, "server/b/calls.e2e.test.ts": 100 }));
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("server/routes/things.ts", 'export const route = (p: string) => /^\\/api\\/things\\/(\\w+)$/.exec(p.trim());\n');
+    const { out } = gate("--base", "HEAD", "--only", "related", "--dry-run");
+    const related = out.split("\n").find((l) => l.startsWith("[related]")) ?? "";
+    expect(related).toMatch(/--passWithNoTests 'server\/b\/calls\.e2e\.test\.ts'$/);
+    expect(out).toContain("the ceiling cut 1");
+    expect(out).not.toContain("fixture.test.ts");
   });
 
   it("bounds the related check, keeps the nearest and the touched folder's tests, and says how many wait", () => {

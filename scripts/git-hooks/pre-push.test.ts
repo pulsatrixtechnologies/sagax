@@ -31,9 +31,10 @@ function git(...args: string[]) {
   return execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: "pipe", env: { ...process.env, ...gitEnv } }).trim();
 }
 
-function stamp(text: string) {
-  write(`.git/sagax-verify-merge/ok-${git("rev-parse", "HEAD")}`, text);
+function stamp(text: string, sha = git("rev-parse", "HEAD")) {
+  write(`.git/sagax-verify-merge/ok-${sha}`, text);
 }
+const ZERO = "0".repeat(40);
 
 function hookEnv(gateExit: number) {
   const env: Record<string, string> = {};
@@ -49,8 +50,9 @@ function readCalls() {
   try { return readFileSync(join(fakeBin, "calls"), "utf8"); } catch { return ""; }
 }
 
-function push(gateExit = 0) {
-  const r = spawnSync("sh", [HOOK], { cwd: repo, encoding: "utf8", env: hookEnv(gateExit) });
+// stdin: the lines git feeds a pre-push hook ("<local ref> <local sha> <remote ref> <remote sha>").
+function push(gateExit = 0, stdin = "") {
+  const r = spawnSync("sh", [HOOK], { cwd: repo, encoding: "utf8", env: hookEnv(gateExit), input: stdin, timeout: 20000 });
   return { code: r.status, out: `${r.stdout}${r.stderr}`, calls: readCalls() };
 }
 
@@ -84,6 +86,7 @@ function ticket(second: number, pid: number) {
 function pushAsync() {
   const child = spawn("sh", [HOOK], { cwd: repo, env: hookEnv(0) });
   started.push(child);
+  child.stdin?.end();
   let out = "";
   child.stdout?.on("data", (d) => { out += d; });
   child.stderr?.on("data", (d) => { out += d; });
@@ -148,6 +151,55 @@ describe("pre-push", () => {
     const { code, out, calls } = push(1);
     expect(code, out).not.toBe(0);
     expect(calls).toBe("pnpm verify:merge --base main\n");
+  });
+});
+
+describe("pre-push stamp before the queue (#4392)", () => {
+  it("lets a commit verify:merge stamped through at once while the lock is held", () => {
+    holdLock(live());
+    stamp(`ok ${new Date().toISOString()}\n`);
+    const { code, out, calls } = push(1);
+    expect(code, out).toBe(0);
+    expect(out).toContain("verify:merge already OK");
+    expect(out).not.toContain("waiting");
+    expect(calls).toBe("");
+    expect(existsSync(ticketDir())).toBe(false);
+  });
+
+  it("checks the pushed commit, not HEAD: a verified release tag skips the queue", () => {
+    // the tagged commit was verified; HEAD has moved on and is not
+    const tagged = git("rev-parse", "HEAD");
+    stamp(`ok ${new Date().toISOString()}\n`, tagged);
+    git("tag", "-a", "v1", "-m", "v1");
+    const tagObject = git("rev-parse", "v1");
+    write("src/a.ts", "export const a = 3;\n");
+    git("commit", "-qam", "after the tag");
+    holdLock(live());
+    const { code, out, calls } = push(1, `refs/tags/v1 ${tagObject} refs/tags/v1 ${ZERO}\n`);
+    expect(code, out).toBe(0);
+    expect(out).toContain("verify:merge already OK");
+    expect(out).not.toContain("waiting");
+    expect(calls).toBe("");
+  });
+
+  it("still runs the tests of a pushed commit the quick gate alone stamped", () => {
+    stamp("");
+    const head = git("rev-parse", "HEAD");
+    const { code, out, calls } = push(1, `refs/heads/work ${head} refs/heads/work ${ZERO}\n`);
+    expect(code, out).not.toBe(0);
+    expect(out).toContain("is not verify:merge's");
+    expect(calls).toBe("fast-gate --base main --only tests,related,extra-source-text,extra-parity-pairs\n");
+  });
+
+  it("does not skip when only one of the pushed commits is stamped", () => {
+    const first = git("rev-parse", "HEAD");
+    stamp(`ok ${new Date().toISOString()}\n`, first);
+    write("src/a.ts", "export const a = 4;\n");
+    git("commit", "-qam", "unverified");
+    const second = git("rev-parse", "HEAD");
+    const r = push(1, `refs/tags/v1 ${first} refs/tags/v1 ${ZERO}\nrefs/heads/work ${second} refs/heads/work ${ZERO}\n`);
+    expect(r.code, r.out).not.toBe(0);
+    expect(r.calls).toBe("pnpm verify:merge --base main\n");
   });
 });
 

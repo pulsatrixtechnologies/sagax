@@ -188,6 +188,91 @@ describe("createInternalMemoryRoutes", () => {
     expect(sent).toEqual([{ status: 201, body: { messageId: "m-card" } }]);
   });
 
+  describe("propose_page replace (#4099): the bot changes the selected words in place", () => {
+    const source = "# Report\n\nClosed tickets, response times and backlog.\n\nClosed tickets again.\n";
+    const page = { id: "page_12345678", botId: "bot-1", threadId: "t-1", versions: [{ n: 1 }, { n: 2 }] };
+    const read = (n: number) => ({ version: { n, kind: "markdown" as const, title: "Report", bytes: 1, sha256: "x" }, content: source, offset: 0, nextOffset: null });
+    function propose(replace: { quote: string; with: string }, over: Partial<InternalMemoryDeps> = {}, kind = "markdown") {
+      const proposePublishedPage = vi.fn((_input: Parameters<InternalMemoryDeps["proposePublishedPage"]>[0]) => ({ ok: true as const, page: { id: page.id }, version: { n: 3 } }));
+      let answer: unknown;
+      const route = createInternalMemoryRoutes(deps({
+        getPage: (id) => (id === page.id ? page : null),
+        pageSource: vi.fn((_id: string, n: number) => read(n)),
+        proposePublishedPage,
+        createCard: ({ proposePage }) => {
+          answer = proposePage({ pageId: page.id, title: "Report", kind, content: "", replace });
+          return { ok: true, messageId: "m1" };
+        },
+        ...over,
+      }));
+      return { proposePublishedPage, route, answer: () => answer };
+    }
+
+    it("saves the latest version with the words replaced, the rest kept", async () => {
+      const { route, proposePublishedPage, answer } = propose({ quote: "response times", with: "median response times" });
+      await call(route, { path: "/api/internal/options-card", body: { tool: "propose_page" } }).run();
+      expect(answer()).toMatchObject({ ok: true, pageId: page.id, version: 3 });
+      expect(proposePublishedPage.mock.calls[0]![0]).toMatchObject({
+        pageId: page.id, kind: "markdown",
+        content: "# Report\n\nClosed tickets, median response times and backlog.\n\nClosed tickets again.\n",
+      });
+    });
+
+    it("keeps the kind of the page it changes, whatever kind the bot sent", async () => {
+      // a passage of a Markdown page never turns it into a deck, nor a deck into a document
+      const { route, proposePublishedPage, answer } = propose({ quote: "response times", with: "median response times" }, {}, "slides");
+      await call(route, { path: "/api/internal/options-card", body: {} }).run();
+      expect(answer()).toMatchObject({ ok: true });
+      expect(proposePublishedPage.mock.calls[0]![0]).toMatchObject({ kind: "markdown" });
+    });
+
+    it("refuses words not found, or found more than once, and says to send the whole page", async () => {
+      const missing = propose({ quote: "no such words", with: "x" });
+      await call(missing.route, { path: "/api/internal/options-card", body: {} }).run();
+      expect(missing.answer()).toMatchObject({ ok: false, status: 400, error: expect.stringContaining("whole page") });
+      expect(missing.proposePublishedPage).not.toHaveBeenCalled();
+      const twice = propose({ quote: "Closed tickets", with: "x" });
+      await call(twice.route, { path: "/api/internal/options-card", body: {} }).run();
+      expect(twice.answer()).toMatchObject({ ok: false, status: 400, error: expect.stringContaining("more than once") });
+      expect(twice.proposePublishedPage).not.toHaveBeenCalled();
+    });
+
+    it("never reads another person's page of the same bot: the 404 of propose, before any read", async () => {
+      // Perspicax: one bot, several people; the page is person B's, in B's conversation
+      const pageSource = vi.fn((_id: string, n: number) => read(n));
+      const theirs = { ...page, threadId: "t-other", ownerId: "person-b" };
+      for (const quote of ["no such words", "Closed tickets", "response times"]) {
+        const other = propose({ quote, with: "x" }, {
+          isPerspicax: () => true,
+          taskByThread: () => ({ ownerPrincipalId: "person-a" }) as never,
+          getPage: () => theirs,
+          pageSource,
+        });
+        await call(other.route, { path: "/api/internal/options-card", body: {} }).run();
+        expect(other.answer()).toEqual({ ok: false, status: 404, error: "page_id: no page of this conversation has that id. Leave it out to propose a new page." });
+        expect(other.proposePublishedPage).not.toHaveBeenCalled();
+      }
+      expect(pageSource).not.toHaveBeenCalled();
+      // the same person's page of this bot, opened from another topic, is revised
+      const mine = propose({ quote: "response times", with: "x" }, {
+        isPerspicax: () => true,
+        taskByThread: () => ({ ownerPrincipalId: "person-b" }) as never,
+        getPage: () => theirs,
+      });
+      await call(mine.route, { path: "/api/internal/options-card", body: {} }).run();
+      expect(mine.answer()).toMatchObject({ ok: true });
+    });
+
+    it("reads only a page this bot may revise, and only Markdown or slides", async () => {
+      const foreign = propose({ quote: "response times", with: "x" }, { getPage: () => ({ ...page, botId: "other", threadId: "t-other", ownerId: "someone" }) });
+      await call(foreign.route, { path: "/api/internal/options-card", body: {} }).run();
+      expect(foreign.answer()).toMatchObject({ ok: false, status: 404 });
+      const html = propose({ quote: "response times", with: "x" }, { pageSource: (_id, n) => ({ ...read(n), version: { ...read(n).version, kind: "html" } }) });
+      await call(html.route, { path: "/api/internal/options-card", body: {} }).run();
+      expect(html.answer()).toMatchObject({ ok: false, status: 400, error: expect.stringContaining("whole page") });
+    });
+  });
+
   it("POST /api/internal/page-comments refuses rooms (409)", async () => {
     const route = createInternalMemoryRoutes(deps({
       groupByThread: () => ({ id: "g1", name: "Room", memberIds: ["bot-1"] }),

@@ -438,8 +438,15 @@ export interface PagePublishRef {
   title: string;
 }
 
+/** #4099: exact words of a page's latest Markdown or slides and the words
+ * that take their place, instead of resending the whole page. */
+export interface PageReplace {
+  quote: string;
+  with: string;
+}
+
 export type PageProposalInput =
-  | { ok: true; value: { title: string; kind: PageKind; content: string; path?: string; pageId?: string; designSystem?: string; designTokens?: unknown } }
+  | { ok: true; value: { title: string; kind: PageKind; content: string; path?: string; pageId?: string; designSystem?: string; designTokens?: unknown; replace?: PageReplace } }
   | { ok: false; error: string };
 
 function byteLength(text: string): number {
@@ -459,6 +466,20 @@ export function parsePageProposal(input: unknown): PageProposalInput {
   // workspace (`path`), read byte for byte by the server: exactly one.
   const hasPath = record.path !== undefined && record.path !== null;
   const hasContent = record.content !== undefined && record.content !== null;
+  // #4099: the words of a passage changed in place (the server finds them
+  // once in the latest version); Markdown and slides only, a page of its own
+  if (record.replace !== undefined && record.replace !== null) {
+    if (hasPath || hasContent) return { ok: false, error: "Give content, path or replace, one of them." };
+    if (kind !== "markdown" && kind !== "presentation") return { ok: false, error: "replace: Markdown and presentation pages only; send the whole page in content." };
+    const replace = record.replace as Record<string, unknown>;
+    if (typeof replace !== "object" || Array.isArray(replace) || typeof replace.quote !== "string" || !replace.quote || typeof replace.with !== "string"
+      || byteLength(replace.quote) > PAGE_LIMITS.contentBytes || byteLength(replace.with) > PAGE_LIMITS.contentBytes) {
+      return { ok: false, error: "replace: { quote: the exact words of the page, with: the words that take their place }." };
+    }
+    const target = record.page_id;
+    if (typeof target !== "string" || !/^[A-Za-z0-9_-]{8,40}$/.test(target)) return { ok: false, error: "replace: needs page_id, the page to change." };
+    return { ok: true, value: { title, kind: kind as PageKind, content: "", pageId: target, replace: { quote: replace.quote, with: replace.with } } };
+  }
   if (hasPath && hasContent) return { ok: false, error: "Give content or path, not both." };
   if (!hasPath && !hasContent) return { ok: false, error: "content: the page's full text is required, or path: a file of your workspace." };
   const path = record.path;

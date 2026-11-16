@@ -614,6 +614,21 @@ describe("input checks", () => {
     expect(validExpiry(now + 400 * 24 * 60 * 60 * 1000, now).ok).toBe(false);
     expect(validExpiry("tomorrow", now).ok).toBe(false);
   });
+
+  it("parsePageProposal takes replace (#4099): exact words of this page's latest Markdown or slides, instead of the whole page", () => {
+    const replace = { quote: "Closed tickets", with: "Tickets closed" };
+    expect(parsePageProposal({ title: "R", kind: "markdown", page_id: "page_12345678", replace }))
+      .toEqual({ ok: true, value: { title: "R", kind: "markdown", content: "", pageId: "page_12345678", replace } });
+    expect(parsePageProposal({ title: "R", kind: "presentation", page_id: "page_12345678", replace: { quote: "a", with: "" } }).ok).toBe(true);
+    // a page of its own, never a new one
+    expect(parsePageProposal({ title: "R", kind: "markdown", replace })).toMatchObject({ ok: false, error: expect.stringContaining("page_id") });
+    // one way to give the source
+    expect(parsePageProposal({ title: "R", kind: "markdown", page_id: "page_12345678", content: "# x", replace }).ok).toBe(false);
+    // an HTML or design page is revised whole
+    expect(parsePageProposal({ title: "R", kind: "html", page_id: "page_12345678", replace })).toMatchObject({ ok: false, error: expect.stringContaining("whole page") });
+    expect(parsePageProposal({ title: "R", kind: "markdown", page_id: "page_12345678", replace: { quote: "", with: "x" } }).ok).toBe(false);
+    expect(parsePageProposal({ title: "R", kind: "markdown", page_id: "page_12345678", replace: { quote: "x" } }).ok).toBe(false);
+  });
 });
 
 describe("the app's preview (review of #646, round 2)", () => {
@@ -1469,8 +1484,8 @@ describe("a reading link in its person's look", () => {
     // the page's frame too: its theme (#1551) in the person's colors
     expect(frame!.body).toContain("--background:#fbf7ee");
     expect(frame!.body).toMatch(/prefers-color-scheme:dark\)\{:root\{[^}]*--background:#1d1812/);
-    // the warning stays, word for word, in the bar
-    expect(wrapper.body).toContain("n&#39;y entrez jamais de mot de passe");
+    // the warning stays, word for word, in the bar (tu since #3268)
+    expect(wrapper.body).toContain("n&#39;y entre jamais de mot de passe");
   });
 
   it("without a look the bar and the frame wear the default theme", async () => {

@@ -255,6 +255,14 @@ Keep these rules, covered by `server/pages/published-pages.test.ts`,
   `pagePublish`; whatever the bot sends (access, publish flags) is ignored.
   `POST /api/pages/:id/publish` needs an explicit `access`. Not available in
   rooms. Choosing "Toute personne ayant le lien" asks a second press.
+- A passage changed in place (#4099): `propose_page` takes `replace: { quote,
+  with }` instead of `content` or `path`, with `page_id`, for a Markdown or
+  presentation page of the calling bot. The route
+  (`server/routes/internal-memory.ts`) reads the latest version, replaces the
+  words found once (`applySuggestion`, the code that accepts a suggested
+  edit) and saves a new proposed version; words not found, or found more
+  than once, answer 400 and tell the bot to send the whole page. An HTML or
+  design page is revised whole. `PAGE_SELECTION_HINT` names it.
 - Source from a file (#3488): `propose_page` takes `content` or `path`,
   exactly one. `path` names a UTF-8 file of the calling bot's own workspace,
   or `plugins/<name>/<file>` of one of its installed plugins (#3612),

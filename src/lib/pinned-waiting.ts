@@ -81,6 +81,17 @@ function drawnAs(item: ServedWaitingItem, message: Message | undefined, threadId
   }
 }
 
+const NO_KEYS: ReadonlySet<string> = new Set();
+
+/** #4438: the keys answered here that the server's list still carries:
+ * once the list drops one, it is forgotten (the server said so). */
+export function stillListed(answered: ReadonlySet<string>, items: readonly ServedWaitingItem[]): ReadonlySet<string> {
+  if (!answered.size) return answered;
+  const listed = new Set(items.map((item) => `${item.threadId}:${item.id}`));
+  const kept = [...answered].filter((key) => listed.has(key));
+  return kept.length === answered.size ? answered : new Set(kept);
+}
+
 /** The pinned row's items: the server's items, in the server's order, each
  * drawn with its card. `fresh` is the transcript the store holds for the
  * conversation on screen: an item whose message it holds is drawn from that
@@ -88,8 +99,9 @@ function drawnAs(item: ServedWaitingItem, message: Message | undefined, threadId
  * before the list is read again. `approvals` are the composer's own live
  * approvals (this turn's, its parallel tasks'): they add who asked to the
  * server's item of the same request, and one the list does not carry yet
- * is pinned after the server's items (#3615). */
-export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: string, fresh: readonly Message[] = [], approvals: readonly Pending[] = []): PinnedItem[] {
+ * is pinned after the server's items (#3615). `answered`: the keys answered
+ * on this device whose answer is on its way (#4438). */
+export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: string, fresh: readonly Message[] = [], approvals: readonly Pending[] = [], answered: ReadonlySet<string> = NO_KEYS): PinnedItem[] {
   const byId = new Map(fresh.map((message) => [message.id, message]));
   const out: PinnedItem[] = [];
   const seen = new Set<string>();
@@ -97,6 +109,10 @@ export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: s
     const key = `${item.threadId}:${item.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    // #4438: answered here a moment ago: it leaves at once, the count goes
+    // down and the next one moves up, wherever its card lives (a topic of
+    // the conversation the store has not loaded, another conversation)
+    if (answered.has(key)) continue;
     const served = item.message && typeof item.message === "object" ? item.message as Message : undefined;
     const local = item.threadId === threadId && item.messageId ? byId.get(item.messageId) : undefined;
     // the store's copy lacks what the server adds to an input request row
@@ -315,6 +331,13 @@ export function waitingStamp(owner: { threadId: string; tasks?: ReadonlyArray<{ 
   return `${owner.threadId}|${owner.waitingOn?.threadId ?? ""}|${tasks}`;
 }
 
+/** #4438: the waiting list's query; `opening`, the first read of a chat's
+ * list (the person opened the chat or its pinned card): the bots re-check
+ * their cards whose facts are old. A poll or a frame's reload never says so. */
+export function waitingQuery(query: string, opening: boolean): string {
+  return opening ? `${query}&opened=1` : query;
+}
+
 /** The server's items that wait on the person in one bot's conversations
  * (`botId`), or in a room's threads (`threads`, no bot). `stamp` changes
  * when the bot's waiting state or topics change: the list is read again. */
@@ -324,6 +347,7 @@ export function useServerWaitingItems(botId: string | undefined, threads: readon
   waitingNow.current = new Set(items.map((item) => item.threadId));
   const threadsKey = threads.join("\u0000");
   const active = Boolean(botId) || (room && threads.length > 0);
+  const openedPlace = useRef<string | null>(null);
   useEffect(() => {
     if (!active) {
       setItems([]);
@@ -333,8 +357,12 @@ export function useServerWaitingItems(botId: string | undefined, threads: readon
     let soon: number | undefined;
     const own = new Set(threadsKey ? threadsKey.split("\u0000") : []);
     const query = botId && !room ? `/api/approvals?waiting=1&botId=${encodeURIComponent(botId)}` : "/api/approvals?waiting=1";
+    // #4438: the first read of this chat's list is the person opening it
+    const place = `${botId ?? ""}\u0000${room ? 1 : 0}\u0000${threadsKey}`;
     const load = () => {
-      api<{ waiting?: ServedWaitingItem[] }>(query)
+      const opening = openedPlace.current !== place;
+      openedPlace.current = place;
+      api<{ waiting?: ServedWaitingItem[] }>(waitingQuery(query, opening))
         .then((body) => {
           if (!live) return;
           const all = Array.isArray(body.waiting) ? body.waiting.filter((item) => item && typeof item.id === "string" && typeof item.threadId === "string") : [];

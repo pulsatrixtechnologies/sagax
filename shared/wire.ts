@@ -1428,6 +1428,10 @@ export interface OptionCardData extends WaitCardField {
   /** What was actually answered, when the answer is words rather than a
    * verdict. */
   answeredText?: string;
+  /** #4438: what the server did at once with the answer (a fix card's
+   * choice: the routine paused, a check started), the one line the
+   * answered card shows. No model turn ran for it. */
+  answerNote?: string;
   dismissed?: boolean;
   /** #3471: the person skipped it without an answer (`answered` reads
    * "skipped", so every reader of `answered` sees it settled). Not a
@@ -1566,6 +1570,13 @@ export interface OptionCardData extends WaitCardField {
    * routine's fix card still open a day later), so a restart never rings
    * it again. */
   remindedAt?: number;
+  /** #4438: when the card's words were last read from what they describe:
+   * raised, or replaced in place by its key. Absent: the message's `at`.
+   * A card nothing re-checks says since when its facts were read. */
+  factsAt?: number;
+  /** #4438: the raw words behind a server card (a tool's own error, its
+   * code), folded under Details; the card's text says it in plain words. */
+  technicalDetails?: string;
   /** #4250 (S7): a keyed card a routine raised: the routine and the card's
    * kind (its key without the item id), whose answer the person's signal
    * ledger keeps, and the "Always do this for this routine" option the card

@@ -131,18 +131,23 @@ export function TechnicalDetails({
   tool,
   server,
   args,
+  text,
   defaultOpen = false,
   argsLabel,
 }: {
   tool?: string;
   server?: string;
   args?: string;
+  /** #4438: plain raw words behind a card (a tool's own error), shown as
+   * they are under the same fold; the card's text says it in plain words. */
+  text?: string;
   defaultOpen?: boolean;
   /** aria-label of the arguments block */
   argsLabel?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  if (!tool && !args) return null;
+  if (!tool && !args && !text) return null;
+  const request = Boolean(tool || args);
   return (
     <div className="mt-2" data-technical-details={open ? "open" : "closed"}>
       <button
@@ -152,11 +157,14 @@ export function TechnicalDetails({
         className="inline-flex items-center gap-1 rounded-md py-0.5 text-[12.5px] text-ink-secondary hover:text-ink"
       >
         <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform", open ? "rotate-0" : "-rotate-90")} />
-        {open ? t("approval.details.hideFull") : t("approval.details.viewFull")}
+        {request
+          ? (open ? t("approval.details.hideFull") : t("approval.details.viewFull"))
+          : (open ? t("approval.details.hide") : t("approval.details.show"))}
       </button>
       {open && (
         <div className="mt-1.5 rounded-xl border border-hairline/40 bg-inset px-3 py-2">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]">
+          {text && <p className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-ink">{text}</p>}
+          {request && <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]">
             {tool && (
               <>
                 <dt className="text-ink-secondary">{t("approval.details.tool")}</dt>
@@ -169,7 +177,7 @@ export function TechnicalDetails({
                 <dd className="min-w-0 break-all font-mono text-ink">{server}</dd>
               </>
             )}
-          </dl>
+          </dl>}
           {args && (
             <>
               <div className="mt-2 flex items-center justify-between">

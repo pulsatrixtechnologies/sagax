@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
 import type { InboxApproval } from "../../shared/approvals-inbox";
 import { servedWaitingItems, waitingEntriesFrom, type ServedWaitingItem } from "../../shared/waiting-items";
-import { createPinnedHold, pinnedHeldIds, pinnedItemsFrom, pinnedJumpTarget } from "./pinned-waiting";
+import { createPinnedHold, pinnedHeldIds, pinnedItemsFrom, pinnedJumpTarget, stillListed } from "./pinned-waiting";
 
 const NOW = 10_000_000;
 
@@ -156,5 +156,30 @@ describe("what the pinned card holds, the conversation does not draw (#3681)", (
     hold.set(new Set());
     expect(told).toBe(2);
     expect(hold.get().size).toBe(0);
+  });
+});
+
+describe("an answered card leaves the pinned row at once (#4438)", () => {
+  /** Five routine fix cards of one bot, in a topic of the conversation the
+   * app has not loaded (the store holds none of them). */
+  const fiveFixCards = (): ServedWaitingItem[] => servedWaitingItems(waitingEntriesFrom([1, 2, 3, 4, 5].map((n) => row({
+    threadId: "older-topic", requestId: `ask-choice-${n}`, messageId: `m-${n}`, kind: "question", at: n * 100,
+    message: { id: `m-${n}`, role: "bot", kind: "options", at: n * 100, card: { title: `Routine ${n} needs a fix`, subtitle: "", options: [], requestId: `ask-choice-${n}`, requestType: "question", askKey: `routine-problem:r${n}`, noHold: true,
+      questionRequest: { version: 1, questions: [{ question: `Routine ${n} ended with problems on its last run.`, options: [{ label: "Run a check" }, { label: "Open the routine" }] }] } } },
+  })), NOW));
+
+  it("the card answered here leaves, the count goes down and the next one is the next card, wherever its card lives", () => {
+    const served = fiveFixCards();
+    expect(pinnedItemsFrom(served, "conv")).toHaveLength(5);
+    const after = pinnedItemsFrom(served, "conv", [], [], new Set(["older-topic:ask-choice-1"]));
+    expect(after).toHaveLength(4);
+    expect(after.map((item) => item.item.id)).toEqual(["ask-choice-2", "ask-choice-3", "ask-choice-4", "ask-choice-5"]);
+  });
+
+  it("an answered key is forgotten once the server's list drops it", () => {
+    const served = fiveFixCards();
+    const answered = new Set(["older-topic:ask-choice-1"]);
+    expect(stillListed(answered, served)).toBe(answered);
+    expect([...stillListed(answered, served.slice(1))]).toEqual([]);
   });
 });

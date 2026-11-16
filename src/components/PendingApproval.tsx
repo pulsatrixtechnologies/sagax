@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
 import { t, tFromServer } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { ProposalBody } from "@/components/ProposalBody";
-import { adminWillAnswerLine, toolApprovalView, toolLabel } from "./ApprovalCard";
+import { adminWaitingLine, adminWaitsOnServerRight, adminWillAnswerLine, toolApprovalView, toolLabel } from "./ApprovalCard";
 import { ApprovalHeading, TechnicalDetails } from "./ApprovalParts";
 import { describeApproval, isTechnicalText } from "@/lib/approval-describe";
 import { reviewedSkillSha256 } from "../../shared/skill-request";
@@ -508,9 +508,9 @@ export function PendingApprovalActions({
           {t("approval.action.cancelTurn")}
         </button>
         <span role="status" className="flex min-w-0 flex-col text-[12.5px] text-ink-secondary">
-          <span>{t("approval.waitingForAdmin")}</span>
+          <span>{adminWaitingLine(pending.message.card.adminReason)}</span>
           <span>{adminWillAnswerLine(pending.message.card.adminNames)}</span>
-          <span data-admin-delegate="">{t("approval.adminDelegate")}</span>
+          {adminWaitsOnServerRight(pending.message.card.adminReason) ? <span data-admin-delegate="">{t("approval.adminDelegate")}</span> : null}
         </span>
       </div>
     );

@@ -78,6 +78,22 @@ function reachChannelName(channel: string | undefined): string {
   return t("botPanel.reachMe.label");
 }
 
+/** #4449: the line of a card waiting for an organization admin, by the
+ * reason the server gave (shared/wire.ts adminReason). Work on the shared
+ * host, or no reason (an older server), keeps the server line. */
+export function adminWaitingLine(reason: string | undefined): string {
+  if (reason === "other-bot-act") return t("approval.waitingForAdminOtherBot");
+  if (reason === "host-tool") return t("approval.waitingForAdminHostTool");
+  if (reason === "foreign-tool") return t("approval.waitingForAdminForeignServer");
+  return t("approval.waitingForAdmin");
+}
+
+/** Whether "Run commands on the organization's server" would answer this
+ * admin card: only work on the shared host itself. */
+export function adminWaitsOnServerRight(reason: string | undefined): boolean {
+  return reason !== "other-bot-act" && reason !== "host-tool" && reason !== "foreign-tool";
+}
+
 export function adminWillAnswerLine(adminNames: readonly string[] | undefined): string {
   const names = (adminNames ?? []).map((name) => name.trim()).filter(Boolean);
   return names.length
@@ -562,7 +578,7 @@ export function ApprovalCard({
         testId="approval-waiting"
         data={{ "data-tour": "approval", "data-approval-waiting": card.requestId, ...(card.reviewing ? { "data-auto-review": "pending" } : {}), ...(byRule ? { "data-held-by-rule": "" } : {}) }}
         icon={<ShieldCheck size={13} aria-hidden="true" className="text-accent" />}
-        label={card.reviewing ? t("customRules.notice.reviewing") : waitsOnAdmin ? t("approval.waitingForAdmin") : byRule ? byRule.label : t("approval.status.waitingApproval")}
+        label={card.reviewing ? t("customRules.notice.reviewing") : waitsOnAdmin ? adminWaitingLine(card.adminReason) : byRule ? byRule.label : t("approval.status.waitingApproval")}
         target={waitsOnAdmin ? adminWillAnswerLine(card.adminNames) : byRule?.target}
       />
     );

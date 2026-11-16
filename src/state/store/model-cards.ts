@@ -31,6 +31,8 @@ export interface OptionCardData {
   adminApproval?: boolean;
   /** Who can answer an adminApproval card: the organization admins' names. */
   adminNames?: string[];
+  /** #4449: why an adminApproval card waits (shared/wire.ts adminReason). */
+  adminReason?: string;
   /** Distinguishes a provider question from an approval after its live run ends. */
   requestType?: "permission" | "question";
   /** what each option means, keyed by its label — a question that came with

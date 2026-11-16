@@ -26,7 +26,8 @@ window.__rules = [];
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  if (url.includes("/api/auth/session")) return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
+  // card=admin-wait*: a member's session (no admin scope), who waits
+  if (url.includes("/api/auth/session")) return new Response(JSON.stringify(which.startsWith("admin-wait") ? { kind: "session", id: "s-member", scopes: [] } : {}), { status: 200, headers: { "content-type": "application/json" } });
   // card=org-once: the organization's Perspicax policy keeps every approval to
   // one card (#2091: the only card without Always allow)
   if (url.includes("/api/custom-rules/policy")) return new Response(JSON.stringify({ alwaysAllow: which !== "org-once", orgRules: which === "org-once" ? 1 : 0 }), { status: 200, headers: { "content-type": "application/json" } });
@@ -119,6 +120,23 @@ cards["flow-go"] = {
 // saves the server's proposed custom rule in one click
 if (which === "candidate") cards.candidate = { ...cards.command!, card: { ...cards.command!.card, ownerRule: undefined } };
 if (which === "org-once") cards["org-once"] = cards.command!;
+// card=admin-wait[-other-bot|-foreign|-host-tool]: a member's card waiting
+// for an organization admin, by the reason the server gives (#4449); no
+// reason is the line an older server leaves
+const ADMIN_WAIT_REASONS: Record<string, string | undefined> = {
+  "admin-wait": undefined, "admin-wait-other-bot": "other-bot-act", "admin-wait-foreign": "foreign-tool", "admin-wait-host-tool": "host-tool",
+};
+if (which in ADMIN_WAIT_REASONS) {
+  const reason = ADMIN_WAIT_REASONS[which];
+  cards[which] = {
+    tool: "mcp__elsewhere__list_issues",
+    card: {
+      ...cards.command!.card, requestId: "req-5", tool: "mcp__elsewhere__list_issues", mcpTool: "mcp__elsewhere__list_issues", subtitle: "list_issues",
+      toolInput: JSON.stringify({ state: "open" }), adminApproval: true, adminNames: ["Alice"], ownerRule: undefined, customRuleCandidate: undefined,
+      ...(reason ? { adminReason: reason } : {}),
+    } as unknown as NonNullable<Message["card"]>,
+  };
+}
 const chosen = cards[which] ?? cards.command!;
 const message = { id: "m1", role: "bot", kind: "options", at: 0, text: "", card: chosen.card } as unknown as Message;
 const pending: Pending = {

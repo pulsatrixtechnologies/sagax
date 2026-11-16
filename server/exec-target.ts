@@ -39,19 +39,21 @@ export function orgServerExecRouting(input: {
   return input.botHasOwnComputer ? "use-bot-computer" : "no-computer";
 }
 
-/** #4449: what the bot reads when a member's turn asked for a shell on the
- * shared host while the bot has a computer of its own this turn. Nothing
- * waits for an admin: the command belongs in the person's own place. */
+/** #4449: what the bot reads when a member's turn asked for work on the
+ * shared host (a shell, an engine tool of the host such as a web fetch, a
+ * file outside its own folders) while the bot has a computer of its own this
+ * turn. Nothing waits for an admin: the work belongs in the person's own
+ * place. */
 export const EXEC_USE_BOT_COMPUTER =
-  "Refused: a shell on the organization's server is never this bot's place. Run it on this bot's own computer instead (its server environment, its Local VM, This computer or its cloud computer, for example sagax-environment run_command, sagax-desktop, vm_exec or the computer tools), not a shell on the host.";
+  "Refused: the organization's server is never this bot's place, for a shell, a web fetch or a file outside its own folders. Do it on this bot's own computer instead (its server environment, its Local VM, This computer or its cloud computer, for example sagax-environment run_command with curl or gh, sagax-desktop, vm_exec or the computer tools), not on the host.";
 
-/** #4449: the plain refusal when a member's turn asked for a shell on the
+/** #4449: the plain refusal when a member's turn asked for work on the
  * shared host and no place of the person's own can be had this turn. Never
  * an admin card, never a fallback to the shared host: it says why and what
  * the person can do. `decision` is the turn's workplace (desktop-bridge.ts
  * resolveBotWorkplace), absent when none was recorded. */
 export function ownPlaceRefusal(decision: { target: string; principal: string | null; reason: string } | undefined): string {
-  const never = "Commands never run on the organization's server, and no admin is asked.";
+  const never = "Commands and engine tools never run on the organization's server, and no admin is asked.";
   if (decision?.target === "user-desktop" || decision?.reason === "pinned-desktop") {
     return `Nothing ran: this conversation works on the person's own computer, and the Sagax desktop app on it is not connected right now. Tell them to open Sagax on that computer, or to set the bot's Workspace to Cloud to use their server environment. ${never}`;
   }

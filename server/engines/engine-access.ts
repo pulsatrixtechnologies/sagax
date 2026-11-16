@@ -315,20 +315,42 @@ export function sensitiveHiddenSegment(segment: string): boolean {
  * member-own-place.test.ts so a new one cannot slip in unnoticed.
  *   other-bot-act        act on a bot someone else owns, or on a route that
  *                        reaches the organization (shared/grant-reach.ts)
- *   host-shell           a shell on the shared organization host; a turn the
- *                        member drives never waits for it (exec-target.ts
- *                        orgServerExecRouting refuses it with what to do)
+ *   host-shell           a shell on the shared organization host
+ *   host-engine-tool     an engine tool that runs on the shared host itself
+ *                        (a web fetch, a tool of the host's
+ *                        own computer, browser, files, shell or terminal)
+ *   outside-own-folders  a file tool on a path of the shared host outside
+ *                        the bot's own folders, or a sensitive hidden name
  *   host-tool            a host-level Sagax tool that leaves the person's
  *                        place: a pooled Local VM, someone else's computer,
  *                        the server's shared MCP list, a file outside the
  *                        bot's folders, the Perspicax admin tools
- *   foreign-tool         a tool Sagax did not mount for this person this
- *                        turn: a host-level built-in server, an engine tool
- *                        of the host (a fetch from the host), an unknown one
- *   outside-own-folders  a file tool on a path of the shared host outside
- *                        the bot's own folders, or a sensitive hidden name */
-export const MEMBER_ADMIN_REASONS = ["other-bot-act", "host-shell", "host-tool", "foreign-tool", "outside-own-folders"] as const;
+ *   foreign-tool         a tool of a server Sagax did not mount for this
+ *                        person this turn: someone else's
+ * The first three (HOST_RUN_REASONS) are work that would run on the shared
+ * host: a turn the member drives never waits for an admin on them
+ * (exec-target.ts orgServerExecRouting sends it to the bot's own computer,
+ * or refuses it in plain words with what to do). Only a turn an admin (or
+ * a host.commands holder) drives keeps their card. */
+export const MEMBER_ADMIN_REASONS = ["other-bot-act", "host-shell", "host-engine-tool", "outside-own-folders", "host-tool", "foreign-tool"] as const;
 export type MemberAdminReason = typeof MEMBER_ADMIN_REASONS[number];
+
+/** #4449: the reasons that are work on the shared host itself. */
+export const HOST_RUN_REASONS: ReadonlySet<MemberAdminReason> = new Set(["host-shell", "host-engine-tool", "outside-own-folders"]);
+
+/** Host-level built-in servers that drive the shared host itself (its
+ * desktop, browser, files, shell). The sagax-* ones are a person's own
+ * destinations: when they are not this person's, they are someone else's. */
+const HOST_ITSELF_MCP_SERVERS: ReadonlySet<string> = new Set(["computer", "browser", "shell", "files", "terminal"]);
+
+/** Whether a tool the member's scope did not cover is the engine's own tool
+ * of the shared host (WebFetch, a host built-in server),
+ * rather than a tool of somebody else's server. */
+function hostEngineTool(tool: string): boolean {
+  const match = /^(?:mcp__)?([A-Za-z0-9][A-Za-z0-9_.-]*?)__([A-Za-z0-9][A-Za-z0-9_.-]*)$/.exec(tool);
+  if (!match) return true;
+  return HOST_ITSELF_MCP_SERVERS.has(match[1]!.toLowerCase());
+}
 
 /** Whether a permission card of a member's bot on an organization server
  * waits for an organization admin (rule until per-owner containers). Every
@@ -441,7 +463,7 @@ export function memberBotAdminReason(input: MemberBotAdminInput): MemberAdminRea
   // read, like a native Read: inside the bot's own folders they are the
   // owner's card, so the bot's level (Full included) answers them.
   const fileView = MCP_FILE_VIEW_TOOL.test(tool);
-  if (!WORKSPACE_FILE_TOOLS.has(tool) && !fileView) return "foreign-tool";
+  if (!WORKSPACE_FILE_TOOLS.has(tool) && !fileView) return hostEngineTool(input.tool?.trim() ?? "") ? "host-engine-tool" : "foreign-tool";
   if (!input.paths?.length) return "outside-own-folders";
   // 2026-10-19 (bot quality, cause A): a read may open the bot's own skill
   // revisions and plugin manifests (READABLE_HIDDEN_SEGMENTS). #1098

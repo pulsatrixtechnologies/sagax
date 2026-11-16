@@ -1527,6 +1527,10 @@ export interface OptionCardData extends WaitCardField {
   /** The organization admins who can answer an adminApproval card (at most
    * five names), so the member's waiting line can say who. */
   adminNames?: string[];
+  /** #4449: why an adminApproval card waits for an admin
+   * (server/engines/engine-access.ts MEMBER_ADMIN_REASONS), so the waiting
+   * line says the true reason. Absent: the generic line. */
+  adminReason?: string;
   /** The bot's change applied without a person (a change to the bot itself,
    * or Full access): clients show a one-line receipt with Undo instead of
    * the approval box. */

@@ -34,7 +34,7 @@ import {
 /** The answer half of request.opened: an automatic answer, a hold, or the card the person sees. */
 export function presentRequestOpened(event: any, ctx: any, host: any, s: any): void {
   const { bot, pushMessage, routineRun } = ctx;
-  const { adminApproval, asker, cardAnswerer, command, customCall, customDecision, customNotice, customReview, destinationAnswerer, effectiveApprovalMode, emailDraftRequest, foreignDestination, gateAllowKey, gateGrantBlocked, grantsOffered, guestDriven, ownSandboxCall, owner, ownerCall, ownerOriginRefused, ownerRuleCandidate, ownerRuleFolderCandidate, ownerStepUp, permission, safetyEffect, safetyWho, serverCommandHolder, strictCard, toolAllowKey, unattended, verdict } = s;
+  const { adminApproval, adminReason, asker, cardAnswerer, command, customCall, customDecision, customNotice, customReview, destinationAnswerer, effectiveApprovalMode, emailDraftRequest, foreignDestination, gateAllowKey, gateGrantBlocked, grantsOffered, guestDriven, ownSandboxCall, owner, ownerCall, ownerOriginRefused, ownerRuleCandidate, ownerRuleFolderCandidate, ownerStepUp, permission, safetyEffect, safetyWho, serverCommandHolder, strictCard, toolAllowKey, unattended, verdict } = s;
       if (verdict?.approve && asker && event.requestId) {
         const instance = event.providerInstanceId
           ? host.registry.get(event.providerInstanceId)
@@ -231,6 +231,10 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
           allowSession: permission && event.allowSession && !event.requiresExplicitApproval && !strictCard && grantsOffered && !guestDriven && !destinationAnswerer && !foreignDestination && safetyEffect?.kind !== "hold"
             && event.outbound !== true && !host.isOutboundTool(event.mcpTool ?? event.tool) ? true : undefined,
           ...(adminApproval ? { adminApproval: true } : {}),
+          // #4449: why it waits, so the waiting line says the true reason
+          // (engine-access.ts MEMBER_ADMIN_REASONS); a client that does not
+          // know the field keeps its own line
+          ...(adminApproval && adminReason ? { adminReason } : {}),
           ...(destinationAnswerer ? { destinationAnswerer } : {}),
           ...(serverCommandHolder ? { serverCommandHolder: true } : {}),
           ...(ownSandboxCall ? { ownSandbox: true } : {}),

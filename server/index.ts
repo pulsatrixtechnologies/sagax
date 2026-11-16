@@ -15792,7 +15792,9 @@ const MEMBER_BOT_FULL_ACCESS = {
   code: "member_bot_full_access"
 } as const;
 const ADMIN_APPROVAL_REQUIRED = {
-  error: "This command would run on the organization's server: an organization admin has to approve it. To approve the server commands of your own bots yourself, ask an admin to give you \"Run commands on the organization's server\" in Perspicax (Bot rights > Who has what).",
+  // #4449: true for every reason a card still waits for an admin
+  // (engine-access.ts MEMBER_ADMIN_REASONS), not only a server command
+  error: "An organization admin has to approve this: it reaches past your own place (a bot of another person, the organization's shared server, or a server that is not yours). For a command on the organization's server, an admin can also give you \"Run commands on the organization's server\" in Perspicax (Bot rights > Who has what).",
   code: "admin_approval_required"
 } as const;
 

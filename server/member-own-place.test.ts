@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { MEMBER_ADMIN_REASONS, memberBotAdminApproval, memberBotAdminReason } from "./engines/engine-access.ts";
+import { HOST_RUN_REASONS, MEMBER_ADMIN_REASONS, memberBotAdminApproval, memberBotAdminReason } from "./engines/engine-access.ts";
 import { EXEC_USE_BOT_COMPUTER, orgServerExecRouting, ownPlaceRefusal } from "./exec-target.ts";
 import { createMountPluginMcp } from "./index-leaves/mountPluginMcp.ts";
 import { createOwnerScopedMcpServerFor } from "./index-leaves/ownerScopedMcpServerFor.ts";
@@ -155,28 +155,31 @@ describe("a shell a member's turn asks on the shared host", () => {
       expect(text).not.toMatch(/waiting for an admin|admin has to approve/i);
     }
   });
-
-  it("the request path refuses it instead of opening an admin card for a member's turn", () => {
-    const source = readFileSync(fileURLToPath(new URL("./runtime-events/request-opened.ts", import.meta.url)), "utf8");
-    const block = source.slice(source.indexOf("const routing = orgServerExecRouting("), source.indexOf("decideRequestOpened(event, ctx, host,"));
-    expect(block).toContain('if (routing !== "admin-card")');
-    expect(block).toContain("host.ownPlaceRefusalForTurn(event.threadId)");
-    expect(block).toContain('behavior: "deny"');
-  });
 });
 
 describe("what can still wait for an organization admin on a member's bot", () => {
   it("is this fixed list: each one reaches past the person's own environment", () => {
-    expect([...MEMBER_ADMIN_REASONS]).toEqual(["other-bot-act", "host-shell", "host-tool", "foreign-tool", "outside-own-folders"]);
+    expect([...MEMBER_ADMIN_REASONS]).toEqual(["other-bot-act", "host-shell", "host-engine-tool", "outside-own-folders", "host-tool", "foreign-tool"]);
     const reason = (input: Parameters<typeof memberBotAdminReason>[0]) => memberBotAdminReason(input);
     expect(reason({ tool: "agents__act", workspaceRoot: root, rawInput: { method: "GET", path: "/api/bots/someone-else" }, ownsBot: () => false })).toBe("other-bot-act");
     expect(reason({ tool: "Bash", command: { command: "ls", cwd: root }, workspaceRoot: root })).toBe("host-shell");
     expect(reason({ tool: "agents__vm_exec", workspaceRoot: root })).toBe("host-tool");
-    expect(reason({ tool: "mcp__computer__click", workspaceRoot: root })).toBe("foreign-tool");
+    expect(reason({ tool: "mcp__elsewhere__list_issues", workspaceRoot: root })).toBe("foreign-tool");
     expect(reason({ tool: "Read", paths: ["/etc/passwd"], workspaceRoot: root })).toBe("outside-own-folders");
+    // the engine's own tools of the shared host: work on the host, like the shell
+    for (const tool of ["WebFetch", "mcp__computer__click", "browser__navigate"]) {
+      expect(reason({ tool, workspaceRoot: root })).toBe("host-engine-tool");
+    }
+    // the sagax-* places are a person's: when not this person's, someone else's
+    expect(reason({ tool: "mcp__sagax-desktop__screenshot", workspaceRoot: root })).toBe("foreign-tool");
     // the person's own place: never an admin's
     expect(reason({ tool: "Bash", command: { command: "ls", cwd: root }, workspaceRoot: root, ownEnvironment: true })).toBeNull();
     expect(reason({ tool: "agents__list_bots", workspaceRoot: root })).toBeNull();
+  });
+
+  it("work on the shared host is never an admin wait for a member's own turn; the rest reaches past the person", () => {
+    expect([...HOST_RUN_REASONS].sort()).toEqual(["host-engine-tool", "host-shell", "outside-own-folders"]);
+    for (const kept of ["other-bot-act", "host-tool", "foreign-tool"] as const) expect(HOST_RUN_REASONS.has(kept)).toBe(false);
   });
 
   it("is set on a card in one place only", () => {

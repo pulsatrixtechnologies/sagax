@@ -566,6 +566,62 @@ posixOnly("organization server: a member's own destinations", () => {
     }
   }, 150_000);
 
+  // #4449: the engine's own tools of the shared host (a web fetch, a file
+  // outside the bot's folders) are work on the host, like the shell: his own
+  // turn never waits for an admin on them. With no computer of his own this
+  // turn he is told why and what to do; with one, the bot is sent there.
+  it("#4449: a web fetch or a file outside his folders on the shared host is never an admin's wait", async () => {
+    await withoutOwnComputer(async () => {
+      const rue = await bobBot("Rue", true);
+      const turn = await heldTurn(bob, rue, "lis les issues");
+      try {
+        const webFetch = await turn.ask("WebFetch", { url: "https://code.example.test/acme/app/issues", prompt: "list the open issues" });
+        const read = await turn.ask("Read", { file_path: "/etc/hostname" });
+        for (const call of [webFetch, read]) {
+          await waitFor(async () => call.answer()?.behavior === "deny");
+          expect(String(call.answer().message)).toContain("Nothing ran");
+          expect(String(call.answer().message)).toContain("no admin is asked");
+          expect(await turn.noCard(call.id)).toBe(true);
+        }
+      } finally {
+        await turn.end();
+      }
+    });
+    const sage = await bobBot("Sage");
+    const turn = await heldTurn(bob, sage, "lis les issues");
+    try {
+      const webFetch = await turn.ask("WebFetch", { url: "https://code.example.test/acme/app/issues", prompt: "list the open issues" });
+      await waitFor(async () => webFetch.answer()?.behavior === "deny");
+      expect(String(webFetch.answer().message)).toContain("own computer");
+      expect(String(webFetch.answer().message)).not.toMatch(/admin/i);
+      expect(await turn.noCard(webFetch.id)).toBe(true);
+    } finally {
+      await turn.end();
+    }
+  }, 120_000);
+
+  // #4449: a plugin's server mounted for him this turn (relayed into his own
+  // server environment, or remote as him) is his: a tool of it is his own
+  // card at his level, never one waiting for an admin.
+  it("#4449: a tool of a plugin server mounted for him is his own card, never an admin's", async () => {
+    const wren = await bobBot("Wren");
+    const enabled = await api("PATCH", `/api/bots/${wren.id}`, bob, { builtinPlugins: { rea: true } });
+    expect(enabled.status, enabled.text).toBe(200);
+    const turn = await heldTurn(bob, wren, "liste les cibles");
+    try {
+      expect(turn.mcpServers).toContain("rea");
+      const call = await turn.ask("mcp__rea__list_targets", {});
+      const card = await turn.cardOf(call.id);
+      expect(card.adminApproval).not.toBe(true);
+      expect(card.adminReason).toBeUndefined();
+      const allowed = await turn.respond(bob, call.id, "allow");
+      expect(allowed.status, allowed.text).toBe(200);
+      await waitFor(async () => call.answer()?.behavior === "allow");
+    } finally {
+      await turn.end();
+    }
+  }, 60_000);
+
   // 2026-10-22 (#990): with a computer of his own this turn (his server
   // environment, or his desktop app connected), a host shell on the shared
   // server is refused with the way out, and no admin card waits in a dead end.

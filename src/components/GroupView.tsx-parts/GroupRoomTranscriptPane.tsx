@@ -1,3 +1,4 @@
+import { citationReplyAction } from "@/lib/citation-reply";
 import { useState, type RefObject, type MutableRefObject } from "react";
 import { createPinnedHold, PinnedHoldContext } from "@/lib/pinned-waiting";
 import { Square } from "lucide-react";
@@ -256,7 +257,8 @@ export function GroupRoomTranscriptPane({
       <CitationSelectionToolbar
         key={`${group.id}:${group.threadId}`}
         viewportRef={scrollRef}
-        onAdd={(citation) => appendDraftAttachments(`group:${citation.source.ownerId}:${citation.source.threadId}`, [citation])}
+        onReply={(citation) => dispatch(citationReplyAction(citation, "group", group.id, group.threadId))}
+        onAdd={(citation) => appendDraftAttachments(`group:${group.id}:${group.threadId}`, [citation])}
       />
       </div>
     </div>

@@ -976,6 +976,12 @@ setting is the person's own (`sagax.voiceDashes.v1`, Settings > Models and
 voice > Voice), on by default for French. A solo server cannot read the
 browser's choice, so it follows the server language there.
 
+Cite on a selected passage sends a nonempty comment directly in the current
+conversation, with the selected passage as a citation (#4487). An empty
+comment and the quote shortcut still add a draft attachment. Opening the
+editor freezes the captured selection before focus moves. A failed send
+restores its words and citation alongside the current draft.
+
 ## Record links in a bot's reply (2026-11-16, #4507)
 
 After the dashes, `pushAssistantText` passes the final text through

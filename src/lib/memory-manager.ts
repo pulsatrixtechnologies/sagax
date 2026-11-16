@@ -26,6 +26,10 @@ export interface MemoryManagerSource {
   scope?: string;
   /** Bot source: false when no current bot owns this memory (a temporary agent's). */
   linked?: boolean;
+  /** Team source on a server several people use (#4460): "self" is the
+   * viewer's own memory, "unclaimed" the entries a shared memory held with
+   * no known author (an admin's). */
+  owner?: "self" | "unclaimed";
 }
 
 export interface MemoryManagerSourcesResponse {
@@ -139,6 +143,8 @@ export interface MemoryNoteDetail {
   versions?: number | null;
   editMode?: string;
   sealed?: boolean;
+  /** Team memory (#4460): the shared memory this entry was moved out of. */
+  movedFrom?: string;
   linksOut?: MemoryNoteLink[];
   backlinks?: MemoryNoteLink[];
 }
@@ -280,6 +286,8 @@ export interface TeamEntry {
   status: string;
   updatedAt: number;
   source?: { botName?: string; at?: number };
+  /** #4460: the shared memory this entry was moved out of. */
+  movedFrom?: string;
 }
 
 export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
@@ -320,7 +328,21 @@ export async function openTeamNote(section: string, id: string): Promise<MemoryN
     author: entry.source?.botName || undefined,
     createdAt: entry.source?.at,
     updatedAt: entry.updatedAt,
+    ...(entry.movedFrom ? { movedFrom: entry.movedFrom } : {}),
   };
+}
+
+/** The console folder an entry of each kind lands in (the server's PUBLISH_TOPICS). */
+export const TEAM_PUBLISH_TOPICS: Record<string, string> = { person: "people", place: "places", decision: "decisions", term: "terms" };
+
+/** #4460: one entry of the person's own memory moved to a tier of the
+ * organization console (a team of theirs, the organization or their own);
+ * it leaves this server's memory once the console has it. */
+export function publishTeamNote(section: string, id: string, scope: string, topic: string): Promise<unknown> {
+  return api(`/api/team-memory/${encodeURIComponent(id)}/publish?section=${encodeURIComponent(section)}`, {
+    method: "POST",
+    body: JSON.stringify({ scope, topic }),
+  });
 }
 
 export async function browsePerspicax(folder?: string, scope?: string): Promise<MemoryBrowse> {

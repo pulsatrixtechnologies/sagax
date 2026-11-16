@@ -13,7 +13,7 @@ import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { setupSystemPrompt, setupModeActive } from "../setup-mode.ts";
 import { skillDiscoveryAvailable } from "../skills/skill-discovery.ts";
 import { resolveSurface, surfacePrompt } from "../surface.ts";
-import { resolveComputerPromptKind, userProfileSystemPrompt, longCommandsPrompt, computerPrompt, customMcpPrompt, CREDENTIAL_PROMPT, REACTION_PROMPT, MEME_PROMPT, IMAGE_PROMPT, FEEDBACK_PROMPT, ROUTINE_PROMPT, richOutputPrompt, TEAM_MEMORY_PROMPT, teamAvailabilityPart, buildSystemPrompt, CLAUDE_REUSE_VOLATILE_SECTIONS } from "../system-prompt.ts";
+import { resolveComputerPromptKind, userProfileSystemPrompt, longCommandsPrompt, computerPrompt, customMcpPrompt, CREDENTIAL_PROMPT, REACTION_PROMPT, MEME_PROMPT, IMAGE_PROMPT, FEEDBACK_PROMPT, ROUTINE_PROMPT, richOutputPrompt, teamAvailabilityPart, buildSystemPrompt, CLAUDE_REUSE_VOLATILE_SECTIONS } from "../system-prompt.ts";
 import { rulesSystemPrompt, docsIndexPrompt } from "../workspace/workspace-files.ts";
 import { supportsWorkspaceFiles, WITHHELD_HOST_TOOLS_PROMPT } from "../workspace/workspace.ts";
 export type Host = Record<string, any>;
@@ -91,7 +91,7 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
     { id: "profile", label: "Profile changes", text: agentsMounted ? host.botProfilePrompt(bot) : "" },
     { id: "rich-output", label: "Rich output", text: richOutputPrompt(bot.emailDrafts !== false) },
     { id: "section-context", label: "Section context", text: (() => { const team = host.teamStorageForBot(bot); return sectionContextSystemPrompt(team.key, team.label); })() },
-    { id: "team-memory", label: "Team memory", text: (() => { const team = host.teamStorageForBot(bot); return host.teamMemory.systemPrompt(team.key, team.label) + (agentsMounted ? TEAM_MEMORY_PROMPT : ""); })() },
+    { id: "team-memory", label: "Team memory", text: host.teamMemoryPromptFor(bot) + (agentsMounted ? host.teamMemoryToolPrompt() : "") },
     teamAvailabilityPart(agentsMounted && coordination ? peers : []),
     { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(bot.id, { writes: agentsMounted }) },
     { id: "memory", label: "Memory", text: host.memoryPromptFor(bot, { managedWrites: agentsMounted, fileTools: Boolean(privateWorkspace), withholdHostTools: Boolean(instance && host.withholdHostToolsFor(instance)) }) },

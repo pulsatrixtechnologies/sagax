@@ -32,6 +32,9 @@ export interface MemoryManagerSource {
   linked?: boolean;
   /** Team source: section key for /api/team-memory. */
   section?: string;
+  /** #4460, a server several people use: "self" is the caller's own memory,
+   * "unclaimed" the entries a shared memory held with no known author. */
+  owner?: "self" | "unclaimed";
   /** Perspicax scope hint (`me`, `org`, `team:<id>`), never a person GUID. */
   scope?: string;
 }
@@ -44,7 +47,7 @@ export interface MemoryManagerSourcesDeps {
    * refuse is not listed: its row would only open on "no such bot". */
   botReachable(auth: RequestAuth, botId: string): boolean;
   /** Team memory sections the caller may see. */
-  teamSections(auth: RequestAuth): Array<{ section: string; label: string; mayWrite: boolean; count: number }>;
+  teamSections(auth: RequestAuth): Array<{ section: string; label: string; mayWrite: boolean; count: number; owner?: "self" | "unclaimed" }>;
   /** Whether Perspicax notes are offered for this caller. */
   perspicax(auth: RequestAuth): { available: boolean; reason?: "link" | "sign_in" | "solo" } | null;
 }
@@ -75,6 +78,7 @@ export function createMemoryManagerRoutes(deps: MemoryManagerSourcesDeps): Route
         detail: section.count === 1 ? "1 team note" : `${section.count} team notes`,
         mayWrite: section.mayWrite,
         section: section.section,
+        ...(section.owner ? { owner: section.owner } : {}),
       });
     }
     const px = deps.perspicax(auth);

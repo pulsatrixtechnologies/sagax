@@ -696,6 +696,7 @@ import {
   sectionContextKey,
   sectionContextLabel,
   sectionContextSystemPrompt,
+  parseTeamDataKey,
   teamDataKey,
   writeSectionContext,
   writeTeamDefaults
@@ -753,7 +754,6 @@ import { buildSystemPrompt,
   LEARN_PROMPT,
   PROFILE_PROMPT,
   PROFILE_CREATOR_PROMPT,
-  TEAM_MEMORY_PROMPT,
   ROUTINE_PROMPT,
   ROUTINE_EXECUTION_PROMPT,
   WEBHOOK_PROMPT,
@@ -835,7 +835,8 @@ import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts"
 import { profileRevision, profileSnapshot } from "./profiles/profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument } from "./bots/bot-package.ts";
-import { TeamMemory } from "./memory/team-memory.ts";
+import { TeamMemory, type TeamMemoryEntry } from "./memory/team-memory.ts";
+import { teamMemoryScope, teamMemoryWording, UNCLAIMED_MEMORY_KEY, type TeamMemoryScope } from "./memory/team-memory-scope.ts";
 import { teamMemoryReviewRefusal } from "./memory/team-memory-review.ts";
 import { teamMemoryCardSettled, teamMemoryLateAnswer } from "./memory/team-memory-cards.ts";
 import { isTeamMemorySharing, storedTeamMemorySharing, teamMemorySharingOf } from "../shared/team-memory-sharing.ts";
@@ -1378,8 +1379,8 @@ import { createRoutineRunInternalRoutes, routineRunNowAllowed } from "./routes/r
 import { createEventSubscriptionsInternalRoutes } from "./routes/event-subscriptions-internal.ts";
 import { createPerspicaxOrgRoutes, orgDirectoryEntries } from "./perspicax/perspicax-org-routes.ts";
 import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
-import { PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
-import { createMeMemoryNotesRoutes } from "./routes/me-memory-notes.ts";
+import { memoryReadPath, PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
+import { createMeMemoryNotesRoutes, memoryPrincipal } from "./routes/me-memory-notes.ts";
 import { createMemoryManagerRoutes } from "./routes/memory-manager.ts";
 import { ownEnvironmentSensitiveRead, ownEnvironmentTurnOrigin } from "./people/member-environment.ts";
 import { lineageEnvironmentCall } from "./approvals/owner-autonomy.ts";
@@ -2943,6 +2944,10 @@ bindLeafHost({
   get sectionMigrationOwner() { return sectionMigrationOwner; },
   get orgSectionNames() { return orgSectionNames; },
   get teamStorageKeyFor() { return teamStorageKeyFor; },
+  get teamMemoryKeyFor() { return teamMemoryKeyFor; },
+  get teamMemoryPromptFor() { return teamMemoryPromptFor; },
+  get teamMemoryToolPrompt() { return teamMemoryToolPrompt; },
+  get teamMemoryPersonScoped() { return teamMemoryPersonScoped; },
   get teamStorageKeyForAuth() { return teamStorageKeyForAuth; },
   get providerAccountOwner() { return providerAccountOwner; },
   get syncPersonalProviders() { return syncPersonalProviders; },
@@ -3284,7 +3289,6 @@ bindLeafHost({
   get Store() { return Store; },
   get SubscriptionDepositor() { return SubscriptionDepositor; },
   get TASK_WORKSPACES_DIR() { return TASK_WORKSPACES_DIR; },
-  get TEAM_MEMORY_PROMPT() { return TEAM_MEMORY_PROMPT; },
   get TEAM_SETUP_DESKTOP_MESSAGE() { return TEAM_SETUP_DESKTOP_MESSAGE; },
   get TEAM_SETUP_DESKTOP_ONLY() { return TEAM_SETUP_DESKTOP_ONLY; },
   get TELEPHONY_ASSERTION_ACTORS() { return TELEPHONY_ASSERTION_ACTORS; },
@@ -9633,7 +9637,9 @@ function viewerUsesTeamSection(viewer: AuthzViewer | undefined, section: string)
  * sees the card's bot and thread or channel. "shared": no extra condition. */
 function teamMemoryContextAllows(threadId: string, botId: string | undefined, viewerId: string | undefined): boolean {
   const bot = botId ? store.bot(botId) : store.botByThread(threadId);
-  if (!viewerId || teamMemorySharingOf(bot) === "shared") return true;
+  // #4460: on a server several people use, a card writes its bot owner's own
+  // memory: only who sees its bot and conversation, whatever the setting
+  if (!viewerId || (!teamMemoryPersonScoped() && teamMemorySharingOf(bot) === "shared")) return true;
   return memberSeesFrame({ threadId, ...(bot ? { botId: bot.id } : {}) }, viewerId);
 }
 
@@ -21571,6 +21577,15 @@ ROUTES.push(createPerspicaxRoleRoutes({
   ),
 }));
 
+/** The person's own Perspicax memory notes (link token plus their sign-in):
+ * the memory manager's notes (createMeMemoryNotesRoutes) and, #4460, an
+ * entry of their own memory moved to a tier of the organization console. */
+const memoryNotesClient = new PerspicaxMemoryNotesClient({
+  baseUrl: () => perspicaxBase(),
+  accessToken: (principalId) => perspicaxAccessToken(principalId),
+  linkBearer: () => perspicaxDirectory?.linkBearer() ?? null,
+});
+
 /** 2026-11-05 (visible roles, batch 5): the person's own Perspicax journal
  * rows, read with their own sign-in bearer (as the memory notes are). */
 const roleJournalClient = new PerspicaxMemoryNotesClient({
@@ -24229,16 +24244,17 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     markWorkspaceUse,
     proposeTeamMemory: (section, entry, meta) => {
       const owner = meta.botId ? effectiveBotOwner(store.bot(meta.botId) ?? {}) : undefined;
-      return teamMemory.propose(teamStorageKeyFor(section, owner), entry, meta);
+      return teamMemory.propose(teamMemoryKeyFor(section, owner), entry, meta);
     },
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
     // #2091: a team-memory rule the person kept accepts the entry at once
+    teamMemoryPersonScoped,
     settleTeamMemoryByRule: (botId, threadId, proposed, section) => {
       const bot = store.bot(botId);
       if (!bot) return undefined;
       return settleProposalByRule(bot, threadId, proposed, () => {
-        const result = teamMemory.resolve(teamStorageKeyFor(section, effectiveBotOwner(bot)), proposed.requestId, "accept");
+        const result = teamMemory.resolve(teamMemoryKeyFor(section, effectiveBotOwner(bot)), proposed.requestId, "accept");
         if (result.claimed && result.state === "accepted") {
           const row = store.messagesFor(threadId).find((message) => message.id === proposed.messageId);
           if (row?.card) store.patchMessage(threadId, row.id, { card: { ...row.card, answered: "allow" } });
@@ -25401,6 +25417,20 @@ ROUTES.push(createMemoryManagerRoutes({
   })),
   botReachable: botMemoryReachable,
   teamSections: (auth) => {
+    // #4460: on an organization server, each person sees their own
+    // memory (their bots' entries, the ones moved out of a shared team
+    // memory among them), never another person's, an admin included
+    if (teamMemoryPersonScoped()) {
+      if (auth.kind === "loopback" && auth.trust === "service") return [];
+      const entries = teamMemory.list(teamMemoryKeyForAuth(auth, ""));
+      const own = { section: "", label: "Your memory", mayWrite: true, count: entries.length, owner: "self" as const };
+      // the entries that left a shared memory with no known author were the
+      // whole server's: its admins list, edit, delete or publish them
+      const unclaimed = teamMemoryUnclaimedReader(auth) ? teamMemory.list(UNCLAIMED_MEMORY_KEY) : [];
+      return unclaimed.length
+        ? [own, { section: UNCLAIMED_MEMORY_KEY, label: "No known author", mayWrite: true, count: unclaimed.length, owner: "unclaimed" as const }]
+        : [own];
+    }
     const may = auth.kind === "loopback"
       ? auth.trust !== "service"
       : auth.scopes.includes("admin") || (IDENTITY.kind === "perspicax" && orgAdminCaller(auth));
@@ -29182,6 +29212,87 @@ function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
   return teamStorageKeyFor(sectionName, owner);
 }
 
+/** #4460: a server several people use (teamMemoryShared: an organization
+ * server, or a workspace with members) keeps no team memory between people:
+ * each person's bots read that person's own
+ * (server/memory/team-memory-scope.ts). Shared memory is the organization
+ * console's teams; a workspace with no console keeps none. */
+function teamMemoryPersonScoped(): boolean {
+  return teamMemoryShared();
+}
+/** #4460: the person a team memory prompt names, their organization teams
+ * by name, and whether a console keeps team memory. */
+function teamMemoryPerson(principalId: string): { name: string; teams: string[]; console: boolean } {
+  const person = principals.byId(principalId);
+  const name = person?.name?.trim() || person?.login?.trim() || person?.email?.trim() || "this person";
+  const teams = (person?.teams ?? []).map((team) => orgTeams.name(team.id) ?? team.id);
+  return { name, teams, console: IDENTITY.kind === "perspicax" };
+}
+/** #4460: who reads the entries kept aside when they left a shared memory
+ * with no known author: they were the whole server's, so its admins. */
+function teamMemoryUnclaimedReader(auth: RequestAuth): boolean {
+  if (auth.kind === "loopback") return auth.trust !== "service";
+  return auth.scopes.includes("admin") && (IDENTITY.kind !== "perspicax" || orgAdminCaller(auth));
+}
+/** #4460: shared keys left from before (a section, General) move to their
+ * authors' own memory on an organization server. */
+function scopeTeamMemoryToPeople(): void {
+  if (!teamMemoryPersonScoped() || !teamMemory.hasSharedKeys()) return;
+  const authorOf = (key: string, entry: TeamMemoryEntry): string | null => {
+    const bot = entry.source.botId ? store.bot(entry.source.botId) : undefined;
+    if (bot) return effectiveBotOwner(bot);
+    const team = parseTeamDataKey(key);
+    if (team && team.ownerPrincipalId !== UNCLAIMED_OWNER) return team.ownerPrincipalId;
+    if (!key || !sectionChannels) return null;
+    const records = sectionChannels.list().filter((record) => record.name === key && record.ownerPrincipalId !== UNCLAIMED_OWNER);
+    return records.length === 1 ? records[0]!.ownerPrincipalId : null;
+  };
+  const labelOf = (key: string) => {
+    const team = parseTeamDataKey(key);
+    const record = team && sectionChannels ? sectionChannels.byId(team.sectionId) : null;
+    return record?.name ?? sectionContextLabel(key);
+  };
+  try {
+    const { moved, unclaimed } = teamMemory.scopeToPeople(authorOf, labelOf);
+    if (moved.length || unclaimed) {
+      const people = new Set(moved.map((row) => row.person)).size;
+      console.log(`team memory: ${moved.length} shared entr${moved.length === 1 ? "y" : "ies"} moved to ${people} author(s)' own memory; ${unclaimed} without a known author listed for the admins, read by no bot`);
+    }
+  } catch (error) {
+    console.error(`[team-memory] Could not move shared team memory to its authors: ${(error as Error).message}`);
+  }
+}
+/** #4460: the team memory a bot reads and writes (server/memory/team-memory-scope.ts). */
+function teamMemoryForBot(bot: { section?: string; sectionId?: string; ownerUserId?: unknown } | null | undefined): TeamMemoryScope {
+  scopeTeamMemoryToPeople();
+  const owner = bot ? effectiveBotOwner(bot) : "";
+  return teamMemoryScope({ personScoped: teamMemoryPersonScoped(), owner, section: () => teamStorageForBot(bot), person: () => teamMemoryPerson(owner) });
+}
+/** #4460: the team memory key of a section name for this owner. */
+function teamMemoryKeyFor(sectionName: string | null | undefined, ownerPrincipalId?: string | null): string {
+  scopeTeamMemoryToPeople();
+  return teamMemoryScope({ personScoped: teamMemoryPersonScoped(), owner: ownerPrincipalId ?? "", section: () => ({ key: teamStorageKeyFor(sectionName, ownerPrincipalId), label: "" }) }).key;
+}
+function teamMemoryKeyForAuth(auth: RequestAuth, sectionName: string): string {
+  // #4460: an admin reads and manages the entries kept aside (no known author)
+  if (teamMemoryPersonScoped() && sectionName === UNCLAIMED_MEMORY_KEY && teamMemoryUnclaimedReader(auth)) {
+    scopeTeamMemoryToPeople();
+    return UNCLAIMED_MEMORY_KEY;
+  }
+  const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+  return teamMemoryKeyFor(sectionName, owner);
+}
+/** #4460: a bot's team memory block, with where its entries come from. */
+function teamMemoryPromptFor(bot: { section?: string; sectionId?: string; ownerUserId?: unknown } | null | undefined): string {
+  const scope = teamMemoryForBot(bot);
+  return teamMemory.systemPrompt(scope.key, scope.label, scope.person);
+}
+/** #4460: the propose_team_memory instruction, worded for this server's
+ * mode (team-memory-scope.ts teamMemoryWording). */
+function teamMemoryToolPrompt(): string {
+  return teamMemoryWording(teamMemoryPersonScoped()).prompt;
+}
+
 /** I2: the caller's team model and computer. */
 function teamDefaultsForAuth(auth: RequestAuth, sectionName: string) {
   return sectionName ? readTeamDefaults(teamStorageKeyForAuth(auth, sectionName)) : null;
@@ -29215,6 +29326,8 @@ if (sectionChannels) {
   };
   const movedBriefs = migrateSectionContextKeys(resolveTeamOwner);
   const movedMemory = teamMemory.migrateSectionKeys(resolveTeamOwner);
+  // #4460: then no team memory stays shared between people on this server
+  scopeTeamMemoryToPeople();
   // #2045: bot/group membership links move from display name to section id.
   // Unknown names create that owner's private section so rename never orphans.
   // Never fall back to byName: two people may share a display name.
@@ -30334,11 +30447,7 @@ if (IDENTITY.kind === "perspicax") {
   ROUTES.push(createMeMemoryNotesRoutes({
     issuer,
     linked: () => Boolean(perspicaxDirectory?.linkBearer()),
-    client: new PerspicaxMemoryNotesClient({
-      baseUrl: () => perspicaxBase(),
-      accessToken: (principalId) => perspicaxAccessToken(principalId),
-      linkBearer: () => perspicaxDirectory?.linkBearer() ?? null,
-    }),
+    client: memoryNotesClient,
   }));
 } else {
   // Slice 8: the copy of the operator's own bots for an organization server.
@@ -34416,7 +34525,18 @@ ROUTES.push(createTeamMemoryHttpRoutes({
   resolve: (section, entryId, decision) => teamMemory.resolve(section, entryId, decision),
   remove: (section, entryId) => teamMemory.remove(section, entryId),
   update: (section, entryId, patch) => teamMemory.update(section, entryId, patch),
-  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
+  storageKey: (auth, section) => teamMemoryKeyForAuth(auth, section),
+  // #4460: a person's own memory is theirs to manage, no admin
+  mayUse: (auth) => teamMemoryPersonScoped() || auth.kind === "loopback" || auth.scopes.includes("admin"),
+  // #4460: a person moves an entry of their own memory to a tier of the
+  // organization console (a team of theirs), as themselves
+  ...(IDENTITY.kind === "perspicax" ? {
+    publish: (auth: RequestAuth, note: Parameters<NonNullable<Parameters<typeof createTeamMemoryHttpRoutes>[0]["publish"]>>[1]) => {
+      const who = IDENTITY.kind === "perspicax" ? memoryPrincipal(auth, IDENTITY.issuer) : null;
+      if (!who) return Promise.resolve({ ok: false as const, error: "unauthorized" as const });
+      return memoryNotesClient.call(who.principalId, "POST", memoryReadPath("/entry"), note);
+    },
+  } : {}),
   settleCards: settleTeamMemoryCards
 }));
 ROUTES.push(createSectionContextRoutes({
@@ -35907,7 +36027,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   REACTION_PROMPT,
   ROUTINE_PROMPT,
   SESSION_SEARCH_SYSTEM_PROMPT,
-  TEAM_MEMORY_PROMPT,
+  teamMemoryToolPrompt,
   THREADS_PROMPT,
   WITHHELD_HOST_TOOLS_PROMPT,
   accessCardFor,
@@ -36134,7 +36254,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,
-  teamMemory,
+  teamMemoryPromptFor,
   toolErrorCorrectiveRoundsFor,
   toolScopeForTurn,
   turnCommandEnvironment,
@@ -36206,7 +36326,7 @@ const startTurnRunner = createStartTurn({
   ROUTINE_PROMPT,
   SESSION_SEARCH_SYSTEM_PROMPT,
   SMALL_TALK_TURN_NOTE,
-  TEAM_MEMORY_PROMPT,
+  teamMemoryToolPrompt,
   THREADS_PROMPT,
   TurnAuthenticationRefusedError,
   TurnNotStartedError,
@@ -36599,7 +36719,7 @@ const startTurnRunner = createStartTurn({
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,
-  teamMemory,
+  teamMemoryPromptFor,
   threadBusy,
   threadPrewarm,
   toolDefinitionBytes,

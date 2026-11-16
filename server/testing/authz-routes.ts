@@ -23,7 +23,7 @@ export type SlotKind =
   | "queueItem" | "parallelRun" | "card" | "resourceUsage" | "connectorSetup" | "phoneRequest"
   | "cardScan" | "purchase" | "phoneCall" | "invite" | "blocked" | "journalEntry" | "credentialGrant"
   | "draft" | "codeRun" | "cloudAgent" | "allowlistEntry" | "workflow" | "workflowRun" | "taskListItem" | "briefItem"
-  | "calendarCall" | "proactiveProposal" | "providerAccount" | "meSkill" | "unattendedHost";
+  | "calendarCall" | "proactiveProposal" | "providerAccount" | "meSkill" | "unattendedHost" | "teamMemoryEntry";
 
 /** Kinds a person owns: the matrix aims A at B's. The rest only ride along. */
 export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
@@ -41,6 +41,8 @@ export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
  */
 export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "bots/": "bot",
+  // #4460: an entry of the caller's own team memory (the handler keys it by caller)
+  "team-memory/": "teamMemoryEntry",
   "threads/": "thread",
   "messages/": "message",
   "groups/": "group",

@@ -106,6 +106,10 @@ export interface CatalogProfile {
   memoryEnabled?: boolean;
   /** A room turn in a group whose shared memory is on (server/memory/group-memory.ts). */
   groupMemory?: boolean;
+  /** #4460: a server several people use: propose_team_memory writes to the
+   * bot owner's own memory, and its description says so. Absent is off, so
+   * the wire goldens stay. */
+  ownTeamMemory?: boolean;
   /** The bot is its person's Primary Bot (bot.chiefOfStaff). Only then
    * are the Primary-Bot-only tools and parameters shown; the server refuses them
    * to every other bot. */
@@ -169,6 +173,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     cloudHome: false,
     memoryEnabled: env.SAGAX_MEMORY_ENABLED !== "0",
     groupMemory: env.SAGAX_GROUP_MEMORY === "1",
+    ...(env.SAGAX_OWN_TEAM_MEMORY === "1" ? { ownTeamMemory: true } : {}),
     chief: env.SAGAX_CHIEF_OF_STAFF === "1",
     createBots: env.SAGAX_CREATE_BOTS === "1",
     botId: env.SAGAX_BOT_ID ?? "",
@@ -577,8 +582,12 @@ export function availableTools(profile: CatalogProfile) {
 
 function catalogTools(profile: CatalogProfile) {
   // #4250 (S4): the product trigger only where Perspicax tells product events.
-  const core = profile.perspicax && !profile.externalRuntime
-    ? coreCatalogTools(profile).map((tool) => tool.name === "propose_routine" ? routinesTools.withProductTrigger(tool as typeof routinesTools.DEF_PROPOSE_ROUTINE) : tool)
+  const product = profile.perspicax && !profile.externalRuntime;
+  const core = product || profile.ownTeamMemory
+    ? coreCatalogTools(profile).map((tool) => product && tool.name === "propose_routine" ? routinesTools.withProductTrigger(tool as typeof routinesTools.DEF_PROPOSE_ROUTINE)
+      // #4460: the bot owner's own memory on a server several people use
+      : profile.ownTeamMemory && tool.name === "propose_team_memory" ? teamTools.proposeTeamMemoryDef(true)
+      : tool)
     : coreCatalogTools(profile);
   const base = [
     ...core,

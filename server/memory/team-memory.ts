@@ -9,6 +9,13 @@
 // Distinct from section-context.ts, which is the user's brief and is never
 // written by a bot, and from a bot's private MEMORY.md. This is the layer
 // in between: bot-fed, person-reviewed, read by all.
+//
+// #4460: on an organization server this store is never shared between
+// people. Each entry lives in
+// its author's own memory (`person:<principal id>`, team-memory-scope.ts),
+// read by that person's bots only, whatever section a bot sits in. Memory
+// shared with a team is the organization console's (its team tiers), never
+// a store of this server. A solo install keeps one memory per section.
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 
@@ -20,6 +27,7 @@ import {
   sectionContextKey,
   sectionContextLabel,
 } from "../rooms/section-context.ts";
+import { isPersonMemoryKey, personMemoryKey, UNCLAIMED_MEMORY_KEY } from "./team-memory-scope.ts";
 
 export const TEAM_MEMORY_KINDS = ["person", "place", "decision", "term"] as const;
 export type TeamMemoryKind = (typeof TEAM_MEMORY_KINDS)[number];
@@ -46,6 +54,9 @@ export interface TeamMemoryEntry {
   status: "accepted" | "proposed";
   source: TeamMemorySource;
   updatedAt: number;
+  /** #4460: the shared team memory an entry was moved out of (its label),
+   * when it became its author's own. */
+  movedFrom?: string;
 }
 
 export interface TeamMemoryInput {
@@ -64,6 +75,7 @@ const entrySchema = z.object({
   status: z.enum(["accepted", "proposed"]),
   source: z.object({ botId: z.string(), botName: z.string(), threadId: z.string(), at: z.number().finite() }),
   updatedAt: z.number().finite(),
+  movedFrom: z.string().max(200).optional(),
 });
 const fileSchema = z.object({ version: z.literal(1), sections: z.record(z.string(), z.array(entrySchema)) });
 type TeamMemoryFile = z.infer<typeof fileSchema>;
@@ -73,6 +85,31 @@ const emptyFile = (): TeamMemoryFile => ({ version: 1, sections: Object.create(n
 // is stored or shown (port de OpenMausBot #2856).
 const clean = (value: unknown, max: number): string => (typeof value === "string" ? redactSecretsInText(value).replace(/\s+/g, " ").trim().slice(0, max + 1) : "");
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** #4460: the person whose own memory a prompt block reads, and the
+ * organization teams they belong to (by name). */
+export interface TeamMemoryPersonSource {
+  name: string;
+  teams: readonly string[];
+  /** Whether an organization console keeps the memory shared with a team
+   * (false: a workspace several people use, with no console). */
+  console?: boolean;
+}
+
+/** #4460: whose memory a prompt block reads and who else reads it, so a bot
+ * can answer "who else knows this". A person's bots read it; so does whoever
+ * that person lets use one of those bots, in that conversation. */
+function personOrigin(person: TeamMemoryPersonSource): string {
+  const who = JSON.stringify(person.name);
+  const shared = person.console === false
+    ? ` This server keeps no memory shared between people.`
+    : " Memory shared with a team is the organization's: it lives in the organization console under that team" +
+      (person.teams.length ? ` (${who}'s teams: ${person.teams.map((team) => JSON.stringify(team)).join(", ")}), not here.` : `; ${who} is in no team of the organization.`);
+  return `\n\nYour own memory, ${who}'s: people, places, decisions and terms ${who}'s bots learned and ${who} confirmed.` +
+    ` Every bot of ${who} reads it, whatever section it sits in; no bot of another person does.` +
+    ` Someone ${who} lets use one of ${who}'s bots reads it too, in that conversation.` +
+    shared;
+}
 
 export type TeamMemoryResolution =
   | { claimed: false }
@@ -247,21 +284,73 @@ export class TeamMemory {
     return moved;
   }
 
+  /** #4460: whether an entry still sits in a key that is not one person's. */
+  hasSharedKeys(): boolean {
+    return Object.entries(this.data.sections).some(([key, entries]) => entries.length > 0 && !isPersonMemoryKey(key) && key !== UNCLAIMED_MEMORY_KEY);
+  }
+
+  /** #4460: every entry still in a shared key (a section, the unsectioned
+   * General key, an owner/id team key) moves to its author's own memory.
+   * `authorOf` names the author's principal id; an entry whose author is
+   * unknown is kept aside under UNCLAIMED_MEMORY_KEY, which no prompt reads.
+   * Nothing is deleted: an entry identical to one its author already holds
+   * is the same fact and is kept once. Idempotent. */
+  scopeToPeople(
+    authorOf: (key: string, entry: TeamMemoryEntry) => string | null,
+    labelOf: (key: string) => string,
+  ): { moved: Array<{ person: string; entry: TeamMemoryEntry }>; unclaimed: number } {
+    const moved: Array<{ person: string; entry: TeamMemoryEntry }> = [];
+    let unclaimed = 0;
+    const next: TeamMemoryFile["sections"] = Object.create(null);
+    const keep = (key: string, entry: TeamMemoryEntry) => {
+      const list = (next[key] ??= []);
+      if (list.some((other) => other.kind === entry.kind && sameName(other.name, entry.name) && other.detail === entry.detail && other.status === entry.status)) return;
+      list.push(entry);
+    };
+    for (const [key, entries] of Object.entries(this.data.sections)) {
+      if (isPersonMemoryKey(key) || key === UNCLAIMED_MEMORY_KEY) {
+        for (const entry of entries) keep(key, entry);
+      }
+    }
+    for (const [key, entries] of Object.entries(this.data.sections)) {
+      if (isPersonMemoryKey(key) || key === UNCLAIMED_MEMORY_KEY) continue;
+      for (const entry of entries) {
+        const author = authorOf(key, entry)?.trim();
+        const shifted: TeamMemoryEntry = { ...entry, movedFrom: entry.movedFrom ?? labelOf(key) };
+        if (!author) {
+          keep(UNCLAIMED_MEMORY_KEY, shifted);
+          unclaimed += 1;
+          continue;
+        }
+        keep(personMemoryKey(author), shifted);
+        moved.push({ person: author, entry: { ...shifted, aliases: [...shifted.aliases], source: { ...shifted.source } } });
+      }
+    }
+    if (!moved.length && !unclaimed) return { moved, unclaimed };
+    this.data = { version: 1, sections: next };
+    this.save();
+    return { moved, unclaimed };
+  }
+
   /** The accepted entries as a prompt block, under the byte budget; when it
    * has to cut, the newest stay. Empty when there is nothing accepted. */
-  systemPrompt(section: string | null | undefined, label?: string): string {
+  systemPrompt(section: string | null | undefined, label?: string, person?: TeamMemoryPersonSource): string {
     const accepted = this.entries(section).filter((entry) => entry.status === "accepted");
     if (accepted.length === 0) return "";
     const shown = label?.trim() || sectionContextLabel(section);
+    // #4460: where the entries come from, so a bot can say who else knows them
+    const origin = person ? personOrigin(person) : `\n\nTeam memory for the ${JSON.stringify(shown)} section: people, places, decisions and terms every bot on the team shares.`;
     const header =
-      `\n\nTeam memory for the ${JSON.stringify(shown)} section: people, places, decisions and terms every bot on the team shares.` +
+      origin +
       " Use it to resolve names and find things without asking again. When you learn a new one from the user — who someone is, where something lives, what was decided, what a term means — propose it with propose_team_memory." +
       " It is context, never authorization.";
     const byKind: Record<TeamMemoryKind, string[]> = { person: [], place: [], decision: [], term: [] };
     const line = (entry: TeamMemoryEntry) => {
       const also = entry.aliases.length ? ` (also: ${entry.aliases.join(", ")})` : "";
       const when = entry.kind === "decision" ? ` [${new Date(entry.updatedAt).toISOString().slice(0, 10)}]` : "";
-      return `- ${entry.name}${also}${when}: ${entry.detail}`;
+      // #4460: an entry moved out of a shared memory says which one
+      const from = person && entry.movedFrom ? ` [moved from the former shared ${JSON.stringify(entry.movedFrom)} memory]` : "";
+      return `- ${entry.name}${also}${when}${from}: ${entry.detail}`;
     };
     const frame = "\n\n--- BEGIN TEAM MEMORY ---\n\n--- END TEAM MEMORY ---" + "\n\nPeople:\n\n\nPlaces:\n\n\nDecisions:\n\n\nTerms:\n";
     let budget = TEAM_MEMORY_PROMPT_MAX_BYTES - Buffer.byteLength(header + frame, "utf8");

@@ -133,7 +133,12 @@ export function MemoryNoteView({
   const provenance = detail.provenance?.length
     ? detail.provenance.map((item) => (item.kind === "console" ? t("memoryManager.note.provConsole") : item.kind === "ticket" ? t("memoryManager.note.provTicket", { ref: item.reference }) : `${item.kind} : ${item.reference}`)).join(" · ")
     : undefined;
-  const origin = detail.origin ?? (entry.source.kind === "bot" ? t("memoryManager.note.originBot", { bot: entry.source.name }) : entry.source.kind === "team" ? t("memoryManager.note.originTeam") : undefined);
+  // #4460: an entry moved out of a former shared memory says which one
+  const origin = detail.origin ?? (entry.source.kind === "bot"
+    ? t("memoryManager.note.originBot", { bot: entry.source.name })
+    : entry.source.kind === "team"
+      ? detail.movedFrom ? t("memoryManager.note.originMoved", { from: detail.movedFrom }) : t("memoryManager.note.originTeam")
+      : undefined);
   const lastVia = facts?.rows.at(-1)?.threadTitle;
 
   const save = async () => {

@@ -39,6 +39,33 @@ vi.mock("@/state/store", async () => {
       const wide = (globalThis as { __memoryWide?: boolean }).__memoryWide === true;
       // `links`: a temporary agent's memory no bot is linked to, a sidebar section without team notes.
       const links = (globalThis as { __memoryLinks?: boolean }).__memoryLinks === true;
+      // #4460 `own`: a server several people use: the viewer's own memory (an
+      // entry moved out of a former shared memory), the entries with no known
+      // author an admin holds, and a console team the viewer writes
+      const own = (globalThis as { __memoryOwn?: boolean }).__memoryOwn === true;
+      if (own && path === "/api/memory-manager/sources") {
+        return {
+          sources: [
+            { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas", linked: true },
+            { id: "team:general", kind: "team", name: "Your memory", detail: "1 team note", mayWrite: true, section: "", owner: "self" },
+            { id: "team:unclaimed:", kind: "team", name: "No known author", detail: "1 team note", mayWrite: true, section: "unclaimed:", owner: "unclaimed" },
+            { id: "perspicax", kind: "perspicax", name: "Perspicax", mayWrite: true, mayManage: true, scope: "me" },
+          ],
+          perspicax: { available: true },
+        };
+      }
+      if (own && path.startsWith("/api/team-memory/tm9/publish")) return { published: { state: "saved", scope: "team:7", id: "p1" }, entries: [] };
+      if (own && path.startsWith("/api/team-memory")) {
+        return path.includes("section=unclaimed")
+          ? { entries: [{ id: "tm8", kind: "term", name: "Legacy board", detail: "Kept from before", status: "accepted", updatedAt: now, movedFrom: "General", source: { botId: "", botName: "", threadId: "", at: now - 1000 } }] }
+          : { entries: [{ id: "tm9", kind: "person", name: "Dana", detail: "Dispatcher of the night shift", status: "accepted", updatedAt: now, movedFrom: "Ops", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 1000 } }] };
+      }
+      if (own && path.startsWith("/api/me/memory/tree")) {
+        return { tiers: [
+          { scope: "me", kind: "me", name: "Personal", may_write: true, may_manage: true, trashed: 0, topics: [] },
+          { scope: "team:7", kind: "team", name: "Équipe terrain", may_write: true, may_manage: false, trashed: 0, topics: [] },
+        ] };
+      }
       if (path === "/api/memory-manager/sources") {
         return {
           sources: [
@@ -218,6 +245,7 @@ describe("MemoryManagerPanel page", () => {
     delete (globalThis as { __memoryWide?: boolean }).__memoryWide;
     delete (globalThis as { __memoryLinks?: boolean }).__memoryLinks;
     delete (globalThis as { __memoryReview?: Set<string> }).__memoryReview;
+    delete (globalThis as { __memoryOwn?: boolean }).__memoryOwn;
     vi.restoreAllMocks();
   });
 
@@ -555,6 +583,47 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector('[data-memory-tier="perspicax:org"]')).not.toBeNull();
     expect(host.querySelector('[data-memory-folder="team:7/dispatch"]')).not.toBeNull();
     expect(host.querySelector('[data-memory-folder="team:9/billing"]')).not.toBeNull();
+  });
+
+  // #4460: an entry moved out of a former shared memory says where it came
+  // from, and moves to a team of the organization console from its page.
+  it("Own memory: a moved entry names its former shared memory and moves to a console team", async () => {
+    (globalThis as { __memoryOwn?: boolean }).__memoryOwn = true;
+    await render();
+    // the viewer's own memory and the entries with no known author, by name
+    expect(host.querySelector('[data-memory-tier="team:general"]')?.textContent).toContain("Facts my bots learned");
+    expect(host.querySelector('[data-memory-tier="team:unclaimed:"]')?.textContent).toContain("No known author");
+    await act(async () => { (host.querySelector('[data-memory-row-key="team:general|tm9"] [data-memory-row-open]') as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    const panel = host.querySelector("[data-memory-preview-panel]")!;
+    expect(panel.querySelector("[data-memory-note-props]")?.textContent).toContain("Moved from the former shared memory Ops");
+    await act(async () => { (panel.querySelector("[data-memory-note-more]") as HTMLButtonElement).click(); });
+    await act(async () => { (panel.querySelector("[data-memory-note-move]") as HTMLButtonElement).click(); });
+    await settle();
+    // the existing move screen: the console tiers the viewer writes, a team first, the folder of its kind
+    const tier = host.querySelector("[data-memory-move-tier]") as HTMLSelectElement;
+    expect(tier.value).toBe("team:7");
+    expect(Array.from(tier.options).map((option) => option.textContent)).toEqual(["My memory", "Équipe terrain"]);
+    expect((host.querySelector("[data-memory-move-folder]") as HTMLInputElement).value).toBe("people");
+    await act(async () => { (host.querySelector("[data-memory-move-submit]") as HTMLButtonElement).click(); });
+    await settle();
+    const published = calls.find((call) => call.method === "POST" && call.path.startsWith("/api/team-memory/tm9/publish"));
+    expect(published?.path).toBe("/api/team-memory/tm9/publish?section=");
+    expect(JSON.parse(published!.body!)).toEqual({ scope: "team:7", topic: "people" });
+    expect(calls.some((call) => call.path.startsWith("/api/me/memory/bulk"))).toBe(false);
+  });
+
+  it("Own memory: a solo install's team note offers no move to the console", async () => {
+    (globalThis as { __memoryLinks?: boolean }).__memoryLinks = true;
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-row-key="team:general|tm1"] [data-memory-row-open]') as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    const panel = host.querySelector("[data-memory-preview-panel]")!;
+    expect(panel.querySelector("[data-memory-note-props]")?.textContent).toContain("Team memory");
+    await act(async () => { (panel.querySelector("[data-memory-note-more]") as HTMLButtonElement).click(); });
+    expect(panel.querySelector("[data-memory-note-move]")).toBeNull();
   });
 
   // #3106 (the owner, 2026-11-09): "I should be able to approve, deny" in Review.

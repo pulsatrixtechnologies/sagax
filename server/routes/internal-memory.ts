@@ -20,6 +20,7 @@ import { workspaceDir } from "../workspace/workspace.ts";
 import { WorkspacePathError, readWorkspaceSourceFile } from "../workspace/workspace-files.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+import { teamMemoryWording } from "../memory/team-memory-scope.ts";
 
 const MAX_MEMORY_REFUSALS_PER_TURN = 3;
 
@@ -163,6 +164,9 @@ export interface InternalMemoryDeps {
   appendMessage(threadId: string, message: Record<string, unknown>): { id: string };
   /** #2091: the Always allow the person kept for team-memory proposals of
    * this kind settles the card at once (index.ts settleProposalByRule). */
+  /** #4460: a server several people use: an entry goes to the bot owner's
+   * own memory, and the card says so (team-memory-scope.ts). */
+  teamMemoryPersonScoped?(): boolean;
   settleTeamMemoryByRule?(botId: string, threadId: string, proposed: { requestId: string; messageId: string }, section: string): { rule: { id: string } } | undefined;
   appendDecision(row: {
     threadId: string;
@@ -511,8 +515,9 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       const ownerThread = deps.ownsThread(from.id, body.fromThreadId);
       if (!ownerThread) return json(res, 403, { error: "source conversation does not belong to sender" });
       const ownerGroup = deps.groupByThread(body.fromThreadId);
+      const wording = teamMemoryWording(deps.teamMemoryPersonScoped?.() === true);
       if (!sameAudience(from.visibility, undefined) || (ownerGroup && !deps.roomFeedsBot(ownerGroup, from))) {
-        return json(res, 403, { error: "restricted conversations cannot publish section-wide memory; ask an admin to add it" });
+        return json(res, 403, { error: wording.restrictedRefusal });
       }
       if (!(TEAM_MEMORY_KINDS as readonly string[]).includes(body.kind)) {
         return json(res, 400, { error: `kind must be one of ${TEAM_MEMORY_KINDS.join(", ")}` });
@@ -537,14 +542,14 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
         kind: "options",
         ...(ownerGroup ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
         card: {
-          title: "Remember this for the team?",
+          title: wording.cardTitle,
           subtitle: summary,
           options: ["Remember", "Skip"],
           requestId: proposed.entry.id,
           tool: "propose_team_memory",
           teamMemoryRequest: { section, entryId: proposed.entry.id, kind: proposed.entry.kind },
           // #2091: what Always allow keeps on this card
-          ownerRule: { tool: "sagax:team_memory", scope: { section, kind: proposed.entry.kind }, description: `Remember ${proposed.entry.kind} entries for the team` },
+          ownerRule: { tool: "sagax:team_memory", scope: { section, kind: proposed.entry.kind }, description: wording.ruleDescription(proposed.entry.kind) },
         },
       });
       const byRule = deps.settleTeamMemoryByRule?.(from.id, body.fromThreadId, { requestId: proposed.entry.id, messageId: card.id }, section);
@@ -555,7 +560,7 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       });
       deps.notify(deliverableNotification("approval", { ...from, threadId: from.threadId ?? body.fromThreadId }, body.fromThreadId, summary, {
         avatarUrl: from.avatarUrl,
-        title: "Remember this for the team?",
+        title: wording.cardTitle,
         requestId: proposed.entry.id,
         ...(ownerGroup ? { group: { id: ownerGroup.id, name: ownerGroup.name } } : {}),
       }));

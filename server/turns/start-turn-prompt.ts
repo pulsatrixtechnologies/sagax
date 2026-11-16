@@ -25,7 +25,6 @@ export function createPromptStartTurn(host: StartTurnHost) {
     LOCAL_RECENT_WORK_LINES,
     MEME_PROMPT,
     REACTION_PROMPT,
-    TEAM_MEMORY_PROMPT,
     WEBHOOK_PROMPT,
     WITHHELD_HOST_TOOLS_PROMPT,
     aiClientThreadPerson,
@@ -100,7 +99,8 @@ export function createPromptStartTurn(host: StartTurnHost) {
     surfacePrompt,
     teamAvailabilityPart,
     teamComputerPrompt,
-    teamMemory,
+    teamMemoryPromptFor,
+    teamMemoryToolPrompt,
     toolDefinitionBytes,
     turnContextBuckets,
     turnPromptBytes,
@@ -227,7 +227,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "rich-output", label: "Rich output", text: richOutputPrompt((state.liveBot ?? state.bot).emailDrafts !== false) },
       { id: "dev-pods", label: "Coding view", text: devPodsPrompt(devPodsThreads.isOn(state.threadId)) },
       { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(state.bot.section) },
-      { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(state.bot.section) + (state.integrations.agents ? TEAM_MEMORY_PROMPT : "") },
+      { id: "team-memory", label: "Team memory", text: teamMemoryPromptFor(state.bot) + (state.integrations.agents ? teamMemoryToolPrompt() : "") },
       // who on the team roster is busy right now; volatile, so a teammate
       // starting or finishing work never changes the stable half
       teamAvailabilityPart(state.coordinationPrompt ? state.sectionPeers : []),

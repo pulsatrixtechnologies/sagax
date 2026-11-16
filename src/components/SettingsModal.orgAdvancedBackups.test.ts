@@ -88,7 +88,8 @@ describe("About", () => {
     expect(html).toContain('data-settings-group="appHelp"');
     expect(html).not.toContain('type="checkbox"');
     expect(html).not.toContain("Export Diagnostics…");
-    expect(html).toContain('data-developer-link=""');
+    // #4457: About and Advanced are sub-pages of Updates, side by side: no link between them
+    expect(html).not.toContain('data-developer-link=""');
     const { DeveloperSettings } = await import("./settings/DeveloperSettings");
     expect(renderToStaticMarkup(createElement(DeveloperSettings, { remoteActive: false }))).toContain("Export Diagnostics…");
   });
@@ -109,18 +110,18 @@ describe("Settings search", () => {
     // #2080 (L0): one word, one page; approvals are found on Security
     expect(sectionMatches(section("security"), "approbations")).toBe(true);
     expect(sectionMatches(section("organization"), "approbations")).toBe(false);
-    for (const query of ["sauvegarde", "restaurer"]) expect(sectionMatches(section("backups"), query), query).toBe(true);
+    // #4457: Backups and storage is General > System > Backups and storage
+    for (const query of ["sauvegarde", "restaurer"]) expect(sectionMatches(section("general"), query), query).toBe(true);
     // the owner 2026-11-06: the reference app / primary-bot preference import left Backup; those words no longer open it
     for (const query of ["grok import", "import grok", "x.ai", "share link", "lien de partage"]) {
-      expect(sectionMatches(section("backups"), query), query).toBe(false);
+      expect(sectionMatches(section("general"), query), query).toBe(false);
     }
     // #2080 (L0): one word, one page; a password is found on the Vault
     expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
-    // #2636: logs, diagnostics and cleanup are found on Developer only
+    // #2636: logs, diagnostics and cleanup are found on Developer only (Updates > Advanced since #4457)
     for (const query of ["journaux", "diagnostic", "nettoyage"]) {
-      expect(sectionMatches(section("developer"), query), query).toBe(true);
-      expect(sectionMatches(section("about"), query), query).toBe(false);
-      expect(sectionMatches(section("backups"), query), query).toBe(false);
+      expect(sectionMatches(section("updates"), query), query).toBe(true);
+      expect(sectionMatches(section("general"), query), query).toBe(false);
     }
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");

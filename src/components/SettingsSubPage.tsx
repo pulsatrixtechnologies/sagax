@@ -6,9 +6,40 @@
 // Which page is open lives in the store (`appSettingsSubPage`), so a deep
 // link can open it: dispatch toggleAppSettings with `subPage`. To add a page,
 // register it in SUB_PAGES (settings/settings-sub-pages.tsx).
-import { useEffect } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { t } from "@/lib/i18n";
+import type { AppSettingsSection } from "@/state/settings-section";
+
+/** What a Settings page needs from the modal to draw its "▸" rows (#4457):
+ * whether a former page's content may show to this viewer (its rules kept),
+ * and how to open a sub-page. Outside the modal (a gallery, a test) every
+ * page shows and nothing opens. */
+export interface SettingsPageScope {
+  allowed: (id: AppSettingsSection) => boolean;
+  openSubPage: (id: string) => void;
+  organization: boolean;
+  editConfig: boolean;
+  remoteActive: boolean;
+  openAbout: () => void;
+}
+
+export const DEFAULT_PAGE_SCOPE: SettingsPageScope = {
+  allowed: () => true,
+  openSubPage: () => {},
+  organization: false,
+  editConfig: false,
+  remoteActive: false,
+  openAbout: () => {},
+};
+
+const SettingsPageContext = createContext<SettingsPageScope>(DEFAULT_PAGE_SCOPE);
+
+export const SettingsPageProvider = SettingsPageContext.Provider;
+
+export function useSettingsPage(): SettingsPageScope {
+  return useContext(SettingsPageContext);
+}
 
 type KeyLike = { key: string; defaultPrevented: boolean; isComposing?: boolean; target?: EventTarget | null };
 
@@ -35,8 +66,9 @@ export function SettingsSubPageRow({
 }: {
   cardId: string;
   title: string;
-  summary: React.ReactNode;
-  actionLabel: string;
+  summary?: React.ReactNode;
+  /** The Edit cue; a "▸" row of a page (#4457) has none, only the chevron. */
+  actionLabel?: string;
   onOpen: () => void;
   /** A row of a settings group's card (General's Account and System), not
    * a card of its own. */
@@ -51,9 +83,9 @@ export function SettingsSubPageRow({
       >
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] leading-[18px] text-ink">{title}</span>
-          <span data-card-summary className="mt-0.5 block truncate text-[12.5px] leading-[18px] text-ink-secondary">{summary}</span>
+          {summary ? <span data-card-summary className="mt-0.5 block truncate text-[12.5px] leading-[18px] text-ink-secondary">{summary}</span> : null}
         </span>
-        <span className="shrink-0 text-[12.5px] font-medium text-accent">{actionLabel}</span>
+        {actionLabel ? <span className="shrink-0 text-[12.5px] font-medium text-accent">{actionLabel}</span> : null}
         <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       </button>
     </div>
@@ -110,7 +142,7 @@ export function SettingsSubPage({
           </ol>
         </nav>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-3 sm:px-8">{children}</div>
+      <div data-settings-pane="" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-3 sm:px-8">{children}</div>
     </div>
   );
 }

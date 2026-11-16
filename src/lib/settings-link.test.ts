@@ -17,14 +17,14 @@ describe("settings links", () => {
     // a former page names the page that holds its card now
     expect(settingsSectionLabel("connectedApps")).toBe("Models");
     // Pair devices and Activity are hidden (2026-10-14), People, Installations
-    // and Email (a card of People) too (2026-10-15): their old links open Account (General is out of the navigation, 2026-10-26)
-    expect(settingsSectionLabel("mail")).toBe("Account");
-    expect(settingsSectionLabel("people")).toBe("Account");
-    expect(settingsSectionLabel("workspaces")).toBe("Account");
-    expect(settingsSectionLabel("companion")).toBe("Account");
-    expect(settingsSectionLabel("activity")).toBe("Account");
-    // Security and Vault are pages again (2026-10-28); Published pages are in Capabilities
-    expect(settingsSectionLabel("security")).toBe("Security");
+    // and Email (a card of People) too (2026-10-15): their old links open General (#4457, Account is its card)
+    expect(settingsSectionLabel("mail")).toBe("General");
+    expect(settingsSectionLabel("people")).toBe("General");
+    expect(settingsSectionLabel("workspaces")).toBe("General");
+    expect(settingsSectionLabel("companion")).toBe("General");
+    expect(settingsSectionLabel("activity")).toBe("General");
+    // Security and Vault are pages again (2026-10-28), Security named Permissions since #4457; Published pages are in Capabilities
+    expect(settingsSectionLabel("security")).toBe("Permissions");
     expect(settingsSectionLabel("credentials")).toBe("Vault");
     expect(settingsSectionLabel("pages")).toBe("Connect Apps");
     expect(settingsSectionLabel("experimental")).toBe("Developer");
@@ -38,9 +38,9 @@ describe("settings links", () => {
     setLocale("fr");
     expect(settingsSectionLabel("engines")).toBe("Modèles");
     expect(settingsSectionLabel("voice")).toBe("Voix");
-    expect(settingsSectionLabel("security")).toBe("Sécurité");
+    expect(settingsSectionLabel("security")).toBe("Autorisations");
     expect(settingsSectionLabel("credentials")).toBe("Coffre");
-    expect(settingsSectionLabel("privacy")).toBe("Notifications");
+    expect(settingsSectionLabel("privacy")).toBe("Autorisations");
     expect(settingsSectionLabel("memory")).toBe("Organisation");
     expect(settingsSectionLabel("about")).toBe("À propos");
     expect(settingsSectionLabel("general")).toBe("Général");
@@ -51,41 +51,41 @@ describe("settings links", () => {
   // 2026-10-14: Integrations and Models and accounts are one page; an old
   // link to Integrations opens it. Decision model, Privacy and Memory became
   // cards of that page. Connected apps stays its own section.
-  it("redirects an old section link to the page and card that hold it now", () => {
+  it("redirects an old section link to the page and card that hold it now (#4457: one of the seven pages)", () => {
     // 2026-10-30: keys are on Providers; the online computers stay on Models
     // 2026-11-05: image generation and web search are Providers > Other services
     expect(currentSettingsSection("connections")).toBe("providers");
     expect(currentSettingsSection("connections", "connections.image")).toBe("providers");
     expect(currentSettingsSection("connections", "connections.webSearch")).toBe("providers");
-    expect(currentSettingsSection("connections", "connections.integrations")).toBe("engines");
+    expect(currentSettingsSection("connections", "connections.integrations")).toBe("providers");
     expect(currentSettingsSection("engines", "engines.keys")).toBe("providers");
     // 2026-10-28: the voice card is on the Voice page
-    expect(currentSettingsSection("connections", "connections.voice")).toBe("voice");
+    expect(currentSettingsSection("connections", "connections.voice")).toBe("providers");
     expect(currentSettingsSection("connections", "connections.apps")).toBe("providers");
-    expect(currentSettingsSection("connectedApps")).toBe("connectedApps");
-    expect(currentSettingsSection("decisionModel")).toBe("engines");
-    expect(currentSettingsSection("privacy")).toBe("notifications");
+    expect(currentSettingsSection("connectedApps")).toBe("providers");
+    expect(currentSettingsSection("decisionModel")).toBe("providers");
+    expect(currentSettingsSection("privacy")).toBe("security");
     expect(currentSettingsSection("memory")).toBe("organization");
-    expect(currentSettingsSection("mail")).toBe("account");
-    expect(currentSettingsSection("people")).toBe("account");
-    expect(currentSettingsSection("workspaces")).toBe("account");
-    expect(currentSettingsSection("companion")).toBe("account");
-    expect(currentSettingsSection("activity")).toBe("account");
+    expect(currentSettingsSection("mail")).toBe("general");
+    expect(currentSettingsSection("people")).toBe("general");
+    expect(currentSettingsSection("workspaces")).toBe("general");
+    expect(currentSettingsSection("companion")).toBe("general");
+    expect(currentSettingsSection("activity")).toBe("general");
     // 2026-10-28: Security and Vault are pages again
     expect(currentSettingsSection("security")).toBe("security");
     expect(currentSettingsSection("credentials")).toBe("credentials");
     // 2026-11-06: General is the app's system page again; the cards the
     // old App page held go where a person looks for them
     expect(currentSettingsSection("general")).toBe("general");
-    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("developer"); // #2636
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("updates"); // #2636
     expect(currentSettingsSection("general", "general.peopleToolAccess")).toBe("security");
     // #2636: the usage meter and diagnostics are technical options, on Developer
-    expect(currentSettingsSection("general", "general.usage")).toBe("developer");
-    expect(currentSettingsSection("general", "general.diagnostics")).toBe("developer");
+    expect(currentSettingsSection("general", "general.usage")).toBe("updates");
+    expect(currentSettingsSection("general", "general.diagnostics")).toBe("updates");
     expect(currentSettingsSection("about", "about.startup")).toBe("general");
     expect(currentSettingsSection("about", "about.input")).toBe("general");
     expect(currentSettingsSection("about", "about.holding")).toBe("general");
-    expect(currentSettingsSection("about", "about.help")).toBe("about");
+    expect(currentSettingsSection("about", "about.help")).toBe("updates");
     expect(mergedSettingsCard("security")).toBeUndefined();
     expect(mergedSettingsCard("credentials")).toBeUndefined();
     expect(currentSettingsSection("usage")).toBe("usage");
@@ -110,7 +110,7 @@ describe("settings links", () => {
     openSettings((action) => sent.push(action), "decisionModel");
     expect(sent).toEqual([
       { type: "toggleAppSettings", open: true, section: "providers" },
-      { type: "toggleAppSettings", open: true, section: "engines" },
+      { type: "toggleAppSettings", open: true, section: "providers", subPage: "providers.models" },
     ]);
   });
 

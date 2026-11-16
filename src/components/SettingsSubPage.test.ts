@@ -11,7 +11,8 @@ import { setLocale } from "@/lib/i18n";
 import { createAboutMeDraft } from "./about-me-draft";
 import { subPageKeyAction } from "./SettingsSubPage";
 import { aboutMeBotPreview, aboutMeCount, withOutline, ABOUT_ME_MAX } from "./AboutMeSettings";
-import { SUB_PAGES, resolveSubPage } from "./settings/settings-sub-pages";
+import { resolveSubPage } from "./settings/settings-sub-pages";
+import { SETTINGS_SUB_PAGES as SUB_PAGES } from "@/lib/settings-sections";
 import { providerCardTarget } from "@/lib/settings-sections";
 
 const fixture = vi.hoisted(() => ({
@@ -35,7 +36,7 @@ vi.mock("./ServerModeSettings", async (importOriginal) => ({
 vi.mock("./DesktopWorkspaceSwitcher", () => ({ useDesktopWorkspace: () => ({ available: false, current: null, open: false, error: "", openMenu: () => {} }) }));
 
 beforeEach(() => {
-  fixture.section = "account";
+  fixture.section = "general";
   fixture.subPage = null;
   setLocale("en");
   vi.stubGlobal("document", { documentElement: { dataset: {} } });
@@ -54,15 +55,15 @@ const render = async () => {
 
 describe("sub-page navigation", () => {
   it("opens from the row, keeps its section, and any other navigation clears it", () => {
-    // the row opens the page on its home section (SUB_PAGES): General is a
-    // page of its own again since #2430, so About me names Account itself
+    // the row opens the page on its home section (SUB_PAGES): Account is a
+    // card of General since #4457, so About me names General
     const open = reducer(initialState, { type: "toggleAppSettings", open: true, section: SUB_PAGES["general.aboutMe"]!.section, subPage: "general.aboutMe" });
-    expect(open.appSettingsSection).toBe("account");
+    expect(open.appSettingsSection).toBe("general");
     expect(open.appSettingsSubPage).toBe("general.aboutMe");
     // back: the section again, no page
-    expect(reducer(open, { type: "toggleAppSettings", open: true, section: "account" }).appSettingsSubPage).toBeNull();
+    expect(reducer(open, { type: "toggleAppSettings", open: true, section: "general" }).appSettingsSubPage).toBeNull();
     // another section, or closing Settings
-    expect(reducer(open, { type: "toggleAppSettings", open: true, section: "appearance" }).appSettingsSubPage).toBeNull();
+    expect(reducer(open, { type: "toggleAppSettings", open: true, section: "computer" }).appSettingsSubPage).toBeNull();
     expect(reducer(open, { type: "toggleAppSettings", open: false }).appSettingsSubPage).toBeNull();
   });
 
@@ -80,12 +81,12 @@ describe("sub-page navigation", () => {
     expect(subPageKeyAction({ key: "Escape", defaultPrevented: false, target: inEditor as never })).toBe("back");
   });
 
-  it("Account > About me shows the breadcrumb, the back arrow and the editor in place of the section", async () => {
+  it("General > About me shows the breadcrumb, the back arrow and the editor in place of the section", async () => {
     fixture.subPage = "general.aboutMe";
     const html = await render();
     expect(html).toContain('data-settings-subpage="general.aboutMe"');
-    expect(html).toContain('aria-label="Back to Account"');
-    expect(html).toMatch(/<nav aria-label="Settings path"[^>]*>.*>Account<\/button>.*aria-current="page"[^>]*>About me</);
+    expect(html).toContain('aria-label="Back to General"');
+    expect(html).toMatch(/<nav aria-label="Settings path"[^>]*>.*>General<\/button>.*aria-current="page"[^>]*>About me</);
     expect(html).toContain('id="profile-about-me"');
     expect(html).toContain("IT lead at Example.");
     expect(html).toContain("What to write");
@@ -97,11 +98,11 @@ describe("sub-page navigation", () => {
     expect(html).not.toContain('data-settings-card="general.account"');
   });
 
-  it("reads Compte > À propos de moi in French", async () => {
+  it("reads Général > À propos de moi in French", async () => {
     setLocale("fr");
     fixture.subPage = "general.aboutMe";
     const html = await render();
-    expect(html).toContain('aria-label="Retour à Compte"');
+    expect(html).toContain('aria-label="Retour à Général"');
     expect(html).toContain(">À propos de moi<");
     expect(html).toContain("Quoi écrire");
     expect(html).toContain("Enregistré au fil de la saisie");
@@ -131,7 +132,7 @@ describe("sub-page navigation", () => {
   });
 
   it("a page of another section is ignored", async () => {
-    fixture.section = "appearance";
+    fixture.section = "usage";
     fixture.subPage = "general.aboutMe";
     const html = await render();
     expect(html).not.toContain("data-settings-subpage=");

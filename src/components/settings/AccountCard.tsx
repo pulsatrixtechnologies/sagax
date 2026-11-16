@@ -34,7 +34,7 @@ import { OwnAvatarField, OwnAvatarStatusLine, setOwnAvatarNotice, useOwnAvatarNo
 import { AnchoredPopover, useAnchoredDismissRoot } from "@/components/AnchoredPopover";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 
-type LockedServer = Extract<ServerModeState, { active: true }>;
+export type LockedServer = Extract<ServerModeState, { active: true }>;
 
 function host(origin: string): string {
   try {

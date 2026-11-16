@@ -30,7 +30,8 @@ class FixtureEventSource {
   close() {}
 }
 
-const SECTIONS: AppSettingsSection[] = ["account", "appearance", "notifications", "security", "credentials", "providers", "engines", "voice", "usage", "organization", "computer", "backups", "about", "developer"];
+// #4457: the seven pages, and the former pages, which open as their sub-pages
+const SECTIONS: AppSettingsSection[] = ["general", "updates", "account", "appearance", "notifications", "security", "credentials", "providers", "engines", "voice", "usage", "organization", "computer", "backups", "about", "developer"];
 const VARIANTS = { solo: "", providers: "providers=1", org: "providers=1&org=1" } as const;
 
 let api: Record<string, unknown> = {};

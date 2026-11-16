@@ -15,9 +15,13 @@ describe("Settings placement (the owner 2026-11-08)", () => {
 
   it("Developer holds the moved cards, whatever Advanced mode says", () => {
     const dev = read("./DeveloperSettings.tsx");
-    for (const needle of ["ModelsDeveloperCards", "OrgGrokBridgePolicy", "OrgGithubApp", "resetOnly", 'part="schedule"', "InterfaceModeRow", 'data-settings-card="developer.links"', 'requestReleaseNotes("browse")']) {
+    for (const needle of ["ModelsDeveloperCards", "OrgGrokBridgePolicy", "OrgGithubApp", "resetOnly", 'part="schedule"', "InterfaceModeRow"]) {
       expect(dev, needle).toContain(needle);
     }
+    // #4457: the release notes are What's new on Updates, About its sub-page there
+    expect(dev).not.toContain("requestReleaseNotes");
+    const modal = read("../SettingsModal.tsx");
+    for (const needle of ['data-settings-card="updates.links"', 'requestReleaseNotes("browse")', '<SubPageEntry id="updates.about"', '<SubPageEntry id="updates.advanced"']) expect(modal, needle).toContain(needle);
     // never folded: no advanced flag on the moved groups
     expect(dev).not.toMatch(/advanced\s*[=}]/);
   });
@@ -32,8 +36,8 @@ describe("Settings placement (the owner 2026-11-08)", () => {
     expect(src).toContain("text-[13px] text-ink-secondary");
   });
 
-  it("search finds the moved options on Developer, not on their old pages", () => {
-    const dev = SECTIONS.find((s) => s.id === "developer")!.keywords;
+  it("search finds the moved options on Updates (Advanced is the former Developer), not on their old pages", () => {
+    const dev = SECTIONS.find((s) => s.id === "updates")!.keywords;
     for (const k of ["advanced mode", "scheduled update", "github oauth", "server environment", "prompt cache"]) expect(dev).toContain(k);
     expect(CARD_KEYWORDS["general.interface"]).toEqual([]);
   });

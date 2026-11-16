@@ -290,24 +290,24 @@ export function AppIconRow() {
   );
 }
 
-/** Desktop mascots: Behavior folds fly-away, liveliness, bark, hotkey, captions. */
-function DesktopMascotsRows() {
-  const [open, setOpen] = useState(false);
+/** Whether the desktop app draws mascots on the desktop (its main process). */
+function desktopMascotsServed(): boolean {
+  return typeof window !== "undefined" && Boolean(window.ogb?.floatingBots);
+}
+
+/** General > Mascots > More mascots (#4457): HD, fly away during tasks, the
+ * activity level, the bark and the call captions, on one page (they folded
+ * under Appearance > Mascots > Behavior before). */
+export function MascotsPage() {
   const prefs = useSyncExternalStore(subscribeFloatingBots, floatingBotPrefs, floatingBotPrefs);
   const call = useCallSettings();
   const captions = call.captions !== false;
-  const hotkeyServed = typeof window !== "undefined" && Boolean((window.ogb?.floatingBots as { hotkey?: unknown } | undefined)?.hotkey);
-  const mac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform || navigator.userAgent);
-  const onDesktop = typeof window !== "undefined" && Boolean(window.ogb?.floatingBots);
-  if (!onDesktop) return null;
   return (
-    <div data-settings-card="appearance.mascots" data-open={open ? "true" : "false"}>
-      <DescribedRow
-        label={t("settings.mascots.behavior")}
-        description={t("settings.mascotsCard.title")}
-        rowId="mascotsBehavior"
-        below={open && (
-          <div className="mt-2 flex flex-col" data-mascot-rows="">
+    <div data-settings-card="appearance.mascots-hd">
+      <SettingsGroup groupId="mascots">
+        <HdMascotsRow />
+        {desktopMascotsServed() && (
+          <div data-settings-card="appearance.mascots" data-mascot-rows="" className="flex flex-col">
             <SwitchLine label={t("settings.floatingBots.flyAway.title")} checked={prefs.flyAway} onChange={setFloatingFlyAway} />
             <CompactRow label={t("settings.floatingBots.liveliness.title")}>
               <PillSelect<FloatingLiveliness>
@@ -318,27 +318,32 @@ function DesktopMascotsRows() {
               />
             </CompactRow>
             <SwitchLine label={t("settings.floatingBots.barkSound.title")} checked={prefs.barkSound} onChange={setFloatingBarkSound} />
-            {hotkeyServed && (
-              <CompactRow label={t("settings.floatingBots.hotkey.title")}>
-                <PillSelect<HotkeyChoice>
-                  value={prefs.hotkeyKeys}
-                  disabled={!prefs.hotkey}
-                  ariaLabel={t("settings.floatingBots.hotkey.keys")}
-                  onChange={(keys) => setFloatingHotkey({ keys })}
-                  options={HOTKEY_CHOICES.map((keys) => ({ value: keys, label: hotkeyLabel(keys, mac) }))}
-                />
-                <Switch checked={prefs.hotkey} aria-label={t("settings.floatingBots.hotkey.title")} onClick={() => setFloatingHotkey({ on: !prefs.hotkey })} />
-              </CompactRow>
-            )}
             <SwitchLine label={t("settings.floatingBots.captions.title")} checked={captions} onChange={(next) => writeCallSettings({ captions: next })} />
           </div>
         )}
-      >
-        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.mascots.behavior")}>
-          {t(open ? "settings.appearance.hide" : "settings.appearance.show")}
-        </DisclosurePill>
-      </DescribedRow>
+      </SettingsGroup>
     </div>
+  );
+}
+
+/** The call hotkey of the desktop mascots, on General > System > Shortcuts
+ * (#4457; it sat in Appearance > Mascots > Behavior). */
+export function FloatingHotkeyRow() {
+  const prefs = useSyncExternalStore(subscribeFloatingBots, floatingBotPrefs, floatingBotPrefs);
+  const hotkeyServed = typeof window !== "undefined" && Boolean((window.ogb?.floatingBots as { hotkey?: unknown } | undefined)?.hotkey);
+  const mac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform || navigator.userAgent);
+  if (!desktopMascotsServed() || !hotkeyServed) return null;
+  return (
+    <CompactRow label={t("settings.floatingBots.hotkey.title")} rowId="floatingHotkey">
+      <PillSelect<HotkeyChoice>
+        value={prefs.hotkeyKeys}
+        disabled={!prefs.hotkey}
+        ariaLabel={t("settings.floatingBots.hotkey.keys")}
+        onChange={(keys) => setFloatingHotkey({ keys })}
+        options={HOTKEY_CHOICES.map((keys) => ({ value: keys, label: hotkeyLabel(keys, mac) }))}
+      />
+      <Switch checked={prefs.hotkey} aria-label={t("settings.floatingBots.hotkey.title")} onClick={() => setFloatingHotkey({ on: !prefs.hotkey })} />
+    </CompactRow>
   );
 }
 
@@ -480,6 +485,28 @@ function SidebarHiddenFold() {
   );
 }
 
+/** General > Appearance (#4457): the theme and accent rows, at the top of
+ * the card; Language, Time zone and the keyboard rows follow them there. */
+export function AppearanceThemeRows() {
+  return (
+    <div data-settings-card="appearance.skin" className="flex flex-col">
+      <SkinPicker modeFirst customizeOpen={false} />
+      <BotAccentRow />
+    </div>
+  );
+}
+
+/** General > Permissions > Privacy (#4457): Keep people apart (it sat in
+ * Appearance > Sidebar). */
+export function SidebarPeopleApartRow() {
+  const peopleApart = useSidebarPeopleApart();
+  return <SwitchLine label={t("settings.sidebarPeopleApart.title")} ariaLabel={t("settings.sidebarPeopleApart.show")} checked={peopleApart} onChange={setSidebarPeopleApart} rowId="sidebarPeopleApart" />;
+}
+
+/** General > Appearance > More appearance (#4457): what the Appearance page
+ * held beside the theme, accent, language, time zone and keyboard rows (on
+ * General's card) and the mascots (General > Mascots): font, background
+ * effects, app icon, conversations, the sidebar, accessibility. */
 export function AppearanceSettings() {
   const { state } = useStore();
   const remoteActive = typeof window !== "undefined" && window.ogb?.remoteClient?.active === true;
@@ -487,7 +514,6 @@ export function AppearanceSettings() {
   // #1098: on an organization server Show tool calls is each person's own.
   const personalSettings = state.config?.personalSettings === true;
   const logo = useShowSidebarLogo();
-  const peopleApart = useSidebarPeopleApart();
   const routinesBadge = useShowRoutinesBadge();
   const suggestions = useShowSuggestions();
   const allHistory = useShowAllHistory();
@@ -495,12 +521,11 @@ export function AppearanceSettings() {
   const streamReplies = useStreamReplies();
   return (
     <>
-      <div data-settings-card="appearance.skin">
+      <div data-settings-card="appearance.customize">
         <SettingsGroup title={t("settings.theme.title")} groupId="theme">
-          <SkinPicker modeFirst customizeOpen={false} />
-          <BotAccentRow />
           <ThemeCustomizeRows />
           <BackgroundChooseRow />
+          <AppIconRow />
         </SettingsGroup>
       </div>
       <SettingsGroup title={t("settings.group.conversation")} groupId="conversation">
@@ -512,7 +537,6 @@ export function AppearanceSettings() {
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.sidebar")} groupId="sidebar">
         <SidebarDensityRow />
-        <SwitchLine label={t("settings.sidebarPeopleApart.title")} ariaLabel={t("settings.sidebarPeopleApart.show")} checked={peopleApart} onChange={setSidebarPeopleApart} rowId="sidebarPeopleApart" />
         <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
         <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />
         <SwitchLine label={t("settings.showPermissions.title")} ariaLabel={t("settings.showPermissions.show")} checked={permissions} onChange={setShowPermissions} rowId="showPermissions" />
@@ -522,12 +546,6 @@ export function AppearanceSettings() {
         <SwitchLine label={t("settings.sidebarLogo.title")} ariaLabel={t("settings.sidebarLogo.show")} checked={logo} onChange={setShowSidebarLogo} rowId="sidebarLogo" />
         <SwitchLine label={t("settings.routinesBadge.title")} ariaLabel={t("settings.routinesBadge.show")} checked={routinesBadge} onChange={setShowRoutinesBadge} rowId="routinesBadge" />
       </SettingsGroup>
-      <div data-settings-card="appearance.mascots-hd">
-        <SettingsGroup title={t("settings.group.mascots")} groupId="mascots">
-          <HdMascotsRow />
-          <DesktopMascotsRows />
-        </SettingsGroup>
-      </div>
       <AccessibilityGroup />
     </>
   );

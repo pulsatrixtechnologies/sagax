@@ -9,10 +9,14 @@ export const DecisionModelSettings = lazyScreen("DecisionModelSettings", async (
 export const DeveloperSettings = lazyScreen("DeveloperSettings", async () => (await import("./settings/DeveloperSettings")).DeveloperSettings);
 export const EnginesSettings = lazyScreen("EnginesSettings", async () => (await import("./EnginesSettings")).EnginesSettings);
 export const LocalComputerSection = lazyScreen("LocalComputerSection", async () => (await import("./LocalComputerSection")).LocalComputerSection);
+export const MascotsPage = lazyScreen("MascotsPage", async () => (await import("./settings/AppearanceSettings")).MascotsPage);
+export const NotificationQuickRows = lazyScreen("NotificationQuickRows", async () => (await import("./NotificationSettings")).NotificationQuickRows);
+export const PrivacyRows = lazyScreen("PrivacyRows", async () => (await import("./NotificationSettings")).PrivacyRows);
 export const NotificationSettings = lazyScreen("NotificationSettings", async () => (await import("./NotificationSettings")).NotificationSettings);
 export const OrganizationSettings = lazyScreen("OrganizationSettings", async () => (await import("./OrganizationSettings")).OrganizationSettings);
 export const OrgMemorySettings = lazyScreen("OrgMemorySettings", async () => (await import("./OrgMemorySettings")).OrgMemorySettings);
 export const ProviderPage = lazyScreen("ProviderPage", async () => (await import("./settings/ProviderPage")).ProviderPage);
+export const ProvidersModelsVoice = lazyScreen("ProvidersModelsVoice", async () => (await import("./settings/ProvidersModelsVoice")).ProvidersModelsVoice);
 export const ProvidersSettings = lazyScreen("ProvidersSettings", async () => (await import("./settings/ProvidersSettings")).ProvidersSettings);
 export const SecurityKeySettings = lazyScreen("SecurityKeySettings", async () => (await import("./SecurityKeySettings")).SecurityKeySettings);
 export const UsageSection = lazyScreen("UsageSection", async () => (await import("./UsageSection")).UsageSection);

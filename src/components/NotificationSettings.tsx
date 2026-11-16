@@ -95,18 +95,49 @@ function NudgesRow() {
   );
 }
 
-/** `privacy` is the organization server's Privacy section. The per-person
- * daily budget and quiet hours (#2695) show everywhere (solo: /api/me/signals).
- * `organization`: the server is an organization's (#4360): only then does a
- * line name it. A person alone on their server (src/lib/server-alone.ts) has
- * nobody to block and no reports to review: the Privacy card shows only when
- * someone was blocked before. A server with other people keeps it all. */
-export function NotificationSettings({ privacy = false, organization = privacy }: { privacy?: boolean; organization?: boolean }) {
+/** General > Notifications (#4457): desktop notifications and the approval
+ * chime on General's card; the rest is one page further (More
+ * notifications, NotificationSettings). */
+export function NotificationQuickRows() {
+  const chime = useLocalSwitch(approvalChime);
+  return (
+    <>
+      <OsPermissionBanner id="notifications" />
+      <NotificationInvite />
+      <NativeNotificationStatusRow />
+      <CompactRow label={t("settings.approvalChime.title")} rowId="approvalChime">
+        <Switch checked={chime} aria-label={t("settings.approvalChime.title")} onClick={() => approvalChime.set(!chime)} />
+      </CompactRow>
+    </>
+  );
+}
+
+/** Permissions > Privacy (#4457; it sat on Notifications): blocked people,
+ * and on an organization server read receipts, presence and reports.
+ * `privacy` is the organization server's Privacy section. A person alone on
+ * their server (src/lib/server-alone.ts) has nobody to block and no reports
+ * to review: the rows show only when someone was blocked before. A server
+ * with other people keeps it all. */
+export function PrivacyRows({ privacy = false }: { privacy?: boolean }) {
   const blocked = useBlockedPeople();
   const alone = useServerAlone();
+  if (alone && blocked.length === 0) return null;
+  return (
+    <>
+      {privacy && <PrivacySettings />}
+      <BlockedPeopleRow />
+      {!alone && <ReportsRow />}
+    </>
+  );
+}
+
+/** General > Notifications > More notifications (#4457): the per-person
+ * daily budget and quiet hours (#2695) show everywhere (solo:
+ * /api/me/signals). `organization`: the server is an organization's (#4360):
+ * only then does a line name it. */
+export function NotificationSettings({ organization = false }: { organization?: boolean }) {
   const persistent = useLocalSwitch(persistentNotifications);
   const badge = useLocalSwitch(dockBadge);
-  const chime = useLocalSwitch(approvalChime);
   const connection = useLocalSwitch(connectionNotices);
   const bots = useLocalSwitch(notifyBots);
   const people = useLocalSwitch(notifyPeople);
@@ -114,7 +145,6 @@ export function NotificationSettings({ privacy = false, organization = privacy }
   const approvals = useLocalSwitch(notifyApprovals);
   return (
     <>
-      <OsPermissionBanner id="notifications" />
       <SettingsGroup title={t("settings.group.notificationTypes")} groupId="notificationTypes">
         <CompactRow label={t("settings.notifications.types.bots")} rowId="notifyBots">
           <Switch checked={bots} aria-label={t("settings.notifications.types.bots")} onClick={() => notifyBots.set(!bots)} />
@@ -129,12 +159,10 @@ export function NotificationSettings({ privacy = false, organization = privacy }
           <Switch checked={approvals} aria-label={t("settings.notifications.types.approvals")} onClick={() => notifyApprovals.set(!approvals)} />
         </CompactRow>
       </SettingsGroup>
-      <SignalSettings organization={privacy} />
+      <SignalSettings organization={organization} />
       {/* #3432: « Ce que je reçois », beside the budget and quiet hours */}
       <ProactiveReceiveSettings />
       <SettingsGroup title={t("settings.group.alerts")} groupId="alerts">
-        <NotificationInvite />
-        <NativeNotificationStatusRow />
         <SoundRow />
         <DescribedRow label={t("settings.notifications.persistent.title")} description={t("settings.notifications.persistent.mac")} rowId="persistentNotifications">
           <Switch checked={persistent} aria-label={t("settings.notifications.persistent.title")} onClick={() => persistentNotifications.set(!persistent)} />
@@ -142,26 +170,11 @@ export function NotificationSettings({ privacy = false, organization = privacy }
         <CompactRow label={t("settings.notifications.badge.title")} rowId="dockBadge">
           <Switch checked={badge} aria-label={t("settings.notifications.badge.title")} onClick={() => dockBadge.set(!badge)} />
         </CompactRow>
-        <CompactRow label={t("settings.approvalChime.title")} rowId="approvalChime">
-          <Switch checked={chime} aria-label={t("settings.approvalChime.title")} onClick={() => approvalChime.set(!chime)} />
-        </CompactRow>
         <DescribedRow label={t("settings.connectionNotices.title")} description={t(organization ? "settings.connectionNotices.description" : "settings.connectionNotices.descriptionSolo")} rowId="connectionNotices">
           <Switch checked={connection} aria-label={t("settings.connectionNotices.title")} onClick={() => connectionNotices.set(!connection)} />
         </DescribedRow>
         <NudgesRow />
       </SettingsGroup>
-      {/* Privacy always hosts blocked people; org read-receipts/presence only when
-          the privacy section is allowed (organization server). ReportsRow hides
-          itself when the viewer is not an admin (#2080). */}
-      {(!alone || blocked.length > 0) && (
-        <div data-settings-card="notifications.privacy">
-          <SettingsGroup title={t("settings.section.privacy")} groupId="privacy">
-            {privacy && <PrivacySettings />}
-            <BlockedPeopleRow />
-            {!alone && <ReportsRow />}
-          </SettingsGroup>
-        </div>
-      )}
     </>
   );
 }

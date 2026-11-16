@@ -21,7 +21,7 @@ import { READ_ONLY_AGENT_TOOL_NAMES } from "../../server/tools/agent-tool-policy
 import { TOOL_POLICY_ROWS } from "../../server/tool-policy.generated.ts";
 import type { KnowledgeBase, KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge/self-knowledge-types.ts";
 import { clip, CUSTOMER_TAG_LEFT, docSections, plainText, scrub, slug } from "./markdown.ts";
-import { CARD_HOME } from "../../src/lib/settings-sections.ts";
+import { SETTINGS_SUB_PAGES, settingsTarget } from "../../src/lib/settings-sections.ts";
 import { TEAM_CHAT_CHANNELS_OFFERED } from "../../shared/team-chat-channels.ts";
 import { XAI_GROUP_LABEL } from "../../shared/model-provider.ts";
 import { GUIDES, SETTING_NOTES } from "./guides.ts";
@@ -161,7 +161,7 @@ const label = (key: string, en: Locale, fr: Locale) => {
   return { english, french: french && french !== english ? french : "" };
 };
 
-export interface SettingsSectionRow { id: string; group: string; labelKey: string; keywords: string[] }
+export interface SettingsSectionRow { id: string; labelKey: string; keywords: string[] }
 
 const SETTINGS_NAV = "src/components/settings/settings-nav.ts";
 
@@ -180,16 +180,14 @@ export function settingsSectionRows(root: string): SettingsSectionRow[] {
   }
   const block = source.slice(start, end);
   const rows: SettingsSectionRow[] = [];
-  for (const match of block.matchAll(/\{ id: "(\w+)", group: "(\w+)", labelKey: "([\w.]+)",[^\n]*?keywords: \[([^\]]*)\]/g)) {
-    rows.push({ id: match[1], group: match[2], labelKey: match[3], keywords: [...match[4].matchAll(/"([^"]+)"/g)].map((word) => word[1]) });
+  for (const match of block.matchAll(/\{ id: "(\w+)", labelKey: "([\w.]+)",[^\n]*?keywords: \[([^\]]*)\]/g)) {
+    rows.push({ id: match[1], labelKey: match[2], keywords: [...match[3].matchAll(/"([^"]+)"/g)].map((word) => word[1]) });
   }
   if (rows.length === 0) {
-    throw new Error(`${SETTINGS_NAV}: SECTIONS found but no { id, group, labelKey, keywords } rows matched`);
+    throw new Error(`${SETTINGS_NAV}: SECTIONS found but no { id, labelKey, keywords } rows matched`);
   }
   return rows;
 }
-
-const NAV_GROUP_KEYS: Record<string, string> = { you: "settings.nav.you", ai: "settings.nav.ai", workspace: "settings.nav.workspace", app: "settings.nav.app" };
 
 /** Card id prefix to the page that holds it (src/lib/settings-sections.ts).
  * A card that moved by itself (CARD_HOME, 2026-10-28) wins over its prefix. */
@@ -214,13 +212,12 @@ function settingsSections(root: string): KnowledgeSection[] {
   const out: KnowledgeSection[] = [];
   for (const row of rows) {
     const name = pageName.get(row.id)!;
-    const group = label(NAV_GROUP_KEYS[row.group] ?? row.group, en, fr);
     const note = SETTING_NOTES[row.id];
     out.push({
       id: `setting:${row.id}`,
       kind: "setting",
       title: `Settings page ${name.english}${name.french ? ` (${name.french})` : ""}`,
-      where: `Settings > ${name.english}${name.french ? ` (FR: Réglages > ${name.french})` : ""}, under ${group.english}`,
+      where: `Settings > ${name.english}${name.french ? ` (FR: Réglages > ${name.french})` : ""}`,
       ...(note?.access ? { access: note.access } : {}),
       keywords: row.keywords.join(" "),
       text: `${note?.text ? `${note.text} ` : ""}Holds: ${row.keywords.slice(0, 40).join(", ")}.`,
@@ -242,9 +239,14 @@ function settingsSections(root: string): KnowledgeSection[] {
       const titleText = /(?:title|label)="([^"]+)"/.exec(window)?.[1];
       if (!titleKey && !titleText) continue;
       const prefix = id.split(".")[0];
-      const page = id.startsWith("bot.") ? null : HIDDEN_PAGES.has(prefix) ? null : (Object.hasOwn(CARD_HOME, id) ? CARD_HOME[id] : undefined) ?? CARD_PAGE[prefix] ?? (pageName.has(prefix) ? prefix : null);
+      // #4457: the page of the rail that holds the card, and the sub-page when it is one page further
+      const target = id.startsWith("bot.") || HIDDEN_PAGES.has(prefix) ? null : settingsTarget((Object.hasOwn(CARD_PAGE, prefix) ? CARD_PAGE[prefix] : prefix) as Parameters<typeof settingsTarget>[0], id);
+      const page = target && pageName.has(target.section) ? target.section : null;
+      const subPageLabel = page && target?.subPage ? label(SETTINGS_SUB_PAGES[target.subPage].titleKey, en, fr) : null;
       if (!page && !id.startsWith("bot.")) continue;
       const own = titleKey ? label(titleKey, en, fr) : { english: titleText!, french: "" };
+      // a card that is its sub-page's whole content names the sub-page once
+      const subPage = subPageLabel && subPageLabel.english !== own.english ? subPageLabel : null;
       const trail = (CARD_TRAIL[id] ?? []).map((step) => "key" in step ? label(step.key, en, fr) : { english: step.text, french: "" });
       const title = trail.length === 0 ? own : {
         english: [...trail.map((step) => step.english), own.english].join(" > "),
@@ -260,7 +262,7 @@ function settingsSections(root: string): KnowledgeSection[] {
         where: prefix === "myConnections"
           ? `the sidebar's Capabilities (Capacités) > ${title.english}`
           : page
-          ? `Settings > ${pageLabel!.english} > ${title.english}${pageLabel!.french ? ` (FR: Réglages > ${pageLabel!.french} > ${title.french || title.english})` : ""}`
+          ? `Settings > ${pageLabel!.english}${subPage ? ` > ${subPage.english}` : ""} > ${title.english}${pageLabel!.french ? ` (FR: Réglages > ${pageLabel!.french}${subPage ? ` > ${subPage.french || subPage.english}` : ""} > ${title.french || title.english})` : ""}`
           : `a bot's settings (open the bot, then its settings) > ${title.english}`,
         ...(SETTING_NOTES[page ?? ""]?.access ? { access: SETTING_NOTES[page!].access } : {}),
         text: subtitle && !/checking|vérification/i.test(subtitle.english) ? `${subtitle.english}${subtitle.french ? ` / ${subtitle.french}` : ""}` : `${title.english} card.`,

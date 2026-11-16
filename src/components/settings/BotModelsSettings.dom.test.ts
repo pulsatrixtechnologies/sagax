@@ -281,7 +281,7 @@ describe("BotModelsSettings page", () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
     expect(container.querySelector("[data-defaults-stub]"), "no editable defaults form").toBeNull();
-    // the defaults card now lives in Settings > Developer, not on this page
+    // the defaults row lives on Settings > Providers > Models (#4457), not on this page
     expect(container.querySelector('[data-settings-row="models.newBotDefaults"]')).toBeNull();
     expect(container.querySelector('[data-settings-group="bot-models-defaults"]')).toBeNull();
     // the table itself stays the person's: rows and Edit several are there

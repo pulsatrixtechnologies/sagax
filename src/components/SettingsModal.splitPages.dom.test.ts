@@ -61,7 +61,7 @@ vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capab
 const { SettingsModal } = await import("./SettingsModal");
 const { MyApprovalRules } = await import("./settings/MyApprovalRules");
 const { clampPageOffset } = await import("./SettingsPager");
-const { openSettings, currentSettingsSection, settingsSectionLabel } = await import("@/lib/settings-link");
+const { openSettings, currentSettingsSection, settingsPlaceLabel, settingsSectionLabel } = await import("@/lib/settings-link");
 
 let host: HTMLDivElement;
 let root: Root;
@@ -88,7 +88,7 @@ async function settings(section: AppSettingsSection): Promise<HTMLElement> {
 }
 
 const rail = () => host.querySelector("nav")!;
-const railLabels = (group: string) => [...rail().querySelectorAll(`[data-settings-nav-group="${group}"] button`)].map((node) => node.textContent?.trim());
+const railLabels = () => [...rail().querySelectorAll("[data-settings-nav-row]")].map((node) => node.textContent?.trim());
 const pane = () => host.querySelector<HTMLElement>("[data-settings-pane]")!;
 const card = (id: string) => pane().querySelector(`[data-settings-card="${id}"]`);
 const group = (id: string) => pane().querySelector(`[data-settings-group="${id}"]`);
@@ -116,11 +116,10 @@ afterEach(() => {
 });
 
 describe("Settings split: navigation", () => {
-  // #2080 (L0): the final rail
-  it("lists Account, Appearance, Notifications, Security, Vault under Personal, and Providers, Models, Voice, Usage under AI", async () => {
+  // #4457: the reference app's rail, seven entries with no group title
+  it("lists General, Computer, Permissions, Vault, Providers, Usage and Updates", async () => {
     await settings("account");
-    expect(railLabels("you")).toEqual(["Account", "Appearance", "Notifications", "Security", "Vault"]);
-    expect(railLabels("ai")).toEqual(["Providers", "Models", "Voice", "Usage"]);
+    expect(railLabels()).toEqual(["General", "Computer", "Permissions", "Vault", "Providers", "Usage", "Updates"]);
     expect(rail().textContent).not.toContain("Models and voice");
   });
 
@@ -134,8 +133,7 @@ describe("Settings split: navigation", () => {
   it("reads in French", async () => {
     setLocale("fr");
     await settings("account");
-    expect(railLabels("you")).toEqual(["Compte", "Apparence", "Notifications", "Sécurité", "Coffre"]);
-    expect(railLabels("ai")).toEqual(["Fournisseurs", "Modèles", "Voix", "Utilisation"]);
+    expect(railLabels()).toEqual(["Général", "Ordinateur", "Autorisations", "Coffre", "Fournisseurs", "Utilisation", "Mises à jour"]);
   });
 });
 
@@ -175,17 +173,27 @@ describe("Settings split: every moved setting at its new place", () => {
     }
   });
 
-  it("Security holds the security keys, the approvals that need a key, the approval rules and My tool access", async () => {
+  it("Permissions holds the security keys, the approvals that need a key, the approval rules and My tool access, one page further", async () => {
     await settings("security");
-    expect(pane().querySelector("h2")?.textContent).toBe("Security");
+    expect(pane().querySelector("h2")?.textContent).toBe("Permissions");
     expect(pane().querySelector("[data-security-page]")).not.toBeNull();
+    for (const id of ["security.keys", "security.rules", "security.toolGrants"]) expect(card(id), id).not.toBeNull();
+    expect(card("credentials.items")).toBeNull();
+    fixture.subPage = "security.keys";
+    await settings("security");
     expect(card("security")).not.toBeNull();
-    for (const id of ["security.keys", "myApprovalRules", "myToolAccess"]) expect(group(id), id).not.toBeNull();
+    expect(group("security.keys")).not.toBeNull();
     expect(pane().querySelector('[data-settings-row="security-classes"]')).not.toBeNull();
     expect(pane().textContent).toContain("Ask for a key for");
+    fixture.subPage = "security.rules";
+    await settings("security");
+    expect(group("myApprovalRules")).not.toBeNull();
     expect(pane().textContent).toContain("Your approval rules");
+    fixture.subPage = "security.toolGrants";
+    await settings("security");
+    expect(group("myToolAccess")).not.toBeNull();
     expect(pane().textContent).toContain("My tool access");
-    expect(card("credentials.items")).toBeNull();
+    fixture.subPage = null;
   });
 
   it("Vault holds the items (New item, Import, Export) and the One-time card", async () => {
@@ -261,12 +269,16 @@ describe("Settings split: every moved setting at its new place", () => {
   });
 
   it("Voice holds the microphone, the voice engine and Live calls; Models keeps the bot models and the Advanced fold, Providers the image generation", async () => {
+    // #4457: Voice and Models are sub-pages of Providers; the microphone is General > System
+    const title = () => host.querySelector('[data-settings-subpage] [aria-current="page"]')?.textContent;
     await settings("voice");
-    expect(pane().querySelector("h2")?.textContent).toBe("Voice");
-    for (const id of ["connections.audio", "connections.voice", "voice.advanced"]) expect(card(id), id).not.toBeNull();
+    // #4457: Providers > Voice > Live calls (who speaks and who listens is Providers' Voice card)
+    expect(title()).toBe("Live calls");
+    for (const id of ["connections.voice", "voice.advanced"]) expect(card(id), id).not.toBeNull();
+    expect(card("connections.audio")).toBeNull();
     expect(pane().querySelector("[data-keys-section]")).toBeNull();
     await settings("engines");
-    expect(pane().querySelector("h2")?.textContent).toBe("Models");
+    expect(title()).toBe("Models and context size");
     // 2026-11-05 (option B): image generation and web search moved to Providers > Other services
     expect(card("connections.image"), "connections.image").toBeNull();
     expect(card("models.advanced"), "models.advanced").not.toBeNull();
@@ -342,6 +354,7 @@ describe("Settings split: old links and anchors open the new page", () => {
   };
 
   it("sends Account's old security and vault anchors to Security and Vault", () => {
+    // #4457: Permissions keeps the id "security"
     expect(opened("account", "security")).toBe("security");
     expect(opened("account", "myApprovalRules")).toBe("security");
     expect(opened("account", "myToolAccess")).toBe("security");
@@ -351,27 +364,28 @@ describe("Settings split: old links and anchors open the new page", () => {
     expect(opened("credentials")).toBe("credentials");
   });
 
-  it("sends Models and voice's voice anchors to Voice and the keys (voice keys included) to Providers", () => {
-    expect(opened("engines", "connections.voice")).toBe("voice");
-    expect(opened("engines", "voice.advanced")).toBe("voice");
-    expect(opened("connections", "connections.audio")).toBe("voice");
-    expect(opened("engines", "voice.microphone")).toBe("voice");
+  it("sends Models and voice's voice anchors to Providers > Voice, the microphone to General and the keys to Providers", () => {
+    expect(opened("engines", "connections.voice")).toBe("providers");
+    expect(opened("engines", "voice.advanced")).toBe("providers");
+    expect(opened("connections", "connections.audio")).toBe("general");
+    expect(opened("engines", "voice.microphone")).toBe("general");
     expect(opened("engines", "connections.voiceKeys")).toBe("providers");
     expect(opened("engines", "engines.keys")).toBe("providers");
     expect(opened("connections", "connections.image")).toBe("providers");
   });
 
-  it("names the new page in a sentence's link", () => {
-    expect(settingsSectionLabel(currentSettingsSection("engines", "voice.advanced"))).toBe("Voice");
-    expect(settingsSectionLabel(currentSettingsSection("account", "credentials.items"))).toBe("Vault");
-    expect(settingsSectionLabel(currentSettingsSection("account", "security"))).toBe("Security");
+  it("names the new page in a sentence's link (the sub-page when it is one page further)", () => {
+    expect(settingsPlaceLabel("engines", "voice.advanced")).toBe("Live calls");
+    expect(settingsPlaceLabel("account", "credentials.items")).toBe("Vault");
+    expect(settingsPlaceLabel("account", "security")).toBe("Your keys");
+    expect(settingsSectionLabel(currentSettingsSection("account", "myApprovalRules"))).toBe("Permissions");
   });
 
   it("the store opens the page an old section names", async () => {
     const { currentSettingsSection: fromStore } = await import("@/lib/settings-sections");
     expect(fromStore("security")).toBe("security");
     expect(fromStore("credentials")).toBe("credentials");
-    expect(fromStore("voice")).toBe("voice");
+    expect(fromStore("voice")).toBe("providers");
   });
 
 });
@@ -385,19 +399,19 @@ describe("Settings split: the search finds each setting at its new place", () =>
       setter.call(input, query);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    return [...rail().querySelectorAll("[data-settings-nav-group] button[aria-current], [data-settings-nav-group] > div > button")].map((node) => node.textContent?.trim() ?? "");
+    return [...rail().querySelectorAll("[data-settings-nav-row]")].map((node) => node.textContent?.trim() ?? "");
   }
 
   it.each([
-    ["yubikey", "Security"],
-    ["always deny", "Security"],
-    ["demander d'abord", "Security"],
-    ["my tool access", "Security"],
+    ["yubikey", "Permissions"],
+    ["always deny", "Permissions"],
+    ["demander d'abord", "Permissions"],
+    ["my tool access", "Permissions"],
     ["one-time card", "Vault"],
     ["1password", "Vault"],
     ["coffre", "Vault"],
-    ["microphone", "Voice"],
-    ["live calls", "Voice"],
+    ["microphone", "General"],
+    ["live calls", "Providers"],
     // 2026-10-30: keys are on Providers
     ["openrouter", "Providers"],
   ])("%s lands on %s only", async (query, page) => {

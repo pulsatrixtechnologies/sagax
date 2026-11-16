@@ -39,6 +39,9 @@ export function createRecallTopicInternalRoutes(deps: {
   topics(capability: InternalCapabilityView): RecallTopicListing[] | null;
   /** One page of a topic already listed by `topics`. */
   page(capability: InternalCapabilityView, topicId: string, before?: string): { text: string; more: boolean; firstId?: string };
+  /** #4407: the topics whose titles or words this answer brings into the
+   * calling conversation's engine session (TaskRecord.carriedThreads). */
+  noteCarried(capability: InternalCapabilityView, topicIds: readonly string[]): void;
 }): InternalRouteHandler {
   return async ({ res, path, method, json, capability, readBody }) => {
     if (path !== "/api/internal/recall-topic") return PASS;
@@ -53,11 +56,13 @@ export function createRecallTopicInternalRoutes(deps: {
     const day = (at: number) => new Date(at).toISOString().slice(0, 10);
     const topicId = parsed.data.topicId?.trim();
     if (!topicId) {
+      deps.noteCarried(capability, topics.map((topic) => topic.id));
       return json(res, 200, { topics: topics.map((topic) => ({ id: topic.id, title: topic.title, started: day(topic.createdAt), last: day(topic.lastAt) })) });
     }
     const topic = topics.find((candidate) => candidate.id === topicId);
     if (!topic) return json(res, 404, { error: "no such topic in this conversation" });
     const page = deps.page(capability, topic.id, parsed.data.before?.trim() || undefined);
+    deps.noteCarried(capability, [topic.id]);
     return json(res, 200, { title: topic.title, text: page.text, more: page.more, ...(page.firstId ? { firstId: page.firstId } : {}) });
   };
 }

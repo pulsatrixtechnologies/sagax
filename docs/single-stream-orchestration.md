@@ -133,7 +133,19 @@ topic") in the same stream, never a new place.
   `false` clears it, so thread mode on is unchanged. A send that says
   nothing (older build, phone, relay) leaves it as it is. A confidential,
   hidden, routine, parallel or bot-opened thread is never marked;
-  `makeTaskConfidential` drops the mark and the digest.
+  `makeTaskConfidential` drops the mark and the digest, and
+  `makeThreadConfidential` forgets the engine sessions of the bot's other
+  conversations that carried the topic (`carriedThreads`, written by each
+  turn's "Earlier topics" and "Recent work" blocks, its automatic recall and
+  the `session_search`, `session_read` and `recall_topic` results; a session
+  with no record counts), closes its rooms' idle engines and starts the
+  bot's next turn in each room on a new session (`RoomContextTracker`
+  `forgetSession`, said nowhere in the room): their history holds the topic,
+  so each next turn starts a new session with its own transcript replayed.
+  A carrier running a turn at that moment (a parallel task, a routine run,
+  another topic) keeps its process to the end of the turn; it is marked
+  (`forgetSessionsAtNextTurn`) and its sessions are forgotten again before
+  its next turn starts, so that turn never reuses nor resumes them (#4407).
 - **Digest.** A person's turn in a marked segment (no teammate, routine,
   webhook, peer ask or call) gets an "Earlier topics" block in the volatile
   half of its system prompt: one entry per other segment of the same

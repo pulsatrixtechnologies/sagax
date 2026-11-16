@@ -23591,7 +23591,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const userName = botUserName(bot);
       const page = recallTopicPage(segmentHistory(bot, topicId).entries, (entry) => (entry.role === "user" ? userName : bot.name), before);
       return { ...page, text: redactSecretsInText(page.text) };
-    }
+    },
+    noteCarried: (capability, topicIds) => store.noteCarriedThreads(capability.botId, capability.threadId, topicIds)
   }),
   // skills_find (#2613, server/routes/skills-find-internal.ts): the marketplaces
   // this bot's person sees, read only
@@ -24380,6 +24381,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     }),
     roomFeedsBot: (group, bot) => roomFeedsBot(group as unknown as GroupRecord, bot as Pick<BotRecord, "visibility">),
     privateRecallFilter: (bot, threadId) => privateRecallFilter(bot as unknown as BotRecord, threadId),
+    noteCarriedThreads: (botId, threadId, carried) => store.noteCarriedThreads(botId, threadId, carried),
     turnSpeaker: (threadId) => turnSpeakerPrincipals.get(threadId),
     localPrincipalId,
     isPerspicax: () => IDENTITY.kind === "perspicax",
@@ -36076,6 +36078,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
 
 const startTurnRunner = createStartTurn({
   AUTO_COMPUTER_RULES,
+  forgetThreadEngineSessions,
   proactiveAskForTurn,
   handoffOpener,
   personForJoin,

@@ -12,6 +12,7 @@ vi.mock("../messages/message-db.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../messages/message-db.ts")>()),
   readMessageText: (threadId: string, messageId: string) => (messageId === "m1" ? { threadId, messageId, text: `report in ${threadId}`, at: 1, role: "bot" } : null),
   readLatestMessageText: (threadId: string) => ({ threadId, messageId: "m-last", text: `latest in ${threadId}`, at: 2, role: "bot" }),
+  recallMessages: (_q: string, threadIds: readonly string[]) => threadIds.filter((id) => id !== "t-1").map((threadId) => ({ threadId, messageId: "m1", at: 1, role: "bot", kind: "text", snippet: `[harbour] in ${threadId}` })),
 }));
 
 const BOT = {
@@ -64,6 +65,7 @@ function baseDeps(over: Partial<InternalSessionsDeps> = {}): InternalSessionsDep
     containerExec: async () => ({ stdout: "ok", exitCode: 0 }),
     roomFeedsBot: () => true,
     privateRecallFilter: () => null,
+    noteCarriedThreads: () => undefined,
     turnSpeaker: () => undefined,
     localPrincipalId: () => "pr_local",
     isPerspicax: () => false,
@@ -259,6 +261,21 @@ describe("createInternalSessionsRoutes", () => {
       query: `fromBotId=${BOT.id}&q=hello`,
     });
     expect(sent).toEqual([{ status: 403, body: { error: "source conversation does not belong to sender" } }]);
+  });
+
+  it("#4407: session_search and session_read note the threads they bring into this conversation", async () => {
+    const noteCarriedThreads = vi.fn();
+    const route = createInternalSessionsRoutes(baseDeps({ noteCarriedThreads }));
+    const search = await call(route, { path: "/api/internal/session-search", method: "GET", query: `fromBotId=${BOT.id}&q=harbour&scope=conversations` });
+    expect(search.sent[0]).toMatchObject({ status: 200, body: { hits: [{ threadId: "t-main" }] } });
+    expect(noteCarriedThreads).toHaveBeenLastCalledWith(BOT.id, "t-1", ["t-main"]);
+    const read = await call(route, { path: "/api/internal/session-read", method: "GET", query: `fromBotId=${BOT.id}&threadId=t-main&messageId=m1` });
+    expect(read.sent[0]).toMatchObject({ status: 200, body: { text: "report in t-main" } });
+    expect(noteCarriedThreads).toHaveBeenLastCalledWith(BOT.id, "t-1", ["t-main"]);
+    expect(noteCarriedThreads).toHaveBeenCalledTimes(2);
+    // nothing found, nothing carried
+    await call(route, { path: "/api/internal/session-read", method: "GET", query: `fromBotId=${BOT.id}&threadId=t-other&messageId=m1` });
+    expect(noteCarriedThreads).toHaveBeenCalledTimes(2);
   });
 
   it("GET /session-read refuses an unknown sender (403)", async () => {

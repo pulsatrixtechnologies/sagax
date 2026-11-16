@@ -15,6 +15,7 @@ export type StartTurnHost = {
   DEFAULT_REBUILD_BYTES: any,
   DESKTOP_BRIDGE_MCP_NAME: any,
   DirectTurnSetupCancelled: any,
+  forgetThreadEngineSessions: any,
   EngineAccessLost: any,
   HOSTED_WORKSPACE: any,
   HOST_COMPUTER_RESOURCE: any,

@@ -46,6 +46,9 @@ function autoRecallPrompt(bot: BotRecord, threadId: string, message: string, opt
       semantic: semanticRecallEnabled(host.cfg)
     });
     if (recalled) console.log(host.autoRecallLogLine(bot.id, recalled.notes, recalled.conversations, threadId));
+    // #4407: the recalled conversations' words ride this turn's message, so
+    // this conversation's session carries them from now on
+    if (recalled?.threadIds.length) host.store.noteCarriedThreads(bot.id, threadId, recalled.threadIds);
     // its memory recalled in this conversation (Total Recall, for whoever wrote that memory)
     if (recalled?.notes) host.recordMastery([{ person: host.achievementThreadPerson(threadId) ?? "", fact: { kind: "memory.recalled", botId: bot.id, threadId } }]);
     return recalled?.text ?? "";

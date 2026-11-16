@@ -628,7 +628,13 @@ none optional:
 - The client's send says `singleStream` (`singleStreamTurnField`); the server
   marks the thread `streamSegment` (server-private) or clears it on `false`;
   `POST .../tasks { stream: true }` is "New topic". Never mark a non-segment;
-  `makeTaskConfidential` drops the mark and `segmentDigest`.
+  `makeTaskConfidential` drops the mark and `segmentDigest`;
+  `makeThreadConfidential` forgets the engine sessions of the bot's other
+  conversations that carried the topic (`carriedThreads`: the prompt's
+  blocks, automatic recall, `session_search`, `session_read`,
+  `recall_topic`) and starts the bot's next turn in each room fresh; a
+  carrier busy at that moment is marked (`forgetSessionsAtNextTurn`) and its
+  sessions are forgotten again when its next turn's setup starts (#4407).
 - A person's turn in a marked segment gets the "Earlier topics" block
   (volatile section `stream`, at most 6,000 chars, newest 8 with digests)
   and `recall_topic` (`SAGAX_SINGLE_STREAM`, permission `topics:recall`).

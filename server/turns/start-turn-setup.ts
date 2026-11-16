@@ -38,6 +38,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     expandNativeSkillCommand,
     expandSetupTurnText,
     expandSkillCommandTurnText,
+    forgetThreadEngineSessions,
     listNativeSkillsForTurn,
     resolveBotSkills,
     handedStateUsable,
@@ -91,6 +92,12 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (state.warmOnly && state.opts?.warmSignal?.aborted) {
       state.instance.adapter.releaseWarmSession?.(state.threadId);
       return { kind: "return" };
+    }
+    // #4407: a thread made confidential while this thread's last turn ran
+    // rode that turn's session: forget it before anything here reads the
+    // session (compaction, the reuse of the idle process, the resume cursor)
+    if (store.taskByThread(state.bot.id, state.threadId)?.forgetSessionsAtNextTurn) {
+      forgetThreadEngineSessions(state.bot.id, state.threadId, "carried a thread made confidential");
     }
     // #3679: the checks, the message's admission and the claim close their
     // own part, so compact names only the fold check

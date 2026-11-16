@@ -44,4 +44,18 @@ describe("room context", () => {
     expect(rooms.takeReset("room", "scout", { autoCompact: false })).toEqual({ reason: "requested", percent: 30 });
     expect(rooms.takeReset("room", "pixel", undefined)).toBeNull();
   });
+
+  it("#4407: a forgotten session starts the next turn fresh once, measured or not, and says nothing of why", () => {
+    const rooms = new RoomContextTracker();
+    rooms.forgetSession("room", "scout");
+    rooms.record("room", "pixel", { tokens: 10_000, window: 200_000 }, undefined);
+    rooms.forgetSession("room", "pixel");
+    expect(rooms.takeReset("room", "scout", { autoCompact: false })).toEqual({ reason: "forgotten", percent: 0 });
+    expect(rooms.takeReset("room", "scout", undefined)).toBeNull();
+    expect(rooms.takeReset("room", "pixel", undefined)).toEqual({ reason: "forgotten", percent: 5 });
+    expect(rooms.forThread("room")).toBeUndefined();
+    rooms.forgetSession("room", "scout");
+    rooms.forget("room");
+    expect(rooms.takeReset("room", "scout", undefined)).toBeNull();
+  });
 });

@@ -99,6 +99,7 @@ export function semanticPassages(botId: string, query: string, limit: number, sc
       return {
         source: "conversation" as const,
         label: names ? names.label(hit.threadId!) : hit.label,
+        threadId: hit.threadId!,
         snippet: author ? `${author}: ${hit.snippet.trim()}` : hit.snippet.trim(),
         ...at,
       };

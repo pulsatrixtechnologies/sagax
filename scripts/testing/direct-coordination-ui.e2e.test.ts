@@ -12,7 +12,7 @@ import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env }));
 
-(enabled ? it : it.skip)("coordinates from the real composer and opens the exact child task from its existing inline receipt", async () => {
+(enabled ? it : it.skip)("coordinates from the real composer and reads the exact child task in the exchange sheet", async () => {
   const temporary = mkdtempSync(join(tmpdir(), "omb-direct-ui-plan-"));
   const planPath = join(temporary, "plan.json");
   writeFileSync(planPath, "{}");
@@ -65,7 +65,7 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     writeFileSync(gateFile, "complete fixture work");
     await ui("wait-settle", "--timeout", "60");
     await expect.poll(snapshot, { timeout: 15_000 }).toContain("Engineer checked the fixture CSV export");
-    expect(await snapshot()).toContain("Sent to Engineer");
+    expect(await snapshot()).toContain("Open the exchange with Engineer");
     const state = await api("/api/bots");
     const parent = state.bots.find((bot: any) => bot.id === info.botId);
     const receipt = parent.messages.find((message: any) => message.tool?.name === "Sent to Engineer");
@@ -73,14 +73,20 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     expect(receipt.threadRef.threadId).not.toBe(lead.threadId);
     const screenshot = info.logPath + ".direct-coordination.png";
     await ui("screenshot", "--out", screenshot);
-    await click("Sent to Engineer");
+    await click("Open the exchange with Engineer");
     await expect.poll(snapshot, { timeout: 15_000 }).toContain("CSV export checked in my separate task");
-    // The request in the teammate's thread names the bot that sent it.
-    expect(await snapshot()).toMatch(/Pepper[\s\S]{0,80}sent a request/);
+    // The exchange stays over the sender chat; it does not switch the teammate's current thread.
+    expect(await snapshot()).toContain("Close Chat");
+    expect(await snapshot()).toContain("Message Pepper");
     const selected = (await api("/api/bots")).bots.find((bot: any) => bot.id === lead.id);
-    expect(selected.threadId).toBe(receipt.threadRef.threadId);
+    expect(selected.threadId).toBe(lead.threadId);
+    await click("Close Chat");
+    expect(await snapshot()).toContain("Message Pepper");
     const evidence = { source: parent.messages, receipt, selectedThread: selected.threadId, final: await snapshot(), screenshot };
     writeFileSync(info.logPath + ".direct-coordination.json", JSON.stringify(evidence, null, 2));
+    const renderer = await ui("console");
+    expect(renderer.ok).toBe(true);
+    expect((renderer.messages as Array<{ type: string }>).filter(message => message.type === "error")).toEqual([]);
     console.log("Direct coordination UI evidence:", info.logPath + ".direct-coordination.json");
   } finally {
     await waitForExit(child, { signal: "SIGINT", graceMs: 30_000 });

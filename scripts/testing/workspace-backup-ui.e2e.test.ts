@@ -88,9 +88,13 @@ describe("full backup Settings in the real renderer", () => {
     await ui("press", "--keys", "Escape");
     await click("You");
     await click("Settings");
-    await click("Backups");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Export full backup");
+    await click("Backups and storage");
+    await expect.poll(() => evaluate("Boolean(document.querySelector('[data-backup-included]'))")).toBe(true);
+    await evaluate("document.querySelector('[data-backup-included]').closest('details').querySelector('summary').click(); true");
     expect(await snapshot()).toContain("Saved account credentials and connections are not included");
+    await evaluate("document.querySelector('[data-backup-included]').closest('details').querySelector('summary').click(); true");
+    await click("Export");
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Export full backup");
     expect(await snapshot()).toContain("not automatically redacted");
     await ui("screenshot", "--out", join(ROOT, ".omb-scratch", "verify-evidence", "workspace-backup-settings.png"));
     await type("Backup password", "fixture password 123");
@@ -101,6 +105,7 @@ describe("full backup Settings in the real renderer", () => {
     expect(await evaluate("window.backupFixture.calls.find(call => call.path.endsWith('/export')).body.clientState['omb-webhook-credentials'] ?? null")).toBeNull();
     expect(await evaluate("Object.values(localStorage).some(value => value.includes('fixture password 123'))")).toBe(false);
 
+    await click("Restore");
     // A File is delivered through the native input's change event. This
     // does not claim to automate the OS file-picker dialog.
     // The picker offers .sagaxbackup. An older .ombbackup file still uploads.
@@ -127,6 +132,9 @@ describe("full backup Settings in the real renderer", () => {
     expect(await evaluate("window.backupFixture.calls.find(call => call.path.endsWith('/restore')).body")).toEqual({ id: "validated-stage", confirmation: "REPLACE" });
     expect(await evaluate("window.backupFixture.calls.find(call => call.path.endsWith('/upload')).rawFile")).toBe(true);
     expect(await evaluate("localStorage.getItem('omb-pending-workspace-restore')")).toBe("validated-stage");
+    const renderer = await ui("console");
+    expect(renderer.ok).toBe(true);
+    expect((renderer.messages as Array<{ type: string }>).filter(message => message.type === "error")).toEqual([]);
     console.log(JSON.stringify({ fixture: info, screenshot: evidence, archiveApi: "simulated; renderer controls real" }));
     await waitForExit(child, { signal: "SIGINT", graceMs: 30_000 });
     expect(child.exitCode).toBe(0);

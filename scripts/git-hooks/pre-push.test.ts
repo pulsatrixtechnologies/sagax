@@ -83,10 +83,10 @@ function ticket(second: number, pid: number) {
   return name;
 }
 
-function pushAsync() {
+function pushAsync(stdin = "") {
   const child = spawn("sh", [HOOK], { cwd: repo, env: hookEnv(0) });
   started.push(child);
-  child.stdin?.end();
+  child.stdin?.end(stdin);
   let out = "";
   child.stdout?.on("data", (d) => { out += d; });
   child.stderr?.on("data", (d) => { out += d; });
@@ -257,4 +257,44 @@ describe("pre-push queue (#4377)", () => {
   it("waits up to two hours", () => {
     expect(readFileSync(HOOK, "utf8")).toMatch(/-gt 7200\b/);
   });
+});
+
+describe("pre-push: what already passed, and a release (#4480)", () => {
+  it("lets through a tag whose commit is already on the remote main branch, with no stamp and no wait", () => {
+    const merged = git("rev-parse", "HEAD");
+    git("update-ref", "refs/remotes/origin/main", merged);
+    git("tag", "-a", "v2", "-m", "v2");
+    const tagObject = git("rev-parse", "v2");
+    holdLock(live());
+    const { code, out, calls } = push(1, `refs/tags/v2 ${tagObject} refs/tags/v2 ${ZERO}\n`);
+    expect(code, out).toBe(0);
+    expect(out).toContain("already on origin/main");
+    expect(out).not.toContain("waiting");
+    expect(calls).toBe("");
+    expect(existsSync(ticketDir())).toBe(false);
+  });
+
+  it("still verifies a commit that is not on the remote main branch", () => {
+    git("update-ref", "refs/remotes/origin/main", git("rev-parse", "main"));
+    const head = git("rev-parse", "HEAD");
+    const { code, out, calls } = push(0, `refs/heads/work ${head} refs/heads/work ${ZERO}\n`);
+    expect(code, out).toBe(0);
+    expect(out).not.toContain("already on origin/main");
+    expect(calls).toContain("pnpm verify:merge");
+  });
+
+  it("puts a release branch ahead of the pushes that arrived before it", async () => {
+    const holder = live();
+    holdLock(holder);
+    const earlier = live();
+    ticket(1700000000, earlier);
+    const head = git("rev-parse", "HEAD");
+    const hook = pushAsync(`refs/heads/release/9.9.9 ${head} refs/heads/release/9.9.9 ${ZERO}\n`);
+    await until(() => hook.out().includes("queue position 1"));
+    // the holder is done: the release goes next although the other push came first
+    rmSync(lockDir(), { recursive: true, force: true });
+    expect(await hook.done, hook.out()).toBe(0);
+    expect(readCalls()).toContain("pnpm verify:merge");
+    process.kill(earlier, "SIGKILL");
+  }, 30000);
 });

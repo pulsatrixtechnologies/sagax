@@ -57,6 +57,7 @@ LOCK_DIR="$STAMP_DIR/queue.lock"
 # "<local ref> <local sha> <remote ref> <remote sha>". A tag is peeled to its
 # commit; a deleted ref (all-zero sha) sends nothing.
 PUSHED=""
+RELEASE_PUSH=""
 if [ ! -t 0 ]; then
   while read -r _lref lsha _rref _rsha; do
     case "$lsha" in
@@ -66,7 +67,23 @@ if [ ! -t 0 ]; then
     [ -n "$lsha" ] || continue
     c="$(git rev-parse --verify -q "$lsha^{commit}" 2>/dev/null)" || c="$lsha"
     PUSHED="$PUSHED $c"
+    case "$_rref" in refs/heads/release/*) RELEASE_PUSH=1 ;; esac
   done
+fi
+
+# Every pushed commit is already on the remote main branch (a release tag on
+# its merged commit, a branch that only points into main): it went through the
+# gate as a pull request, so it neither waits in line nor runs again (#4480).
+on_main() {
+  [ -n "$PUSHED" ] || return 1
+  git rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1 || return 1
+  for c in $PUSHED; do
+    git merge-base --is-ancestor "$c" refs/remotes/origin/main 2>/dev/null || return 1
+  done
+}
+if on_main; then
+  echo "pre-push: already on origin/main ($(git rev-parse --short $PUSHED | tr '\n' ' ' | sed 's/ $//')): nothing to verify"
+  exit 0
 fi
 
 # A stamp verify-merge.mjs wrote: its first line is "ok <time>".
@@ -109,7 +126,14 @@ mkdir -p "$TICKET_DIR"
 # <arrival second>-<pid> and tries the lock only while its ticket is the
 # oldest one whose process is alive; dead waiters' tickets are dropped. A hook
 # of an older checkout (no ticket) still races for the lock and wins or waits.
-TICKET="$(printf '%010d' "$(date +%s)")-$$"
+# A release branch goes to the head of the line (#4480): it carries a version
+# number and notes on top of commits that already passed, and every person
+# waits for the version behind it. Its ticket sorts before any arrival time.
+if [ -n "$RELEASE_PUSH" ]; then
+  TICKET="0000000001-$$"
+else
+  TICKET="$(printf '%010d' "$(date +%s)")-$$"
+fi
 : >"$TICKET_DIR/$TICKET"
 HOLDING=""
 leave_queue() {

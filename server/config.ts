@@ -652,6 +652,9 @@ const appConfigSchema = z.object({
   /** #4329 lot 5: on a solo server, what runs its person's bots for each
    * provider ("Runs with"), `{ <provider id>: <driver kind> }`. */
   harnessByProvider: z.record(z.string().max(120), z.string().max(61)).optional(),
+  /** #4417: on a solo server, its person's default context size per
+   * provider, `{ <provider id>: <tokens> }` (shared/context-size.ts). */
+  contextByProvider: z.record(z.string().max(120), z.number().int().min(1_000).max(100_000_000)).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
   box: z.object({ token: optionalText }).optional(),
@@ -917,6 +920,8 @@ export interface AppConfig extends HelperConfig {
   favoriteModels?: string[];
   /** #4329 lot 5: a solo server's default engine per provider. */
   harnessByProvider?: Record<string, string>;
+  /** #4417: a solo server's default context size per provider. */
+  contextByProvider?: Record<string, number>;
   /** Persisted under the historical config key "box" (ascii.dev renamed Box to Boat). */
   box?: { token?: string };
   /** A named host from the user's SSH config. Authentication stays with SSH. */
@@ -2040,6 +2045,7 @@ export function saveConfig(
   if (checkedPatch.favoriteModels !== undefined) disk.favoriteModels = checkedPatch.favoriteModels;
   // Replaced whole: a provider taken off the map runs on its own tool again.
   if (checkedPatch.harnessByProvider !== undefined) disk.harnessByProvider = checkedPatch.harnessByProvider;
+  if (checkedPatch.contextByProvider !== undefined) disk.contextByProvider = checkedPatch.contextByProvider;
   if (checkedPatch.identityMigratedAt !== undefined) disk.identityMigratedAt = checkedPatch.identityMigratedAt;
   if (checkedPatch.privateThreadsMigratedAt !== undefined) disk.privateThreadsMigratedAt = checkedPatch.privateThreadsMigratedAt;
   if (checkedPatch.invites !== undefined) disk.invites = checkedPatch.invites;

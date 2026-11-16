@@ -31,15 +31,17 @@ const fixture = vi.hoisted(() => ({
   harnessByProvider: {} as Record<string, string>,
   /** #4415: the answers of one test (a sign-in's verbs, a refused removal) */
   answer: null as null | ((path: string, init?: RequestInit) => unknown),
+  contextByProvider: {} as Record<string, number>,
 }));
 
 const answers = (path: string, init?: RequestInit): unknown => {
   const own = fixture.answer?.(path, init);
   if (own !== undefined) return own;
   if (path === "/api/me/models") {
-    const body = JSON.parse(String(init?.body ?? "{}")) as { disabledModels?: string[]; harnessByProvider?: Record<string, string> };
+    const body = JSON.parse(String(init?.body ?? "{}")) as { disabledModels?: string[]; harnessByProvider?: Record<string, string>; contextByProvider?: Record<string, number> };
     if (body.harnessByProvider) fixture.harnessByProvider = { ...fixture.harnessByProvider, ...body.harnessByProvider };
-    return { mine: body.disabledModels ?? [], harnessByProvider: fixture.harnessByProvider };
+    if (body.contextByProvider) fixture.contextByProvider = { ...fixture.contextByProvider, ...body.contextByProvider };
+    return { mine: body.disabledModels ?? [], harnessByProvider: fixture.harnessByProvider, contextByProvider: fixture.contextByProvider };
   }
   if (path.startsWith("/api/instances/")) return { instances: fixture.instances };
   if (/^\/api\/me\/engines\/[^/]+\/name$/.test(path)) return { ok: true };
@@ -84,6 +86,7 @@ vi.mock("../HarnessConnectorsSection", () => ({ HarnessConnectorsSection: () => 
 
 const { ProvidersSettings, addChoices } = await import("./ProvidersSettings");
 const { api: apiMock, ApiError } = await import("@/state/store");
+const { forgetContextDefaults } = await import("@/lib/context-size");
 const apiCalls = (method: string) => vi.mocked(apiMock).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === method).map(([path, init]) => [path, (init as RequestInit).body ?? null]);
 const { ProviderPage } = await import("./ProviderPage");
 const { resetSettingsCards, requestSettingsCard } = await import("../SettingsPrimitives");
@@ -133,6 +136,8 @@ beforeEach(() => {
   fixture.accountsDown = false;
   fixture.harnessByProvider = {};
   fixture.answer = null;
+  fixture.contextByProvider = {};
+  forgetContextDefaults();
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
   host = document.createElement("div");
   document.body.append(host);
@@ -1049,5 +1054,47 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       await click(remove);
       expect(line(`account:${id}`).querySelector(`[data-account-error]`)!.textContent).toBe("Scout et Atlas utilisent encore ce compte. Choisis-leur un autre compte, puis retire celui-ci.");
     });
+  });
+});
+
+// #4417: the person's default context size, at the head of the Models section
+describe("Context size on a provider's page (#4417)", () => {
+  const SIZES = { contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] };
+  const claude = () => instance("claude", "claudeAgent", "Claude", { access: "subscription", models: { default: "claude-opus-5-5", options: [
+    { id: "claude-opus-5-5", label: "Claude Opus 5.5", ...SIZES }, { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+  ] } });
+
+  it("offers the sizes the provider's models run at in the Models section, and saves the pick as the person's default", async () => {
+    fixture.instances = [claude()];
+    await page("anthropic");
+    const models = host.querySelector<HTMLElement>('[data-settings-group="provider-models"]')!;
+    const row = models.querySelector<HTMLElement>('[data-provider-context-size="anthropic"]');
+    expect(row, "drawn in the Models section").not.toBeNull();
+    expect(visibleText(row!)).toContain("Context size");
+    expect(visibleText(row!)).toContain("The size your bots' Claude models run at, unless a bot has its own.");
+    const pill = row!.querySelector<HTMLButtonElement>('[data-context-size="settings"] button[data-pill-select]')!;
+    expect(pill.textContent).toBe("Each model's own");
+    await click(pill);
+    const options = [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+    expect(options.map((option) => option.textContent)).toEqual(["Each model's own", "200K", "1M"]);
+    await click(options[1]);
+    expect(apiCalls("PUT")).toEqual([["/api/me/models", JSON.stringify({ contextByProvider: { anthropic: 200_000 } })]]);
+    expect(row!.querySelector('[data-context-size="settings"]')!.getAttribute("data-context-size-value")).toBe("200000");
+  });
+
+  it("reads the saved default, in Quebec French", async () => {
+    setLocale("fr");
+    fixture.instances = [claude()];
+    fixture.contextByProvider = { anthropic: 200_000 };
+    await page("anthropic");
+    const row = host.querySelector<HTMLElement>('[data-provider-context-size="anthropic"]')!;
+    expect(visibleText(row)).toContain("Taille du contexte");
+    expect(row.querySelector("button[data-pill-select]")!.textContent).toBe("200K");
+  });
+
+  it("is absent where each model has one size", async () => {
+    fixture.instances = [instance("mistral", "mistral", "Mistral")];
+    await page("mistral");
+    expect(host.querySelector("[data-provider-context-size]")).toBeNull();
   });
 });

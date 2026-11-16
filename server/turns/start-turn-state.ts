@@ -32,6 +32,7 @@ export type TurnState = {
   coordinated: any;
   dispatchClaimId: any;
   effort: any;
+  contextWindow: any;
   engine: any;
   guestConfined: any;
   instance: any;
@@ -215,6 +216,7 @@ export function createTurnState(init: {
     coordinated: undefined,
     dispatchClaimId: undefined,
     effort: undefined,
+    contextWindow: undefined,
     engine: undefined,
     guestConfined: undefined,
     instance: undefined,

@@ -10,6 +10,7 @@ import { DATA_DIR } from "../config.ts";
 import type { ModelCatalog } from "../contracts.ts";
 import { afterFirstEngineRead } from "../first-engine-read.ts";
 import { parseModelEffortFacts } from "../../shared/model-capabilities.ts";
+import { isContextSize } from "../../shared/context-size.ts";
 
 const SAFE_INSTANCE_ID = /^[\w.-]+$/;
 
@@ -56,6 +57,7 @@ function catalogFrom(value: unknown): ModelCatalog | null {
       loaded?: unknown;
       provider?: unknown;
       contextWindow?: unknown;
+      contextWindows?: unknown;
       variants?: unknown;
       effortLevels?: unknown;
       defaultEffort?: unknown;
@@ -73,6 +75,10 @@ function catalogFrom(value: unknown): ModelCatalog | null {
       ...(typeof option.provider === "string" ? { provider: option.provider } : {}),
       ...(typeof option.contextWindow === "number" && Number.isFinite(option.contextWindow)
         ? { contextWindow: option.contextWindow }
+        : {}),
+      // #4417: the sizes the person may pick survive a restart too
+      ...(Array.isArray(option.contextWindows) && option.contextWindows.length > 1 && option.contextWindows.every(isContextSize)
+        ? { contextWindows: [...option.contextWindows as number[]] }
         : {}),
       ...(variants ? { variants } : {}),
       ...(effort.effortLevels ? { effortLevels: [...effort.effortLevels] } : {}),

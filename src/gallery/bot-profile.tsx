@@ -508,7 +508,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   ] });
   if (/^\/api\/me\/engines\/[^/]+\/models$/.test(path)) return json({ models: [{ id: "sonnet", label: "Sonnet" }, { id: "opus", label: "Opus" }, { id: "haiku", label: "Haiku" }] });
   if (path === "/api/instances") return json({ instances: [
-    { instanceId: "claude", displayName: "Claude", driverKind: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "sonnet", label: "Sonnet" }, { id: "opus", label: "Opus" }, { id: "haiku", label: "Haiku" }] } },
+    { instanceId: "claude", displayName: "Claude", driverKind: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "sonnet", label: "Sonnet", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "opus", label: "Opus", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "haiku", label: "Haiku" }] } },
     { instanceId: "grok", displayName: "Grok", driverKind: "grok", access: "key", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] } },
     { instanceId: "openai", displayName: "OpenAI", driverKind: "codex", access: "key", snapshot: { state: "available", authenticated: true }, models: { default: "gpt-5", options: [{ id: "gpt-5", label: "GPT-5" }] } },
     { instanceId: "local", displayName: "Local oMLX", driverKind: "local", access: "local", snapshot: { state: "available", authenticated: true }, models: { default: "ornith-35b", options: [{ id: "ornith-35b", label: "Ornith 35B" }] } },

@@ -6,7 +6,7 @@ import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
 import { ModelMenuItem, ModelSearchList, type ModelMenuRow, type ModelMenuSection } from "../ModelMenu";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { ModelMenuSettings, type RunsWithChoice } from "../ModelMenuSettings";
+import { ModelMenuSettings, type ContextSizeChoice, type RunsWithChoice } from "../ModelMenuSettings";
 import { ModelNoEngineNotice } from "../ModelNoEngineNotice";
 import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
@@ -74,6 +74,7 @@ export function ModelPickerMenu({
   onManage,
   engineMark,
   runsWith,
+  contextSize,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
@@ -120,6 +121,9 @@ export function ModelPickerMenu({
   /** #4329 lot 6: "Runs with" for the bot (src/components/RunsWith.tsx),
    * computed by the picker (this menu stays hook-free). */
   runsWith?: readonly RunsWithChoice[];
+  /** #4417: "Context size" for the bot (src/components/ContextSize.tsx),
+   * computed by the picker. */
+  contextSize?: readonly ContextSizeChoice[];
 }) {
   const width = MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
@@ -152,6 +156,7 @@ export function ModelPickerMenu({
         onPick: setEffort,
       } : undefined}
       runsWith={autoOn ? undefined : runsWith}
+      contextSize={autoOn ? undefined : contextSize}
     />
   ) : null;
 

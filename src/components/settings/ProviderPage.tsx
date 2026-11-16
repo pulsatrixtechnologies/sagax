@@ -11,8 +11,10 @@
 // - Runs with (#4329 lot 6, #4384): what runs the person's bots with this
 //   provider, their default for it (src/components/RunsWith.tsx); absent
 //   when one engine only can;
-// - Models: the provider's models unfolding in place, one switch each, the
-//   same switches as Settings > Models > Active models;
+// - Models: the context size its models run at by default when they offer
+//   more than one (#4417, src/components/ContextSize.tsx), then the
+//   provider's models unfolding in place, one switch each, the same
+//   switches as Settings > Models > Active models;
 // - Advanced, folded each time the page opens: who pays, the tool by its
 //   name with its version, location and updates, a server's address, the
 //   model list problem, the identifier.
@@ -56,6 +58,7 @@ import { PiServerDetail, removePiServer } from "./PiModelServers";
 import { BotsLinkAdvanced, BotsLinkSection, botsLinkOnPage, useBotsLink } from "./LinkedGrokBotSettings";
 import { ProviderModels, activeModelProviders, useModelSwitches } from "./ModelSwitchesSettings";
 import { RunsWith, runsWithShown, useProviderRunsWith } from "../RunsWith";
+import { ContextSize, contextSizeShown, useProviderContextSizes } from "../ContextSize";
 import { accountAddress, accountName, accountRows } from "./provider-summary";
 import { SignInState, SignInSteps, signInWay, useAccountSignIn } from "./AccountSignIn";
 import {
@@ -377,6 +380,23 @@ function RunsWithSection({ group }: { group: ProviderGroup }) {
   );
 }
 
+/** "Context size" (#4417), at the head of the Models section: the person's
+ * default for this provider's models that offer more than one size; a bot's
+ * own size wins. Absent where each model has one size. */
+function ProviderContextSizeRow({ group }: { group: ProviderGroup }) {
+  const { choices, busy, error } = useProviderContextSizes(group.id);
+  if (!contextSizeShown(choices)) return null;
+  const label = t("model.contextSize");
+  return (
+    <div data-provider-context-size={group.id}>
+      <DescribedRow label={label} description={t("providers.page.contextSizeHelp", { provider: groupName(group) })} rowId="providers.page.contextSize">
+        <ContextSize tone="settings" choices={choices} disabled={busy} ariaLabel={label} />
+      </DescribedRow>
+      {error && <p role="alert" className="px-3.5 py-1.5 text-[12px] text-danger">{error}</p>}
+    </div>
+  );
+}
+
 /** The provider's models on its own page (#4376: never sent to another
  * page): the count line unfolds in place into one switch per model, a
  * search when the list is long; the same provider, rows and switches as
@@ -388,6 +408,7 @@ function ModelsSection({ group }: { group: ProviderGroup }) {
   if (!provider) return null;
   return (
     <SettingsGroup title={t("providers.page.modelsTitle")} groupId="provider-models">
+      <ProviderContextSizeRow group={group} />
       <div data-provider-models={group.id}>
         <ProviderModels provider={provider} switches={switches} mayEdit={mayEdit} onToggle={toggle} busy={busy} inPage />
       </div>

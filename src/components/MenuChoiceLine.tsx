@@ -1,7 +1,8 @@
 // One line of the composer's model menu settings (ModelMenuSettings.tsx):
 // its label, its value at the right; a click opens its choices under it,
 // each with a check on the one in use, an optional grey line under each.
-// Shared by "Thinking effort" and "Runs with" (src/components/RunsWith.tsx).
+// Shared by "Thinking effort", "Context size" (src/components/ContextSize.tsx)
+// and "Runs with" (src/components/RunsWith.tsx).
 import { useId, type KeyboardEvent } from "react";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 

@@ -254,6 +254,9 @@ export interface SendTurnInput {
   subagentEffort?: EffortLevel;
   effort?: EffortLevel;
   variant?: string;
+  /** #4417: the context size this turn runs at, one of the model's
+   * `contextWindows` (shared/context-size.ts). Absent: the model's own. */
+  contextWindow?: number;
   resumeCursor?: unknown;
   /** Start without the previous native context, including any retained idle
    * process. Takes precedence over resumeCursor. The runtime supplies the
@@ -781,6 +784,10 @@ export interface ModelCatalog {
      * the model-facing rebuild (server/context/context-rebuild.ts). Unknown falls
      * back to a pattern table over the model id, then a conservative default. */
     contextWindow?: number;
+    /** #4417: every context size the engine can run this model at (the
+     * default among them), when it offers more than one; the person picks
+     * one (shared/context-size.ts). Absent: the one size above. */
+    contextWindows?: number[];
     /** Discovery hints; the native session revalidates these before each turn. */
     variants?: ModelVariantOption[];
     /** Reasoning levels this model takes, as its engine reports them

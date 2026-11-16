@@ -56,6 +56,8 @@ import { lockedWhileBusy } from "./ModelPicker.tsx-parts/model-picker-reasoning"
 import { ModelPickerMenu, windowOnlyMenuPlace } from "./ModelPicker.tsx-parts/ModelPickerMenu";
 import { pickBotHarness, type RunsWithChoice } from "./RunsWith";
 import { botRunsWith } from "@/lib/runs-with";
+import { pickBotContextSize, type ContextSizeChoice } from "./ContextSize";
+import { botChoosesContextSize, botContextSizes, useContextDefaults } from "@/lib/context-size";
 import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/modelPickerActions";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
@@ -239,6 +241,12 @@ export function ModelPicker({
   const runsWith = botRunsWith({
     instances: pickerInstances, place: orgMode ? "organization" : "solo", selection: bot.modelSelection, chosen: bot.harness,
     onPick: pickBotHarness(dispatch, bot.id),
+  });
+  // #4417: "Context size", the bot's own setting (src/components/ContextSize.tsx)
+  const { defaults: contextDefaults } = useContextDefaults(botChoosesContextSize(pickerInstances, bot.modelSelection));
+  const contextSize = botContextSizes({
+    instances: pickerInstances, selection: bot.modelSelection, chosen: bot.contextWindow, defaults: contextDefaults,
+    onPick: pickBotContextSize(dispatch, bot.id),
   });
   const selectable = pickerInstances.filter((instance) => !notAllowed(instance) && (!choose?.engine || choose.engine(instance)));
   const selectedVariantLabel = variantLabelForSelection(active, selection);
@@ -460,6 +468,7 @@ export function ModelPicker({
       onManage={onManage}
       engineMark={engineMark}
       runsWith={choose || viewerLocal ? undefined : runsWith}
+      contextSize={choose || viewerLocal ? undefined : contextSize}
       customModel={choose?.custom ? { label: choose.custom.label, onPick: (text) => { choose.onPick({ model: text }); closeAll(); } } : undefined}
     />
   );
@@ -506,6 +515,7 @@ function ModelPickerShell({
   onManage,
   engineMark,
   runsWith,
+  contextSize,
   customModel,
 }: {
   rootRef: React.RefObject<HTMLDivElement | null>;
@@ -549,6 +559,7 @@ function ModelPickerShell({
   onManage?: () => void;
   engineMark: (sectionKey: string) => ReactNode;
   runsWith?: readonly RunsWithChoice[];
+  contextSize?: readonly ContextSizeChoice[];
   customModel?: { label: (text: string) => string; onPick: (text: string) => void };
 }) {
   return (
@@ -644,6 +655,7 @@ function ModelPickerShell({
         onManage,
         engineMark,
         runsWith,
+        contextSize,
         customModel,
       }))}
     </div>

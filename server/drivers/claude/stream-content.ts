@@ -242,6 +242,8 @@ case "assistant": {
       // one assistant message = one model call, and its prompt is
       // everything in the window: fresh text, cache reads and writes
       contextTokens: (msg.usage.input_tokens || 0) + (msg.usage.cache_read_input_tokens || 0) + (msg.usage.cache_creation_input_tokens || 0),
+      // #4417: the size the turn runs at, for the usage card
+      ...(session.turn?.input.contextWindow ? { contextWindow: session.turn.input.contextWindow } : {}),
     });
   }
   break;

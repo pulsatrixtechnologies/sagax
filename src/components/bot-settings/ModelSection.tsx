@@ -28,6 +28,7 @@ import { botRecovery, effectiveBackups, type BotRecovery } from "@/lib/bot-runti
 import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
 import { BotHostSettings } from "./BotHostSettings";
 import { RunsWith, runsWithShown, useBotsRunsWith } from "../RunsWith";
+import { ContextSize, contextSizeShown, useBotContextSizes } from "../ContextSize";
 
 type Backup = NonNullable<Bot["fallback"]>[number];
 
@@ -73,6 +74,7 @@ export function ModelSection({ bot }: { bot: Bot }) {
           />
           {!draft && turn.busy && <ModelLockLine bot={bot} lock={turn} />}
         </div>}
+        {!machine && !draft && !viewerLocal && <BotContextSizeRow bot={bot} disabled={!canEditBotField(state.config, bot, "modelSelection")} />}
         {!machine && !draft && !viewerLocal && <BotRunsWithRow bot={bot} disabled={turn.busy || !canEditBotField(state.config, bot, "modelSelection")} />}
       </SettingsGroup>
       {!machine && (canSwitch || canOrder) && <IfItFailsCard key={`recovery:${bot.id}`} bot={bot} canSwitch={canSwitch} canOrder={canOrder} />}
@@ -89,6 +91,20 @@ export function ModelSection({ bot }: { bot: Bot }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** "Context size" (#4417): the same control as the model menu and the
+ * provider's page, the bot's own setting; absent where its model has one
+ * size. A change applies to the bot's next turn, so a busy bot keeps it. */
+function BotContextSizeRow({ bot, disabled }: { bot: Bot; disabled: boolean }) {
+  const choices = useBotContextSizes(bot);
+  if (!contextSizeShown(choices)) return null;
+  const label = t("model.contextSize");
+  return (
+    <DescribedRow label={label} description={t("model.contextSize.botHelp")} rowId="botModel.contextSize">
+      <ContextSize tone="settings" choices={choices} disabled={disabled} ariaLabel={label} />
+    </DescribedRow>
   );
 }
 

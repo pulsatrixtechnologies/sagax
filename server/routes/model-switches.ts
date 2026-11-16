@@ -2,9 +2,11 @@
 // voice", lot 2; shared/offered-models.ts).
 //
 //   GET /api/me/models   { org: string[], mine: string[], favoriteModels: string[],
-//                          harnessByProvider: { <provider id>: <driver kind> } }
+//                          harnessByProvider: { <provider id>: <driver kind> },
+//                          contextByProvider: { <provider id>: <tokens> } }
 //   PUT /api/me/models   { disabledModels?: string[], favoriteModels?: string[],
-//                          harnessByProvider?: { <provider id>: <driver kind> | null } }
+//                          harnessByProvider?: { <provider id>: <driver kind> | null },
+//                          contextByProvider?: { <provider id>: <tokens> | null } }
 //                        each list given replaces the person's whole list;
 //                        each provider given in harnessByProvider sets or
 //                        (null) clears that provider's default only
@@ -18,6 +20,10 @@
 // matrix does not offer is refused with its sentence; saving moves the
 // person's bots that have no engine of their own (server/models/resolve-harness.ts).
 //
+// #4417: `contextByProvider` is the person's default context size for each
+// provider (shared/context-size.ts), read by each turn of their bots without
+// a size of their own; a provider given sets or (null) clears its default.
+//
 // Their own: no admin right. On an organization server the list is kept in
 // the person's settings (server/people/person-settings.ts); on a solo server it is
 // the installation's (`disabledModels` in config.json), written by whoever
@@ -26,6 +32,7 @@
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { cleanDisabledModels, cleanFavoriteModels } from "../../shared/offered-models.ts";
 import { cleanHarnessDefaults, isHarnessId } from "../../shared/harness-matrix.ts";
+import { cleanContextDefaults, isContextSize } from "../../shared/context-size.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const MODEL_SWITCHES_PATH = "/api/me/models";
@@ -51,6 +58,12 @@ export interface ModelSwitchRouteDeps {
     /** Saves the whole map, then moves the owner's bots that follow it. */
     save(owner: string | "installation", map: Record<string, string>, auth: RequestAuth): Promise<void>;
   };
+  /** #4417: the owner's default context size per provider. */
+  contextDefaults?: {
+    read(owner: string | "installation"): Readonly<Record<string, number>>;
+    /** Saves the whole map; the next turn of each bot reads it. */
+    save(owner: string | "installation", map: Record<string, number>): void;
+  };
 }
 
 export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandler {
@@ -63,17 +76,30 @@ export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandle
     const answer = () => json(res, 200, {
       org: [...deps.org()], mine: [...deps.mine(owner)], favoriteModels: [...deps.favorites(owner)],
       ...(deps.harnessDefaults ? { harnessByProvider: { ...deps.harnessDefaults.read(owner) } } : {}),
+      ...(deps.contextDefaults ? { contextByProvider: { ...deps.contextDefaults.read(owner) } } : {}),
     });
     if (method === "GET") return answer();
     if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
       return json(res, 415, { error: "content-type must be application/json" });
     }
-    const body = await readBody(req).catch(() => undefined) as { disabledModels?: unknown; favoriteModels?: unknown; harnessByProvider?: unknown } | undefined;
+    const body = await readBody(req).catch(() => undefined) as { disabledModels?: unknown; favoriteModels?: unknown; harnessByProvider?: unknown; contextByProvider?: unknown } | undefined;
     const switches = body && typeof body === "object" && Array.isArray(body.disabledModels);
     const favorites = body && typeof body === "object" && Array.isArray(body.favoriteModels);
     const rawHarness = body && typeof body === "object" ? body.harnessByProvider : undefined;
     const harness = Boolean(deps.harnessDefaults) && rawHarness !== null && typeof rawHarness === "object" && !Array.isArray(rawHarness);
-    if (!switches && !favorites && !harness) return json(res, 400, { error: "Send { disabledModels: [\"<engine>/<model>\", …] } and/or { favoriteModels: [\"<engine>/<model>\", …] } and/or { harnessByProvider: { \"<provider>\": \"<engine>\" | null } }." });
+    const rawContext = body && typeof body === "object" ? body.contextByProvider : undefined;
+    const context = Boolean(deps.contextDefaults) && rawContext !== null && typeof rawContext === "object" && !Array.isArray(rawContext);
+    if (!switches && !favorites && !harness && !context) return json(res, 400, { error: "Send { disabledModels: [\"<engine>/<model>\", …] } and/or { favoriteModels: [\"<engine>/<model>\", …] } and/or { harnessByProvider: { \"<provider>\": \"<engine>\" | null } } and/or { contextByProvider: { \"<provider>\": <tokens> | null } }." });
+    let contextMap: Record<string, number> | undefined;
+    if (context) {
+      const next: Record<string, number> = { ...deps.contextDefaults!.read(owner) };
+      for (const [provider, value] of Object.entries(rawContext as Record<string, unknown>)) {
+        if (value === null) { delete next[provider]; continue; }
+        if (!isContextSize(value)) return json(res, 400, { error: `contextByProvider.${provider} must be a context size in tokens, or null.` });
+        next[provider] = value;
+      }
+      contextMap = cleanContextDefaults(next);
+    }
     let harnessMap: Record<string, string> | undefined;
     if (harness) {
       const next: Record<string, string> = { ...deps.harnessDefaults!.read(owner) };
@@ -89,6 +115,7 @@ export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandle
     if (switches) deps.save(owner, cleanDisabledModels(body!.disabledModels));
     if (favorites) deps.saveFavorites(owner, cleanFavoriteModels(body!.favoriteModels));
     if (harnessMap) await deps.harnessDefaults!.save(owner, harnessMap, auth);
+    if (contextMap) deps.contextDefaults!.save(owner, contextMap);
     return answer();
   };
 }

@@ -538,6 +538,10 @@ export interface WireBot {
    * person's default for the model's provider, else the engine the model was
    * picked on. Resolved into modelSelection when written, never per turn. */
   harness?: string;
+  /** #4417: the context size this bot's turns run at (shared/context-size.ts),
+   * kept when its model offers more than one. Absent: the person's default
+   * for the model's provider, else the model's own size. */
+  contextWindow?: number;
   /** where the bot works ("Works on"). Unset = auto. */
   computer?: Surface | "off";
   /** Enrolled unattended hosts (`h_` + 32 hex) attached from the Computer

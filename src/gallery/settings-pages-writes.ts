@@ -24,6 +24,7 @@ export function applyStoredGalleryNames(api: Api): void {
 
 /** "Runs with" defaults saved in this page (#4384). */
 let galleryHarness: Record<string, string> | null = null;
+let galleryContext: Record<string, number> = {};
 
 const parse = (init?: RequestInit): Record<string, unknown> => {
   try { return typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {}; } catch { return {}; }
@@ -77,6 +78,17 @@ export function answerGalleryWrite(api: Api, url: URL, init?: RequestInit): unkn
     const saved = { ...galleryHarness, ...(body.harnessByProvider as Record<string, string>) };
     galleryHarness = saved;
     return { mine: config.myDisabledModels ?? [], harnessByProvider: saved };
+  }
+
+  // "Context size" on a provider's page (#4417): the person's default per provider
+  if (method === "PUT" && url.pathname === "/api/me/models" && body.contextByProvider && typeof body.contextByProvider === "object") {
+    const next = { ...galleryContext };
+    for (const [provider, size] of Object.entries(body.contextByProvider as Record<string, number | null>)) {
+      if (size === null) delete next[provider];
+      else next[provider] = size;
+    }
+    galleryContext = next;
+    return { mine: config.myDisabledModels ?? [], contextByProvider: next };
   }
 
   // the person's own key for a provider

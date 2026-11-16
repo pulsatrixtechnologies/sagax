@@ -42,6 +42,8 @@ export const settingsSchema = z.object({
   helperModel: z.boolean().optional(),
   /** #4329 lot 5: what runs the bot's model (a driver kind). */
   harness: z.string().max(61).optional(),
+  /** #4417: the bot's context size (shared/context-size.ts). */
+  contextWindow: z.number().int().min(1_000).max(100_000_000).optional(),
   parkDirectMessages: z.boolean().optional(),
   approvePeerComms: z.boolean().optional(),
   localPrompt: z.enum(["compact", "full"]).optional(),

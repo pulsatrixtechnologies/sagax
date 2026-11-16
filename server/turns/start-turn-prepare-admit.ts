@@ -42,6 +42,7 @@ export function createPrepareAdmitStartTurn(
     effectiveBotOwner,
     effortAcceptedByEngine,
     effortForModel,
+    turnContextWindow,
     engineAccessNotice,
     engineDisplayName,
     explainPick,
@@ -213,6 +214,9 @@ export function createPrepareAdmitStartTurn(
   // then nothing is sent and the model runs at its own default.
   state.effort = effortForModel(askedEffort, state.instance.models.options.find((option: any) => option.id === state.model),
     state.instance.adapter.capabilities.effortLevels);
+  // #4417: the context size this turn runs at (shared/context-size.ts),
+  // read each turn so a change applies to the bot's next one
+  state.contextWindow = turnContextWindow?.(state.bot, state.instance, state.model);
 
   // an edit hands us its already-branched user message; a plain send appends
   state.userMessage= state.opts?.userMessage;

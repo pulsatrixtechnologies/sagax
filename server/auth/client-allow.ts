@@ -752,6 +752,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET"], path: /^\/api\/desktop-viewer\/vps\/[\w-]+(?:\/websockify)?$/ },
   { methods: ["POST"], path: /^\/api\/me\/engines\/[\w.-]+\/login\/(?:start|complete|cancel|sign-out)$/, feature: "orgDirectory" },
   { methods: ["GET"], path: /^\/api\/me\/engines\/[\w.-]+\/login\/status$/, feature: "orgDirectory" },
+  // #4376, #4415: the person names one of their accounts, or takes an added
+  // one off their own list (theirs alone; the organization's engine stays)
+  { methods: ["PUT"], path: /^\/api\/me\/engines\/[\w.-]+\/name$/, feature: "orgDirectory" },
+  { methods: ["DELETE"], path: /^\/api\/me\/engines\/[\w.-]+$/, feature: "orgDirectory" },
   // The caller's own claude.ai connectors (server/harness-connectors.ts):
   // names and statuses of their own account only. The admin switch
   // (PUT /api/harness-connectors/settings) stays admin.

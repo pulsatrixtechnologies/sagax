@@ -1,17 +1,13 @@
-// The one in-app sign-in for an engine's CLI on the machine running Sagax:
-// Codex and Kimi with a one-time code, Grok Build the same way, the ChatGPT
-// plan (a browser page, no code), and Cursor (its own page, no code). The
-// same card on the desktop, a self-hosted server and an organization server.
-import { useEffect, useState } from "react";
-import { Check, Copy, ExternalLink, Loader2, LogIn, X } from "lucide-react";
-import { api, ApiError, useStore } from "@/state/store";
-import { t, activeLocale } from "@/lib/i18n";
-import { openExternalLink } from "@/lib/app-links";
-import { useCopyFeedback } from "@/lib/copy-text";
+// The in-app sign-in for an engine's CLI on the machine running Sagax, where
+// it is offered outside a provider's account rows: Codex and Kimi with a
+// one-time code, Grok Build the same way, the ChatGPT plan (a browser page,
+// no code), and Cursor (its own page, no code). The flow and its look are the
+// provider page's own (settings/AccountSignIn.tsx, #4415).
+import { ApiError, useStore } from "@/state/store";
+import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { cursorSignInLink } from "../../shared/cli-sign-in";
-import { deviceSignInLink, isDeviceSignInCode, type DeviceSignInProvider } from "../../shared/device-sign-in";
-import { CodexMark } from "./ProviderIcons";
+import { deviceSignInLink, type DeviceSignInProvider } from "../../shared/device-sign-in";
+import { AccountSignIn, type SignInWay } from "./settings/AccountSignIn";
 
 export interface DeviceSignInStatus {
   phase: "waiting" | "succeeded" | "failed" | "expired" | "cancelled";
@@ -33,59 +29,31 @@ export function deviceSignInProvider(driverKind: string): DeviceSignInProvider {
 export type SetupSignInProvider = DeviceSignInProvider | "cursor";
 
 /** The words that differ by whose account the code signs in. */
-export const DEVICE_SIGN_IN_COPY: Record<SetupSignInProvider, Record<"description" | "start" | "enterCode" | "open" | "security" | "connected" | "connectedAccount" | "failed" | "invalidChallenge", LocaleKey>> = {
+export const DEVICE_SIGN_IN_COPY: Record<SetupSignInProvider, Record<"description" | "start" | "connectedAccount", LocaleKey>> = {
   codex: {
     description: "engineSetup.device.description",
     start: "engineSetup.device.start",
-    enterCode: "engineSetup.device.enterCode",
-    open: "engineSetup.device.openChatGPT",
-    security: "engineSetup.device.security",
-    connected: "engineSetup.device.connected",
     connectedAccount: "engineSetup.device.connectedAccount",
-    failed: "engineSetup.device.failed",
-    invalidChallenge: "engineSetup.device.invalidChallenge",
   },
   grok: {
     description: "engineSetup.grok.description",
     start: "engineSetup.grok.start",
-    enterCode: "engineSetup.grok.enterCode",
-    open: "engineSetup.grok.open",
-    security: "engineSetup.grok.security",
-    connected: "engineSetup.grok.connected",
     connectedAccount: "engineSetup.grok.connectedAccount",
-    failed: "engineSetup.grok.failed",
-    invalidChallenge: "engineSetup.grok.invalidChallenge",
   },
   kimi: {
     description: "engineSetup.kimi.description",
     start: "engineSetup.kimi.start",
-    enterCode: "engineSetup.kimi.enterCode",
-    open: "engineSetup.kimi.open",
-    security: "engineSetup.kimi.security",
-    connected: "engineSetup.kimi.connected",
     connectedAccount: "engineSetup.kimi.connectedAccount",
-    failed: "engineSetup.kimi.failed",
-    invalidChallenge: "engineSetup.kimi.invalidChallenge",
   },
   cursor: {
     description: "engineSetup.cursor.description",
     start: "engineSetup.cursor.start",
-    enterCode: "engineSetup.cursor.enterCode",
-    open: "engineSetup.cursor.open",
-    security: "engineSetup.cursor.security",
-    connected: "engineSetup.cursor.connected",
     connectedAccount: "engineSetup.cursor.connectedAccount",
-    failed: "engineSetup.cursor.failed",
-    invalidChallenge: "engineSetup.cursor.invalidChallenge",
   },
 };
 
 export function deviceFlowUnavailable(cause: unknown): boolean {
   return cause instanceof ApiError && [401, 403, 404, 410].includes(cause.status);
-}
-
-function endedFlow(phase: "expired" | "failed", browserPkce = false): DeviceSignInStatus {
-  return { phase, flowId: null, authorizationUrl: null, expiresAt: null, ...(phase === "failed" ? { message: t(browserPkce ? "engineSetup.chatgpt.flowEnded" : "engineSetup.device.flowEnded") } : {}) };
 }
 
 /** Never turn arbitrary process output into a sign-in link. The server also
@@ -110,69 +78,18 @@ export function deviceCodeHintShown(auth: Pick<DeviceSignInStatus, "phase" | "me
   return !/device.?code/i.test(`${auth?.message ?? ""} ${error ?? ""}`);
 }
 
-const chatgptButton = "flex w-full items-center justify-center gap-2 rounded-lg border border-black/20 bg-white px-3 py-2 text-[12.5px] font-semibold text-black hover:opacity-85 disabled:opacity-50";
-
-export function DeviceSignInProgress({ auth, browserPkce = false, linkOnly = false, provider = "codex" }: { auth: DeviceSignInStatus; browserPkce?: boolean; linkOnly?: boolean; provider?: SetupSignInProvider }) {
-  // The code stays select-all, so one click selects it for Cmd/Ctrl+C when copying is blocked.
-  const { state: codeCopy, copy: copyCode } = useCopyFeedback(auth.userCode ?? "");
-  const copy = DEVICE_SIGN_IN_COPY[provider];
-  const pageOnly = linkOnly || provider === "cursor";
-  const link = browserPkce
-    ? chatgptPlanLink(auth.authorizationUrl)
-    : pageOnly
-      ? cursorSignInLink(auth.authorizationUrl)
-      : deviceSignInLink(provider, auth.authorizationUrl, auth.userCode);
-  const copyLabel = t(codeCopy === "failed" ? "common.copyFailed" : "engineSetup.device.copyCode");
-
-  if (auth.phase !== "waiting") {
-    const label = auth.phase === "succeeded" ? t(copy.connected)
-      : auth.phase === "cancelled" ? t(browserPkce ? "engineSetup.chatgpt.cancelled" : "engineSetup.device.cancelled")
-      : auth.phase === "expired" ? t(browserPkce ? "engineSetup.chatgpt.expired" : "engineSetup.device.expired")
-      : auth.message || t(browserPkce ? "engineSetup.chatgpt.failed" : copy.failed);
-    return <p role="status" className={auth.phase === "succeeded" ? "text-[12px] text-success" : "text-[12px] text-ink-secondary"}>{label}</p>;
-  }
-
-  if (!link || (!browserPkce && !pageOnly && !isDeviceSignInCode(provider, auth.userCode))) {
-    return <p role="alert" className="text-[12px] text-danger">{t(browserPkce ? "engineSetup.chatgpt.invalidChallenge" : copy.invalidChallenge)}</p>;
-  }
-
-  return (
-    <div className="space-y-2 rounded-lg border border-hairline/50 bg-app p-3">
-      {!browserPkce && !pageOnly && <><p className="text-[12px] text-ink-secondary">{t(copy.enterCode)}</p>
-      <div className="flex items-center justify-between gap-2 rounded-lg bg-inset px-3 py-2">
-        <code className="select-all font-mono text-lg font-semibold tracking-widest text-ink">{auth.userCode}</code>
-        <button
-          type="button"
-          aria-label={copyLabel}
-          title={copyLabel}
-          onClick={copyCode}
-          className="rounded-md p-2 text-ink-secondary hover:bg-control hover:text-ink"
-        >
-          {codeCopy === "copied" ? <Check size={15} className="text-success" /> : codeCopy === "failed" ? <X size={15} className="text-danger" /> : <Copy size={15} />}
-        </button>
-      </div></>}
-      <a href={link} target="_blank" rel="noopener noreferrer" onClick={(event) => {
-        if (window.ogb?.openExternal) { event.preventDefault(); void openExternalLink(link); }
-      }} className={browserPkce ? chatgptButton : "flex items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-[12.5px] font-semibold text-accent-ink hover:brightness-110"}>
-        {browserPkce && <CodexMark size={16} className="fill-current" />}
-        {t(browserPkce ? "engineSetup.chatgpt.start" : copy.open)} <ExternalLink size={13} />
-      </a>
-      <p role="status" className="flex items-center gap-1.5 text-[11.5px] text-ink-secondary">
-        <Loader2 size={12} className="animate-spin" /> {t("engineSetup.device.waiting")}
-      </p>
-      {auth.expiresAt && Number.isFinite(Date.parse(auth.expiresAt)) && (
-        <p className="text-[11px] text-ink-secondary">{t(browserPkce ? "engineSetup.chatgpt.expires" : "engineSetup.device.expires", { time: new Date(auth.expiresAt).toLocaleTimeString(activeLocale(), { hour: "2-digit", minute: "2-digit" }) })}</p>
-      )}
-      <p className="text-[11px] leading-relaxed text-ink-secondary">{t(browserPkce ? "engineSetup.chatgpt.security" : copy.security)}</p>
-    </div>
-  );
+/** How each of these sign-ins runs in the shared flow. */
+function deviceWay(base: string, browserPkce: boolean, linkOnly: boolean, provider: SetupSignInProvider): SignInWay {
+  if (browserPkce) return { base, kind: "page", vendor: "chatgpt" };
+  if (linkOnly || provider === "cursor") return { base, kind: "page", vendor: "cursor" };
+  return { base, kind: "device", vendor: provider };
 }
 
-export function DeviceSignIn({ instanceId, browserPkce = false, linkOnly = false, provider = "codex", base: baseOverride, onSignedIn }: {
+export function DeviceSignIn({ instanceId, browserPkce = false, linkOnly = false, provider = "codex", base, onSignedIn }: {
   instanceId: string;
   browserPkce?: boolean;
   /** A page with no one-time code (Cursor). The button opens it, and the
-   * card polls until the server confirms the sign-in. */
+   * flow asks the server until it confirms the sign-in. */
   linkOnly?: boolean;
   provider?: SetupSignInProvider;
   /** Another sign-in with the same verbs (start, status, cancel): a
@@ -183,109 +100,17 @@ export function DeviceSignIn({ instanceId, browserPkce = false, linkOnly = false
   onSignedIn?: () => Promise<unknown> | void;
 }) {
   const { refreshInstances, refreshModels } = useStore();
-  const [auth, setAuth] = useState<DeviceSignInStatus | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const base = baseOverride ?? `/api/instances/${encodeURIComponent(instanceId)}/auth`;
-  const copy = DEVICE_SIGN_IN_COPY[provider];
-  const failed = t(browserPkce ? "engineSetup.chatgpt.failed" : copy.failed);
-
-  const refresh = async () => {
-    if (onSignedIn) {
-      await onSignedIn();
-      return;
-    }
+  const refresh = onSignedIn ?? (async () => {
     await refreshInstances();
     await refreshModels(instanceId);
-  };
-
-  useEffect(() => {
-    if (busy || auth?.phase !== "waiting" || !auth.flowId) return;
-    const controller = new AbortController();
-    const remaining = auth.expiresAt ? Date.parse(auth.expiresAt) - Date.now() : Number.NaN;
-    // Also expire the UI if the connection hangs or the server was restarted.
-    // No credentials are removed: this only discards an obsolete challenge.
-    const expiryTimer = Number.isFinite(remaining)
-      ? window.setTimeout(() => { controller.abort(); setAuth(endedFlow("expired")); setError(null); }, Math.max(0, remaining))
-      : null;
-    const timer = window.setTimeout(() => {
-      void api(`${base}/status?flowId=${encodeURIComponent(auth.flowId!)}`, { signal: controller.signal })
-        .then(async ({ auth: next }: { auth: DeviceSignInStatus }) => {
-          if (controller.signal.aborted) return;
-          setAuth(next);
-          setError(null);
-          if (next.phase === "succeeded") await refresh();
-        })
-        .catch((cause: unknown) => {
-          if (controller.signal.aborted) return;
-          if (deviceFlowUnavailable(cause)) {
-            setAuth(endedFlow("failed", browserPkce));
-            setError(null);
-            return;
-          }
-          setError(cause instanceof Error ? cause.message : failed);
-          // Retry transient connectivity failures without creating another login.
-          setAuth({ ...auth });
-        });
-    }, 2000);
-    return () => {
-      window.clearTimeout(timer);
-      if (expiryTimer !== null) window.clearTimeout(expiryTimer);
-      controller.abort();
-    };
-  }, [auth, base, browserPkce, busy, failed, instanceId, onSignedIn, refreshInstances, refreshModels]);
-
-  const start = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const { auth: next }: { auth: DeviceSignInStatus } = await api(`${base}/start`, { method: "POST" });
-      setAuth(next);
-      if (next.phase === "succeeded") await refresh();
-      else if (next.phase === "waiting" && (browserPkce || linkOnly)) {
-        const link = browserPkce ? chatgptPlanLink(next.authorizationUrl) : cursorSignInLink(next.authorizationUrl);
-        if (link) await openExternalLink(link);
-      }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : failed);
-    } finally { setBusy(false); }
-  };
-
-  const cancel = async () => {
-    if (!auth?.flowId) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`${base}/cancel`, { method: "POST", body: JSON.stringify({ flowId: auth.flowId }) });
-      setAuth({ phase: "cancelled", flowId: null, authorizationUrl: null, expiresAt: null });
-    } catch (cause) {
-      if (deviceFlowUnavailable(cause)) setAuth(endedFlow("failed", browserPkce));
-      else setError(cause instanceof Error ? cause.message : failed);
-    } finally { setBusy(false); }
-  };
-
-  // A cancelled, expired or failed sign-in has one next step: a new code.
-  const startLabel = busy ? t(browserPkce ? "engineSetup.chatgpt.starting" : "engineSetup.device.starting")
-    : auth || error ? t("engineSetup.device.tryAgain")
-    : t(browserPkce ? "engineSetup.chatgpt.start" : copy.start);
-
+  });
+  const way = deviceWay(base ?? `/api/instances/${encodeURIComponent(instanceId)}/auth`, browserPkce, linkOnly, provider);
+  const name = browserPkce || provider === "codex" ? "ChatGPT" : provider === "grok" ? "Grok" : provider === "kimi" ? "Kimi" : "Cursor";
   return (
-    <div className="mt-3 space-y-2" data-device-sign-in={linkOnly ? undefined : provider} data-link-sign-in={linkOnly ? provider : undefined} data-chatgpt-plan-sign-in={browserPkce || undefined}>
-      {auth && <DeviceSignInProgress auth={auth} browserPkce={browserPkce} linkOnly={linkOnly} provider={provider} />}
-      {auth?.phase === "waiting" ? (
-        <button type="button" disabled={busy} onClick={() => void cancel()} className="w-full rounded-lg bg-control px-3 py-2 text-[12px] font-medium text-ink disabled:opacity-50">
-          {busy ? t("engineSetup.device.cancelling") : t("engineSetup.device.cancel")}
-        </button>
-      ) : auth?.phase !== "succeeded" && (
-        <button type="button" disabled={busy} onClick={() => void start()} className={browserPkce ? chatgptButton : "flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-[12.5px] font-semibold text-accent-ink hover:brightness-110 disabled:opacity-50"}>
-          {busy ? <Loader2 size={14} className="animate-spin" /> : browserPkce ? <CodexMark size={16} className="fill-current" /> : <LogIn size={14} />}
-          {startLabel}
-        </button>
-      )}
-      {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
-      {!browserPkce && provider === "codex" && deviceCodeHintShown(auth, error) && (
-        <p className="text-[11px] leading-relaxed text-ink-secondary">{t("engineSetup.device.enableHint")}</p>
-      )}
-    </div>
+    <AccountSignIn className="mt-3" data-device-sign-in={linkOnly ? undefined : provider} data-link-sign-in={linkOnly ? provider : undefined} data-chatgpt-plan-sign-in={browserPkce || undefined}
+      way={way} onSignedIn={refresh} name={name} label={t(browserPkce ? "engineSetup.chatgpt.start" : DEVICE_SIGN_IN_COPY[provider].start)}
+      // ChatGPT refuses a device code until the person turns it on in their security settings
+      hint={!browserPkce && provider === "codex" ? (outcome) => deviceCodeHintShown({ phase: "failed", message: outcome }, null)
+        ? <p className="text-[11px] leading-relaxed text-ink-secondary">{t("engineSetup.device.enableHint")}</p> : null : undefined} />
   );
 }

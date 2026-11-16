@@ -244,6 +244,10 @@ export interface MyEngine {
   /** `expired` (#1533): signed in, but the provider refused that sign-in
    * since and could not refresh it: the card offers Reconnect. */
   subscription: { supported: boolean; signedIn: boolean; expired?: boolean };
+  /** #4415: this engine reads the person's same sign-in as the engine named
+   * here (Codex and the ChatGPT plan on one folder): one account, one row.
+   * Absent on an engine with a sign-in of its own, and on an older server. */
+  sharesSignInWith?: string;
   /** The person's own key for this engine's provider is in Perspicax. */
   myKey: boolean;
   /** 2026-10-30: where the person's own key that serves this engine lives:

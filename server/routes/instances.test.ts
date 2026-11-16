@@ -218,12 +218,40 @@ describe("instances routes", () => {
     expect(cfg.instances?.ghost?.displayName).toBe("Preserved shadow");
   });
 
-  it("refuses deleting the default Claude account", async () => {
-    const { call } = harness();
-    expect((await call("DELETE", "/api/instances/claude")).sent).toEqual({
-      status: 400,
-      body: { error: "Only added Claude accounts can be removed here." },
+  it("refuses deleting a provider's first account (Claude's, the ChatGPT plan's)", async () => {
+    const { call, cfg } = harness();
+    cfg.instances!.chatgpt = { driver: "codex", displayName: "ChatGPT plan", config: { authMode: "chatgpt-plan" } };
+    for (const id of ["claude", "chatgpt"]) {
+      expect((await call("DELETE", `/api/instances/${id}`)).sent, id).toEqual({
+        status: 400,
+        body: { error: "Only an account added beside the provider's first one can be removed." },
+      });
+    }
+  });
+
+  it("removes an added account of any provider, not Claude's only (#4415)", async () => {
+    const { call, cfg } = harness();
+    const id = "chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd";
+    cfg.instances![id] = { driver: "codex", displayName: "Side plan", config: { authMode: "chatgpt-plan" } };
+    expect((await call("DELETE", `/api/instances/${id}`)).sent?.status).toBe(200);
+    expect(cfg.instances?.[id]).toBeUndefined();
+  });
+
+  it("names the bots that still use an account it refuses to remove (#4415)", async () => {
+    const id = "chatgpt-00000002-aaaa-4bbb-8ccc-dddddddddddd";
+    const { call, cfg } = harness({
+      bots: () => [
+        { id: "b1", name: "Scout", modelSelection: { instanceId: id, model: "m" } },
+        { id: "b2", name: "Atlas", modelSelection: { instanceId: "claude", model: "m" }, fallback: [{ instanceId: id, model: "m" }] },
+        { id: "b3", name: "Juniper", modelSelection: { instanceId: "claude", model: "m" } },
+      ],
     });
+    cfg.instances![id] = { driver: "codex", displayName: "Side plan", config: { authMode: "chatgpt-plan" } };
+    expect((await call("DELETE", `/api/instances/${id}`)).sent).toEqual({
+      status: 409,
+      body: { error: "Choose another account for the bots and default model using this account before removing it.", code: "account_in_use", bots: ["Scout", "Atlas"] },
+    });
+    expect(cfg.instances?.[id]).toBeDefined();
   });
 
   it("removes an added Claude account when unused", async () => {

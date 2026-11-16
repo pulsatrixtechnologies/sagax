@@ -416,13 +416,12 @@ describe("Settings → Engines → Claude accounts", () => {
     expect(html).not.toContain("Sign out of Claude");
   });
 
-  it("protects the default and assigned accounts and explains credential preservation", () => {
+  it("keeps the default account marked and leaves Remove to the account's row (#4415)", () => {
     const defaultMarkup = renderClaude(claude(true, true));
     expect(defaultMarkup).toContain("Default account");
     expect(defaultMarkup).not.toContain(">Remove account</button>");
-    const assignedMarkup = renderClaude(claude(true), true);
-    expect(assignedMarkup).toMatch(/<button[^>]*disabled=""[^>]*>Remove account<\/button>/);
-    expect(assignedMarkup).toContain("Choose a different model provider for every bot");
-    expect(renderClaude(claude(true))).toContain("credentials and files stay on disk");
+    // #4415: an added account is removed from its row on the provider's page
+    // (the server names the bots that still use it), never here too
+    expect(renderClaude(claude(true), true)).not.toContain("Remove account");
   });
 });

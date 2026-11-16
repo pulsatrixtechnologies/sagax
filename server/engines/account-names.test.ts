@@ -30,4 +30,21 @@ describe("account names (#4376)", () => {
     expect(cleanAccountName("a\nb")).toBeNull();
     expect(cleanAccountName(3)).toBeNull();
   });
+
+  it("keeps the accounts a person removed from their own list, per person, with their name gone (#4415)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "account-names-"));
+    try {
+      const names = createAccountNames(dir);
+      names.set("pr_alice", "chatgpt-x", "Side plan");
+      names.remove("PR_Alice", "chatgpt-x");
+      expect(names.removed("pr_alice", "chatgpt-x")).toBe(true);
+      expect(names.removed("pr_bob", "chatgpt-x")).toBe(false);
+      expect(names.removed(null, "chatgpt-x")).toBe(false);
+      expect(createAccountNames(dir).removed("pr_alice", "chatgpt-x")).toBe(true);
+      expect(names.get("pr_alice", "chatgpt-x")).toBeUndefined();
+    } finally {
+      await removeTempDir(dir);
+    }
+  });
 });
+

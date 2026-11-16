@@ -64,6 +64,9 @@ export interface ProviderRow {
   manage: boolean;
   /** The Claude account row: the claude.ai connectors open in it. */
   claude?: boolean;
+  /** 2026-10-29: the person's second sign-in on an engine that keeps two
+   * (Grok on an organization server): a row of its own (#4415). */
+  slot?: "second";
 }
 
 export interface ProviderInput {
@@ -146,10 +149,22 @@ export function providerRows(input: ProviderInput): ProviderRow[] {
       if (mine.subscription.supported) {
         // the sign-in's own state: a key serving the engine meanwhile is its own row
         const state: ProviderState = mine.subscription.signedIn ? (mine.subscription.expired ? "reconnect" : "connected") : "available";
-        rows.push({
+        // #4415: an engine that reads the same sign-in as one already listed
+        // (Codex and the ChatGPT plan on the person's one folder) is that
+        // account: one sign-in, one row, both engines behind it
+        const lead = mine.sharesSignInWith ? rows.find((row) => row.kind === "account" && !row.slot && row.instanceIds.includes(mine.sharesSignInWith!)) : undefined;
+        if (lead) lead.instanceIds.push(instance.instanceId);
+        else rows.push({
           id: `account:${instance.instanceId}`, kind: "account", name: instance.displayName, payer: "me", keyWhere: "session",
           state,
           instanceIds: [instance.instanceId], brings: [], manage: true, ...(mine.driver === "claudeAgent" ? { claude: true } : {}),
+        });
+        // the person's second sign-in on it (Grok), its own row
+        const second = mine.accounts?.find((account) => account.slot === "second");
+        if (second && !lead) rows.push({
+          id: `account:${instance.instanceId}#second`, kind: "account", name: instance.displayName, payer: "me", keyWhere: "session",
+          state: second.signedIn ? (second.expired ? "reconnect" : "connected") : "available",
+          instanceIds: [instance.instanceId], brings: [], manage: true, slot: "second",
         });
         // a key also serving it is its own row below, and the engine joins it
         if (mine.myTurns === "key" && keyId) keyRow("me", mine.keyWhere ?? "perspicax", keyId, false).instanceIds.push(instance.instanceId);

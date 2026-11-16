@@ -24,6 +24,8 @@ import {
   newClaudeAccount,
 } from "../engines/claude-accounts.ts";
 import { pinnedClaudeUpdateRefusal, updateClaudeCli } from "../engines/claude-update.ts";
+import { accountInUseRefusal, accountUserNames } from "../engines/account-users.ts";
+import { addedAccount } from "../../shared/added-account.ts";
 import {
   engineLaunches,
   persistableInstanceConfigs,
@@ -53,6 +55,7 @@ import { PASS, type RouteHandler } from "./table.ts";
 
 type BusyBot = {
   id: string;
+  name?: string;
   busy?: boolean;
   modelSelection: ModelSelection;
   fallback?: ModelSelection[];
@@ -523,13 +526,17 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
       if (deps.getProviderConfigBusy()) return json(res, 409, { error: "provider settings are already being updated" });
       const instances = persistableInstanceConfigs(deps.cfg);
       if (!Object.hasOwn(instances, instanceId)) return json(res, 404, { error: "unknown instance" });
-      if (instances[instanceId].driver !== "claudeAgent" || instanceId === "claude") {
-        return json(res, 400, { error: "Only added Claude accounts can be removed here." });
+      // #4415: every account added beside a provider's first one, of any
+      // provider (Claude, the ChatGPT plan, Antigravity), not Claude's only
+      if (!addedAccount(instanceId, instances[instanceId].driver)) {
+        return json(res, 400, { error: "Only an account added beside the provider's first one can be removed." });
       }
-      if (deps.cfg.defaultModelSelection?.instanceId === instanceId || deps.bots().some((bot) =>
-        bot.modelSelection.instanceId === instanceId || bot.fallback?.some((candidate) => candidate.instanceId === instanceId) || deps.tasks(bot.id).some((task) => task.modelSelection?.instanceId === instanceId)) ||
-        busyProviderSelections(deps).some((selection) => selection.instanceId === instanceId)) {
-        return json(res, 409, { error: "Choose another account for the bots and default model using this account before removing it." });
+      // #4415: the refusal names the bots to move (the page says it in the person's words)
+      const users = accountUserNames(deps.bots(), deps.tasks, instanceId);
+      const defaultModel = deps.cfg.defaultModelSelection?.instanceId === instanceId;
+      if (users.length || defaultModel) return json(res, 409, accountInUseRefusal(users, defaultModel));
+      if (busyProviderSelections(deps).some((selection) => selection.instanceId === instanceId)) {
+        return json(res, 409, { error: "Wait for the bots using this account to finish, then remove it.", code: "account_busy" });
       }
       deps.setProviderConfigBusy(true);
       deps.providerInstancesChanging.add(instanceId);

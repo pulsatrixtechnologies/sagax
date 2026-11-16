@@ -2,7 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "@/state/store";
-import { chatgptPlanLink, codexDeviceLink, deviceFlowUnavailable, DeviceSignInProgress, deviceSignInProvider, type DeviceSignInStatus } from "./DeviceSignIn";
+import { chatgptPlanLink, codexDeviceLink, deviceFlowUnavailable, deviceSignInProvider, type DeviceSignInStatus } from "./DeviceSignIn";
+import { SignInSteps, type AccountSignInFlow, type SignInWay } from "./settings/AccountSignIn";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -13,7 +14,14 @@ const waiting: DeviceSignInStatus = {
   userCode: "ABCD-12345",
   expiresAt: "2030-01-01T12:00:00.000Z",
 };
-const render = (auth: DeviceSignInStatus) => renderToStaticMarkup(createElement(DeviceSignInProgress, { auth }));
+// #4415: one sign-in flow; its steps are drawn by the shared SignInSteps
+const flowOf = (auth: DeviceSignInStatus): AccountSignInFlow => {
+  const running = auth.phase === "waiting";
+  const outcome = running ? null : auth.phase === "expired" ? "The sign-in expired. Sign in again." : auth.phase === "failed" ? auth.message ?? "The sign-in did not finish." : null;
+  return { running, auth: running ? auth : null, busy: null, outcome, code: "", setCode: () => {}, start: async () => {}, finish: async () => {}, cancel: async () => {} };
+};
+const steps = (auth: DeviceSignInStatus, way: SignInWay) => renderToStaticMarkup(createElement(SignInSteps, { flow: flowOf(auth), way, rowId: "fixture" }));
+const render = (auth: DeviceSignInStatus) => steps(auth, { base: "/api/instances/codex/auth", kind: "device", vendor: "codex" });
 
 describe("Codex device sign-in UI", () => {
   it("shows the one-time code and an explicit official link, not a terminal command", () => {
@@ -22,7 +30,6 @@ describe("Codex device sign-in UI", () => {
     expect(html).toContain('href="https://auth.openai.com/codex/device"');
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain("Copy sign-in code");
-    expect(html).toContain("Waiting for you");
     expect(html).not.toContain("codex login");
   });
 
@@ -46,14 +53,14 @@ describe("Codex device sign-in UI", () => {
   it("does not render an invalid code or expired challenge as actionable", () => {
     expect(render({ ...waiting, userCode: "this is not a device code" })).not.toContain("href=");
     const expired = render({ ...waiting, phase: "expired" });
-    expect(expired).toContain("code expired");
+    expect(expired).toContain("expired");
     expect(expired).not.toContain(waiting.userCode);
     expect(expired).not.toContain("href=");
   });
 
   it.each(["succeeded", "cancelled", "failed"] as const)("renders the %s result without retaining the code", (phase) => {
     const html = render({ ...waiting, phase });
-    expect(html).toContain('role="status"');
+    if (phase === "failed") expect(html).toContain('role="status"');
     expect(html).not.toContain(waiting.userCode);
     expect(html).not.toContain("href=");
   });
@@ -75,14 +82,14 @@ describe("Codex device sign-in UI", () => {
 
 describe("ChatGPT plan browser sign-in", () => {
   const authorizationUrl = "https://auth.openai.com/api/accounts/authorize?client_id=dynamic_agent_client&state=fixture&code_challenge=fixture";
-  const renderBrowser = (auth: DeviceSignInStatus) => renderToStaticMarkup(createElement(DeviceSignInProgress, { auth, browserPkce: true }));
+  const renderBrowser = (auth: DeviceSignInStatus) => steps(auth, { base: "/api/instances/chatgpt/auth", kind: "page", vendor: "chatgpt" });
 
   it("uses the official browser flow without a device code or terminal command", () => {
     expect(chatgptPlanLink(authorizationUrl)).toBe(authorizationUrl);
     const html = renderBrowser({ ...waiting, authorizationUrl, userCode: undefined });
-    expect(html).toContain("Continue with ChatGPT");
+    expect(html).toContain(`href="${authorizationUrl.replaceAll("&", "&amp;")}"`);
     expect(html).toContain('rel="noopener noreferrer"');
-    expect(html).toContain("Waiting for you");
+    expect(html).toContain("Finish signing in on the page that opened");
     expect(html).not.toContain("Copy sign-in code");
     expect(html).not.toContain("codex login");
   });
@@ -101,27 +108,21 @@ describe("ChatGPT plan browser sign-in", () => {
     expect(html).toContain('role="alert"');
     expect(html).not.toContain("href=");
   });
-
-  it("has browser-specific cancellation and expiry text", () => {
-    expect(renderBrowser({ ...waiting, phase: "cancelled" })).not.toContain("new code");
-    expect(renderBrowser({ ...waiting, phase: "expired" })).not.toContain("code expired");
-  });
 });
 
 describe("Grok Build device sign-in UI", () => {
   const grok: DeviceSignInStatus = { ...waiting, authorizationUrl: "https://accounts.x.ai/device", userCode: "WDJB-MJHT" };
-  const renderGrok = (auth: DeviceSignInStatus) => renderToStaticMarkup(createElement(DeviceSignInProgress, { auth, provider: "grok" }));
+  const renderGrok = (auth: DeviceSignInStatus) => steps(auth, { base: "/api/instances/grok/auth", kind: "device", vendor: "grok" });
 
-  it("shows the code and xAI's own page, in Grok's words, not ChatGPT's", () => {
+  it("shows the code and xAI's own page, never ChatGPT's", () => {
     expect(deviceSignInProvider("grokAgent")).toBe("grok");
     expect(deviceSignInProvider("codex")).toBe("codex");
     const html = renderGrok(grok);
     expect(html).toContain("WDJB-MJHT");
     expect(html).toContain('href="https://accounts.x.ai/device"');
     expect(html).toContain('rel="noopener noreferrer"');
-    expect(html).toContain("Enter this one-time code on xAI&#x27;s sign-in page");
-    expect(html).toContain("Open Grok sign-in");
-    expect(html).toContain("grok.com subscription");
+    expect(html).toContain("Enter this code on the sign-in page");
+    expect(html).toContain("Open sign-in page");
     expect(html).not.toMatch(/ChatGPT|OpenAI/);
   });
 
@@ -140,19 +141,20 @@ describe("Grok Build device sign-in UI", () => {
   ])("does not expose an unexpected Grok sign-in URL: %s", (url) => {
     const html = renderGrok({ ...grok, authorizationUrl: url });
     expect(html).toContain('role="alert"');
-    expect(html).toContain("Grok did not return a valid xAI sign-in link and code");
+    expect(html).toContain("could not be opened safely");
     expect(html).not.toContain("href=");
     expect(html).not.toContain(grok.userCode);
   });
 
   it.each([
     ["failed", { message: "Grok sign-in was declined in the browser. Start sign-in again to try once more." }, "declined in the browser"],
-    ["expired", {}, "This code expired"],
-    ["cancelled", {}, "Sign-in cancelled"],
-    ["succeeded", {}, "Grok connected"],
-  ] as const)("ends a %s sign-in with one plain line and no code", (phase, extra, line) => {
+    ["expired", {}, "The sign-in expired"],
+    ["cancelled", {}, ""],
+    ["succeeded", {}, ""],
+  ] as const)("ends a %s sign-in with at most one plain line and no code", (phase, extra, line) => {
     const html = renderGrok({ ...grok, phase, ...extra });
-    expect(html).toContain(line);
+    if (line) expect(html).toContain(line);
+    else expect(html).toBe("");
     expect(html).not.toContain(grok.userCode);
     expect(html).not.toContain("href=");
   });

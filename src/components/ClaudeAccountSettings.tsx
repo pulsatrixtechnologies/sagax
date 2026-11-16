@@ -102,7 +102,6 @@ export function AddClaudeAccount() {
 export function ClaudeAccountSettings({ instance }: { instance: InstanceInfo }) {
   const { state, dispatch, refreshInstances } = useStore();
   const [busy, setBusy] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,21 +127,6 @@ export function ClaudeAccountSettings({ instance }: { instance: InstanceInfo }) 
     try { await refreshInstances(); }
     catch (cause) { setError(readableError(cause)); }
     finally { setBusy(false); }
-  };
-
-  const remove = async () => {
-    setConfirmRemove(false);
-    if (busy || signingOut || account.isDefault || assigned) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`/api/instances/${encodeURIComponent(instance.instanceId)}`, { method: "DELETE" });
-      await refreshInstances().catch(() => {});
-    } catch (cause) {
-      setError(readableError(cause));
-    } finally {
-      setBusy(false);
-    }
   };
 
   const signOut = async () => {
@@ -195,24 +179,10 @@ export function ClaudeAccountSettings({ instance }: { instance: InstanceInfo }) 
               {assigned && <p className="mt-1 text-[11.5px] leading-relaxed text-warning">{t("engines.account.signOutAssigned", { count: String(assignedCount) })}</p>}
             </div>
           )}
-          {!account.isDefault && (
-            <div className="border-t border-hairline/40 pt-2">
-              <button type="button" onClick={() => setConfirmRemove(true)} disabled={busy || signingOut || assigned} className="text-danger hover:underline disabled:no-underline disabled:opacity-50">{t("engines.account.remove")}</button>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-ink-secondary">{t(assigned ? "engines.account.assigned" : "engines.account.removeHint")}</p>
-            </div>
-          )}
+          {/* #4415: an added account is removed from its row (Providers > Claude > Accounts), never twice */}
         </div>
       </InlineFold>
       {error && <p role="alert" className="text-danger">{error}</p>}
-      <ConfirmDialog
-          open={confirmRemove}
-          title={t("engines.account.removeTitle", { name: instance.displayName })}
-          body={t("engines.account.removeHint")}
-          confirmLabel={t("engines.account.remove")}
-          tone="neutral"
-          onCancel={() => setConfirmRemove(false)}
-          onConfirm={() => void remove()}
-      />
       <ConfirmDialog
           open={confirmSignOut}
           title={t("engines.account.signOutTitle", { name: instance.displayName })}

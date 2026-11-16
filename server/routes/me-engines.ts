@@ -5,6 +5,18 @@
  */
 import { PASS, type RouteHandler } from "./table.ts";
 import { cleanAccountName } from "../engines/account-names.ts";
+import { accountInUseRefusal } from "../engines/account-users.ts";
+import { addedAccount, separateAccountInstance } from "../../shared/added-account.ts";
+
+/** The person's sign-in folder of an engine, or null when it keeps none
+ * (#4415: engines reading the same folder are one account). */
+function signInFolder(deps: MeEnginesRouteDeps, principalId: string, driver: string, instanceId: string): string | null {
+  try {
+    return deps.logins?.loginDir ? String(deps.logins.loginDir(principalId, driver, "primary", instanceId)) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Injected closures from index.ts. Pure move; host locals stay loosely typed. */
 export type MeEnginesRouteDeps = Record<string, any>;
@@ -20,8 +32,13 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
   if (method === "GET" && path === "/api/me/engines") {
     const owner = deps.providerAccountOwner(principalId);
     if (owner) await deps.syncPersonalProviders(owner).catch(() => undefined);
+    // #4415: two engines that read the person's same sign-in folder (Codex
+    // and the ChatGPT plan, say) are one account: the later one names the first
+    const signInLeads = new Map<string, string>();
     const engines = deps.orgOfferedEngines(deps.registry.entries(), principalId)
       .filter((entry: any) => deps.personalProviderInstances.visible(entry.instanceId, principalId))
+      // #4415: an account the person took off their own list
+      .filter((entry: any) => !deps.accountNames?.removed?.(principalId, entry.instanceId))
       .map((entry: any) => {
       const driver = entry.shadow?.driverKind ?? entry.live?.driverKind ?? "";
       // #1098: outside the organization's list only the person's own
@@ -55,6 +72,9 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       // person (theirs, else the organization's when it serves them): names only
       const piProviders = driver === "piAgent" ? deps.piKeyProviders?.forViewer(principalId, { instanceId: entry.instanceId, driverKind: driver }) : null;
       const notAvailable = installed ? undefined : deps.engineNotAvailableReason(entry.instanceId);
+      const folder = supported ? signInFolder(deps, principalId, driver, entry.instanceId) : null;
+      const lead = folder ? signInLeads.get(folder) : undefined;
+      if (folder && !lead) signInLeads.set(folder, entry.instanceId);
       return {
         instanceId: entry.instanceId,
         driver,
@@ -64,6 +84,7 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
         // image deliberately does not carry it (engines.lock.json).
         ...(notAvailable ? { notAvailable } : {}),
         subscription: { supported, signedIn, ...(expired ? { expired: true } : {}) },
+        ...(lead ? { sharesSignInWith: lead } : {}),
         myKey,
         // 2026-10-30 (Providers, lot 1): where the person's own key lives,
         // in the order engine-credentials.ts reads them (Perspicax first)
@@ -96,6 +117,27 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
     if (name === null) return json(res, 400, { error: "Give a name of 80 characters at most." });
     deps.accountNames.set(principalId, instanceId, name);
     return json(res, 200, { ok: true, ...(name ? { displayName: name } : {}) });
+  }
+  // #4415: DELETE /api/me/engines/:id takes an account added beside the
+  // provider's first one off the person's own list, and signs them out of
+  // it; the organization's engine stays for everyone else. Refused, with the
+  // bots to move, while one of the person's bots still uses it.
+  const removing = method === "DELETE" ? /^\/api\/me\/engines\/([\w.-]+)$/.exec(path) : null;
+  if (removing) {
+    const instanceId = removing[1];
+    const entry = deps.orgOfferedEngines(deps.registry.entries(), principalId)
+      .find((candidate: any) => candidate.instanceId === instanceId && deps.personalProviderInstances.visible(candidate.instanceId, principalId));
+    if (!entry || deps.accountNames?.removed?.(principalId, instanceId)) return json(res, 404, { error: "unknown account" });
+    const driver = entry.shadow?.driverKind ?? entry.live?.driverKind ?? "";
+    if (!addedAccount(instanceId, driver)) return json(res, 400, { error: "Only an account added beside the provider's first one can be removed." });
+    const users = deps.accountUsers?.(principalId, instanceId) ?? [];
+    if (users.length) return json(res, 409, accountInUseRefusal(users, false));
+    // its own sign-in folder goes with it; a folder another account reads stays
+    if (deps.isLoginDriver(driver) && separateAccountInstance(instanceId) && deps.logins.signedIn(principalId, driver, "primary", instanceId)) {
+      await deps.logins.signOut(principalId, instanceId, auth.kind === "session" ? auth.session.id : "loopback");
+    }
+    deps.accountNames.remove(principalId, instanceId);
+    return json(res, 200, { ok: true });
   }
   const status = /^\/api\/me\/engines\/([\w.-]+)\/login\/status$/.exec(path);
   const action = /^\/api\/me\/engines\/([\w.-]+)\/login\/(start|complete|cancel|sign-out)$/.exec(path);

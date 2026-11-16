@@ -445,3 +445,49 @@ describe("the pinned card draws the server's items (#3543)", () => {
     expect(dispatched).toContainEqual({ type: "focusMessage", threadId: "task-far", messageId: "q-far" });
   });
 });
+
+// #4468: an answer of their own on the pinned card sends from its field:
+// Enter and the arrow, with no tab switch, for one question and for a set.
+describe("the pinned card sends an answer of their own (#4468)", () => {
+  const typeIn = async (value: string) => {
+    const field = host.querySelector<HTMLTextAreaElement>("[data-pinned-body=question] textarea")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(field, value);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    return field;
+  };
+  const other = () => [...host.querySelectorAll<HTMLButtonElement>("[data-pinned-body=question] [data-ask-choice]")].find((row) => row.textContent?.trim().endsWith("Other"))!;
+  const decided = () => dispatched.filter((action) => (action as { type?: string }).type === "decideRequest") as Array<{ message: string }>;
+
+  it("one question: Other, type, Enter sends", async () => {
+    await render([], [ask("q1", 1, "Which plan?", ["Free", "Pro"])]);
+    await act(async () => { other().click(); });
+    const field = await typeIn("Enterprise");
+    await act(async () => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
+    expect(decided()).toHaveLength(1);
+    expect(decided()[0]!.message).toContain("Enterprise");
+  });
+
+  it("a set: the arrow is live on the first question's own answer and moves on; the last answer sends", async () => {
+    const questions = [
+      { question: "Which plan?", header: "Plan", options: [{ label: "Free" }, { label: "Pro" }] },
+      { question: "Which region?", header: "Region", options: [{ label: "East" }, { label: "West" }] },
+    ];
+    await render([], [ask("q2", 1, "Which plan?", [], { questionRequest: { version: 1, questions } })]);
+    await act(async () => { other().click(); });
+    const field = await typeIn("Enterprise");
+    const arrow = field.parentElement!.querySelector<HTMLButtonElement>("button")!;
+    expect(arrow.disabled).toBe(false);
+    await act(async () => { arrow.click(); });
+    expect(decided()).toHaveLength(0);
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("Region");
+    await act(async () => { other().click(); });
+    const second = await typeIn("North");
+    await act(async () => { second.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
+    expect(decided()).toHaveLength(1);
+    expect(decided()[0]!.message).toContain("Enterprise");
+    expect(decided()[0]!.message).toContain("North");
+  });
+});

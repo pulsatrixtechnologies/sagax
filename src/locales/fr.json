@@ -8805,6 +8805,7 @@
   "question.status.waiting": "En attente de ta réponse",
   "question.submit": "Envoyer la réponse",
   "question.submitAll": "Envoyer les réponses",
+  "question.next": "Question suivante",
   "pageTarget.question": "Où dois-je publier ceci ?",
   "pageTarget.alwaysUse": "Toujours utiliser ce choix",
   "pageTarget.sagax_page.name": "Page Sagax",

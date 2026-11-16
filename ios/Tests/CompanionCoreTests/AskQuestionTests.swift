@@ -111,6 +111,23 @@ final class AskQuestionTests: XCTestCase {
         XCTAssertEqual(card.questions.first?.tabLabel(position: 1), "Question 1")
     }
 
+    func testWordsAloneAnswerAQuestionThatOffersNoOptions() {
+        // #4468: no options means no "Other" row to open; the always-drawn
+        // field's text is the answer, so a set holding one can be sent.
+        let words = AskQuestion(question: "Which account?", options: [])
+        XCTAssertEqual(
+            AskQuestionAnswer.answers(for: words, picked: [], otherOpen: false, typed: "  The main one "),
+            ["The main one"]
+        )
+        XCTAssertEqual(AskQuestionAnswer.answers(for: words, picked: [], otherOpen: false, typed: "   "), [])
+
+        let choice = AskQuestion(question: "Which store?", options: [AskQuestionOption(label: "Instamart")])
+        XCTAssertEqual(AskQuestionAnswer.answers(for: choice, picked: [], otherOpen: false, typed: "Mine"), [],
+                       "a closed Other field on a question with options is not an answer")
+        XCTAssertEqual(AskQuestionAnswer.answers(for: choice, picked: ["Instamart"], otherOpen: true, typed: "Mine"),
+                       ["Instamart", "Mine"])
+    }
+
     func testFormatsTheAnswerTheModelWillRead() throws {
         let card = try card()
         let answer = AskQuestionAnswer.format(

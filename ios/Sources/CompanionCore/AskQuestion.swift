@@ -115,6 +115,21 @@ public enum AskQuestionAnswer {
     /// card strips it back off when it shows a person what they sent.
     public static let preamble = "The user answered your questions."
 
+    /// What one question is answered with: the picked options, then the
+    /// typed words. An open "Other" field with nothing in it is not an
+    /// answer. #4468: a question with no options is answered in words only;
+    /// its field is always drawn, so its text counts without an "Other" row.
+    public static func answers(
+        for question: AskQuestion, picked: Set<String>, otherOpen: Bool, typed: String
+    ) -> [String] {
+        var chosen = Array(picked).sorted()
+        if otherOpen || question.options.isEmpty {
+            let words = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !words.isEmpty { chosen.append(words) }
+        }
+        return chosen
+    }
+
     public static func format(questions: [AskQuestion], answers: [[String]]) -> String {
         var blocks: [String] = []
         for (index, question) in questions.enumerated() {

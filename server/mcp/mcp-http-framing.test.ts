@@ -39,3 +39,21 @@ describe("MCP event stream framing", () => {
     await expect(answer(text, split)).resolves.toEqual({ text: "日本語" });
   });
 });
+
+describe("the last event of a streamable HTTP reply", () => {
+  // A stateless server (one reply, then it hangs up) may close the stream
+  // without the blank line after its last event.
+  it.each([
+    ["LF", "\n", false],
+    ["CRLF", "\r\n", false],
+    ["LF split across chunks", "\n", true],
+    ["no newline at all", "", false],
+  ] as const)("is read when the server closed without a blank line (%s)", async (_label, newline, split) => {
+    const text = ["event: message", 'data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_quote"}]}}'].join(newline || "\n") + newline;
+    await expect(answer(text, split)).resolves.toEqual({ tools: [{ name: "get_quote" }] });
+  });
+
+  it("is still refused when the stream was cut in the middle of it", async () => {
+    await expect(answer('event: message\ndata: {"jsonrpc":"2.0","id":1,"res', false)).rejects.toMatchObject({ kind: "protocol" });
+  });
+});

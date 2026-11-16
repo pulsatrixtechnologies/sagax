@@ -474,6 +474,9 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     await turnWithoutError(ana, plain, "ENGINE-CONFIDENTIAL third");
 
     // deleting the confidential thread removes its transcripts and nothing else's
+    // (its own transcript is written by the engine process: wait for it rather
+    // than read it once, a loaded machine wrote it late and failed here)
+    await waitFor(async () => claudeProjects(secret).length === 1);
     expect(claudeProjects(secret)).toHaveLength(1);
     expect(existsSync(rollout(codexSecret))).toBe(true);
     expect((await api("DELETE", `/api/bots/${botId}/tasks/${secret}`, ana)).status).toBe(200);

@@ -93,10 +93,12 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
       ref={wrap}
       className="inline-flex origin-center will-change-transform"
       data-sidebar-mascot=""
-      onPointerDown={(event) => {
-        if (event.pointerType === "mouse" && event.button !== 0) return;
-        react();
-      }}
+      // #4433: the tap plays on the click, never on the press. A shape's move
+      // swaps its still image for the moving drawing; done on pointerdown it
+      // took the pressed element off the page, so the release had another
+      // target and the browser sent the row (or the pinned tile) no click.
+      // The click bubbles on to the row, which opens the bot's chat.
+      onClick={react}
     >
       <span ref={box} className="inline-flex">
         <BotAvatar

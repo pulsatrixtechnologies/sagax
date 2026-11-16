@@ -20,28 +20,28 @@ final class RoutineRunStreakWordingTests: XCTestCase {
     }
 
     /// The desktop's `routineRunForm` (isProblemStreakCard -> "card") and its
-    /// `streakFailed` state line: the streak's summary is a card whatever
+    /// `streakFailed` state line: the streak's summary is a problem row whatever
     /// its run said, folded or not, and its state line counts the runs for
     /// a failed or blocked run too.
-    func testAFailedOrBlockedStreakSummaryIsACardThatCountsItsRuns() throws {
+    func testAFailedOrBlockedStreakSummaryIsAProblemRowThatCountsItsRuns() throws {
         for status in ["failed", "blocked"] {
             let json = #"{"runId":"r","routineId":"x","routineName":"X","status":"\#(status)","error":"Login refused","repeat":{"count":4,"since":1,"streak":true}}"#
             let summary = try JSONDecoder().decode(RoutineRunCard.self, from: Data(json.utf8))
             XCTAssertTrue(summary.isFailedStreak, status)
-            XCTAssertEqual(RoutineResultStack.form(summary, attention: nil, folded: false), .card, status)
-            XCTAssertEqual(RoutineResultStack.form(summary, attention: nil, folded: true), .card, status)
+            XCTAssertEqual(RoutineResultStack.form(summary, attention: nil, folded: false), .problem, status)
+            XCTAssertEqual(RoutineResultStack.form(summary, attention: nil, folded: true), .problem, status)
             XCTAssertEqual(summary.countedRepeat?.count, 4, status)
             XCTAssertEqual(summary.countedRepeat?.wording, .problemStreak, status)
         }
     }
 
-    /// A failed run that is no streak's summary stays the quiet row, and its
+    /// A failed run that is no streak's summary gets the compact problem row, and its
     /// card counts no repeat.
-    func testAFailedRunOutsideAStreakStaysARow() throws {
+    func testAFailedRunOutsideAStreakIsAProblemRow() throws {
         let json = #"{"runId":"r","routineId":"x","routineName":"X","status":"failed","error":"x","repeat":{"count":4,"since":1}}"#
         let run = try JSONDecoder().decode(RoutineRunCard.self, from: Data(json.utf8))
         XCTAssertFalse(run.isFailedStreak)
-        XCTAssertEqual(RoutineResultStack.form(run, attention: nil, folded: false), .row)
+        XCTAssertEqual(RoutineResultStack.form(run, attention: nil, folded: false), .problem)
         XCTAssertNil(run.countedRepeat)
     }
 

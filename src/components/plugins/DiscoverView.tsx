@@ -96,7 +96,7 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
     .map(({ group, rows }) => ({ group, rows: rows.filter((row) => accountRowMatches(row, filter, type)), notice: !single && group.notice ? group : null }))
     .filter((section) => section.rows.length > 0 || section.notice);
   return (
-    <div data-plugins-discover>
+    <div data-plugins-discover className="[&>section:first-child]:mt-4">
       {type !== "any" && (
         <div className="flex flex-wrap items-center gap-2" data-plugins-chips="">
           <button type="button" aria-pressed data-plugins-type={type} onClick={() => onType("any")} className={cn(PLUGINS.fillPill, "h-7 px-3 text-[13px]")}>

@@ -359,3 +359,44 @@ describe("product key card", () => {
     expect(view.textContent).toContain("Open in Perspicax");
   });
 });
+
+describe("marks of products and vendors (#4453, 2026-11-16: not one grey icon for all)", () => {
+  const suite = { id: "harbor", name: "Harbor Suite" };
+  const marks = async (products: PersonProduct[]) => {
+    const view = await render(createElement("div", null, productRows(products, ctx()).map((row) => createElement("div", { key: row.key }, row.node))));
+    return view;
+  };
+
+  it("a product with no icon of its own gets the lettered tile with its initial, never the one grey connector glyph", async () => {
+    const view = await marks([px({ id: "a", name: "Service Desk" }), px({ id: "b", name: "Knowledge Base" })]);
+    const tiles = [...view.querySelectorAll<HTMLElement>("[data-letter-tile]")];
+    expect(tiles.map((tile) => tile.textContent)).toEqual(["S", "K"]);
+    expect(view.querySelector("svg.lucide-server-cog")).toBeNull();
+    // tinted from the app's own palette
+    for (const tile of tiles) expect(["blue", "purple", "teal", "orange", "pink", "green"]).toContain(tile.getAttribute("data-letter-tile"));
+  });
+
+  it("the same name always has the same tint, and the list is told apart", async () => {
+    const first = await marks([px({ id: "a", name: "Service Desk" })]);
+    const tint = first.querySelector<HTMLElement>("[data-letter-tile]")!.getAttribute("data-letter-tile");
+    const again = await marks([px({ id: "a", name: "Service Desk" })]);
+    expect(again.querySelector<HTMLElement>("[data-letter-tile]")!.getAttribute("data-letter-tile")).toBe(tint);
+    const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"];
+    const view = await marks(names.map((name, index) => px({ id: `p${index}`, name })));
+    const tints = new Set([...view.querySelectorAll<HTMLElement>("[data-letter-tile]")].map((tile) => tile.getAttribute("data-letter-tile")));
+    expect(tints.size).toBeGreaterThan(2);
+  });
+
+  it("a product that carries its own icon shows it, not a tile", async () => {
+    const view = await marks([px({ id: "a", name: "Service Desk", icon: { domain: "desk.example.com" } })]);
+    expect(view.querySelector("[data-letter-tile]")).toBeNull();
+    expect(view.querySelector("img")?.getAttribute("src")).toContain("desk.example.com");
+  });
+
+  it("a vendor takes the icon of one of its products when one has it, else its own initial", async () => {
+    const withIcon = await marks([{ ...px({ id: "a", name: "Service Desk", icon: { domain: "desk.example.com" } }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }]);
+    expect(withIcon.querySelector("[data-vendor] > div img")?.getAttribute("src")).toContain("desk.example.com");
+    const without = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }]);
+    expect(without.querySelector("[data-vendor] > div [data-letter-tile]")?.textContent).toBe("H");
+  });
+});

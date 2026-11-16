@@ -15,14 +15,8 @@ import { cn } from "@/lib/cn";
 import { groupByVendor, whereLabel, type ProductVendor } from "@/lib/capability-kinds";
 import { botProductEnabled } from "../../../shared/bot-products";
 import { ITEM_ROW_ATTR, ItemTrailer, type ItemMenuActions } from "./ItemTrailer";
-import { PluginIcon, PluginStatusLabel } from "./PluginParts";
+import { LetterTile, PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
-
-/** The mark of a product: the vendor's site when Perspicax names one, else
- * the connector tile. */
-export function productIcon(product: Pick<PersonProduct, "id" | "name" | "icon">) {
-  return { key: `perspicax-product:${product.id}`, kind: "mcp" as const, name: product.name, ...(product.icon ? { domain: product.icon.domain } : {}) };
-}
 
 /** The "..." actions of a product, the same in its row and on its page:
  * open it in Perspicax (only when Perspicax names that page), copy its id. */
@@ -59,6 +53,13 @@ export function ProductStateLabel({ product, wrap = false }: { product: Pick<Per
       {productStateLabel(product.state)}
     </span>
   );
+}
+
+/** A product's (or a vendor's) mark: its own icon when the console sends
+ * one, else the app's lettered tile. */
+export function ProductMark({ name, domain, className }: { name: string; domain?: string; className: string }) {
+  if (domain) return <PluginIcon item={{ key: `perspicax-product:${name}`, kind: "app", name, domain }} className={cn("shrink-0 rounded-[10px]", className)} />;
+  return <LetterTile name={name} className={className} />;
 }
 
 /** The bots a product row reads and writes: the person's own, with each
@@ -128,7 +129,7 @@ function ProductRow({ product, ctx, nested = false }: { product: PersonProduct; 
     <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       <button type="button" onClick={() => ctx.onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
         aria-label={t("connectApps.openAria", { name: product.name })}>
-        <PluginIcon item={productIcon(product)} className={cn("shrink-0 rounded-[10px]", nested ? "size-8" : "size-10")} />
+        <ProductMark name={product.name} domain={product.icon?.domain} className={nested ? "size-8" : "size-10"} />
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1" data-person-product-line>
           <span className="min-w-0 max-w-full flex-[1_1_16rem]">
@@ -157,7 +158,7 @@ function VendorRow({ vendor, ctx }: { vendor: ProductVendor<PersonProduct>; ctx:
         <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} data-vendor-toggle=""
           aria-label={t(open ? "connectApps.vendor.fold" : "connectApps.vendor.unfold", { name: vendor.name })}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
-          <PluginIcon item={productIcon({ id: vendor.key, name: vendor.name, icon: vendor.products[0]?.icon })} className="size-10 shrink-0 rounded-[10px]" />
+          <ProductMark name={vendor.name} domain={vendor.products.find((product) => product.icon)?.icon?.domain} className="size-10" />
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
             <span className="min-w-0 max-w-full flex-[1_0_auto]">
               <span className={cn(PLUGINS.rowName, "flex items-center gap-1")}>

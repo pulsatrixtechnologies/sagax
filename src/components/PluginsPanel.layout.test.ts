@@ -57,10 +57,13 @@ describe("Plugins panel views", () => {
     expect(html).toMatch(/role="tab" aria-selected="true" data-plugins-kind-tab="connectors"/);
     expect(html).toMatch(/data-plugins-kind-tab="skills"[^>]*>Skills<span[^>]*data-plugins-kind-count="3">3</);
     expect(html).not.toContain('data-plugins-kind-count="0"');
-    // the search and the one Add on the kinds' row; Yours, Discover, the scope and the refresh under it
-    expect(html).toMatch(/data-plugins-kind-row[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-test-add/);
+    // line 1: the title, the search, Add, "..."; line 2: the kinds, then Yours | Discover alone
+    expect(html).toMatch(/data-plugins-head[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-test-add[\s\S]*?data-plugins-more-button[\s\S]*?data-plugins-kind-row[\s\S]*?data-plugins-kinds=""[\s\S]*?data-plugins-views=""/);
     expect(html.match(/data-plugins-search=""/g)).toHaveLength(1);
-    expect(html).toMatch(/data-plugins-view-row[\s\S]*?data-plugins-refresh[\s\S]*?data-plugins-view="installed"[^>]*>Yours<[\s\S]*?data-plugins-view="discover"[^>]*>Discover</);
+    expect(html).toMatch(/data-plugins-view="installed"[^>]*>Yours<[\s\S]*?data-plugins-view="discover"[^>]*>Discover</);
+    // no third line, and Refresh is not in the head: it is the "..." menu's first line
+    expect(html).not.toContain("data-plugins-view-row");
+    expect(html).not.toContain("data-plugins-refresh");
     // #4453 (2026-11-16): no scope control in the header: it is chosen on the item
     expect(html).not.toContain("data-plugins-scope-slot");
     expect(html).not.toContain("SCOPE");
@@ -73,6 +76,8 @@ describe("Plugins panel views", () => {
     expect(html.indexOf("data-plugins-title-row")).toBeLessThan(html.indexOf("data-plugins-list"));
     // Bots, Pages and Sources: the "..." of the title bar, never a tab
     expect(html).toContain("data-plugins-more-button");
+    // the "..." is always there now (Refresh), even with no view past Yours and Discover
+    expect(page({ tabs: ["installed", "discover"], tab: "installed" })).toContain("data-plugins-more-button");
     expect(html).not.toContain("data-plugins-bot-templates");
     expect(html).not.toContain("data-plugins-connected");
     // Discover: the same head, its list
@@ -81,7 +86,7 @@ describe("Plugins panel views", () => {
     expect(discover).toMatch(/role="radio" aria-checked="true" data-plugins-view="discover"/);
     // the filter button of Discover sits on the same row when the panel gives one
     const filtered = page({ search: createElement("input"), filterControl: createElement("button", { "data-test-filter": "" }) });
-    expect(filtered).toMatch(/data-plugins-search-slot[\s\S]*?data-test-filter[\s\S]*?data-plugins-view-row/);
+    expect(filtered).toMatch(/data-plugins-search-slot[\s\S]*?data-test-filter[\s\S]*?data-plugins-kind-row/);
     // ...and Yours has none
     expect(page({ tab: "installed", filterControl: createElement("button", { "data-test-filter": "" }) })).not.toContain("data-test-filter");
     // with text, the results take the list's place
@@ -97,8 +102,6 @@ describe("Plugins panel views", () => {
     expect(bots).not.toContain("data-apps-back");
     expect(page({ tab: "sources" })).toContain("SOURCES");
     expect(page({ tab: "pages" })).toContain("PAGES");
-    // no view past Yours and Discover: no "..."
-    expect(page({ tabs: ["installed", "discover"], tab: "installed" })).not.toContain("data-plugins-more-button");
   });
 
   it("Discover: no search of its own, every category pill and no Browse Bots button, sections in the card grid (#2948)", () => {

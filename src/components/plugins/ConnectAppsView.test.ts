@@ -6,7 +6,7 @@
 // every empty section hidden. Bots, Pages and Sources open alone under a
 // "< Plugins" back row; every GitHub setting stays in Sources (the
 // organization's part for an admin only, as before).
-import { createElement } from "react";
+import { act, createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -69,7 +69,10 @@ describe("Plugins tabs", () => {
       // the title is never cut (French at phone width, #4153)
       const title = html.match(/<h2 [^>]*id="plugins-title"[^>]*>/)?.[0] ?? "";
       expect(title).not.toMatch(/\btruncate\b|\bline-clamp|\bwhitespace-nowrap\b/);
-      expect(html).toMatch(/id="plugins-title"[\s\S]*?data-plugins-more-button[\s\S]*?role="tablist"[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-add[\s\S]*?data-plugins-views/);
+      // line 1: the title, the search, Add, "..."; line 2: the kinds, then the switch alone
+      expect(html).toMatch(/id="plugins-title"[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-add[\s\S]*?data-plugins-more-button[\s\S]*?role="tablist"[\s\S]*?data-plugins-views/);
+      expect(html).not.toContain("data-plugins-view-row");
+      expect(html).not.toMatch(/aria-label="Refresh/);
       expect(html).not.toContain("data-plugins-scope-slot");
       expect(html).toContain(tab === "installed" ? ">I<" : ">D<");
       expect(html).not.toContain("Manage plugins and skills");
@@ -707,5 +710,67 @@ describe("#4453 (2026-11-16): the organization console's own section, apart, at 
     // the gateway's roles are the console's: in its section, before the person's own account rows
     expect(section).toMatch(/Perspicax · Example Org[\s\S]*?data-capability="role"/);
     expect(html.indexOf("data-plugins-console-section")).toBeLessThan(html.indexOf('data-capability-scope="account"'));
+  });
+});
+
+describe("#4453 (2026-11-16): the title line never wraps; the search gives way", () => {
+  let observed: ((entries: Array<{ contentRect: { width: number } }>) => void) | null = null;
+  beforeEach(() => {
+    observed = null;
+    vi.stubGlobal("ResizeObserver", class { constructor(callback: typeof observed) { observed = callback; } observe() {} disconnect() {} });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const mount = async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(createElement(ConnectAppsView, {
+        tab: "installed", onTab: noop, refreshing: false, onRefresh: noop, kind: "skills",
+        search: createElement("input", { "data-plugins-search": "" }), manageActions: createElement("button", { "data-test-add": "" }), installed: "I",
+      }));
+    });
+    return { host, root };
+  };
+  const width = async (value: number) => { await act(async () => { observed?.([{ contentRect: { width: value } }]); }); };
+
+  it("is a field on a wide line and an icon button that opens it on a narrow one, in one row", async () => {
+    const { host, root } = await mount();
+    await width(800);
+    expect(host.querySelector("[data-plugins-head] [data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
+    expect(host.querySelector("[data-plugins-search-toggle]")).toBeNull();
+    expect(host.querySelector("[data-plugins-head]")?.className).not.toMatch(/\bflex-wrap\b/);
+    await width(420);
+    expect(host.querySelector("[data-plugins-search]")).toBeNull();
+    const toggle = host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!;
+    expect(toggle).not.toBeNull();
+    // Add and "..." stay on the line
+    expect(host.querySelector("[data-plugins-head] [data-test-add]")).not.toBeNull();
+    expect(host.querySelector("[data-plugins-head] [data-plugins-more-button]")).not.toBeNull();
+    await act(async () => { toggle.click(); });
+    expect(host.querySelector("[data-plugins-search-expanded] [data-plugins-search]")).not.toBeNull();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-close]")!.click(); });
+    expect(host.querySelector("[data-plugins-search]")).toBeNull();
+    // back to a wide line: the field again, one search in the page
+    await width(800);
+    expect(host.querySelectorAll("[data-plugins-search]")).toHaveLength(1);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("Refresh is the first line of the \"...\" menu and runs the refresh", async () => {
+    const onRefresh = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => { root.render(createElement(ConnectAppsView, { tab: "installed", onTab: noop, refreshing: false, onRefresh, installed: "I" })); });
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-more-button]")!.click(); });
+    const first = host.querySelector('[role="menu"] [role="menuitem"]')!;
+    expect(first.textContent).toBe("Refresh");
+    await act(async () => { (first as HTMLButtonElement).click(); });
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    await act(async () => root.unmount());
+    host.remove();
   });
 });

@@ -6,7 +6,7 @@
 // skill, a custom connector) takes the whole pane under its own bar. The
 // shared row parts (pills, section titles, PluginRow) live here too.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw } from "lucide-react";
+import { Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -161,6 +161,9 @@ export function segmentTrackOption(active: boolean): string {
   );
 }
 
+/** Below this width of the title line the search is an icon that opens. */
+export const SEARCH_ICON_BELOW = 560;
+
 export interface ConnectAppsViewProps {
   tab: ConnectAppsTab;
   onTab: (tab: ConnectAppsTab) => void;
@@ -242,6 +245,21 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, kindCounts, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   const [stuck, setStuck] = useState(false);
+  // the title line's width decides the search: a field, or an icon that opens it
+  const headRef = useRef<HTMLElement | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const head = headRef.current;
+    if (!head || typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? 0;
+      if (width > 0) setNarrow(width < SEARCH_ICON_BELOW);
+    });
+    watch.observe(head);
+    return () => watch.disconnect();
+  });
+  useEffect(() => { if (!narrow) setSearchOpen(false); }, [narrow]);
   // each view opens at its top: the hairline of a scrolled list goes with it
   useEffect(() => setStuck(false), [shown, kind]);
 
@@ -266,20 +284,38 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           data-plugins-title-row=""
           data-plugins-stuck={stuck ? "" : undefined}
         >
-          {/* the title is never cut (French at phone width): it wraps; the
-              room at the right is the close button's */}
-          <header className="flex min-h-8 items-center gap-2 pr-9" data-plugins-head="">
+          {/* line 1 (#4453, 2026-11-16, two balanced lines): the title, then
+              the search, the filter (Discover only), Add, "..." and the
+              close button. Narrow: the search shrinks, then is an icon
+              button that opens over the line; it never wraps. */}
+          <header ref={headRef} className="relative flex min-h-8 items-center gap-2 pr-9" data-plugins-head="">
             {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
-            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-0 flex-1 break-words")}>
+            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-fit flex-1 break-words")}>
               {botName ? t("connectApps.titleForBot", { name: botName }) : t("connectApps.title")}
             </h2>
-            {moreViews.length > 0 && <MoreViewsMenu views={moreViews} onPick={onTab} />}
+            {search && !narrow && <div className="min-w-[96px] max-w-[260px] flex-[0_1_260px]" data-plugins-search-slot="">{search}</div>}
+            {search && narrow && (
+              <button type="button" onClick={() => setSearchOpen(true)} className="ui-icon-button" aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
+                <Search size={16} aria-hidden="true" />
+              </button>
+            )}
+            {shown === "discover" && filterControl}
+            {manageActions}
+            <MoreViewsMenu views={moreViews} onPick={onTab} onRefresh={onRefresh} refreshing={refreshing} />
+            {search && narrow && searchOpen && (
+              <div className="absolute inset-y-0 left-0 right-9 z-10 flex items-center gap-2 bg-inset" data-plugins-search-slot="" data-plugins-search-expanded="">
+                <div className="min-w-0 flex-1">{search}</div>
+                <button type="button" onClick={() => setSearchOpen(false)} className="ui-icon-button" aria-label={t("connectApps.search.close")} title={t("connectApps.search.close")} data-plugins-search-close="">
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </div>
+            )}
           </header>
-          {/* one row of controls (#4453, 2026-11-16): the kinds as underlined
-              tabs with their counts, then the search, the filter (Discover
-              only) and Add. No scope here: it is chosen on each item. */}
-          <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-hairline-weak" data-plugins-kind-row="">
-            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex items-end gap-1" data-plugins-kinds="">
+          {/* line 2: the three kinds as underlined tabs with their counts at
+              the left, Yours | Discover alone at the right. No scope here: it
+              is chosen on each item. */}
+          <div className="mt-3 flex items-end justify-between gap-6 border-b border-hairline-weak" data-plugins-kind-row="">
+            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex items-end gap-3" data-plugins-kinds="">
               {CONNECT_APPS_KINDS.map((id) => {
                 const count = kindCounts?.[id];
                 return (
@@ -293,17 +329,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                 );
               })}
             </div>
-            <div className="ml-auto flex min-w-0 flex-[1_1_240px] items-center justify-end gap-2 pb-1">
-              {search && <div className="min-w-0 max-w-[260px] flex-1" data-plugins-search-slot="">{search}</div>}
-              {shown === "discover" && filterControl}
-              {manageActions}
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2" data-plugins-view-row="">
-            <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")} data-plugins-refresh="">
-              <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
-            </button>
-            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={SEGMENT_TRACK} data-plugins-views="">
+            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={cn(SEGMENT_TRACK, "mb-1 shrink-0")} data-plugins-views="">
               {(["installed", "discover"] as const).map((id) => (
                 <button key={id} type="button" role="radio" aria-checked={shown === id} data-plugins-view={id}
                   onClick={() => onTab(id)} className={segmentTrackOption(shown === id)}>
@@ -324,7 +350,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           <div className={cn(PLUGINS.gutter, "pb-8")}>
             {scopeNote}
             {notices}
-            <div className="mt-3">{results ?? (shown === "installed" ? props.installed : props.discover)}</div>
+            <div>{results ?? (shown === "installed" ? props.installed : props.discover)}</div>
           </div>
         </div>
       </div>
@@ -426,7 +452,7 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
 }
 
 /** The title bar's "..." (#4453): Bot templates, Published pages, Sources. */
-function MoreViewsMenu({ views, onPick }: { views: ReadonlyArray<{ id: ConnectAppsTab; key: LocaleKey; icon: ReactNode }>; onPick: (tab: ConnectAppsTab) => void }) {
+function MoreViewsMenu({ views, onPick, onRefresh, refreshing }: { views: ReadonlyArray<{ id: ConnectAppsTab; key: LocaleKey; icon: ReactNode }>; onPick: (tab: ConnectAppsTab) => void; onRefresh: () => void; refreshing: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   usePopoverDismiss(open, ref, () => setOpen(false));
@@ -438,6 +464,12 @@ function MoreViewsMenu({ views, onPick }: { views: ReadonlyArray<{ id: ConnectAp
       </button>
       {open && (
         <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+          {/* Refresh: plugins, servers, skills and the engine accounts' connectors, together */}
+          <button type="button" role="menuitem" data-plugins-refresh="" disabled={refreshing}
+            onClick={() => { setOpen(false); onRefresh(); }} className={MENU_ROW}>
+            <RefreshCw size={14} aria-hidden="true" className={cn(refreshing && "animate-spin")} />
+            {t("connectApps.refresh")}
+          </button>
           {views.map((view) => (
             <button key={view.id} type="button" role="menuitem" data-plugins-view-link={view.id}
               onClick={() => { setOpen(false); onPick(view.id); }} className={MENU_ROW}>

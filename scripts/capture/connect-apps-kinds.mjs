@@ -77,6 +77,13 @@ try {
       }
       return { sizes, off: off.slice(0, 6) };
     });
+    const head = await page.evaluate(() => {
+      const h = document.querySelector("[data-plugins-head]"); const k = document.querySelector("[data-plugins-kind-row]");
+      const slot = document.querySelector("[data-plugins-head] [data-plugins-search-slot]");
+      if (!h) return null;
+      return { headH: Math.round(h.getBoundingClientRect().height), tabsLineH: Math.round(k?.getBoundingClientRect().height ?? 0), searchW: Math.round(slot?.getBoundingClientRect().width ?? 0), iconSearch: Boolean(document.querySelector("[data-plugins-search-toggle]")) };
+    });
+    console.log("head", name, JSON.stringify(head));
     console.log("sizes", name, JSON.stringify(report.sizes), report.off.length ? `OFF ${JSON.stringify(report.off)}` : "");
   };
   const open = async (query) => {

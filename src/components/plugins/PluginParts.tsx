@@ -9,6 +9,7 @@ import type { LocaleKey } from "@/locales";
 import { WHOP_KEY, type PluginItem, type PluginStatus } from "@/lib/plugins-model";
 import type { Crumb } from "../Breadcrumb";
 import { WhopIcon } from "../WhopIcon";
+import { MASCOT_COLOR_HEX, type MascotColorName } from "../../../shared/mascot-colors";
 
 /** A connectable app's catalog card, as the Connect apps views read it. */
 export interface ToolkitCard {
@@ -50,6 +51,25 @@ export function ServiceIcon({ card, className = "size-11" }: { card: Pick<Toolki
   return (
     <div className={cn("flex items-center justify-center rounded-xl bg-raised text-[15px] font-semibold text-ink-secondary", className)}>
       {card.label.slice(0, 1).toUpperCase()}
+    </div>
+  );
+}
+
+/** The colours a lettered tile picks from: the app's own bot palette. */
+const TILE_COLORS = ["blue", "purple", "teal", "orange", "pink", "green"] as MascotColorName[];
+
+/** An item with no mark of its own: its initial on a tile tinted from the
+ * app's bot palette (the same name always has the same tint), so a list of
+ * them is told apart at a glance. */
+export function LetterTile({ name, className = "size-10" }: { name: string; className?: string }) {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  const colorName = TILE_COLORS[hash % TILE_COLORS.length] ?? "blue";
+  const color = MASCOT_COLOR_HEX[colorName] ?? "#888888";
+  return (
+    <div data-letter-tile={colorName} aria-hidden="true" className={cn("flex shrink-0 items-center justify-center rounded-[10px] text-[14px] font-semibold", className)}
+      style={{ backgroundColor: `color-mix(in srgb, ${color} 22%, transparent)`, color: `color-mix(in srgb, ${color} 80%, var(--color-ink, #888))` }}>
+      {(name.trim().slice(0, 1) || "?").toUpperCase()}
     </div>
   );
 }

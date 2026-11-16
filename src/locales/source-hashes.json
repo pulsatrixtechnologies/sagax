@@ -17045,7 +17045,6 @@
       "connectApps.connector.typeSse": "ce66aebbe9add01bdcde56044ce8f539ceb96aec85db5cfe42046cf220be6acd",
       "connectApps.connector.url": "22f5ebc3ad3ff7638885810bfd9485a3d1b536966124cae45727d4181760f9ba",
       "connectApps.connector.value": "8e37953d23daca5ff01b8282c33f4e0a2152f1d1885f94c06418617e3ee1d24e",
-      "connectApps.filter.more": "d47d7cb0e4f8fd2be5ee07826694c18917d83ca77d0a01698582d05f432db996",
       "connectApps.manage.installed": "f8b32f4e92bd84ce1fcd177bec17d43093de3ee8303bb40c1b9ea521ed6a70f6",
       "connectApps.manage.privateSkills": "118ffc5d6b28bb4ac252d5c25196bcfdb911dd64b712b616281b85dc50b2ce79",
       "connectApps.manage.showAll": "797c99fa9e5bbd1c3e7e1308e4e0d3f4659c6b9f800249b9876a63cfe5f0cfaa",
@@ -18862,7 +18861,10 @@
       "connectApps.vendor.productMany": "2ee1321343c621890d96316989538c52737203d4df8db0a039fc2da429957af3",
       "connectApps.vendor.on": "b93544a232653bacd922433b710c20b240c06dbcd2be7bf55ee7f357b4c02a8d",
       "connectApps.vendor.fold": "cc0277f5d9874321d2e13b46270121ce1bf3ab3ee83431ce3e2dfa73f1e204f4",
-      "connectApps.vendor.unfold": "af0d8342dda0ff4c6dd4ff10738dbbfdfae79d9c444418a7f89e2bcb4b794d82"
+      "connectApps.vendor.unfold": "af0d8342dda0ff4c6dd4ff10738dbbfdfae79d9c444418a7f89e2bcb4b794d82",
+      "connectApps.refresh": "0e91610117029a62a478b7fa7df0b8598bebe3ab1e192d4b1882e310719c9671",
+      "connectApps.search.open": "49c266baaaa70981ea188fa714d5c40cf13830d786a861c9943ae0d26a7f3fe9",
+      "connectApps.search.close": "55656b5e434f4c069877f0c12174a14e67ef9619d30e796834b1216a03d9f677"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

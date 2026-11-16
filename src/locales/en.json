@@ -14506,7 +14506,6 @@
   "connectApps.connector.typeSse": "Remote SSE (older servers)",
   "connectApps.connector.url": "Server URL",
   "connectApps.connector.value": "Value",
-  "connectApps.filter.more": "More",
   "connectApps.manage.installed": "Installed",
   "connectApps.manage.privateSkills": "Private skills",
   "connectApps.manage.showAll": "Show all {count} plugins",
@@ -15125,5 +15124,8 @@
   "connectApps.vendor.productMany": "{count} products",
   "connectApps.vendor.on": "{count} on",
   "connectApps.vendor.fold": "Fold {name}",
-  "connectApps.vendor.unfold": "Unfold {name}"
+  "connectApps.vendor.unfold": "Unfold {name}",
+  "connectApps.refresh": "Refresh",
+  "connectApps.search.open": "Search",
+  "connectApps.search.close": "Close search"
 }

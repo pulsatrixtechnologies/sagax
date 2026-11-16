@@ -19,10 +19,10 @@ import {
   removePersonProductKey, savePersonProductKey, testPersonProduct, type PersonProduct, type ProductKeyTarget,
 } from "@/lib/person-products";
 import type { Crumb } from "../Breadcrumb";
-import { PluginCard, PluginIcon, PluginPageHeader } from "./PluginParts";
+import { PluginCard, PluginPageHeader } from "./PluginParts";
 import { PluginActionsMenu } from "./PluginDetailView";
 import { ProductKeyForm } from "./ProductKeyForm";
-import { productIcon, productMenuActions, ProductStateLabel } from "./ProductRows";
+import { ProductMark, productMenuActions, ProductStateLabel } from "./ProductRows";
 import { PLUGINS } from "./plugins-style";
 
 function KeyRow({ label, value, title }: { label: string; value: string; title?: string }) {
@@ -104,7 +104,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
       <PluginPageHeader title={product.name} trail={trail} onBack={onBack} named />
       <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-4 pb-8 pt-[34px] sm:px-[34px]" data-person-product-page={product.id}>
         <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
-          <PluginIcon item={productIcon(product)} className="size-14 rounded-[14px]" />
+          <ProductMark name={product.name} domain={product.icon?.domain} className="size-14 rounded-[14px]" />
           <div className="min-w-0 flex-[1_1_220px] pl-0.5">
             <h2 className="truncate text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink" data-plugins-detail-name>{product.name}</h2>
           </div>

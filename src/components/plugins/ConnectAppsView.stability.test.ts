@@ -95,11 +95,11 @@ describe("the header", () => {
     expect(onTab).toHaveBeenCalledWith("pages");
   });
 
-  it("Yours: one refresh button, no scope slot; Pages' back row returns to the view it came from", () => {
+  it("Yours: no refresh button in the head (it is the \"...\" menu's first line), no scope slot; Pages' back row returns to the view it came from", () => {
     const onTab = vi.fn();
     const html = view("installed");
     expect(html).not.toContain("data-plugins-scope-slot");
-    expect(html.match(/aria-label="Refresh[^"]*"/g)).toHaveLength(1);
+    expect(html).not.toMatch(/aria-label="Refresh[^"]*"/);
     flushSync(() => root.render(createElement(ConnectAppsView, { tab: "pages", onTab, home: "discover", refreshing: false, onRefresh: noop })));
     flushSync(() => host.querySelector<HTMLButtonElement>("[data-plugins-home]")!.click());
     expect(onTab).toHaveBeenCalledWith("discover");

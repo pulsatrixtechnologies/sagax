@@ -815,6 +815,20 @@ describe("a card waiting for an organization admin (2026-10-08)", () => {
     expect(html).not.toContain("waiting for an admin");
     expect(html).not.toContain("Primary Bot");
   });
+  it("the pinned card of the admin names the member's bot and the person it is for, once (#4451 review)", () => {
+    const message = {
+      id: "m-view", role: "bot", kind: "options", at: 1, from: { botId: "nimbus", name: "Nimbus" },
+      relayVia: "organization", relayAsk: { text: "", by: "Nimbus", botId: "nimbus", for: "Erin" },
+      card: { title: "Approval needed", subtitle: "systemctl restart backup-agent", toolInput: JSON.stringify({ command: "systemctl restart backup-agent" }), options: ["Allow", "Deny"],
+        requestId: "admin:m-admin", requestType: "permission", tool: "Bash", adminApproval: true,
+        approvalOrigin: { threadId: "t-member", messageId: "m-admin", requestId: "r-admin", admin: true } },
+    } as unknown as Message;
+    const pending: Pending = { message, requestId: "admin:m-admin", tool: "Bash", detail: "systemctl restart backup-agent", threadId: "t-member", askedBy: "Nimbus" };
+    // the admin's own bot (Atlas) holds the card: never named as the asker
+    const strip = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending, count: 1, index: 0, askerName: "Atlas" }));
+    expect(strip).toContain("Nimbus for Erin");
+    expect(strip).not.toContain("Asked by");
+  });
   it("tells the admin whose request it is", () => {
     expect(approvalWho({ botName: "Sprout", requestedBy: "Erin", ownerName: "Erin" })).toBe("Sprout, asked by Erin");
     expect(approvalWho({ botName: "Sprout", ownerName: "Erin" })).toBe("Sprout, owned by Erin");

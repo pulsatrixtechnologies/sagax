@@ -107,6 +107,22 @@ describe("organization approvals in each admin's Primary Bot (#4451)", () => {
     expect(viewsIn("home-max")).toHaveLength(1);
   });
 
+  it("never shows a secret of the member's command to the admins: every text of the card is masked like the Settings row", () => {
+    const { views, ask, viewsIn } = fixture();
+    const token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789AB";
+    const command = `curl -H "Authorization: Bearer ${token}" https://api.example.test/v1/sync`;
+    ask({
+      title: `Run ${command}`, subtitle: command, toolInput: JSON.stringify({ command }),
+      plain: { title: `Allow Nimbus to run ${command}?`, line: command, action: `run ${command}` },
+      ownerRule: { tool: "Bash", scope: { command }, description: `Run "${command}"`, from: "admin" },
+      commandAllowlist: { command, cwd: "/srv", providerInstanceId: "claude" },
+    });
+    views.reconcile();
+    const [view] = viewsIn("home-ada");
+    expect(JSON.stringify(view)).not.toContain(token);
+    expect(view!.card!.subtitle).toContain("https://api.example.test/v1/sync");
+  });
+
   it("a person who becomes an admin gets the waiting cards right away, with no change to any approval", () => {
     vi.useFakeTimers();
     try {

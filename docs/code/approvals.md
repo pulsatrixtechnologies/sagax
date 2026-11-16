@@ -35,12 +35,17 @@ conversation with their Primary Bot (else their first visible bot,
 `primaryBotPlace`). The list is the one Settings > Organization reads
 (`adminApprovalEntries` in `server/index-leaves/pendingAdminApprovals.ts`),
 reconciled on each `org.approvals` announce, on a deleted conversation, on
-every organization role change (`principals.onRoleChanged`, so a new admin
-gets the waiting cards right away) and once after start: a new card, an admin
+every organization role change, a person marked out or back in, and an
+admin's first sign-in (`principals.onRoleChanged`, `onDisabledChanged`,
+`onAdded`: a new admin gets the waiting cards right away) and once after start: a new card, an admin
 who lost the role, a source answered, expired or gone all converge. An admin
 with no bot at all gets no card: the row of Settings > Organization stays
 their only place to answer; once they have a bot, the next pass (an
-announce, a role change or a restart) brings the cards. A view carries `approvalOrigin.admin`; its
+announce, a role change or a restart) brings the cards. Every text of the view (title, command line, plain words, rules, the
+Details' `toolInput`) goes through `redactSecretsInText`, the masking of the
+Settings row; the answer resolves to the original card, whose rules stay
+whole. The pinned card is titled by the member's bot and the person it is
+for ("Nimbus for Erin wants to run a command"). A view carries `approvalOrigin.admin`; its
 answer resolves to the original (`originApprovals.sourceFor`) where
 `adminApprovalCheck` decides, so a member never answers it, and the first
 answer closes every admin's card with the same outcome. `scopeApprovalMessage`

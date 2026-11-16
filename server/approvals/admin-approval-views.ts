@@ -10,6 +10,7 @@
 // reconciled from that list, not tracked in memory: a restart, a deleted
 // conversation or an admin who lost the role all converge on the next pass.
 import type { Message, Store } from "../store.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 type ViewStore = Pick<Store, "appendMessage" | "patchMessage" | "isConfidentialThread">;
 type Card = NonNullable<Message["card"]>;
@@ -47,12 +48,29 @@ export interface AdminApprovalViewsDeps {
 const open = (card: Card | undefined) => Boolean(card?.requestId && !card.answered && !card.dismissed && !card.expired);
 export const ADMIN_VIEW_PREFIX = "admin:";
 
-/** The view's card: the original card at its own address, with a backlink. */
+/** Addresses and names the answer resolves by: never rewritten. */
+const ADDRESS_KEYS = new Set(["requestId", "allowKey", "approvalOrigin", "tool", "mcpTool", "requestType", "providerInstanceId"]);
+/** Every text of the member's card through the same masking as the
+ * Settings > Organization row (pendingAdminApprovals): the title, the
+ * command line, the plain words, the rules and the Details (toolInput).
+ * The answer resolves to the original card, so its rules stay whole there. */
+function masked<T>(value: T, key?: string): T {
+  if (key && ADDRESS_KEYS.has(key)) return value;
+  if (typeof value === "string") return redactSecretsInText(value) as T;
+  if (Array.isArray(value)) return value.map((item) => masked(item)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, masked(item, name)])) as T;
+  }
+  return value;
+}
+
+/** The view's card: the original card at its own address, with a backlink,
+ * its texts masked (#4451 review: a token in a command never reaches the admins). */
 export function adminViewCard(threadId: string, message: Message): Card {
   const card = message.card!;
   const { approvalDestination: _destination, adminNames: _names, ...content } = card;
   return {
-    ...content,
+    ...masked(content),
     requestId: `${ADMIN_VIEW_PREFIX}${message.id}`,
     ...(card.allowKey ? { allowKey: `${ADMIN_VIEW_PREFIX}${message.id}` } : {}),
     approvalOrigin: { threadId, messageId: message.id, requestId: card.requestId!, ...(card.allowKey ? { allowKey: card.allowKey } : {}), admin: true },

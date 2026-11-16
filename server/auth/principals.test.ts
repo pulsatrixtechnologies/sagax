@@ -335,4 +335,14 @@ describe("a person's organization role changes (2026-10-17, follow-up of #696)",
     expect(reg.upsertFromDirectory({ iss: ISS, sub: "ADA", orgRole: "member" }).orgRole).toBe("member");
     expect(seen).toHaveLength(3);
   });
+  it("tells the added listeners once when a person is first known, from a sign-in or the directory (#4451)", () => {
+    const { reg } = registry();
+    const seen: Array<{ sub: string | undefined; role: string | undefined }> = [];
+    reg.onAdded((person) => seen.push({ sub: person.subject?.sub, role: person.orgRole }));
+    reg.forSubject({ iss: ISS, sub: "ADA", orgRole: "admin" });
+    reg.forSubject({ iss: ISS, sub: "ADA", orgRole: "admin" });
+    reg.upsertFromDirectory({ iss: ISS, sub: "LIN", orgRole: "member" });
+    reg.upsertFromDirectory({ iss: ISS, sub: "LIN", orgRole: "member" });
+    expect(seen).toEqual([{ sub: "ADA", role: "admin" }, { sub: "LIN", role: "member" }]);
+  });
 });

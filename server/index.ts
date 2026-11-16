@@ -14910,7 +14910,12 @@ const adminApprovalViews = createAdminApprovalViews({
     return bot ? { botId: bot.id, name: bot.name, color: bot.color } : undefined;
   },
   withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId),
-  onAdminsChanged: (listener) => principals.onRoleChanged(() => listener()),
+  // a role change, a person marked out or back in, an admin from their first sign-in
+  onAdminsChanged: (listener) => {
+    principals.onRoleChanged(() => listener());
+    principals.onDisabledChanged(() => listener());
+    principals.onAdded((person) => { if (person.orgRole === "admin") listener(); });
+  },
 });
 store.onChange((change) => { if (change.type === "thread.deleted") adminApprovalViews.schedule(); });
 // after the restart pass closed what no longer waits
@@ -14923,7 +14928,7 @@ function adminApprovalHomeBot(principalId: string): string | undefined {
 /** #4451: the organization admins' principal ids (active, signed in with Perspicax). */
 function orgAdminPrincipals(): string[] {
   if (IDENTITY.kind !== "perspicax") return [];
-  return principals.list().filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined).map((person) => person.id);
+  return principals.list().filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined && !person.mergedInto).map((person) => person.id);
 }
 
 // ── message pages ──────────────────────────────────────────────────────

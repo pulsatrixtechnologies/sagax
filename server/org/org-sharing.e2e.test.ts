@@ -742,6 +742,9 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     // #4451: the admin's Primary Bot, where the organization's approvals wait as cards
     const atlas = await createBot(alice, "Atlas", "claude");
     expect((await api("POST", `/api/bots/${atlas.id}/primary`, alice, {})).status).toBe(200);
+    // a member with a Primary Bot of her own besides the asking one: never an admin's card there
+    const echo = await createBot(erin, "Echo", "claude");
+    expect((await api("POST", `/api/bots/${echo.id}/primary`, erin, {})).status).toBe(200);
     const holdDump = join(home, "hold-dump.json");
     rmSync(holdDump, { force: true });
     const adminStream = await openStream(alice);
@@ -803,6 +806,13 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       };
       const [adminCard, ...extra] = await waitFor(async () => { const found = await adminCards(); return found.length ? found : null; });
       expect(extra).toEqual([]);
+      // only admins get the card: none in any conversation of the member's bots
+      for (const mine of (await botsOf(erin)) as Array<{ threadId: string; tasks?: Array<{ threadId: string }> }>) {
+        for (const threadId of new Set([mine.threadId, ...(mine.tasks ?? []).map((task) => task.threadId)])) {
+          const got = await api("GET", `/api/threads/${threadId}/messages?limit=200`, erin);
+          expect(((got.body.messages as Array<{ card?: any }> | undefined) ?? []).filter((row) => row.card?.approvalOrigin?.admin)).toEqual([]);
+        }
+      }
       expect(adminCard!.view).toMatchObject({ kind: "options", relayVia: "organization", relayAsk: { by: "Bram", for: "Erin" }, card: { tool: "Bash", adminApproval: true } });
       expect(adminCard!.view.card.adminNames).toBeUndefined();
       // a member can neither read nor answer it, even with the exact address

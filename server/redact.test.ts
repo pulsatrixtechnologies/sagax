@@ -190,6 +190,18 @@ describe("redactSecretsInText", () => {
     }
   });
 
+  // upstream #5510
+  it("masks Perplexity API keys", () => {
+    // pplx- plus 48 letters and digits, assembled at runtime like the cases above.
+    const key = `${"pp" + "lx-"}${"0123456789ABCDEFGHIJKLMN"}${"opqrstuvwxyzabcdefghijkl"}`;
+    expect(redactSecretsInText(`perplexity ${key} search`)).toBe(`perplexity «redacted ${key.length} chars» search`);
+    expect(holdsCredential(`search via ${key}`)).toBe(true);
+    for (const ordinary of ["perplexity/pplx-decider-v1.1-27b", `${"pp" + "lx-"}${"a".repeat(47)}`, `${"pp" + "lx-"}${"a".repeat(49)}`, `example_${"pp" + "lx-"}${"a".repeat(48)}`]) {
+      expect(redactSecretsInText(ordinary)).toBe(ordinary);
+      expect(holdsCredential(ordinary)).toBe(false);
+    }
+  });
+
   it("masks SendGrid API keys", () => {
     // SG.<22-char key id>.<43-char secret>, assembled at runtime like the cases above.
     const key = `${"S" + "G."}${"abcdefghij0123456789_-"}.${"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij0123456"}`;

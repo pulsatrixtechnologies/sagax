@@ -37,6 +37,12 @@ describe("redactSecretsInLine key formats", () => {
     const token = `${"nt" + "n_"}${"0123456789A"}${"bcdefghijklmnopqrstuvwxyzABCDEFGHIJ"}`;
     expect(redactSecretsInLine(`notion ${token} connected`)).not.toContain(token);
   });
+
+  // upstream #5510
+  it("masks a Perplexity API key", () => {
+    const key = `${"pp" + "lx-"}${"0123456789ABCDEFGHIJKLMN"}${"opqrstuvwxyzabcdefghijkl"}`;
+    expect(redactSecretsInLine(`perplexity ${key} search`)).not.toContain(key);
+  });
 });
 
 describe("buildDiagnosticsReport", () => {

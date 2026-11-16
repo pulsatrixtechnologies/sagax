@@ -39,6 +39,7 @@ const KEY_PREFIXES: RegExp[] = [
   /\bnpm_[A-Za-z0-9]{20,}/g, // npm
   /\bwhsec_[A-Za-z0-9_-]{20,}/g, // webhook secrets, alone or in an automation's address (upstream tip)
   /\bntn_[A-Za-z0-9]{46}(?![A-Za-z0-9_-])/g, // notion integration tokens (upstream #5428)
+  /\bpplx-[A-Za-z0-9]{48}(?![A-Za-z0-9_-])/g, // perplexity api keys (upstream #5510)
   /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, // sendgrid api keys
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, // jwt
 ];

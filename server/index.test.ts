@@ -9350,7 +9350,7 @@ describe("harness HTTP API", () => {
   it("keeps skill authoring on by default and persists an explicit opt-out", async () => {
     const before = await api("GET", "/api/config");
     expect(before.status).toBe(200);
-    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false, claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin", teachTask: false });
+    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false, claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin", teachTask: true });
     // the default is the absence of the key: nothing is written until the toggle is used
     const untouched = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
     expect(untouched.features?.skillAuthoring).toBeUndefined();

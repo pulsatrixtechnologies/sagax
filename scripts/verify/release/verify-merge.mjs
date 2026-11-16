@@ -410,8 +410,19 @@ function main() {
   // load (the full suite beside it) 20 s is not enough, 60 s is
   const vitest = [process.execPath, VITEST, "run", "--reporter=dot", "--testTimeout=60000"];
   stop(run(`guard tests (${guards.length} files)`, [...vitest, ...guards]));
-  if (diffTests.length) stop(run(`tests of the diff (${diffTests.length} files)`, [...vitest, ...diffTests]));
-  if (related.length) stop(run(`related tests (${related.length} files${cut.length ? `, ${cut.length} cut by the time ceiling` : ""})`, [...vitest, "--passWithNoTests", ...related]));
+  // a test of scripts/testing/known-failures.json is red on main already: a lot that did not make it red
+  // does not stop on it (the same rule as the fast gate); vitest names a test "<describe> > <test>"
+  const knownSkip = (files) => {
+    try {
+      const listed = JSON.parse(readFileSync(join(ROOT, "scripts/testing/known-failures.json"), "utf8")).tests ?? [];
+      const names = listed.filter((t) => files.includes(t.file) && t.test !== "(whole file)" && t.test !== "exited non-zero with no failing test").map((t) => t.test.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      return names.length ? ["-t", `^(?!(?:.* )?(?:${names.join("|")})$)`] : [];
+    } catch {
+      return [];
+    }
+  };
+  if (diffTests.length) stop(run(`tests of the diff (${diffTests.length} files)`, [...vitest, ...knownSkip(diffTests), ...diffTests]));
+  if (related.length) stop(run(`related tests (${related.length} files${cut.length ? `, ${cut.length} cut by the time ceiling` : ""})`, [...vitest, "--passWithNoTests", ...knownSkip(related), ...related]));
   for (const test of electronTests) stop(run(`electron ${test}`, [process.execPath, "--test", test]));
   const notes = ios ? runIosStage({ iosDir: join(ROOT, "ios"), stop }) : [];
   const seconds = ((Date.now() - started) / 1000).toFixed(0);

@@ -1016,7 +1016,14 @@ describe("the Outcomes tab (#4098, first lot: read from the routines that exist)
 
     const again = await openOutcomes([waitingRun, doneRun]);
     await click(again.querySelector<HTMLElement>('[data-outcome-row="routine:r2"] button[aria-expanded]'), "row r2");
-    const card = again.querySelector<HTMLElement>('[data-outcome-row="routine:r2"] [data-outcome-open] [data-ask-card]')!;
+    // The card is lazy-loaded. Twelve event-loop ticks do not guarantee the
+    // chunk has arrived while other workers are compiling on the runner.
+    const cardSelector = '[data-outcome-row="routine:r2"] [data-outcome-open] [data-ask-card]';
+    await expect.poll(async () => {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      return again.querySelector(cardSelector) !== null;
+    }, { timeout: 15_000 }).toBe(true);
+    const card = again.querySelector<HTMLElement>(cardSelector)!;
     expect(card.textContent).toContain("Which source should replace the one that closed?");
     expect(card.querySelector("[data-outcome-needs]")!.textContent).toBe("Needs you");
     // nothing is answered here: Reply in chat leaves the page for the run in the chat

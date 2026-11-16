@@ -229,6 +229,11 @@ export interface AcpSupport {
   /** Some managed agents are intentionally not probed during app startup.
    * Their explicit Refresh action remains the only network/process boundary. */
   resolveModelsOnCreate?: boolean;
+  /** #4416: the key in an environment whose account `resolveModels` reads
+   * (an HTTP list, no CLI spawned). Set: an organization person's own key
+   * gets the list their account offers, per key (ProviderInstance
+   * modelsForAccess). */
+  accountModelKey?(environment: Record<string, string | undefined>): string | undefined;
   /** Native-protocol log label, e.g. "grok.acp". */
   nativeSource: string;
   /** Whether models behind this ACP harness can consume a referenced image.

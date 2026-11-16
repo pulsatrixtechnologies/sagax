@@ -28,7 +28,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { TurnAccessInput } from "../../contracts.ts";
+import type { ModelCatalog, TurnAccessInput } from "../../contracts.ts";
 import { userHome } from "../../env-path.ts";
 import { geminiHostToolArgs, sagaxMcpServerNames, withheldWorkspace } from "../host-tools.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
@@ -63,6 +63,59 @@ function liveOauthCredential(env: Record<string, string | undefined>): boolean {
 }
 
 const nonBlank = (value: string | undefined): boolean => Boolean(value?.trim());
+
+/** Fallback only, for when the key's own list cannot be read, or the CLI
+ * runs off Vertex or an enterprise login, which no key lookup reaches. */
+export const STATIC_GEMINI_MODELS: ModelCatalog = {
+  default: "gemini-2.5-pro",
+  options: [
+    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  ],
+};
+
+const GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+/** generateContent models that cannot hold a coding conversation. */
+const NON_CHAT_GEMINI = /embedding|image|tts|audio|live|aqa|robotics|computer-use/i;
+
+/** #4416: the Gemini models the key the CLI runs with really offers
+ * (Google's model list, no model turn), under the name Google gives each.
+ * No key: the written list. A failed or empty lookup throws, so the
+ * runtime keeps its last usable catalog. */
+/** The key whose account Google's model list answers for. */
+export function geminiModelKey(env: Record<string, string | undefined>): string {
+  return (env.GEMINI_API_KEY ?? env.GOOGLE_API_KEY ?? "").trim();
+}
+
+export async function geminiModelCatalog(env: Record<string, string | undefined>): Promise<ModelCatalog> {
+  const key = geminiModelKey(env);
+  if (!key) return STATIC_GEMINI_MODELS;
+  const options: ModelCatalog["options"] = [];
+  const seen = new Set<string>();
+  let pageToken = "";
+  for (let page = 0; page < 10; page++) {
+    const response = await fetch(`${GEMINI_MODELS_URL}?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`, {
+      headers: { "x-goog-api-key": key }, redirect: "error", signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) throw new Error(`Gemini model list answered HTTP ${response.status}`);
+    const body = await response.json() as { models?: unknown; nextPageToken?: unknown };
+    for (const entry of Array.isArray(body.models) ? body.models : []) {
+      const row = entry as { name?: unknown; displayName?: unknown; inputTokenLimit?: unknown; supportedGenerationMethods?: unknown } | null;
+      const id = typeof row?.name === "string" ? row.name.replace(/^models\//, "") : "";
+      const methods = Array.isArray(row?.supportedGenerationMethods) ? row.supportedGenerationMethods : [];
+      if (!id.startsWith("gemini-") || NON_CHAT_GEMINI.test(id) || !methods.includes("generateContent") || seen.has(id)) continue;
+      seen.add(id);
+      const written = STATIC_GEMINI_MODELS.options.find((option) => option.id === id);
+      const label = typeof row?.displayName === "string" && row.displayName.trim() ? row.displayName.trim() : written?.label ?? id;
+      const contextWindow = typeof row?.inputTokenLimit === "number" && row.inputTokenLimit > 0 ? row.inputTokenLimit : undefined;
+      options.push({ id, label, ...(contextWindow ? { contextWindow } : {}) });
+    }
+    pageToken = typeof body.nextPageToken === "string" ? body.nextPageToken : "";
+    if (!pageToken) break;
+  }
+  if (!options.length) throw new Error("Gemini model list is empty");
+  return { default: seen.has(STATIC_GEMINI_MODELS.default) ? STATIC_GEMINI_MODELS.default : options[0].id, options };
+}
 
 /** The credential check as a named function, so the support entry and the
  * exported test surface are the same implementation, not a self-call.
@@ -102,13 +155,9 @@ export function geminiApplyAccess(env: Record<string, string | undefined>, acces
 const support: AcpSupport = {
   driverKind: "geminiAgent",
   displayName: "Gemini",
-  models: {
-    default: "gemini-2.5-pro",
-    options: [
-      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    ],
-  },
+  models: STATIC_GEMINI_MODELS,
+  resolveModels: (env) => geminiModelCatalog(env),
+  accountModelKey: geminiModelKey,
   defaultCli: "gemini",
   nativeSource: "gemini.acp",
   loginNote:

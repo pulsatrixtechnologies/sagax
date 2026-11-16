@@ -62,6 +62,10 @@ export interface RuntimeOptions<Config> {
   timeoutMs: number;
   nativeLog: NativeLog;
   refreshModels?: () => Promise<void>;
+  /** #4416: the models another key's account offers (an organization
+   * person's own key), read live; the runtime passes the key an access
+   * resolves to, never the instance's own. */
+  modelsForKey?: (apiKey: string) => Promise<ModelCatalog>;
   generateModel?: () => string;
   reasoning?: boolean;
   /** Field the provider reads replayed reasoning from; Cerebras rejects

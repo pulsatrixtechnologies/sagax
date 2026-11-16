@@ -149,6 +149,12 @@ struct PinnedWaitingDock: View {
         return titled
     }
 
+    /// #4440: the skip a routine run's form takes when the server allows one.
+    private func formSkip(_ entry: PinnedWaitingEntry) -> (() async -> Void)? {
+        guard entry.item.skippable else { return nil }
+        return { await session.skipForm(entry) }
+    }
+
     @ViewBuilder
     private func item(_ entry: PinnedWaitingEntry) -> some View {
         let place = itemChat(entry)
@@ -160,6 +166,16 @@ struct PinnedWaitingDock: View {
                 tint: MausPalette.color(chat.color),
                 reply: { text in try await session.answerAttention(card, text: text, message: message, in: place) },
                 skip: { await session.skipAttention(message, in: place) },
+                messageId: message.id
+            )
+        } else if let card = entry.wordsCard {
+            // #4440: a routine run's form, never its text alone: the field
+            // in words and the skip the server allows on it
+            AttentionCardView(
+                card: card,
+                tint: MausPalette.color(chat.color),
+                reply: { text in try await session.answerForm(entry, card: card, text: text) },
+                skip: formSkip(entry),
                 messageId: message.id
             )
         } else {

@@ -854,6 +854,28 @@ function collectActions(root: WidgetRoot, strict: boolean): WidgetActionEntry[] 
   }));
 }
 
+/** #4440: why a bot's widget could never be answered, or undefined. A
+ * Button with nothing behind it is drawn and presses nothing (an action the
+ * bot wrote under another key is dropped by the reader), and fields with
+ * nothing that sends them are a form filled for no one: either one left a
+ * card with its text and no control waiting on the person. show_widget and
+ * update_widget refuse it with this sentence, so the bot shows it again. */
+export function widgetAnswerProblem(root: WidgetRoot): string | undefined {
+  let dead: WidgetNode | undefined;
+  walk(root, (node) => {
+    if (!dead && node.type === "Button" && node.disabled !== true && node.submit !== true && !isRecord(node.onClickAction)) dead = node;
+  });
+  if (dead) {
+    const label = widgetString(dead, "label");
+    return `widget: the Button${label ? ` ${JSON.stringify(label)}` : ""} has no onClickAction; give it onClickAction: {type, payload?}, or disabled: true.`;
+  }
+  const fields = widgetFields(root);
+  if (fields.length && !widgetActions(root).some((entry) => !entry.client)) {
+    return `widget: it has fields (${fields.map((field) => field.name).join(", ")}) and nothing sends them; add confirm: {label, action} or a Button with onClickAction.`;
+  }
+  return undefined;
+}
+
 /** Every pressable thing in a canonical widget, in document order. */
 export function widgetActions(root: WidgetRoot): WidgetActionEntry[] {
   return collectActions(root, false);

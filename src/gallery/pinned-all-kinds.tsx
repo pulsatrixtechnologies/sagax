@@ -13,6 +13,8 @@
  * not know, in a conversation it has not loaded: its text, and its
  * conversation opens. The pinned row draws the server's items
  * (GET /api/approvals?waiting=1), built here as the server serves them.
+ * form (#4440): only a routine run's form the server lists with no choice
+ * (options [], freeText, skippable): the field in words and the skip.
  * Every action is recorded in window.__decisions. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -99,7 +101,7 @@ const briefOffer = {
     : { title: "Keep today's brief?", subtitle: "Today's brief was on by default, without you choosing it: I stopped it. If you say yes, I send it to you every day at 08:00, as one of my routines, which you can pause, edit or delete.", options: ["Yes", "Not now"], proactiveProposal: { id: "proposal-brief" } },
 } as unknown as Message;
 
-const current = which === "offer" ? [] : [handoff, inputRequest];
+const current = which === "offer" || which === "form" ? [] : [handoff, inputRequest];
 const earlier = which === "two" ? [oldChoice] : which === "approval" ? [oldApproval] : which === "offer" ? [briefOffer] : [];
 const hidden = pending.inputRequestsDrawnElsewhere(current);
 
@@ -121,11 +123,22 @@ const unknownItem: ServedWaitingItem = {
   text: fr ? "Signer la liste de vérification de la mise en production\n\nIl reste trois points : les sauvegardes, le DNS et l'avis aux clients." : "Sign the release checklist\n\nThree points are left: the backups, the DNS and the customer notice.",
 };
 
+// #4440: a routine run's form, as the server lists it: no choice to draw
+const formItem: ServedWaitingItem = {
+  id: "form:m-form", kind: "form", botId: bot.id, botName: bot.name, threadId: "thread-main", messageId: "m-form",
+  at: now - 11 * 3_600_000, ageMs: 11 * 3_600_000, options: [], answerWith: "text", freeText: true, skippable: true,
+  routineName: fr ? "Brouillons du soir" : "Evening drafts",
+  title: fr ? "Brouillons de ce soir" : "Tonight's drafts",
+  text: fr ? "Brouillons de ce soir\n\nTrois brouillons sont prêts. Coche ceux à publier, puis « Publier la sélection » ou « Passer ce soir »." : "Tonight's drafts\n\nThree drafts are ready. Check the ones to post, then \"Post selected\" or \"Skip tonight\".",
+  message: { id: "m-form", role: "bot", kind: "widget", at: now - 11 * 3_600_000, text: fr ? "Brouillons de ce soir" : "Tonight's drafts", widget: { v: 1, root: { type: "Card", id: "n1", children: [] } } },
+};
+
 // the hand-off's card and its input request are one ask: one item
 const servedItems: ServedWaitingItem[] = [
   ...earlier.map((message) => served(message, "topic-1")),
   ...current.filter((message) => !hidden.has(message.id)).map((message) => served(message, "thread-main")),
   ...(which === "unknown" ? [unknownItem] : []),
+  ...(which === "form" ? [formItem] : []),
 ].sort((x, y) => x.at - y.at);
 
 function Bubble({ children }: { children: string }) {
@@ -149,7 +162,9 @@ function Gallery() {
             <TopicDivider task={{ threadId: "thread-main", title: fr ? "Migration" : "Migration", createdAt: now - DAY }} />
           </>
         )}
-        {which === "offer" ? (
+        {which === "form" ? (
+          <Bubble>{fr ? "Orla : la routine du soir a préparé tes brouillons." : "Orla: the evening routine prepared your drafts."}</Bubble>
+        ) : which === "offer" ? (
           <Bubble>{fr ? "Orla : la migration du siège est terminée." : "Orla: the head office migration is done."}</Bubble>
         ) : (
           <>

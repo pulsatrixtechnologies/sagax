@@ -49,6 +49,8 @@ export interface WaitingItem {
   proactiveId?: string;
   /** The conversation's own title, when it has one. */
   threadTitle?: string;
+  /** #4440: a routine run's form: the routine that drew it (its card says so). */
+  routineName?: string;
   confidential?: boolean;
 }
 

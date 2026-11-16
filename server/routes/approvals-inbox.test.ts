@@ -27,7 +27,7 @@ let answered: Array<{ requestId: string; decision: string; rule?: string }> = []
 let historyCalls = 0;
 let journalDaysAsked: number[] = [];
 let testedDrafts: unknown[] = [];
-let settledCalls: Array<{ messageId: string; how: string }> = [];
+let settledCalls: Array<{ messageId: string; how: string; answer?: string }> = [];
 let gateNow = Date.UTC(2026, 10, 13, 3, 0);
 let gate: PersonSignalGate;
 
@@ -44,7 +44,7 @@ beforeEach(async () => {
   const deps: ApprovalsInboxDeps = {
     held: (_auth, viewer) => gate.peekHeld(viewer.principalId).map((item) => ({ ...item, ...(item.botId ? { botName: "Nova" } : {}) })),
     readHeld: (_auth, viewer, upTo) => gate.clearHeldUpTo(viewer.principalId, upTo),
-    settle: (_auth, _viewer, item, how) => { settledCalls.push({ messageId: item.messageId, how }); return item.messageId !== "gone"; },
+    settle: (_auth, _viewer, item, how) => { settledCalls.push({ messageId: item.messageId, how, ...(item.answer ? { answer: item.answer } : {}) }); return item.messageId !== "gone"; },
     viewer: () => (person ? { principalId: person } : null),
     pending: () => pending,
     history: () => {
@@ -233,6 +233,13 @@ describe("POST /api/approvals/handled with skip", () => {
   it("settles as answered once the person's words went to the work", async () => {
     expect((await handled({ botId: "b1", threadId: "t1", messageId: "m3", answered: true })).body).toEqual({ ok: true, outcome: "answered" });
     expect(settledCalls).toEqual([{ messageId: "m3", how: "answered" }]);
+  });
+  // #4440: a routine run's form answered in words from the pinned card is
+  // drawn answered with those words
+  it("carries the person's words with an answer, never with a skip", async () => {
+    expect((await handled({ botId: "b1", threadId: "t1", messageId: "m4", answered: true, answer: "  Post the first one  " })).body).toEqual({ ok: true, outcome: "answered" });
+    expect((await handled({ botId: "b1", threadId: "t1", messageId: "m5", skip: true, answer: "ignored" })).body).toEqual({ ok: true, outcome: "skipped" });
+    expect(settledCalls).toEqual([{ messageId: "m4", how: "answered", answer: "Post the first one" }, { messageId: "m5", how: "skipped" }]);
   });
 });
 

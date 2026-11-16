@@ -31,14 +31,14 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { PinnedItem } from "@/lib/pending-question";
-import { pinnedItemsFrom } from "@/lib/pinned-waiting";
+import { pinnedItemsFrom, servedItemPlace, servedWordsCard } from "@/lib/pinned-waiting";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openThread, type Bot, type Message, type useStore } from "@/state/store";
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
 import type { ServedWaitingItem } from "../../../shared/waiting-items";
 import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Stepper, type Pending } from "../PendingApproval";
 import { QuestionCard } from "../QuestionCard";
-import { PersonRequestCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
+import { PersonRequestCard, ServedItemCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
 import { CardCloseButton } from "../AskCard";
 import { OptionCard } from "../OptionCard";
 
@@ -209,14 +209,18 @@ export function PinnedWaitingCard({
     >
       {current.kind === "other" ? (
         // #3543: a kind this app does not know: its text, and its
-        // conversation opens from the top row
+        // conversation opens from the top row. #4440: one the server
+        // answers in words (a routine run's form) takes them here, as a
+        // question in words does, never its text alone
         <div className="px-4 pb-3 pt-2.5" data-pinned-body="other">
           <div className="mb-2 flex min-w-0 items-center gap-2">
             {mark}
             <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
             {controls}
           </div>
-          <p className="whitespace-pre-wrap break-words text-[14px] leading-5 text-ink" data-pinned-text="">{current.item.text || current.item.title}</p>
+          {servedWordsCard(current.item)
+            ? <ServedItemCard key={current.key} item={current.item} />
+            : <p className="whitespace-pre-wrap break-words text-[14px] leading-5 text-ink" data-pinned-text="">{current.item.text || current.item.title}</p>}
         </div>
       ) : current.kind === "request" ? (
         <div className="px-4 pb-3 pt-2.5" data-pinned-body="request">
@@ -289,8 +293,13 @@ export function PinnedWaitingCard({
 /** How the pinned item is skipped (#3471): an approval or a question by its
  * request, a question in words by its card. Closed as skipped, never denied. */
 export function pinnedItemSkip(item: PinnedItem, askedIn: string, conversationBotId: string | undefined, dispatch: ReturnType<typeof useStore>["dispatch"]): (() => void) | undefined {
-  // a kind this app does not know is answered in its conversation
-  if (item.kind === "other") return undefined;
+  // a kind this app does not know is answered in its conversation; #4440:
+  // one the server settles by its one route (a routine run's form) is
+  // skipped from here, whatever the app draws for it
+  if (item.kind === "other") {
+    const place = item.item.skippable ? servedItemPlace(item.item) : undefined;
+    return place ? () => { void skipPersonRequest(place).catch(() => undefined); } : undefined;
+  }
   if (item.kind === "approval") {
     const card = item.pending.message.card;
     const requestId = card?.approvalOrigin?.requestId ?? item.pending.requestId;

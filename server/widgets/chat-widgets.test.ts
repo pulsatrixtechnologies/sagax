@@ -119,6 +119,25 @@ describe("show_widget", () => {
     expect(fake.appendMessage).not.toHaveBeenCalled();
   });
 
+  // #4440: a form drawn with its text and no control waited on the person
+  // for hours; it is refused to the bot, which shows it again properly
+  it("refuses a form the person could not answer, on a show and on an update", () => {
+    const fake = fakeStore();
+    const deadButtons = { type: "Card", title: "Tonight's drafts", children: [
+      { type: "Checkbox", name: "first", label: "First draft" },
+      { type: "Button", label: "Post selected", action: { type: "post" } },
+      { type: "Button", label: "Skip tonight", action: { type: "skip" } },
+    ] };
+    expect(show(fake, deadButtons)).toEqual({ ok: false, status: 400, error: 'widget: the Button "Post selected" has no onClickAction; give it onClickAction: {type, payload?}, or disabled: true.' });
+    expect(show(fake, { type: "Card", children: [{ type: "Checkbox", name: "first", label: "First draft" }] }))
+      .toMatchObject({ ok: false, status: 400, error: expect.stringContaining("nothing sends them") });
+    expect(fake.appendMessage).not.toHaveBeenCalled();
+    const first = show(fake, WIDGET_SAMPLES.pullRequests);
+    if (!first.ok) throw new Error(first.error);
+    expect(createAgentCard({ store: fake.store, bot: SCOUT, threadId: THREAD, input: { tool: "update_widget", widget_id: first.messageId, widget: deadButtons } }))
+      .toMatchObject({ ok: false, status: 400, error: expect.stringContaining("has no onClickAction") });
+  });
+
   it("redacts a secret from every string: text, labels, options, chart rows and action payloads", () => {
     // The values really are ones the redactor rewrites.
     expect(redactSecretsInText(API_KEY)).not.toContain(API_KEY);

@@ -196,6 +196,29 @@ final class PinnedWaitingTests: XCTestCase {
         XCTAssertEqual(PinnedWaiting.entries(list) { _ in nil }.map(\.message.id), ["m9"])
     }
 
+    /// #4440: a routine run's form stayed pinned eleven hours with its text
+    /// and no control. On the phone it is pinned as the standard question in
+    /// words (the field and the skip the server allows), skipped on the route
+    /// a question in words takes, and leaves once its widget is answered.
+    func testARoutineFormIsPinnedAsAQuestionInWordsWithItsSkip() throws {
+        let json = #"{"pending":[],"waiting":[{"id":"form:m7","kind":"form","botId":"b1","botName":"Ara","threadId":"main","messageId":"m7","at":1,"title":"Tonight's drafts","text":"Tonight's drafts\n\nPost selected or Skip tonight","options":[],"answerWith":"text","freeText":true,"skippable":true,"routineName":"Evening drafts","message":{"id":"m7","role":"bot","kind":"widget","at":1,"text":"Tonight's drafts","widget":{"v":1,"root":{"type":"Card","id":"n1","children":[]}}}}]}"#
+        let list = try JSONDecoder().decode(WaitingPayload.self, from: Data(json.utf8))
+        let entries = PinnedWaiting.entries(list) { _ in nil }
+        XCTAssertEqual(entries.map(\.message.id), ["m7"])
+        let card = try XCTUnwrap(entries.first?.wordsCard)
+        XCTAssertEqual(card.items.map(\.text), ["Tonight's drafts\n\nPost selected or Skip tonight"])
+        XCTAssertEqual(card.threadId, "main")
+        XCTAssertEqual(card.routineName, "Evening drafts")
+        XCTAssertTrue(card.isWaiting)
+        XCTAssertEqual(PinnedWaiting.skipRoute(entries[0]), .handled(botId: "b1", threadId: "main", messageId: "m7"))
+        // still not held: the form itself stays drawn at the run's row
+        XCTAssertTrue(PinnedWaiting.heldIds(entries).isEmpty)
+        // answered in its conversation: it leaves the pinned card
+        let answered = #"{"id":"m7","role":"bot","kind":"widget","at":1,"text":"Tonight's drafts","widget":{"v":1,"root":{"type":"Card","id":"n1","children":[]},"settled":{"ref":"","label":"Post","tone":"submit","at":2}}}"#
+        let settled = try JSONDecoder().decode(Message.self, from: Data(answered.utf8))
+        XCTAssertTrue(PinnedWaiting.entries(list) { _ in [settled] }.isEmpty)
+    }
+
     func testAToolNamedAfterAProductReadsAsASentence() {
         XCTAssertEqual(ApprovalToolAction.of(tool: "App Store Connect"), .useNamed("App Store Connect"))
         XCTAssertEqual(ApprovalToolAction.of(tool: "mcp__srv__list_sites"), .named("list sites"))

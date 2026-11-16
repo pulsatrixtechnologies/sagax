@@ -1104,6 +1104,11 @@ took 13 tool calls and ended in "I can't". Now one call posts a card.
   plugin's repository, a reviewed server's documentation, else its https
   address; nothing for a connected app or a local server.
 
+The phone's account connectors use `ProviderConnectorGroups`, as the iPad
+provider sections do. Each provider gets its own connector state and manage
+link. `providerConnectorNoticeText` supplies the shared notices on both
+layouts; connector data still comes from `HarnessConnectorsModel`.
+
 ## Connector call deadlines (#4467)
 
 The Claude, Codex and Grok connector hosts share one deadline for waiting

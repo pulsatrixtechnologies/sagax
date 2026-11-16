@@ -330,6 +330,53 @@ posixOnly("organization server environments (user-sandbox)", () => {
     expect(docker.calls.filter((call) => call.startsWith("create"))).toEqual([`create ${aliceContainer}`]);
   }, 120_000);
 
+  // #4449: a member's command never runs on the shared organization host and
+  // never waits for an admin. With no environment of his own yet, his turn's
+  // shell goes to his own server environment, created on demand there.
+  it("#4449: a member's command with no environment yet goes to his own one, created on demand: no admin card, no refusal", async () => {
+    const bobContainer = sandboxNames(sandboxKeyForPrincipal(INSTANCE, ids.bob!)).container;
+    expect(docker.containers.has(bobContainer)).toBe(false);
+    const rowan = await createBot(bob, "Rowan");
+    // a shell his own turn asks on the host: told to run it in his own
+    // place (his server environment, not there yet), never "Nothing ran",
+    // never an admin card
+    expect((await api("PATCH", `/api/bots/${rowan.id}`, bob, { modelSelection: { instanceId: "hold", model: "fake-model" } })).status).toBe(200);
+    const holdDump = join(home, "hold-dump.json");
+    rmSync(holdDump, { force: true });
+    expect((await api("POST", `/api/bots/${rowan.id}/messages`, bob, { text: "read the issues" })).status).toBe(202);
+    await waitFor(async () => existsSync(holdDump), 20_000);
+    const mcp = (JSON.parse(readFileSync(holdDump, "utf8")) as { mcpConfig: any }).mcpConfig.mcpServers;
+    expect(Object.keys(mcp)).toContain("sagax-environment");
+    const socket = connect(mcp.ogb.args.at(-1) as string);
+    try {
+      await new Promise<void>((resolve, reject) => { socket.once("connect", resolve); socket.once("error", reject); });
+      let answer: any;
+      let buffer = "";
+      socket.on("data", (chunk) => { buffer += chunk; if (buffer.includes("\n")) answer = JSON.parse(buffer.split("\n")[0]!); });
+      socket.write(JSON.stringify({ t: "ask", id: "own-place-absent", kind: "permission", tool: "Bash", input: { command: "gh issue list" } }) + "\n");
+      await waitFor(async () => answer?.behavior === "deny");
+      expect(String(answer.message)).toContain("own computer");
+      expect(String(answer.message)).not.toMatch(/Nothing ran|waiting for an admin|admin has to approve/i);
+      const rows = (await api("GET", `/api/threads/${rowan.threadId}/messages?limit=200`, bob)).body.messages as Array<{ card?: any }>;
+      expect(rows.some((m) => m.card?.requestId === "own-place-absent")).toBe(false);
+    } finally {
+      socket.destroy();
+      await api("POST", `/api/bots/${rowan.id}/interrupt`, bob, {});
+      await waitFor(async () => !((await api("GET", "/api/bots", bob)).body.bots as Array<{ id: string; busy?: boolean }>).find((b) => b.id === rowan.id)?.busy);
+    }
+    expect(docker.containers.has(bobContainer)).toBe(false);
+    // the command in his own environment: created on demand and run there,
+    // with no admin card and no refusal
+    expect((await api("PATCH", `/api/bots/${rowan.id}`, bob, { modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
+    expect(await turn(bob, rowan, "read the issues")).toContain("mcp:run_command:ok");
+    expect(docker.containers.has(bobContainer)).toBe(true);
+    expect(docker.calls).toContain(`create ${bobContainer}`);
+    expect(docker.execs.some((e) => e.name === bobContainer && e.exec.Cmd[0] === "timeout")).toBe(true);
+    const rows = (await api("GET", `/api/threads/${rowan.threadId}/messages?limit=200`, bob)).body.messages as Array<{ card?: any; text?: string; tool?: { name?: string } }>;
+    expect(rows.some((m) => m.card?.adminApproval === true)).toBe(false);
+    expect(rows.some((m) => /Nothing ran|waiting for an admin/i.test(`${m.text ?? ""} ${m.tool?.name ?? ""}`))).toBe(false);
+  }, 120_000);
+
   it("never puts a teammate's commands in the bot owner's sandbox", async () => {
     const aliceContainer = sandboxNames(sandboxKeyForPrincipal(INSTANCE, ids.alice!)).container;
     const bobContainer = sandboxNames(sandboxKeyForPrincipal(INSTANCE, ids.bob!)).container;

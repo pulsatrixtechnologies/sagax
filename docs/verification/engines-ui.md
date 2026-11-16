@@ -84,7 +84,7 @@ pnpm exec vitest run src/state/engine-refresh.test.ts src/components/EngineSetup
 ```sh
 pnpm exec vitest run scripts/verify/dev/verify-engines-ui.test.mjs
 pnpm exec vitest run server/antigravity-account-api.test.ts server/drivers/antigravity-account.test.ts src/components/ChatGptPlanSignIn.interaction.test.ts
-pnpm exec vitest run src/components/EngineLibrary.test.ts src/components/EnginesSettings.test.ts src/components/EngineSetup.test.ts src/components/ClaudeAccountSettings.test.ts src/components/CodexAccountSettings.test.ts src/components/ClaudeSignIn.test.ts src/components/DeviceSignIn.test.ts src/components/GrokSignIn.interaction.test.ts src/components/EngineSetup.grok.test.ts src/components/EngineUpdateNotice.test.ts src/components/SettingsModal.appearance.test.ts src/components/ModelPicker.test.ts
+pnpm exec vitest run src/components/EngineLibrary.test.ts src/components/EnginesSettings.test.ts src/components/EngineSetup.test.ts src/components/ClaudeAccountSettings.test.ts src/components/CodexAccountSettings.test.ts src/components/ClaudeSignIn.test.ts src/components/DeviceSignIn.test.ts src/components/settings/AccountSignIn.dom.test.ts src/components/EngineSetup.grok.test.ts src/components/EngineUpdateNotice.test.ts src/components/SettingsModal.appearance.test.ts src/components/ModelPicker.test.ts
 pnpm typecheck
 pnpm i18n:check
 pnpm build

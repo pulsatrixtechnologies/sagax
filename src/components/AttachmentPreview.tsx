@@ -225,6 +225,10 @@ function revealBridge(): NonNullable<Window["ogb"]>["revealInFolder"] {
   return ogb?.remoteClient?.active ? undefined : ogb?.revealInFolder;
 }
 
+export function canRevealLocalPath(filePath: string): boolean {
+  return Boolean(revealBridge() && REVEALABLE_PATH.test(filePath));
+}
+
 export function OutsideWorkspaceFile({ filePath }: { filePath: string }) {
   const [problem, setProblem] = useState("");
   const reveal = revealBridge();
@@ -254,7 +258,7 @@ export function OutsideWorkspaceFile({ filePath }: { filePath: string }) {
         className="inline-flex items-center gap-1 text-accent underline decoration-accent/40 hover:decoration-accent"
       >
         <FolderOpen size={12} className="shrink-0" aria-hidden="true" />
-        {t("attach.showInFolder")}
+        {t(window.ogb?.platform === "darwin" ? "fileLink.showInFinder" : window.ogb?.platform === "win32" ? "fileLink.showInExplorer" : "attach.showInFolder")}
       </button>
       {problem && <span role="alert" className="text-danger">{problem}</span>}
     </>

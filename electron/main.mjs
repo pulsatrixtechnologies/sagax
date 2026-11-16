@@ -4525,7 +4525,7 @@ ipcMain.handle("app-icon:reset", desktopUiOnly("app-icon:reset", () => {
 // server is refused, because that server's paths mean nothing here.
 ipcMain.handle("desktop:reveal-file", localOnly("desktop:reveal-file", async (_event, rawPath) => {
   if (desktopRemoteAccess) throw new Error("That file is on the computer this app is connected to");
-  return revealInFolder(rawPath, { reveal: (target) => shell.showItemInFolder(target), home: os.homedir() });
+  return revealInFolder(rawPath, { reveal: (target) => shell.showItemInFolder(target), openDirectory: (target) => shell.openPath(target), home: os.homedir() });
 }));
 
 // A file name in a bot message, clicked: open it with this computer's default

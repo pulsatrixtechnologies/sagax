@@ -806,13 +806,13 @@ describe("ChatMarkdown attachments", () => {
       expect(render(true)).toContain(`>${filePath}</code>`);
     });
 
-    it("leaves other failures alone", () => {
+    it("keeps other failures visible while offering the local file manager", () => {
       vi.stubGlobal("window", { ogb: { revealInFolder, remoteClient: { active: false } } });
       try {
         const html = render(false);
         expect(html).toContain("the linked file is outside this conversation&#x27;s workspace");
-        expect(html).not.toContain("Show in folder");
-        expect(html).not.toContain(filePath);
+        expect(html).toContain("Show in folder");
+        expect(html).toContain("lucide-rotate-ccw");
       } finally {
         vi.unstubAllGlobals();
       }

@@ -568,7 +568,7 @@ const __BUILD_DATE__: string;
       saveFile?(filePath: string): Promise<string | null>;
       /** Points this computer's file manager at a file a bot linked outside
        * its workspace, without opening or reading it. Local app only. */
-      revealInFolder?(filePath: string): Promise<"shown" | "missing" | "invalid">;
+      revealInFolder?(filePath: string): Promise<"shown" | "missing" | "invalid" | "failed">;
       /** Opens a file a bot wrote with this computer's default app (a leading
        * ~ is the home folder). Local app only. */
       openLocalFile?(filePath: string): Promise<"opened" | "missing" | "failed" | "invalid">;

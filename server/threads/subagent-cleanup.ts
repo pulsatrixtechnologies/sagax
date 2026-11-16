@@ -18,7 +18,7 @@ import type { WireMessage as Message } from "../../shared/wire.ts";
 import { yieldToEventLoop } from "../harness/http.ts";
 
 /** A call cut short by a person's Stop. */
-export const CUT_TOOL_OUTPUT = "Stopped before it finished.";
+export const CUT_TOOL_OUTPUT = "You stopped the turn before this finished.";
 /** A call its turn left open when it ended, on success or failure. */
 export const ENDED_TOOL_OUTPUT = "Its turn ended before this finished.";
 /** A call left open by a server stop. */
@@ -42,8 +42,15 @@ export function openToolRows<T extends ToolRow>(messages: readonly T[]): T[] {
 }
 
 /** What a settled turn's open rows say. */
-export function endedToolOutput(outcome: { stopped: boolean }): string {
-  return outcome.stopped ? CUT_TOOL_OUTPUT : ENDED_TOOL_OUTPUT;
+export function endedToolOutput(outcome: { stopped: boolean; clientStopped?: boolean; stopReason?: string | null }): string {
+  if (outcome.clientStopped || (outcome.clientStopped === undefined && outcome.stopped)) return CUT_TOOL_OUTPUT;
+  switch (outcome.stopReason) {
+    case "interrupted": return "The engine interrupted the turn before this finished.";
+    case "cancelled": return "The engine cancelled the turn before this finished.";
+    case "superseded": return "A newer turn replaced this turn before the call finished.";
+    case "exit_before_result": return "The engine exited before this call returned a result.";
+    default: return ENDED_TOOL_OUTPUT;
+  }
 }
 
 /** What the start sweep reads and writes: the store's own methods. */

@@ -71,6 +71,14 @@ export async function userSandboxProxyRequest(frame: unknown, connection: { url:
 export const PERSONAL_STDIO_TOOL_SERVER = "sagax-stdio";
 const PERSONAL_STDIO_ENDPOINT = "/api/internal/personal-mcp";
 
+/** Whether a mount is a person's or a plugin's stdio server relayed to their
+ * server environment: the relay (sandbox-stdio-mcp.ts, #3623) already keeps
+ * its initialize and tool list, so no other layer keeps them again (#4394). */
+export function relayedToEnvironment(spec: unknown): boolean {
+  const env = (spec as { env?: unknown } | null)?.env;
+  return Boolean(env) && typeof env === "object" && (env as Record<string, unknown>).SAGAX_TOOL_SERVER === PERSONAL_STDIO_TOOL_SERVER;
+}
+
 /** One frame of the relay: the server's answer for a request, nothing for a
  * notification. Never throws: a failure answers the request. */
 export async function personalStdioRelayRequest(frame: unknown, connection: { url: string; token: string }, fetchImpl: typeof fetch = fetch): Promise<unknown | undefined> {

@@ -1124,6 +1124,30 @@ describe("ACP turns (fake CLI)", () => {
     expect(instance.adapter.capabilities.customMcp).toBe(true);
   });
 
+  // #4394: the gate keeps a connector's answers only where nothing keeps
+  // them yet; a server relayed to the person's environment is kept by the
+  // relay (#3623), never twice
+  it("keeps the answers of a URL connector and of a server run here, not of one relayed to the environment", async () => {
+    await create();
+    const dump = join(scratch, "kept-dump.json");
+    process.env.FAKE_ACP_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-kept-mcp", botId: "bot-kept", text: "go",
+      integrations: { custom: {
+        docs: { type: "http", url: "https://docs.example/mcp", headers: { Authorization: "Bearer tok-docs" } },
+        local: { command: "npx", args: ["-y", "@x/notes-mcp"], env: {} },
+        relayed: { command: process.execPath, args: ["user-sandbox-proxy.js"], env: { SAGAX_TOOL_SERVER: "sagax-stdio", SAGAX_SANDBOX_TOKEN: "synthetic" } },
+      } },
+    });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8")) as { mcpServers: AcpServer[] };
+    const kept = (name: string) => seen.mcpServers.find((server) => server.name === name)?.env.find((entry) => entry.name === "SAGAX_GATE_KEPT")?.value;
+    expect(kept("docs")).toMatch(/mcp-gate-kept/);
+    expect(kept("local")).toMatch(/mcp-gate-kept/);
+    expect(kept("docs")).not.toBe(kept("local"));
+    expect(kept("relayed")).toBeUndefined();
+  });
+
   const remoteServers = {
     docs: { type: "http" as const, url: "https://docs.example/mcp", headers: { Authorization: "Bearer tok-docs" } },
     legacy: { type: "sse" as const, url: "https://old.example/sse", headers: {} },
@@ -2599,7 +2623,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
         expect(lines).toHaveLength(1);
         expect(lines[0]).toMatch(
-          /^\[turn-latency\] \S+ thread=t-latenc path=spawn queue=\d+ms setup=\d+ms ttfa=\d+ms ttft=\d+ms tools=\d+ total=\d+ms prompt=\d+ch full=\S+ in=\S+ cached=\S+ queueBy=\S+ setupBy=\S+ stallGuard=150ms retried ok$/,
+          /^\[turn-latency\] \S+ thread=t-latenc path=spawn queue=\d+ms setup=\d+ms ttfa=\d+ms ttft=\d+ms tools=\d+ total=\d+ms prompt=\d+ch full=\S+ in=\S+ cached=\S+ queueBy=\S+ setupBy=\S+ spawnWhy=none stallGuard=150ms retried ok$/,
         );
         // #3561: a spawned turn names its process start and handshake
         expect(lines[0]).toMatch(/ setupBy=prepare:\d+,init:\d+/);

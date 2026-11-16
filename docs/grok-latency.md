@@ -15,6 +15,17 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
 - full: the prompt carried the whole system block (new session, changed stable half, re-anchor).
 - in / cached: the provider's input tokens and the cached share.
 - stallGuard: how long a silent prompt is given before Sagax cancels and asks once more.
+- spawnWhy (#4394): on a spawn only, why no warm engine took the turn: `none` (no engine
+  process of this conversation on this server), `closed:<why>` (its process was closed:
+  `idle`, `warm-budget`, `stop`, `reestablish`, `rpc-failure`...), `exited` (it ended on its
+  own), `closing` (its process was being closed when the turn came), `contract:<fields>` (started for another command, variables or tool scope:
+  `envFingerprint`, `cwd`, `spawnArgs`...), `budget`, `tools` (an engine that restarts for
+  changed tool servers) or `reset`.
+- firstWords (#4394): what the stream did between its first update (ttfa) and the first answer
+  text, in ms: `think` (reasoning streamed), `tool` (a tool running, from its
+  call to the update that says it completed or failed, however long it is silent), `quiet`
+  (any other gap of a second or more between two updates). The engine's own start and its tool
+  listing are setupBy's `init` and `tools`.
 - queueBy / setupBy (#3561): the parts of queue and setup in ms, from the turn's own step marks
   (server/turns/turn-trace.ts), each step closing the part it names; a part the turn did not
   reach is left out, and the parts add up to the stage.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newTurnLatency, type TurnToolWait, noteTurnActivity, turnLatencyLine, turnLatencyParts, turnToolsGap, turnToolsSlow } from "./turn-latency.ts";
+import { contractFieldsChanged, newTurnLatency, noteEngineClosed, type TurnToolWait, noteTurnActivity, takeEngineClosed, turnFirstWords, turnLatencyLine, turnLatencyParts, turnToolsGap, turnToolsSlow } from "./turn-latency.ts";
 
 describe("turn latency line", () => {
   it("logs every stage of a pooled one-tool turn, ids and numbers only", () => {
@@ -18,7 +18,7 @@ describe("turn latency line", () => {
     trace.cachedTokens = 16_000;
     trace.stallMs = 10_000;
     expect(turnLatencyLine("grok", "800b207c-1a77-43fc-897a-2964d1c2d32f", trace, 3_132, "ok")).toBe(
-      "[turn-latency] grok thread=800b207c path=pooled queue=99ms setup=21ms ttfa=979ms ttft=1150ms tools=1 total=2132ms prompt=1655ch full=no in=18225 cached=16000 stallGuard=10000ms ok",
+      "[turn-latency] grok thread=800b207c path=pooled queue=99ms setup=21ms ttfa=979ms ttft=1150ms tools=1 total=2132ms prompt=1655ch full=no in=18225 cached=16000 firstWords=think:171 stallGuard=10000ms ok",
     );
   });
 
@@ -210,5 +210,95 @@ describe("turn latency line", () => {
     // a quick wait prints nothing
     trace.toolWait = { waitedMs: 400, mounts: [], resolvedMs: 390, served: [["data", 120, 300]] };
     expect(turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok")).not.toContain("toolsGap");
+  });
+});
+
+// #4394: ordinary turns took 22 to 27 s to their first words on a hosted
+// server, path=spawn every time, and the line could not say whether those
+// seconds were the model's or the engine's, nor why no warm engine took them.
+describe("what the line says of a spawn and of the time to the first words (#4394)", () => {
+  it("splits the time to the first answer text into the first update's wait, reasoning, a tool and quiet gaps", () => {
+    const trace = newTurnLatency(0);
+    trace.path = "pooled";
+    trace.promptAt = 1_000;
+    noteTurnActivity(trace, "agent_thought_chunk", 2_700); // first update after 1.7 s
+    noteTurnActivity(trace, "agent_thought_chunk", 3_200);
+    noteTurnActivity(trace, "agent_thought_chunk", 3_900);
+    noteTurnActivity(trace, "tool_call", 4_000, { toolCallId: "a", status: "pending" });
+    noteTurnActivity(trace, "tool_call_update", 4_400, { toolCallId: "a", status: "completed" });
+    noteTurnActivity(trace, "agent_thought_chunk", 4_500);
+    // 20 s with nothing streamed: neither reasoning seen nor a tool
+    noteTurnActivity(trace, "agent_message_chunk", 24_500);
+    noteTurnActivity(trace, "agent_thought_chunk", 30_000); // after the first words: not counted
+    expect(trace.firstTextAt).toBe(24_500);
+    expect(turnFirstWords(trace)).toBe("think:1300,tool:500,quiet:20000");
+    expect(turnLatencyLine("grok", "t", trace, 31_000, "ok")).toContain(" ttfa=1700ms ttft=23500ms tools=1 ");
+    expect(turnLatencyLine("grok", "t", trace, 31_000, "ok")).toContain(" firstWords=think:1300,tool:500,quiet:20000 ok");
+  });
+
+  it("counts a tool that runs several seconds without a progress update as tool, not quiet", () => {
+    const trace = newTurnLatency(0);
+    trace.path = "pooled";
+    trace.promptAt = 1_000;
+    noteTurnActivity(trace, "agent_thought_chunk", 2_000);
+    noteTurnActivity(trace, "tool_call", 2_100, { toolCallId: "web", status: "in_progress" });
+    // the tool runs 6 s with no update, then ends
+    noteTurnActivity(trace, "tool_call_update", 8_100, { toolCallId: "web", status: "completed" });
+    // the model is quiet 3 s after it before its words: that is quiet
+    noteTurnActivity(trace, "agent_message_chunk", 11_100);
+    expect(turnFirstWords(trace)).toBe("think:100,tool:6000,quiet:3000");
+  });
+
+  it("keeps a tool open until its own update says it ended, also when two run at once", () => {
+    const trace = newTurnLatency(0);
+    trace.promptAt = 0;
+    noteTurnActivity(trace, "tool_call", 1_000, { toolCallId: "a", status: "pending" });
+    noteTurnActivity(trace, "tool_call", 1_100, { toolCallId: "b", status: "pending" });
+    noteTurnActivity(trace, "tool_call_update", 4_100, { toolCallId: "a", status: "in_progress" });
+    noteTurnActivity(trace, "tool_call_update", 6_100, { toolCallId: "a", status: "completed" });
+    noteTurnActivity(trace, "tool_call_update", 9_100, { toolCallId: "b", status: "failed" });
+    noteTurnActivity(trace, "agent_message_chunk", 9_200);
+    expect(turnFirstWords(trace)).toBe("tool:8200");
+  });
+
+  it("a tool reported already ended opens nothing", () => {
+    const trace = newTurnLatency(0);
+    trace.promptAt = 0;
+    noteTurnActivity(trace, "tool_call", 500, { toolCallId: "a", status: "completed" });
+    noteTurnActivity(trace, "agent_message_chunk", 5_500);
+    expect(turnFirstWords(trace)).toBe("quiet:5000");
+  });
+
+  it("says nothing of the first words before there are any", () => {
+    const trace = newTurnLatency(0);
+    trace.promptAt = 10;
+    noteTurnActivity(trace, "agent_thought_chunk", 20);
+    expect(turnFirstWords(trace)).toBeUndefined();
+    expect(turnLatencyLine("grok", "t", trace, 50, "failed")).not.toContain("firstWords=");
+  });
+
+  it("says why a turn started an engine, on a spawn only", () => {
+    const trace = newTurnLatency(0);
+    trace.promptAt = 10;
+    trace.spawnWhy = "closed:idle";
+    trace.path = "spawn";
+    expect(turnLatencyLine("grok", "t", trace, 50, "ok")).toContain(" spawnWhy=closed:idle ");
+    trace.path = "pooled";
+    expect(turnLatencyLine("grok", "t", trace, 50, "ok")).not.toContain("spawnWhy=");
+  });
+
+  it("remembers why a conversation's engine closed, in a few plain words, once", () => {
+    noteEngineClosed("thread-a", "warm budget");
+    noteEngineClosed("thread-b", "Context full!");
+    expect(takeEngineClosed("thread-a")).toBe("warm-budget");
+    expect(takeEngineClosed("thread-a")).toBeUndefined();
+    expect(takeEngineClosed("thread-b")).toBe("context-full");
+  });
+
+  it("names the parts of a spawn contract that changed", () => {
+    const key = (cwd: string, env: string) => JSON.stringify(["person", "bot", "grok", [], ["agent"], cwd, false, env, null, null, null]);
+    expect(contractFieldsChanged(key("/w", "e1"), key("/w", "e2"))).toBe("envFingerprint");
+    expect(contractFieldsChanged(key("/w", "e1"), key("/x", "e2"))).toBe("cwd+envFingerprint");
+    expect(contractFieldsChanged("not json", key("/w", "e1"))).toBe("?");
   });
 });

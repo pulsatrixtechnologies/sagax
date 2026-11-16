@@ -29,6 +29,7 @@
 import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 
+import { wholeToolList } from "../mcp/whole-tool-list.ts";
 import type { SandboxStdioSpec } from "./sandboxd-core.ts";
 
 type RpcId = string | number;
@@ -166,12 +167,6 @@ export class SandboxStdioRelay {
     }
   }
 
-  /** Whether a tools/list answer can be kept: a whole list, not a page. */
-  private static keepableList(result: unknown): boolean {
-    const value = result as { tools?: unknown; nextCursor?: unknown } | null;
-    return Boolean(value) && typeof value === "object" && Array.isArray(value!.tools) && (value!.nextCursor === undefined || value!.nextCursor === null);
-  }
-
   /** Asks the server for its tool list again and keeps the answer (#3623):
    * after a list served from the copy, and when the server says it changed.
    * A failed check drops the copy, so the next turn asks the server. */
@@ -185,7 +180,7 @@ export class SandboxStdioRelay {
       if (session.ready) await session.ready;
       const answer = await this.request(session, { jsonrpc: "2.0", id: this.relayId(), method: "tools/list", params: {} });
       if (this.kept.get(keptKey) !== entry) return;
-      if (answer.error === undefined && SandboxStdioRelay.keepableList(answer.result)) entry.list = answer.result;
+      if (answer.error === undefined && wholeToolList(answer.result)) entry.list = answer.result;
       else delete entry.list;
     } catch {
       if (this.kept.get(keptKey) === entry) this.kept.delete(keptKey);
@@ -293,7 +288,7 @@ export class SandboxStdioRelay {
   /** The live session of `key`, opened when missing. `hello`: the engine's
    * initialize (under a relay id), sent first on a new process; the
    * session's `ready` is its answer. */
-  private async session(key: string, keptKey: string, principalId: string, server: string, spec: SandboxStdioSpec, fresh: boolean, botId?: string, hello?: Frame): Promise<Session> {
+  private async session(key: string, keptKey: string, principalId: string, server: string, spec: SandboxStdioSpec, fresh: boolean, botId?: string, hello?: Frame, before?: () => Promise<void>): Promise<Session> {
     const fingerprint = stdioFingerprint(spec);
     const current = this.sessions.get(key);
     if (current && !current.closed && current.fingerprint === fingerprint && !fresh && !hello) return current;
@@ -302,6 +297,9 @@ export class SandboxStdioRelay {
     if (inFlight && inFlight.fingerprint === fingerprint && !fresh && !hello) return inFlight.promise;
     const opening = { fingerprint } as { promise: Promise<Session>; fingerprint: string };
     opening.promise = (async () => {
+      // #4394: what the process needs in the environment first (a plugin's
+      // files): only a start waits for it, never a kept answer
+      if (before) await before();
       const stream = await this.options.open(principalId, spec, botId);
       const session: Session = { stream, fingerprint, pending: new Map(), buffer: Buffer.alloc(0), lastUsed: this.now(), closed: false, firstLine: true, answered: false, principalId, server, keptKey };
       if (this.opening.get(key) !== opening) {
@@ -390,8 +388,10 @@ export class SandboxStdioRelay {
 
   /** Relay one frame from the engine. A request resolves with the server's
    * answer; a notification or an answer to the server resolves with null.
-   * `onPart`: the parts of a tool list's path (#3623, toolsSlow). */
-  async relay(input: { principalId: string; botId: string; threadId: string; server: string; spec: SandboxStdioSpec; frame: unknown; onPart?: StdioRelayPart }): Promise<Frame | null> {
+   * `onPart`: the parts of a tool list's path (#3623, toolsSlow). `before`:
+   * awaited before the server's process starts (#4394: its plugin's copy),
+   * so a kept initialize and tool list are answered without it. */
+  async relay(input: { principalId: string; botId: string; threadId: string; server: string; spec: SandboxStdioSpec; frame: unknown; onPart?: StdioRelayPart; before?: () => Promise<void> }): Promise<Frame | null> {
     const frame = input.frame as Frame | null;
     if (!frame || typeof frame !== "object" || Array.isArray(frame) || frame.jsonrpc !== "2.0") throw new StdioRelayError("Invalid request.", "invalid");
     const key = this.sessionKey(input);
@@ -402,7 +402,7 @@ export class SandboxStdioRelay {
     if (failed) throw failed;
     const keptKey = this.keptKey(input, fingerprint);
     const part = input.onPart ?? (() => undefined);
-    const open = (fresh: boolean, hello?: Frame) => this.session(key, keptKey, input.principalId, input.server, input.spec, fresh, input.botId, hello);
+    const open = (fresh: boolean, hello?: Frame) => this.session(key, keptKey, input.principalId, input.server, input.spec, fresh, input.botId, hello, input.before);
     const live = (session: Session) => {
       if (session.closed) throw session.failure ?? new StdioRelayError("The MCP server stopped.", "stopped");
       session.lastUsed = this.now();
@@ -460,7 +460,7 @@ export class SandboxStdioRelay {
     if (listing) {
       part("list", this.now() - at);
       if (input.onPart) part("kb", Math.round(Buffer.byteLength(JSON.stringify(answer)) / 1024));
-      if (answer.error === undefined && SandboxStdioRelay.keepableList(answer.result)) this.keep(keptKey).list = answer.result;
+      if (answer.error === undefined && wholeToolList(answer.result)) this.keep(keptKey).list = answer.result;
     }
     return answer;
   }

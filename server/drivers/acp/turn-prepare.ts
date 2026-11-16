@@ -190,6 +190,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       support, turn, turnConfig, cliTurn, approvalGated, launch, env, cwd, accountModels,
       openSession, threadId, active, warming, sessions, closeSession, sessionAllows, sessionServersKey,
     });
+    if (spawned.spawnWhy) latency.spawnWhy = spawned.spawnWhy;
     const {
       spawnEnv, launchEnv, sessionKey, launchSession,
       cursor, reused, sessionRef,

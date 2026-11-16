@@ -5,6 +5,7 @@ import { USER_SANDBOX_MCP_NAME } from "../../sandbox/user-sandbox-routing.ts";
 import { AUTO_COMPUTER_MCP_NAME } from "../../computer/auto-computer.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../../shared/bot-workplace.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
+import { relayedToEnvironment } from "../../user-sandbox-proxy.ts";
 
 /** A TOML inline table for a `-c key=value` override; JSON string quoting
  * is valid TOML basic-string quoting. */
@@ -39,7 +40,7 @@ export const PROXY_ENV_PREFIX_VARIABLE = "SAGAX_PROXY_ENV_PREFIX";
 export function isSagaxWorkplaceProxy(name: string, server: McpServerSpec): boolean {
   // A person's own MCP server command relayed to their server environment
   // (server/sandbox/sandbox-stdio-mcp.ts) is the same proxy under the person's name.
-  return !("url" in server) && (SAGAX_WORKPLACE_PROXIES.has(name) || server.env?.SAGAX_TOOL_SERVER === "sagax-stdio");
+  return !("url" in server) && (SAGAX_WORKPLACE_PROXIES.has(name) || relayedToEnvironment(server));
 }
 
 /** Perspicax is a harness-created mount in integrations.custom,

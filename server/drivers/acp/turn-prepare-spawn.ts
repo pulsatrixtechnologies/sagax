@@ -4,6 +4,7 @@ import { MiB, warmResourcePerson, warmResources } from "../../resources/warm-res
 import { killCliTree } from "../../procs.ts";
 import { narrowsNativeTools } from "../../../shared/tool-scope.ts";
 import type { AcpSession } from "./types.ts";
+import { contractFieldsChanged, takeEngineClosed } from "./turn-latency.ts";
 
 export type AcpSpawnDeps = {
   support: any;
@@ -37,6 +38,8 @@ export type AcpSpawnResult = {
   cursor: string | null;
   reused: boolean;
   sessionRef: { current: AcpSession };
+  /** #4394: why no warm process took this turn (the latency line's spawnWhy) */
+  spawnWhy?: string;
   getLaunchedThisTurn: () => boolean;
 };
 
@@ -112,41 +115,37 @@ export function prepareAcpSpawn(deps: AcpSpawnDeps): AcpSpawnResult {
   }
   const pooled = sessions.get(threadId);
   let session: AcpSession;
+  const contractMismatch = Boolean(pooled) && pooled!.contractKey !== contractKey;
+  const sessionMismatch = Boolean(pooled) && Boolean(support.restartOnMcpChange) && pooled!.sessionKey !== sessionKey;
+  const budgetGone = Boolean(pooled) && !(pooled!.budget?.active() ?? true);
   if (process.env.SAGAX_ACP_REUSE_DIAG === "1") {
     if (!pooled) console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=none`);
     else {
-      const contractMismatch = pooled.contractKey !== contractKey;
-      const sessionMismatch = Boolean(support.restartOnMcpChange) && pooled.sessionKey !== sessionKey;
       const why = pooled.dead ? "dead" : pooled.closing ? "closing" : contractMismatch ? "contract" : sessionMismatch ? "sessionKey" : "reuse";
-      let diffHint = "";
-      if (contractMismatch) {
-        try {
-          const before = JSON.parse(pooled.contractKey) as unknown[];
-          const after = JSON.parse(contractKey) as unknown[];
-          const labels = ["command", "args", "spawnArgs", "cwd", "fullAuto", "envFingerprint", "spawnFingerprint", "toolScope", "inheritedScope"];
-          const parts: string[] = [];
-          for (let i = 0; i < Math.max(before.length, after.length); i++) {
-            if (JSON.stringify(before[i]) !== JSON.stringify(after[i])) parts.push(`${labels[i] ?? i}`);
-          }
-          diffHint = ` fields=${parts.join(",")}`;
-        } catch { /* ignore */ }
-      }
+      const diffHint = contractMismatch ? ` fields=${contractFieldsChanged(pooled.contractKey, contractKey)}` : "";
       console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=${why}${diffHint} sessionKeyChanged=${pooled.sessionKey !== sessionKey} exit=${pooled.child.exitCode} dead=${pooled.dead} closing=${pooled.closing} sid=${pooled.sessionId}`);
     }
   }
-  if (pooled && !pooled.dead && !pooled.closing && pooled.contractKey === contractKey
-      && (pooled.budget?.active() ?? true)
-      && (!support.restartOnMcpChange || pooled.sessionKey === sessionKey)) {
+  // #4394: why this turn starts a process instead of a warm one (spawnWhy)
+  let spawnWhy: string | undefined;
+  if (pooled && !pooled.dead && !pooled.closing && !contractMismatch && !budgetGone && !sessionMismatch) {
     // adoption cancels the idle countdown — a running turn is not quiet
     if (pooled.idleTimer) clearTimeout(pooled.idleTimer);
     pooled.idleTimer = null;
     session = pooled;
   } else {
+    const closed = takeEngineClosed(threadId);
+    spawnWhy = turn.sessionReset ? "reset"
+      : !pooled ? (closed ? `closed:${closed}` : "none")
+      : pooled.dead ? "exited" : pooled.closing ? "closing"
+      : contractMismatch ? `contract:${contractFieldsChanged(pooled.contractKey, contractKey)}`
+      : budgetGone ? "budget" : "tools";
     if (pooled) {
       // a dead child already exited — just drop the record; a live one
       // gets the full close (contract changed)
       if (pooled.dead) sessions.delete(threadId);
       else closeSession(threadId, "contract");
+      takeEngineClosed(threadId);
     }
     session = launchSession();
     sessions.set(threadId, session);
@@ -164,7 +163,7 @@ export function prepareAcpSpawn(deps: AcpSpawnDeps): AcpSpawnResult {
 
   return {
     spawnArgs, spawnEnv, launchEnv, launchModel, contractKey, sessionKey, launchSession,
-    session, cursor, reused, sessionRef,
+    session, cursor, reused, sessionRef, spawnWhy,
     getLaunchedThisTurn: () => launchedThisTurn,
   };
 }

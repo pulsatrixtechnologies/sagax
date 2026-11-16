@@ -244,3 +244,37 @@ describe("SandboxStdioRelay kept tool list (#3623)", () => {
     relay.stop();
   });
 });
+
+// #4394: a plugin's server waited for its plugin's copy into the person's
+// environment before anything, its kept list included: the copy of an
+// environment still starting held the engine's tool listing with it.
+describe("SandboxStdioRelay kept answers and what a start needs first (#4394)", () => {
+  it("answers a kept initialize and tool list while the start's own need (a plugin copy) is still running, and starts once it is done", async () => {
+    const { state, open } = upstream();
+    const relay = new SandboxStdioRelay({ open: (principalId) => open(principalId) });
+    let copies = 0;
+    // the first turn pays the start, after its need
+    const first = await engineTurn(relay, { principalId: "pr_a", threadId: "t-1" });
+    expect(first.list.result.tools).toHaveLength(120);
+    // a new engine process while the copy hangs (the environment starting)
+    let release!: () => void;
+    const hanging = new Promise<void>((resolve) => { release = resolve; });
+    const input = { principalId: "pr_a", botId: "bot-1", threadId: "t-2", server: "connector", spec, before: () => { copies += 1; return hanging; } };
+    const hello = await relay.relay({ ...input, frame: { jsonrpc: "2.0", id: 0, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "engine", version: "1" } } } });
+    const list = await relay.relay({ ...input, frame: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} } }) as { result: { tools: unknown[] } };
+    expect(hello).toMatchObject({ id: 0, result: { serverInfo: { name: "connector" } } });
+    expect(list.result.tools).toHaveLength(120);
+    // the server was not started while its need runs
+    const opensWhileCopying = state.opens;
+    expect(copies).toBe(1);
+    expect(opensWhileCopying).toBe(1);
+    // a call waits for the copy and the start, then reaches the server
+    const call = relay.relay({ ...input, frame: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "pr_a_tool_3" } } });
+    await later(20);
+    expect(state.opens).toBe(1);
+    release();
+    expect(await call).toMatchObject({ id: 2, result: { content: [{ text: "called pr_a_tool_3" }] } });
+    expect(state.opens).toBe(2);
+    relay.stop();
+  });
+});

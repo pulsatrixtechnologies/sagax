@@ -57,7 +57,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
           if (current && ["agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update"].includes(p.update?.sessionUpdate)) {
             current.state.startupActivity = true;
             if (current.state.promptSent) current.state.promptActivity = true;
-            noteTurnActivity(current.latency, p.update.sessionUpdate, Date.now());
+            noteTurnActivity(current.latency, p.update.sessionUpdate, Date.now(), p.update);
           }
           if (!current || !current.state.promptSent) return;
           const u = p.update ?? {};

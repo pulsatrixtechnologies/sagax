@@ -257,6 +257,8 @@ export interface InternalEnvironmentsDeps {
     frame: unknown;
     /** #3623: the parts of a tool list's path (toolsSlow) */
     onPart?: StdioRelayPart;
+    /** #4394: awaited before the server's process starts (its plugin's copy) */
+    before?: () => Promise<void>;
   }): Promise<unknown>;
 
   desktopConnected(person: string): boolean;
@@ -745,12 +747,16 @@ async function handlePersonalMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
   const onPart: StdioRelayPart | undefined = mount
     ? (part, value) => noteTurnServedPart(capability.threadId, mount, part, value)
     : undefined;
-  try {
-    if (capability.pluginMcp) {
+  // #4394: a plugin's server starts once its plugin is in the environment;
+  // its kept initialize and tool list are answered without that copy
+  const before = capability.pluginMcp
+    ? async () => {
       const at = Date.now();
       await deps.syncPluginsForTurn(person, capability.generation, capability.botId);
       onPart?.("env", Date.now() - at);
     }
+    : undefined;
+  try {
     if (frame?.method === "tools/call") await deps.syncGithubForTurn(person, capability.generation, capability.botId);
     const answer = await deps.stdioRelay({
       principalId: person,
@@ -760,6 +766,7 @@ async function handlePersonalMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
       spec: { argv: [server.command, ...server.args], env: server.env },
       frame,
       ...(onPart ? { onPart } : {}),
+      ...(before ? { before } : {}),
     });
     deps.requireActive(capability);
     return json(res, 200, { message: answer });

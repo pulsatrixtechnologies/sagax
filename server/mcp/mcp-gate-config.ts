@@ -3,6 +3,7 @@
 // Shared by every driver that mounts external MCP servers, so the rule about
 // what a tool may put into a model's context is written once. The gate itself
 // is mcp-gate.ts; the policy it applies is mcp-trim.ts.
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 
@@ -82,6 +83,16 @@ export function toolNameReportDir(): string {
  * the same bundles again. A directory a gate cannot write only turns it off. */
 export function gateCompileCacheDir(): string {
   return join(DATA_DIR, "cache", "node-compile");
+}
+
+/** #4394: where a gate keeps its server's last initialize and whole tool
+ * list (mcp-gate.ts SAGAX_GATE_KEPT), one file per `key`: the next engine
+ * start of the same mount is answered from it at once, and the gate lists
+ * the server again beside the turn. The key names the mount for one bot and
+ * one person (instance-mcp.ts), never a credential; only its hash reaches
+ * the file name. */
+export function gateKeptFile(key: string): string {
+  return join(DATA_DIR, "mcp-gate-kept", `${createHash("sha256").update(key).digest("hex").slice(0, 40)}.json`);
 }
 
 export interface StdioServer {
@@ -231,6 +242,10 @@ export function gateServer(input: {
   withhold?: readonly string[];
   /** The engine's provider limits each listed tool schema, so the gate fits them to its profile. */
   schemaProfile?: ToolSchemaProfileId;
+  /** #4394: the mount's key (gateKeptFile): the gate answers the engine's
+   * initialize and tool list from what it kept of this server, and lists the
+   * server again beside the turn. */
+  kept?: string;
 }): { command: string; args: string[]; env: Record<string, string> } | null {
   const { name, server, budget, schemaProfile } = input;
   const parsed = parseToolScope(input.toolScope);
@@ -276,6 +291,7 @@ export function gateServer(input: {
     SAGAX_GATE_MISUSE_MODE: process.env.SAGAX_MISUSE_GUARDRAILS?.trim() || "shadow",
     ...(search ? { SAGAX_GATE_SEARCH: search } : {}),
     ...(withhold.length ? { SAGAX_GATE_WITHHOLD: JSON.stringify(withhold) } : {}),
+    ...(input.kept ? { SAGAX_GATE_KEPT: gateKeptFile(input.kept) } : {}),
   };
   if (input.configEnvName && ((!scoped && !search && !withhold.length) || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
     throw new Error("Invalid private MCP gate configuration.");

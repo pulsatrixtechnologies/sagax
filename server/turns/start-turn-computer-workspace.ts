@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn computer workspace half (cwd, sandbox, local VM helpers).
 // Never imports server/index.ts.
+import { pluginCopyForTurnStart } from "../index-leaves/syncPluginsForTurn.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -128,7 +129,9 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     if (plugins?.githubWithheld?.length) state.githubWithheld = [...(state.githubWithheld ?? []), ...plugins.githubWithheld];
     mark("mounts-ready");
     if (IDENTITY.kind === "perspicax" && state.turnPlace.principal) {
-      await syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id);
+      // #4394: the turn waits at most a second for the copy; the copy goes
+      // on beside it and is tried again once the environment is up
+      await pluginCopyForTurnStart(syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id));
       mark("plugins-synced");
     }
   };

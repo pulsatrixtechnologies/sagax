@@ -5,15 +5,17 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { removeTempDir } from "../testing/cleanup.ts";
 import { PluginFolderDigests } from "../sandbox/sandbox-plugin-digests.ts";
-import { PLUGIN_PRESENCE_RECONFIRM_MS, SANDBOX_PLUGINS_DIR, SandboxPluginPresence, sandboxPluginPresence, syncPluginsToSandbox } from "../sandbox/sandbox-plugins.ts";
+import { PLUGIN_PRESENCE_RECONFIRM_MS, PluginCopyFailures, SANDBOX_PLUGINS_DIR, SandboxPluginPresence, sandboxPluginPresence, syncPluginsToSandbox } from "../sandbox/sandbox-plugins.ts";
+import { SANDBOX_STARTING_CODE, SANDBOX_STARTING_RETRY_MS, SandboxClusterWaker } from "../sandbox/sandbox-k8s-wake.ts";
 import { readFolderSliced } from "../sandbox/sandbox-workspace-copy.ts";
 import { UserSandboxManager } from "../sandbox/user-sandbox-manager.ts";
 import type { SandboxdClient } from "../sandbox/user-sandbox-client.ts";
 import { createSyncPluginFoldersForTurn } from "./syncPluginFoldersForTurn.ts";
+import { createSyncPluginsForTurn, PLUGIN_COPY_TURN_WAIT_MS, pluginCopyForTurnStart } from "./syncPluginsForTurn.ts";
 
 const root = mkdtempSync(join(tmpdir(), "sagax-plugin-turn-"));
 afterAll(() => removeTempDir(root));
@@ -212,4 +214,107 @@ describe("the turn's plugin copy (#3619)", () => {
     await syncPluginsToSandbox(plugins, { exec: (input) => env.exec("carol", input) }, SANDBOX_PLUGINS_DIR, options);
     expect(presence.confirmed("carol\ndocker", SANDBOX_PLUGINS_DIR, "a")).toBeDefined();
   });
+});
+
+// #4394: a turn waited 5 min 20 s on its plugin copy into an environment
+// still starting (queueBy plugins:310873), and the copy failed anyway
+// ("not copied to the server environment: ... still starting"). The whole
+// path here, through the environment manager and its wake: the turn's
+// bounded wait, the copy cut by the starting environment, and the copy
+// waiting for it on its own and copying again once it is up, with no other
+// call of the person in the environment.
+describe("a plugin copy into an environment that takes minutes to start (#4394)", () => {
+  it("starts the turn at once, and the plugins arrive once the environment is up", async () => {
+    const env = environment();
+    const { digests } = countingDigests();
+    const plugins = [plugin("flow"), plugin("notes")];
+    // the environment's own clock: each wait between two tries passes its
+    // time at once (minutes here take milliseconds)
+    let clock = 1_800_000_000_000;
+    const sleep = async (ms: number) => { clock += ms; await new Promise((resolve) => setTimeout(resolve, 25)); };
+    // the environment finishes starting on its own, while the copy waits for it
+    const pod = { up: false, ensureTriesBeforeUp: 3 };
+    const calls: string[] = [];
+    const starting = () => Object.assign(new Error("starting"), { status: 503, code: SANDBOX_STARTING_CODE });
+    const gate = async <T>(method: string, answer: () => T | Promise<T>): Promise<T> => {
+      calls.push(method);
+      if (method === "ensure" && calls.filter((call) => call === "ensure").length > pod.ensureTriesBeforeUp) pod.up = true;
+      if (!pod.up) throw starting();
+      return answer();
+    };
+    const running = { state: "running" };
+    const kubernetes = new Proxy({}, {
+      get: (_target, method: string) => method === "exec"
+        ? (_key: string, input: { argv: string[]; env?: Record<string, string> }) => gate("exec", () => env.exec("alice", input))
+        : () => gate(method, () => running),
+    }) as unknown as SandboxdClient;
+    const waker = new SandboxClusterWaker({
+      settings: { url: new URL("https://wake.example.invalid/hook"), timeoutMs: 10 * 60_000 },
+      health: async () => true,
+      fetchImpl: (async () => new Response("{}", { status: 202 })) as typeof fetch,
+      now: () => clock,
+      sleep,
+      log: () => {},
+    });
+    const dir = mkdtempSync(join(root, "starting-"));
+    const manager = new UserSandboxManager({
+      client: kubernetes,
+      kubernetes,
+      kubernetesWaker: waker,
+      backendFor: () => "kubernetes",
+      instance: "default",
+      stateFile: join(dir, "deletions.json"),
+      now: () => clock,
+      sleep,
+    });
+    const failures = new PluginCopyFailures();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const host: Record<string, any> = {
+      userSandbox: manager,
+      store: { bot: (id: string) => ({ id, owner: "alice" }) },
+      scopedPluginFolders: () => plugins,
+      samePerson: (a: string, b: string) => a === b,
+      effectiveBotOwner: (bot: { owner: string }) => bot.owner,
+      skillsLibraryEnabled: () => false,
+      cfg: {},
+      personalSkills: { enabled: () => [] },
+      sandboxPluginPresence: new SandboxPluginPresence(),
+      pluginFolderDigests: digests,
+      pluginCopyFailures: failures,
+      pluginSyncedGenerations: new Map(),
+      pluginSyncInFlight: new Map(),
+      pluginSyncSlots: new Map(),
+      reportBackgroundError: () => undefined,
+    };
+    host.syncPluginFoldersForTurn = createSyncPluginFoldersForTurn(() => host);
+    const syncPluginsForTurn = createSyncPluginsForTurn(() => host);
+    try {
+      const startedAt = Date.now();
+      let copied = false;
+      const copy = syncPluginsForTurn("alice", "turn-1", "alice:bot-a").then(() => { copied = true; });
+      await pluginCopyForTurnStart(copy);
+      // the turn goes on after its bounded wait, the environment still starting
+      const waited = Date.now() - startedAt;
+      expect(waited).toBeGreaterThanOrEqual(PLUGIN_COPY_TURN_WAIT_MS - 50);
+      expect(waited).toBeLessThan(PLUGIN_COPY_TURN_WAIT_MS + 1_500);
+      expect(copied).toBe(false);
+      expect(env.markers.size).toBe(0);
+
+      // the copy's command is cut by the start (5 min of tries), then the
+      // copy itself waits for the environment: nothing else of this person
+      // calls the environment
+      await vi.waitFor(() => expect(manager.startingCuts("alice")).toBe(1), { timeout: 10_000 });
+      expect(clock - 1_800_000_000_000).toBeGreaterThanOrEqual(SANDBOX_STARTING_RETRY_MS);
+      expect(env.markers.size).toBe(0);
+
+      // the environment finishes starting on its own: the plugins arrive,
+      // without the failed copy's pause and without another turn
+      await copy;
+      expect(calls.filter((call) => call === "ensure")).toHaveLength(pod.ensureTriesBeforeUp + 1);
+      expect([...env.markers.keys()].sort()).toEqual([`${SANDBOX_PLUGINS_DIR}/flow`, `${SANDBOX_PLUGINS_DIR}/notes`]);
+      expect(host.pluginSyncInFlight.size).toBe(0);
+    } finally {
+      warn.mockRestore();
+    }
+  }, 20_000);
 });

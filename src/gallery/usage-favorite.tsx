@@ -72,7 +72,7 @@ function Gallery() {
         <SidebarPopoverMenu items={items} ariaLabel="Account" renderTrigger={() => <span className="block rounded-lg px-2 py-1.5 text-left">Alex Morgan</span>} />
       </div>
       <div data-gallery-sample="page" className="ml-[340px] w-[420px] pt-[120px]">
-        <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} myEngines={null} issuer="" onOpenEngines={() => {}} favorite={{ id: favorite, onToggle: toggleUsageFavorite }} />
+        <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} favorite={{ id: favorite, onToggle: toggleUsageFavorite }} />
       </div>
     </div>
   );

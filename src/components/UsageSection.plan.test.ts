@@ -99,12 +99,11 @@ describe("Réglages > Utilisation : Limites d'utilisation, sous Mon forfait", ()
       const card = page.querySelector('[data-settings-card="usage.plan"]')!;
       expect(card.textContent).toContain("Limites d'utilisation");
       expect(card.querySelector('[data-plan-row="claude"]')).not.toBeNull();
-      expect(card.querySelector('[data-plan-window-kind="fiveHour"]')?.textContent).toContain("Session de 5 heures");
+      expect(card.querySelector('[data-plan-window-kind="fiveHour"]')?.textContent).toContain("Session de 5 h");
       expect(card.querySelector('[data-plan-window-kind="weekly"]')?.textContent).toContain("Se renouvelle le ");
       expect(card.textContent).toContain("27 % utilisé");
-      expect(card.textContent).toContain("73 % restant");
+      expect(card.textContent).not.toContain("restant");
       expect(card.textContent).toContain("40 % utilisé");
-      expect(card.textContent).toContain("60 % restant");
       expect(card.querySelectorAll('[role="meter"]')).toHaveLength(2);
       expect(page.querySelector('[data-usage-unavailable]')).toBeNull();
     });
@@ -135,15 +134,18 @@ describe("Réglages > Utilisation : Limites d'utilisation, sous Mon forfait", ()
     expect(page.querySelector('[data-plan-status="none"]')?.textContent).toContain("Connecte un abonnement");
   });
 
-  it("abonnement déconnecté : la ligne reste avec Connecter (#1774)", async () => {
+  // #4418: connecting lives in Providers; Usage shows only signed-in accounts.
+  it("abonnement déconnecté : aucune ligne, ni Connecter ni Non connecté, ni lien vers les clés", async () => {
     scene.org = ORG;
     scene.config = { viewer: { role: "member" } };
     scene.plan = { providers: [{ ...claude, state: "signed-out", ok: false, plan: null }] };
     const page = await mount();
-    const row = page.querySelector('[data-plan-row="claude"]');
-    expect(row).not.toBeNull();
-    expect(row!.querySelector('[data-plan-state="signed-out"]')?.textContent).toContain("Non connecté");
-    expect(page.querySelector('[data-plan-status]')).toBeNull();
+    const card = page.querySelector('[data-settings-card="usage.plan"]')!;
+    expect(card.querySelector('[data-plan-row="claude"]')).toBeNull();
+    expect(card.textContent).not.toContain("Non connecté");
+    expect(card.textContent).not.toContain("Connecter Claude");
+    expect(card.querySelector("[data-plan-keys-link]")).toBeNull();
+    expect(card.querySelector('[data-plan-status="none"]')).not.toBeNull();
   });
 
   it("fournisseur en erreur (429) : la ligne reste avec la raison et Réessayer (#1774)", async () => {

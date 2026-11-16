@@ -1,7 +1,8 @@
 // Settings > Usage (#2080, 2026-11-05; the reference's layout since #4095):
 // group titles over one card each. My plan: this month's cost and its
 // renewal. Usage limits (refresh in its title row): the spending limit and
-// each engine's windows, a large percent with its bar and renewal line each.
+// each signed-in account's short window and week (#4418), a large percent
+// with its bar and renewal line each.
 // The bots' usage: the cycle's cost, a segmented control (by source, by bot,
 // by model), the coloured share bar with its legend, the daily cost chart.
 // Detail: the plan history and the per-job traces on a sub-page. With
@@ -17,7 +18,7 @@ import { t, activeLocale } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { canViewUsage } from "@/lib/viewer";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { planRows } from "@/lib/plan-usage";
+import { accountLimitRows } from "@/lib/plan-usage";
 import { formatMoneyCompact } from "@/lib/usage";
 import type { LocaleKey } from "@/locales";
 import {
@@ -184,7 +185,7 @@ export function UsageSection() {
   const plan = usePlanUsage(planShown);
   // #2757: the history follows each reading of the windows above.
   const planHistory = usePlanHistory(planShown, plan.report?.fetchedAt ? Date.parse(plan.report.fetchedAt) || 0 : 0);
-  const hasPlan = !plan.unavailable && planRows(plan.report).length > 0;
+  const hasPlan = !plan.unavailable && accountLimitRows(plan.report).length > 0;
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <UsagePlan

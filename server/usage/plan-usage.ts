@@ -36,6 +36,10 @@ export interface PlanWindow {
   remainingPercent: number | null;
   usedPercent: number | null;
   resetsAt: string | null;
+  /** #4418: the short window's length in whole hours, as the vendor sets it
+   * (5 for Claude; the reported duration for Codex and Grok). Absent from
+   * the weekly window and from servers older than this field. */
+  hours?: number;
 }
 
 export interface PlanExtra {
@@ -359,7 +363,7 @@ export function parseClaudeUsage(body: unknown): PlanWindows {
   sortModelWindows(models);
   return {
     plan: planLabel(root?.subscription_type ?? root?.plan ?? root?.plan_type),
-    fiveHour: (root && readClaudeWindow(root.five_hour)) ?? closedWindow(),
+    fiveHour: withHours((root && readClaudeWindow(root.five_hour)) ?? closedWindow(), CLAUDE_SESSION_HOURS),
     weekly: (root && readClaudeWindow(root.seven_day)) ?? closedWindow(),
     extra,
     models,
@@ -386,7 +390,7 @@ export function parseGrokUsage(credits: unknown, billing?: unknown, settings?: u
     if (!sample) return;
     const window = openWindow(sample.used, sample.resetsAt);
     if (sample.slot === "fiveHour") {
-      if (!fiveHour.available) fiveHour = window;
+      if (!fiveHour.available) fiveHour = withHours(window, sample.seconds == null ? FIVE_HOUR_DEFAULT_HOURS : sample.seconds / 3600);
     } else if (sample.slot === "weekly") {
       if (!weekly.available) weekly = window;
     } else if (sample.slot === "monthly") {
@@ -480,6 +484,17 @@ export async function loadPlanUsage(input: {
   return report;
 }
 export { PLAN_ALERT_DEFAULT_PERCENT, clearPlanUsageAlerts, newPlanUsageAlerts, claudeHasExtraUsageRoom, spentPlanUntil, planUsedPercent, planUsageAlertText, type PlanUsageAlert } from "./plan-usage-alerts.ts";
+
+/** Claude's session window is five hours by its own definition (five_hour). */
+const CLAUDE_SESSION_HOURS = 5;
+/** A short window classified by its name ("5 hour") without a duration. */
+const FIVE_HOUR_DEFAULT_HOURS = 5;
+
+/** The short window with its length in whole hours (#4418); a closed window stays bare. */
+function withHours(window: PlanWindow, hours: number): PlanWindow {
+  if (!window.available || !Number.isFinite(hours) || hours <= 0) return window;
+  return { ...window, hours: Math.max(1, Math.round(hours)) };
+}
 
 function closedWindow(): PlanWindow {
   return { available: false, remainingPercent: null, usedPercent: null, resetsAt: null };
@@ -777,7 +792,7 @@ function assignDurationWindows(windows: DurationWindow[]): PlanWindows {
     const open = openWindow(window.used, window.resetsAt);
     const fiveHourSlot = window.seconds >= FIVE_HOUR_MIN_SECONDS && window.seconds <= FIVE_HOUR_MAX_SECONDS;
     const weeklySlot = window.seconds >= WEEK_MIN_SECONDS && window.seconds <= WEEK_MAX_SECONDS;
-    if (fiveHourSlot && !fiveHour.available) fiveHour = open;
+    if (fiveHourSlot && !fiveHour.available) fiveHour = withHours(open, window.seconds / 3600);
     else if (weeklySlot && !weekly.available) weekly = open;
     else extra.push(extraLine(durationLabel(window.seconds), open));
   }

@@ -35259,6 +35259,7 @@ ROUTES.push(createPlanUsageRoutes({
   identityIssuer: () => (IDENTITY.kind === "perspicax" ? IDENTITY.issuer : ""),
   localPrincipalId,
   announcePlanThresholds,
+  accountName: (principalId, instanceId) => accountNames.get(principalId, instanceId),
   planHistory: createPlanHistoryStore(DATA_DIR, reportBackgroundError)
 }));
 ROUTES.push(createKeysTestRoutes({ cfg: () => cfg }));

@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { piAccessEnvironment, piCatalogEnvironment, PI_ACCESS_KEY_ENV } from "../pi.ts";
+import { piAccessEnvironment, piCatalogEnvironment, PI_ACCESS_KEY_ENV, PI_SIGN_IN_ENV } from "../pi.ts";
+import { PI_SIGN_IN_VARIABLES } from "../pi-mcp-extension.ts";
 import { geminiApplyAccess } from "./gemini.ts";
 import { grokApplyAccess, grokPickAuthMethod } from "./grok.ts";
 import { KIMI_MOONSHOT_MODEL, kimiApplyAccess } from "./kimi.ts";
@@ -122,6 +123,15 @@ describe("pi", () => {
     const text = readFileSync(join(served, "models.json"), "utf8");
     expect(JSON.parse(text).providers["px-org-acme"].apiKey).toBe("$SAGAX_PI_KEY_ORG_ACME");
     expect(text).not.toContain("srv\"");
+  });
+
+  it("#4410: takes the payer's Claude sign-in by its variable, and lists no placeholder for it", () => {
+    const dir = home();
+    const env = piAccessEnvironment({ HOME: "/data" }, { via: "subscription", identity: "subscription:p:claude", environment: { ANTHROPIC_OAUTH_TOKEN: "sk-ant-oat01-bob", ANTHROPIC_AUTH_TOKEN: "nope" }, engineHome: dir });
+    expect(env).toEqual({ HOME: "/data", PI_CODING_AGENT_DIR: dir, ANTHROPIC_OAUTH_TOKEN: "sk-ant-oat01-bob" });
+    expect(PI_SIGN_IN_ENV).toEqual(["ANTHROPIC_OAUTH_TOKEN"]);
+    expect(PI_SIGN_IN_ENV).toEqual([...PI_SIGN_IN_VARIABLES]);
+    expect(piCatalogEnvironment({ HOME: "/data" }, true).ANTHROPIC_OAUTH_TOKEN).toBeUndefined();
   });
 
   it("an organization server lists every key provider's models from a home of its own", () => {

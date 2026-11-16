@@ -147,7 +147,8 @@ function rowsFor(source: HarnessSource): Row[] {
         case "anthropic":
           return [
             { harness: "claudeAgent", mark: "works" },
-            { harness: "piAgent", mark: "no", reason: SUBSCRIPTION_KEPT },
+            // #4410 lot 1: pi takes the person's own sign-in as ANTHROPIC_OAUTH_TOKEN
+            { harness: "piAgent", mark: "works" },
             { harness: "opencodeGo", mark: "no", reason: SUBSCRIPTION_KEPT },
             { harness: "openai-compat", mark: "no", reason: SUBSCRIPTION_KEPT },
           ];

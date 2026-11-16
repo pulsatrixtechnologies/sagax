@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { STABLE_ACK, STABLE_CWD_NOTE, STABLE_END_MARKER, splitStableMessages, stableCwdTurn } from "./pi-mcp-extension.ts";
@@ -12,6 +13,8 @@ import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 
 import extension, {
   allocateToolName,
+  hideSignInsFromShell,
+  withoutSignIns,
   StdioMcp,
   toTypebox,
   truncateToolText,
@@ -955,5 +958,48 @@ describe("Pi ask_user tool", () => {
       .rejects.toThrow(/one answer per question/);
     await expect(tool.execute("call-6", { questions: [] }, undefined, undefined, ctx)).rejects.toThrow(/malformed/);
     expect(asked).toEqual([]);
+  });
+});
+
+describe("#4410: printenv, env and set in the bot's shell under pi do not show the Claude sign-in", () => {
+  const TOKEN = "sk-ant-oat01-fake-sign-in-value-000000000000000002";
+  const shell = (command: string) => execFileSync("bash", ["-c", command], { encoding: "utf8", env: { PATH: process.env.PATH ?? "", ANTHROPIC_OAUTH_TOKEN: TOKEN, OTHER_VALUE: "kept" } });
+
+  it("unsets it before the command runs, in a real shell", () => {
+    // without the guard the command would print it: the test reads a real leak
+    expect(shell("printenv ANTHROPIC_OAUTH_TOKEN; true")).toContain(TOKEN);
+    for (const command of ["printenv ANTHROPIC_OAUTH_TOKEN; true", "env", "echo \"$ANTHROPIC_OAUTH_TOKEN\"", "bash -c 'printenv'", "set"]) {
+      const event = { toolName: "bash", input: { command } };
+      expect(hideSignInsFromShell(event)).toBeUndefined();
+      const out = shell((event.input as { command: string }).command);
+      expect(out, command).not.toContain(TOKEN);
+    }
+    expect(shell((() => { const event = { toolName: "bash", input: { command: "printenv OTHER_VALUE" } }; hideSignInsFromShell(event); return event.input.command; })())).toBe("kept\n");
+  });
+
+  it("leaves every other tool's call as it is", () => {
+    const event = { toolName: "read", input: { path: "a.txt" } };
+    hideSignInsFromShell(event);
+    expect(event.input).toEqual({ path: "a.txt" });
+  });
+
+  it("is registered as soon as pi holds a sign-in, and an MCP server pi starts never gets it", async () => {
+    const before = process.env.ANTHROPIC_OAUTH_TOKEN;
+    const config = process.env.SAGAX_MCP_CONFIG;
+    delete process.env.SAGAX_MCP_CONFIG;
+    const events: string[] = [];
+    const api = { registerTool: () => {}, on: (name: string) => { events.push(name); } } as unknown as ExtensionApi;
+    try {
+      delete process.env.ANTHROPIC_OAUTH_TOKEN;
+      await extension(api);
+      expect(events).toEqual([]);
+      process.env.ANTHROPIC_OAUTH_TOKEN = TOKEN;
+      await extension(api);
+      expect(events).toEqual(["tool_call"]);
+    } finally {
+      if (before === undefined) delete process.env.ANTHROPIC_OAUTH_TOKEN; else process.env.ANTHROPIC_OAUTH_TOKEN = before;
+      if (config !== undefined) process.env.SAGAX_MCP_CONFIG = config;
+    }
+    expect(withoutSignIns({ ANTHROPIC_OAUTH_TOKEN: TOKEN, PATH: "/bin" })).toEqual({ PATH: "/bin" });
   });
 });

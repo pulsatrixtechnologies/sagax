@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** orgEngineInput (#1388). Pure move from server/index.ts. */
-import { driverKeyBacked, DATA_DIR } from "../config.ts";
+import { driverKeyBacked, DATA_DIR, piOrgKeyProviders } from "../config.ts";
 import { fileKeyConfigured } from "../engines/engine-api-keys.ts";
 export type Host = Record<string, any>;
 
@@ -29,7 +29,9 @@ function orgEngineInput(bot: BotRecord, instance: { instanceId: string; driverKi
     hasLocalKey: (principalId, driver) => fileKeyConfigured(DATA_DIR, { organization: true, principalId }, driver),
     serverEngineAllowed: host.serverEngineAllowedFor,
     payerMode: host.speakerPayerMode(bot, speaker),
-    orgEngineAllowed: host.consoleEngineAllowed(instance.instanceId)
+    orgEngineAllowed: host.consoleEngineAllowed(instance.instanceId),
+    // #4410: whether the organization's pi keys already pay Claude models
+    ...(instance.driverKind === "piAgent" ? { orgKeyProviders: piOrgKeyProviders(host.cfg) } : {})
   };
 }
   return orgEngineInput;

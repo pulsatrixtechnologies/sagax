@@ -85,7 +85,9 @@ function stillFresh(access: SubscriptionAccess | null, now: number, marginMs: nu
   return access.expiresAt === null || access.expiresAt - now >= marginMs;
 }
 
-function usable(access: SubscriptionAccess | null, now: number): access is SubscriptionAccess {
+/** The access token still serves past the next minute (the same bar the
+ * renewal uses, #4410 reads it too). */
+export function claudeAccessUsable(access: SubscriptionAccess | null, now: number): access is SubscriptionAccess {
   if (!access) return false;
   return access.expiresAt === null || access.expiresAt > now + 60_000;
 }
@@ -126,7 +128,7 @@ export function ensureClaudeSubscriptionFresh(input: EnsureClaudeSubscriptionFre
     }).catch(() => {});
 
     access = await read(input.loginDir);
-    if (usable(access, now)) {
+    if (claudeAccessUsable(access, now)) {
       input.onRenewed?.(input.loginDir);
       notifyRenewed(input.loginDir);
       return { ok: true, renewed: true, expiresAt: access.expiresAt };

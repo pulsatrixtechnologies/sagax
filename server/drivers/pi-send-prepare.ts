@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { newId } from "../contracts.ts";
+import { PI_CLAUDE_SIGN_IN_ENV } from "../engines/engine-credentials.ts";
+import { noteFilledSecret } from "../vault/filled-secret-guard.ts";
 import { spawnCli } from "../procs.ts";
 import { withoutTurnTokens } from "./spawn-contract.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
@@ -79,7 +81,13 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, optio
   let mcpTempDir: string | null = null;
   let scopeReadyPath: string | undefined;
   const mcpConfig: Record<string, unknown> = { mcpServers: mcpServers ?? {}, toolScope, approvalMode: turn.approvalMode, askUser, ...(turn.compactPrompt ? { stableCwd: true, splitStable: true } : {}) };
-  const mounts = Boolean(mcpServers || toolScope !== undefined || askUser);
+  // #4410: a turn on the payer's Claude sign-in always loads the extension,
+  // which keeps that token out of the commands the bot runs
+  const signIn = turn.access?.environment?.[PI_CLAUDE_SIGN_IN_ENV];
+  // its value and its encodings are masked wherever text is redacted, through
+  // the vault's existing list of held values
+  if (signIn) noteFilledSecret(signIn);
+  const mounts = Boolean(mcpServers || toolScope !== undefined || askUser || signIn);
   const piArgs = [...deps.piArgs];
   const standbyArgs: string[] = [
     ...(turn.compactPrompt ? piArgs.filter((arg) => arg !== "--no-session") : piArgs),

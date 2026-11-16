@@ -4,12 +4,17 @@ import { harnessAllowed, harnessPairs, keyProvidersOfDriver, offeredHarnesses, r
 const works = (source: HarnessSource, place: "solo" | "organization" = "solo") => offeredHarnesses(source, place).map((pair) => pair.harness);
 
 describe("the harness matrix (#4329, design section 1)", () => {
-  it("keeps a Claude subscription on its own tool only, with the reason", () => {
+  it("#4410 lot 1: offers a Claude account under its own tool and pi, nothing more, with no added sentence", () => {
     const source: HarnessSource = { kind: "subscription", vendor: "anthropic", driver: "claudeAgent" };
-    expect(works(source)).toEqual(["claudeAgent"]);
-    const pi = harnessPairs(source, "solo").find((pair) => pair.harness === "piAgent");
-    expect(pi?.mark).toBe("no");
-    expect(pi?.reason).toBeTruthy();
+    for (const place of ["solo", "organization"] as const) {
+      expect(works(source, place)).toEqual(["claudeAgent", "piAgent"]);
+      // the owner's answer 1: the pair carries no reason, notice or billing line
+      expect(harnessPairs(source, place).find((pair) => pair.harness === "piAgent")).toEqual({ harness: "piAgent", role: "pi", mark: "works" });
+    }
+    // the later lots: still off, with the reason
+    const opencode = harnessPairs(source, "solo").find((pair) => pair.harness === "opencodeGo");
+    expect(opencode?.mark).toBe("no");
+    expect(opencode?.reason).toBeTruthy();
     expect(recommendedHarness(source, "solo")).toBe("claudeAgent");
   });
 

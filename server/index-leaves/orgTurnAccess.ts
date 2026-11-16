@@ -2,6 +2,7 @@
 /** orgTurnAccess (#1388). Pure move from server/index.ts. */
 import { materializeEngineAccess } from "../engines/engine-credentials.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
+import { claudeAccessUsable } from "../engines/claude-subscription-refresh.ts";
 export type Host = Record<string, any>;
 
 /** The account a bot signs in with on an organization server, for a turn
@@ -26,7 +27,10 @@ async function resolveBotEngineAccess(host: Host, bot: BotRecord, instance: { in
     },
     invalidate: (sub, provider) => host.perspicaxDirectory?.invalidate(sub, provider),
     // the turn's own sign-in on this engine (a second Grok account runs in its own folder)
-    loginDir: (principalId, driver, instanceId) => host.principalLoginDir(principalId, driver, host.turnSlotFor(bot, instance), instanceId)
+    loginDir: (principalId, driver, instanceId) => host.principalLoginDir(principalId, driver, host.turnSlotFor(bot, instance), instanceId),
+    // #4410: pi on the payer's Claude sign-in: its short token, renewed by
+    // the one flight every Claude turn of theirs shares, read in memory only
+    claudeSignIn: (principalId) => claudeSignInToken(host, principalId)
   });
   if (!outcome.ok) throw new host.EngineAccessLost(outcome.plan ? host.orgRefusalOf(outcome.plan, speaker) : { reason: outcome.reason }, outcome.detail);
   const { plan } = outcome;
@@ -43,6 +47,22 @@ async function resolveBotEngineAccess(host: Host, bot: BotRecord, instance: { in
       ...(provider ? { provider } : {})
     }
   };
+}
+
+/** #4410: the payer's Claude sign-in (their first account folder, the one
+ * resolveEngineAccess judged) as a pi turn takes it, or null. */
+export async function claudeSignInToken(host: Host, principalId: string): Promise<{ accessToken: string } | null> {
+  const logins = host.engineLogins;
+  if (!logins) return null;
+  const loginDir = logins.loginDir(principalId, "claudeAgent", "primary");
+  const cli = host.subscriptionCli("claude-code");
+  if (cli) {
+    const fresh = await host.ensureClaudeSubscriptionFresh({ loginDir, cli: cli.cli, environment: cli.environment });
+    if (!fresh.ok) return null;
+  }
+  const access = await host.readSubscriptionAccess("claude-code", loginDir);
+  if (!claudeAccessUsable(access, Date.now())) return null;
+  return { accessToken: access.accessToken };
 }
 
 export function createOrgTurnAccess(getHost: () => Host): any {

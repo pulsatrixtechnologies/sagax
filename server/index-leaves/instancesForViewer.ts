@@ -17,7 +17,10 @@ async function instancesForViewer(person: string | null) {
   const compatViewer = host.IDENTITY.kind === "perspicax"
     ? { principalId: person, admin: false }
     : undefined;
-  const instances = withoutRefusedModels(await host.describeInstances(), (instanceId) => host.refusedModelsFor(person, instanceId))
+  // #4416: an engine that reads a key's own list shows a person the models
+  // their own key's account offers, before refusals and filters apply
+  const described = host.viewerAccountModels ? await host.viewerAccountModels(person, await host.describeInstances()) : await host.describeInstances();
+  const instances = withoutRefusedModels(described, (instanceId) => host.refusedModelsFor(person, instanceId))
     .filter((instance) => host.personalProviderInstances.visible(instance.instanceId, host.IDENTITY.kind === "perspicax" ? person ?? "" : "solo"))
     // #4415: an account the person took off their own list
     .filter((instance) => !(host.IDENTITY.kind === "perspicax" && host.accountNames?.removed?.(person, instance.instanceId)))

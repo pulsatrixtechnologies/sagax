@@ -336,6 +336,14 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       return options.models();
     },
     ...(options.refreshModels ? { refreshModels: options.refreshModels } : {}),
+    ...(options.modelsForKey ? {
+      // #4416: the key a turn on this access reads, through the same
+      // resolveKey; the instance's own key keeps the instance's list.
+      modelsForAccess: async (access: TurnAccessInput) => {
+        const key = resolveKey(oneShotTurn(access));
+        return key && key !== resolveKey() ? options.modelsForKey!(key) : options.models();
+      },
+    } : {}),
     snapshot: async () => {
       const apiKey = resolveKey();
       if (!apiKey && !options.allowNoKey) return { state: "unavailable", reason: options.unavailableReason };

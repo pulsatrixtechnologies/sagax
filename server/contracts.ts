@@ -870,6 +870,11 @@ export interface ProviderInstance {
   readonly models: ModelCatalog;
   /** Refresh a live catalog without recreating the provider instance. */
   readonly refreshModels?: () => Promise<void>;
+  /** #4416: the models the account an access signs in with offers (an
+   * organization person's own key), read live per key, the last good list
+   * kept and the written list as fallback. Absent, or an access on the
+   * instance's own account: `models`. */
+  readonly modelsForAccess?: (access: TurnAccessInput) => Promise<ModelCatalog>;
   /** Set on a later start while the catalog served from the last run is
    * still refreshing. A turn awaits it; listen does not. */
   readonly startupModelRefresh?: Promise<void>;

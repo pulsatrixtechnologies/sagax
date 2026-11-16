@@ -1841,6 +1841,7 @@ import { createWebhookDelegateRefusal } from "./index-leaves/webhookDelegateRefu
 import { createWorkplaceTurnText } from "./index-leaves/workplaceTurnText.ts";
 import { createWriteWorkerTurn } from "./index-leaves/writeWorkerTurn.ts";
 import { createInstancesForViewer } from "./index-leaves/instancesForViewer.ts";
+import { createViewerAccountModels } from "./index-leaves/viewerAccountModels.ts";
 import { createBookTurnUsage } from "./index-leaves/bookTurnUsage.ts";
 import { createResendUserMessage } from "./index-leaves/resendUserMessage.ts";
 import { createPiKitIdentityFor } from "./index-leaves/piKitIdentityFor.ts";
@@ -7074,6 +7075,7 @@ bindLeafHost({
   get accessCardFor() { return accessCardFor; },
   get describeInstances() { return describeInstances; },
   get instancesForViewer() { return instancesForViewer; }, get accountNames() { return accountNames; },
+  get viewerAccountModels() { return viewerAccountModels; },
   get modelAccessRefusals() { return modelAccessRefusals; },
   get memberInstanceView() { return memberInstanceView; },
   get _stopCompanyInstancesImpl() { return _stopCompanyInstancesImpl; },
@@ -8178,6 +8180,7 @@ const holdSignInRefusal = createHoldSignInRefusal(getLeafHost);
 const accessCardFor = createAccessCardFor(getLeafHost);
 const describeInstances = createDescribeInstances(getLeafHost);
 const instancesForViewer = createInstancesForViewer(getLeafHost);
+const viewerAccountModels = createViewerAccountModels(getLeafHost);
 const memberInstanceView = createMemberInstanceView(getLeafHost);
 const persistProviderInstance = createPersistProviderInstance(getLeafHost);
 const revokeEngineCapabilities = createRevokeEngineCapabilities(getLeafHost);

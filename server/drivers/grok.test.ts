@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ensureDirs, NATIVE_DIR } from "../config.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
-import { GrokDriver } from "./grok.ts";
+import { GrokDriver, xaiModelLabel } from "./grok.ts";
 
 const SSE_BODY = (text: string) =>
   [
@@ -55,6 +55,8 @@ describe("GrokDriver turns (fake fetch)", () => {
     // /models (no JSON body).
     globalThis.fetch = (async (url, init) => {
       requestedUrls.push(String(url));
+      // The account's model list read at start (#4416) is not a scripted turn.
+      if (String(url).endsWith("/language-models")) return Response.json({ models: [] });
       const raw = init?.body != null ? String(init.body) : "";
       if (raw) requestedModels.push((JSON.parse(raw) as { model: string }).model);
       const step = script.shift();
@@ -136,7 +138,7 @@ describe("GrokDriver turns (fake fetch)", () => {
     // SAFETY: the stub only returns real Response objects, the sole member
     // of fetch's return type this driver consumes.
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      if (String(input).endsWith("/models")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      if (String(input).endsWith("models")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
       calls++;
       bodies.push(String(init?.body));
       return sseResponse(bodies.length === 1 ? askBody : SSE_BODY("done from fake grok"));
@@ -207,7 +209,8 @@ describe("GrokDriver turns (fake fetch)", () => {
       },
     });
     // SAFETY: a real Response built from a live stream, same as above.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      if (String(input).endsWith("models")) return Response.json({ models: [] });
       calls++;
       return new Response(failingStream, { status: 200, headers: { "content-type": "text/event-stream" } });
     }) as typeof fetch;
@@ -255,7 +258,7 @@ describe("GrokDriver turns (fake fetch)", () => {
       warmOnly: true,
     });
     expect(warm.reused).toBeUndefined();
-    expect(requestedUrls.some((url) => url.endsWith("/models"))).toBe(true);
+    expect(requestedUrls.some((url) => url.endsWith("/v1/models"))).toBe(true);
     expect(requestedUrls.some((url) => url.includes("/chat/completions"))).toBe(false);
     expect(recorder.events.map((e) => e.type)).toEqual([]);
 
@@ -270,13 +273,13 @@ describe("GrokDriver turns (fake fetch)", () => {
     script = [];
     await create();
     await instance.adapter.sendTurn({ threadId: "t-ping", text: "", keepWarm: true, warmOnly: true });
-    const afterWarm = requestedUrls.filter((url) => url.endsWith("/models")).length;
+    const afterWarm = requestedUrls.filter((url) => url.endsWith("/v1/models")).length;
     await new Promise((resolve) => setTimeout(resolve, 120));
-    expect(requestedUrls.filter((url) => url.endsWith("/models")).length).toBeGreaterThan(afterWarm);
+    expect(requestedUrls.filter((url) => url.endsWith("/v1/models")).length).toBeGreaterThan(afterWarm);
     instance.adapter.releaseWarmSession?.("t-ping");
-    const afterHangup = requestedUrls.filter((url) => url.endsWith("/models")).length;
+    const afterHangup = requestedUrls.filter((url) => url.endsWith("/v1/models")).length;
     await new Promise((resolve) => setTimeout(resolve, 120));
-    expect(requestedUrls.filter((url) => url.endsWith("/models")).length).toBe(afterHangup);
+    expect(requestedUrls.filter((url) => url.endsWith("/v1/models")).length).toBe(afterHangup);
   });
 
   it("bounds each warm /models ping so a stalled provider cannot pin the interval", async () => {
@@ -297,6 +300,147 @@ describe("GrokDriver turns (fake fetch)", () => {
   });
 });
 
+
+describe("GrokDriver live model list (#4416)", () => {
+  let previousFetch: typeof globalThis.fetch;
+  let instances: ProviderInstance[] = [];
+  /** What each key's account lists, by key; a missing key answers 500. */
+  let accounts: Record<string, { language?: unknown; models?: unknown; status?: number }> = {};
+  let seenKeys: string[] = [];
+
+  beforeEach(() => {
+    previousFetch = globalThis.fetch;
+    instances = [];
+    seenKeys = [];
+    globalThis.fetch = (async (url, init) => {
+      const key = String(new Headers(init?.headers).get("authorization") ?? "").replace(/^Bearer /, "");
+      seenKeys.push(key);
+      const account = accounts[key];
+      if (!account || account.status) return new Response("down", { status: account?.status ?? 500 });
+      if (String(url).endsWith("/language-models")) {
+        return account.language === undefined ? new Response("not found", { status: 404 }) : Response.json(account.language);
+      }
+      if (String(url).endsWith("/models")) return Response.json(account.models ?? { data: [] });
+      return new Response("unexpected", { status: 500 });
+    }) as typeof fetch;
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = previousFetch;
+    await Promise.all(instances.map((instance) => instance.dispose()));
+  });
+
+  const create = async (key: string, instanceId = `grok-${key}`) => {
+    const instance = await GrokDriver.create({
+      instanceId, displayName: "Grok", enabled: true,
+      environment: { XAI_API_KEY: key },
+      config: { url: "https://fake.xai.invalid/v1", apiKeyEnv: "XAI_API_KEY" },
+    });
+    instances.push(instance);
+    await instance.refreshModels?.();
+    return instance;
+  };
+  const ids = (instance: ProviderInstance) => instance.models.options.map((option) => option.id);
+
+  it("lists every model the account offers, with readable names, beyond the written list", async () => {
+    accounts = { "key-a": { language: { models: [
+      { id: "grok-4.7", aliases: [], input_modalities: ["text", "image"], output_modalities: ["text"] },
+      { id: "grok-4.7-fast", input_modalities: ["text"], output_modalities: ["text"] },
+      { id: "grok-4.6", input_modalities: ["text", "image"], output_modalities: ["text"] },
+      { id: "grok-4.5", output_modalities: ["text"] },
+      { id: "grok-4-1-fast-reasoning", output_modalities: ["text"] },
+      { id: "grok-imagine-image", output_modalities: ["image"] },
+    ] } } };
+    const instance = await create("key-a");
+    expect(ids(instance)).toEqual(["grok-4.7", "grok-4.7-fast", "grok-4.6", "grok-4.5", "grok-4-1-fast-reasoning"]);
+    expect(instance.models.default).toBe("grok-4.7");
+    expect(instance.models.options).toContainEqual({ id: "grok-4.7", label: "Grok 4.7", contextWindow: 500_000 });
+    expect(instance.models.options.find((option) => option.id === "grok-4.7-fast")?.label).toBe("Grok 4.7 Fast");
+    expect(instance.models.options.find((option) => option.id === "grok-4-1-fast-reasoning")?.label).toBe("Grok 4.1 Fast Reasoning");
+    // Nothing is invented for a model the written list does not know.
+    expect(instance.models.options.find((option) => option.id === "grok-4.5")).toEqual({ id: "grok-4.5", label: "Grok 4.5" });
+  });
+
+  it("drops a model the account lost, and keeps a written id that is only an alias", async () => {
+    accounts = { "key-b": { language: { models: [
+      { id: "grok-4-0709", aliases: ["grok-4", "grok-4-latest"], output_modalities: ["text"] },
+    ] } } };
+    const instance = await create("key-b");
+    expect(instance.models.options).toEqual([{ id: "grok-4", label: "Grok 4" }]);
+    expect(instance.models.default).toBe("grok-4");
+  });
+
+  it("reads the plain model list when the richer one is absent", async () => {
+    accounts = { "key-c": { models: { data: [{ id: "grok-4.6" }, { id: "grok-2-image" }, { id: "grok-3-mini" }] } } };
+    const instance = await create("key-c");
+    expect(ids(instance)).toEqual(["grok-4.6", "grok-3-mini"]);
+  });
+
+  it("keeps the written list, then the last good list, when a lookup fails", async () => {
+    accounts = { "key-d": { status: 503 } };
+    const instance = await create("key-d");
+    expect(ids(instance)).toEqual(["grok-4.7", "grok-4", "grok-4-fast", "grok-3-mini"]);
+    accounts = { "key-d": { language: { models: [{ id: "grok-4.6", output_modalities: ["text"] }] } } };
+    await instance.refreshModels?.();
+    expect(ids(instance)).toEqual(["grok-4.6"]);
+    accounts = { "key-d": { status: 500 } };
+    await instance.refreshModels?.();
+    expect(ids(instance)).toEqual(["grok-4.6"]);
+    accounts = { "key-d": { language: { models: [] } } };
+    await instance.refreshModels?.();
+    expect(ids(instance)).toEqual(["grok-4.6"]);
+  });
+
+  it("gives two accounts their own lists", async () => {
+    accounts = {
+      "key-e": { language: { models: [{ id: "grok-4.7", output_modalities: ["text"] }, { id: "grok-4.5", output_modalities: ["text"] }] } },
+      "key-f": { language: { models: [{ id: "grok-3-mini", output_modalities: ["text"] }] } },
+    };
+    const first = await create("key-e");
+    const second = await create("key-f");
+    expect(ids(first)).toEqual(["grok-4.7", "grok-4.5"]);
+    expect(ids(second)).toEqual(["grok-3-mini"]);
+    expect(second.models.default).toBe("grok-3-mini");
+    expect(new Set(seenKeys)).toEqual(new Set(["key-e", "key-f"]));
+  });
+
+  const personAccess = (key: string) => ({ via: "speaker-key" as const, identity: `speaker-key:person:${key}`, environment: { XAI_API_KEY: key, SAGAX_PERSONAL_PROVIDER_KEY: key } });
+
+  it("gives two people with their own keys on one instance their own lists", async () => {
+    accounts = {
+      "server-key": { language: { models: [{ id: "grok-3-mini", output_modalities: ["text"] }] } },
+      "person-a": { language: { models: [{ id: "grok-4.7", output_modalities: ["text"] }, { id: "grok-4.5", output_modalities: ["text"] }] } },
+      "person-b": { language: { models: [{ id: "grok-4.6", output_modalities: ["text"] }] } },
+    };
+    const instance = await create("server-key");
+    const forA = await instance.modelsForAccess!(personAccess("person-a"));
+    const forB = await instance.modelsForAccess!(personAccess("person-b"));
+    expect(forA.options.map((option) => option.id)).toEqual(["grok-4.7", "grok-4.5"]);
+    expect(forB.options.map((option) => option.id)).toEqual(["grok-4.6"]);
+    // the instance's own account keeps its own list
+    expect(ids(instance)).toEqual(["grok-3-mini"]);
+    expect((await instance.modelsForAccess!({ via: "org-key", identity: "org-key" })).options.map((option) => option.id)).toEqual(["grok-3-mini"]);
+  });
+
+  it("reads a person's key with no server key, and keeps their last good list", async () => {
+    accounts = { "person-c": { language: { models: [{ id: "grok-4.6", output_modalities: ["text"] }, { id: "grok-4.7-fast", output_modalities: ["text"] }] } } };
+    const instance = await GrokDriver.create({
+      instanceId: "grok-nokey", displayName: "Grok", enabled: true, environment: {},
+      config: { url: "https://fake.xai.invalid/v1", apiKeyEnv: "SAGAX_TEST_NO_XAI_KEY" },
+    });
+    instances.push(instance);
+    expect(ids(instance)).toEqual(["grok-4.7", "grok-4", "grok-4-fast", "grok-3-mini"]);
+    const listed = await instance.modelsForAccess!(personAccess("person-c"));
+    expect(listed.options.map((option) => option.id)).toEqual(["grok-4.6", "grok-4.7-fast"]);
+    expect(seenKeys).not.toContain("");
+  });
+
+  it("labels an id the written list does not know", () => {
+    expect(xaiModelLabel("grok-4-1-fast-reasoning")).toBe("Grok 4.1 Fast Reasoning");
+    expect(xaiModelLabel("grok-4-0709")).toBe("Grok 4 0709");
+    expect(xaiModelLabel("grok-code-fast-1")).toBe("Grok Code Fast 1");
+  });
+});
 
 it("grok preserves an explicit tools-off connection and rejects ambiguous flags", () => {
   expect(GrokDriver.decodeConfig({})).not.toHaveProperty("tools");

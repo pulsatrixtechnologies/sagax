@@ -29,6 +29,8 @@ export interface FakeOAuthMcpOptions {
   foreignResource?: boolean;
   /** leave S256 out of code_challenge_methods_supported */
   noS256?: boolean;
+  /** advertise offline_access on the authorization server alone */
+  offlineAccess?: boolean;
   /** Queued answers for refresh_token grants (consumed in order). After the
    * queue is empty, behaviour falls back to refuseRefresh / valid refresh. */
   refreshAnswers?: FakeRefreshAnswer[];
@@ -121,6 +123,7 @@ export async function startFakeOAuthMcp(options: FakeOAuthMcpOptions = {}): Prom
           response_types_supported: ["code"],
           code_challenge_methods_supported: options.noS256 ? ["plain"] : ["S256"],
           token_endpoint_auth_methods_supported: ["none", "client_secret_post"],
+          ...(options.offlineAccess ? { scopes_supported: ["notes:read", "offline_access"] } : {}),
         });
         return;
       }

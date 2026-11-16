@@ -177,6 +177,7 @@ export class PrincipalRegistry {
   private readonly accessListeners: Array<(principalId: string) => void> = [];
   private readonly roleListeners: Array<(principal: Principal, before: Principal["orgRole"]) => void> = [];
   private readonly disabledListeners: Array<(principal: Principal, disabled: boolean) => void> = [];
+  private readonly addedListeners: Array<(principal: Principal) => void> = [];
 
   constructor(options: { path: string; now?: () => number; newId?: () => string }) {
     this.path = options.path;
@@ -264,6 +265,23 @@ export class PrincipalRegistry {
    * admin's may keep. */
   onRoleChanged(listener: (principal: Principal, before: Principal["orgRole"]) => void): void {
     this.roleListeners.push(listener);
+  }
+
+  /** #4451: called after a person is first known (a first sign-in or the
+   * directory), with their role: an admin from the start gets what waits on
+   * the organization's admins at once. */
+  onAdded(listener: (principal: Principal) => void): void {
+    this.addedListeners.push(listener);
+  }
+
+  private added(principal: Principal): void {
+    for (const listener of this.addedListeners) {
+      try {
+        listener({ ...principal });
+      } catch (error) {
+        console.error(`principals: an added listener failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   private roleChanged(principal: Principal, before: Principal["orgRole"]): void {
@@ -393,6 +411,7 @@ export class PrincipalRegistry {
     if (wasDisabled) this.disabledChanged(found, false);
     if (teamsChanged && !created) this.accessChanged(found.id);
     if (!created && found.orgRole !== roleBefore) this.roleChanged(found, roleBefore);
+    if (created) this.added(found);
     return { ...found };
   }
 
@@ -435,6 +454,7 @@ export class PrincipalRegistry {
     if (created || JSON.stringify(found) !== before) this.persist();
     if (teamsChanged && !created) this.accessChanged(found.id);
     if (!created && found.orgRole !== roleBefore) this.roleChanged(found, roleBefore);
+    if (created) this.added(found);
     return { ...found };
   }
 

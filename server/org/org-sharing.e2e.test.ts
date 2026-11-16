@@ -739,6 +739,12 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
   it("S3-7c: list_bots runs for a member without an admin; a server command reaches the admins live and their answer releases it", async () => {
     const erin = await signIn(ERIN);
     const bram = await createBot(erin, "Bram", "hold");
+    // #4451: the admin's Primary Bot, where the organization's approvals wait as cards
+    const atlas = await createBot(alice, "Atlas", "claude");
+    expect((await api("POST", `/api/bots/${atlas.id}/primary`, alice, {})).status).toBe(200);
+    // a member with a Primary Bot of her own besides the asking one: never an admin's card there
+    const echo = await createBot(erin, "Echo", "claude");
+    expect((await api("POST", `/api/bots/${echo.id}/primary`, erin, {})).status).toBe(200);
     const holdDump = join(home, "hold-dump.json");
     rmSync(holdDump, { force: true });
     const adminStream = await openStream(alice);
@@ -786,8 +792,36 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       expect(waiting.find((entry) => entry.requestId === shell.id)).toMatchObject({ botName: "Bram", ownerName: "Erin", requestedBy: "Erin", tool: "Bash" });
       expect(waiting.some((entry) => entry.requestId === list.id)).toBe(false);
 
-      // the admin's Allow releases the member's turn and settles the card for both
-      const approved = await respond(alice, shell.id);
+      // #4451: one card in the admin's Primary Bot, from Bram, for Erin
+      const adminCards = async () => {
+        const mine = ((await botsOf(alice)) as Array<{ id: string; threadId: string; tasks?: Array<{ threadId: string }> }>).find((bot) => bot.id === atlas.id)!;
+        const found: Array<{ threadId: string; view: any }> = [];
+        for (const threadId of new Set([mine.threadId, ...(mine.tasks ?? []).map((task) => task.threadId)])) {
+          const got = await api("GET", `/api/threads/${threadId}/messages?limit=200`, alice);
+          for (const view of (got.body.messages as Array<{ card?: any }> | undefined) ?? []) {
+            if (view.card?.approvalOrigin?.admin && view.card.approvalOrigin.requestId === shell.id) found.push({ threadId, view });
+          }
+        }
+        return found;
+      };
+      const [adminCard, ...extra] = await waitFor(async () => { const found = await adminCards(); return found.length ? found : null; });
+      expect(extra).toEqual([]);
+      // only admins get the card: none in any conversation of the member's bots
+      for (const mine of (await botsOf(erin)) as Array<{ threadId: string; tasks?: Array<{ threadId: string }> }>) {
+        for (const threadId of new Set([mine.threadId, ...(mine.tasks ?? []).map((task) => task.threadId)])) {
+          const got = await api("GET", `/api/threads/${threadId}/messages?limit=200`, erin);
+          expect(((got.body.messages as Array<{ card?: any }> | undefined) ?? []).filter((row) => row.card?.approvalOrigin?.admin)).toEqual([]);
+        }
+      }
+      expect(adminCard!.view).toMatchObject({ kind: "options", relayVia: "organization", relayAsk: { by: "Bram", for: "Erin" }, card: { tool: "Bash", adminApproval: true } });
+      expect(adminCard!.view.card.adminNames).toBeUndefined();
+      // a member can neither read nor answer it, even with the exact address
+      expect([403, 404]).toContain((await api("GET", `/api/threads/${adminCard!.threadId}/messages?limit=10`, erin)).status);
+      expect([403, 404]).toContain((await api("POST", `/api/threads/${adminCard!.threadId}/respond`, erin, { requestId: adminCard!.view.card.requestId, behavior: "allow" })).status);
+      expect((await api("GET", `/api/threads/${bram.threadId}/messages?limit=100`, erin)).text).not.toContain(adminCard!.view.card.requestId);
+
+      // the admin's Allow on that card releases the member's turn and settles the card for both
+      const approved = await api("POST", `/api/threads/${adminCard!.threadId}/respond`, alice, { requestId: adminCard!.view.card.requestId, behavior: "allow" });
       expect(approved.status, approved.text).toBe(200);
       await waitFor(async () => shell.answer()?.behavior === "allow");
       await waitFor(async () => {
@@ -795,6 +829,8 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
         return Boolean((got.body.messages as Array<{ card?: any }>).find((m) => m.card?.requestId === shell.id)?.card?.answered);
       });
       await waitFor(async () => /"kind":"org.approvals","count":0/.test(adminStream.text()));
+      // the admin's card shows the same outcome, once
+      await waitFor(async () => { const found = await adminCards(); return found.length === 1 && found[0]!.view.card.answered ? found : null; });
       expect(((await api("GET", "/api/org/approvals", alice)).body.approvals as Array<{ requestId: string }>).some((entry) => entry.requestId === shell.id)).toBe(false);
     } finally {
       for (const socket of sockets) socket.destroy();

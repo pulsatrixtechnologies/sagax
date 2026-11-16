@@ -42,6 +42,11 @@ function sseFrameFor(   client: SseClient,   seq: number,   payload: Record<stri
   }
   // the approvals waiting for an organization admin reach the admins only
   if (payload?.kind === "org.approvals" && !host.orgAdminStream(client)) return null;
+  // #4451: each admin's notification opens their own Primary Bot, where the cards wait
+  if (payload?.kind === "org.approvals" && client.viewerId) {
+    const botId = host.adminApprovalHomeBot?.(client.viewerId);
+    if (botId) return encodeSseDataFrame(host.STREAM_ID, seq, { ...payload, home: { botId }, seq });
+  }
   // a person's unlocks reach that person's streams only
   if (payload?.kind === "achievements" && !achievementFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
   // a person's phone tool requests reach that person's own streams only

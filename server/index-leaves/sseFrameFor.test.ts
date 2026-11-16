@@ -55,3 +55,38 @@ describe("each viewer's stream follows their own signal verdict (#4233)", () => 
     expect(notified(createSseFrameFor(() => host("person-2"))({ viewerId: "", admin: true }, 1, payload, frame, frame))).toBeUndefined();
   });
 });
+
+// #4451: the organization approvals frame names each admin's own Primary Bot,
+// where the cards wait, so the notification opens it; a member gets nothing.
+describe("org.approvals names each admin's own Primary Bot (#4451)", () => {
+  const host = {
+    STREAM_ID: "s",
+    IDENTITY: { kind: "perspicax" },
+    localPrincipalId: () => "local",
+    orgAdminStream: (client: { viewerId?: string }) => client.viewerId !== "member",
+    adminApprovalHomeBot: (principalId: string) => ({ ada: "atlas", lin: "nova" } as Record<string, string>)[principalId],
+    PHONE_TOOLS_FRAME: "phone-tools",
+    DEVICE_SETTINGS_FRAME: "device-settings",
+    peopleDmFrameAllowed: () => true,
+    temporaryAgentFrame: () => false,
+    viewerNotificationMuted: () => false,
+    botTasksFrameAllowed: () => true,
+    approvalViewerOf: () => undefined,
+    scopeChannelApproval: () => ({ action: "keep" }),
+    privateThreads: () => false,
+    memberFrame: (_client: unknown, _seq: number, _payload: unknown, clientFrame: string) => clientFrame,
+  };
+  const frameFor = createSseFrameFor(() => host);
+  const payload = { kind: "org.approvals", count: 1, added: [{ requestId: "r1", botName: "Nimbus" }] };
+  const raw = encodeSseDataFrame("s", 7, { ...payload, seq: 7 });
+  const read = (viewerId: string) => {
+    const out = frameFor({ viewerId, admin: false } as never, 7, payload, raw, raw);
+    return out === null ? null : JSON.parse(String(out).split("\ndata: ")[1]) as { home?: { botId: string } };
+  };
+  it("each admin reads their own bot, never another admin's", () => {
+    expect(read("ada")?.home).toEqual({ botId: "atlas" });
+    expect(read("lin")?.home).toEqual({ botId: "nova" });
+    expect(read("max")?.home).toBeUndefined();
+    expect(read("member")).toBeNull();
+  });
+});

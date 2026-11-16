@@ -147,6 +147,14 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
       const origin = mirror?.card?.approvalOrigin;
       if (!origin) return null;
       const original = store.messagesFor(origin.threadId).find(row => row.id === origin.messageId);
+      // #4451: an admin's view of an organization approval
+      // (./admin-approval-views.ts). The address only; the existing admin
+      // check on the original decides who may answer.
+      if (origin.admin) {
+        return open(mirror.card) && original?.card?.adminApproval && open(original.card) && original.card.requestId === origin.requestId
+          && !store.isConfidentialThread(origin.threadId)
+          ? { threadId: origin.threadId, requestId: origin.requestId } : false;
+      }
       if (!open(mirror.card) || !original || !allowed(origin.threadId, threadId, original)) return false;
       const destination = original?.card?.approvalDestination;
       return open(original?.card) && original!.card!.requestId === origin.requestId

@@ -371,7 +371,8 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
           break;
         // organization admins only: the approvals waiting for an admin
         case "org.approvals":
-          receiveOrgApprovalsFrame(frame, () => dispatch({ type: "toggleAppSettings", open: true, section: "organization" }));
+          // #4451: the cards wait in the admin's Primary Bot; Settings when there is none
+          receiveOrgApprovalsFrame(frame, () => dispatch(frame.home ? { type: "select", id: frame.home.botId } : { type: "toggleAppSettings", open: true, section: "organization" }));
           break;
         case "person.label":
           applyPersonLabel(frame.principalId, frame.label);

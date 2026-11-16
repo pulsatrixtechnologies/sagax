@@ -553,14 +553,17 @@ export function ApprovalCard({
   if (open && view) {
     // an "Ask first" rule (the organization's or the person's) held it: the
     // line says which rule, whatever the approval level
+    // #4451: an admin's own view of an organization approval is theirs to
+    // answer, never "waiting for an admin"
+    const waitsOnAdmin = card.adminApproval && !card.approvalOrigin?.admin;
     const byRule = !card.reviewing && !card.adminApproval ? heldByRuleLine(card) : undefined;
     return (
       <StepRow
         testId="approval-waiting"
         data={{ "data-tour": "approval", "data-approval-waiting": card.requestId, ...(card.reviewing ? { "data-auto-review": "pending" } : {}), ...(byRule ? { "data-held-by-rule": "" } : {}) }}
         icon={<ShieldCheck size={13} aria-hidden="true" className="text-accent" />}
-        label={card.reviewing ? t("customRules.notice.reviewing") : card.adminApproval ? t("approval.waitingForAdmin") : byRule ? byRule.label : t("approval.status.waitingApproval")}
-        target={card.adminApproval ? adminWillAnswerLine(card.adminNames) : byRule?.target}
+        label={card.reviewing ? t("customRules.notice.reviewing") : waitsOnAdmin ? t("approval.waitingForAdmin") : byRule ? byRule.label : t("approval.status.waitingApproval")}
+        target={waitsOnAdmin ? adminWillAnswerLine(card.adminNames) : byRule?.target}
       />
     );
   }

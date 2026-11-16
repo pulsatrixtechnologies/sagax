@@ -17,7 +17,10 @@ function scopeApprovalMessage<T>(threadId: string, message: T, viewer: ApprovalV
   if (!host.isApprovalCardMessage(row)) return message;
   // A team-memory card is the team's (cardAnswerRefusal): a person who can
   // use a bot of that section gets the card itself, not "waiting on owner".
-  const bot = host.botForApproval(threadId, row);
+  // #4451: an admin's view of an organization approval is answered by the
+  // person of the conversation it sits in (that admin), never the asking bot's owner
+  const adminView = (row.card as { approvalOrigin?: { admin?: unknown } } | undefined)?.approvalOrigin?.admin === true;
+  const bot = adminView ? host.store.botByThread(threadId) : host.botForApproval(threadId, row);
   if (host.teamMemoryMemberMayAnswer(threadId, row.card as { teamMemoryRequest?: { section?: unknown } } | undefined, viewer.userId, bot?.id)) return message;
   const audience = bot
     ? approvalAudience({ ownerUserId: host.cardAnswererId(bot, threadId, row.card as { destinationAnswerer?: unknown } | undefined), host: host.approvalHostOf(bot) })

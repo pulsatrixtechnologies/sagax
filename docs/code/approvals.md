@@ -27,6 +27,35 @@ withdraws its notice and removes the source backlink. A late model review
 re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
+## Organization approvals in each admin's Primary Bot (#4451, 2026-11-16)
+
+`server/approvals/admin-approval-views.ts` puts each card that waits on an
+organization admin (`adminApproval`) as one card in every admin's
+conversation with their Primary Bot (else their first visible bot,
+`primaryBotPlace`). The list is the one Settings > Organization reads
+(`adminApprovalEntries` in `server/index-leaves/pendingAdminApprovals.ts`),
+reconciled on each `org.approvals` announce, on a deleted conversation, on
+every organization role change, a person marked out or back in, and an
+admin's first sign-in (`principals.onRoleChanged`, `onDisabledChanged`,
+`onAdded`: a new admin gets the waiting cards right away) and once after start: a new card, an admin
+who lost the role, a source answered, expired or gone all converge. An admin
+with no bot at all gets no card: the row of Settings > Organization stays
+their only place to answer; once they have a bot, the next pass (an
+announce, a role change or a restart) brings the cards. Every text of the view (title, command line, plain words, rules, the
+Details' `toolInput`) goes through `redactSecretsInText`, the masking of the
+Settings row; the answer resolves to the original card, whose rules stay
+whole. The pinned card is titled by the member's bot and the person it is
+for ("Nimbus for Erin wants to run a command"). A view carries `approvalOrigin.admin`; its
+answer resolves to the original (`originApprovals.sourceFor`) where
+`adminApprovalCheck` decides, so a member never answers it, and the first
+answer closes every admin's card with the same outcome. `scopeApprovalMessage`
+delivers the view to the conversation's person. No confidential thread is
+copied. The one notification stays the `org.approvals` frame; its `home`
+(set per stream in `sseFrameFor`) opens that admin's Primary Bot. Provenance:
+`relayVia: "organization"`, `relayAsk.by` (bot) and `relayAsk.for` (person).
+Tests: `server/approvals/admin-approval-views.test.ts`, S3-7c in
+`server/org/org-sharing.e2e.test.ts`, `server/index-leaves/sseFrameFor.test.ts`.
+
 ## Blocking decisions are cards (#1984, 2026-11-04)
 
 Every blocking decision uses ask_choice, a native question tool, or the write

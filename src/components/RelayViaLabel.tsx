@@ -9,14 +9,14 @@
 // (lib/incoming-line); a waiting card that came from such a request keeps its
 // card, with the same line above it. A routine's or a wake's label says where
 // it came from and, when its turn left nothing to copy, why, on that one line.
-import { BellRing, Plug, Repeat, Users } from "lucide-react";
+import { BellRing, Building2, Plug, Repeat, Users } from "lucide-react";
 import type { Bot, Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { relayAskEntry } from "@/lib/incoming-line";
 import { IncomingLine } from "./HandoffRow";
 
-const ICON = { mcp: Plug, routine: Repeat, proactive: BellRing, teammate: Users } as const;
+const ICON = { mcp: Plug, routine: Repeat, proactive: BellRing, teammate: Users, organization: Building2 } as const;
 const TRACES = new Set<string>(["failed", "stopped", "silent"]);
 
 export function RelayViaLabel({ message }: { message: Pick<Message, "relayVia" | "relayAsk" | "relayTrace"> }) {
@@ -24,7 +24,10 @@ export function RelayViaLabel({ message }: { message: Pick<Message, "relayVia" |
   if (!via || !(via in ICON)) return null;
   const Icon = ICON[via];
   const name = t(`chat.relayVia.${via}` as LocaleKey);
-  const by = message.relayAsk?.by?.trim();
+  const asker = message.relayAsk?.by?.trim();
+  // #4451: an organization approval names the bot and the person it is for
+  const person = via === "organization" ? message.relayAsk?.for?.trim() : undefined;
+  const by = asker && person ? t("chat.relayVia.botForPerson", { bot: asker, person }) : asker;
   const trace = message.relayTrace && TRACES.has(message.relayTrace) ? message.relayTrace : undefined;
   return (
     <div className="mb-1 flex min-w-0 max-w-full items-center gap-1.5 pl-0.5 text-[11px] text-ink-secondary" data-relay-via={via} data-relay-trace={trace} title={t("chat.relayVia.label", { via: name })}>

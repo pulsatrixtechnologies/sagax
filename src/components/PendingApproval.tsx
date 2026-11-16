@@ -258,7 +258,13 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
   const card = pending.message.card;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const proposal = isSkillApproval(pending) || isRoutineApproval(pending) || isProfileApproval(pending) || isRuleApproval(pending) || Boolean(card?.teamSetupRequest);
-  const view = !proposal && card ? toolApprovalView(card, bot?.name) : undefined;
+  // #4451: an organization approval in an admin's chat is named by the
+  // member's bot and the person it is for ("Nimbus for Erin wants to ...")
+  const relayAsk = card?.approvalOrigin?.admin ? pending.message.relayAsk : undefined;
+  const titleName = relayAsk?.by?.trim() && relayAsk.for?.trim()
+    ? t("chat.relayVia.botForPerson", { bot: relayAsk.by.trim(), person: relayAsk.for.trim() })
+    : relayAsk?.by?.trim() || bot?.name;
+  const view = !proposal && card ? toolApprovalView(card, titleName) : undefined;
   // #3414: the bot is named once, in the title. A background conversation's
   // card (another bot, a proactive wake) says who asked only when that is
   // not the bot the title already names. An empty askedBy (a conversation an
@@ -267,13 +273,15 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
   const askedByLine = pending.askedBy === undefined
     ? undefined
     : pending.askedBy
-      ? pending.askedBy.trim() === bot?.name?.trim() ? undefined : t("approval.askedByBot", { name: pending.askedBy })
+      ? pending.askedBy.trim() === bot?.name?.trim() || (relayAsk && view?.title.includes(pending.askedBy.trim())) ? undefined : t("approval.askedByBot", { name: pending.askedBy })
       : t("approval.askedByOtherBot");
   // A proposal's title ("Enable this learned skill") and a tool title built
   // without a bot name never say who asks: one quiet line does, so a card
   // over a room's composer still names the bot it waits on.
   const title = view ? view.title : label(pending);
-  const asker = askerName?.trim() || bot?.name?.trim();
+  // an organization approval's asker is the member's bot the title names,
+  // never the admin's own bot whose chat holds the card
+  const asker = relayAsk?.by?.trim() || askerName?.trim() || bot?.name?.trim();
   const askerLine = !askedByLine && asker && !title.includes(asker) ? t("approval.askedByBot", { name: asker }) : undefined;
   const whoLine = askedByLine ?? askerLine;
   // never truncated: long commands wrap and scroll

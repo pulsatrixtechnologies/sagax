@@ -256,7 +256,9 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     // asked to compact) starts this turn on a fresh provider session; the
     // room's recent transcript is what every room turn carries anyway.
     const roomReset = roomMemberContexts.takeReset(threadId, readyBot.id, cfg.context);
-    if (roomReset) {
+    // #4407: a reset for a thread made confidential is said nowhere: the
+    // room never hears of that thread
+    if (roomReset && roomReset.reason !== "forgotten") {
       store.appendMessage(threadId, {
         role: "bot", kind: "activity", from: { botId: readyBot.id, name: readyBot.name, color: readyBot.color },
         tool: { name: roomReset.reason === "requested"

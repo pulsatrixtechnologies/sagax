@@ -171,6 +171,20 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * confidential or a confidential one is deleted, after a reset replaced
    * the cursor (server/engines/engine-transcripts.ts). Ids only. */
   engineSessions?: string[];
+  /** #4407: the other threads whose words rode this thread's engine session
+   * (the "Earlier topics" block, the "Recent work" lines, automatic recall,
+   * session_search, session_read, recall_topic) since its engine
+   * sessions were last forgotten. A thread made confidential later forgets
+   * the sessions of every thread that carried it. Absent on a thread whose
+   * turns predate it: unknown, so any session it holds counts as a carrier.
+   * Ids only. */
+  carriedThreads?: string[];
+  /** #4407: this thread's turn was running when a thread its session carried
+   * was made confidential. That turn keeps its process to the end, so its
+   * engine sessions are forgotten again before its next turn starts: the
+   * process closes, its files go and the turn starts a new session with its
+   * own transcript replayed, never the one that still holds the topic. */
+  forgetSessionsAtNextTurn?: true;
   /** #3609: whom this thread's last admitted turn speaks for
    * (server/turns/thread-speakers.ts), so a continuation after a restart
    * speaks for the same person. Ids and flags only. */
@@ -183,7 +197,7 @@ export const ENGINE_SESSIONS_KEPT = 64;
 /** TaskRecord fields no client may see. Everything else must be on WireTask:
  * the exactness assertion below fails to compile when either side drifts,
  * so a new server field forces a decision — wire-visible or private here. */
-export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "speaker";
+export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "carriedThreads" | "forgetSessionsAtNextTurn" | "speaker";
 /** WireTask fields computed by toWireTask and never stored on a TaskRecord. */
 export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel" | "personWrote";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
@@ -202,7 +216,7 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
   const { resumeCursors: _resumeCursors, lastInstanceId: _lastInstanceId, handedMessages: _handedMessages,
     appliedCompactionId: _appliedCompactionId, contextSummaries: _contextSummaries, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
     surfaceSource, askedAt: _askedAt, autoWorkspace: _autoWorkspace, streamSegment: _streamSegment, segmentDigest: _segmentDigest,
-    engineSessions: _engineSessions, speaker: _speaker, ...stored } = task;
+    engineSessions: _engineSessions, carriedThreads: _carriedThreads, forgetSessionsAtNextTurn: _forgetSessionsAtNextTurn, speaker: _speaker, ...stored } = task;
   const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined,
     // only the fact, never when (shared/background-threads.ts)
     ...(task.askedAt !== undefined ? { personWrote: true as const } : {}) };
@@ -2473,6 +2487,32 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return task;
   }
 
+  /** Add the other threads whose words this thread's prompt, its recalled
+   * passages or a tool result carried (TaskRecord.carriedThreads). Written
+   * only when the set grows, and once empty so a thread with a session is
+   * known to carry nothing. A thread already holding a session with no
+   * record stays unknown: what that session took in before is not known. */
+  noteCarriedThreads(botId: string, threadId: string, carried: Iterable<string>): void {
+    const task = this.taskByThread(botId, threadId);
+    if (!task) return;
+    if (task.carriedThreads === undefined && (Object.keys(task.resumeCursors ?? {}).length > 0 || (task.engineSessions?.length ?? 0) > 0)) return;
+    const known = new Set(task.carriedThreads ?? []);
+    const before = task.carriedThreads === undefined ? -1 : known.size;
+    for (const id of carried) if (id && id !== threadId) known.add(id);
+    if (known.size === before) return;
+    task.carriedThreads = [...known];
+    saveBotsFor("the threads a conversation's prompt carried", () => this.saveBotsSoon());
+  }
+
+  /** #4407: forget this thread's engine sessions again before its next turn
+   * (TaskRecord.forgetSessionsAtNextTurn). */
+  markForgetSessionsAtNextTurn(botId: string, threadId: string): void {
+    const task = this.taskByThread(botId, threadId);
+    if (!task || task.forgetSessionsAtNextTurn) return;
+    task.forgetSessionsAtNextTurn = true;
+    this.saveBots();
+  }
+
   /** Forget a thread's native engine sessions (server/engines/engine-transcripts.ts):
    * its cursors, the bot's mirror of them and the ids it kept go, and the
    * next turn starts a new session with the thread's own transcript
@@ -2487,7 +2527,11 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     task.resumeCursors = {};
     delete task.handedMessages;
     delete task.engineSessions;
-    if (hadAny) task.rewound = true;
+    delete task.carriedThreads;
+    // a session that took in a confidential thread while its turn ran is
+    // rebuilt even when no cursor of it was kept
+    if (hadAny || task.forgetSessionsAtNextTurn) task.rewound = true;
+    delete task.forgetSessionsAtNextTurn;
     for (const [instanceId, cursor] of Object.entries(bot.resumeCursors ?? {})) {
       if (bot.threadId === threadId || (typeof cursor === "string" && held.includes(cursor))) delete bot.resumeCursors[instanceId];
     }

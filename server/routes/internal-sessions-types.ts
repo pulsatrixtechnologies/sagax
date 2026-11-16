@@ -50,6 +50,9 @@ export interface InternalSessionsDeps {
   groups(): readonly InternalSessionsGroup[];
   groupByThread(threadId: string): InternalSessionsGroup | null | undefined;
   isConfidentialThread(threadId: string): boolean;
+  /** #4407: other threads whose words a tool result just brought into this
+   * conversation's engine session (TaskRecord.carriedThreads). */
+  noteCarriedThreads(botId: string, threadId: string, carried: readonly string[]): void;
   ownsThread(botId: string, threadId: string): { group?: InternalSessionsGroup } | null;
   threadBusy(botId: string, threadId: string): boolean;
   awaitingAnswer(threadId: string): boolean;

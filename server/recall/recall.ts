@@ -80,6 +80,8 @@ export interface RecallResult {
   text: string;
   notes: number;
   conversations: number;
+  /** The threads whose passages the block shows (#4407). */
+  threadIds: string[];
 }
 
 export function recallQuery(text: string): string | null {
@@ -121,6 +123,7 @@ export function renderRecall(passages: readonly RecallPassage[], maxChars = RECA
   let length = lines.join("\n").length + RECALL_CLOSE.length + 1;
   let notes = 0;
   let conversations = 0;
+  const threadIds = new Set<string>();
   // the same words found twice (two copies of one message) say nothing new
   const shown = new Set<string>();
   for (const passage of passages) {
@@ -133,10 +136,11 @@ export function renderRecall(passages: readonly RecallPassage[], maxChars = RECA
     length += line.length + 1;
     if (passage.source === "memory") notes += 1;
     else conversations += 1;
+    if (passage.threadId) threadIds.add(passage.threadId);
   }
   if (!notes && !conversations) return null;
   lines.push(RECALL_CLOSE);
-  return { text: lines.join("\n"), notes, conversations };
+  return { text: lines.join("\n"), notes, conversations, threadIds: [...threadIds] };
 }
 
 /** How much one turn may recall: notes kept and characters in all. */
@@ -288,6 +292,7 @@ export function conversationPassages(input: RecallInput, query: string): RecallP
     .map((hit) => ({
       source: "conversation" as const,
       label: input.label(hit.threadId),
+      threadId: hit.threadId,
       at: hit.at,
       snippet: hit.kind === "digest" ? `[what you did] ${plain(hit.snippet)}` : `${input.author(hit)}: ${plain(hit.snippet)}`,
     }));

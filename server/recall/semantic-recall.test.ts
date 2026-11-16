@@ -48,6 +48,8 @@ describe("semantic recall beside FTS5", () => {
     expect(block?.text).toContain("quiet room upstairs");
     expect(block?.text).toContain('chat "t-ok" (');
     expect(block?.text).toContain("Memo: the quiet room is booked");
+    // #4407: the block says which conversations it carried
+    expect(block?.threadIds).toEqual(["t-ok"]);
     expect(block?.text).not.toContain("private aside");
     expect(buildRecall({ botId: "bot-a", message: "where is the quiet room tonight", threadIds: [], label: () => "", author: () => "", semantic: true })?.text).not.toContain("booked");
     expect(buildRecall({ botId: "bot-a", message: "where is the quiet room tonight", threadIds: [], label: () => "", author: () => "" })?.text ?? "").not.toContain("quiet room");

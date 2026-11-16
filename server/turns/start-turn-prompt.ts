@@ -160,6 +160,10 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // server is never given a path of it (server/server-path-prompt.ts)
     const serverFiles = !withholdHostToolsFor(state.instance);
     const environmentFolder = serverFiles ? null : sandboxFolderFor?.(state.bot.id) ?? null;
+    const recentLines = state.onCall ? [] : recentWorkFor(state.bot, state.threadId, { userName: botUserName(state.bot) }).filter((line: any) => !state.streamPart?.threadIds.has(line.threadId)).slice(0, state.compactPrompt ? LOCAL_RECENT_WORK_LINES : undefined);
+    // #4407: the other threads whose words ride this session from now on, so
+    // one of them made confidential later forgets this session too
+    store.noteCarriedThreads(state.bot.id, state.threadId, [...(state.streamPart?.threadIds ?? []), ...recentLines.map((line: any) => line.threadId)]);
     state.promptParts = [
       { id: "finish-until", label: "Do not finish until", text: finishUntilPrompt((state.liveBot ?? state.bot).finishUntil) },
       // #1372: a 1:1 goal's instruction, while it works; never the person's message
@@ -230,7 +234,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       // what the bot said lately in its other conversations, so a task
       // never redoes — or forgets — what another one already did
       // not on a call: a phone turn stays short (docs/voice-mode-xai.md, "Latency")
-      { id: "recent", label: "Recent work", text: state.onCall ? "" : recentWorkPrompt(recentWorkFor(state.bot, state.threadId, { userName: botUserName(state.bot) }).filter((line: any) => !state.streamPart?.threadIds.has(line.threadId)).slice(0, state.compactPrompt ? LOCAL_RECENT_WORK_LINES : undefined)) },
+      { id: "recent", label: "Recent work", text: state.onCall ? "" : recentWorkPrompt(recentLines) },
       { id: "stream", label: "Earlier topics", text: state.streamPart?.text ?? "" },
       // RULES.md: listed here, placed right after the soul by buildSystemPrompt
       { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(state.bot.id, { writes: Boolean(state.integrations.agents) }) },

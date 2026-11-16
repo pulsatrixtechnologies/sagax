@@ -152,6 +152,8 @@ export async function handleInternalSessionsRecall(
     if (inRoom) {
       discloseRecall(deps, from, fromThreadId, hits.filter((hit) => hit.crossed).map((hit) => hit.threadId));
     }
+    // #4407: the hits' words (and the summary of them) ride this session now
+    deps.noteCarriedThreads(from.id, fromThreadId, hits.map((hit) => hit.threadId));
     // One short model summary of the best-matching conversations (#2610),
     // above the hits; a search by time alone has nothing to focus it.
     let summary: string | null = null;
@@ -195,6 +197,7 @@ export async function handleInternalSessionsRecall(
     const readInRoom = Boolean(deps.groupByThread(fromThreadId));
     const readCrossed = readInRoom && !readRoom && threadId !== fromThreadId;
     if (readCrossed) discloseRecall(deps, from, fromThreadId, [threadId]);
+    deps.noteCarriedThreads(from.id, fromThreadId, [threadId]);
     // An outside app wrote a webhook line: read back with its note, never as the bot's own words.
     const readText = message.webhook ? webhookPostText(from.name, message.text) : message.text;
     return json(res, 200, {

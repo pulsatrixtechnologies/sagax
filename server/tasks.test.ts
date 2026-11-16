@@ -108,6 +108,50 @@ describe("tasks", () => {
     expect(store.forgetEngineSessions(bot.id, "missing")).toEqual([]);
   });
 
+  it("keeps which other threads a conversation's prompt carried, private, until its sessions are forgotten (#4407)", async () => {
+    const { store } = await freshStore();
+    const bot = store.createBot();
+    const thread = store.createTask(bot.id)!.threadId;
+    expect(store.taskByThread(bot.id, thread)!.carriedThreads).toBeUndefined();
+    // a turn that carried nothing is known to carry nothing
+    store.noteCarriedThreads(bot.id, thread, []);
+    expect(store.taskByThread(bot.id, thread)!.carriedThreads).toEqual([]);
+    store.noteCarriedThreads(bot.id, thread, ["topic-a", "topic-b", thread]);
+    store.noteCarriedThreads(bot.id, thread, ["topic-a"]);
+    expect(store.taskByThread(bot.id, thread)!.carriedThreads).toEqual(["topic-a", "topic-b"]);
+    const { toWireTask } = await import("./store.ts");
+    expect(toWireTask(store.taskByThread(bot.id, thread)!, bot.modelSelection)).not.toHaveProperty("carriedThreads");
+    store.setResumeCursor(bot.id, "claude", "aaaaaaaa-0000-4000-8000-000000000009", thread);
+    store.forgetEngineSessions(bot.id, thread);
+    expect(store.taskByThread(bot.id, thread)!.carriedThreads).toBeUndefined();
+    store.noteCarriedThreads(bot.id, "missing", ["topic-a"]);
+    // a session from before the record stays unknown, so it still counts as
+    // a carrier of anything
+    store.setResumeCursor(bot.id, "claude", "aaaaaaaa-0000-4000-8000-000000000010", thread);
+    store.noteCarriedThreads(bot.id, thread, ["topic-a"]);
+    expect(store.taskByThread(bot.id, thread)!.carriedThreads).toBeUndefined();
+  });
+
+  it("forgets again, before its next turn, the sessions of a thread busy when one it carried turned confidential (#4407)", async () => {
+    const { store } = await freshStore();
+    const { toWireTask } = await import("./store.ts");
+    const bot = store.createBot();
+    const thread = store.createTask(bot.id)!.threadId;
+    store.setResumeCursor(bot.id, "claude", "aaaaaaaa-0000-4000-8000-000000000011", thread);
+    // the change forgets its sessions while its turn still runs
+    store.forgetEngineSessions(bot.id, thread);
+    store.patchTask(bot.id, thread, { rewound: false });
+    store.markForgetSessionsAtNextTurn(bot.id, thread);
+    expect(store.taskByThread(bot.id, thread)!.forgetSessionsAtNextTurn).toBe(true);
+    expect(toWireTask(store.taskByThread(bot.id, thread)!, bot.modelSelection)).not.toHaveProperty("forgetSessionsAtNextTurn");
+    // the running turn's process keeps its session: no cursor comes back,
+    // yet its next turn must start on a new session
+    store.forgetEngineSessions(bot.id, thread);
+    const task = store.taskByThread(bot.id, thread)!;
+    expect(task.forgetSessionsAtNextTurn).toBeUndefined();
+    expect(task.rewound).toBe(true);
+  });
+
   it("names a task after the first thing you asked it", async () => {
     const { store, UNTITLED_THREAD, titleFromMessage } = await freshStore();
     const bot = store.createBot();

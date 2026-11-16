@@ -33,6 +33,18 @@ export function roomCompactTokens(window: number, settings: { autoCompact?: bool
 
 export class RoomContextTracker {
   private threads = new Map<string, Map<string, RoomMemberContext>>();
+  /** #4407: room threads whose listed bots must start their next turn on a
+   * fresh session whatever their reading, because that session may hold a
+   * thread made confidential since (a warm process busy at the time is not
+   * closed, and a room keeps no cursor to drop). */
+  private forgotten = new Map<string, Set<string>>();
+
+  /** The bot's next turn in this room thread starts on a fresh session. */
+  forgetSession(threadId: string, botId: string): void {
+    const bots = this.forgotten.get(threadId) ?? new Set<string>();
+    bots.add(botId);
+    this.forgotten.set(threadId, bots);
+  }
 
   /** A settled room turn's last model call, as the driver reported it. */
   record(threadId: string, botId: string, reading: { tokens?: number; window?: number } | undefined, model: string | undefined, catalog?: ModelCatalog): void {
@@ -69,9 +81,16 @@ export class RoomContextTracker {
    * reading is consumed either way it fires, so one reset follows one
    * measurement; the turn records a new one when it settles. */
   takeReset(threadId: string, botId: string, settings: { autoCompact?: boolean; roomCompactAt?: number } | undefined):
-    { reason: "requested" | "threshold"; percent: number } | null {
+    { reason: "requested" | "threshold" | "forgotten"; percent: number } | null {
     const members = this.threads.get(threadId);
     const current = members?.get(botId);
+    const forgotten = this.forgotten.get(threadId);
+    if (forgotten?.delete(botId)) {
+      if (!forgotten.size) this.forgotten.delete(threadId);
+      members?.delete(botId);
+      if (members && !members.size) this.threads.delete(threadId);
+      return { reason: "forgotten", percent: current ? Math.round((current.tokens / current.window) * 100) : 0 };
+    }
     if (!members || !current) return null;
     const percent = Math.round((current.tokens / current.window) * 100);
     const limit = roomCompactTokens(current.window, settings);
@@ -84,5 +103,6 @@ export class RoomContextTracker {
 
   forget(threadId: string): void {
     this.threads.delete(threadId);
+    this.forgotten.delete(threadId);
   }
 }

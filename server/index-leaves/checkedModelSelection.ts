@@ -12,6 +12,9 @@ function checkedModelSelection(
   /** #1098: the person choosing, who may pick an engine outside the
    * organization's list that they pay for themselves. */
   payer?: string | null,
+  /** #4435: the person whose bot or conversation this is, when not the payer
+   * (another person editing it): only their own added accounts are offered. */
+  accountUser?: string | null,
 ): { ok: true; selection: ModelSelection } | { ok: false; status: number; error: string } {
   const host = getHost();
 
@@ -34,7 +37,7 @@ function checkedModelSelection(
   // else picks it, for a bot, a conversation, a backup or a default (it is
   // not there for them, as an unknown one).
   const accountOwner = host.IDENTITY.kind === "perspicax" ? host.personalProviderInstances.ownerOf(selection.instanceId) : undefined;
-  if (accountOwner && accountOwner !== (payer ?? "").trim().toLowerCase() && current?.selection.instanceId !== selection.instanceId) {
+  if (accountOwner && accountOwner !== ((accountUser !== undefined ? accountUser : payer) ?? "").trim().toLowerCase() && current?.selection.instanceId !== selection.instanceId) {
     return { ok: false, status: 400, error: `model instance "${selection.instanceId}" is unavailable` };
   }
   // The organization's allowed providers; the engine a bot already runs on

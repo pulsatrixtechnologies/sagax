@@ -125,4 +125,82 @@ describe.skipIf(process.platform === "win32")("added provider accounts belong to
       expect((await listed(alex)).instances).toContain(alexId);
     } finally { await org.close(); }
   }, 120_000);
+
+  it("an added account follows its provider's first one in the organization's allowed list", async () => {
+    const alexUser = person("alex"), samUser = person("sam"), adaUser = person("ada", "admin");
+    const org = await startOrgServer({ user: alexUser, prefix: "sagax-added-allowed-", instances: { claude: { driver: "claudeAgent" } } });
+    try {
+      const alex = await org.signIn(alexUser), sam = await org.signIn(samUser);
+      await org.signIn(adaUser);
+      const consoleCall = async (method: string, sub: string, body?: unknown) => {
+        const response = await fetch(`${org.base}/api/org/admin/${sub}`, {
+          method,
+          headers: {
+            authorization: `Bearer ${org.idp.consoleAssertion({ sub: adaUser.sub, aud: org.base, role: "admin", teams: [] })}`,
+            ...(body !== undefined ? { "content-type": "application/json" } : {}),
+          },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        });
+        return { status: response.status, body: await response.json().catch(() => null) as any };
+      };
+      const allow = async (allowedEngines: string[]) => {
+        const saved = await consoleCall("POST", "settings", { allowedEngines });
+        expect(saved.status, JSON.stringify(saved.body)).toBeLessThan(300);
+      };
+      const listed = async (auth: typeof alex) => ({
+        instances: ((await org.api("GET", "/api/instances", auth)).body.instances as Listed[]).map((entry) => entry.instanceId),
+        engines: ((await org.api("GET", "/api/me/engines", auth)).body.engines as Listed[]).map((entry) => entry.instanceId),
+        allowed: (await org.api("GET", "/api/config", auth)).body.allowedEngines as string[] | null,
+      });
+      const add = async (auth: typeof alex, name: string) => {
+        const added = await org.api("POST", "/api/instances/claude-accounts", auth, { displayName: name });
+        expect(added.status, JSON.stringify(added.body)).toBe(201);
+        return added.body.instanceId as string;
+      };
+      const newBot = async (auth: typeof alex, name: string) => {
+        const created = await org.api("POST", "/api/bots", auth, { name });
+        expect(created.status, JSON.stringify(created.body)).toBe(201);
+        return created.body.bot.id as string;
+      };
+
+      // the list holds the provider's first account: each person's own follows it
+      await allow(["grok", "claude"]);
+      const alexId = await add(alex, "Alex work"), samId = await add(sam, "Sam work");
+      const alexBot = await newBot(alex, "Alex helper"), samBot = await newBot(sam, "Sam helper");
+      for (const [auth, own, other, bot] of [[alex, alexId, samId, alexBot], [sam, samId, alexId, samBot]] as const) {
+        const seen = await listed(auth);
+        expect(seen.instances).toContain(own);
+        expect(seen.engines).toContain(own);
+        expect(seen.allowed).toEqual(expect.arrayContaining(["grok", "claude", own]));
+        expect(seen.instances).not.toContain(other);
+        expect(seen.engines).not.toContain(other);
+        expect(seen.allowed).not.toContain(other);
+        const picked = await org.api("PATCH", `/api/bots/${bot}`, auth, { modelSelection: { instanceId: own, model: "default" } });
+        expect(picked.status, JSON.stringify(picked.body)).toBe(200);
+        expect((await org.api("PATCH", `/api/bots/${bot}`, auth, { modelSelection: { instanceId: other, model: "default" } })).status).not.toBe(200);
+      }
+      // the administrator neither sees nor allows one person's account by itself
+      expect((await consoleCall("POST", "settings", { allowedEngines: ["grok", "claude", samId] })).status).toBe(400);
+      // each removes their own once no bot of theirs uses it
+      for (const [auth, own, bot] of [[alex, alexId, alexBot], [sam, samId, samBot]] as const) {
+        expect((await org.api("PATCH", `/api/bots/${bot}`, auth, { modelSelection: { instanceId: "grok", model: "default" } })).status).toBe(200);
+        const removed = await org.api("DELETE", `/api/me/engines/${own}`, auth);
+        expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+        expect((await listed(auth)).instances).not.toContain(own);
+      }
+
+      // the list leaves the provider out: the person still lists and removes
+      // the account they added, and no bot runs on it
+      await allow(["grok"]);
+      const left = await add(alex, "Alex spare");
+      const seen = await listed(alex);
+      expect(seen.instances).toContain(left);
+      expect(seen.allowed).not.toContain(left);
+      expect((await org.api("PATCH", `/api/bots/${alexBot}`, alex, { modelSelection: { instanceId: left, model: "default" } })).status).toBe(403);
+      expect((await listed(sam)).instances).not.toContain(left);
+      const removed = await org.api("DELETE", `/api/me/engines/${left}`, alex);
+      expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+      expect((await listed(alex)).instances).not.toContain(left);
+    } finally { await org.close(); }
+  }, 120_000);
 });

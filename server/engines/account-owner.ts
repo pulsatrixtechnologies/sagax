@@ -7,6 +7,7 @@
 // administrator configured for everyone, and accounts added before #4435
 // whose adder the server never recorded).
 import type { InstanceConfigMap } from "../contracts.ts";
+import { providerFirstAccount } from "../../shared/added-account.ts";
 
 const personKey = (principalId: string) => principalId.trim().toLowerCase();
 
@@ -21,6 +22,24 @@ export function accountOwnerOf(instances: Readonly<Record<string, { ownerPrincip
  * (undefined: the organization's, everyone's). */
 export function accountOwnedBy(owner: string | undefined, person: string | null | undefined): boolean {
   return owner === undefined || (typeof person === "string" && personKey(person) === owner);
+}
+
+/** The organization's list of allowed engines with every account a person
+ * added whose provider's first account is on it: the administrator allows a
+ * provider, and each person's own accounts of it follow (they are never
+ * listed in the console to allow one by one). Who may see and use each one
+ * stays `accountOwnedBy`. null (every engine) stays null. */
+export function allowedWithOwnedAccounts(
+  allowed: readonly string[] | null,
+  instances: Readonly<Record<string, { driver: string; ownerPrincipalId?: string }>> | undefined,
+): string[] | null {
+  if (allowed === null) return null;
+  const owned = Object.entries(instances ?? {}).filter(([instanceId, entry]) => {
+    if (allowed.includes(instanceId) || accountOwnerOf(instances, instanceId) === undefined) return false;
+    const first = providerFirstAccount(instanceId, entry.driver);
+    return first !== undefined && allowed.includes(first);
+  }).map(([instanceId]) => instanceId);
+  return [...allowed, ...owned];
 }
 
 /** #4435 point 4: an account added before the server recorded who added it

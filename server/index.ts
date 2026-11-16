@@ -1510,7 +1510,7 @@ import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
 import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedAccountRemovalDeps } from "./routes/instances.ts";
-import { accountOwnerOf, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
+import { accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
 import { addedAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
@@ -23302,8 +23302,12 @@ function orgOfferedEngines<T extends { instanceId: string }>(every: readonly T[]
   // #4435: another person's added account or own server is never offered
   const instances = IDENTITY.kind === "perspicax" && person ? every.filter((instance) => personalProviderInstances.visible(instance.instanceId, person.trim().toLowerCase())) : every;
   const allowed = offeredEngines(instances, { organization: IDENTITY.kind === "perspicax", allowedEngines: orgAllowedEngines() }, "settings");
-  if (!person || IDENTITY.kind !== "perspicax" || !orgOwnAccountsOutsideList() || allowed.length === instances.length) return allowed;
-  return instances.filter((instance) => allowed.includes(instance) || personalEngine(instance.instanceId, person));
+  if (!person || IDENTITY.kind !== "perspicax" || allowed.length === instances.length) return allowed;
+  // #4435: a person always lists (and so can remove) the accounts they added,
+  // even while the organization's list leaves their provider out
+  const own = (instanceId: string) => accountOwnerOf(cfg.instances, instanceId) === person.trim().toLowerCase();
+  return instances.filter((instance) => allowed.includes(instance) || own(instance.instanceId)
+    || (orgOwnAccountsOutsideList() && personalEngine(instance.instanceId, person)));
 }
 /** #1098: an engine a person can run on their own account or key: one they
  * can sign in to or keep a key for, or one theirs already serves. */
@@ -32664,8 +32668,9 @@ function orgOwnAccountsOutsideList(): boolean {
  * every engine (shared/org-allowed-engines.ts). */
 function orgAllowedEngines(): string[] | null {
   const allowed = cfg.organization?.allowedEngines;
-  // [] is "none" (2026-10-17): only null or absent means every engine
-  return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowed : null;
+  // [] is "none" (2026-10-17): only null or absent means every engine.
+  // #4435: a person's own added account follows its provider's first one.
+  return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
 }
 /** Why a model choice may not use this engine here, if it may not.
  * 2026-10-30: an engine outside the organization's list is refused to

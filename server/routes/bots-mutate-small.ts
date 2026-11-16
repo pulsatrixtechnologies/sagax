@@ -58,13 +58,14 @@ async function handleBotModel(env: BotsMutateEnv): Promise<boolean> {
       { selection: selected.modelSelection, busy: env.threadBusy(selected.id, selected.threadId) },
       true,
       env.sessionPrincipal(env.auth),
+      env.effectiveBotOwner(existing),
     );
     if (!checked.ok) {
       env.json(env.res, checked.status, { error: checked.error });
       return true;
     }
     if (env.activeGroupTurnForBot(existing.id) && !onMachine) {
-      const groupChecked = env.checkedModelSelection(checked.selection, { selection: existing.modelSelection, busy: true }, false, env.sessionPrincipal(env.auth));
+      const groupChecked = env.checkedModelSelection(checked.selection, { selection: existing.modelSelection, busy: true }, false, env.sessionPrincipal(env.auth), env.effectiveBotOwner(existing));
       if (!groupChecked.ok) {
         env.json(env.res, groupChecked.status, { error: groupChecked.error });
         return true;

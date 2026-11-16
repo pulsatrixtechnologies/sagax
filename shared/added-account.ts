@@ -24,3 +24,13 @@ export function addedAccount(instanceId: string, driver: string): boolean {
   if (separateAccountInstance(instanceId)) return true;
   return driver === "claudeAgent" && instanceId !== "claude";
 }
+
+/** #4435: the provider's first account an added one sits beside (the id
+ * before its `-<uuid>`: `claude`, `chatgpt`, `antigravity`; `claude` for a
+ * named Claude account from before #2373). Undefined for any other engine.
+ * A person's own added account follows that first account in the
+ * organization's list of allowed engines. */
+export function providerFirstAccount(instanceId: string, driver: string): string | undefined {
+  if (!addedAccount(instanceId, driver)) return undefined;
+  return separateAccountInstance(instanceId) ? instanceId.slice(0, -37) : "claude";
+}

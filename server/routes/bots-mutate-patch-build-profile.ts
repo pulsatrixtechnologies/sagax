@@ -87,6 +87,7 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
       selectedTask ? { selection: selectedTask.modelSelection, busy: env.threadBusy(selectedTask.id, selectedTask.threadId) } : undefined,
       body.requireAvailableModel === true,
       env.sessionPrincipal(env.auth),
+      existingBot ? env.effectiveBotOwner(existingBot) : undefined,
     );
     if (!checked.ok) {
       env.json(env.res, checked.status, { error: checked.error });
@@ -94,7 +95,7 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     }
     normalizedSelection = checked.selection;
     if (existingBot && env.activeGroupTurnForBot(existingBot.id)) {
-      const groupChecked = env.checkedModelSelection(normalizedSelection, { selection: existingBot.modelSelection, busy: true }, false, env.sessionPrincipal(env.auth));
+      const groupChecked = env.checkedModelSelection(normalizedSelection, { selection: existingBot.modelSelection, busy: true }, false, env.sessionPrincipal(env.auth), env.effectiveBotOwner(existingBot));
       if (!groupChecked.ok) {
         env.json(env.res, groupChecked.status, { error: groupChecked.error });
         return true;

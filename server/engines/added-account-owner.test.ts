@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { LOGIN_MARKER, PrincipalEngineLogins } from "./principal-engine-logins.ts";
 import { materializeEngineAccess, resolveEngineAccess, type EngineCredentialInput } from "./engine-credentials.ts";
-import { accountOwnerOf, describeUnownedAccount, unownedAddedAccounts } from "./account-owner.ts";
-import { addedAccount, separateAccountInstance } from "../../shared/added-account.ts";
+import { accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./account-owner.ts";
+import { addedAccount, providerFirstAccount, separateAccountInstance } from "../../shared/added-account.ts";
 import { createOrgAdminEngines } from "../index-leaves/orgAdminEngines.ts";
 import { PersonalProviderInstances } from "./personal-provider-instances.ts";
 import type { TurnSpeaker } from "./engine-access.ts";
@@ -164,5 +164,30 @@ describe("#4435: an added account runs only for the person who added it", () => 
     expect(steps).toEqual(["sign-out", "persist"]);
     expect(Object.keys((cfg as { instances: object }).instances)).not.toContain(ALEX_ACCOUNT);
     expect(configBusy).toBe(false);
+  });
+});
+
+describe("an added account follows its provider's first one in the allowed list (#4435)", () => {
+  const uuid = "0f2b7c1e-3a4d-4e5f-8a9b-1c2d3e4f5a6b";
+  const instances = {
+    claude: { driver: "claudeAgent" },
+    [`claude-${uuid}`]: { driver: "claudeAgent", ownerPrincipalId: "alex" },
+    [`chatgpt-${uuid}`]: { driver: "codex", ownerPrincipalId: "sam" },
+    "claude-work": { driver: "claudeAgent" },
+  };
+  it("names the provider's first account", () => {
+    expect(providerFirstAccount(`claude-${uuid}`, "claudeAgent")).toBe("claude");
+    expect(providerFirstAccount(`chatgpt-${uuid}`, "codex")).toBe("chatgpt");
+    expect(providerFirstAccount(`antigravity-${uuid}`, "antigravityAgent")).toBe("antigravity");
+    expect(providerFirstAccount("claude-work", "claudeAgent")).toBe("claude");
+    expect(providerFirstAccount("claude", "claudeAgent")).toBeUndefined();
+    expect(providerFirstAccount("grok", "grokAgent")).toBeUndefined();
+  });
+  it("adds each owned account whose provider is allowed, never an unowned one", () => {
+    expect(allowedWithOwnedAccounts(["grok", "claude"], instances)).toEqual(["grok", "claude", `claude-${uuid}`]);
+    expect(allowedWithOwnedAccounts(["chatgpt"], instances)).toEqual(["chatgpt", `chatgpt-${uuid}`]);
+    expect(allowedWithOwnedAccounts(["grok"], instances)).toEqual(["grok"]);
+    expect(allowedWithOwnedAccounts([], instances)).toEqual([]);
+    expect(allowedWithOwnedAccounts(null, instances)).toBeNull();
   });
 });

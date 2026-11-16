@@ -15,7 +15,6 @@ import { t } from "@/lib/i18n";
 import { setShowInspectorButton, useShowInspectorButton } from "@/lib/inspector-preferences";
 import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
 import { setShowTurnTiming, useShowTurnTiming } from "@/lib/turn-timing-preferences";
-import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useStore } from "@/state/store";
 
@@ -24,7 +23,7 @@ import { ClaudeCodeRows } from "../ClaudeCodeSwitches";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
 import { McpCallTimeoutSettings } from "../McpCallTimeoutSettings";
 import { RoomTurnTimeoutSettings } from "../RoomTurnTimeoutSettings";
-import { CompactRow, DescribedRow, LinkRow, SettingsGroup, Switch } from "../SettingsPrimitives";
+import { CompactRow, DescribedRow, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
 import { DiagnosticsRow, DownloadLogsRow, generalAdvancedShown, LoopGuardRow } from "./AdvancedSettings";
 import { InterfaceModeRow } from "./AppearanceSettings";
@@ -47,7 +46,7 @@ function SwitchLine({ label, checked, onChange, rowId, ariaLabel }: { label: str
   );
 }
 
-export function DeveloperSettings({ remoteActive, openAbout }: { remoteActive: boolean; openAbout?: () => void }) {
+export function DeveloperSettings({ remoteActive }: { remoteActive: boolean }) {
   const { state } = useStore();
   const editConfig = canEditConfig(state.config);
   const runCard = useShowRunCard();
@@ -117,13 +116,7 @@ export function DeveloperSettings({ remoteActive, openAbout }: { remoteActive: b
           <InterfaceModeRow />
         </SettingsGroup>
       </div>
-      {/* Release notes and About (moved from Updates): the update flow, app menu and app grid show the notes on their own */}
-      <div data-settings-card="developer.links">
-        <SettingsGroup groupId="updatesLinks">
-          <LinkRow rowId="releaseNotes" label={t("settings.updates.links.releaseNotes")} onClick={() => requestReleaseNotes("browse")} />
-          {openAbout && <LinkRow rowId="aboutFromUpdates" label={t("settings.updates.links.about")} onClick={openAbout} />}
-        </SettingsGroup>
-      </div>
+      {/* #4457: Release notes are What's new on Updates again, About its own sub-page there */}
       {/* Per bot (#2658): the bot page's technical cards, one bot at a time */}
       <DeveloperBotCard />
       {/* Claude Code on this computer (#2658, was Connect apps > Installed) */}

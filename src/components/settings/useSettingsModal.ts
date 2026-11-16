@@ -7,7 +7,7 @@ import { navigate } from "@/lib/view-transitions";
 import { peopleListServed, readMembership } from "@/lib/membership";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { canEditConfig, canManageBackups, canManageComputers, canManageExperimental, viewerCan } from "@/lib/viewer";
-import { currentSettingsSection, isMovedOrganizationCard } from "@/lib/settings-sections";
+import { currentSettingsSection, isMovedOrganizationCard, settingsTarget } from "@/lib/settings-sections";
 import { requestAbout } from "@/lib/about-ui";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesSettingsSection } from "@/lib/interface-visibility";
@@ -27,9 +27,11 @@ import {
   organizationHidesSection,
   orgMemoryAvailable,
   publishedPagesMatch,
+  railSections,
   sectionMatches,
 } from "./settings-nav";
 import { resolveSubPage } from "./settings-sub-pages";
+import type { SettingsPageScope } from "../SettingsSubPage";
 
 export function useSettingsModal() {
   const { state, dispatch } = useStore();
@@ -40,10 +42,12 @@ export function useSettingsModal() {
   // shows this desktop's own pages only (Appearance, Organization,
   // Notifications); Pair devices, its old landing page, is hidden since
   // 2026-10-14, so it lands on Appearance.
+  // #4457: a remote client draws General, Updates and Organization (the
+  // cards of those pages that are about this desktop), so it lands on General.
   const current = currentSettingsSection(state.appSettingsSection);
   const requested: AppSettingsSection =
-    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "updates" && current !== "general" && current !== "about"
-      ? "appearance"
+    remoteActive && current !== "organization" && current !== "updates" && current !== "general"
+      ? "general"
       : current;
   const dialogRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
@@ -122,28 +126,38 @@ export function useSettingsModal() {
       dispatch({ type: "toggleAppSettings", open: true, section: "general" });
       return;
     }
-    dispatch({ type: "toggleAppSettings", open: false, section: "account" });
+    dispatch({ type: "toggleAppSettings", open: false, section: "general" });
     dispatch({ type: "toggleLaunch", open: true, mode: "server" });
   }, [soloDesktop, memoryShown, state.appSettingsSection, dispatch]);
   // A page shows when it is allowed, or when one of the cards it holds is.
   // #4360: a person alone reads no organization word in the rail or titles
   const sections = sectionsFor(organization);
   const availableSections = sections.filter((entry) => allowed(entry.id) || (HOSTED_CARDS[entry.id] ?? []).some(allowed));
+  // #4457: the rail draws the seven pages; Organization, off the rail, shows
+  // in it while a search finds it (its own address opens it too)
   // A page this viewer cannot see (an old link to Email where People is not
   // shown, a hidden page) draws the first page they can, at once.
   const section: AppSettingsSection = availableSections.some((entry) => entry.id === requested) ? requested : availableSections[0]?.id ?? requested;
   // On a solo desktop the org-advanced rows live on General, so its search matches their words.
-  const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "general" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
+  const visibleSections = (q ? availableSections : railSections(availableSections)).filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "general" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
   const pagesHit = Boolean(q) && publishedPagesMatch(q);
   const sectionLabelKey = sections.find((entry) => entry.id === section)?.labelKey;
   // #2080: every page has its one sentence under the title, drawn by the modal.
   const sectionIntroKey = sections.find((entry) => entry.id === section)?.introKey;
-  const subPageId = state.appSettingsSubPage;
-  const resolved = useMemo(() => resolveSubPage(subPageId), [subPageId]);
-  const subPage = subPageId && resolved?.section === section ? resolved : null;
-  const openSubPage = (id: string) => { const page = resolveSubPage(id); if (page) dispatch({ type: "toggleAppSettings", open: true, section: page.section, subPage: id }); };
+  // A former page id kept in the state (a saved section, an older link)
+  // opens its sub-page, as the reducer does for a new one (#4457).
+  const subPageId = state.appSettingsSubPage ?? settingsTarget(state.appSettingsSection).subPage ?? null;
+  const openSubPage = (id: string) => { const page = resolveSubPage(id, () => pageScope); if (page) dispatch({ type: "toggleAppSettings", open: true, section: page.section, subPage: id }); };
+  // What the pages need to draw their "▸" rows (#4457), and the sub-pages
+  // to draw their content: the former pages' rules, kept.
+  const pageScope: SettingsPageScope = { allowed, openSubPage, organization, editConfig, remoteActive, openAbout };
+  const scopeRef = useRef(pageScope);
+  scopeRef.current = pageScope;
+  const resolved = useMemo(() => resolveSubPage(subPageId, () => scopeRef.current), [subPageId]);
+  // A sub-page this viewer may not see draws its page instead.
+  const subPage = subPageId && resolved?.section === section && (!resolved.gate || allowed(resolved.gate)) ? resolved : null;
   const closeSubPage = useCallback(() => {
-    const from = state.appSettingsSubPage;
+    const from = subPageId;
     dispatch({ type: "toggleAppSettings", open: true, section });
     // Back where the person left: the row that opened the page.
     if (from && typeof requestAnimationFrame === "function") {
@@ -152,7 +166,7 @@ export function useSettingsModal() {
         row?.querySelector<HTMLElement>("button")?.focus();
       });
     }
-  }, [dispatch, section, state.appSettingsSubPage]);
+  }, [dispatch, section, subPageId]);
   const nextVisibleSection = visibleSections.some((entry) => entry.id === section) ? undefined : visibleSections[0]?.id;
 
   useEffect(() => {
@@ -278,5 +292,6 @@ export function useSettingsModal() {
     subPage,
     openSubPage,
     closeSubPage,
+    pageScope,
   };
 }

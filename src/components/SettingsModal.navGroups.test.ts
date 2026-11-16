@@ -1,7 +1,9 @@
-// Settings nav in headed groups (2026-10-16, the owner): as Cursor Settings and
-// the reference design keep their rail short, Sagax groups its pages under Personal, AI,
-// Installation and App. Every page stays reachable, the search keeps working,
-// and a heading with nothing under it is not drawn.
+// Settings nav (#4457, the owner 2026-11-16): the reference app's rail, seven
+// entries with no group title (General, Computer, Permissions, Vault,
+// Providers, Usage, Updates). The headed groups of 2026-10-16 are gone; every
+// former page lives on one of the seven or one page further, the search
+// finds them, and Organization is off the rail (its console is linked in the
+// footer when the app is linked to one).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +12,8 @@ import type { AppSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
 
 const fixture = vi.hoisted(() => ({
-  section: "account" as AppSettingsSection,
+  section: "general" as AppSettingsSection,
+  org: null as unknown,
   config: { rooms: { turnTimeoutMinutes: 5 } } as Record<string, unknown> | undefined,
 }));
 vi.mock("@/state/store", async (importOriginal) => ({
@@ -22,14 +25,21 @@ vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvance
 vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: () => {}, usageMeterEnabled: () => false, setUsageMeterEnabled: () => {} }));
 vi.mock("@/lib/updater", () => ({ useUpdaterState: () => ({ status: "idle", allowPrerelease: false }) }));
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
+vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/perspicax-org")>(),
+  usePerspicaxOrg: () => fixture.org,
+}));
 
-const { NAV_GROUPS, SECTIONS, SettingsModal } = await import("./SettingsModal");
+const { SECTIONS, SettingsModal, sectionMatches } = await import("./SettingsModal");
 const render = () => renderToStaticMarkup(createElement(SettingsModal));
 const nav = (html: string) => html.slice(html.indexOf("<nav"), html.indexOf("</nav>"));
+const railRows = (html: string) => [...nav(html).matchAll(/data-settings-nav-row="(\w+)"/g)].map((match) => match[1]);
 const updater = { check: vi.fn(), install: vi.fn(), onState: vi.fn(), setPrereleases: vi.fn() };
+const page = (id: string) => SECTIONS.find((entry) => entry.id === id)!;
 
 beforeEach(() => {
-  fixture.section = "account";
+  fixture.section = "general";
+  fixture.org = null;
   fixture.config = { rooms: { turnTimeoutMinutes: 5 } };
   setLocale("en");
   vi.stubGlobal("document", { documentElement: { dataset: {} } });
@@ -40,183 +50,120 @@ afterEach(() => {
   setLocale("en");
 });
 
-describe("Settings nav groups", () => {
-  it("puts every page in one known group, in the order of the groups", () => {
-    const order = NAV_GROUPS.map((group) => group.id);
-    const at = SECTIONS.map((entry) => order.indexOf(entry.group));
-    expect(at.every((value) => value >= 0)).toBe(true);
-    expect([...at].sort((x, y) => x - y)).toEqual(at);
-    expect(SECTIONS.map((entry) => entry.id)).toEqual([
-      // #2080 (L0): the final rail; Import lives in Backups (its old id stays
-      // an alias). #2090: Updates is its own page. 2026-11-06: the old App
-      // page splits into General (system, keyboard, mode) and About.
-      // the owner 2026-11-07: App in the Apple order, General first, About last.
-      // #2614: Permissions (OS permissions of this computer) after Computer.
-      "account", "appearance", "notifications", "security", "credentials",
-      "providers", "engines", "voice", "usage",
-      "organization", "computer", "permissions", "backups",
-      "general", "updates", "developer", "about",
-    ]);
-  });
-
-  it("draws the headings in order, each over its pages; Automations is in the avatar menu, not here", () => {
-    const rail = nav(render());
-    const headings = [...rail.matchAll(/data-settings-nav-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(headings).toEqual(["you", "ai", "workspace", "app"]);
-    // #4360: with no organization the third heading is the person's Installation
-    for (const label of ["Personal", "AI", "Installation", "App"]) expect(rail, label).toContain(`>${label}</div>`);
-    const ai = rail.slice(rail.indexOf('data-settings-nav-group="ai"'), rail.indexOf('data-settings-nav-group="workspace"'));
-    expect(ai).toContain(">Models</button>");
-    expect(ai.indexOf(">Models</button>")).toBeLessThan(ai.indexOf(">Voice</button>"));
-    const you = rail.slice(rail.indexOf('data-settings-nav-group="you"'), rail.indexOf('data-settings-nav-group="ai"'));
-    for (const page of ["Account", "Security", "Vault", "Appearance", "Notifications"]) expect(you, page).toContain(`>${page}</button>`);
-    expect(rail).not.toContain("data-settings-automations");
-    const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
-    // the owner 2026-11-07: the Apple order, General, Updates (desktop), Developer, About last
-    const order = [">General</button>", ">Updates</button>", ">Developer</button>", ">About</button>"].map((label) => app.indexOf(label));
-    expect(order.every((value) => value >= 0)).toBe(true);
-    expect([...order].sort((x, y) => x - y)).toEqual(order);
-    expect(app).not.toContain(">App</button>");
-    expect(app).not.toContain("Help and about");
-    // each group is labelled by its heading for assistive tech
-    expect(rail).toMatch(/role="group" aria-labelledby="app-settings-nav-you"/);
-  });
-
-  // 2026-10-26: Published pages are in Connect apps. 2026-10-28: Security
-  // and Vault are pages of their own. 2026-11-06: General comes back as the
-  // app's own system page, under the App heading, never in Personal.
-  it("keeps General under App, not Personal; Account first, then Security and Vault", () => {
+describe("Settings rail (#4457)", () => {
+  it("draws the seven entries in the reference order, with no group heading", () => {
     const html = render();
+    expect(railRows(html)).toEqual(["general", "computer", "security", "credentials", "providers", "usage", "updates"]);
     const rail = nav(html);
-    const you = rail.slice(rail.indexOf('data-settings-nav-group="you"'), rail.indexOf('data-settings-nav-group="ai"'));
-    expect(you).not.toContain(">General</button>");
-    expect(rail.slice(rail.indexOf('data-settings-nav-group="app"'))).toContain(">General</button>");
-    const at = [">Account</button>", ">Appearance</button>", ">Security</button>", ">Vault</button>"].map((label) => rail.indexOf(label));
-    expect(at.every((value) => value >= 0)).toBe(true);
-    expect([...at].sort((x, y) => x - y)).toEqual(at);
-    for (const gone of ["Credentials", "Published pages", "Models and voice"]) expect(rail, gone).not.toContain(`>${gone}</button>`);
-    for (const id of ["security", "credentials"]) expect(html, id).toContain(`<option value="${id}"`);
-    expect(html).not.toContain('<option value="pages"');
+    for (const label of ["General", "Computer", "Permissions", "Vault", "Providers", "Usage", "Updates"]) expect(rail, label).toContain(`${label}</button>`);
+    expect(rail).not.toContain("data-settings-nav-group");
+    for (const heading of ["Personal", "AI", "Installation", "App"]) expect(rail, heading).not.toContain(`>${heading}</div>`);
+    // Organization is off the rail
+    expect(rail).not.toContain('data-settings-nav-row="organization"');
+    expect(rail).not.toContain("data-settings-automations");
   });
 
-  it("Account keeps the account only: no security key, rule, tool access or vault there", () => {
+  it("the small-screen menu lists the same seven pages, with no group", () => {
     const html = render();
-    expect(html).toContain('data-settings-group="account"');
-    for (const gone of ['data-settings-card="security"', "Loading your vault", 'data-settings-card="credentials.items"', "data-security-page", "data-vault-page"]) {
-      expect(html, gone).not.toContain(gone);
-    }
+    expect(html).not.toContain("<optgroup");
+    const options = [...html.matchAll(/<option value="(\w+)"/g)].map((match) => match[1]);
+    expect(options).toEqual(["general", "computer", "security", "credentials", "providers", "usage", "updates"]);
   });
 
-  it("a search for pages finds Published pages in Connect apps, and the moved sections where they are now", async () => {
-    const { publishedPagesMatch, sectionMatches } = await import("./SettingsModal");
-    for (const query of ["pages", "published", "publiées", "revoke"]) expect(publishedPagesMatch(query), query).toBe(true);
-    expect(publishedPagesMatch("vault")).toBe(false);
-    expect(publishedPagesMatch("")).toBe(false);
-    const account = SECTIONS.find((entry) => entry.id === "account")!;
-    const security = SECTIONS.find((entry) => entry.id === "security")!;
-    const vault = SECTIONS.find((entry) => entry.id === "credentials")!;
-    // 2026-10-28: security keys, rules and tool access on Security; the vault on Vault
-    for (const query of ["security key", "clé de sécurité", "passkey", "yubikey", "always allow", "toujours refuser", "demander d'abord", "règles d'approbation", "my tool access", "mon accès aux outils"]) {
-      expect(sectionMatches(security, query), query).toBe(true);
-      expect(sectionMatches(account, query), query).toBe(false);
-    }
-    // "tool access" also names People's tool access, an admin card that
-    // lives on Security now (2026-11-06): one search, one place
-    expect(sectionMatches(security, "tool access")).toBe(true);
-    expect(sectionMatches(security, "people's tool access")).toBe(true);
-    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "about")!, "people's tool access")).toBe(false);
-    for (const query of ["vault", "coffre", "identifiants", "1password", "one-time card", "carte à usage unique", "mot de passe"]) {
-      expect(sectionMatches(vault, query), query).toBe(true);
-      expect(sectionMatches(account, query), query).toBe(false);
-    }
-    // what General held: identity and region on Account, tours and
-    // diagnostics on About; the microphone on Voice
-    for (const query of ["language", "langue", "time zone", "fuseau", "avatar"]) {
-      expect(sectionMatches(account, query), query).toBe(true);
-    }
-    const app = SECTIONS.find((entry) => entry.id === "about")!;
-    expect(sectionMatches(app, "tour")).toBe(true);
-    // #2636: diagnostics on Developer
-    expect(sectionMatches(app, "diagnostic")).toBe(false);
-    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "developer")!, "diagnostic")).toBe(true);
-    // the server choice is Organization's (its launch screen on a desktop with no server)
-    for (const query of ["server", "serveur"]) {
-      expect(sectionMatches(SECTIONS.find((entry) => entry.id === "organization")!, query), query).toBe(true);
-    }
-    expect(sectionMatches(account, "microphone")).toBe(false);
-    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "engines")!, "microphone")).toBe(false);
-    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "voice")!, "microphone")).toBe(true);
-    const general = SECTIONS.find((entry) => entry.id === "general")!;
-    for (const query of ["open at login", "hotkey", "send key"]) {
-      expect(sectionMatches(general, query), query).toBe(true);
-      expect(sectionMatches(app, query), query).toBe(false);
-    }
-  });
-
-  it("groups the small-screen menu the same way", () => {
-    const html = render();
-    expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
-    expect(html).toContain('<optgroup label="App"><option value="general">General</option><option value="updates">Updates</option>');
-    expect(html).toContain('<option value="updates">Updates</option><option value="developer">Developer</option><option value="about">About</option>');
-    expect(html).not.toContain(">App</option>");
-  });
-
-  it("keeps General and About without an updater; Updates hides; Help and about is gone", () => {
-    vi.stubGlobal("window", {});
+  it("links the organization console in the footer, only when the app is linked to one", () => {
+    expect(nav(render())).not.toContain("data-settings-console-link");
+    fixture.org = { org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://console.example.test/" } }, link: { state: "ok" }, viewerRole: "member", settings: {} };
     const rail = nav(render());
-    expect(rail).toContain('data-settings-nav-group="app"');
-    expect(rail).toContain(">General</button>");
-    expect(rail).toContain(">About</button>");
-    expect(rail).not.toContain(">Updates</button>");
-    expect(rail).not.toContain("Help and about");
-    // a member who cannot edit the installation has no Experimental
-    fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
-    vi.stubGlobal("window", {});
-    const member = nav(render());
-    expect(member).not.toContain(">Experimental</button>");
-    expect(member).toContain(">General</button>");
-    expect(member).toContain(">About</button>");
+    expect(rail).toMatch(/<a href="https:\/\/console\.example\.test\/console\/" target="_blank" rel="noreferrer" data-settings-console-link=""/);
+    expect(rail).toContain("More on Perspicax");
+    setLocale("fr");
+    expect(nav(render())).toContain("Plus dans Perspicax");
   });
 
-  it("draws Updates without a This app heading; App keeps the About link", () => {
-    fixture.section = "updates";
+  it("General holds Account, Appearance, Notifications, Mascots and System, with its rows one page further", () => {
     const html = render();
-    expect(html).toContain('data-settings-card="updates"');
-    // the owner 2026-11-08: the Release notes / About rows moved to Developer
-    expect(html).not.toContain('data-settings-card="updates.links"');
-    expect(html).not.toMatch(/<h3[^>]*>This app<\/h3>/);
-    expect(html).not.toContain("data-about-section");
-    fixture.section = "about";
-    const app = render();
-    expect(app).toContain('data-settings-card="about.about"');
-    expect(app).not.toContain('data-settings-card="updates"');
+    for (const group of ["account", "generalAppearance", "generalNotifications", "generalMascots", "generalSystem"]) expect(html, group).toContain(`data-settings-group="${group}"`);
+    for (const row of ["general.aboutMe", "general.appearance", "general.notifications", "general.mascots", "general.backups"]) expect(html, row).toContain(`data-settings-card="${row}"`);
+    // the order of the cards
+    const at = ["account", "generalAppearance", "generalNotifications", "generalMascots", "generalSystem"].map((group) => html.indexOf(`data-settings-group="${group}"`));
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+  });
+
+  it("Permissions holds Before acting, Privacy and Security", () => {
+    fixture.section = "security";
+    const html = render();
+    for (const group of ["permissionsBeforeActing", "privacy", "permissionsSecurity"]) expect(html, group).toContain(`data-settings-group="${group}"`);
+    for (const row of ["security.rules", "security.toolGrants", "security.keys"]) expect(html, row).toContain(`data-settings-card="${row}"`);
+    expect(html).toContain(">Permissions</h2>");
+  });
+
+  it("Providers holds the Models and Voice cards (their rows one page further); Updates holds What's new, About and Advanced", async () => {
+    const { ProvidersModelsVoice, ProvidersSettings } = await import("./lazy-settings-sections");
+    await Promise.all([ProvidersModelsVoice.preload(), ProvidersSettings.preload()]);
+    fixture.section = "providers";
+    const providers = render();
+    for (const row of ["providers.models", "providers.voice"]) expect(providers, row).toContain(`data-settings-card="${row}"`);
+    // Accounts, Models, Voice, then Advanced (never under the Advanced fold)
+    const at = ["providers.list", "providers.models", "voice.providers", "providers.advanced"].map((card) => providers.indexOf(`data-settings-card="${card}"`));
+    expect(at.every((index) => index >= 0), at.join()).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+    expect(providers).toContain('data-settings-group="providersModels"');
+    fixture.section = "updates";
+    const updates = render();
+    expect(updates).toContain('data-settings-card="updates.links"');
+    for (const row of ["updates.about", "updates.advanced"]) expect(updates, row).toContain(`data-settings-card="${row}"`);
+  });
+
+  it("keeps Updates on the web (About and Advanced), with no updater", () => {
+    vi.stubGlobal("window", {});
+    expect(railRows(render())).toContain("updates");
+  });
+
+  it("the search finds each moved option on the page that holds it now", () => {
+    const where: Record<string, string[]> = {
+      general: ["language", "time zone", "avatar", "open at login", "hotkey", "send key", "microphone", "notification sound", "backup", "theme", "font"],
+      security: ["security key", "passkey", "always allow", "my tool access", "people's tool access", "read receipts", "screen recording"],
+      credentials: ["vault", "1password", "one-time card"],
+      providers: ["api key", "models", "voice", "tts", "decision model"],
+      updates: ["version", "diagnostic", "advanced mode", "licence", "send feedback"],
+      organization: ["server", "obsidian"],
+    };
+    for (const [id, queries] of Object.entries(where)) {
+      for (const query of queries) {
+        const found = SECTIONS.filter((entry) => sectionMatches(entry, query)).map((entry) => entry.id);
+        expect(found, query).toContain(id);
+      }
+    }
+  });
+
+  it("a search lists Organization in the rail, the way it lists the pages it finds", async () => {
+    const { railSections } = await import("./settings/settings-nav");
+    expect(railSections(SECTIONS).map((entry) => entry.id)).not.toContain("organization");
+    expect(sectionMatches(page("organization"), "obsidian")).toBe(true);
   });
 
   it("reads in French, with no long dash", () => {
     setLocale("fr");
     const html = render();
     const rail = nav(html);
-    for (const label of ["Personnel", "IA", "Installation", "Application"]) expect(rail, label).toContain(`>${label}</div>`);
-    expect(html).toContain('<optgroup label="Personnel">');
+    for (const label of ["Général", "Ordinateur", "Autorisations", "Coffre", "Fournisseurs", "Utilisation", "Mises à jour"]) expect(rail, label).toContain(label);
     expect(html).not.toMatch(/[\u2013\u2014]/);
   });
 
-  // the owner 2026-11-07: General selected and Updates highlighted looked like two
-  // active rows. One row carries the selection; the hover of the others is a
-  // lighter fill than bg-selected, never the same token.
+  // the owner 2026-11-07: one row carries the selection; the hover of the
+  // others is a lighter fill than bg-selected, never the same token.
   it("marks exactly one row active, and the hover of the others stays lighter", () => {
-    for (const section of ["general", "updates", "about"] as AppSettingsSection[]) {
+    for (const section of ["general", "updates", "security"] as AppSettingsSection[]) {
       fixture.section = section;
       const buttons = [...nav(render()).matchAll(/<button[^>]*>/g)].map((match) => match[0]);
       const rows = buttons.filter((tag) => /data-settings-nav-row="/.test(tag));
-      expect(rows.length).toBeGreaterThan(10);
+      expect(rows).toHaveLength(7);
       const active = rows.filter((tag) => tag.includes('aria-current="page"'));
       expect(active, section).toHaveLength(1);
       expect(active[0]).toContain(`data-settings-nav-row="${section}"`);
       expect(rows.filter((tag) => /\bbg-selected\b/.test(tag)), section).toHaveLength(1);
       for (const tag of rows.filter((row) => !row.includes('aria-current="page"'))) {
         expect(tag).not.toContain("hover:bg-selected");
-        expect(tag).not.toContain("hover:bg-hover");
         expect(tag).toContain("hover:bg-ink/[0.05]");
       }
     }

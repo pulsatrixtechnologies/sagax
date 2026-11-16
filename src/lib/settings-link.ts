@@ -7,7 +7,7 @@ import { requestProviderRow } from "@/lib/provider-row-request";
 import { t } from "@/lib/i18n";
 import { requestSettingsCard } from "@/components/SettingsPrimitives";
 import type { AppSettingsSection } from "@/state/store";
-import { currentSettingsCard, currentSettingsSection, mergedSettingsCard } from "@/lib/settings-sections";
+import { currentSettingsCard, currentSettingsSection, mergedSettingsCard, SETTINGS_SUB_PAGES, settingsTarget } from "@/lib/settings-sections";
 
 export { currentSettingsSection, mergedSettingsCard };
 
@@ -30,25 +30,27 @@ const SECTION_LABEL = {
   voice: "settings.section.voice",
   // Pair devices, Activity and Email are hidden (2026-10-14), People and
   // Installations too (2026-10-15): a pointer names the page an old link opens.
-  companion: "settings.section.account",
+  companion: "settings.section.general",
   computer: "settings.section.computer",
-  permissions: "settings.section.permissions",
+  permissions: "settings.sub.systemPermissions",
   usage: "settings.section.usage",
   // 2026-10-28: Security and Vault are pages again.
   credentials: "settings.section.vault",
-  people: "settings.section.account",
-  mail: "settings.section.account",
-  activity: "settings.section.account",
+  people: "settings.section.general",
+  mail: "settings.section.general",
+  activity: "settings.section.general",
   backups: "settings.section.backupsAndStorage",
   import: "settings.section.backupsAndStorage",
-  workspaces: "settings.section.account",
-  privacy: "settings.section.notifications",
+  workspaces: "settings.section.general",
+  // #4457: Privacy is a card of Permissions
+  privacy: "settings.section.permissions",
   notifications: "settings.section.notifications",
   memory: "settings.section.organization",
   updates: "settings.updates.title",
   // About (was Help and about, JC 2026-11-07); a bare link opens the About window (requestAbout).
   about: "settings.section.about",
-  security: "settings.section.security",
+  // #4457: Permissions keeps the id "security"
+  security: "settings.section.permissions",
   // Published pages are a section of Connect apps > Manage (2026-10-26).
   pages: "connectApps.title",
 } as const satisfies Record<AppSettingsSection, LocaleKey>;
@@ -61,8 +63,15 @@ export function settingsSectionLabel(section: AppSettingsSection): string {
   return t(SECTION_LABEL[section]);
 }
 
+/** The name a pointer shows for a settings target (#4457): the sub-page it
+ * opens when it is one page further, else the page. */
+export function settingsPlaceLabel(section: AppSettingsSection, cardId?: string): string {
+  const target = settingsTarget(section, cardId);
+  return target.subPage ? t(SETTINGS_SUB_PAGES[target.subPage].titleKey) : settingsSectionLabel(target.section);
+}
+
 type SettingsDispatch = (action:
-  | { type: "toggleAppSettings"; open: true; section: AppSettingsSection }
+  | { type: "toggleAppSettings"; open: true; section: AppSettingsSection; subPage?: string }
   | { type: "togglePlugins"; open: true; page: "pages" | "providers" | "sources" }) => void;
 
 /** Opens Settings on a section, and a card when the sentence points at one.
@@ -85,7 +94,8 @@ export function openSettings(dispatch: SettingsDispatch, section: AppSettingsSec
     dispatch({ type: "togglePlugins", open: true, page: "sources" });
     return;
   }
-  dispatch({ type: "toggleAppSettings", open: true, section: currentSettingsSection(section, cardId) });
+  const target = settingsTarget(section, cardId);
+  dispatch({ type: "toggleAppSettings", open: true, section: target.section, ...(target.subPage ? { subPage: target.subPage } : {}) });
   const card = cardId ? currentSettingsCard(cardId) : mergedSettingsCard(section);
   if (card) requestSettingsCard(card);
 }

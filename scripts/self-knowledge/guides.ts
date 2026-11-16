@@ -20,16 +20,13 @@ export interface Guide {
 
 /** One line more on a Settings page (setting:<id>): what it holds or who sees it. */
 export const SETTING_NOTES: Record<string, { text?: string; access?: string }> = {
-  account: { text: "Who is signed in (name, photo, label, Sign out), Open at login, About me, language and time zone; then the server, default bot, guided tours and Advanced." },
-  security: { text: "The person's own security: security keys and passkeys and the approvals that need one, every approval rule they saved (Always allow, Always deny, Ask first; paged, each revocable) and their own tool access.", access: "everyone, for their own keys, rules and tool access" },
+  general: { text: "General (#4457, one of the seven pages): Account (who is signed in, name, photo, Sign out, About me); Appearance (theme, accent, language, time zone, spell check, send key, then More appearance: font, chat width, background effects, app icon, conversations, sidebar, accessibility); Notifications (desktop notifications, the approval chime, then More notifications); Mascots (More mascots: HD, fly away, captions, activity level; a mascot's own Settings item opens it); System (microphone, hardware acceleration, open at login, Shortcuts, Backups and storage). Backups and storage: Export full backup (bots, conversations, settings; no secret), import and restore. Backups access: solo: the person; organization: permission backup.workspace (off for members by default), restore stays with admins." },
+  security: { text: "Permissions (id security): Before acting (the person's approval rules, Always allow, Always deny, Ask first, paged and revocable; their own tool access; people's tool access for whoever edits the installation), Privacy (Keep people apart, blocked people, read receipts and presence on an organization server), Security (security keys and passkeys, and this computer's OS permissions).", access: "everyone, for their own keys, rules and tool access" },
+  updates: { text: "Updates: version and update state, Check now, the update channel, install while away, What's new; About (license, source, app tour, feedback) and Advanced (the former Developer page: advanced mode, diagnostics, logs, experimental features, timeouts, telemetry) one page further. Advanced: Technical options, and the Experimental section (moved here from its own page in 0.8.65): early features, each off until switched on (Meeting notetaker (Google Meet), skill authoring, data window); generated conversation titles are a row of Providers > Models.", access: "everyone for the person's own options; on an organization server the Experimental switches are for people who may edit the configuration (admins), plus a person's own switches" },
   credentials: { text: "Vault: logins, API keys, notes, cards and contact info bots use without seeing the secrets, under the tabs All, Logins, Payments and Contacts with a search; New item adds a login, API key, note, card, address or contact, and holds Import and Export; Manage on an item reveals it, edits it, deletes it and says which bot may use it. The Payments tab holds Bots use first, the one-time card (Shop Pay, Link), which bots may pay, purchases waiting for an answer and the history; then 1Password.", access: "everyone, for their own vault" },
-  providers: { text: "Providers: one list of where models and services come from, each row with who pays (me, the organization, this computer), its state and how many models are active; Other services (web search, image generation) and, under Advanced, cloud coding agent keys and the connectors of the person's provider accounts, one section per provider (a provider not signed in yet shows its one sign-in step there). On an organization server the organization's providers and keys read here as they stand, for everyone, and are managed in Perspicax (Manage in Perspicax). Personal accounts serve Models and Voice in solo and organization modes." },
-  engines: { text: "Models: which model each bot uses, as a table of bots (model and effort, batch selection, All bots) with a two-pane selector (providers on the left, models on the right, Favorites per person) and the defaults chosen in Perspicax on an organization server; under Advanced, the active model switches by provider, what Auto would choose now and the prompt cache. Provider sign-ins and keys live in Providers." },
-  voice: { text: "Voice: the person's speaking and listening providers, read-aloud and voice-note preferences, available voices, paired Mac voices, microphone and provider options. Keys live in Providers; the same OpenAI key serves Live. Installation Live settings stay under Advanced." },
-  developer: { text: "Technical options, and the Experimental section (moved here from its own page in 0.8.65): early features, each off until switched on (Meeting notetaker (Google Meet), skill authoring, data window, generated titles).", access: "everyone for the person's own options; on an organization server the Experimental switches are for people who may edit the configuration (admins), plus a person's own switches" },
-  backups: { text: "Export full backup (bots, conversations, settings; no secret), import and restore.", access: "solo: the person; organization: permission backup.workspace (off for members by default), restore stays with admins" },
+  providers: { text: "Providers (#4457): Accounts, one list of where models and services come from, each row with who pays (me, the organization, this computer), its state and how many models are active; then the Models card (Defaults for new bots, Models and context size, Generated conversation titles), then the Voice card (who speaks and who listens, the voice, then Live calls), then Advanced: Other services (web search, image generation), cloud coding agent keys and the connectors of the person's provider accounts, one section per provider (a provider not signed in yet shows its one sign-in step there). On an organization server the organization's providers and keys read here as they stand, for everyone, and are managed in Perspicax (Manage in Perspicax). Personal accounts serve Models and Voice in solo and organization modes. Models and context size and Live calls are sub-pages of Providers. Models and context size: which model each bot uses, as a table of bots (model and effort, batch selection, All bots) with a two-pane selector (providers on the left, models on the right, Favorites per person); under Advanced, the active model switches by provider, what Auto would choose now and the prompt cache. Provider sign-ins and keys live in Providers. Voice card: the person's speaking and listening providers and the voice; Live calls: read-aloud and voice-note preferences, provider options, installation Live settings and phone calls. Keys live in Providers; the same OpenAI key serves Live. The microphone is General > System." },
   computer: { text: "Where bots work: this computer, Local VM, cloud computers, self-hosted VPS, isolation, safety and storage.", access: "solo: the person; organization: admins, and each member for their own server environment" },
-  organization: { text: "Join a Perspicax server, connect to or start an organization; on an organization server the admin's policies: Allow full access, member auto-approval, new threads confidential by default, memory." },
+  organization: { text: "Off the seven-page rail since #4457 (found by search or its own address; the rail's footer links to the organization console). Join a Perspicax server, connect to or start an organization; on an organization server the admin's policies: Allow full access, member auto-approval, new threads confidential by default, memory." },
   usage: { text: "Tokens and cost this month and over 30 days, by bot and by model.", access: "everyone; it shows the person's own usage only" },
 };
 
@@ -76,8 +73,8 @@ export const GUIDES: Guide[] = [
     where: "Perspicax console > Access > Bot rights (Accès > Droits sur les bots), tab Who has what (Qui a quoi), /sagax/permissions?tab=assign",
     access: "Perspicax admins only; a bot cannot do it",
     keywords: "voix vocal mode voix voice mode xai equipe team teams donner assigner moteur engine membres",
-    text: "An admin does it in the Perspicax console: Access > Bot rights, tab Who has what; pick the teams or people, then give the engine Voice mode (xAI) (Mode voix (xAI)). A person's rights are the union of their own and their teams'. One person can also get it on their sheet. On the Sagax organization server the organization's xAI key then serves voice to admins and to the people given that engine. The personal xAI key is in Settings > Providers. In solo mode each person sets their own voice engine in Settings > Voice.",
-    refs: ["px:console:/sagax/permissions", "setting:engines", "file:server/org/org-xai-media.ts", "file:docs/voice-mode-xai.md"],
+    text: "An admin does it in the Perspicax console: Access > Bot rights, tab Who has what; pick the teams or people, then give the engine Voice mode (xAI) (Mode voix (xAI)). A person's rights are the union of their own and their teams'. One person can also get it on their sheet. On the Sagax organization server the organization's xAI key then serves voice to admins and to the people given that engine. The personal xAI key is in Settings > Providers. In solo mode each person sets their own voice engine in Settings > Providers, Voice card.",
+    refs: ["px:console:/sagax/permissions", "setting:providers", "file:server/org/org-xai-media.ts", "file:docs/voice-mode-xai.md"],
   },
   {
     id: "cloud-agents",
@@ -145,10 +142,10 @@ export const GUIDES: Guide[] = [
   {
     id: "voice-note",
     title: "Send a voice note",
-    where: "voice engine in Settings > Voice; the bot's voice in Edit bot > Model and tools > Voice & alerts",
+    where: "voice engine in Settings > Providers, Voice card; the bot's voice in Edit bot > Model and tools > Voice & alerts",
     keywords: "note vocale voice note audio message vocal voix parler speak",
     text: "Yes with send_voice_note, but only when a voice is configured: a voice engine with its key and a voice for the bot or the app, and the bot's voice notes not turned off. Otherwise the tool is not offered. On an organization server using the organization's xAI key, only for people given Voice mode (xAI).",
-    refs: ["tool:send_voice_note", "setting:engines", "bot-setting:voice"],
+    refs: ["tool:send_voice_note", "setting:providers", "bot-setting:voice"],
   },
   {
     id: "model-change",
@@ -161,9 +158,9 @@ export const GUIDES: Guide[] = [
   {
     id: "os-permissions",
     title: "Give Sagax a missing OS permission in one click",
-    where: "Settings > Permissions (Autorisations); a sagax://permission/<id> link in a reply",
+    where: "Settings > Permissions > This computer's permissions (Autorisations > Permissions de cet ordinateur); a sagax://permission/<id> link in a reply",
     keywords: "permission permissions autorisation autorisations microphone micro ecran screen recording enregistrement accessibilite accessibility notifications reconnaissance vocale speech automation automatisation full disk acces complet disque reglages systeme system settings parametres windows relancer relaunch tcc",
-    text: "Never send the person to look for a setting. Settings > Permissions lists what this computer allows Sagax (macOS: microphone, screen, accessibility, notifications, speech, automation, fullDisk; Windows: microphone, notifications), each with its one button: the system's own prompt when it can still ask, otherwise the exact System Settings or Windows Settings pane, and Relaunch Sagax for Screen Recording (macOS applies it at the next launch; still refused after a relaunch, the button resets the entry and reopens the pane). The page reads again when the person comes back. In a reply, write [Allow Screen Recording](sagax://permission/screen) (ids: microphone, screen, accessibility, notifications, speech, automation, fullDisk): in the desktop app it is a button that runs the same action, and once allowed it reads as plain text.",
+    text: "Never send the person to look for a setting. Settings > Permissions > This computer's permissions lists what this computer allows Sagax (macOS: microphone, screen, accessibility, notifications, speech, automation, fullDisk; Windows: microphone, notifications), each with its one button: the system's own prompt when it can still ask, otherwise the exact System Settings or Windows Settings pane, and Relaunch Sagax for Screen Recording (macOS applies it at the next launch; still refused after a relaunch, the button resets the entry and reopens the pane). The page reads again when the person comes back. In a reply, write [Allow Screen Recording](sagax://permission/screen) (ids: microphone, screen, accessibility, notifications, speech, automation, fullDisk): in the desktop app it is a button that runs the same action, and once allowed it reads as plain text.",
     refs: ["file:docs/desktop-chat-links.md"],
   },
   {
@@ -177,11 +174,11 @@ export const GUIDES: Guide[] = [
   {
     id: "meetings",
     title: "Join a meeting and take notes",
-    where: "Settings > Developer > Experimental > Meeting notetaker (Google Meet)",
-    access: "organization: the Experimental section of Developer is for admins",
+    where: "Settings > Updates > Advanced > Experimental > Meeting notetaker (Google Meet)",
+    access: "organization: the Experimental section of Updates > Advanced is for admins",
     keywords: "reunion meeting teams zoom google meet notes prendre rejoindre join transcription",
-    text: "Google Meet only: Microsoft Teams and Zoom links are recognized but not supported. With Settings > Developer > Experimental > Meeting notetaker (Google Meet) on, in a direct conversation, the bot has join_meeting, which shows the person a consent card first.",
-    refs: ["tool:join_meeting", "setting:developer", "file:shared/meeting-links.ts"],
+    text: "Google Meet only: Microsoft Teams and Zoom links are recognized but not supported. With Settings > Updates > Advanced > Experimental > Meeting notetaker (Google Meet) on, in a direct conversation, the bot has join_meeting, which shows the person a consent card first.",
+    refs: ["tool:join_meeting", "setting:updates", "file:shared/meeting-links.ts"],
   },
   {
     id: "usage",
@@ -220,11 +217,11 @@ export const GUIDES: Guide[] = [
   {
     id: "backups",
     title: "Back up bots and conversations",
-    where: "Settings > Backups > Export full backup (Réglages > Sauvegardes > Exporter une sauvegarde complète); one bot: its actions menu > Export the bot (.zip)",
+    where: "Settings > General > Backups and storage > Export full backup (Réglages > Général > Sauvegardes et stockage > Exporter une sauvegarde complète); one bot: its actions menu > Export the bot (.zip)",
     access: "organization: permission backup.workspace (off for members by default); restoring stays with admins",
     keywords: "sauvegarde backup exporter export restaurer restore bots conversations zip copie",
-    text: "Settings > Backups > Export full backup saves bots, conversations and settings (never a secret: keys and tokens are left out). One bot: its actions menu > Export the bot (.zip), optionally with its conversations. On an organization server the page needs the backup.workspace permission, and restoring stays with admins.",
-    refs: ["setting:backups", "file:docs/bot-package.md", "file:shared/permissions.ts"],
+    text: "Settings > General > Backups and storage > Export full backup saves bots, conversations and settings (never a secret: keys and tokens are left out). One bot: its actions menu > Export the bot (.zip), optionally with its conversations. On an organization server the page needs the backup.workspace permission, and restoring stays with admins.",
+    refs: ["setting:general", "file:docs/bot-package.md", "file:shared/permissions.ts"],
   },
   {
     id: "triggers",

@@ -3,49 +3,40 @@
 // is the stuff shared by every bot: who you are, your keys, and the
 // machine your bots can borrow.
 import { useState } from "react";
-import { FileText, Search, X } from "lucide-react";
-import { useStore, type AppSettingsSection } from "@/state/store";
-import { localeChoices } from "@/locales";
+import { ArrowUpRight, FileText, Search, X } from "lucide-react";
+import type { AppSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { APP_NAME, appVersion } from "@/lib/app-links";
 import { brand } from "@/lib/brand";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
-import { CompactRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, SettingsPageActionsProvider, Switch } from "./SettingsPrimitives";
-import { TimeZoneRows } from "./settings/TimeZoneSettings";
-import { AboutPage, GeneralPage } from "./settings/AppPage";
+import { LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, SettingsPageActionsProvider, Switch } from "./SettingsPrimitives";
+import { GeneralPage } from "./settings/AppPage";
 import { DeveloperLink } from "./settings/DeveloperLink";
-import { PeopleToolAccessSettings } from "./ToolAccessSettings";
+import { requestReleaseNotes } from "@/lib/release-notes-ui";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
 import {
-  AppearanceSettings,
-  DeveloperSettings,
   CredentialsSettings,
-  DecisionModelSettings,
-  EnginesSettings,
   LocalComputerSection,
-  NotificationSettings,
   OrganizationSettings,
   OrgMemorySettings,
+  PrivacyRows,
+  ProvidersModelsVoice,
   ProvidersSettings,
-  SecurityKeySettings,
   UsageSection,
-  VoiceSettingsPage,
-  WorkspaceBackupSettings,
 } from "./lazy-settings-sections";
 import { openSettings } from "@/lib/settings-link";
 import { shortcutLabel } from "./ShortcutHint";
-import { aboutMeFirstLine } from "./AboutMeSettings";
-import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
-import { AccountCard } from "./settings/AccountCard";
-import { MyApprovalRules } from "./settings/MyApprovalRules";
-import { MyToolGrants } from "./settings/MyToolGrants";
+import { SettingsPageProvider, SettingsSubPage } from "./SettingsSubPage";
 import { cn } from "@/lib/cn";
-import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/language-preference";
 import { focusSettingsSearchLabel } from "@/lib/settings-search";
 import { useSettingsModal } from "./settings/useSettingsModal";
-import { navGroupsFor } from "./settings/settings-nav";
-import { OsPermissionsSection } from "./settings/OsPermissions";
+import { railSections } from "./settings/settings-nav";
+import { SubPageEntry } from "./settings/sub-page-entry";
+import { SubPagesForSearch } from "./settings/settings-sub-pages";
+import { SidebarPeopleApartRow } from "./settings/AppearanceSettings";
 
 // The threads choice moved with Appearance (0.5.6); old imports still work.
 // Re-exported from the thin preference module so this shell chunk does not
@@ -56,7 +47,6 @@ export { generalAdvancedShown, isSoloDesktop };
 
 export {
   ORGANIZATION_ADVANCED_KEYWORDS,
-  NAV_GROUPS,
   SECTIONS,
   cardsMatching,
   organizationHidesSection,
@@ -65,7 +55,6 @@ export {
   PUBLISHED_PAGES_KEYWORDS,
   publishedPagesMatch,
   sectionMatches,
-  type SettingsNavGroup,
 } from "./settings/settings-nav";
 
 
@@ -179,36 +168,23 @@ function AutoInstallAwayRow() {
   );
 }
 
-function LanguageRow() {
-  const { state } = useStore();
-  // Follows the account: anyone can switch, including a chat-only teammate,
-  // and nobody changes another person's screen. The server's language is
-  // the default until this person picks one.
-  const current = effectiveLanguage(useLanguageChoice(), state.config?.language);
-  return (
-    <CompactRow label={t("settings.language.title")} rowId="language">
-      <PillSelect
-        value={current}
-        ariaLabel={t("settings.language.aria")}
-        onChange={(next) => setLanguageChoice(next)}
-        options={[{ value: "", label: t("settings.language.system") }, ...localeChoices.map(({ code, label }) => ({ value: code, label }))]}
-      />
-    </CompactRow>
-  );
-}
-
 export function SettingsModal() {
   const {
-    state, dispatch, advanced, retroSkin, remoteActive, dialogRef, paneRef,
-    searchLabels, closeSettings, openAbout, query, setQuery, q,
+    dispatch, advanced, retroSkin, remoteActive, dialogRef, paneRef,
+    searchLabels, closeSettings, query, setQuery, q,
     lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
-    pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
-    editConfig, organization,
+    pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, closeSubPage,
+    pageScope,
   } = useSettingsModal();
+  // #4457: the footer's link to the organization console, where the
+  // organization's settings are managed (none when no console is linked)
+  const perspicaxOrg = usePerspicaxOrg();
+  const consoleIssuer = perspicaxOrg?.org.identity.issuer;
   // #4094: the header's action slot (the Vault's New item, top right)
   const [pageActions, setPageActions] = useState<HTMLDivElement | null>(null);
 
   return (
+    <SettingsPageProvider value={pageScope}>
     <div
       // in: the backdrop fades and the sheet settles from 98% (starting:, the
       // first paint); out: a quick page cross-fade (navigate, "back")
@@ -251,62 +227,47 @@ export function SettingsModal() {
               {t("settings.noMatch", { query: query.trim() })}
             </div>
           )}
-          {/* 2026-10-16: the rail in headed groups, as Cursor Settings
-              groups its own (you, AI, the workspace, this app last). A
-              heading shows while one of its entries does, a search too. */}
-          {navGroupsFor(organization).map((group) => {
-            // #2080 (L0): App (id "about") is a page of the rail; the About
-            // window opens from its link. #2090: Updates is its own page too.
-            const entries = visibleSections.filter((entry) => entry.group === group.id);
-            if (entries.length === 0) return null;
-            const headingId = `app-settings-nav-${group.id}`;
-            return (
-              <div key={group.id} role="group" aria-labelledby={headingId} data-settings-nav-group={group.id} className="flex shrink-0 flex-col gap-0.5">
-                <div id={headingId} className="px-[9px] pb-1 pt-3 text-[11.5px] font-medium leading-4 text-ink-tertiary">
-                  {t(group.labelKey)}
-                </div>
-                {entries.map(({ id, labelKey, icon: Icon }) => (
-                  <div key={id} className="flex min-w-0 flex-col">
-                    <button
-                      onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: id })}
-                      aria-current={section === id ? "page" : undefined}
-                      data-settings-nav-row={id}
-                      className={cn(
-                        "flex items-center gap-[9px] rounded-lg px-[9px] py-[7px] text-left text-[13px] leading-[18px] text-ink transition-colors motion-reduce:transition-none",
-                        // JC 2026-11-07: the hover fill (hover, 17% grey) read as a
-                        // second selected row next to bg-selected (32% grey). The
-                        // hover is a barely visible ink wash, as the reference asks.
-                        section === id ? "bg-selected" : "hover:bg-ink/[0.05]",
-                      )}
-                    >
-                      {/* The reference design's nav item (198px rail, 7/9px padding, 9px gap,
-                          8px corners, 15px icon) with its thinner glyph stroke */}
-                      <Icon size={15} strokeWidth={1.5} className="shrink-0" />
-                      {t(labelKey)}
-                    </button>
-                    {section === id && q && searchLabels.length > 0 && (
-                      <ul data-settings-search-hits="" className="mb-0.5 flex flex-col">
-                        {searchLabels.map((label) => (
-                          <li key={label}>
-                            <button
-                              type="button"
-                              className="w-full truncate rounded-md py-0.5 pl-[33px] pr-2 text-left text-[12px] leading-4 text-ink-secondary hover:bg-hover hover:text-ink"
-                              onClick={() => {
-                                const pane = paneRef.current;
-                                if (pane) focusSettingsSearchLabel(pane, label);
-                              }}
-                            >
-                              {label}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })}
+          {/* #4457 (the owner, 2026-11-16): the reference app's rail, seven
+              entries with no group title; a search lists the pages it finds. */}
+          {visibleSections.map(({ id, labelKey, icon: Icon }) => (
+            <div key={id} className="flex min-w-0 shrink-0 flex-col">
+              <button
+                onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: id })}
+                aria-current={section === id ? "page" : undefined}
+                data-settings-nav-row={id}
+                className={cn(
+                  "flex items-center gap-[9px] rounded-lg px-[9px] py-[7px] text-left text-[13px] leading-[18px] text-ink transition-colors motion-reduce:transition-none",
+                  // JC 2026-11-07: the hover fill (hover, 17% grey) read as a
+                  // second selected row next to bg-selected (32% grey). The
+                  // hover is a barely visible ink wash, as the reference asks.
+                  section === id ? "bg-selected" : "hover:bg-ink/[0.05]",
+                )}
+              >
+                {/* The reference design's nav item (198px rail, 7/9px padding, 9px gap,
+                    8px corners, 15px icon) with its thinner glyph stroke */}
+                <Icon size={15} strokeWidth={1.5} className="shrink-0" />
+                {t(labelKey)}
+              </button>
+              {section === id && q && searchLabels.length > 0 && (
+                <ul data-settings-search-hits="" className="mb-0.5 flex flex-col">
+                  {searchLabels.map((label) => (
+                    <li key={label}>
+                      <button
+                        type="button"
+                        className="w-full truncate rounded-md py-0.5 pl-[33px] pr-2 text-left text-[12px] leading-4 text-ink-secondary hover:bg-hover hover:text-ink"
+                        onClick={() => {
+                          const pane = paneRef.current;
+                          if (pane) focusSettingsSearchLabel(pane, label);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
           {pagesHit && (
             <button
               type="button"
@@ -317,6 +278,20 @@ export function SettingsModal() {
               <FileText size={15} strokeWidth={1.5} className="shrink-0" />
               <span className="min-w-0"><span className="block truncate">{t("settings.section.pages")}</span><span className="block truncate text-[12px] text-ink-secondary">{t("connectApps.title")}</span></span>
             </button>
+          )}
+          {/* #4457: the organization's settings live in its console; the
+              rail's footer links there (the reference's Invite teammates slot) */}
+          {consoleIssuer && (
+            <a
+              href={perspicaxConsoleUrl(consoleIssuer)}
+              target="_blank"
+              rel="noreferrer"
+              data-settings-console-link=""
+              className="mt-auto flex shrink-0 items-center gap-[9px] rounded-lg px-[9px] py-[7px] text-[13px] leading-[18px] text-ink-secondary transition-colors hover:bg-ink/[0.05] hover:text-ink motion-reduce:transition-none"
+            >
+              <span className="min-w-0 truncate">{t("settings.consoleLink")}</span>
+              <ArrowUpRight size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0" />
+            </a>
           )}
         </nav>
 
@@ -339,16 +314,9 @@ export function SettingsModal() {
               }}
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
-              {navGroupsFor(organization).map((group) => {
-                const entries = availableSections.filter((entry) => entry.group === group.id);
-                return entries.length === 0 ? null : (
-                  <optgroup key={group.id} label={t(group.labelKey)}>
-                    {entries.map(({ id, labelKey }) => (
-                      <option key={id} value={id}>{t(labelKey)}</option>
-                    ))}
-                  </optgroup>
-                );
-              })}
+              {railSections(availableSections).map(({ id, labelKey }) => (
+                <option key={id} value={id}>{t(labelKey)}</option>
+              ))}
             </select>
           </div>
 
@@ -392,41 +360,30 @@ export function SettingsModal() {
                   </SettingsGroup>
                 )
             )}
-            {section === "account" && (
-              <>
-                {/* #2080 L2: identity and region only. Open at login, tours,
-                    diagnostics and the former Advanced rows live on App. */}
-                <SettingsGroup groupId="account">
-                  <AccountCard lockedServer={lockedServer} />
-                  {/* #3432: each person's own About me (#3424), for a member too */}
-                  <SettingsSubPageRow
-                    bare
-                    cardId="general.aboutMe"
-                    title={t("settings.profile.aboutMe")}
-                    summary={aboutMeFirstLine(state.config?.profile?.aboutMe)}
-                    actionLabel={t("settings.aboutMe.edit")}
-                    onOpen={() => openSubPage("general.aboutMe")}
-                  />
-                </SettingsGroup>
-                <SettingsGroup title={t("settings.group.languageRegion")} groupId="languageRegion">
-                  <LanguageRow />
-                  <TimeZoneRows />
-                </SettingsGroup>
-              </>
-            )}
 
-            {/* Security (2026-10-28, out of Account): security keys and the
-                classes they confirm, every rule the person saved (paged),
-                their own tool access. */}
+            {/* General (#4457): Account, Appearance, Notifications, Mascots, System */}
+            {section === "general" && <GeneralPage remoteActive={remoteActive} lockedServer={lockedServer} />}
+
+            {/* Permissions (#4457, id "security"): Before acting, Privacy, Security, this computer */}
             {section === "security" && (
               <div className="flex min-w-0 flex-col gap-3" data-security-page="">
-                <SecurityKeySettings />
-                {/* every Always allow, Always deny and Ask first the person saved, revocable (2026-10-19) */}
-                <MyApprovalRules />
-                {/* the person's own tool access, theirs without an admin (2026-10-26) */}
-                <MyToolGrants />
-                {/* everyone's tool access, for whoever edits the installation (JC 2026-11-06, out of App) */}
-                {editConfig && <PeopleToolAccessSettings />}
+                {allowed("security") && (
+                  <SettingsGroup title={t("settings.permissions.beforeActing")} groupId="permissionsBeforeActing">
+                    <SubPageEntry id="security.rules" summary={t("settings.sub.rules.summary")} />
+                    <SubPageEntry id="security.toolGrants" summary={t("settings.sub.toolGrants.summary")} />
+                    <SubPageEntry id="security.peopleToolAccess" summary={t("settings.toolAccess.people.subtitle")} />
+                  </SettingsGroup>
+                )}
+                <div data-settings-card="notifications.privacy">
+                  <SettingsGroup title={t("settings.section.privacy")} groupId="privacy">
+                    {allowed("appearance") && <SidebarPeopleApartRow />}
+                    {allowed("notifications") && <PrivacyRows privacy={allowed("privacy")} />}
+                  </SettingsGroup>
+                </div>
+                <SettingsGroup title={t("settings.section.security")} groupId="permissionsSecurity">
+                  <SubPageEntry id="security.keys" summary={t("settings.sub.keys.summary")} />
+                  <SubPageEntry id="security.system" summary={t("settings.intro.permissions")} />
+                </SettingsGroup>
               </div>
             )}
 
@@ -442,7 +399,7 @@ export function SettingsModal() {
               </div>
             )}
 
-            {/* #2080: Updates, untitled card + links (release notes, About). */}
+            {/* Updates (#4457): the version card with What's new, then About and Advanced one page further */}
             {section === "updates" && (
               <>
                 <div data-settings-card="updates">
@@ -450,70 +407,36 @@ export function SettingsModal() {
                     <UpdatesRow />
                     <PrereleaseRow />
                     <AutoInstallAwayRow />
+                    <div data-settings-card="updates.links" className="flex flex-col">
+                      <LinkRow rowId="releaseNotes" label={t("settings.updates.links.releaseNotes")} onClick={() => requestReleaseNotes("browse")} />
+                    </div>
                   </SettingsGroup>
                 </div>
+                <SettingsGroup groupId="updatesMore">
+                  <SubPageEntry id="updates.about" summary={t("settings.sub.about.summary")} />
+                  <SubPageEntry id="updates.advanced" summary={t("settings.sub.advanced.summary")} />
+                </SettingsGroup>
               </>
             )}
 
-            {/* General (JC 2026-11-06): System, Keyboard and typing, Advanced mode. */}
-            {section === "general" && <GeneralPage remoteActive={remoteActive} />}
-
-            {/* About (JC 2026-11-07, was Help and about): the About window, tours, help rows. */}
-            {section === "about" && <AboutPage remoteActive={remoteActive} openAbout={openAbout} />}
-
-            {section === "appearance" && (
-              <>
-                <AppearanceSettings />
-                {/* run card, inspector and turn timing are on Developer (#2636) */}
-                <DeveloperLink />
-              </>
-            )}
-
-
-            {/* Developer (#2636, JC 2026-11-07): every technical option, for every member. */}
-            {section === "developer" && <DeveloperSettings remoteActive={remoteActive} openAbout={openAbout} />}
-
-            {/* Providers (2026-10-30) */}
+            {/* Providers (2026-10-30; #4457: Accounts, Models, Voice, then Advanced) */}
             {section === "providers" && (
-              // the link with Grok Bot sits in Providers > Advanced (#2295)
-              <ProvidersSettings />
-            )}
-
-            {section === "engines" && (
-              <div className="flex min-w-0 flex-col gap-6">
-                <EnginesSettings />
-                {/* Decision model (2026-10-14): a group of Models, shown
-                    while its experiment is on. */}
-                {allowed("decisionModel") && <DecisionModelSettings />}
-              </div>
-            )}
-
-            {/* Voice (2026-10-28, out of Models and voice) */}
-            {section === "voice" && <VoiceSettingsPage />}
-
-            {/* Backups (#2080): export and restore only. Grok Bot / primary-bot preference import left this page (JC 2026-11-06). Updates stay on their own page (#2090). */}
-            {section === "backups" && (
-              <>
-                <WorkspaceBackupSettings />
-                {/* event log cleanup and retention are on Developer (#2636) */}
-                <DeveloperLink />
-              </>
+              allowed("providers")
+                ? <ProvidersSettings><ProvidersModelsVoice /></ProvidersSettings>
+                : <ProvidersModelsVoice />
             )}
 
             {section === "computer" && <LocalComputerSection />}
 
-            {/* every OS permission with its button (#2614) */}
-            {section === "permissions" && <OsPermissionsSection />}
-
             {section === "usage" && (
               <>
                 <UsageSection />
-                {/* the usage meter in the chat is on Developer (#2636) */}
+                {/* the usage meter in the chat is on Updates > Advanced (#2636) */}
                 <DeveloperLink />
               </>
             )}
-            {/* Privacy (2026-10-14): a group of Notifications on an organization server. */}
-            {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} organization={organization} />}
+            {/* #4457: a search finds every setting one page further, drawn here under its sub-page's title */}
+            {q && <SubPagesForSearch section={section} />}
             </SettingsAdvancedScope>
             </div>
           </div>
@@ -530,5 +453,6 @@ export function SettingsModal() {
         </div>
       </div>
     </div>
+    </SettingsPageProvider>
     );
 }

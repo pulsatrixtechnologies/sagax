@@ -5063,6 +5063,8 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 /* Settings search: the open page keeps the matching rows. The attribute
    survives a React render, unlike a class added beside the row's own. */
 [data-settings-filtering] [data-settings-search-miss] { display: none; }
+/* #4457: a sub-page drawn inline for a search hides with its last match */
+[data-settings-filtering] [data-settings-subpage-inline]:not(:has([data-settings-search-match])) { display: none; }
 [data-settings-search-hit] { background: var(--color-selected); }
 
 /* Computer screen calm asleep / waking (2026-11-01, Grok Bot style):

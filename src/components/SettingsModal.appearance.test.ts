@@ -9,6 +9,8 @@ import type { Switch } from "./SettingsPrimitives";
 import { chooseThreadsView, SECTIONS, sectionMatches, SettingsModal } from "./SettingsModal";
 import {
   AppearanceSettings,
+  MascotsPage,
+  NotificationQuickRows,
   DeveloperSettings,
   NotificationSettings,
   OrganizationSettings,
@@ -21,6 +23,7 @@ vi.mock("@/lib/server-alone", () => ({ useServerAlone: () => true }));
 
 const fixture = vi.hoisted(() => ({
   section: "appearance" as AppSettingsSection,
+  subPage: null as string | null,
   showThreads: true,
   setShowThreads: vi.fn(),
   setThreadsLocation: vi.fn(),
@@ -52,7 +55,9 @@ vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capab
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: fixture.api,
-  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: [], groups: [] }, dispatch: fixture.dispatch }),
+  // #4457: "appearance" opens General (the theme card); these tests read the
+  // rest of the former page, General > More appearance
+  useStore: () => ({ state: { appSettingsSection: fixture.section, appSettingsSubPage: fixture.subPage ?? (fixture.section === "appearance" ? "general.appearance" : null), instances: [], bots: [], groups: [] }, dispatch: fixture.dispatch }),
 }));
 vi.mock("@/lib/thread-preferences", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/thread-preferences")>();
@@ -131,6 +136,8 @@ vi.mock("./SettingsPrimitives", async (importOriginal) => {
 beforeAll(async () => {
   await Promise.all([
     AppearanceSettings.preload(),
+    MascotsPage.preload(),
+    NotificationQuickRows.preload(),
     DeveloperSettings.preload(),
     NotificationSettings.preload(),
     OrganizationSettings.preload(),
@@ -141,6 +148,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   fixture.section = "appearance";
+  fixture.subPage = null;
   fixture.showThreads = true;
   fixture.showRunCard = true;
   fixture.showSuggestions = true;
@@ -190,9 +198,13 @@ describe("Settings → Appearance", () => {
 
   it("groups skins, thread visibility, and tool-call display with preservation copy", () => {
     const html = render();
-    expect(html).toContain('<option value="appearance" selected="">Appearance</option>');
-    // the skin families (2026-10-19): Midnight is Studio's Neutral variant
-    expect(html).toContain('data-skin-family="studio"');
+    // #4457: Appearance is General's card; the rest is General > More appearance
+    expect(html).toContain('<option value="general" selected="">General</option>');
+    expect(html).toContain('data-settings-subpage="general.appearance"');
+    // the skin families (2026-10-19): Midnight is Studio's Neutral variant, on General's Appearance card
+    fixture.section = "general";
+    expect(render()).toContain('data-skin-family="studio"');
+    fixture.section = "appearance";
     // one choice for whether and where threads show (2026-10-14)
     expect(html).toContain('aria-label="Conversation threads"');
     expect(html).not.toContain('aria-label="Show threads"');
@@ -206,25 +218,28 @@ describe("Settings → Appearance", () => {
     expect(html).not.toContain("Maximum turn length");
   });
 
-  it("is laid out as Theme, Conversations, Sidebar, Mascots, Accessibility (#2080 L2)", () => {
+  it("is laid out as Theme, Conversations, Sidebar, Accessibility; the mode and skins on General (#2080 L2, #4457)", () => {
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    // #2636: the run card, inspector and turn timing switches are on Developer
-    expect(groups).toEqual(["theme", "conversation", "sidebar", "sidebarAdvanced", "mascots", "accessibility"]);
-    for (const heading of ["Theme", "Conversations", "Sidebar", "Mascots", "Accessibility"]) expect(html).toContain(`>${heading}</h3>`);
+    // #2636: the run card, inspector and turn timing switches are on Developer; #4457: Mascots is General's card
+    expect(groups).toEqual(["theme", "conversation", "sidebar", "sidebarAdvanced", "accessibility"]);
+    for (const heading of ["Theme", "Conversations", "Sidebar", "Accessibility"]) expect(html).toContain(`>${heading}</h3>`);
     expect(html).not.toContain('data-settings-group="interface"');
     expect(html).not.toContain('data-settings-group="desktop"');
     const page = html.slice(html.indexOf('data-settings-group="theme"'));
     expect(page).not.toContain("<select");
-    for (const label of ["Mode", "Conversation threads", "Choose sidebar density"]) {
+    for (const label of ["Conversation threads", "Choose sidebar density"]) {
       expect(page).toContain(`aria-label="${label}"`);
     }
     expect(html).not.toContain("all conversation history and running work");
     expect(html).not.toContain("Overrides the skin's font");
     expect(html).not.toContain("Applies instantly.");
-    // Advanced mode left for App; Theme keeps Mode first and the skin grid
-    expect(html).toContain('data-settings-row="skinMode"');
-    expect(html).toContain('data-skin-grid=""');
+    // Advanced mode left for App; General's Appearance keeps Mode first and the skin grid
+    fixture.section = "general";
+    const general = render();
+    expect(general).toContain('aria-label="Mode"');
+    expect(general).toContain('data-settings-row="skinMode"');
+    expect(general).toContain('data-skin-grid=""');
     // Background effects fold until Choose is opened
     expect(html).toContain('data-settings-row="backgroundEffects"');
     expect(html).not.toContain('data-effect-grid=""');
@@ -251,7 +266,10 @@ describe("Settings → Appearance", () => {
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("folds desktop mascot behavior under Mascots (#2080 L2)", () => {
+  it("draws the mascots on General > Mascots > Desktop mascots (#2080 L2, #4457)", () => {
+    fixture.section = "general";
+    expect(render()).toContain('data-settings-card="general.mascots"');
+    fixture.subPage = "general.mascots";
     const html = render();
     expect(html).toContain('data-settings-group="mascots"');
     expect(html).toContain('data-settings-row="hdMascots"');
@@ -317,12 +335,10 @@ describe("Settings → Appearance", () => {
     expect(pill).toContain('title="Shift+Enter"');
   });
 
-  it("finds the app icon on General and the dock badge in Notifications", () => {
+  it("finds the app icon and the dock badge on General (#4457: Notifications is its card)", () => {
     const general = SECTIONS.find((section) => section.id === "general")!;
-    const notifications = SECTIONS.find((section) => section.id === "notifications")!;
     expect(sectionMatches(general, "icon")).toBe(true);
-    expect(sectionMatches(notifications, "icon")).toBe(true);
-    expect(sectionMatches(notifications, "icône")).toBe(true);
+    expect(sectionMatches(general, "icône")).toBe(true);
   });
 
   it("finds the send key by the keys' names on General", () => {
@@ -359,41 +375,43 @@ describe("Settings → Appearance", () => {
     fixture.section = "account";
     const html = render();
     expect(html).toContain('aria-label="App language"');
-    // technical cards left Account for App (#2080 L2)
+    // technical cards left Account for App (#2080 L2); #4457 Language sits on General's Appearance
     expect(html).not.toContain('data-settings-card="general.advanced"');
-    expect(html).toContain('data-settings-group="languageRegion"');
+    expect(html).toContain('data-settings-group="generalAppearance"');
     expect(html).not.toContain("Maximum running threads per bot");
     expect(html).not.toContain("Automatic recovery");
     expect(html).not.toContain('aria-label="Show threads"');
     expect(html).not.toContain('aria-label="Choose sidebar density"');
     expect(html).not.toContain('aria-label="Show tool calls in chat"');
     expect(html).not.toContain('aria-label="Show unconfigured providers"');
-    expect(html).not.toContain('data-skin-family="studio"');
   });
 
   it("makes local appearance available remotely without exposing server settings", () => {
     vi.stubGlobal("window", { ogb: { remoteClient: { active: true } } });
+    // #4457: a remote client lands on General, which holds this desktop's Appearance
+    fixture.section = "general";
     const html = render();
-    expect(html).toContain('<option value="appearance" selected="">Appearance</option>');
+    expect(html).toContain('<option value="general" selected="">General</option>');
     // Pair devices is hidden since 2026-10-14
     expect(html).not.toContain('<option value="companion"');
-    // General (system, keys, Advanced mode) is about this desktop, so it stays (the owner 2026-11-06)
-    expect(html).toContain('<option value="general">General</option>');
-    expect(html).not.toContain('<option value="connections">');
-    expect(html).not.toContain('<option value="engines">');
-    expect(html).not.toContain('<option value="backups">');
+    expect(html).not.toContain('<option value="providers">');
+    expect(html).not.toContain('<option value="security">');
     expect(html).toContain('data-skin-family="studio"');
-    expect(html).toContain('aria-label="Conversation threads"');
     // this computer's notification switches stay reachable from a remote page
-    expect(html).toContain('<option value="notifications">Notifications</option>');
-    expect(html).toContain('aria-label="Choose sidebar density"');
-    expect(html).not.toContain('aria-label="Show tool calls in chat"');
+    expect(html).toContain('data-settings-card="general.notifications"');
+    expect(html).not.toContain('data-settings-card="general.backups"');
+    fixture.section = "appearance";
+    const more = render();
+    expect(more).toContain('aria-label="Conversation threads"');
+    expect(more).toContain('aria-label="Choose sidebar density"');
+    expect(more).not.toContain('aria-label="Show tool calls in chat"');
   });
 
   it("offers full backups in local Settings", () => {
     fixture.section = "backups";
     const html = render();
-    expect(html).toContain('<option value="backups" selected="">Backups and storage</option>');
+    // #4457: General > System > Backups and storage
+    expect(html).toContain('data-settings-subpage="general.backups"');
     // one card, two actions; each form opens in place (2026-10-14)
     expect(html).toContain('data-backup-action="export"');
     expect(html).toContain('data-backup-action="import"');
@@ -420,7 +438,7 @@ describe("Settings → Appearance", () => {
     try {
       setLocale("zz");
       const html = render();
-      expect(html).toContain("Appearance");
+      expect(html).toContain("More appearance");
       expect(html).toContain('aria-label="Conversation threads"');
       expect(html).toContain("Sidebar");
       expect(html).not.toContain("settings.group");
@@ -439,22 +457,22 @@ describe("Settings → Appearance", () => {
     fixture.section = "organization";
     vi.stubGlobal("window", { ogb: { organization: {} } });
     const local = render();
-    // #4360: with no organization the page reads Servers
-    expect(local).toContain('<option value="organization" selected="">Servers</option>');
+    // #4360: with no organization the page reads Servers; #4457: off the rail, by its address
+    expect(local).toMatch(/<h2[^>]*>Servers<\/h2>/);
     expect(local).not.toContain('<option value="desktopWorkspaces"');
     // The enterprise Admin connection stays hidden until it is in use.
     expect(local).not.toContain("personal and local models");
     vi.stubGlobal("window", {});
     const browser = render();
-    expect(browser).toContain('<option value="organization" selected="">Servers</option>');
+    expect(browser).toMatch(/<h2[^>]*>Servers<\/h2>/);
   });
 
   it("keeps Organisation reachable to a remote client instead of hiding it", () => {
     fixture.section = "organization";
     vi.stubGlobal("window", { ogb: { organization: {}, remoteClient: { active: true } } });
     const html = render();
-    expect(html).toContain('<option value="organization" selected="">Servers</option>');
-    fixture.section = "appearance";
+    expect(html).toMatch(/<h2[^>]*>Servers<\/h2>/);
+    fixture.section = "general";
     expect(render()).toContain('data-skin-family="studio"');
   });
 });
@@ -475,7 +493,8 @@ describe("Settings → Notifications", () => {
   it("has its own section with the alert switches on by default (nudges stay folded)", () => {
     fixture.section = "notifications";
     const html = render();
-    expect(html).toContain('<option value="notifications" selected="">Notifications</option>');
+    // #4457: General > Notifications > More notifications
+    expect(html).toContain('data-settings-subpage="general.notifications"');
     for (const label of ["Keep notifications on screen", "Unread count on the app icon"]) {
       const toggle = fixture.switches.find((props) => props["aria-label"] === label);
       expect(toggle?.checked, label).toBe(true);

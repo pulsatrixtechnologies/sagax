@@ -25,6 +25,7 @@ import { MemesSettings } from "./MemesSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { SavedKeysResetNotice } from "../SavedKeysReset";
 import { DescribedRow, HelpTip, InlineFold, PILL, SettingsFoldSection, SettingsGroup, Switch, peekRequestedSettingsCard } from "../SettingsPrimitives";
+import { useSettingsCardOpen } from "../settings-card-state";
 import { SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { PLUGINS } from "../plugins/plugins-style";
 import { BOTS_LINK_SEARCH_WORDS, BotsLinkButton, botsLinkOnPage, botsLinkWords, useBotsLink } from "./LinkedGrokBotSettings";
@@ -261,7 +262,13 @@ function AddProvider({ list, onClose }: { list: ProviderList; onClose: () => voi
   );
 }
 
-export function ProvidersSettings() {
+/** Settings > Providers (#4457): Accounts, then `children` (the Models and
+ * Voice cards of the page), then Advanced (other services, the cloud agent
+ * keys, the account connectors). */
+/** The cards of Other services (under Advanced since #4457). */
+const SERVICES_CARDS = new Set(["providers.services", "connections.image", "connections.webSearch"]);
+
+export function ProvidersSettings({ children }: { children?: ReactNode } = {}) {
   const { state, dispatch } = useStore();
   const list = useProviderList();
   const [adding, setAdding] = useState(false);
@@ -290,6 +297,12 @@ export function ProvidersSettings() {
   // An old link to a row's card (Advanced of an engine, this computer's
   // models) opens the provider's page that holds it now (settings-sections.ts).
   const target = useMemo(() => providerCardTarget(peekRequestedSettingsCard()), []);
+  // #4457: Other services sit under Advanced; a link to one of them opens it.
+  const [advancedOpen, toggleAdvanced] = useSettingsCardOpen("providers.advanced", false);
+  const servicesAsked = useMemo(() => SERVICES_CARDS.has(peekRequestedSettingsCard() ?? ""), []);
+  useEffect(() => {
+    if (servicesAsked && !advancedOpen) toggleAdvanced();
+  }, [servicesAsked]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!target) return;
     if (target.kind === "computer") { if (list.local) openProviderPage(dispatch, COMPUTER_PROVIDER_ID); return; }
@@ -365,24 +378,26 @@ export function ProvidersSettings() {
             )}
         </SettingsGroup>
       </div>
-      {/* Other services (from Models, 2026-11-05): web search (the person's own key) and image generation */}
-      <div data-settings-card="providers.services">
-        <SettingsGroup title={t("providers.services.title")} groupId="providers-services">
-          <WebSearchSettings bare />
-          <MemesSettings bare />
-          {list.installation
-            ? <div data-settings-card="connections.image"><ImageGenerationSettings keysLink={list.manageKeys} /></div>
-            : (
-              <DescribedRow label={t("imageGen.title")} description={imageProviderLabel(imageGen?.provider)} rowId="providers.imageGen" />
-            )}
-        </SettingsGroup>
-      </div>
+      {/* #4457: the Models and Voice cards, between Accounts and Advanced */}
+      {children}
       {/* Advanced (#2295): the person's cloud agent keys and the connectors of
           their provider accounts, one section per provider (#4408). Never a
           card in a card. The link to the person's bots in the xAI provider's
           bot app is a line of that provider (#4329). */}
       <SettingsFoldSection cardId="providers.advanced" groupId="providers-advanced" title={t("providers.advanced.title")} description={t("providers.advanced.help")}>
         <div className="flex flex-col gap-6" data-providers-advanced="">
+          {/* Other services (from Models, 2026-11-05; #4457 under Advanced): web search (the person's own key) and image generation */}
+          <div data-settings-card="providers.services">
+            <SettingsGroup title={t("providers.services.title")} groupId="providers-services">
+              <WebSearchSettings bare />
+              <MemesSettings bare />
+              {list.installation
+                ? <div data-settings-card="connections.image"><ImageGenerationSettings keysLink={list.manageKeys} /></div>
+                : (
+                  <DescribedRow label={t("imageGen.title")} description={imageProviderLabel(imageGen?.provider)} rowId="providers.imageGen" />
+                )}
+            </SettingsGroup>
+          </div>
           {list.manageKeys && (
             <SettingsGroup groupId="providers-cloud-agents">
               <CloudAgentKeys />

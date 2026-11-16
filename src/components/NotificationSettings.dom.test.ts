@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 // #2080 L2: Notifications sound selector (None mutes), one "On this computer"
 // mention (the page intro), Privacy card visible in solo with blocked people.
-import { act, createElement } from "react";
+// #4457: the Privacy rows (PrivacyRows) are a card of Permissions now; the
+// mount draws them beside More notifications, as Settings draws both.
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
@@ -82,7 +84,7 @@ vi.mock("./NotificationInvite", () => ({
   NotificationInvite: () => null,
 }));
 
-import { NotificationSettings } from "./NotificationSettings";
+import { NotificationSettings, PrivacyRows } from "./NotificationSettings";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -110,7 +112,9 @@ afterEach(() => {
 
 const mount = (privacy = false, organization = privacy) => {
   act(() => {
-    root.render(createElement(NotificationSettings, { privacy, organization }));
+    root.render(createElement(Fragment, null,
+      createElement(NotificationSettings, { organization }),
+      createElement("section", { "data-privacy-rows": "" }, createElement(PrivacyRows, { privacy }))));
   });
 };
 
@@ -137,13 +141,13 @@ describe("NotificationSettings (#2080)", () => {
     mount(true);
     expect(host.textContent).not.toMatch(/On this computer/);
     expect(host.textContent).toContain("Alerts");
-    expect(host.textContent).toContain("Privacy");
+    expect(host.textContent).toContain("Blocked people");
   });
 
   it("shows the Privacy card in solo with only blocked people", () => {
     fixture.blocked = [{ id: "p1", name: "Alex" }, { id: "p2", name: "Sam" }];
     mount(false);
-    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeTruthy();
+    expect(host.querySelector("[data-privacy-rows]")?.childElementCount).toBeGreaterThan(0);
     expect(host.textContent).toContain("Blocked people");
     expect(host.textContent).toContain("2 people");
     expect(host.textContent).not.toContain("Send read receipts");
@@ -154,7 +158,7 @@ describe("NotificationSettings (#2080)", () => {
     fixture.admin = true;
     fixture.alone = true;
     mount(false, false);
-    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeNull();
+    expect(host.querySelector("[data-privacy-rows]")?.childElementCount).toBe(0);
     expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeNull();
     expect(host.textContent).not.toContain("Blocked people");
     expect(host.textContent).not.toContain("Perspicax");
@@ -165,7 +169,7 @@ describe("NotificationSettings (#2080)", () => {
     fixture.admin = true;
     fixture.alone = false;
     mount(false, false);
-    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeTruthy();
+    expect(host.querySelector("[data-privacy-rows]")?.childElementCount).toBeGreaterThan(0);
     expect(host.textContent).toContain("Blocked people");
     expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeTruthy();
     expect(host.textContent).not.toContain("Perspicax");
@@ -176,7 +180,7 @@ describe("NotificationSettings (#2080)", () => {
     fixture.alone = true;
     fixture.blocked = [{ id: "p2", name: "Former guest" }];
     mount(false, false);
-    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeTruthy();
+    expect(host.querySelector("[data-privacy-rows]")?.childElementCount).toBeGreaterThan(0);
     expect(host.textContent).toContain("Blocked people");
     expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeNull();
   });
@@ -184,7 +188,7 @@ describe("NotificationSettings (#2080)", () => {
   it("keeps Privacy, reports and the organization wording on an organization server (#4360)", () => {
     fixture.admin = true;
     mount(true, true);
-    expect(host.querySelector('[data-settings-card="notifications.privacy"]')).toBeTruthy();
+    expect(host.querySelector("[data-privacy-rows]")?.childElementCount).toBeGreaterThan(0);
     expect(host.textContent).toContain("Blocked people");
     expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeTruthy();
     expect(host.textContent).toContain("or while Perspicax is unreachable.");

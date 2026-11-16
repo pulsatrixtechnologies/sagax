@@ -119,7 +119,7 @@ export function handleFloatingEvent(botId: string, event: FloatingEvent, deps: F
           setCue({ kind: "snooze", at: Date.now(), botId });
           setTimeout(hide, SNOOZE_NAP_MS);
         } else hide();
-      } else if (event.id === "settings") dispatch({ type: "toggleAppSettings", open: true, section: "appearance" });
+      } else if (event.id === "settings") dispatch({ type: "toggleAppSettings", open: true, section: "general", subPage: "general.mascots" });
       else if (event.id.startsWith("switch:")) switchMascot(botId, event.id.slice("switch:".length));
       // the balloon's clip and model chip: the app comes forward (main focused it) on this thread, and its own composer does the rest
       else if (event.id === "attach" || event.id === "model") {

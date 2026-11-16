@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { browserUnavailableReason, type FeatureFlagConfig } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
-import { currentSettingsSection, openSettings, settingsLinkParts, settingsSectionLabel, type SettingsLinkTarget } from "@/lib/settings-link";
+import { openSettings, settingsLinkParts, settingsPlaceLabel, type SettingsLinkTarget } from "@/lib/settings-link";
 import { useStore } from "@/state/store";
 import { useSettingsSurface } from "./SettingsPrimitives";
 
@@ -36,7 +36,7 @@ export function SettingsText({
             className={flat ? "text-accent transition-colors hover:text-ink" : "text-accent underline"}
             onClick={() => { target.prepare?.(); openSettings(dispatch, target.section, target.cardId); }}
           >
-            {settingsSectionLabel(currentSettingsSection(target.section, target.cardId))}
+            {settingsPlaceLabel(target.section, target.cardId)}
           </button>
         );
       })}

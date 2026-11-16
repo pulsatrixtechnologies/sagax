@@ -31,11 +31,8 @@ import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsFoldSection, Se
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
-import { NewBotDefaultsCard } from "./settings/BotModelsSettings";
 import { ModelSwitchesSettings } from "./settings/ModelSwitchesSettings";
-import { VoiceProviderSettings } from "./settings/VoiceProviderSettings";
 import { VoiceProviderOptions } from "./settings/VoiceProviderOptions";
-import { MicrophonePermissionRow, MicrophoneSettings } from "./settings/MicrophoneSettings";
 import { PhoneCallsCard } from "./settings/PhoneCallsCard";
 import { LiveCallInstallationSettings } from "./LiveCallSettings";
 import { ApiKeyRow, VpsConnection } from "./ApiKeys";
@@ -532,14 +529,14 @@ export function EnginesSettings() {
 
 /** Settings > Developer > Models (JC 2026-11-08, Models page tidy): the
  * cards that left the Models page, with the same content and controls:
- * Defaults for new bots, What Auto would choose now, Keep prompt cache warm. */
+ * What Auto would choose now, Keep prompt cache warm. Defaults for new bots
+ * is a row of Providers > Models (#4457). */
 export function ModelsDeveloperCards() {
   const { state } = useStore();
   const { installation } = useModelsVoiceAccess();
   const keepWarm = state.config?.cacheKeepWarm;
   return (
     <div className="flex min-w-0 flex-col gap-6" data-models-developer="">
-      <NewBotDefaultsCard />
       <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
         <div data-auto-model-explainer=""><AutoModelSettings /></div>
       </SettingsGroup>
@@ -553,21 +550,15 @@ export function ModelsDeveloperCards() {
   );
 }
 
-/** The person's unified providers and voices, microphone, provider options
- * and installation Live controls. Personal keys live in Providers. */
+/** Providers > Voice > Live calls (#4457): the installation's Live controls
+ * (or, in an organization, their state) and the phone calls. Who speaks and
+ * who listens is Providers' Voice card (VoiceProviderSettings), this
+ * computer's microphone a row of General > System. Personal keys live in
+ * Providers. */
 export function VoiceSettingsPage() {
   const { installation, org } = useModelsVoiceAccess();
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-voice-page="">
-      <VoiceProviderSettings />
-
-      {/* this computer's microphone: everyone's, whoever edits the installation */}
-      <div data-settings-card="connections.audio">
-        <SettingsGroup title={t("settings.audio.title")} groupId="audio">
-          <MicrophonePermissionRow />
-          <MicrophoneSettings />
-        </SettingsGroup>
-      </div>
       {installation ? (
         <VoiceProviderOptions installation>
           <LiveCallInstallationSettings />

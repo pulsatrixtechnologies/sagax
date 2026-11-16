@@ -53,9 +53,9 @@ describe("Settings → General", () => {
     setLocale("fr");
     const fr = await renderSettings();
     expect(fr).toContain(">Réglages<");
-    // Account opens first: the account card, then a grey Language and region heading (#2080 L2)
-    expect(fr).toContain(">Langue et région</h3>");
-    expect(fr).toContain(">Apparence</button>");
+    // General opens first (#4457): the account card, then the grey Apparence heading
+    expect(fr).toContain(">Apparence</h3>");
+    expect(fr).toContain(">Général</button>");
     expect(fr).not.toMatch(/[\u2013\u2014]/);
   });
 
@@ -63,15 +63,15 @@ describe("Settings → General", () => {
     setLocale("en");
     const en = await renderSettings();
     expect(en).toContain("Settings");
-    expect(en).toContain(">Models</button>");
-    expect(en).toContain(">Voice</button>");
-    expect(en).toContain(">Language and region</h3>");
+    expect(en).toContain(">Providers</button>");
+    expect(en).toContain(">Usage</button>");
+    expect(en).toContain(">Appearance</h3>");
   });
 
   it("offers a labeled compact section picker without removing desktop navigation", async () => {
     const html = await renderSettings();
     expect(html).toMatch(/<select[^>]*aria-label="Settings"[^>]*sm:hidden/);
-    expect(html).toContain('<option value="appearance">Appearance</option>');
+    expect(html).toContain('<option value="providers">Providers</option>');
     // Pair devices is hidden since 2026-10-14
     expect(html).not.toContain('<option value="companion"');
     expect(html).toMatch(/<nav[^>]*hidden[^>]*sm:flex/);

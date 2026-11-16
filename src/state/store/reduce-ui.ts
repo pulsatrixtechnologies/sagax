@@ -3,7 +3,7 @@
 import type {Action, AppState} from "./model";
 import {withoutFreshTopicFor} from "./model";
 import {personaCategoryForSection} from "@/lib/persona-sections";
-import {currentSettingsSection} from "@/lib/settings-sections";
+import {settingsTarget} from "@/lib/settings-sections";
 import {profilePanelSnapshot, reduceUiSurfaces} from "./reduce-ui-surfaces";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
@@ -266,12 +266,14 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     }
     case "toggleAppSettings": {
       const open = action.open ?? !state.appSettingsOpen;
+      // #4457: a former page opens where it lives now, often a sub-page
+      const target = action.section ? settingsTarget(action.section) : null;
       return {
         ...state,
         appSettingsOpen: open,
         activityOpen: open ? false : state.activityOpen,
-        appSettingsSection: action.section ? currentSettingsSection(action.section) : state.appSettingsSection,
-        appSettingsSubPage: open ? action.subPage ?? null : null,
+        appSettingsSection: target ? target.section : state.appSettingsSection,
+        appSettingsSubPage: open ? action.subPage ?? target?.subPage ?? null : null,
         personPanelId: open ? null : state.personPanelId,
         appSettingsPhonePairing: action.phonePairing && open ? state.appSettingsPhonePairing + 1 : 0,
         settingsOpen: open ? false : state.settingsOpen,

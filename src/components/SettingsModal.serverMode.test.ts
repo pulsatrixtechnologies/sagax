@@ -148,7 +148,7 @@ describe("Settings in server mode", () => {
     fixture.section = "companion";
     fixture.serverMode = { active: true, name: "Example", origin: "https://bot.example.test" };
     const html = render();
-    expect(html).toContain('<option value="account" selected="">Account</option>');
+    expect(html).toContain('<option value="general" selected="">General</option>');
     expect(html).not.toContain('<option value="companion"');
     expect(html).not.toContain("SERVER_PAIRING_CARD_MARKER");
     expect(html).not.toContain("LOCAL_COMPANION_MARKER");
@@ -159,7 +159,7 @@ describe("Settings in server mode", () => {
     fixture.section = "companion";
     fixture.serverMode = { active: true, name: "Example", origin: "https://bot.example.test" };
     const html = render();
-    expect(html).toContain('<option value="account" selected="">Compte</option>');
+    expect(html).toContain('<option value="general" selected="">Général</option>');
     expect(html).not.toContain("Jumeler des appareils");
   });
 });

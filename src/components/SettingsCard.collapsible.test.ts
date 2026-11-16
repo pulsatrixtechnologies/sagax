@@ -242,6 +242,10 @@ describe("Settings → Account and General, compact", () => {
     // the Security page of their own (#1510, 2026-10-28).
     expect(html).not.toContain('data-settings-card="general.profile"');
     expect(html).not.toContain('data-settings-card="security"');
-    expect(html.match(/data-settings-card="[^"]*"(?! data-open| data-settings-subpage-row)/g)).toEqual(['data-settings-card="general.account"']);
+    // #4457: General's cards wrap groups of rows (Appearance, Notifications,
+    // Mascots, System); the account card is the one card of Account
+    const plain = html.match(/data-settings-card="[^"]*"(?! data-open| data-settings-subpage-row)/g) ?? [];
+    expect(plain).toContain('data-settings-card="general.account"');
+    for (const card of plain) expect(['data-settings-card="general.account"', 'data-settings-card="general.input"', 'data-settings-card="appearance.skin"', 'data-settings-card="general.notifications"', 'data-settings-card="general.mascots"', 'data-settings-card="general.system"', 'data-settings-card="connections.audio"', 'data-settings-card="voice.microphone"', 'data-settings-card="general.bots"'], card).toContain(card);
   });
 });

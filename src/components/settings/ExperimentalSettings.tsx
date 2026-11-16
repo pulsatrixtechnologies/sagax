@@ -5,6 +5,7 @@
 // Context pods are a card of Developer too (#2636). Decision model lives only on Models (its own master switch).
 // #2080 L3: built-in browser and My Chrome live on Computer.
 // #2080: phone calls live on Voice (same read-only card for every org member).
+// #4457: Generated conversation titles moved to Providers > Models.
 import { Fragment, useEffect, useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { dataWindowEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
@@ -53,13 +54,11 @@ function FeatureRow({
   );
 }
 
-export function ExperimentalSettings() {
+/** Who may flip an experimental switch and how a flip is saved: shared by
+ * the Experimental card and the Generated conversation titles row of
+ * Providers > Models (#4457), so the move changes no right. */
+function useExperimentalToggle() {
   const { state, dispatch } = useStore();
-  const skillAuthoring = skillAuthoringEnabled(state.config);
-  const dataWindow = dataWindowEnabled(state.config);
-  const dataWindowServed = typeof state.config?.features?.dataWindow === "boolean";
-  const meetingNotetaker = meetingNotetakerEnabled(state.config);
-  const meetingNotetakerServed = typeof state.config?.features?.meetingNotetaker === "boolean";
   // #1098 (2026-10-27): on an organization server a person sets their own
   // switches (skill authoring, the Data window, generated titles) with no
   // right to edit the installation (/api/me/experimental). The meeting
@@ -68,18 +67,8 @@ export function ExperimentalSettings() {
   const personalServed = useServerFeature("memberPersonSettings") !== "no";
   const personal = state.config?.personalSettings === true && personalServed;
   const personalMissing = state.config?.personalSettings === true && !personalServed && !manage;
-  // 2026-10-26 (owner): generated conversation titles were on only after a
-  // hand edit of config.json; they get their switch here.
-  const llmThreadTitles = llmThreadTitlesEnabled(state.config);
-  const llmThreadTitlesServed = typeof state.config?.features?.llmThreadTitles === "boolean";
   const [saving, setSaving] = useState<ExperimentalFeature | null>(null);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let live = true;
-    api<ConfigStatus>("/api/config").then((config) => { if (live) dispatch({ type: "configStatus", config }); }, () => {});
-    return () => { live = false; };
-  }, [dispatch]);
 
   const mayToggle = (feature: ExperimentalFeature) => manage || (personal && isPersonalFeature(feature));
   const toggle = async (feature: ExperimentalFeature, next: boolean) => {
@@ -105,6 +94,48 @@ export function ExperimentalSettings() {
     }
   };
   const busy = saving !== null;
+  return { mayToggle, toggle, busy, error, personalMissing };
+}
+
+/** Generated conversation titles (2026-10-26, owner: on only after a hand
+ * edit of config.json, they got their switch on Experimental; #4457: a row
+ * of Providers > Models). Not drawn where this server does not serve it or
+ * this viewer may not flip it. */
+export function GeneratedTitlesRow() {
+  const { state } = useStore();
+  const { mayToggle, toggle, busy, error } = useExperimentalToggle();
+  const checked = llmThreadTitlesEnabled(state.config);
+  if (typeof state.config?.features?.llmThreadTitles !== "boolean" || !mayToggle("llmThreadTitles")) return null;
+  return (
+    <>
+      <FeatureRow
+        feature="llmThreadTitles"
+        label={t("settings.experimental.llmThreadTitles")}
+        ariaKey="settings.experimental.llmThreadTitlesAria"
+        checked={checked}
+        note={t("settings.experimental.llmThreadTitlesDescription")}
+        busy={busy}
+        onToggle={() => void toggle("llmThreadTitles", !checked)}
+      />
+      {error ? <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</p> : null}
+    </>
+  );
+}
+
+export function ExperimentalSettings() {
+  const { state, dispatch } = useStore();
+  const skillAuthoring = skillAuthoringEnabled(state.config);
+  const dataWindow = dataWindowEnabled(state.config);
+  const dataWindowServed = typeof state.config?.features?.dataWindow === "boolean";
+  const meetingNotetaker = meetingNotetakerEnabled(state.config);
+  const meetingNotetakerServed = typeof state.config?.features?.meetingNotetaker === "boolean";
+  const { mayToggle, toggle, busy, error, personalMissing } = useExperimentalToggle();
+
+  useEffect(() => {
+    let live = true;
+    api<ConfigStatus>("/api/config").then((config) => { if (live) dispatch({ type: "configStatus", config }); }, () => {});
+    return () => { live = false; };
+  }, [dispatch]);
 
   type MainRow = {
     feature: ExperimentalFeature;
@@ -148,15 +179,7 @@ export function ExperimentalSettings() {
     });
   }
 
-  if (llmThreadTitlesServed) {
-    main.push({
-      feature: "llmThreadTitles",
-      label: "settings.experimental.llmThreadTitles",
-      aria: "settings.experimental.llmThreadTitlesAria",
-      description: "settings.experimental.llmThreadTitlesDescription",
-      checked: llmThreadTitles,
-    });
-  }
+  // #4457: Generated conversation titles is a row of Providers > Models (GeneratedTitlesRow).
 
   // #2729: a switch this viewer may not flip (the installation's, on an
   // organization server) is not shown, never greyed (hiddenWhenUnavailable).

@@ -18,7 +18,7 @@ import { buildPluginItems } from "@/lib/plugins-model";
 import { installedEntries, privateSkills } from "@/lib/installed-model";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { bringsLabel, InstalledView, type InstalledViewProps } from "./InstalledView";
-import { ConnectAppsView, connectedCounts, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
+import { ConnectAppsView, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
 import { accountConnectorRows, connectedAccountRows, connectorGroups, noticeAction, type HarnessConnectorGroup, type RegistryGrokAccount } from "./HarnessConnectorGroups";
 import type { HarnessAnswer } from "../PluginsPanel.tsx-parts/types";
 import { DiscoverView } from "./DiscoverView";
@@ -58,75 +58,58 @@ describe("Plugins tabs", () => {
     installed: createElement(InstalledView, props()), discover: "D", bots: "B", pages: "G", sources: "S",
   }));
 
-  it("the home: the title, \"N connected\" with its icons opening Manage, the search row and Bot templates (#2104, the reference app's Connect Apps)", () => {
-    const entries = installedEntries(items);
-    // GitHub (three rows folded into one) and Twilio Docs: two entries, as Manage shows them,
-    // plus the three connectors of the providers, which Manage lists too
-    expect(connectedCounts({ entries, engineConnected: 3 })).toEqual({ installed: 5 });
-    expect(connectedCounts({ entries, engineConnected: 0 })).toEqual({ installed: 2 });
-    expect(connectedCounts({ entries: [], engineConnected: 0 })).toEqual({});
-    const html = renderToStaticMarkup(createElement(ConnectAppsView, {
-      tab: "discover", onTab: noop, refreshing: false, onRefresh: noop,
-      connected: { count: 6, icons: items.slice(0, 2) }, search: createElement("input", { "data-plugins-search": "" }), discover: "D",
-    }));
-    expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps</);
-    // the title is never cut (French at phone width, #4153): the head wraps "N connected" under it instead
-    const head = html.match(/<header [^>]*data-plugins-head=""[^>]*>/)?.[0] ?? "";
-    expect(head).toMatch(/\bflex-wrap\b/);
-    const title = html.match(/<h2 [^>]*id="plugins-title"[^>]*>/)?.[0] ?? "";
-    expect(title).not.toMatch(/\btruncate\b|\bline-clamp|\bwhitespace-nowrap\b/);
-    expect(html).toMatch(/data-plugins-connected="6"[\s\S]*?6 connected</);
-    expect(html).toMatch(/data-plugins-search-row[\s\S]*?data-plugins-search-slot[\s\S]*?data-plugins-bot-templates[^>]*>[\s\S]*?Bot templates/);
-    // no tab row: Manage and the other views open from the home
-    expect(html).not.toContain('role="tablist"');
-    // nothing connected: no "0 connected", a plain Manage link (scope, pages, sources live there)
-    const none = renderToStaticMarkup(createElement(ConnectAppsView, { tab: "discover", onTab: noop, refreshing: false, onRefresh: noop, connected: { count: 0, icons: [] } }));
-    expect(none).not.toContain("0 connected");
-    expect(none).toMatch(/data-plugins-connected="0"[\s\S]*?<span>Manage<\/span>/);
+  it("#4453: one head on Yours and Discover: the title, \"...\", the kinds, the search, Add, the view, the scope", () => {
+    for (const tab of ["installed", "discover"] as const) {
+      const html = renderToStaticMarkup(createElement(ConnectAppsView, {
+        tab, onTab: noop, refreshing: false, onRefresh: noop, kind: "skills",
+        search: createElement("input", { "data-plugins-search": "" }), scope: createElement("div", { "data-test-scope": "" }),
+        manageActions: createElement("button", { "data-test-add": "" }), installed: "I", discover: "D",
+      }));
+      expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps</);
+      // the title is never cut (French at phone width, #4153)
+      const title = html.match(/<h2 [^>]*id="plugins-title"[^>]*>/)?.[0] ?? "";
+      expect(title).not.toMatch(/\btruncate\b|\bline-clamp|\bwhitespace-nowrap\b/);
+      expect(html).toMatch(/id="plugins-title"[\s\S]*?data-plugins-more-button[\s\S]*?role="tablist"[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-add[\s\S]*?data-plugins-views[\s\S]*?data-plugins-scope-slot[\s\S]*?data-test-scope/);
+      expect(html).toContain(tab === "installed" ? ">I<" : ">D<");
+      expect(html).not.toContain("Manage plugins and skills");
+    }
   });
 
-  it("Manage: \"< Connect Apps\" back to the home, the big title, the scope and + Add in its row, links to Pages and Sources (#2104)", () => {
-    const html = shell("installed");
-    expect(html).toMatch(/data-plugins-home=""[^>]*>[\s\S]*?Connect Apps<\/button>/);
-    expect(html).toMatch(/id="plugins-title"[^>]*>Manage plugins and skills</);
-    expect(html).toMatch(/data-plugins-view-link="pages"[\s\S]*?data-plugins-view-link="sources"/);
-    expect(html).not.toContain('data-plugins-view-link="bots"');
-    expect(html).not.toContain('role="tablist"');
-    expect(html).not.toContain("data-plugins-advanced");
-    const scoped = renderToStaticMarkup(createElement(ConnectAppsView, {
-      tab: "installed", onTab: noop, refreshing: false, onRefresh: noop,
-      scope: createElement("div", { "data-test-scope": "" }), manageActions: createElement("button", { "data-test-add": "" }), installed: "I",
-    }));
-    expect(scoped).toMatch(/id="plugins-title"[\s\S]*?data-plugins-scope-slot[\s\S]*?data-test-scope[\s\S]*?data-test-add/);
-  });
-
-  it("Manage, Pages and Sources: the title row and its pills sit outside the scrolling list, so they never slide under \"< Plugins\" (#2948)", () => {
-    for (const tab of ["installed", "pages", "sources"] as const) {
+  it("Bots, Pages and Sources: the back row, the title row and its pills sit outside the scrolling list (#2948)", () => {
+    for (const tab of ["pages", "sources"] as const) {
       const host = document.createElement("div");
       document.body.append(host);
       const root = createRoot(host);
       flushSync(() => root.render(createElement(ConnectAppsView, {
         tab, onTab: noop, refreshing: false, onRefresh: noop,
-        scope: createElement("div", { "data-test-scope": "" }), manageActions: createElement("button", { "data-test-add": "" }),
-        installed: "I", pages: "G", sources: "S",
+        scope: createElement("div", { "data-test-scope": "" }), installed: "I", pages: "G", sources: "S",
       })));
       const bar = host.querySelector("[data-plugins-manage-bar]");
       const titleRow = host.querySelector("[data-plugins-title-row]");
       const list = host.querySelector("[data-plugins-list]");
       expect(titleRow?.querySelector("#plugins-title")).toBeTruthy();
       if (tab !== "pages") expect(titleRow?.querySelector("[data-plugins-scope-slot]")).toBeTruthy();
-      if (tab === "installed") expect(titleRow?.querySelector("[data-test-add]")).toBeTruthy();
       // bar, then the title row, then the list: siblings, the list alone scrolls
       expect(bar?.nextElementSibling).toBe(titleRow);
       expect(titleRow?.className).toContain("shrink-0");
       expect(list?.contains(titleRow!)).toBe(false);
       expect(list?.querySelector("#plugins-title")).toBeNull();
       expect(list?.className).toContain("overflow-y-auto");
-      // no hairline at rest (it shows once the list moves; checked headless by scripts/capture/plugins-grid.mjs)
+      // no hairline at rest (it shows once the list moves)
       expect(titleRow?.hasAttribute("data-plugins-stuck")).toBe(false);
       root.unmount();
       host.remove();
     }
+    // Yours too: its head stays out of the list
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab: noop, refreshing: false, onRefresh: noop, installed: "I" })));
+    const titleRow = host.querySelector("[data-plugins-title-row]");
+    expect(titleRow?.className).toContain("shrink-0");
+    expect(host.querySelector("[data-plugins-list]")?.contains(titleRow!)).toBe(false);
+    root.unmount();
+    host.remove();
   });
 
   it("Installed, the private skills and This Mac are the reference's two columns of borderless rows, nothing dropped (#4097)", () => {
@@ -275,11 +258,11 @@ describe("the \"...\" menu of an entry", () => {
     click(host.querySelector("[data-entry-menu]"));
     expect([...host.querySelectorAll("[data-entry-action]")].map((node) => node.textContent)).toEqual(["Mettre à jour", "Pour quels bots", "Retirer"]);
     flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab: noop, refreshing: false, onRefresh: noop })));
-    expect(host.querySelector("#plugins-title")?.textContent).toBe("Gérer les plugins et les skills");
-    expect([...host.querySelectorAll("[data-plugins-view-link]")].map((node) => node.textContent)).toEqual(["Pages", "Sources"]);
-    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "discover", onTab: noop, connected: { count: 2, icons: [] }, refreshing: false, onRefresh: noop })));
-    expect(host.querySelector("[data-plugins-connected]")?.textContent).toBe("2 connectés");
-    expect(host.querySelector("[data-plugins-bot-templates]")?.textContent).toBe("Modèles de bots");
+    expect(host.querySelector("#plugins-title")?.textContent).toBe("Connecter des apps");
+    expect([...host.querySelectorAll("[data-plugins-kind-tab]")].map((node) => node.textContent)).toEqual(["Skills", "Connecteurs", "Plugins"]);
+    expect([...host.querySelectorAll("[data-plugins-view]")].map((node) => node.textContent)).toEqual(["Les tiens", "Découvrir"]);
+    click(host.querySelector("[data-plugins-more-button]"));
+    expect([...host.querySelectorAll("[data-plugins-view-link]")].map((node) => node.textContent)).toEqual(["Modèles de bots", "Pages publiées", "Sources"]);
   });
 });
 
@@ -335,10 +318,9 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
     expect(discover(groups)).toMatch(/data-plugins-section="from-codex"[\s\S]*>From ChatGPT<[\s\S]*data-plugin-row="account:codex:Notion"/);
   });
 
-  it("\"N connected\" counts the connected account rows with the plugins", () => {
+  it("the Connectors count takes the connected account rows", () => {
     const groups = connectorGroups({ claude }, { grokConfigured: true });
     expect(connectedAccountRows(groups)).toBe(3);
-    expect(connectedCounts({ entries: [], engineConnected: connectedAccountRows(groups) })).toEqual({ installed: 3 });
   });
 
   it("Manage: connected connectors are rows of the Installed list, with their state and a \"...\" menu; no separate account section", () => {
@@ -600,5 +582,82 @@ describe("Connect Apps (once Capabilities, then Plugins), the engine accounts (o
   it("the accounts section no longer draws the pages", () => {
     const html = renderToStaticMarkup(createElement(AccountsView, {}));
     expect(html).not.toContain("data-plugins-pages");
+  });
+});
+
+describe("#4453: Yours and Discover of one kind", () => {
+  const capabilityKeys = (html: string) => [...html.matchAll(/<li data-capability="[^"]+"[^>]*>/g)].length;
+
+  // regression (#4453): the flat "Capabilities · N on" list mixed products,
+  // connectors, plugins and skills; each now shows in its one tab, once
+  it("a bot's rows: each in one kind only, none dropped, none twice", () => {
+    const resolved = capabilityFixture();
+    const all = capabilityKeys(renderToStaticMarkup(createElement(InstalledView, props({ resolved, botName: "Scout" }))));
+    const perKind = (["skills", "connectors", "plugins"] as const).map((kind) => renderToStaticMarkup(createElement(InstalledView, props({ resolved, botName: "Scout", kind }))));
+    expect(perKind.map(capabilityKeys).reduce((sum, count) => sum + count, 0)).toBe(all);
+    for (const [index, html] of perKind.entries()) {
+      const forms = [...html.matchAll(/<li data-capability="([^"]+)"/g)].map((match) => match[1]);
+      const wanted = [["skill"], ["mcp", "connector", "product", "role"], ["plugin", "flow"]][index]!;
+      expect(forms.every((form) => wanted.includes(form!)), forms.join()).toBe(true);
+    }
+    // the list's title says whose rows they are, never "Capabilities"
+    expect(perKind[1]).toContain("What Scout receives");
+    expect(perKind[1]).not.toMatch(/>Capabilities</);
+  });
+
+  it("a row the person may not switch shows a locked switch with the reason: set by the organization, the engine account", () => {
+    const html = renderToStaticMarkup(createElement(InstalledView, props({ resolved: capabilityFixture(), botName: "Scout", kind: "connectors" })));
+    expect(html).toMatch(/data-capability-scope="account"[\s\S]*?data-capability-locked=""/);
+    // another person's bot: every switch locked, with that reason
+    const other = renderToStaticMarkup(createElement(InstalledView, props({ resolved: capabilityFixture(), botName: "Scout", kind: "connectors", readOnlyReason: "READ ONLY" })));
+    expect(other).toContain('title="READ ONLY"');
+  });
+
+  it("Me: entries split by kind, private skills on Skills, account rows on Connectors with their pill and a locked switch", () => {
+    const groups = connectorGroups({ claude: { available: true, connectors: [{ name: "Gmail", status: "connected" as const }] } });
+    const accounts = { sections: groups.map((group) => ({ group, rows: accountConnectorRows(group, items) })) };
+    const view = (kind: "skills" | "connectors" | "plugins") => renderToStaticMarkup(createElement(InstalledView, props({ kind, accounts })));
+    const names = (html: string) => [...html.matchAll(/data-installed-entry="([^"]+)"/g)].map((match) => match[1]);
+    expect(names(view("plugins"))).toEqual(["plugin:github@claude-plugins-official"]);
+    expect(names(view("connectors"))).toEqual(["mcp:twilio-docs", "account:claude:Gmail"]);
+    expect(names(view("skills"))).toEqual([]);
+    expect(view("skills")).toContain("weekly-summary");
+    expect(view("connectors")).not.toContain("weekly-summary");
+    expect(view("connectors")).toMatch(/data-installed-entry="account:claude:Gmail"[\s\S]*?data-row-scope=""[^>]*>Engine account<[\s\S]*?data-row-switch="locked"/);
+    // the group's count at its right
+    expect(view("connectors")).toMatch(/>Yours<[\s\S]*?data-plugins-installed-count[^>]*>2 connectors</);
+    // nothing of a kind: its own empty line and a way to Discover
+    const empty = renderToStaticMarkup(createElement(InstalledView, props({ kind: "skills", skills: [] })));
+    expect(empty).toContain("No skills here yet.");
+    expect(empty).toContain("data-plugins-go-discover");
+  });
+
+  it("the organization's products fold past six rows behind Show all N", () => {
+    const products = Array.from({ length: 9 }, (_, index) => ({ key: `p${index}`, node: createElement("div", { "data-test-product": index }) }));
+    const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "connectors", products })));
+    expect(html).toMatch(/data-plugins-organization-group[\s\S]*?From your organization/);
+    expect(html.match(/data-test-product=/g)).toHaveLength(6);
+    expect(html).toMatch(/data-plugins-organization-all[^>]*>Show all 9</);
+    expect(renderToStaticMarkup(createElement(InstalledView, props({ kind: "skills", products })))).not.toContain("data-test-product");
+  });
+
+  it("Discover lists the chosen kind only; the engine accounts and the custom connector belong to Connectors", () => {
+    const catalog = buildPluginItems({
+      featured: [{ id: "linear", name: "Linear", description: "Issues", url: "https://mcp.linear.app/mcp", domain: "linear.app", auth: "oauth" }],
+      marketplaces: [{ name: "kit", plugins: [{ name: "notes-kit", installed: false, servers: [], skills: ["notes"] }] }],
+    });
+    const groups = connectorGroups({ claude: { available: true, connectors: [{ name: "Gmail", status: "connected" as const }] } });
+    const discover = (kind: "skills" | "connectors" | "plugins") => renderToStaticMarkup(createElement(DiscoverView, {
+      kind, items: catalog, filter: "all", onFilter: noop, type: "any", onType: noop, sourceLabel: (source: string) => source,
+      onOpenItem: noop, renderAction: () => null, accounts: groups.map((group) => ({ group, rows: accountConnectorRows(group, catalog) })), onAddCustom: noop, extraSources: ["kit"],
+    }));
+    const rows = (html: string) => [...html.matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1]);
+    expect(rows(discover("plugins"))).toEqual(["plugin:notes-kit@kit"]);
+    expect(rows(discover("connectors"))).toContain("featured:linear");
+    expect(rows(discover("connectors"))).not.toContain("plugin:notes-kit@kit");
+    expect(discover("connectors")).toContain("data-plugins-add-custom");
+    expect(discover("connectors")).toContain('data-harness-group="claude"');
+    expect(discover("plugins")).not.toContain("data-plugins-add-custom");
+    expect(discover("plugins")).not.toContain("data-harness-group");
   });
 });

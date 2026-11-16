@@ -39,7 +39,7 @@ const TONE: Record<"good" | "accent" | "warn" | "muted", string> = {
 
 /** Everything the tab shows, given the loaded list (tests and the gallery
  * render it). */
-export function CapabilitiesBody({ botName, data, error = null, actionError = null, busy = null, switchable = (item) => item.canToggle, onToggle = () => {}, onRetry = () => {}, onAdd, openAll = false, rowActions, showReceived = true }: {
+export function CapabilitiesBody({ botName, data, error = null, actionError = null, busy = null, switchable = (item) => item.canToggle, onToggle = () => {}, onRetry = () => {}, onAdd, openAll = false, rowActions, showReceived = true, title, fold, lockedReason }: {
   botName: string;
   /** null while the first load is in flight */
   data: BotCapabilities | null;
@@ -57,8 +57,18 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
   /** Installed keeps its existing detail, update and remove actions. */
   rowActions?: (item: Capability) => ReactNode;
   showReceived?: boolean;
+  /** #4453: the list's title in place of "Capabilities" (a group of Connect
+   * Apps' Connectors: "From your organization") */
+  title?: string;
+  /** #4453: the rows past this count fold behind "Show all N" */
+  fold?: number;
+  /** #4453: a row with no switch of its own shows a locked switch when this
+   * gives its reason (set by the organization, the engine account, another
+   * person's bot) */
+  lockedReason?: (item: Capability) => string | undefined;
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const [all, setAll] = useState(false);
   if (!data) {
     return (
       <div className="flex flex-col gap-4 px-4 pb-6 pt-2" data-capabilities="">
@@ -95,7 +105,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
       <section className="flex flex-col gap-1.5" data-capabilities-list="">
         <div className="flex items-center gap-2 px-0.5">
           <h3 className="flex-1 text-[12px] font-medium text-ink-secondary">
-            {t("capabilities.panel.title")}
+            {title ?? t("capabilities.panel.title")}
             <span className="text-ink-tertiary"> · {t(activeCount === 1 ? "capabilities.panel.activeOne" : "capabilities.panel.activeMany", { count: activeCount })}</span>
           </h3>
           {onAdd && (
@@ -111,7 +121,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
           </div>
         ) : (
           <ul className="flex flex-col overflow-hidden rounded-2xl border border-hairline-weak bg-elevated">
-            {items.map((item) => (
+            {(fold !== undefined && !all ? items.slice(0, fold) : items).map((item) => (
               <CapabilityRow
                 key={item.key}
                 item={item}
@@ -122,9 +132,16 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
                 locked={busy !== null}
                 onToggle={(next) => onToggle(item, next)}
                 actions={rowActions?.(item)}
+                lockedReason={lockedReason?.(item)}
               />
             ))}
           </ul>
+        )}
+        {fold !== undefined && items.length > fold && (
+          <button type="button" onClick={() => setAll((value) => !value)} data-capabilities-show-all=""
+            className="mr-auto rounded-full px-2 py-0.5 text-[12px] leading-4 text-ink-secondary transition-colors hover:bg-ink/[0.05] hover:text-ink motion-reduce:transition-none">
+            {all ? t("connectApps.manage.showFewer") : t("connectApps.showAllRows", { count: items.length })}
+          </button>
         )}
       </section>
 
@@ -185,7 +202,7 @@ function ReceivedRow({ id, label, children }: { id: string; label: string; child
 
 /** One capability: name, form and source, scope, state, its switch; open,
  * its detail. */
-function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onToggle, actions }: {
+function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onToggle, actions, lockedReason }: {
   item: Capability;
   expanded: boolean;
   onExpand: () => void;
@@ -194,6 +211,7 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   locked: boolean;
   onToggle: (next: boolean) => void;
   actions?: ReactNode;
+  lockedReason?: string;
 }) {
   const name = capabilityName(item);
   const tone = stateTone(item.state);
@@ -215,17 +233,22 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
           </span>
         </button>
         {/* #4359: at a phone's width the chips stack before a long name breaks a word */}
+        {/* #4453: the state, then the scope pill, the row's actions, the
+            switch at the far right (the same pair on every row) */}
         <span className={cn("flex min-w-0 max-w-[50%] flex-wrap justify-end gap-1", item.supersededBy && "ml-auto")}>
-          <span className={cn(CHIP, TONE.muted)} data-capability-scope-chip="">{scopeWord(item.scope)}</span>
           {tone && <span className={cn(CHIP, TONE[tone])} data-capability-state-chip="" title={reason ?? undefined}>{stateWord(item.state)}</span>}
+          <span className={cn(CHIP, TONE.muted)} data-capability-scope-chip="">{scopeWord(item.scope)}</span>
         </span>
+        {actions}
         {switchable ? (
           busy ? <LoaderCircle size={14} className="mx-3 shrink-0 animate-spin text-ink-secondary motion-reduce:animate-none" aria-hidden="true" /> : (
             <Switch checked={item.enabled} disabled={locked} onClick={() => onToggle(!item.enabled)}
               aria-label={t(item.enabled ? "capabilities.row.offAria" : "capabilities.row.onAria", { name })} />
           )
+        ) : lockedReason ? (
+          <Switch checked={item.enabled} disabled title={lockedReason} data-capability-locked=""
+            aria-label={t(item.enabled ? "capabilities.row.offAria" : "capabilities.row.onAria", { name })} />
         ) : null}
-        {actions}
       </div>
       {item.supersededBy && <p data-capability-superseded="" className="px-8 pb-2.5 text-[12px] leading-[17px] text-ink-secondary">
         {reason}

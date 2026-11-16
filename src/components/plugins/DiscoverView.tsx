@@ -8,32 +8,22 @@
 // connectors in Installed (Providers). Recommended for you comes first, under
 // the pills (#4207): the curated picks a bot usually wants
 // (recommended-picks.ts) that this person can connect and does not have.
+// #4453: Discover of one kind (Skills, Connectors or Plugins); "From Sagax"
+// left the home, it repeated Yours.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { kindOf, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { mainSections, SECTION_PREVIEW, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
 import { PICK_WHY, recommendedPicks } from "@/lib/recommended-picks";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { ConnectedMark, PluginRow, categoryPills, filterLabel, moreCategoryPills, sectionTitle } from "./ConnectAppsView";
-import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS, pluginChipClass } from "./plugins-style";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, accountRowMatches, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
 
 const PAGE = 60;
-const FROM_SAGAX = 6;
-
-/** A row of "From Sagax": what is here, with what it brings. */
-export interface FromSagaxRow {
-  key: string;
-  /** the mark to show (the entry's real logo) */
-  item: Pick<PluginItem, "key" | "kind" | "name" | "logo" | "domain">;
-  name: string;
-  /** "1 connector, 27 skills" */
-  sub: string;
-  status: PluginItem["status"];
-}
 
 export interface DiscoverViewProps {
   /** rows not installed yet (discoverItems) */
@@ -53,13 +43,10 @@ export interface DiscoverViewProps {
   onOpenItem: (item: PluginItem) => void;
   renderAction: (item: PluginItem) => ReactNode;
   renderBelow?: (item: PluginItem) => ReactNode;
-  /** "From Sagax": what is installed, first, on All */
-  fromSagax?: readonly FromSagaxRow[];
-  onOpenFromSagax?: (row: FromSagaxRow) => void;
-  /** View all of From Sagax: Manage */
-  onViewInstalled?: () => void;
-  /** "From <provider>" (#2306): the engine accounts' connectors, after From
-   * Sagax, in its rows; Manage on <provider> is the section's link */
+  /** #4453: the one kind shown; absent: every kind */
+  kind?: ConnectAppsKind;
+  /** "From <provider>" (#2306): the engine accounts' connectors, in their
+   * rows (Connectors only); Manage on <provider> is the section's link */
   accounts?: ReadonlyArray<{ group: HarnessConnectorGroup; rows: AccountConnectorRow[] }>;
   /** an account row with a page of its own (a Grok connector); absent: none */
   onOpenAccount?: (row: AccountConnectorRow) => (() => void) | undefined;
@@ -79,7 +66,16 @@ export interface DiscoverViewProps {
   recommendFrom?: readonly PluginItem[];
 }
 
-export function DiscoverView({ items, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, accounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom, owned = [], canConnect, recommendFrom }: DiscoverViewProps) {
+export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom }: DiscoverViewProps) {
+  // #4453: the kind tab says what is listed (the type filter's apps, MCP
+  // servers or skills); the engine accounts and the custom connector are
+  // connectors
+  const ofKind = (rows: readonly PluginItem[]) => (kind === undefined ? [...rows] : rows.filter((item) => kindOf(item) === kind));
+  const items = ofKind(allItems);
+  const recommendFrom = allRecommendFrom ? ofKind(allRecommendFrom) : undefined;
+  const connectors = kind === undefined || kind === "connectors";
+  const accounts = connectors ? allAccounts : [];
+  const onAddCustom = connectors ? addCustom : undefined;
   const [limit, setLimit] = useState(PAGE);
   useEffect(() => setLimit(PAGE), [filter, type]);
   const single = filter !== "all" || type !== "any";
@@ -99,7 +95,6 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
   const categorized = [...items, ...accounts.flatMap((section) => section.rows)];
   const pills = categoryPills(categorized, filter);
   const more = moreCategoryPills(categorized, filter);
-  const ours = !single ? fromSagax : [];
   // a category or a type keeps the account rows it matches; the notices
   // (no account, nothing read yet) show on All only
   const accountSections = accounts
@@ -131,25 +126,6 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
           <div className={PLUGINS.grid}>
             {recommended.map(({ item, pick }) => (
               <PluginRow key={item.key} item={item} sub={t(PICK_WHY[pick.kind])} onOpen={onOpenItem} action={renderAction(item)} below={renderBelow?.(item)} />
-            ))}
-          </div>
-        </section>
-      )}
-      {ours.length > 0 && (
-        <section data-plugins-section="from-sagax" className="mt-[30px]">
-          <SectionHead title={t("connectApps.section.fromSagax")} onViewAll={ours.length > FROM_SAGAX ? onViewInstalled : undefined} />
-          <div className={PLUGINS.grid}>
-            {ours.slice(0, FROM_SAGAX).map((row) => (
-              <div key={row.key} data-plugin-row={row.key} className="py-3">
-                <button type="button" onClick={() => onOpenFromSagax?.(row)} className="flex w-full min-w-0 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>
-                  <PluginIcon item={row.item} className="size-10 rounded-[10px]" />
-                  <span className="min-w-0 flex-1">
-                    <span className={PLUGINS.rowName}>{row.name}</span>
-                    <span className={PLUGINS.rowSub}>{row.sub}</span>
-                  </span>
-                  {row.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={row.status} className="text-[13px] font-normal" />}
-                </button>
-              </div>
             ))}
           </div>
         </section>

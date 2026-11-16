@@ -55,7 +55,7 @@ function formWords(form: "plugin" | "skill" | "mcp"): string {
 
 /** Me scope: the organization's capabilities for the person, with their
  * own switch on an offered one. */
-export function OrgCapabilitiesForMe() {
+export function OrgCapabilitiesForMe({ forms }: { forms?: readonly string[] } = {}) {
   const [items, setItems] = useState<MemberOrgCapability[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -76,7 +76,9 @@ export function OrgCapabilitiesForMe() {
       </p>
     );
   }
-  if (!items || items.length === 0) return null;
+  // #4453: one kind of Connect Apps lists its own forms only
+  const shown = forms ? items?.filter((item) => forms.includes(item.form)) : items;
+  if (!shown || shown.length === 0) return null;
   const toggle = async (item: MemberOrgCapability) => {
     setBusy(item.id);
     setError(null);
@@ -93,7 +95,7 @@ export function OrgCapabilitiesForMe() {
     <section className="mb-4" data-org-capabilities="me">
       <h3 className="mb-1.5 text-[13px] font-semibold text-ink">{t("orgCapabilities.me.title")}</h3>
       <ul className="divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
-        {items.map((item) => {
+        {shown.map((item) => {
           const state = installWords(item.state, item.enabled);
           return (
             <li key={item.id} data-org-capability={item.form} data-org-capability-mode={item.mode} className="flex items-center gap-2 px-3 py-2">
@@ -234,7 +236,7 @@ export function OrgCapabilityForm({ initial, onDone, onCancel }: { initial?: Dec
 /** Organization scope, for an admin, on a server whose Perspicax owns the
  * declarations: the list, Add, Edit and Remove. Unlinked: nothing (the
  * Organization scope keeps its local behaviour). */
-export function OrgCapabilitiesAdmin() {
+export function OrgCapabilitiesAdmin({ forms }: { forms?: readonly string[] } = {}) {
   const confirm = useConfirm();
   const [inventory, setInventory] = useState<OrgInventory | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,7 +264,8 @@ export function OrgCapabilitiesAdmin() {
       setBusy(null);
     }
   };
-  const rows = inventory?.capabilities ?? [];
+  // #4453: one kind of Connect Apps lists its own forms only
+  const rows = (inventory?.capabilities ?? []).filter((row) => !forms || forms.includes(row.form));
   return (
     <details className="group" data-org-capabilities="admin">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-[13px] text-ink-secondary hover:text-ink [&::-webkit-details-marker]:hidden">

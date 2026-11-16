@@ -4,8 +4,9 @@
 //   - the install scope sits under Manage's title, once, beside + Add (it
 //     vanished on Providers before); on Pages it shows turned off, with the
 //     reason;
-//   - "N connected" on the home opens Manage; no tab row any more, the
-//     close button keeps clear of the title row;
+//   - #4453: the kind tabs (Skills, Connectors, Plugins) and the view
+//     (Yours, Discover); "..." opens Bots, Pages and Sources; the close
+//     button keeps clear of the title row;
 //   - a plugin's page takes the whole pane under its own back bar, with the
 //     app's real mark, its name once, the technical id as metadata, where it
 //     is installed and its main action; the view it came from is on the
@@ -31,7 +32,7 @@ const items = buildPluginItems({
   marketplaces: [{ name: "claude-plugins-official", plugins: [{ name: "github", installed: true, servers: ["github-github"], skills: [] }] }],
 });
 const noop = () => {};
-const TABS: ConnectAppsTab[] = ["installed", "sources"];
+const TABS: ConnectAppsTab[] = ["installed", "discover", "sources"];
 
 let host: HTMLDivElement;
 let root: Root;
@@ -53,14 +54,13 @@ const view = (tab: ConnectAppsTab, extra: Record<string, unknown> = {}) => rende
 }));
 
 describe("the scope bar on Manage and Sources", () => {
-  it("draws the scope once under the big title; the home and Pages have none", () => {
+  it("draws the scope once under the title, on Yours, Discover (the install scope) and Sources; Pages has none", () => {
     for (const tab of TABS) {
       const html = view(tab);
       expect(html, tab).toMatch(/id="plugins-title"[\s\S]*?data-plugins-scope-slot[\s\S]*?data-test-scope/);
       expect(html.match(/data-plugins-scope-slot/g), tab).toHaveLength(1);
     }
     expect(view("pages")).not.toContain("data-test-scope");
-    expect(view("discover")).not.toContain("data-test-scope");
   });
 
   it("on Pages the toggle is shown turned off, with the line that says why", () => {
@@ -78,23 +78,31 @@ describe("the scope bar on Manage and Sources", () => {
 });
 
 describe("the header", () => {
-  it("the home: \"N connected\" opens Manage; no tab row (#2104)", () => {
+  it("#4453: a kind tab and Yours or Discover each say which they are and choose it", () => {
     expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "bots", "pages", "sources"]);
     const onTab = vi.fn();
-    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "discover", onTab, connected: { count: 6, icons: [] }, refreshing: false, onRefresh: noop })));
-    expect(host.querySelector('[role="tablist"]')).toBeNull();
-    const connected = host.querySelector<HTMLButtonElement>("[data-plugins-connected]")!;
-    expect(connected.textContent).toContain("6 connected");
-    flushSync(() => connected.click());
-    expect(onTab).toHaveBeenCalledWith("installed");
+    const onKind = vi.fn();
+    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab, kind: "skills", onKind, refreshing: false, onRefresh: noop })));
+    const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tablist"] [role="tab"]')];
+    expect(tabs.map((tab) => [tab.textContent, tab.getAttribute("aria-selected")])).toEqual([["Skills", "true"], ["Connectors", "false"], ["Plugins", "false"]]);
+    flushSync(() => tabs[2]!.click());
+    expect(onKind).toHaveBeenCalledWith("plugins");
+    flushSync(() => host.querySelector<HTMLButtonElement>('[data-plugins-view="discover"]')!.click());
+    expect(onTab).toHaveBeenCalledWith("discover");
+    // "...": Bot templates, Published pages, Sources, each opening its view
+    flushSync(() => host.querySelector<HTMLButtonElement>("[data-plugins-more-button]")!.click());
+    const links = [...host.querySelectorAll<HTMLButtonElement>("[data-plugins-view-link]")];
+    expect(links.map((link) => link.textContent)).toEqual(["Bot templates", "Published pages", "Sources"]);
+    flushSync(() => links[1]!.click());
+    expect(onTab).toHaveBeenCalledWith("pages");
   });
 
-  it("Manage: one refresh button, one scope slot, a back row to the home (#2104)", () => {
+  it("Yours: one refresh button, one scope slot; Pages' back row returns to the view it came from", () => {
     const onTab = vi.fn();
     const html = view("installed");
     expect(html.match(/data-plugins-scope-slot/g)).toHaveLength(1);
     expect(html.match(/aria-label="Refresh[^"]*"/g)).toHaveLength(1);
-    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab, refreshing: false, onRefresh: noop })));
+    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "pages", onTab, home: "discover", refreshing: false, onRefresh: noop })));
     flushSync(() => host.querySelector<HTMLButtonElement>("[data-plugins-home]")!.click());
     expect(onTab).toHaveBeenCalledWith("discover");
   });

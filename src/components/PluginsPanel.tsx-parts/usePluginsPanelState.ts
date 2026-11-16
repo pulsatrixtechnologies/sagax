@@ -29,6 +29,7 @@ import { BotCatalogPane } from "../lazy-bot-catalog";
 import { loadMacApps } from "@/lib/mac-apps-setup";
 import { macAppsSectionVisible, type MacAppsSetupStatus } from "../../../shared/mac-apps-setup.ts";
 import { useBotCapabilities } from "@/lib/capabilities";
+import { normalizeKind, type ConnectAppsKind } from "@/lib/capability-kinds";
 import type { DataCenter } from "../plugins/DataCenterDialog";
 import { useHarnessConnectors } from "./useHarnessConnectors";
 import type { FeaturedListing, MarketplaceListing, Page } from "./types";
@@ -63,11 +64,18 @@ export function usePluginsPanelState() {
   const [activeResult, setActiveResult] = useState(-1);
   const [filter, setFilter] = useState<PluginFilter>("all");
   const [type, setType] = useState<PluginTypeFilter>("any");
-  // The Connect Apps home is where a person lands (#2104, 2026-11-06: as
-  // Grok Bot; Installed was the landing on 2026-11-05: what they have,
-  // then Discover to add; Discover was first from 2026-10-28 to then).
-  // Sent to add an MCP server (#3910): Manage, whose "+ Add" adds it.
-  const [tab, setTab] = useState<ConnectAppsTab>(() => state.pluginsSurface === "mcp" ? "installed" : "discover");
+  // #4453: the window opens on the last kind used, on Yours ("installed");
+  // the view moves to Discover once the lists answer with nothing of that
+  // kind here (PluginsPanelView), unless the person chose a view already.
+  // Sent to add an MCP server (#3910): Connectors, whose "+ Add" adds it.
+  const [kind, setKindState] = useState<ConnectAppsKind>(() => state.pluginsSurface === "mcp" ? "connectors" : normalizeKind(state.pluginsPage) ?? rememberedKind() ?? "connectors");
+  const [tab, setTab] = useState<ConnectAppsTab>("installed");
+  /** the person (or a link) chose Yours or Discover: no automatic move */
+  const viewChosen = useRef(state.pluginsSurface === "mcp");
+  /** the last of Yours and Discover shown: where "< Connect Apps" of Bots,
+   * Pages and Sources leads back */
+  const homeView = useRef<"installed" | "discover">("installed");
+  if (tab === "installed" || tab === "discover") homeView.current = tab;
   const harness = useHarnessConnectors();
   const claudeConnectors = harness.connected;
   const ownerOrAdmin = useOwnerOrAdmin();
@@ -193,14 +201,27 @@ export function usePluginsPanelState() {
   const botCatalogTarget = state.botCatalogTarget;
   useEffect(() => {
     const providersLink = isProvidersLink(state.pluginsPage);
+    // #4453: a link to one kind opens it, on Yours
+    const requestedKind = normalizeKind(state.pluginsPage);
+    if (requestedKind) {
+      setStack([{ page: "main" }]);
+      setKindState(requestedKind);
+      setTab("installed");
+      viewChosen.current = true;
+      return;
+    }
     if (requestedTab === null || (requestedTab !== "pages" && !providersLink && requestedTab !== "sources" && requestedTab !== "bots")) return;
     if (requestedTab !== "bots") setScopeChoice("workspace");
     setStack([{ page: "main" }]);
     setSearch("");
     setTab(requestedTab);
-    // the old Providers tab: Installed, on its Providers section
-    if (providersLink) revealLater("[data-plugins-providers]");
-  }, [requestedTab, botCatalogTarget]);
+    viewChosen.current = true;
+    // the old Providers tab: Connectors, Yours, on its Providers section
+    if (providersLink) {
+      setKindState("connectors");
+      revealLater("[data-plugins-providers]");
+    }
+  }, [requestedTab, botCatalogTarget, state.pluginsPage]);
   const skillsLibraryOn = skillsLibraryEnabled(state.config);
   const back = useCallback(() => setStack((current) => current.length > 1 ? current.slice(0, -1) : current), []);
   useEffect(() => { void BotCatalogPane.preload().catch(() => undefined); }, []);
@@ -330,6 +351,15 @@ export function usePluginsPanelState() {
   const chooseTab = (next: ConnectAppsTab) => {
     setStack([{ page: "main" }]);
     setTab(next);
+    viewChosen.current = true;
+  };
+  /** #4453: a kind tab: its list, in the view open (Bots, Pages and Sources
+   * go back to Yours); remembered for the next opening */
+  const setKind = (next: ConnectAppsKind) => {
+    setStack([{ page: "main" }]);
+    setKindState(next);
+    setTab((current) => (current === "discover" ? "discover" : "installed"));
+    rememberKind(next);
   };
 
   return {
@@ -346,7 +376,20 @@ export function usePluginsPanelState() {
     botBusy, setBotBusy, loadFeatured, skillsRoute, loadSkills, loadMarketplaces, loadBotView,
     loadPersonalView, close, skillsLibraryOn, back, revealLater, shownMarketplaces, grokConfigured,
     tailscaleView, setTailscaleView, items, scopedItems, refreshAll, refreshing, chooseTab,
+    kind, setKind, viewChosen, homeView: homeView.current,
   };
+}
+
+const KIND_MEMORY = "sagax.connectApps.kind";
+
+/** The kind the person used last, in this browser (a convenience: absent in
+ * a private window or a preview). */
+function rememberedKind(): ConnectAppsKind | null {
+  try { return normalizeKind(window.localStorage.getItem(KIND_MEMORY)); } catch { return null; }
+}
+
+function rememberKind(kind: ConnectAppsKind): void {
+  try { window.localStorage.setItem(KIND_MEMORY, kind); } catch { /* not kept: the window opens on Connectors */ }
 }
 
 export type PluginsPanelState = ReturnType<typeof usePluginsPanelState>;

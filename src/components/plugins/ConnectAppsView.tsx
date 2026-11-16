@@ -1,11 +1,12 @@
-// Plugins (#2104, JC 2026-11-06): a copy of Grok Bot's Connect Apps. The
-// home (Discover) lists what can be added under one round search; Manage
-// (Installed) lists what is here; Bots, Pages and Sources are views reached
-// from the home ("Bot templates") and from Manage. A page opened from a view
-// (a plugin, a skill, a custom connector) takes the whole pane under its own
-// bar. The shared row parts (pills, section titles, PluginRow) live here too.
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRight, Bot, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+// Connect Apps (#2104, the reference's look; #4453, JC 2026-11-16: "to be
+// able to see what are skills, connectors, plugins"). Three kind tabs
+// (Skills, Connectors, Plugins), each with Yours (what is here, in the chosen
+// scope) and Discover (what can be added); Bot templates, Published pages and
+// Sources under the title bar's "...". A page opened from a view (a plugin, a
+// skill, a custom connector) takes the whole pane under its own bar. The
+// shared row parts (pills, section titles, PluginRow) live here too.
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Bot, ChevronLeft, FileText, Library, MoreHorizontal, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -19,12 +20,15 @@ import {
   type PluginSection,
   type PluginTypeFilter,
 } from "@/lib/plugins-model";
+import { CONNECT_APPS_KINDS, type ConnectAppsKind } from "@/lib/capability-kinds";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 import { BackButton } from "../Breadcrumb";
+import { QUIET_SEGMENT_GROUP, quietSegmentClass } from "./ScopeToggle";
 import { ConnectedMark, PluginIcon, PluginStatusLabel } from "./PluginParts";
 
 export { ConnectedMark };
-import { PLUGINS } from "./plugins-style";
-import { usePageHost } from "../page-host";
+import { PLUGINS, pluginChipClass } from "./plugins-style";
 
 /** The pills: All, then each category in the section order (only those with
  * a row, and the chosen one). Kinds and sources are not pills. */
@@ -119,7 +123,7 @@ export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["installed", "disco
 export const SCOPELESS_TABS: readonly ConnectAppsTab[] = ["bots", "pages"];
 
 const TAB_KEY = {
-  installed: "connectApps.manage.tab.installed",
+  installed: "connectApps.view.yours",
   discover: "connectApps.manage.tab.discover",
   bots: "connectApps.manage.tab.bots",
   pages: "connectApps.manage.tab.pages",
@@ -131,43 +135,33 @@ export function connectAppsTabLabel(tab: ConnectAppsTab): string {
   return t(TAB_KEY[tab]);
 }
 
-/** What the old "N connected" header counted, now on the tab that lists
- * them (2026-10-28, the owner: the button repeated Installed): the
- * person's own connected entries on Installed (the rows it shows) plus their
- * providers' connected connectors, which Installed lists too since
- * 2026-10-29. Zero: no counter. */
-export function connectedCounts(input: { entries: readonly { status: PluginItem["status"] }[]; engineConnected: number }): Partial<Record<ConnectAppsTab, number>> {
-  // the rows Installed shows (one per thing, installedEntries), connected
-  const own = input.entries.filter((entry) => entry.status === "connected").length;
-  const total = own + Math.max(0, input.engineConnected);
-  return total > 0 ? { installed: total } : {};
-}
-
 export interface ConnectAppsViewProps {
   tab: ConnectAppsTab;
   onTab: (tab: ConnectAppsTab) => void;
   /** Leave the Connect apps view (content frame back). */
   onBack?: () => void;
   /** views with something to show (Sources only when a source is reachable):
-   * Manage links to the ones past Installed */
+   * the "..." of the title bar opens the ones past Yours and Discover */
   tabs?: readonly ConnectAppsTab[];
-  /** connected things per view (connectedCounts) */
-  counts?: Partial<Record<ConnectAppsTab, number>>;
-  /** the home's "N connected": the count and a few icons, opens Manage */
-  connected?: { count: number; icons: readonly PluginItem[] };
-  /** the install scope (everyone, me, one bot): in Manage's title row */
+  /** #4453: the kind shown (Skills, Connectors, Plugins) and its tabs */
+  kind?: ConnectAppsKind;
+  onKind?: (kind: ConnectAppsKind) => void;
+  /** what the person has of each kind in the chosen scope, on its tab */
+  kindCounts?: Partial<Record<ConnectAppsKind, number>>;
+  /** where "< Connect Apps" of Bots, Pages and Sources leads: the view the
+   * person came from */
+  home?: "installed" | "discover";
+  /** the install scope (this bot, me, organization): beside Yours and Discover */
   scope?: ReactNode;
-  /** what the scope does here, under Manage's title */
+  /** what the scope does here, over the list */
   scopeNote?: ReactNode;
-  /** a line under the home's search while a scope other than the default is on */
-  homeNote?: ReactNode;
-  /** Manage's "+ Add" menu, beside the refresh */
+  /** the one "+ Add" menu, beside the search */
   manageActions?: ReactNode;
   /** a page opened from a view (a plugin's detail, a skill): the whole pane */
   page?: ReactNode;
-  /** the one search (ConnectAppsSearch), on the home's sticky row */
+  /** the one search (ConnectAppsSearch), beside the kind tabs */
   search?: ReactNode;
-  /** what the search found: in place of the home's sections */
+  /** what the search found: in place of the list */
   results?: ReactNode;
   /** notices over the open view */
   notices?: ReactNode;
@@ -182,29 +176,46 @@ export interface ConnectAppsViewProps {
 }
 
 const BIG_TITLE_KEY = {
-  installed: "connectApps.manage.title",
+  installed: "connectApps.title",
   discover: "connectApps.title",
-  bots: "connectApps.manage.tab.bots",
-  pages: "connectApps.manage.tab.pages",
+  bots: "connectApps.botTemplates",
+  pages: "settings.section.pages",
   sources: "connectApps.manage.tab.sources",
 } as const satisfies Record<ConnectAppsTab, LocaleKey>;
 
-/** Plugins (#2104, JC 2026-11-06: identical to Grok Bot's Connect Apps).
- * Home (Discover): the title and "N connected" on one line, then the round
- * search and "Bot templates" on a row that sticks to the top when the list
- * scrolls (the X joins it there), then the pills and the sections. Manage
- * (Installed) and the other views: "< Connect Apps", a big title, the list.
+const KIND_KEY = {
+  skills: "connectApps.kind.skills",
+  connectors: "connectApps.kind.connectors",
+  plugins: "connectApps.kind.plugins",
+} as const satisfies Record<ConnectAppsKind, LocaleKey>;
+
+/** A kind's name, on its tab and in a search's "in Skills". */
+export function connectAppsKindLabel(kind: ConnectAppsKind): string {
+  return t(KIND_KEY[kind]);
+}
+
+/** The views under the title bar's "...": Bot templates, Published pages,
+ * Sources (#4453: they are none of the three kinds; one home each). */
+const MORE_VIEWS: ReadonlyArray<{ id: Extract<ConnectAppsTab, "bots" | "pages" | "sources">; key: LocaleKey; icon: ReactNode }> = [
+  { id: "bots", key: "connectApps.botTemplates", icon: <Bot size={14} aria-hidden="true" /> },
+  { id: "pages", key: "settings.section.pages", icon: <FileText size={14} aria-hidden="true" /> },
+  { id: "sources", key: "connectApps.manage.tab.sources", icon: <Library size={14} aria-hidden="true" /> },
+];
+
+/** Connect Apps (#4453, the reference's Customize, JC 2026-11-16): the title
+ * and "..." (Bot templates, Published pages, Sources); the three kind tabs
+ * (Skills, Connectors, Plugins) with their counts, the one search and the
+ * one "+ Add"; Yours or Discover and the scope (This bot, Me, Organization)
+ * with the refresh; then the list of the chosen kind, view and scope, which
+ * alone scrolls. Bots, Pages and Sources open alone under "< Connect Apps".
  * A page (a plugin, a skill, a custom connector) takes the whole pane under
  * its own bar. */
 export function ConnectAppsView(props: ConnectAppsViewProps) {
-  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, connected, scope, scopeNote, homeNote, manageActions, search, results, page, notices, refreshing, onRefresh } = props;
-  const shown = tabs.includes(tab) ? tab : tabs.includes("discover") ? "discover" : tabs[0] ?? "discover";
+  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, kindCounts, home = "installed", scope, scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh } = props;
+  const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   const [stuck, setStuck] = useState(false);
-  // #4420: as a page of a host page (the bot's profile), the sticky row and
-  // the icons' cut-out take that page's ground, not the window's tint.
-  const hosted = usePageHost() !== null;
   // each view opens at its top: the hairline of a scrolled list goes with it
-  useEffect(() => setStuck(false), [shown]);
+  useEffect(() => setStuck(false), [shown, kind]);
 
   if (page !== undefined && !results) {
     return (
@@ -216,70 +227,87 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
     );
   }
 
-  if (shown === "discover") {
+  if (shown === "installed" || shown === "discover") {
+    const moreViews = MORE_VIEWS.filter((view) => tabs.includes(view.id));
     return (
-      <div className="flex min-h-0 flex-1 flex-col" data-plugins-main="discover">
+      <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown} data-plugins-kind={kind}>
+        {/* the title, the kind tabs and the view row stay put: only the list
+            scrolls, under a hairline once it moves (#2948) */}
+        <div
+          className={cn(PLUGINS.gutter, "shrink-0 border-b border-transparent pb-3 pt-[22px]", stuck && "border-hairline-weak")}
+          data-plugins-title-row=""
+          data-plugins-stuck={stuck ? "" : undefined}
+        >
+          {/* the title is never cut (French at phone width): it wraps; the
+              room at the right is the close button's */}
+          <header className="flex min-h-8 items-center gap-2 pr-9" data-plugins-head="">
+            {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
+            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-0 flex-1 break-words")}>{t("connectApps.title")}</h2>
+            {moreViews.length > 0 && <MoreViewsMenu views={moreViews} onPick={onTab} />}
+          </header>
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2" data-plugins-kind-row="">
+            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex flex-wrap items-center gap-1.5" data-plugins-kinds="">
+              {CONNECT_APPS_KINDS.map((id) => {
+                const count = kindCounts?.[id];
+                return (
+                  <button key={id} type="button" role="tab" aria-selected={kind === id} data-plugins-kind-tab={id}
+                    onClick={() => onKind?.(id)} className={pluginChipClass(kind === id)}>
+                    {connectAppsKindLabel(id)}
+                    {count !== undefined && count > 0 && (
+                      <span className={cn("tabular-nums", kind === id ? "text-app/60" : "text-ink-tertiary")} data-plugins-kind-count={count}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="ml-auto flex min-w-0 flex-[1_1_240px] items-center justify-end gap-2">
+              {search && <div className="min-w-0 max-w-[260px] flex-1" data-plugins-search-slot="">{search}</div>}
+              {manageActions}
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2" data-plugins-view-row="">
+            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={QUIET_SEGMENT_GROUP} data-plugins-views="">
+              {(["installed", "discover"] as const).map((id) => (
+                <button key={id} type="button" role="radio" aria-checked={shown === id} data-plugins-view={id}
+                  onClick={() => onTab(id)} className={quietSegmentClass(shown === id)}>
+                  {t(id === "installed" ? "connectApps.view.yours" : "connectApps.manage.tab.discover")}
+                </button>
+              ))}
+            </div>
+            {scope && (
+              <>
+                <span aria-hidden="true" className="mx-1 h-5 w-px bg-ink/10" />
+                <div className="min-w-0" data-plugins-scope-slot="">{scope}</div>
+              </>
+            )}
+            <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "ml-auto w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")} data-plugins-refresh="">
+              <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
+            </button>
+          </div>
+        </div>
         <div
           className="min-h-0 flex-1 overflow-y-auto outline-none"
           onScroll={(event) => setStuck(event.currentTarget.scrollTop > 4)}
           tabIndex={-1}
           data-plugins-list=""
-          data-plugins-manage="discover"
+          data-plugins-manage={shown}
           data-plugins-results={results ? "" : undefined}
         >
-          {/* the title is never cut: when it and "N connected" do not fit on one line (French at phone width), "N connected" goes under it */}
-          <header className={cn(PLUGINS.gutter, "flex flex-wrap items-center gap-x-3 gap-y-1 pb-[9px] pt-[50px] pr-14")} data-plugins-head="">
-            {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
-            <h2 id="plugins-title" className={cn(PLUGINS.title, "max-w-full flex-[1_0_auto] break-words")}>{t("connectApps.title")}</h2>
-            {/* with nothing connected it still leads to Manage (scope, pages, sources) */}
-            {connected && (
-              <button
-                type="button"
-                onClick={() => onTab("installed")}
-                className="-mr-1 flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-1.5 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink"
-                data-plugins-connected={connected.count}
-              >
-                <span className="flex -space-x-1.5" aria-hidden="true">
-                  {connected.icons.slice(0, 4).map((item) => (
-                    <PluginIcon key={item.key} item={item} className={cn("size-[22px] rounded-[7px] ring-2", hosted ? "ring-(--color-app)" : "ring-(--color-inset)")} />
-                  ))}
-                </span>
-                <span>{connected.count > 0 ? t("connectApps.connectedCount", { count: connected.count }) : t("connectApps.manageLink")}</span>
-                <ChevronRight size={16} aria-hidden="true" />
-              </button>
-            )}
-          </header>
-          <div
-            className={cn(
-              PLUGINS.gutter,
-              "sticky top-0 z-10 flex items-center gap-3 py-2 transition-[padding] motion-reduce:transition-none",
-              hosted ? "bg-app" : "bg-inset",
-              stuck && "border-b border-hairline-weak sm:pr-14",
-            )}
-            data-plugins-search-row
-            data-plugins-stuck={stuck ? "" : undefined}
-          >
-            {search && <div className="min-w-0 flex-1" data-plugins-search-slot>{search}</div>}
-            <button type="button" onClick={() => onTab("bots")} className={PLUGINS.textLink} data-plugins-bot-templates>
-              <span className="flex size-[18px] items-center justify-center rounded-full bg-ink text-app" aria-hidden="true"><Bot size={12} /></span>
-              {t("connectApps.botTemplates")}
-              <ArrowUpRight size={14} className="text-ink-secondary" aria-hidden="true" />
-            </button>
+          <div className={cn(PLUGINS.gutter, "pb-8")}>
+            {scopeNote}
+            {notices}
+            <div className="mt-3">{results ?? (shown === "installed" ? props.installed : props.discover)}</div>
           </div>
-          {homeNote && <div className={PLUGINS.gutter}>{homeNote}</div>}
-          {notices}
-          <div className={cn(PLUGINS.gutter, "pb-8 pt-3")}>{results ?? props.discover}</div>
         </div>
       </div>
     );
   }
 
-  const extraViews = tabs.filter((id) => id === "pages" || id === "sources");
   const backBar = (
     <div className="flex h-12 shrink-0 items-center px-3 pr-14" data-plugins-manage-bar>
       <button
         type="button"
-        onClick={() => onTab("discover")}
+        onClick={() => onTab(home)}
         className="-ml-0.5 flex h-8 items-center gap-1 rounded-full pl-1 pr-2.5 text-[13px] text-ink hover:bg-hover"
         data-plugins-home=""
         data-breadcrumb-back=""
@@ -318,7 +346,6 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
             </button>
           )}
-          {shown === "installed" && manageActions}
         </div>
       </div>
       <div
@@ -332,29 +359,37 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           {shown !== "pages" && scopeNote}
           {notices}
           <div className="mt-3">
-            {shown === "installed" && props.installed}
             {shown === "pages" && props.pages}
             {shown === "sources" && props.sources}
           </div>
-          {shown === "installed" && extraViews.length > 0 && (
-            <div className="mt-8" data-plugins-more-views>
-              <h3 className={cn(PLUGINS.label, "mb-1")}>{t("connectApps.manage.more")}</h3>
-              {extraViews.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onTab(id)}
-                  className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-hover"
-                  data-plugins-view-link={id}
-                >
-                  <span className={cn(PLUGINS.rowName, "flex-1")}>{connectAppsTabLabel(id)}</span>
-                  <ChevronRight size={16} className="text-ink-secondary" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The title bar's "..." (#4453): Bot templates, Published pages, Sources. */
+function MoreViewsMenu({ views, onPick }: { views: ReadonlyArray<{ id: ConnectAppsTab; key: LocaleKey; icon: ReactNode }>; onPick: (tab: ConnectAppsTab) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  usePopoverDismiss(open, ref, () => setOpen(false));
+  return (
+    <div ref={ref} className="relative shrink-0" data-plugins-more="">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("connectApps.more.aria")} title={t("connectApps.more.aria")}
+        onClick={() => setOpen((value) => !value)} className="ui-icon-button" data-plugins-more-button="">
+        <MoreHorizontal size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+          {views.map((view) => (
+            <button key={view.id} type="button" role="menuitem" data-plugins-view-link={view.id}
+              onClick={() => { setOpen(false); onPick(view.id); }} className={MENU_ROW}>
+              {view.icon}
+              {t(view.key)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

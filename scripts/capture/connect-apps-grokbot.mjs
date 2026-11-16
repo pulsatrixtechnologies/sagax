@@ -54,7 +54,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1100, height: 820 }, deviceScaleFactor: 2, colorScheme: scheme });
   page.on("pageerror", (error) => console.error("page error:", error.stack));
   await page.goto(`${base}?view=manage&skin=${skin}&lang=${lang}&role=${role}`, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-plugins-main="discover"]', { timeout: 30_000 });
+  await page.waitForSelector("[data-plugins-main]", { timeout: 30_000 });
   const shot = async (name) => {
     await page.waitForTimeout(700);
     const file = join(outDir, `${name}.png`);
@@ -64,11 +64,13 @@ try {
   const home = async () => {
     while (await page.locator("[data-plugins-back]").count()) await page.click("[data-plugins-back]");
     if (await page.locator("[data-plugins-home]").count()) await page.click("[data-plugins-home]");
+    // #4453: Discover of the kind open
+    await page.click('[data-plugins-view="discover"]');
     await page.waitForSelector('[data-plugins-main="discover"]');
   };
 
   // the organization's scope lists the most (featured apps, the custom connector)
-  await page.click("[data-plugins-connected]");
+  await page.click('[data-plugins-view="installed"]');
   await page.waitForSelector('[data-plugins-main="installed"]');
   if (await page.locator('[data-plugins-scope-option="workspace"]').count()) {
     await page.click('[data-plugins-scope-option="workspace"]');
@@ -88,11 +90,12 @@ try {
     console.log("skip 6-home-scrolled: the home does not scroll at this size");
   }
 
-  await page.click("[data-plugins-connected]");
+  await page.click('[data-plugins-view="installed"]');
   await page.waitForSelector('[data-plugins-main="installed"]');
   await shot("2-manage");
 
-  // a plugin's page: the first plugin row of Manage
+  // a plugin's page: the first row of Plugins > Yours (#4453)
+  await page.click('[data-plugins-kind-tab="plugins"]');
   const pluginRow = page.locator('[data-installed-entry^="plugin:"] button[aria-label]').first();
   if (await pluginRow.count()) {
     await pluginRow.click();
@@ -115,6 +118,7 @@ try {
     console.log("skip 5-skill: Manage lists no skill");
   }
 
+  await page.click('[data-plugins-kind-tab="connectors"]');
   await home();
   await page.locator('[data-plugins-manage="discover"]').evaluate((list) => { list.scrollTop = list.scrollHeight; });
   await page.click("[data-plugins-add-custom]");

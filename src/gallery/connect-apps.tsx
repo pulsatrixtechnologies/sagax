@@ -29,6 +29,7 @@ import type { PerspicaxOrg } from "../lib/perspicax-org";
 import { catalogCategories, catalogSections, catalogTemplates } from "../lib/bot-catalog";
 import { loadLocale, t } from "../lib/i18n";
 import { flowSupersededFixture, flowSupersededPluginsFixture } from "../lib/flow-superseded.fixture";
+import { capabilityFixture } from "../lib/capabilities.fixture";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore } from "../state/store";
 import { parsePersonProducts } from "../../shared/person-products";
@@ -330,6 +331,9 @@ if (params.has("bot")) {
     items: [
       plugin("code-review", "Code Review", "claude-plugins-official", ["code-review"], ["reviewer"]),
       plugin("cursor-team-kit", "Cursor Team Kit", "cursor-plugins", ["rule-no-inline-imports", "ship-it"], ["ci-watcher"]),
+      // #4453: a skill, the person's own server, a server everyone may use
+      // (this bot's switch) and an engine account's connector, one per kind tab
+      ...capabilityFixture().items.filter((item) => item.form === "skill" || item.form === "mcp" || item.form === "connector"),
     ],
   };
 }

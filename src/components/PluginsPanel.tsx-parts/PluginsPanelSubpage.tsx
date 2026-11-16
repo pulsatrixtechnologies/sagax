@@ -2,13 +2,13 @@ import { useEffect, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 
 import { t } from "@/lib/i18n";
-import { permissionMissingText } from "@/lib/permissions";
 import { detailIdentity } from "@/lib/installed-model";
 import { fetchBotTailscale } from "@/lib/bot-tailscale";
 import type { SkillsLibrarySkillWire } from "../../../shared/wire";
 import { TailscaleConnectView } from "../plugins/TailscaleConnectView";
 import type { Crumb } from "../Breadcrumb";
-import { connectAppsTabLabel, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import { connectAppsKindLabel, connectAppsTabLabel, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import type { ConnectAppsKind } from "@/lib/capability-kinds";
 import { PluginCard, PluginPageHeader } from "../plugins/PluginParts";
 import { PluginDetailView } from "../plugins/PluginDetailView";
 import { SkillPage } from "../plugins/SkillPage";
@@ -19,6 +19,7 @@ import { CustomConnectorPage } from "../plugins/CustomConnectorPage";
 import { ProductDetailView } from "../plugins/ProductDetailView";
 import type { PersonProduct } from "@/lib/person-products";
 import { detailProps } from "./detailBuilders";
+import { skillReadOnlyReason } from "./helpers";
 import type { Page } from "./types";
 import type { PluginsPanelState } from "./usePluginsPanelState";
 import type { PluginsPanelActions } from "./usePluginsPanelActions";
@@ -46,7 +47,7 @@ export function PluginsPanelSubpage({
   toggleBotServers: (entry: InstalledEntry, botId: string, on: boolean) => void;
 }): ReactNode {
   const {
-    page, skills, skillsRoute, scope, ownerOrAdmin, libraryEditor, perspicaxOrg, marketplaces,
+    page, skills, skillsRoute, scope,
     back, setStack, loadSkills, items, mcp, mcpAccountDraft, setMcpAccountDraft,
     shownMarketplaces, installing,
   } = s;
@@ -76,14 +77,8 @@ export function PluginsPanelSubpage({
   }, [githubLate, githubKey, setStack]);
 
   const pageSkill = page.page === "skill" && page.name ? skills?.find((entry) => entry.name === page.name) : undefined;
-  const skillReadOnly = (skill: SkillsLibrarySkillWire): string | undefined => {
-    if (scope === "me") return undefined;
-    if (ownerOrAdmin === false && !libraryEditor) return perspicaxOrg !== null ? permissionMissingText("skills.library") : t("connectApps.skill.readOnlyOwner");
-    if (skill.version) return t("connectApps.skill.readOnlyOrganization");
-    const plugin = marketplaces?.find((market) => market.name === skill.source)?.plugins.find((entry) => entry.installed && entry.skills.includes(skill.name));
-    if (plugin) return t("connectApps.skill.readOnlyPlugin", { plugin: plugin.name });
-    return undefined;
-  };
+  const skillReadOnly = (skill: SkillsLibrarySkillWire): string | undefined => skillReadOnlyReason(s, skill);
+
 
   // A page opened from a tab (2026-10-28): inside that tab's panel, under
   // the title, scope and tabs. Browse Bots is the Bots tab, a pane of its
@@ -186,9 +181,10 @@ export function PluginsPanelSubpage({
   return null;
 }
 
-export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = []): string {
+export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = [], kind?: ConnectAppsKind): string {
   switch (entry.page) {
-    case "main": return connectAppsTabLabel(tab);
+    // #4453: a page opened from Yours or Discover names its kind ("Plugins")
+    case "main": return kind && (tab === "installed" || tab === "discover") ? connectAppsKindLabel(kind) : connectAppsTabLabel(tab);
     case "botsFor": return t("connectApps.entry.bots");
     case "detail": {
       const item = items.find((candidate) => candidate.key === entry.key);

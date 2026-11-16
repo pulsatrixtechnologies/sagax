@@ -1,11 +1,12 @@
 // Plugins > Me > Installed: the person's own MCP servers (organization
 // server, 2026-11-06). One row each, like an installed plugin: name, where
 // it runs, its state, Sign in when it waits for one, and the "..." menu
-// (Edit, Sign in / Sign out, Turn on / off, Remove). "+ Add" opens the same
+// (Edit, Sign in / Sign out, Remove); its scope pill (Me) and its switch
+// (on or off for all of the person's bots) at the right (#4453). "+ Add" opens the same
 // flows as under Organization (Add an MCP server, Paste config), each one
 // adding a server of the person's own. No admin needed: they are theirs.
 import { useState, type ReactNode } from "react";
-import { LogIn, LogOut, Pencil, Power, Server } from "lucide-react";
+import { LogIn, LogOut, Pencil, Server } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
@@ -15,7 +16,7 @@ import {
   type MyConnections, type PersonalServer,
 } from "@/lib/my-connections";
 import { PersonalImportForm, PersonalServerForm, stateLabel, useMyConnections } from "../settings/MyConnectionsSettings";
-import { EntryMenu, type EntryActions } from "./InstalledView";
+import { EntryMenu, RowSwitch, ScopePill, type EntryActions } from "./InstalledView";
 import { PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
@@ -76,8 +77,6 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
         ...(oauth && server.authState === "connected"
           ? [{ id: "signout", label: t("myConnections.servers.signOut"), icon: <LogOut size={14} />, run: () => void run(`out:${server.name}`, () => disconnectPersonalServer(server.name)) }]
           : oauth ? [{ id: "signin", label: t("myConnections.servers.signIn"), icon: <LogIn size={14} />, run: () => void signIn(server.name) }] : []),
-        { id: "toggle", label: server.enabled ? t("myConnections.servers.turnOff") : t("myConnections.servers.turnOn"), icon: <Power size={14} />,
-          run: () => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, !server.enabled)) },
       ],
       remove: () => void run(`rm:${server.name}`, () => removePersonalServer(server.name)),
     };
@@ -103,7 +102,10 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
           {server.enabled && waitsForSignIn(server) && (
             <button type="button" className="ui-button shrink-0" data-personal-sign-in={server.name} disabled={busy !== null} onClick={() => void signIn(server.name)}>{t("myConnections.servers.signIn")}</button>
           )}
+          <ScopePill label={t("capabilities.scope.me")} />
           <EntryMenu name={server.name} actions={actions} updateWaiting={false} hoverOnly />
+          <RowSwitch name={server.name} on={server.enabled} busy={busy !== null}
+            onChange={(next) => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, next))} />
         </div>
       ),
     };

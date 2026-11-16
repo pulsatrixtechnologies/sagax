@@ -1045,3 +1045,7 @@ took 13 tool calls and ended in "I can't". Now one call posts a card.
 - Copy link to this plugin (`src/lib/plugin-link.ts`): a marketplace
   plugin's repository, a reviewed server's documentation, else its https
   address; nothing for a connected app or a local server.
+
+## Connect Apps: three kinds (2026-11-16, #4453 lot 1)
+
+Connect Apps opens on three kind tabs, **Skills**, **Connectors** and **Plugins**, each with **Yours** (what is here in the chosen scope: This bot, Me, Organization) and **Discover** (what can be added). A row lands in one kind only, from a field the server already sends (`src/lib/capability-kinds.ts`: a resolved row's `form`, a catalog row's `kind`; `plugin` and `flow` are Plugins, `skill` is Skills, `mcp`, `connector`, `product` and `role` are Connectors). The tab shows how many rows its Yours lists. Every row of Yours carries its scope pill and its switch at the right (a locked, dimmed switch with the reason when the organization or the engine account keeps it, or on another person's bot); at This bot a server everyone may use switches through the bot's own server list, the write "For which bots" makes. The organization's products are the group "From your organization" of Connectors, folded past six rows. One "+ Add" offers the ways to add something of the kind open. Bot templates, Published pages and Sources open from the "..." of the title bar. "From Sagax" left Discover (it repeated Yours).

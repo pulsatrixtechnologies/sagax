@@ -30,67 +30,66 @@ describe("Plugins panel views", () => {
     renderAction: (item: PluginItem) => item.action ? createElement("button", { type: "button" }, item.action === "connect" ? "Connect" : "Add") : null,
   };
   const page = (overrides: Partial<ConnectAppsViewProps> = {}) => renderToStaticMarkup(createElement(ConnectAppsView, {
-    tab: "discover", onTab: noop, counts: { installed: 2 }, refreshing: false, onRefresh: noop,
+    tab: "discover", onTab: noop, kind: "connectors", kindCounts: { skills: 3, connectors: 2, plugins: 0 }, refreshing: false, onRefresh: noop,
     discover: createElement(DiscoverView, discoverProps), installed: "INSTALLED", pages: "PAGES", sources: "SOURCES", ...overrides,
   }));
 
-  // #4420 review: as a page of the bot page (bg-app ground), the sticky
-  // search row kept the window's tinted ground (bg-inset), a grey strip
-  // wider than the column's text edge. Under a host it takes the host's
-  // ground; the window keeps its own.
-  it("regression #4420: under a host page the sticky search row takes the page's ground, not the window's tint", () => {
+  // #4420 review: as a page of the bot page (bg-app ground), a row of the
+  // window kept the window's tinted ground (bg-inset), a grey strip wider
+  // than the column's text edge. #4453: the head is no longer a sticky strip
+  // at all: nothing of it paints the window's tint, in a window or a page.
+  it("regression #4420: under a host page no strip of the window's tint", () => {
     const search = createElement("input", { "data-plugins-search": "" });
-    const row = (html: string) => html.match(/<div class="([^"]*)"[^>]*data-plugins-search-row/)?.[1] ?? "";
-    const windowed = page({ search, connected: { count: 1, icons: [] } });
-    expect(row(windowed)).toContain("bg-inset");
     const hosted = renderToStaticMarkup(createElement(PageHostProvider, { value: { header: null } }, createElement(ConnectAppsView, {
-      tab: "discover", onTab: noop, counts: { installed: 2 }, refreshing: false, onRefresh: noop, search,
-      connected: { count: 1, icons: [] }, discover: "DISCOVER", installed: "INSTALLED", pages: "PAGES", sources: "SOURCES",
+      tab: "discover", onTab: noop, refreshing: false, onRefresh: noop, search,
+      discover: "DISCOVER", installed: "INSTALLED", pages: "PAGES", sources: "SOURCES",
     })));
-    expect(row(hosted)).not.toContain("bg-inset");
-    expect(row(hosted)).toContain("bg-app");
+    expect(hosted).not.toContain("bg-inset");
+    expect(page({ search })).not.toContain("bg-inset");
   });
 
-  it("the reference app's Connect Apps: the home (title, N connected, the sticky search row), then Manage, Bots and the views behind a back bar (#2104)", () => {
-    const html = page({ connected: { count: 2, icons: [] } });
+  it("#4453: Connect Apps is three kind tabs with their counts, Yours and Discover, the scope, the one search and Add; Bots, Pages and Sources under \"...\"", () => {
+    const html = page({ tab: "installed", scope: createElement("div", null, "SCOPE"), search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }), manageActions: createElement("button", { "data-test-add": "" }) });
     expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps<\/h2>/);
-    expect(html).toMatch(/data-plugins-connected="2"[\s\S]*?2 connected/);
-    expect(html).not.toContain('role="tablist"');
-    expect(html).not.toContain("data-breadcrumb");
     expect(html).not.toContain("Manage plugins and skills");
-    // nothing connected: the header still leads to Manage
-    expect(page({ connected: { count: 0, icons: [] } })).toMatch(/data-plugins-connected="0"[\s\S]*?>Manage</);
-    // one search: on the sticky row, with Bot templates on its right
-    const searched = page({ search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }) });
-    expect(searched).toMatch(/id="plugins-title"[\s\S]*?data-plugins-search-row[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-plugins-bot-templates/);
-    expect(searched).toMatch(/class="[^"]*sticky top-0[^"]*"[^>]*data-plugins-search-row/);
-    expect(searched.match(/data-plugins-search=""/g)).toHaveLength(1);
-    // the scope is not on the home
-    expect(page({ scope: createElement("div", null, "SCOPE") })).not.toContain("SCOPE");
-    // with text, the results take the catalogue's place
+    // the kinds, in the reference's order, the chosen one pressed, a count only where there is one
+    expect([...html.matchAll(/data-plugins-kind-tab="([a-z]+)"/g)].map((match) => match[1])).toEqual(["skills", "connectors", "plugins"]);
+    expect(html).toMatch(/role="tab" aria-selected="true" data-plugins-kind-tab="connectors"/);
+    expect(html).toMatch(/data-plugins-kind-tab="skills"[^>]*>Skills<span[^>]*data-plugins-kind-count="3">3</);
+    expect(html).not.toContain('data-plugins-kind-count="0"');
+    // the search and the one Add on the kinds' row; Yours, Discover, the scope and the refresh under it
+    expect(html).toMatch(/data-plugins-kind-row[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-test-add/);
+    expect(html.match(/data-plugins-search=""/g)).toHaveLength(1);
+    expect(html).toMatch(/data-plugins-view-row[\s\S]*?data-plugins-view="installed"[^>]*>Yours<[\s\S]*?data-plugins-view="discover"[^>]*>Discover<[\s\S]*?data-plugins-scope-slot[\s\S]*?SCOPE[\s\S]*?data-plugins-refresh/);
+    expect(html).toMatch(/role="radio" aria-checked="true" data-plugins-view="installed"/);
+    expect(html).toContain("INSTALLED");
+    // the title row stays out of the list, which alone scrolls
+    expect(html.indexOf("data-plugins-title-row")).toBeLessThan(html.indexOf("data-plugins-list"));
+    // Bots, Pages and Sources: the "..." of the title bar, never a tab
+    expect(html).toContain("data-plugins-more-button");
+    expect(html).not.toContain("data-plugins-bot-templates");
+    expect(html).not.toContain("data-plugins-connected");
+    // Discover: the same head, its list
+    const discover = page({ scope: createElement("div", null, "SCOPE") });
+    expect(discover).toContain("data-plugins-discover");
+    expect(discover).toMatch(/role="radio" aria-checked="true" data-plugins-view="discover"/);
+    expect(discover).toContain("SCOPE");
+    // with text, the results take the list's place
     const results = page({ results: "RESULTS" });
     expect(results).toContain("data-plugins-results");
     expect(results).toContain("RESULTS");
     expect(results).not.toContain("data-plugins-discover");
-    expect(html).not.toContain("INSTALLED");
-    // Manage: the back bar to Plugins, the big title, the scope, the links to Pages and Sources
-    const manage = page({ tab: "installed", scope: createElement("div", null, "SCOPE") });
-    expect(manage).toContain("INSTALLED");
-    expect(manage).toMatch(/data-plugins-home[^>]*>[\s\S]*?Connect Apps/);
-    expect(manage).toMatch(/id="plugins-title"[^>]*>Manage plugins and skills<\/h2>[\s\S]*?SCOPE/);
-    expect([...manage.matchAll(/data-plugins-view-link="([a-z]+)"/g)].map((match) => match[1])).toEqual(["pages", "sources"]);
-    // Bots: its pane under the back bar, no scope
+    // Bots: its pane under the back bar to Connect Apps, no scope
     const bots = page({ tab: "bots", bots: "BOTS", scope: createElement("div", null, "SCOPE") });
     expect(bots).toContain("BOTS");
     expect(bots).toMatch(/data-plugins-manage="bots"/);
-    expect(bots).toContain("data-plugins-home");
+    expect(bots).toMatch(/data-plugins-home[^>]*>[\s\S]*?Connect Apps/);
     expect(bots).not.toContain("SCOPE");
     expect(bots).not.toContain("data-apps-back");
     expect(page({ tab: "sources" })).toContain("SOURCES");
     expect(page({ tab: "pages" })).toContain("PAGES");
-    // a view left out is not linked from Manage
-    const noSources = page({ tabs: ["installed", "discover"], tab: "installed" });
-    expect(noSources).not.toContain('data-plugins-view-link="sources"');
+    // no view past Yours and Discover: no "..."
+    expect(page({ tabs: ["installed", "discover"], tab: "installed" })).not.toContain("data-plugins-more-button");
   });
 
   it("Discover: no search of its own, every category pill and no Browse Bots button, sections in the card grid (#2948)", () => {
@@ -112,7 +111,7 @@ describe("Plugins panel views", () => {
     expect(html).not.toMatch(/Browse bots/i);
   });
 
-  it("Recommended for you is the first section, above From Sagax, with each pick's why on the shared row (#4207)", () => {
+  it("Recommended for you is the first section, with each pick's why on the shared row (#4207); no From Sagax (#4453)", () => {
     const rows = buildPluginItems({
       featured: [
         { id: "linear", name: "Linear", description: "Issues", url: "https://mcp.linear.app/mcp", domain: "linear.app", auth: "oauth" },
@@ -123,13 +122,13 @@ describe("Plugins panel views", () => {
     });
     const html = renderToStaticMarkup(createElement(DiscoverView, {
       ...discoverProps, items: rows, owned: ["Stripe"],
-      fromSagax: [{ key: "plugin:github", item: { key: "plugin:github", kind: "plugin", name: "GitHub" }, name: "GitHub", sub: "1 connector", status: "connected" }],
     }));
     const sections = [...html.matchAll(/data-plugins-section="([^"]+)"/g)].map((match) => match[1]);
     expect(sections[0]).toBe("recommended");
-    expect(sections[1]).toBe("from-sagax");
+    expect(sections).not.toContain("from-sagax");
     expect(html.indexOf("data-plugins-chips")).toBeLessThan(html.indexOf('data-plugins-section="recommended"'));
-    const shelf = html.slice(html.indexOf('data-plugins-section="recommended"'), html.indexOf('data-plugins-section="from-sagax"'));
+    const after = html.indexOf("data-plugins-section=", html.indexOf('data-plugins-section="recommended"') + 1);
+    const shelf = html.slice(html.indexOf('data-plugins-section="recommended"'), after < 0 ? undefined : after);
     // the basics first (chat before tickets), what the person has left out, the private network tool not picked
     expect([...shelf.matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1])).toEqual(["featured:slack", "featured:linear"]);
     expect(shelf).toContain("Reads and posts in your team&#x27;s chat and meetings");

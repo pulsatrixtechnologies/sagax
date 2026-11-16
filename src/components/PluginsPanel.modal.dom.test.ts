@@ -139,10 +139,13 @@ describe("PluginsPanel modal", () => {
   });
 
   // the panel opens on its home; "N connected" (or Manage) leads to Manage (#2104)
+  /** #4453: Plugins, Yours (the bot's plugins and its organization Flow) */
   const toManage = async () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    const link = host.querySelector<HTMLButtonElement>("[data-plugins-connected]");
-    if (link) await act(async () => { link.click(); });
+    const plugins = host.querySelector<HTMLButtonElement>('[data-plugins-kind-tab="plugins"]');
+    if (plugins) await act(async () => { plugins.click(); });
+    const yours = host.querySelector<HTMLButtonElement>('[data-plugins-view="installed"]');
+    if (yours) await act(async () => { yours.click(); });
   };
 
   it("opens Connect Apps as a centred modal dialog", async () => {

@@ -1,4 +1,6 @@
 import { t } from "@/lib/i18n";
+import { permissionMissingText } from "@/lib/permissions";
+import type { SkillsLibrarySkillWire } from "../../../shared/wire";
 import type { PluginItem } from "@/lib/plugins-model";
 import { openExternalLink } from "@/lib/app-links";
 import { GROK_CONNECTORS_URL } from "../../../shared/grok-cloud-connectors";
@@ -41,4 +43,18 @@ export function safeHost(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** Why a library skill cannot be changed here (absent: it can): the skill
+ * page's read-only line and, #4453, a locked switch on its row. */
+export function skillReadOnlyReason(
+  s: { scope: string; ownerOrAdmin: boolean | null; libraryEditor: boolean; perspicaxOrg: unknown; marketplaces: ReadonlyArray<{ name: string; plugins: ReadonlyArray<{ name: string; installed: boolean; skills: readonly string[] }> }> | null },
+  skill: Pick<SkillsLibrarySkillWire, "name" | "source" | "version">,
+): string | undefined {
+  if (s.scope === "me") return undefined;
+  if (s.ownerOrAdmin === false && !s.libraryEditor) return s.perspicaxOrg !== null ? permissionMissingText("skills.library") : t("connectApps.skill.readOnlyOwner");
+  if (skill.version) return t("connectApps.skill.readOnlyOrganization");
+  const plugin = s.marketplaces?.find((market) => market.name === skill.source)?.plugins.find((entry) => entry.installed && entry.skills.includes(skill.name));
+  if (plugin) return t("connectApps.skill.readOnlyPlugin", { plugin: plugin.name });
+  return undefined;
 }

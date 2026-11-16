@@ -25,11 +25,15 @@ export function usePluginsInstalledEntries(s: PluginsPanelState, a: PluginsPanel
   // on a solo installation)
   const editableBots = state.bots.filter((bot) => !bot.hidden && canEditBotField(state.config, bot, "mcpServers"));
   const botsForRows = (entry: InstalledEntry) => editableBots.map((bot) => ({ id: bot.id, name: bot.name, on: botUsesServers(bot.mcpServers, enabledServers, entry.servers) }));
-  const toggleBotServers = (entry: InstalledEntry, botId: string, on: boolean) => {
+  /** These servers on or off for one bot: the bot's own server list, the
+   * write "For which bots" makes (#4453: a connector's switch at This bot too). */
+  const toggleBotServerNames = (botId: string, servers: readonly string[], on: boolean) => {
     const bot = state.bots.find((candidate) => candidate.id === botId);
-    if (!bot) return;
-    dispatch({ type: "updateBot", botId, patch: { mcpServers: botServersAfter(bot.mcpServers, enabledServers, entry.servers, on) } });
+    if (!bot) return false;
+    dispatch({ type: "updateBot", botId, patch: { mcpServers: botServersAfter(bot.mcpServers, enabledServers, servers, on) } });
+    return true;
   };
+  const toggleBotServers = (entry: InstalledEntry, botId: string, on: boolean) => { toggleBotServerNames(botId, entry.servers, on); };
   /** Remove: the plugin (its servers and skills go with it) and every
    * server of the entry added by hand or from the catalog, after one
    * confirmation. */
@@ -73,5 +77,5 @@ export function usePluginsInstalledEntries(s: PluginsPanelState, a: PluginsPanel
     };
   };
   const botsForEntry = page.page === "botsFor" ? entries.find((entry) => entry.key === page.key) : undefined;
-  return { entries, botsForRows, toggleBotServers, entryActions, botsForEntry };
+  return { entries, botsForRows, toggleBotServers, toggleBotServerNames, entryActions, botsForEntry };
 }

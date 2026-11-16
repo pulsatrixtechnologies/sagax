@@ -12,7 +12,7 @@ import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { productRowSub, productStateLabel, productStateTone, type PersonProduct } from "@/lib/person-products";
 import { cn } from "@/lib/cn";
-import { EntryMenu } from "./InstalledView";
+import { EntryMenu, ScopePill } from "./InstalledView";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
@@ -59,7 +59,9 @@ export function ProductStateLabel({ product, wrap = false }: { product: Pick<Per
   );
 }
 
-export function productRows(products: readonly PersonProduct[], onOpen: (product: PersonProduct) => void): Array<{ key: string; node: ReactNode }> {
+/** The rows; `scope` is the pill at their right (#4453: kept by the
+ * organization). A product's switch is per bot only: none here. */
+export function productRows(products: readonly PersonProduct[], onOpen: (product: PersonProduct) => void, scope?: string): Array<{ key: string; node: ReactNode }> {
   return products.map((product) => {
     const sub = productRowSub(product);
     return {
@@ -78,6 +80,7 @@ export function productRows(products: readonly PersonProduct[], onOpen: (product
               <ProductStateLabel product={product} wrap />
             </span>
           </button>
+          {scope && <ScopePill label={scope} />}
           <EntryMenu name={product.name} actions={{ links: productMenuActions(product, 14) }} updateWaiting={false} hoverOnly />
         </div>
       ),

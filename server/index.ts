@@ -790,7 +790,7 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
 import { lastingProblem, RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
-import { answerRoutineFix, type RoutineFixAnswer } from "./routines/routine-problem-answer.ts";
+import { answerRoutineFix, cardWithCheckNote, RoutineCheckFollowUps, type RoutineFixAnswer } from "./routines/routine-problem-answer.ts";
 import { RoutineCheapPathCards, firstToolStep } from "./routines/routine-cheap-path.ts";
 import { cardSignalEnding, createTellPerson, settleCardSignals, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
 import { alwaysChoiceOn, alwaysChoices, answeredCardText, answerHistory, answerLearningNote, answersOnKind, forgetAlwaysChoice, learnFromAnsweredCard, migrateAlwaysLines, type AnswerScope } from "./proactive/answer-learning.ts";
@@ -17090,11 +17090,12 @@ function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where:
     runNow: (routine) => {
       if (routineNeedsRun(auth, routine.botId)) return { ok: false, error: NEEDS_RUN.error };
       if (!mayRunRoutineNow(auth, routine)) return { ok: false, error: "Only the bot's owner, the person this routine runs as or an admin can run it now." };
-      if (routineInFlightRun(routine.id)) return { ok: false, running: true };
+      const going = routineInFlightRun(routine.id);
+      if (going) return { ok: false, running: true, runId: going.id };
       const run = routines!.runNow(routine.id, undefined, "person");
       if (!run) return { ok: false, error: "no such routine" };
       auditRoutineRunNow(auth, routine, run);
-      return { ok: true };
+      return { ok: true, runId: run.id };
     },
     pause: (routine) => {
       const patched = patchRoutineAs(auth, { headers: {} } as IncomingMessage, routine.id, { enabled: false });
@@ -17105,8 +17106,38 @@ function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where:
   // the routine's need moved (a run started, it was turned off): its frame
   // and its fix card follow at the watch's next pass
   if (done) routineNeedsWatch.touch();
+  // #4579: the answered card carries `checkRunId` (deliverLateQuestionAnswer)
+  // and then says what that run did (routineCheckFollowUps)
   return done;
 }
+
+/** #4579: Run a check's answered card says what its run did, once it ends
+ * (routines/routine-problem-answer.ts). The line replaces the card's note,
+ * and the one after its words for an app that reads only those. */
+const routineCheckFollowUps = new RoutineCheckFollowUps({
+  words: (routineId) => {
+    const routine = routines?.routineById(routineId);
+    return serverApprovalWords(languageOfPerson(routine ? routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }) : undefined));
+  },
+  stillWrong: (routineId) => {
+    const routine = routines?.routineById(routineId);
+    return Boolean(routine && lastingProblem(routineFixNeed(routine)));
+  },
+  checkCards: (routineId) => {
+    const routine = routines?.routineById(routineId);
+    const place = routine ? routineProblemPlace(routine, false) : null;
+    if (!place) return [];
+    const key = routineProblemKey(routineId);
+    return store.messagesFor(place.threadId)
+      .filter((row) => row.kind === "options" && row.card?.askKey === key && typeof row.card.checkRunId === "string")
+      .map((row) => ({ routineId, threadId: place.threadId, messageId: row.id, runId: row.card!.checkRunId! }));
+  },
+  tell: (card, note) => {
+    const row = store.messagesFor(card.threadId).find((message) => message.id === card.messageId);
+    if (!row?.card) return;
+    store.patchMessage(card.threadId, row.id, { card: cardWithCheckNote(row.card, note) });
+  },
+});
 
 const routineProblemCards = new RoutineProblemCards<Routine>({
   need: (routine) => routineFixNeed(routine),
@@ -21143,6 +21174,7 @@ routines = new RoutineManager({
   interruptGoal: interruptRoutineGroupGoal,
   onRunChanged: (run) => {
     syncRoutineRunToSource(run);
+    routineCheckFollowUps.runChanged(run);
     if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
     if (run.proactive) proactiveMetrics.noteRun(run);
     void botEventSubscriptions.publish(run);
@@ -21325,6 +21357,12 @@ routines = new RoutineManager({
     return bot ? effectiveBotOwner(bot) || undefined : undefined;
   },
 });
+// #4579: a check's run the restart failed was reported while `routines` was
+// still being built (its card could not be found): the cards following a run
+// that already ended get their line now
+try {
+  routineCheckFollowUps.catchUp(routines.listRoutines().map((routine) => routine.id), (routineId, runId) => routines?.runsOfRoutineAsStored(routineId).find((run) => run.id === runId));
+} catch (error) { reportBackgroundError(error); }
 /** #4250: whose signal ledger a run's notice is in: the run's person, else
  * the owner of the bot that tells it. */
 function routineRunPerson(run: RoutineRun, bot: BotRecord): string {

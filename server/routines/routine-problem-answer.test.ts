@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { ENGLISH_WORDS } from "../../shared/approval-describe.ts";
 import type { RoutineNeedsPerson } from "../../shared/routines.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
-import { answerRoutineFix, routineFixChoice, type RoutineFixAnswerDeps } from "./routine-problem-answer.ts";
+import { ROUTINE_RESTARTED } from "./routines.ts";
+import { answerRoutineFix, cardWithCheckNote, RoutineCheckFollowUps, routineFixChoice, type RoutineFixAnswerDeps } from "./routine-problem-answer.ts";
 import { plainProblemText, routineProblemCardInput } from "./routine-problem-card.ts";
 
 const FRENCH = serverApprovalWords("fr", {});
@@ -105,5 +106,86 @@ describe("the fix card never shows a raw code (#4438)", () => {
     expect(plainProblemText("Flow failed 2 times and never succeeded after: Tool not found: Flow", ENGLISH_WORDS)).toEqual({ text: "Flow failed 2 times and never succeeded after: Tool not found: Flow" });
     const input = routineProblemCardInput({ id: "r1", name: "Sweep" }, need, { summary: "Down", count: 3 }, ENGLISH_WORDS);
     expect(input.technical).toBeUndefined();
+  });
+});
+
+describe("Run a check: the card says what that run did (#4579)", () => {
+  it("names the run it started, or the one already going, so its end can be told", () => {
+    const d = deps({ runNow: vi.fn(() => ({ ok: true as const, runId: "run-9" })) });
+    expect(answerRoutineFix("routine-problem:r1", "Run a check", d)).toEqual({ note: ENGLISH_WORDS.t("routine.problemCard.checkStarted"), checkRunId: "run-9" });
+    const busy = deps({ runNow: vi.fn(() => ({ ok: false as const, running: true as const, runId: "run-8" })) });
+    expect(answerRoutineFix("routine-problem:r1", "Run a check", busy)).toEqual({ note: ENGLISH_WORDS.t("routine.problemCard.checkRunning"), checkRunId: "run-8" });
+  });
+
+  /** The answered fix cards of a conversation, as the store keeps them. */
+  function world() {
+    const cards = new Map<string, { askKey: string; checkRunId?: string; answeredText?: string; answerNote?: string }>();
+    const notes: Array<[string, string]> = [];
+    let wrong = false;
+    const followUps = () => new RoutineCheckFollowUps({
+      words: () => ENGLISH_WORDS,
+      stillWrong: () => wrong,
+      checkCards: (routineId) => [...cards]
+        .filter(([, card]) => card.askKey === `routine-problem:${routineId}` && card.checkRunId)
+        .map(([messageId, card]) => ({ routineId, threadId: "t1", messageId, runId: card.checkRunId! })),
+      tell: (card, note) => {
+        notes.push([card.messageId, note]);
+        cards.set(card.messageId, cardWithCheckNote(cards.get(card.messageId)!, note));
+      },
+    });
+    return { cards, notes, followUps, setWrong: (value: boolean) => { wrong = value; } };
+  }
+
+  it("when that run ends, the card's line says clean, the same problem again, or stopped; once", () => {
+    const w = world();
+    for (const [messageId, runId] of [["m1", "run-1"], ["m2", "run-2"], ["m3", "run-3"]]) w.cards.set(messageId!, { askKey: "routine-problem:r1", checkRunId: runId });
+    const followUps = w.followUps();
+    // still going: nothing said yet
+    followUps.runChanged({ id: "run-1", routineId: "r1", status: "running" });
+    expect(w.notes).toEqual([]);
+    followUps.runChanged({ id: "run-1", routineId: "r1", status: "completed" });
+    w.setWrong(true);
+    followUps.runChanged({ id: "run-2", routineId: "r1", status: "failed" });
+    followUps.runChanged({ id: "run-3", routineId: "r1", status: "cancelled" });
+    // told again, or a run no card follows: nothing
+    followUps.runChanged({ id: "run-1", routineId: "r1", status: "completed" });
+    followUps.runChanged({ id: "run-4", routineId: "r1", status: "failed" });
+    expect(w.notes).toEqual([
+      ["m1", ENGLISH_WORDS.t("routine.problemCard.checkClean")],
+      ["m2", ENGLISH_WORDS.t("routine.problemCard.checkStill")],
+      ["m3", ENGLISH_WORDS.t("routine.problemCard.checkStopped")],
+    ]);
+    expect(w.cards.get("m1")!.checkRunId).toBeUndefined();
+  });
+
+  it("a server restart during the check: the card still gets its line, and a run the restart cut is stopped, not the same problem", () => {
+    const w = world();
+    w.cards.set("m1", { askKey: "routine-problem:r1", checkRunId: "run-1", answeredText: "Run a check", answerNote: ENGLISH_WORDS.t("routine.problemCard.checkStarted") });
+    w.cards.set("m2", { askKey: "routine-problem:r1", checkRunId: "run-2" });
+    w.setWrong(true);
+    // a new process: nothing in memory, the card says which run it follows
+    const after = w.followUps();
+    after.runChanged({ id: "run-1", routineId: "r1", status: "failed", error: ROUTINE_RESTARTED });
+    after.runChanged({ id: "run-2", routineId: "r1", status: "failed", error: "The mailbox refused the sign-in" });
+    expect(w.notes).toEqual([
+      ["m1", ENGLISH_WORDS.t("routine.problemCard.checkStopped")],
+      ["m2", ENGLISH_WORDS.t("routine.problemCard.checkStill")],
+    ]);
+    expect(w.cards.get("m1")!.answerNote).toBe(ENGLISH_WORDS.t("routine.problemCard.checkStopped"));
+  });
+
+  it("two cards following the same run (a second Run a check while it runs) both get the line", () => {
+    const w = world();
+    w.cards.set("m1", { askKey: "routine-problem:r1", checkRunId: "run-1" });
+    w.cards.set("m2", { askKey: "routine-problem:r1", checkRunId: "run-1" });
+    w.followUps().runChanged({ id: "run-1", routineId: "r1", status: "completed" });
+    expect(w.notes.map(([messageId]) => messageId).sort()).toEqual(["m1", "m2"]);
+  });
+
+  it("the new line replaces the card's note, and the one after its words for an app that reads only those", () => {
+    const started = ENGLISH_WORDS.t("routine.problemCard.checkStarted");
+    const clean = ENGLISH_WORDS.t("routine.problemCard.checkClean");
+    expect(cardWithCheckNote({ answeredText: "Run a check", answerNote: started, checkRunId: "run-1" }, clean)).toEqual({ answeredText: "Run a check", answerNote: clean });
+    expect(cardWithCheckNote({ answeredText: `Run a check\n\n${started}`, answerNote: started }, clean)).toEqual({ answeredText: `Run a check\n\n${clean}`, answerNote: clean });
   });
 });

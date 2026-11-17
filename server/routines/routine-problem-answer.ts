@@ -8,7 +8,11 @@
  * - Open the routine: the person's device opens the routine's page (its
  *   settings and its last runs) from the answer's `open`; a device that
  *   cannot (a released app, a call) is told where the page is;
- * - Run a check: the routine runs once now, as Run now does;
+ * - Run a check: the routine runs once now, as Run now does, in its own
+ *   conversation; when that run ends (or the one already going), the card's
+ *   line says what it did: worked (the problem is cleared), the same problem
+ *   again, or stopped before the end (RoutineCheckFollowUps, #4579; the card
+ *   carries the run it follows, so a restart changes nothing);
  * - Pause the routine: the routine is turned off, as its switch does;
  *
  * and the answered card says what happened in one line (`card.answerNote`).
@@ -19,6 +23,8 @@
  * card says so. */
 import { ENGLISH_WORDS, type ApprovalWords } from "../../shared/approval-describe.ts";
 import { ROUTINE_PROBLEM_KEY_PREFIX, serverCardRoutineId } from "../../shared/fix-card-keys.ts";
+import { answerWithNote, answerWithoutNote } from "../../shared/options-card.ts";
+import { ROUTINE_RESTARTED } from "./routines.ts";
 
 export type RoutineFixChoice = "check" | "pause" | "open";
 
@@ -52,9 +58,13 @@ export interface RoutineFixAnswer {
   /** The one line the answered card shows. */
   note: string;
   open?: RoutineFixOpen;
+  /** #4579: Run a check: the run whose end the card's line then tells. */
+  checkRunId?: string;
 }
 
 export type RoutineFixStep = { ok: true; note?: string } | { ok: false; error: string };
+/** Run now's step: the run started (`runId`), or the one already going. */
+export type RoutineRunStep = { ok: true; note?: string; runId?: string } | { ok: false; error: string } | { ok: false; running: true; runId?: string };
 
 export interface RoutineFixAnswerDeps<R extends { id: string; name?: string; botId?: string }> {
   routine(id: string): R | undefined;
@@ -68,7 +78,7 @@ export interface RoutineFixAnswerDeps<R extends { id: string; name?: string; bot
   stillWrong(routine: R): boolean;
   /** Run the routine once now as the person who answered; `running` when a
    * run of it is already going. */
-  runNow(routine: R): RoutineFixStep | { ok: false; running: true };
+  runNow(routine: R): RoutineRunStep;
   /** Turn the routine off as the person who answered. */
   pause(routine: R): RoutineFixStep;
 }
@@ -95,9 +105,87 @@ export function answerRoutineFix<R extends { id: string; name?: string; botId?: 
   if (!deps.stillWrong(routine)) return { note: words.t("routine.problemCard.alreadyFixed") };
   if (choice === "check") {
     const run = deps.runNow(routine);
-    if (run.ok) return { note: run.note ?? words.t("routine.problemCard.checkStarted") };
-    return { note: "running" in run ? words.t("routine.problemCard.checkRunning") : run.error };
+    if (run.ok) return { note: run.note ?? words.t("routine.problemCard.checkStarted"), ...(run.runId ? { checkRunId: run.runId } : {}) };
+    if ("running" in run) return { note: words.t("routine.problemCard.checkRunning"), ...(run.runId ? { checkRunId: run.runId } : {}) };
+    return { note: run.error };
   }
   const paused = deps.pause(routine);
   return { note: paused.ok ? paused.note ?? words.t("routine.problemCard.pausedNow") : paused.error };
+}
+
+/** #4579: where a check's answered card is. */
+export interface RoutineCheckCard {
+  routineId: string;
+  threadId: string;
+  messageId: string;
+}
+
+const RUN_GOING = new Set(["queued", "running", "waiting"]);
+/** A run that ended without doing the routine's work. */
+const RUN_STOPPED = new Set(["cancelled", "missed"]);
+
+export interface RoutineCheckFollowUpDeps {
+  /** The card's language, for its routine. */
+  words(routineId: string): ApprovalWords;
+  /** The routine's problem still stands, read when the run ended. */
+  stillWrong(routineId: string): boolean;
+  /** The routine's answered fix cards (key `routine-problem:<routineId>`)
+   * still following a run (their `checkRunId`). */
+  checkCards(routineId: string): Array<RoutineCheckCard & { runId: string }>;
+  /** Write the card's new line (cardWithCheckNote: it follows no run after). */
+  tell(card: RoutineCheckCard, note: string): void;
+}
+
+/** #4579: Run a check's follow-up: the answered card carries the run it
+ * follows (`checkRunId`, the run the answer started or the one already
+ * going), and when that run ends the card's line says what it did: the
+ * routine worked (the problem is cleared), the same problem came back, or
+ * the run stopped before the end (cancelled, missed, or cut by a server
+ * restart). Read from the card, so a restart during the check changes
+ * nothing; told once (the card then follows no run). */
+export class RoutineCheckFollowUps {
+  private readonly deps: RoutineCheckFollowUpDeps;
+
+  constructor(deps: RoutineCheckFollowUpDeps) {
+    this.deps = deps;
+  }
+
+  /** A run changed (RoutineManager onRunChanged): every card following it
+   * gets its line. */
+  runChanged(run: { id: string; routineId?: string | null; status: string; error?: string }): void {
+    if (!run.routineId || RUN_GOING.has(run.status)) return;
+    const cards = this.deps.checkCards(run.routineId).filter((card) => card.runId === run.id);
+    if (!cards.length) return;
+    const words = this.deps.words(run.routineId);
+    const key = RUN_STOPPED.has(run.status) || run.error === ROUTINE_RESTARTED
+      ? "routine.problemCard.checkStopped"
+      : this.deps.stillWrong(run.routineId) ? "routine.problemCard.checkStill" : "routine.problemCard.checkClean";
+    for (const card of cards) this.deps.tell(card, words.t(key));
+  }
+
+  /** Once the routines are loaded (server start): every card still
+   * following a run that already ended gets its line. A run the restart
+   * failed is reported while the routines are being built, before a card
+   * can be found; this pass catches it, and any other end missed. */
+  catchUp(
+    routineIds: readonly string[],
+    runOf: (routineId: string, runId: string) => { id: string; routineId?: string | null; status: string; error?: string } | undefined,
+  ): void {
+    for (const routineId of routineIds) {
+      for (const card of this.deps.checkCards(routineId)) {
+        const run = runOf(routineId, card.runId);
+        if (run) this.runChanged(run);
+      }
+    }
+  }
+}
+
+/** #4579: the answered card with the check's new line: its note, and the
+ * line after its words when the first one was written there too (an app
+ * that reads only the words). It then follows no run. */
+export function cardWithCheckNote<C extends { answeredText?: string; answerNote?: string; checkRunId?: string }>(card: C, note: string): C {
+  const { checkRunId: _told, ...rest } = card;
+  if (card.answeredText === undefined) return { ...rest, answerNote: note } as C;
+  const words = answerWithoutNote(card.answeredText, card.answerNote);
+  return { ...rest, answerNote: note, answeredText: words !== card.answeredText ? answerWithNote(words, note) : words } as C;
 }

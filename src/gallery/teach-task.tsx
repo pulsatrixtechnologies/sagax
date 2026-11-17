@@ -5,6 +5,8 @@
  * - recording: the bot's browser in the screen window, recording (the bar,
  *   Stop with the elapsed time, Discard, the red frame);
  * - steps: Stop leads to the recorded steps, ready to save as a skill;
+ * - steps-window: the same steps inside the screen window that recorded
+ *   them (#4208), drawn with the detail panel's rows;
  * - computer-menu / computer-details: the bot panel's Computer section, its
  *   "..." menu with Computer details last, then that window (what the old
  *   side panel held);
@@ -70,7 +72,7 @@ const STEPS: TeachStep[] = [
   { id: "s4", kind: "click", url: "https://reports.example.com/monthly", target: { role: "button", name: fr ? "Télécharger" : "Download", tag: "button" } },
 ];
 
-function Recording() {
+function Recording({ review = false }: { review?: boolean }) {
   const [frame] = useState(() => ({ seq: 1, data: pageFrame(), format: "png" as const, metadata: { deviceWidth: 1280, deviceHeight: 800 }, viewerId: "v", generation: 1 }));
   const ref = <T,>(value: T) => ({ current: value });
   const noop = () => {};
@@ -80,7 +82,7 @@ function Recording() {
     address: "https://reports.example.com/monthly", setAddress: noop, connected: true, control: { held: true, controlling: true, owned: true },
     pending: false, error: "", showProfiles: false, setShowProfiles: noop, showTyping: false, setShowTyping: noop, masked: false, setMasked: noop,
     takeControl: noop, handBack: noop, viewport: { width: 1280, height: 800 }, takeStatus: "" as const, busy: false, reconnecting: false,
-    showNetwork: false, setShowNetwork: noop, recording: true, recordingStartedAt: Date.now() - 42_000, taught: undefined, setTaught: noop, teachNote: "",
+    showNetwork: false, setShowNetwork: noop, recording: !review, recordingStartedAt: Date.now() - 42_000, taught: review ? { steps: STEPS, recordedAt: new Date(Date.now() - 60_000).toISOString() } : undefined, setTaught: noop, teachNote: "",
     addressInput: ref(null), profilesButton: ref(null), profilesPopover: ref(null), typingPopover: ref(null), typingField: ref(null), menuSummary: ref(null),
     profileName: t("browser.profile.own", { name: bot.name }), interactive: true, typingReady: true, commandsReady: true, heldElsewhere: false, taking: false, mine: true,
     pageTitle: fr ? "Portail des rapports" : "Reports portal", holder: t("sandboxDesktop.controlling"),
@@ -170,6 +172,7 @@ function Gallery() {
     <div data-gallery-sample={which} className="inline-block bg-canvas">
       {which === "chooser" && <Chooser />}
       {which === "recording" && <Recording />}
+      {which === "steps-window" && <Recording review />}
       {which === "steps" && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={STEPS} recordedAt={new Date(Date.now() - 60_000).toISOString()} onClose={() => {}} />}
       {(which === "computer-menu" || which === "computer-details") && <ComputerSection details={which === "computer-details"} />}
       {(which === "learn-before" || which === "learn-after") && <Learn after={which === "learn-after"} />}

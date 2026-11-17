@@ -793,7 +793,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
       items={items}
       ariaLabel={name}
       banner={updateWaits ? (close) => <AccountMenuUpdateBanner onInstall={() => { close(); openUpdatePrompt(); }} /> : undefined}
-      menuClassName={avatarOnly ? "left-0 w-max min-w-[228px] max-w-[300px]" : undefined}
+      menuClassName={avatarOnly ? "left-0" : undefined}
       renderTrigger={({ open }) => avatarOnly && withName ? (
         // The foot's profile (reference design): the avatar and the full
         // name, 14/20 medium as the reference's (#4093), no background pill;

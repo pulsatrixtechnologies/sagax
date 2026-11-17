@@ -21,7 +21,7 @@ import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
-import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MenuGlyph } from "@/components/menu-look";
 
 /** What an entry brings, in one short line: "app + 2 connectors",
  * "plugin (claude-plugins-official) · 3 skills", "1 connector". */
@@ -143,12 +143,12 @@ export function AddMenu({ actions }: { actions: AddAction[] }) {
         <Plus size={14} /> {t("connectApps.add")}
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-10 z-20 min-w-52")}>
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-10 z-20")}>
           {actions.map((action) => (
             <button key={action.id} type="button" role="menuitem" data-plugins-add-action={action.id} disabled={action.disabled}
               onClick={() => { setOpen(false); action.onPick(); }}
               className={MENU_ROW}>
-              {action.icon}
+              {action.icon && <MenuGlyph>{action.icon}</MenuGlyph>}
               {action.label}
             </button>
           ))}
@@ -382,7 +382,7 @@ export function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: {
         {updateWaiting && actions.update && <span data-entry-update-dot className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-44")}>
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-8 z-20")}>
           {items.map((item) => (
             <button
               key={item.id}
@@ -392,7 +392,7 @@ export function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: {
               onClick={() => { setOpen(false); item.run(); }}
               className={item.danger ? MENU_ROW_DANGER : MENU_ROW}
             >
-              {item.icon}
+              <MenuGlyph danger={item.danger}>{item.icon}</MenuGlyph>
               {item.label}
             </button>
           ))}

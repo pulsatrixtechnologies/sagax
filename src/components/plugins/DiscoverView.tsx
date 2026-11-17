@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 
+import { MENU_FIT_ROW, MENU_SURFACE, menuRow } from "@/components/menu-look";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { mainSections, SECTION_PREVIEW, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
@@ -258,10 +259,10 @@ function MoreChips({ chips, chosen, label, onPick }: { chips: readonly PluginFil
         <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
-        <div role="menu" className="absolute left-0 top-full z-20 mt-1.5 min-w-[180px] rounded-xl border border-border bg-raised p-1 shadow-lg">
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute left-0 top-full z-20 mt-1.5")}>
           {chips.map((chip) => (
             <button key={chip} type="button" role="menuitemradio" aria-checked={chosen === chip} onClick={() => { setOpen(false); onPick(chip); }}
-              className={cn("flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-hover", chosen === chip && "bg-hover")} data-plugins-chip={chip}>
+              className={menuRow(chosen === chip ? "active" : "idle")} data-plugins-chip={chip}>
               {label(chip)}
             </button>
           ))}

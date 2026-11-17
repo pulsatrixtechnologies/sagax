@@ -5,6 +5,7 @@ import { reportAchievement } from "@/lib/achievements";
 import { approvalModeFor, hasNativeAutoReview, supportsApprovalMode, type ApprovalMode } from "../../shared/approval-mode";
 import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuGlyph, menuRow, SUBMENU_SIDE_OFFSET } from "./menu-look";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
 import { useSettingsSurface } from "./SettingsPrimitives";
@@ -213,9 +214,9 @@ export function ApprovalModeSelector({
         onManageCommandAllowlist();
         onDone?.();
       }}
-      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover"
+      className={menuRow()}
     >
-      <ListChecks size={16} className="shrink-0" />
+      <MenuGlyph><ListChecks size={16} /></MenuGlyph>
       {t("commandAllowlist.title")}
     </button>
   );
@@ -303,9 +304,10 @@ export function ApprovalModeSelector({
       if (row && event.key === "ArrowLeft") { event.preventDefault(); event.stopPropagation(); setOpen(false); triggerRef.current?.focus(); }
     },
   };
-  // Same surface and scale as the right-click menus: no heading, 13px rows,
-  // and nothing listed that cannot be picked here.
-  const menuClass = cn("flex w-[260px] flex-col gap-0.5 overflow-hidden rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5", motion.className);
+  // The menu family's surface and rows (menu-look): no heading, and nothing
+  // listed that cannot be picked here.
+  const menuClass = cn(MENU_SURFACE, MENU_FIT_ROW, "overflow-hidden", motion.className);
+  const choiceRow = (selected: boolean) => cn(menuRow(selected ? "active" : "idle"), "h-auto items-start py-1.5");
   const menuItems = (
     <>
       {!advanced && (
@@ -328,14 +330,11 @@ export function ApprovalModeSelector({
                   setOpen(false);
                   onDone?.();
                 }}
-                className={cn(
-                  "flex items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover",
-                  modesDisabled && "cursor-not-allowed opacity-45 hover:bg-transparent",
-                )}
+                className={choiceRow(selected)}
               >
-                <Icon size={16} className="mt-px shrink-0 text-ink" />
+                <MenuGlyph><Icon size={16} /></MenuGlyph>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="flex items-center justify-between gap-3 text-[13px] leading-[18px] text-ink">
+                  <span className="flex items-center justify-between gap-3">
                     {choice.label}
                     {selected && <Check size={14} className="shrink-0" />}
                   </span>
@@ -370,14 +369,11 @@ export function ApprovalModeSelector({
                 setOpen(false);
                 onDone?.();
               }}
-              className={cn(
-                "flex items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover",
-                optionDisabled && "cursor-not-allowed opacity-45 hover:bg-transparent",
-              )}
+              className={choiceRow(selected)}
             >
-              <Icon size={16} className="mt-px shrink-0 text-ink" />
+              <MenuGlyph><Icon size={16} /></MenuGlyph>
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex items-center justify-between gap-3 text-[13px] leading-[18px] text-ink">
+                <span className="flex items-center justify-between gap-3">
                   {option.label}
                   {selected && <Check size={14} className="shrink-0" />}
                 </span>
@@ -456,7 +452,8 @@ export function ApprovalModeSelector({
           ref={(node) => { menuRef.current = node; }}
           {...menuProps}
           {...motion.exitProps}
-          className={cn("absolute bottom-0 left-full z-40 ml-2", menuClass)}
+          className={cn("absolute bottom-0 z-40", menuClass)}
+          style={{ left: `calc(100% + ${SUBMENU_SIDE_OFFSET}px)` }}
         >
           {menuItems}
         </div>

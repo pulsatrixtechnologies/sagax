@@ -17,7 +17,7 @@ import { Switch } from "../SettingsPrimitives";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
-import { MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
 
 export interface DetailTool {
   name: string;
@@ -375,7 +375,7 @@ export function PluginActionsMenu({ name, busy, actions, updateAvailable }: {
         {updateAvailable && <span data-plugin-update-dot className="absolute right-1 top-1 size-2 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-10 min-w-[220px]")}>
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-9 z-10")}>
           {shown.map((action) => (
             <button
               key={action.id}

@@ -18,6 +18,7 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { pickRole, useRolePick } from "@/lib/role-pick";
+import { MENU_FIT_ROW, MENU_SURFACE, menuRow } from "./menu-look";
 import { useMenuMotion } from "./MenuMotion";
 import { roleLabel } from "./RoleChip";
 import { isOpaqueId, containsUuid } from "../../shared/human-id";
@@ -80,7 +81,7 @@ export function RolePickerMenu({ roles, selected, current, loading = false, fail
         data-role-explicit-only={extra.muted ? "true" : undefined}
         title={extra.title}
         onClick={() => onPick(slug)}
-        className="group flex min-h-8 w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-popover-ink outline-none hover:bg-popover-hover focus-visible:bg-popover-hover"
+        className={cn(menuRow(chosen ? "active" : "idle"), "h-auto py-1.5")}
       >
         <span className={cn("flex min-w-0 flex-col", extra.muted && "opacity-55")}>
           <span className="flex min-w-0 items-baseline gap-1.5">
@@ -98,10 +99,10 @@ export function RolePickerMenu({ roles, selected, current, loading = false, fail
       role="menu"
       aria-label={t("roles.picker.menu")}
       data-role-picker-menu=""
-      className={cn("flex w-[300px] max-w-[calc(100vw-16px)] flex-col rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50", className)}
+      className={cn(MENU_SURFACE, MENU_FIT_ROW, "overflow-hidden", className)}
     >
       <div className="px-3.5 pb-1 pt-2 text-[11.5px] text-popover-ink-secondary">{t("roles.picker.menu")}</div>
-      <div className="max-h-[min(360px,50dvh)] overflow-y-auto overscroll-contain px-1.5 pb-1">
+      <div className="max-h-[min(360px,50dvh)] overflow-y-auto overscroll-contain">
         {row("", t("roles.me"), t("roles.picker.meDetail"))}
         {roles.map((role) => {
           const notes = [

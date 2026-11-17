@@ -52,7 +52,7 @@ import { AttachmentPreviewDialog, canonicalDownloadFilename, startMessageFileDow
 import { HoverCard, type AnchorProps } from "../LinkHoverCard";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
 import { SkeletonRows } from "@/components/Skeleton";
-import { MENU_FIT, MENU_ROW, MENU_SURFACE, MenuGlyph } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "@/components/menu-look";
 
 export const KIND_ICON: Record<FileKind, LucideIcon> = {
   image: ImageIcon,
@@ -426,7 +426,6 @@ export function FilesBrowser({ threadId, files, error, onRetry, onJump, initialF
           menuLabel={t("botPanel.files.filterButton")}
           defaultOpen={openMenus === "filter" || openMenus === "all"}
           data-files-filter=""
-          wide
         >
           {() => (
             <>
@@ -552,7 +551,7 @@ export function FilesBrowser({ threadId, files, error, onRetry, onJump, initialF
 
 /** A button that opens a small menu under it; a click outside or Escape
  * closes it. The menu's items get `close` to shut it after acting. */
-export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, className, defaultOpen = false, wide = false, ...data }: {
+export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, className, defaultOpen = false, ...data }: {
   label: string;
   icon: React.ReactNode;
   buttonClass: string;
@@ -560,7 +559,6 @@ export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, cla
   children: (close: () => void) => React.ReactNode;
   className?: string;
   defaultOpen?: boolean;
-  wide?: boolean;
 } & Record<`data-${string}`, string>) {
   const [open, setOpen] = useState(defaultOpen);
   const ref = useRef<HTMLDivElement>(null);
@@ -590,7 +588,7 @@ export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, cla
         {icon}
       </button>
       {open && (
-        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={menuLabel} align="end" className={cn(MENU_SURFACE, MENU_FIT, wide ? "min-w-[220px]" : "min-w-[200px]")}>
+        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={menuLabel} align="end" className={cn(MENU_SURFACE, MENU_FIT_ROW)}>
           {children(close)}
         </AnchoredPopover>
       )}

@@ -6,7 +6,7 @@ import { t } from "@/lib/i18n";
 import { entryName, type WorkspaceEntry } from "@/lib/workspace-files";
 import { MenuItem, PopoverMenu } from "../FilesSection";
 import { iconButtonCls } from "./helpers";
-import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 import { cn } from "@/lib/cn";
 
 export function RowMenu({
@@ -70,7 +70,7 @@ export function MovePopover({ folders, onPick, onClose }: { folders: string[]; o
         popoverRef={popoverRef}
         align="center"
         side="top"
-        className={cn(MENU_SURFACE, "max-h-72 min-w-[220px] overflow-auto")}
+        className={cn(MENU_SURFACE, MENU_FIT_ROW, "max-h-72 overflow-auto")}
         data-files-move-menu=""
       >
         <div className="px-2 py-1 text-[11.5px] text-ink-tertiary">{t("persona.files.moveTo")}</div>

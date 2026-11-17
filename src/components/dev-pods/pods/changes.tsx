@@ -41,7 +41,7 @@ export interface PullStats {
 function ChangeMenu({ change, ctx, open, anchorRef, onClose }: { change: DevChange; ctx: DevPodContext; open: boolean; anchorRef: RefObject<HTMLButtonElement | null>; onClose: () => void }) {
   const run = (action: () => void) => () => { onClose(); action(); };
   return (
-    <DevMenu open={open} anchorRef={anchorRef} label={t("devPods.changes.more", { title: change.title })} onClose={onClose} width={200}>
+    <DevMenu open={open} anchorRef={anchorRef} label={t("devPods.changes.more", { title: change.title })} onClose={onClose}>
       {change.url && <button type="button" role="menuitem" className={DEV_MENU_ITEM} onClick={run(() => void openExternalLink(change.url!))}>{t("devPods.changes.open")}</button>}
       {change.url && <button type="button" role="menuitem" className={DEV_MENU_ITEM} onClick={run(() => void copyText(change.url!))}>{t("devPods.changes.copy")}</button>}
       <button type="button" role="menuitem" className={DEV_MENU_ITEM} onClick={run(() => ctx.dispatch({ type: "focusMessage", threadId: ctx.bot.threadId, messageId: change.messageId }))}>{t("devPods.changes.show")}</button>

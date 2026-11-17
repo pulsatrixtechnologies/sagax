@@ -25,7 +25,7 @@ import { useStoreSelector } from "@/state/store-selector";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { readableErrorMessage } from "@/lib/readable-error";
-import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
 
 type Tab = "changes" | "desktop" | "terminal" | "files";
 type SubTab = "diff" | "review" | "commits";
@@ -101,11 +101,11 @@ function RunMenu({ run, consoleUrl, onStop, onArchive }: { run: CodeRun; console
         <MoreHorizontal size={16} aria-hidden />
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-30 w-56")}>
-          <button type="button" role="menuitem" className={item} disabled={terminal} onClick={() => { setOpen(false); onStop(); }}><Square size={13} aria-hidden />{t("code.action.stop")}</button>
-          <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onArchive(); }}><Archive size={13} aria-hidden />{t("code.action.archive")}</button>
-          {consoleUrl && <a role="menuitem" className={item} href={`${consoleUrl.replace(/\/$/, "")}/runs/${encodeURIComponent(run.id)}`} target="_blank" rel="noreferrer" onClick={() => setOpen(false)}><ExternalLink size={13} aria-hidden />{t("code.action.console")}</a>}
-          <button type="button" role="menuitem" className={item} disabled={!link} onClick={() => { setOpen(false); if (link) void copyText(link); }}><Copy size={13} aria-hidden />{t("code.action.copyLink")}</button>
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-9 z-30")}>
+          <button type="button" role="menuitem" className={item} disabled={terminal} onClick={() => { setOpen(false); onStop(); }}><MenuGlyph><Square size={16} /></MenuGlyph>{t("code.action.stop")}</button>
+          <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onArchive(); }}><MenuGlyph><Archive size={16} /></MenuGlyph>{t("code.action.archive")}</button>
+          {consoleUrl && <a role="menuitem" className={item} href={`${consoleUrl.replace(/\/$/, "")}/runs/${encodeURIComponent(run.id)}`} target="_blank" rel="noreferrer" onClick={() => setOpen(false)}><MenuGlyph><ExternalLink size={16} /></MenuGlyph>{t("code.action.console")}</a>}
+          <button type="button" role="menuitem" className={item} disabled={!link} onClick={() => { setOpen(false); if (link) void copyText(link); }}><MenuGlyph><Copy size={16} /></MenuGlyph>{t("code.action.copyLink")}</button>
         </div>
       )}
     </div>
@@ -152,11 +152,11 @@ function FollowUpComposer({ run, onSend }: { run: CodeRun; onSend: (text: string
         </button>
       </div>
       {menu && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute bottom-11 left-1 z-20 w-64")}>
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute bottom-11 left-1 z-20")}>
           {(["queue", "steer", "interrupt"] as const).map((value) => (
-            <button key={value} type="button" role="menuitemradio" aria-checked={mode === value} onClick={() => { setMode(value); setMenu(false); }} className={cn("flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-popover-hover", mode === value && "bg-popover-hover")}>
-              <span className="text-[12.5px] text-popover-ink">{t(`code.followup.mode.${value}`)}</span>
-              <span className="text-[11.5px] text-popover-ink-secondary">{t(`code.followup.mode.${value}.hint`)}</span>
+            <button key={value} type="button" role="menuitemradio" aria-checked={mode === value} onClick={() => { setMode(value); setMenu(false); }} className={cn(menuRow(mode === value ? "active" : "idle"), "h-auto flex-col items-start py-1.5")}>
+              <span>{t(`code.followup.mode.${value}`)}</span>
+              <span className="text-[12px] text-ink-secondary">{t(`code.followup.mode.${value}.hint`)}</span>
             </button>
           ))}
         </div>

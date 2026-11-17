@@ -12,6 +12,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { MoreHorizontal, type LucideIcon } from "lucide-react";
 
 import { PAGE_MENU } from "@/components/content-page";
+import { MENU_FIT_ROW } from "@/components/menu-look";
 import { PillSelect } from "@/components/SettingsPrimitives";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { cn } from "@/lib/cn";
@@ -82,7 +83,7 @@ export function DeviceCardRow({ kind, icon: Icon, title, line, meta, online, acc
                   <MoreHorizontal size={14} aria-hidden="true" />
                 </button>
                 {open && (
-                  <div role="menu" className={cn(PAGE_MENU, "w-max min-w-[220px] max-w-[300px]")}>
+                  <div role="menu" className={cn(PAGE_MENU, MENU_FIT_ROW)}>
                     {menu.items(() => setOpen(false))}
                   </div>
                 )}

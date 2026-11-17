@@ -30,7 +30,7 @@ export interface PodMenuActions {
 function PodMenu({ name, open, anchorRef, onClose, actions }: { name: string; open: boolean; anchorRef: RefObject<HTMLButtonElement | null>; onClose: () => void; actions: PodMenuActions }) {
   const run = (action: () => void) => () => { onClose(); action(); };
   return (
-    <DevMenu open={open} anchorRef={anchorRef} label={t("devPods.menu.aria", { name })} onClose={onClose} width={200}>
+    <DevMenu open={open} anchorRef={anchorRef} label={t("devPods.menu.aria", { name })} onClose={onClose}>
       <button type="button" role="menuitem" className={DEV_MENU_ITEM} disabled={!actions.canMoveUp} onClick={run(actions.onMoveUp)}>{t("devPods.menu.moveUp")}</button>
       <button type="button" role="menuitem" className={DEV_MENU_ITEM} disabled={!actions.canMoveDown} onClick={run(actions.onMoveDown)}>{t("devPods.menu.moveDown")}</button>
       <button type="button" role="menuitem" data-pod-hide="" className={DEV_MENU_ITEM} onClick={run(actions.onHide)}>{t("devPods.menu.hide")}</button>

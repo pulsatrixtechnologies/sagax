@@ -16,7 +16,7 @@ import { useMenuMotion } from "./MenuMotion";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { trackInputModality } from "@/lib/input-modality";
 import { GLASS_POPUP_CHROME_TOP } from "@/lib/glass-popup";
-import { MENU_FIT, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow, SUBMENU_SIDE_OFFSET } from "./menu-look";
 
 export interface SidebarMenuItem {
   key: string;
@@ -116,7 +116,7 @@ export interface SubmenuPlace {
  * the row's other side when the right has no room. At the top it stays
  * under the window's top bar (the title-bar zone the glass pop-ups clear
  * too), so a tall card never covers the top bar's controls. */
-export const SUBMENU_SIDE_OFFSET = -4;
+export { SUBMENU_SIDE_OFFSET };
 export const SUBMENU_WINDOW_MARGIN = 12;
 export const SUBMENU_WINDOW_TOP = GLASS_POPUP_CHROME_TOP;
 
@@ -315,8 +315,8 @@ export function SidebarPopoverMenu({
    * waiting update, #4093); it gets `close` for its own button. */
   banner?: (close: () => void) => React.ReactNode;
   /** "above" stretches over the trigger's width and opens upward (the
-   * sidebar's bottom menus); "below" hangs a fixed-width sheet under the
-   * trigger's right edge (a header icon). */
+   * sidebar's bottom menus); "below" hangs under the trigger's right edge
+   * and sizes to its labels (a header icon). */
   placement?: "above" | "below";
   /** `data-tour` id for the trigger button */
   tourId?: string;
@@ -500,8 +500,11 @@ export function SidebarPopoverMenu({
             // corners, 6px padding, 32px rows 2px apart, 14/20 type, 10px
             // row corners; its fill, hairline and shadow are `.menu-surface`
             MENU_SURFACE,
-            "absolute z-40 min-w-[200px]",
-            placement === "below" ? "top-full right-0 mt-1 w-72 max-w-[calc(100vw-2rem)]" : cn("bottom-full mb-1", menuClassName),
+            MENU_FIT_ROW,
+            "absolute z-40",
+            // above: the foot's width (w-auto), still on the shared floor.
+            // below: the labels' width.
+            placement === "below" ? "top-full right-0 mt-1" : cn("bottom-full mb-1 w-auto", menuClassName),
             motion.className,
           )}
         >
@@ -579,8 +582,8 @@ export function SidebarPopoverMenu({
                     rootRef.current?.querySelector<HTMLElement>(`[data-menu-key="${CSS.escape(item.key)}"]`)?.focus();
                   }}
                   data-sidebar
-                  style={{ minWidth: item.submenuWidth ?? 180, ...subAt }}
-                  className={cn(MENU_SURFACE, MENU_FIT, "fixed z-[70] overflow-hidden")}
+                  style={{ ...(item.submenuWidth != null ? { minWidth: item.submenuWidth } : {}), ...subAt }}
+                  className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-[70] overflow-hidden")}
                 >
                   <div
                     data-submenu-rows=""

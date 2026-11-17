@@ -19,6 +19,7 @@ import { BotConversationLine, creditedLines } from "./BotConversations";
 import { ConversationLink } from "./ConversationLink";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "./menu-look";
 
 /** The top of the composer docked over this chat, when there is one: the
  * list opens above it instead of under it (2026-11-02, cut off by the
@@ -288,10 +289,7 @@ function GotoGroupChipBody({
             aria-label={t("chat.gotoGroup.menu")}
             data-testid="goto-group-menu"
             onKeyDown={onMenuKey}
-            className={cn(
-              "flex w-[280px] max-w-[80vw] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]",
-              motion.className,
-            )}
+            className={cn(MENU_SURFACE, MENU_FIT_ROW, "max-h-[min(320px,50dvh)] overflow-y-auto overscroll-contain", motion.className)}
             {...motion.exitProps}
           >
             {entries.map((entry, index) => {
@@ -308,7 +306,7 @@ function GotoGroupChipBody({
                   data-goto-target={entry.key}
                   aria-label={t("chat.goToConversationWith", { name: entry.label })}
                   onClick={() => pick(target)}
-                  className="flex w-full shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none"
+                  className={MENU_ROW}
                 >
                   {face ? (
                     <BotAvatar bot={face as Bot} state="happy" size={18} animated={false} />

@@ -33,7 +33,7 @@ import { cn } from "@/lib/cn";
 import { openExternalLink } from "@/lib/app-links";
 import { readableError } from "@/lib/plain-error";
 import { copyText } from "@/lib/copy-text";
-import { MENU_ROW, MENU_SURFACE } from "./menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "./menu-look";
 
 const PHASE_LABEL: Record<PhoneCallPhase, LocaleKey> = {
   dialing: "outbound.call.phase.dialing",
@@ -488,11 +488,11 @@ function RecordingPlayer({ url, onUnavailable }: { url: string; onUnavailable: (
           <Ellipsis size={14} aria-hidden="true" />
         </button>
         {menuOpen && (
-          <div role="menu" className={cn(MENU_SURFACE, "absolute end-0 top-8 z-10 min-w-[200px]")}>
+          <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute end-0 top-8 z-10")}>
             <a role="menuitem" data-outbound-download href={url} download
               className={MENU_ROW}
               onClick={() => setMenuOpen(false)}>
-              <Download size={13} aria-hidden="true" className="text-ink-secondary" />
+              <MenuGlyph><Download size={16} /></MenuGlyph>
               {t("outbound.call.downloadRecording")}
             </a>
           </div>

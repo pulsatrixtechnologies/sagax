@@ -9,7 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadMenu } from "./ThreadMenu";
-import { MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, useMenuInWindow, type MenuPoint } from "./menu-look";
+import { MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, SUBMENU_SIDE_OFFSET, useMenuInWindow, type MenuPoint } from "./menu-look";
 
 let root: Root;
 let container: HTMLDivElement;
@@ -35,6 +35,7 @@ describe("the menu family's one look", () => {
     expect(MENU_ROW.split(" ")).toEqual(expect.arrayContaining([...ROW, "text-ink"]));
     expect(MENU_ROW_DANGER.split(" ")).toEqual(expect.arrayContaining([...ROW, "text-danger"]));
     expect(MENU_ROW_ACTIVE.split(" ")).toEqual(expect.arrayContaining(["bg-menu-active", "h-8", "rounded-[10px]"]));
+    expect(SUBMENU_SIDE_OFFSET).toBe(-4);
   });
 });
 
@@ -118,6 +119,21 @@ describe("the rows' and cards' three dots menus", () => {
     "src/components/memory-manager/MemoryManagerPanel.tsx",
     "src/components/TeamCanvas.tsx-parts/TeamSectionsLayer.tsx",
     "src/components/VoiceCallCard.tsx",
+    "src/components/BrowserPanel.tsx-parts/LiveBrowserView.tsx",
+    "src/components/RoutineCalendarPage.tsx",
+    "src/components/RoutineToggleLine.tsx",
+    "src/components/approvals/ApprovalsPage.tsx",
+    "src/components/plugins/DiscoverView.tsx",
+    "src/components/settings/OwnAvatarField.tsx",
+    "src/components/settings/AccountCard.tsx",
+    "src/components/TeamMapPage.tsx",
+    "src/components/bot-profile/BotProfilePage.tsx-parts/AddMenu.tsx",
+    "src/components/data/DataPanel.tsx",
+    "src/components/GotoGroupChip.tsx",
+    "src/components/LimitResetContinue.tsx",
+    "src/components/RolePicker.tsx",
+    "src/components/ApprovalModeSelector.tsx",
+    "src/components/remote-session/DeviceCardRow.tsx",
   ];
 
   it.each(ROW_MENUS)("%s takes the shared menu look", (file) => {
@@ -142,6 +158,15 @@ describe("the rows' and cards' three dots menus", () => {
     expect(text).not.toMatch(/<span className="shrink-0 text-ink-secondary">\{icon\}<\/span>/);
     // a page menu sizes to its labels too
     expect(text).not.toMatch(/PAGE_MENU, "w-\[2[0-9]{2}px\]/);
+    // a submenu's own offset (8px away, 6px above its row) instead of
+    // SUBMENU_SIDE_OFFSET, and a fixed width that cuts a longer label
+    expect(text).not.toMatch(/top-\[-6px\]/);
+    expect(text).not.toMatch(/MENU_SURFACE, "[^"]*\b(?:min-)?w-(?:44|52|56|64)\b/);
+    // a menu's own floor under 228px (a field's min-w is not a menu)
+    expect(text).not.toMatch(/MENU_(?:SURFACE|FIT(?:_ROW)?)[^"]{0,180}min-w-\[(?:1[0-4][0-9]|180|200|220)px\]/);
+    expect(text).not.toMatch(/"[^"]*(?:absolute|fixed)[^"]*min-w-\[(?:1[0-4][0-9]|180|200|220)px\][^"]*"/);
+    expect(text).not.toMatch(/"[^"]*min-w-\[(?:1[0-4][0-9]|180|200|220)px\][^"]*(?:absolute|fixed)[^"]*"/);
+    expect(text).not.toMatch(/"min-w-\[(?:1[0-4][0-9]|180|200|220)px\]"/);
   });
 
   // The three dots menus on rows and cards that drew their own box: each

@@ -9,6 +9,8 @@
 // other window and person gets it through the `person.avatar` frame.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Camera } from "lucide-react";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import {
@@ -186,11 +188,11 @@ export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
         </span>
       </button>
       {menuOpen && (
-        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" gap={8} className="flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px]">
-          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className="block w-full rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover">
+        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={t("settings.profile.changePhoto")} gap={8} className={cn(MENU_SURFACE, MENU_FIT_ROW)}>
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className={MENU_ROW}>
             {t("settings.profile.changePhoto")}
           </button>
-          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setConfirmRemove(true); }} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-hover">
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setConfirmRemove(true); }} className={MENU_ROW_DANGER}>
             {t("settings.profile.removePhoto")}
           </button>
         </AnchoredPopover>

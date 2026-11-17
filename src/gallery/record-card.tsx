@@ -146,7 +146,7 @@ function Page() {
     return (
       <Frame>
         <div className="max-w-[44rem] pt-[22rem] text-[15px] leading-6" data-gallery-chat>
-          <ChatMarkdown text={CHAT} botId="bot-gallery" message={{ threadId: "thread-gallery", messageId: "m-1" }} />
+          <ChatMarkdown text={CHAT} botId="bot-gallery" draftId="bot:bot-gallery:thread-gallery" message={{ threadId: "thread-gallery", messageId: "m-1" }} />
         </div>
       </Frame>
     );

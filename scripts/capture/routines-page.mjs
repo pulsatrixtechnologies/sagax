@@ -100,19 +100,21 @@ try {
           }));
           // the narrow gutter: the header's muted line, the first tab and the content all start 16px from the edge
           const left = (selector) => { const element = document.querySelector(selector); return element ? Math.round(element.getBoundingClientRect().left - sample.getBoundingClientRect().left) : null; };
+          const right = (selector) => { const element = document.querySelector(selector); return element ? Math.round(element.getBoundingClientRect().right - sample.getBoundingClientRect().left) : null; };
           const tops = ["[data-routines-search]", "[data-automations-filters] > summary", "[data-routines-table] [data-automations-create]"].map((selector) => { const element = document.querySelector(selector); return element ? Math.round(element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2) : null; });
           const tabs = document.querySelector("[data-routines-tabs]");
           const first = document.querySelector('[data-page-tab="overview"]');
-          return { gutter: { subtitle: left("[data-page-subtitle]"), tab: left('[data-page-tab="overview"]'), content: left("[data-routines-runs]") }, controlsTops: tops, tabsClipped: Boolean(tabs && first && (tabs.scrollLeft > 0 || first.getBoundingClientRect().left < sample.getBoundingClientRect().left)),
+          return { rightEdges: { menu: right("[data-automations-actions]"), content: right("[data-routines-runs]") }, gutter: { icon: left("[data-page-title] svg"), subtitle: left("[data-page-subtitle]"), tab: left('[data-page-tab="overview"]'), content: left("[data-routines-runs]") }, controlsTops: tops, tabsClipped: Boolean(tabs && first && (tabs.scrollLeft > 0 || first.getBoundingClientRect().left < sample.getBoundingClientRect().left)),
             page: sample.scrollWidth - sample.clientWidth, wide: rows.filter((row) => row.scrollWidth > row.clientWidth + 1).length, headers, tallest, off };
         });
         const tag = `${shot.name} ${look.tag} ${width}`;
         if (shot.name === "overview" || shot.name.startsWith("grouped")) {
-          if (width < 640) {
-            const { subtitle, tab, content } = layout.gutter;
-            if ([subtitle, tab, content].some((value) => value === null || Math.abs(value - 16) > 1)) errors.push(`${tag}: left edges ${JSON.stringify(layout.gutter)}, the phone gutter is 16`);
-            if (layout.tabsClipped) errors.push(`${tag}: the first tab is clipped`);
-          }
+          // one left edge: the header's icon, muted line and tabs sit on the content's own column, at every width
+          const { icon, subtitle, tab, content } = layout.gutter;
+          if ([icon, subtitle, tab, content].some((value) => value === null || Math.abs(value - content) > 1)) errors.push(`${tag}: head and content are on different left edges ${JSON.stringify(layout.gutter)}`);
+          if (width < 640 && Math.abs(content - 16) > 1) errors.push(`${tag}: the phone gutter is ${content}, not 16`);
+          if (width >= 764 && Math.abs(layout.rightEdges.menu - layout.rightEdges.content) > 1) errors.push(`${tag}: the head's right edge ${layout.rightEdges.menu} is not the content's ${layout.rightEdges.content}`);
+          if (layout.tabsClipped) errors.push(`${tag}: the first tab is clipped`);
           const tops = layout.controlsTops.filter((value) => value !== null);
           if (tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 4) errors.push(`${tag}: the heading controls are on several rows ${JSON.stringify(layout.controlsTops)}`);
         }

@@ -240,14 +240,14 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
     expect(toolsOf(items({ teamMap: false })).submenu!.some((entry) => entry.key === "team-map")).toBe(false);
   });
 
-  it("opens Automations from Tools and keeps the tour anchor, with no dot (Owner, 2026-10-18)", () => {
+  it("opens Routines from Tools and keeps the tour anchor, with no dot (Owner, 2026-10-18)", () => {
     let opened = 0;
     const tools = toolsOf(items({
       automationsActive: true,
       handlers: { ...handlers, onAutomations: () => { opened += 1; } },
     }));
     const entry = tools.submenu!.find((item) => item.key === "routines")!;
-    expect(entry.label).toBe("Automations");
+    expect(entry.label).toBe("Routines");
     expect(entry.tourId).toBe("nav-automations");
     expect(entry.active).toBe(true);
     expect(tools.active).toBe(true);

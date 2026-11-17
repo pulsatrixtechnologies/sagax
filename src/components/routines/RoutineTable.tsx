@@ -157,7 +157,7 @@ export function GroupBand({ lead, name, count, failing, collapsed, onToggle, men
   children?: ReactNode;
 } & Record<`data-${string}`, string | number | undefined>) {
   return <div role="row" {...rest} onContextMenu={onMenu ? (event) => { event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }, event.currentTarget); } : undefined}
-    className="flex min-w-0 items-center gap-1 rounded-lg bg-inset pr-1">
+    className="-mx-3 flex min-w-0 items-center gap-1 rounded-lg bg-inset pr-3">
     <button type="button" aria-expanded={!collapsed} data-group-toggle onClick={onToggle}
       className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
       <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform motion-reduce:transition-none", !collapsed && "rotate-90")} />

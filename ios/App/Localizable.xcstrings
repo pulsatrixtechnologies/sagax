@@ -118366,6 +118366,56 @@
           }
         }
       }
+    },
+    "Routines menu": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menu des routines"
+          }
+        }
+      }
+    },
+    "A routine’s webhook is managed in that routine; a webhook of its own, in Routines.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le webhook d’une routine se gère dans cette routine ; un webhook autonome, dans Routines."
+          }
+        }
+      }
+    },
+    "Open in Routines": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir dans Routines"
+          }
+        }
+      }
+    },
+    "Routines. Bots that run on a schedule, or when a webhook calls. Let's open it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines. Des bots qui s'exécutent à l'horaire, ou quand un webhook les appelle. Ouvrons-la."
+          }
+        }
+      }
+    },
+    "The foot of the sidebar: your avatar opens Team map, Routines, Browse Bots and your settings. The Connect Apps pill sits right beside it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le pied de la barre latérale : ton avatar ouvre la Carte de l’équipe, les Routines, Parcourir les bots et tes réglages. La pilule Connecter des apps est juste à côté."
+          }
+        }
+      }
     }
   }
 }

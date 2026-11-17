@@ -2,7 +2,7 @@
 // engine (the deps record what would have started): off vs proactive, a bot
 // never wakes on its own work or past the hop limit, a burst of events makes
 // one wake, and an event that cannot concern the bot calls no model at all.
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -35,19 +35,23 @@ import {
   type ProactiveWakeBatch,
 } from "./proactive-wake.ts";
 
-function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined; signals?: SignalLedger } = {}) {
+function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined; signals?: SignalLedger; pendingFile?: string } = {}) {
   let now = 1_000_000;
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];
   const lines: Array<{ botId: string; line: string }> = [];
   const dropped: Array<{ botId: string; events: readonly ProactiveEvent[] }> = [];
   const changes: Array<{ botId: string; keys: string[] }> = [];
+  const disk = opts.pendingFile ? new ProactivePendingFile(opts.pendingFile) : null;
   const waker = new ProactiveWaker({
     bot: (botId) => (botId in modes ? { proactiveMode: modes[botId] } : undefined),
     wake: (batch) => woken.push(batch),
     log: (botId, line) => lines.push({ botId, line }),
     dropped: (botId, events) => dropped.push({ botId, events }),
-    pendingChanged: (botId, events) => changes.push({ botId, keys: events.map((event) => event.key) }),
+    pendingChanged: (botId, events) => {
+      changes.push({ botId, keys: events.map((event) => event.key) });
+      disk?.set(botId, events);
+    },
     ...(opts.engineExpired ? { engineExpired: opts.engineExpired } : {}),
     ...(opts.owner ? { owner: opts.owner } : {}),
     ...(opts.signals ? { signals: opts.signals } : {}),
@@ -228,6 +232,9 @@ describe("batching", () => {
       expect(new Set(batch.events.map((event) => event.runAs ?? "owner-o"))).toEqual(new Set([batch.runAs]));
     }
     expect(h.waker.pendingFor("nova")).toBe(0);
+    // each person's wake has started: the rows stay until the wakes settle
+    expect(h.changes.at(-1)!.keys).toEqual(["run-1", "run-4", "run-2", "mail-3"]);
+    h.waker.noteWakeSucceeded("nova");
     expect(h.changes.at(-1)!.keys).toEqual([]);
   });
 
@@ -582,13 +589,15 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     replay: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "osprey", hops: 1 }, ...extra,
   });
 
-  it("the waker reports what each bot has gathered, and clears it when the wake starts", () => {
+  it("the waker reports what each bot has gathered, and keeps it until the wake settles", () => {
     const h = harness({ wren: "proactive" });
     h.waker.offer(notice("wren", 1));
     h.waker.offer(notice("wren", 2));
     expect(h.changes).toEqual([{ botId: "wren", keys: ["peer-notice:node-1"] }, { botId: "wren", keys: ["peer-notice:node-1", "peer-notice:node-2"] }]);
     h.advance(30_000);
     expect(h.woken).toHaveLength(1);
+    expect(h.changes.at(-1)).toEqual({ botId: "wren", keys: ["peer-notice:node-1", "peer-notice:node-2"] });
+    h.waker.noteWakeSucceeded("wren");
     expect(h.changes.at(-1)).toEqual({ botId: "wren", keys: [] });
   });
 
@@ -601,18 +610,30 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
       const raw = readFileSync(file, "utf8");
       for (const word of ["SECRET_WORDS", "SECRET_RESULT", "SECRET_POST", "SECRET_MAIL", "Northwind"]) expect(raw).not.toContain(word);
       expect(statSync(file).mode & 0o777).toBe(0o600);
-      // a restart: a fresh instance reads what was kept
+      // a row written before status existed is still pending
+      const legacy = JSON.parse(raw) as { pending: Record<string, Array<{ status?: string }>> };
+      for (const row of legacy.pending.wren!) delete row.status;
+      writeFileSync(file, JSON.stringify(legacy));
+      // a restart: a fresh instance reads what was kept, mail included as a sealed id
       const second = new ProactivePendingFile(file);
-      expect(second.take()).toEqual([
+      const taken = second.take();
+      expect(taken).toEqual([
         { botId: "wren", key: "peer-notice:node-1", ref: { kind: "peer", noticeId: "node-1" } },
         { botId: "wren", key: "room-post:m1", ref: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "osprey", hops: 1 } },
+        { botId: "wren", key: "mail-1", ref: { kind: "sealed", id: expect.stringMatching(/^[0-9a-f]{32}$/) } },
       ]);
+      const sealedId = (taken[2]!.ref as { id: string }).id;
+      const sealedPath = join(dir, "proactive-sealed", `${sealedId}.json`);
+      expect(readFileSync(sealedPath, "utf8")).toContain("SECRET_MAIL");
+      expect(statSync(sealedPath).mode & 0o777).toBe(0o600);
+      // taken pending rows are not offered twice; the sealed file stays for the replay
       expect(new ProactivePendingFile(file).take()).toEqual([]);
+      expect(existsSync(sealedPath)).toBe(true);
       // a garbled row is left out, the others kept
       const third = new ProactivePendingFile(file);
       third.set("harrie", [notice("harrie", 3)]);
       const parsed = JSON.parse(readFileSync(file, "utf8"));
-      parsed.pending.harrie.push({ key: "x", ref: { kind: "room", groupId: 4 } }, { nope: true });
+      parsed.pending.harrie.push({ key: "x", ref: { kind: "room", groupId: 4 } }, { nope: true }, { key: "bad-seal", ref: { kind: "sealed", id: "not-hex" } });
       writeFileSync(file, JSON.stringify(parsed));
       expect(new ProactivePendingFile(file).take().map((row) => row.key)).toEqual(["peer-notice:node-3"]);
       // emptied: the bot leaves the file
@@ -644,6 +665,63 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     expect(after.waker.offer(notice("wren", 1))).toBe("duplicate");
     after.advance(30_000);
     expect(after.woken.map((batch) => batch.events.map((event) => event.key))).toEqual([["peer-notice:node-1"]]);
+  });
+
+  // A restart during the gather window replays each source once. A wake that
+  // has started stays running and is not offered again. Settling removes the
+  // row and its sealed file.
+  it.each([
+    ["mail", { botId: "nova", source: "mail" as const, key: "mail-1", label: "Email", detail: "SECRET_mail please pay", summary: "Invoice", confined: true }],
+    ["sms", { botId: "nova", source: "sms" as const, key: "sms-1", label: "Text", detail: "SECRET_sms hello", from: "+15550001111" }],
+    ["calendar", { botId: "nova", source: "calendar" as const, key: "cal-1", label: "Calendar", detail: "SECRET_cal stand-up" }],
+    ["webhook", { botId: "nova", source: "webhook" as const, key: "hook-1", label: "Webhook", detail: "SECRET_hook posted" }],
+    ["run", { botId: "nova", source: "run" as const, key: "run-1", failed: true, label: "Routine failed: Hourly", detail: "SECRET_run the run failed" }],
+    ["screen", { botId: "nova", source: "screen" as const, key: "screen-1", label: "Screen", detail: "SECRET_screen a window" }],
+    ["suggestion", { botId: "nova", source: "suggestion" as const, key: "sug-1", label: "Suggestion", detail: "SECRET_sug accepted" }],
+  ])("%s cut while it gathers is replayed once, then kept running until the wake settles", (_name, event) => {
+    const secret = event.detail.split(" ")[0]!;
+    const dir = mkdtempSync(join(tmpdir(), "proactive-inbox-"));
+    try {
+      const file = join(dir, "proactive-pending.json");
+      const signals = new SignalLedger();
+      const before = harness({ nova: "proactive" }, { signals, pendingFile: file });
+      expect(before.waker.offer(event)).toBe("gathered");
+      expect(before.woken).toHaveLength(0);
+      expect(readFileSync(file, "utf8")).not.toContain(secret);
+
+      const held = new ProactivePendingFile(file);
+      const rows = held.take();
+      expect(rows.map((row) => row.key)).toEqual([event.key]);
+      expect(rows[0]!.ref.kind).toBe("sealed");
+      const sealedId = (rows[0]!.ref as { id: string }).id;
+      const restored = held.readSealed(sealedId);
+      expect(restored).toMatchObject({ botId: "nova", source: event.source, key: event.key, detail: event.detail });
+      if (event.source === "run") expect(restored?.failed).toBe(true);
+
+      const after = harness({ nova: "proactive" }, { signals, pendingFile: file });
+      expect(after.waker.offer(event)).toBe("duplicate");
+      after.waker.replayPending(rows, () => {
+        expect(after.waker.offer(restored!)).toBe("gathered");
+        expect(after.waker.offer(restored!)).toBe("duplicate");
+      });
+      after.advance(30_000);
+      expect(after.woken).toHaveLength(1);
+      expect(after.woken[0]!.events.map((row) => row.detail)).toEqual([event.detail]);
+
+      const mid = new ProactivePendingFile(file);
+      expect(mid.take()).toEqual([]);
+      const body = JSON.parse(readFileSync(file, "utf8")) as { pending: Record<string, Array<{ key: string; status: string }>> };
+      expect(body.pending.nova).toEqual([{ key: event.key, ref: { kind: "sealed", id: sealedId }, status: "running" }]);
+      const sealedPath = join(dir, "proactive-sealed", `${sealedId}.json`);
+      expect(readFileSync(sealedPath, "utf8")).toContain(secret);
+      expect(readFileSync(file, "utf8")).not.toContain(secret);
+
+      after.waker.noteWakeSucceeded("nova");
+      expect(JSON.parse(readFileSync(file, "utf8")).pending).toEqual({});
+      expect(existsSync(sealedPath)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("#3581, #4051: a wake on a teammate's message posts no report; one on a two-bot DM or a room post that names the bot posts what it tells the person", () => {

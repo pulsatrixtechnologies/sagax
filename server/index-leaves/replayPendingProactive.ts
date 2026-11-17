@@ -18,6 +18,10 @@ function replayPendingProactive() {
       } else if (row.ref.kind === "watch") {
         // #3140: a Flow watch reads its condition as new at its routine's next check (#4250)
         host.flowWatches.replay(row.botId, row.ref.watchId);
+      } else if (row.ref.kind === "sealed") {
+        const event = host.proactivePending.readSealed(row.ref.id);
+        if (!event || event.botId !== row.botId || event.key !== row.key) continue;
+        host.offerProactive(event);
       } else {
         const ref = row.ref;
         const room = host.store.group(ref.groupId);

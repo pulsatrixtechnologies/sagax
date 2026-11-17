@@ -1,0 +1,406 @@
+{
+ "bots": [
+  {
+   "id": "preview-scout",
+   "threadId": "preview-thread-scout",
+   "name": "Scout",
+   "title": "Researcher",
+   "description": "Finds the facts and brings back sources.",
+   "notifications": true,
+   "color": "cyan",
+   "section": "Launch",
+   "chiefOfStaff": true,
+   "unread": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1787000000000,
+   "activeLeafId": "f-list-done",
+   "tasks": [
+    {
+     "threadId": "preview-thread-scout",
+     "title": "Evening routines",
+     "createdAt": 1787000000000
+    }
+   ],
+   "messages": [
+    {
+     "role": "user",
+     "kind": "text",
+     "text": "Get tonight's work ready for me.",
+     "id": "f-user",
+     "at": 1787028500000
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Time entries to confirm (routine Evening timesheet)",
+      "subtitle": "Seven entries drafted from today's calendar. Confirm each one.",
+      "options": [],
+      "requestId": "form-time",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Standup with the acme team, 9:00 to 9:15",
+         "kind": "choice",
+         "options": [
+          {
+           "label": "Done"
+          },
+          {
+           "label": "Not done"
+          },
+          {
+           "label": "Move to tomorrow"
+          }
+         ]
+        },
+        {
+         "question": "Design review with Ada, 10:00: how long did it last?",
+         "kind": "duration",
+         "options": []
+        },
+        {
+         "question": "Nimbus migration call: which ticket?",
+         "kind": "text",
+         "options": []
+        },
+        {
+         "question": "Nimbus migration call: how long?",
+         "kind": "duration",
+         "options": []
+        },
+        {
+         "question": "Taxi receipt from Tuesday: expense code",
+         "kind": "choice",
+         "options": [
+          {
+           "label": "Travel"
+          },
+          {
+           "label": "Meals"
+          },
+          {
+           "label": "Office"
+          }
+         ]
+        },
+        {
+         "question": "Weekly summary email: billable?",
+         "kind": "yes_no",
+         "options": [
+          {
+           "label": "Yes",
+           "id": "yes"
+          },
+          {
+           "label": "No",
+           "id": "no"
+          }
+         ]
+        },
+        {
+         "question": "Backup check: move to Friday?",
+         "kind": "yes_no",
+         "options": [
+          {
+           "label": "Yes",
+           "id": "yes"
+          },
+          {
+           "label": "No",
+           "id": "no"
+          }
+         ],
+         "optional": true
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "f-time",
+     "at": 1787028601000,
+     "parentId": "f-user"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Report details",
+      "subtitle": "A few answers before the weekly report goes out.",
+      "options": [],
+      "requestId": "form-kinds",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Which day should the report cover?",
+         "kind": "date",
+         "options": []
+        },
+        {
+         "question": "When should it go out?",
+         "kind": "time",
+         "options": []
+        },
+        {
+         "question": "How many reviewers?",
+         "kind": "number",
+         "options": []
+        },
+        {
+         "question": "Which channels?",
+         "kind": "multi",
+         "options": [
+          {
+           "label": "Email"
+          },
+          {
+           "label": "Chat"
+          },
+          {
+           "label": "Newsletter"
+          },
+          {
+           "label": "Blog"
+          }
+         ],
+         "multiSelect": true
+        },
+        {
+         "question": "Anything the reviewers should know?",
+         "kind": "long_text",
+         "options": [],
+         "optional": true
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "f-kinds",
+     "at": 1787028602000,
+     "parentId": "f-time"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Posts to publish tonight (routine Evening posts)",
+      "subtitle": "Six drafts are ready. Uncheck any you do not want posted.",
+      "options": [],
+      "requestId": "form-list",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Six drafts are ready. Uncheck any you do not want posted.",
+         "kind": "multi",
+         "multiSelect": true,
+         "options": [
+          {
+           "label": "Release notes for Nimbus 2.4",
+           "description": "Nimbus 2.4 is out: faster sync, a calmer sidebar and three fixes from your reports. Thanks for every bug you sent us."
+          },
+          {
+           "label": "Thread about the acme meetup",
+           "description": "Next Thursday we are at the acme meetup. Come say hi, we will demo the offline mode and bring stickers."
+          },
+          {
+           "label": "Reply about offline mode",
+           "description": "Yes: offline mode keeps your last 30 days and syncs when you are back online."
+          },
+          {
+           "label": "Clip of the new sidebar",
+           "description": "Fifteen seconds of the new sidebar: drag to reorder, pin what matters."
+          },
+          {
+           "label": "Thank-you post for beta testers",
+           "description": "Two hundred of you tested 2.4 before anyone else. Thank you, it shows."
+          },
+          {
+           "label": "Maintenance reminder",
+           "description": "Friday 22:00 to 23:00, sync pauses for an upgrade. Nothing to do on your side."
+          }
+         ],
+         "checked": [
+          "Release notes for Nimbus 2.4",
+          "Thread about the acme meetup",
+          "Reply about offline mode",
+          "Thank-you post for beta testers",
+          "Maintenance reminder"
+         ],
+         "actions": [
+          "Post selected",
+          "Skip tonight"
+         ]
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "f-list",
+     "at": 1787028603000,
+     "parentId": "f-kinds"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Time entries to confirm (routine Evening timesheet)",
+      "subtitle": "Seven entries drafted from today's calendar. Confirm each one.",
+      "options": [],
+      "requestId": "form-time-done",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Standup with the acme team, 9:00 to 9:15",
+         "kind": "choice",
+         "options": [
+          {
+           "label": "Done"
+          },
+          {
+           "label": "Not done"
+          },
+          {
+           "label": "Move to tomorrow"
+          }
+         ]
+        },
+        {
+         "question": "Design review with Ada, 10:00: how long did it last?",
+         "kind": "duration",
+         "options": []
+        },
+        {
+         "question": "Nimbus migration call: which ticket?",
+         "kind": "text",
+         "options": []
+        },
+        {
+         "question": "Nimbus migration call: how long?",
+         "kind": "duration",
+         "options": []
+        },
+        {
+         "question": "Taxi receipt from Tuesday: expense code",
+         "kind": "choice",
+         "options": [
+          {
+           "label": "Travel"
+          },
+          {
+           "label": "Meals"
+          },
+          {
+           "label": "Office"
+          }
+         ]
+        },
+        {
+         "question": "Weekly summary email: billable?",
+         "kind": "yes_no",
+         "options": [
+          {
+           "label": "Yes",
+           "id": "yes"
+          },
+          {
+           "label": "No",
+           "id": "no"
+          }
+         ]
+        },
+        {
+         "question": "Backup check: move to Friday?",
+         "kind": "yes_no",
+         "options": [
+          {
+           "label": "Yes",
+           "id": "yes"
+          },
+          {
+           "label": "No",
+           "id": "no"
+          }
+         ],
+         "optional": true
+        }
+       ]
+      },
+      "answered": "answer",
+      "answeredText": "The user answered your questions.\n\nQ: Standup with the acme team, 9:00 to 9:15\nA: Done\n\nQ: Design review with Ada, 10:00: how long did it last?\nA: 90 min\n\nQ: Nimbus migration call: which ticket?\nA: 4512\n\nQ: Nimbus migration call: how long?\nA: 45 min\n\nQ: Taxi receipt from Tuesday: expense code\nA: Travel\n\nQ: Weekly summary email: billable?\nA: yes\n\nQ: Backup check: move to Friday?\nA: (left empty)"
+     },
+     "role": "bot",
+     "id": "f-time-done",
+     "at": 1787028604000,
+     "parentId": "f-list"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Posts to publish tonight (routine Evening posts)",
+      "subtitle": "Six drafts are ready. Uncheck any you do not want posted.",
+      "options": [],
+      "requestId": "form-list-done",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Six drafts are ready. Uncheck any you do not want posted.",
+         "kind": "multi",
+         "multiSelect": true,
+         "options": [
+          {
+           "label": "Release notes for Nimbus 2.4",
+           "description": "Nimbus 2.4 is out: faster sync, a calmer sidebar and three fixes from your reports. Thanks for every bug you sent us."
+          },
+          {
+           "label": "Thread about the acme meetup",
+           "description": "Next Thursday we are at the acme meetup. Come say hi, we will demo the offline mode and bring stickers."
+          },
+          {
+           "label": "Reply about offline mode",
+           "description": "Yes: offline mode keeps your last 30 days and syncs when you are back online."
+          },
+          {
+           "label": "Clip of the new sidebar",
+           "description": "Fifteen seconds of the new sidebar: drag to reorder, pin what matters."
+          },
+          {
+           "label": "Thank-you post for beta testers",
+           "description": "Two hundred of you tested 2.4 before anyone else. Thank you, it shows."
+          },
+          {
+           "label": "Maintenance reminder",
+           "description": "Friday 22:00 to 23:00, sync pauses for an upgrade. Nothing to do on your side."
+          }
+         ],
+         "checked": [
+          "Release notes for Nimbus 2.4",
+          "Thread about the acme meetup",
+          "Reply about offline mode",
+          "Thank-you post for beta testers",
+          "Maintenance reminder"
+         ],
+         "actions": [
+          "Post selected",
+          "Skip tonight"
+         ]
+        }
+       ]
+      },
+      "answered": "answer",
+      "answeredText": "The user answered your questions.\n\nQ: Six drafts are ready. Uncheck any you do not want posted.\nA: Release notes for Nimbus 2.4, Thread about the acme meetup, Reply about offline mode, Thank-you post for beta testers, Maintenance reminder\n\nQ: Action\nA: Post selected"
+     },
+     "role": "bot",
+     "id": "f-list-done",
+     "at": 1787028605000,
+     "parentId": "f-time-done"
+    }
+   ],
+   "pinned": true
+  }
+ ],
+ "groups": []
+}

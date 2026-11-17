@@ -78,7 +78,10 @@ struct QuestionCardView: View {
 
     var body: some View {
         if let card, !questions.isEmpty {
-            if settled {
+            if isFormCard(questions) {
+                // #4490: a form or a checklist, a row per question
+                FormCardView(chat: chat, message: message)
+            } else if settled {
                 settledCard(card)
             } else if let current {
                 pendingCard(card, current)

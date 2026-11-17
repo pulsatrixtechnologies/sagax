@@ -93,6 +93,8 @@ struct QuestionSheetRow: View {
     var multi = false
     var on = false
     var settled = false
+    /// #4490: a checklist row ticks without the highlighted fill.
+    var quiet = false
     var disabled = false
     let action: () -> Void
 
@@ -144,13 +146,13 @@ struct QuestionSheetRow: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
             .background {
-                if on {
+                if on && !quiet {
                     RoundedRectangle(cornerRadius: 10, style: .continuous).fill(colors.ink.opacity(settled ? 0.06 : 0.07))
                 }
             }
             .contentShape(Rectangle())
             // Settled-unpicked and unavailable options (#2048) share the same dim.
-            .opacity((settled && !on) || (disabled && !on) ? 0.45 : 1)
+            .opacity((settled && !on) || (disabled && !on && !quiet) ? 0.45 : 1)
         }
         .buttonStyle(QuestionSheetRowStyle(colors: colors))
         .disabled(settled || disabled)
@@ -281,6 +283,40 @@ struct QuestionSheetSend: View {
             }
             .buttonStyle(.plain)
             .opacity(enabled ? 1 : 0.4)
+        }
+    }
+}
+
+/// #4490: the buttons of a form or a checklist. The first action is the main
+/// one and is drawn last, filled, where the eye ends; the others are quiet text.
+struct QuestionSheetButtons: View {
+    let colors: QuestionSheetColors
+    let actions: [String]
+    let enabled: Bool
+    let onPress: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Spacer(minLength: 0)
+            ForEach(Array((Array(actions.dropFirst()) + actions.prefix(1)).enumerated()), id: \.offset) { position, action in
+                let main = position == actions.count - 1
+                Button {
+                    Haptics.selection()
+                    if enabled { onPress(action) }
+                } label: {
+                    Text(action)
+                        .font(colors.font(13.5, .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(main ? colors.fill : colors.ink)
+                        .padding(.horizontal, 16)
+                        .frame(height: 36)
+                        .background { if main { Capsule().fill(colors.ink) } }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .opacity(enabled ? 1 : 0.35)
+                .accessibilityIdentifier("form-action-\(position)")
+            }
         }
     }
 }

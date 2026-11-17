@@ -1,3 +1,5 @@
+import Foundation
+
 /// Structured questions raised by a provider's own "ask the human" tool —
 /// Claude's built-in `AskUserQuestion`.
 ///
@@ -49,18 +51,46 @@ public struct AskQuestionOption: Codable, Hashable, Sendable {
     }
 }
 
+/// #4490: the control a form row draws, one per kind of answer
+/// (`ANSWER_KINDS` in `shared/ask-question.ts`).
+public enum AnswerKind: String, Codable, Hashable, Sendable {
+    case choice, multi
+    case yesNo = "yes_no"
+    case duration, time, date, number, text
+    case longText = "long_text"
+
+    /// The kinds answered among options; the others take none.
+    public var isChoice: Bool { self == .choice || self == .multi || self == .yesNo }
+}
+
 public struct AskQuestion: Codable, Hashable, Sendable {
     public var question: String
     /// The short tab label the model gave this question ("Schedule", "Model").
     public var header: String?
     public var multiSelect: Bool?
     public var options: [AskQuestionOption]
+    /// #4490: the row's control in a form. Nil: an engine's own question,
+    /// drawn as before. A kind this build does not know decodes as nil.
+    public var kind: AnswerKind?
+    /// #4490: a form row the person may leave empty.
+    public var optional: Bool?
+    /// #4490: a checklist's rows the bot proposes checked (option ids or labels).
+    public var checked: [String]?
+    /// #4490: a checklist's buttons; the one pressed is sent with the picks.
+    public var actions: [String]?
 
-    public init(question: String, header: String? = nil, multiSelect: Bool? = nil, options: [AskQuestionOption]) {
+    public init(
+        question: String, header: String? = nil, multiSelect: Bool? = nil, options: [AskQuestionOption],
+        kind: AnswerKind? = nil, optional: Bool? = nil, checked: [String]? = nil, actions: [String]? = nil
+    ) {
         self.question = question
         self.header = header
         self.multiSelect = multiSelect
         self.options = options
+        self.kind = kind
+        self.optional = optional
+        self.checked = checked
+        self.actions = actions
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,6 +101,10 @@ public struct AskQuestion: Codable, Hashable, Sendable {
         // A question with no options is still answerable — the card always
         // offers free text — so a missing list is empty, not a failure.
         options = try container.decodeIfPresent([AskQuestionOption].self, forKey: .options) ?? []
+        kind = (try? container.decodeIfPresent(String.self, forKey: .kind)).flatMap { $0 }.flatMap(AnswerKind.init(rawValue:))
+        optional = try? container.decodeIfPresent(Bool.self, forKey: .optional)
+        checked = try? container.decodeIfPresent([String].self, forKey: .checked)
+        actions = try? container.decodeIfPresent([String].self, forKey: .actions)
     }
 
     /// What the tab shows. The model names most questions; a numbered
@@ -80,7 +114,40 @@ public struct AskQuestion: Codable, Hashable, Sendable {
         return "Question \(position)"
     }
 
-    public var allowsMultiple: Bool { multiSelect == true }
+    public var allowsMultiple: Bool { multiSelect == true || kind == .multi }
+
+    /// #4490: a single row with buttons: a list to tick, not a form.
+    public var isChecklist: Bool { !(actions ?? []).isEmpty }
+    public var isOptional: Bool { optional == true }
+
+    /// The key an option is answered with: its id, else its label.
+    public func key(_ option: AskQuestionOption) -> String {
+        let id = option.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return id.isEmpty ? option.label : id
+    }
+}
+
+/// #4490: a card drawn as rows with their controls (a form or a checklist)
+/// rather than an engine's own question set (`isFormCard`).
+public func isFormCard(_ questions: [AskQuestion]) -> Bool {
+    questions.contains { $0.kind != nil || $0.isChecklist }
+}
+
+/// #4490: what one form row holds while it is being filled in: the picks of
+/// a choice, or the words, date, time or number typed, or a duration's hours
+/// and minutes (as typed).
+public struct FormDraft: Equatable, Sendable {
+    public var picked: [String]
+    public var value: String
+    public var hours: String
+    public var minutes: String
+
+    public init(picked: [String] = [], value: String = "", hours: String = "", minutes: String = "") {
+        self.picked = picked
+        self.value = value
+        self.hours = hours
+        self.minutes = minutes
+    }
 }
 
 public struct QuestionRequestCardData: Codable, Hashable, Sendable {
@@ -130,17 +197,137 @@ public enum AskQuestionAnswer {
         return chosen
     }
 
-    public static func format(questions: [AskQuestion], answers: [[String]]) -> String {
-        var blocks: [String] = []
+    /// #4490: the line that carries a checklist's pressed button.
+    public static let actionQuestion = "Action"
+    /// #4490: a checklist sent with no row checked.
+    public static let nothingPicked = "(none)"
+    /// #4490: an optional form row the person left empty (not "not asked").
+    public static let leftEmpty = "(left empty)"
+    private static let jsonPrefix = "\(preamble)\n\nAnswers (JSON):\n"
+
+    /// `formatQuestionAnswers` of `shared/ask-question.ts`. `action` is the
+    /// checklist button pressed: its own last block, and a checklist sent
+    /// with nothing checked still says "(none)".
+    public static func format(questions: [AskQuestion], answers: [[String]], action: String? = nil) -> String {
+        var pairs: [(String, String)] = []
         for (index, question) in questions.enumerated() {
             let picked = (index < answers.count ? answers[index] : [])
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            guard !picked.isEmpty else { continue }
-            blocks.append("Q: \(question.question)\nA: \(picked.joined(separator: ", "))")
+            if picked.isEmpty && !((action?.isEmpty == false) && question.isChecklist) { continue }
+            pairs.append((question.question, picked.isEmpty ? nothingPicked : picked.joined(separator: ", ")))
         }
-        guard !blocks.isEmpty else { return "" }
-        return "\(preamble)\n\n\(blocks.joined(separator: "\n\n"))"
+        if let action, !action.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            pairs.append((actionQuestion, action.trimmingCharacters(in: .whitespacesAndNewlines)))
+        }
+        guard !pairs.isEmpty else { return "" }
+        // Newlines can contain Q:/A: headers; JSON keeps them as answer text.
+        if pairs.contains(where: { hasLineBreak($0.0) || hasLineBreak($0.1) }) {
+            let body = pairs.map { "[\(jsonString($0.0)),\(jsonString($0.1))]" }.joined(separator: ",")
+            return "\(jsonPrefix)[\(body)]"
+        }
+        return "\(preamble)\n\n\(pairs.map { "Q: \($0.0)\nA: \($0.1)" }.joined(separator: "\n\n"))"
+    }
+
+    private static func hasLineBreak(_ value: String) -> Bool {
+        value.unicodeScalars.contains { $0 == "\n" || $0 == "\r" }
+    }
+
+    /// JSON.stringify of a string, exactly (no escaped slash, \u00xx lowercase).
+    static func jsonString(_ value: String) -> String {
+        var out = "\""
+        for scalar in value.unicodeScalars {
+            switch scalar {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            case "\u{08}": out += "\\b"
+            case "\u{0C}": out += "\\f"
+            default:
+                if scalar.value < 0x20 { out += String(format: "\\u%04x", scalar.value) } else { out.unicodeScalars.append(scalar) }
+            }
+        }
+        return out + "\""
+    }
+
+    /// A duration's total minutes, or nil when nothing was typed (or it is
+    /// not more than zero).
+    public static func durationMinutes(_ draft: FormDraft) -> Int? {
+        func number(_ text: String) -> Double? {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? 0 : Double(trimmed)
+        }
+        guard let hours = number(draft.hours), let minutes = number(draft.minutes),
+              hours.isFinite, minutes.isFinite, hours >= 0, minutes >= 0 else { return nil }
+        let total = (hours * 60 + minutes).rounded(.toNearestOrAwayFromZero)
+        return total > 0 && total < 1e9 ? Int(total) : nil
+    }
+
+    /// What one form row sends: its picks, or the one value typed.
+    public static func rowAnswer(_ question: AskQuestion, _ draft: FormDraft) -> [String] {
+        switch question.kind {
+        case .choice, .multi, .yesNo: return draft.picked
+        case .duration: return durationMinutes(draft).map { ["\($0) min"] } ?? []
+        default:
+            let value = draft.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? [] : [value]
+        }
+    }
+
+    /// How many rows still owe an answer (an optional row never does).
+    public static func owed(_ questions: [AskQuestion], drafts: [Int: FormDraft]) -> Int {
+        questions.enumerated().filter { index, question in
+            !question.isOptional && rowAnswer(question, drafts[index] ?? FormDraft()).isEmpty
+        }.count
+    }
+
+    /// The answer a form sends: an optional row left empty says so. Nil
+    /// while a required row is still owed.
+    public static func formAnswer(_ questions: [AskQuestion], drafts: [Int: FormDraft]) -> String? {
+        guard owed(questions, drafts: drafts) == 0 else { return nil }
+        let rows = questions.enumerated().map { index, question -> [String] in
+            let row = rowAnswer(question, drafts[index] ?? FormDraft())
+            return row.isEmpty ? [leftEmpty] : row
+        }
+        return format(questions: questions, answers: rows)
+    }
+
+    /// A checklist's answer: the ticked items and the button pressed.
+    public static func checklistAnswer(_ questions: [AskQuestion], picked: [String], action: String) -> String {
+        format(questions: questions, answers: [picked], action: action)
+    }
+
+    /// "90 min" read back as hours and minutes for a settled row; nil when
+    /// the value is not a duration.
+    public static func durationParts(_ value: String) -> (hours: Int, minutes: Int)? {
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.hasSuffix(" min"), let total = Int(text.dropLast(4)), total >= 0,
+              String(total) == String(text.dropLast(4)) else { return nil }
+        return (total / 60, total % 60)
+    }
+
+    /// The checklist button an answer was sent with.
+    public static func action(in answer: String) -> String? {
+        let value = pairs(in: answer).first { $0.0 == actionQuestion }?.1.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (value?.isEmpty == false) ? value : nil
+    }
+
+    /// Every Q/A pair in an answer, in order: the blocks, or the JSON form.
+    static func pairs(in answer: String) -> [(String, String)] {
+        if answer.hasPrefix(jsonPrefix) {
+            let data = Data(answer.dropFirst(jsonPrefix.count).utf8)
+            guard let list = (try? JSONSerialization.jsonObject(with: data)) as? [[String]] else { return [] }
+            return list.compactMap { $0.count == 2 ? ($0[0], $0[1]) : nil }
+        }
+        var result: [(String, String)] = []
+        for block in withoutPreamble(answer).components(separatedBy: "\n\nQ: ") {
+            let text = block.hasPrefix("Q: ") ? String(block.dropFirst(3)) : block
+            guard let split = text.range(of: "\nA: ") else { continue }
+            result.append((String(text[..<split.lowerBound]), String(text[split.upperBound...])))
+        }
+        return result
     }
 
     /// The answer read back per question ("Q: …\nA: …" blocks), keyed by
@@ -149,15 +336,10 @@ public enum AskQuestionAnswer {
     public static func byQuestion(_ answer: String, questions: [AskQuestion]) -> [String: String] {
         let body = withoutPreamble(answer)
         var found: [String: String] = [:]
-        for block in body.components(separatedBy: "\n\nQ: ") {
-            let text = block.hasPrefix("Q: ") ? String(block.dropFirst(3)) : block
-            guard let split = text.range(of: "\nA: ") else { continue }
-            let question = String(text[..<split.lowerBound])
-            if questions.contains(where: { $0.question == question }) {
-                found[question] = String(text[split.upperBound...])
-            }
+        for (question, value) in pairs(in: answer) where questions.contains(where: { $0.question == question }) {
+            found[question] = value
         }
-        if found.isEmpty, questions.count == 1, !body.hasPrefix("Q: ") {
+        if found.isEmpty, questions.count == 1, !body.hasPrefix("Q: "), !answer.hasPrefix(jsonPrefix) {
             found[questions[0].question] = body
         }
         return found

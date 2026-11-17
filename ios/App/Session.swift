@@ -524,7 +524,7 @@ final class Session: ObservableObject {
         }
         if (arguments.contains("-store-preview") || arguments.contains("-computer-switcher-preview")),
            let url = Bundle.main.url(
-               forResource: arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-phone-line-preview") ? "PhoneLinePreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
+               forResource: arguments.contains("-form-cards-preview") ? "FormCardsPreview" : arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-phone-line-preview") ? "PhoneLinePreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
                withExtension: "json"
            ),
            let data = try? Data(contentsOf: url),
@@ -694,6 +694,15 @@ final class Session: ObservableObject {
                 state.activeLeafIds[thread] = preview.rows.last?.id
                 state.bots[index].busy = false
                 waitingLists["preview-scout"] = preview.waiting
+            }
+            // #4490 captures: the form cards chat up to one of its rows
+            if let at = arguments.firstIndex(of: "-form-cards-until"), arguments.indices.contains(at + 1),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }),
+               let rows = state.messages[state.bots[index].threadId],
+               let end = rows.firstIndex(where: { $0.id == arguments[at + 1] }) {
+                state.messages[state.bots[index].threadId] = Array(rows[...end])
+                state.bots[index].activeLeafId = rows[end].id
+                state.activeLeafIds[state.bots[index].threadId] = rows[end].id
             }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).

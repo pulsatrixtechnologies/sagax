@@ -8,9 +8,12 @@ import { createRoot } from "react-dom/client";
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { botBubbleAccent, botReplyBubbles, useBotReplyBubbleClass } from "../lib/bot-reply-bubbles";
 import { loadLocale } from "../lib/i18n";
+import { nimbusProduct } from "../lib/record-card-fixtures";
+import { seedPersonProducts } from "../lib/person-products";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import "../styles.css";
 
+seedPersonProducts([nimbusProduct()]);
 const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
@@ -21,7 +24,7 @@ botBubbleAccent.set(params.get("accent") === "1" ? "1" : "0");
 
 const fr = lang === "fr";
 const first = fr ? "J'ai fermé **3 billets** et mis à jour le rapport." : "I closed **3 tickets** and updated the report.";
-const second = fr ? "Voir [le rapport](https://example.com) et le suivi acme/app#1042." : "See [the report](https://example.com) and the follow-up acme/app#1042.";
+const second = fr ? "Voir [le rapport](https://example.com) et le suivi [#481516](sagax://record/nimbus_desk/ticket/481516)." : "See [the report](https://example.com) and the follow-up [#481516](sagax://record/nimbus_desk/ticket/481516).";
 
 function Bot({ text, room }: { text: string; room?: boolean }) {
   const cls = useBotReplyBubbleClass();

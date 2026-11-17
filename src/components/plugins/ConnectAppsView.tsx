@@ -173,6 +173,8 @@ export interface ConnectAppsViewProps {
   filterControl?: ReactNode;
   /** the sort button, after the filter */
   sortControl?: ReactNode;
+  /** "N updates" before Add: one press updates everything (#4504) */
+  updateControl?: ReactNode;
   /** what the scope does here, over the list */
   scopeNote?: ReactNode;
   /** the one "+ Add" menu, beside the search */
@@ -231,7 +233,7 @@ const MORE_VIEWS: ReadonlyArray<{ id: Extract<ConnectAppsTab, "bots" | "pages" |
  * A page (a plugin, a skill, a custom connector) takes the whole pane under
  * its own bar. */
 export function ConnectAppsView(props: ConnectAppsViewProps) {
-  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl, sortControl } = props;
+  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl, sortControl, updateControl } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   const [stuck, setStuck] = useState(false);
   // the title line's width decides the search: a field, or an icon that opens it
@@ -348,6 +350,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                   <Search size={15} aria-hidden="true" />
                 </button>
               )}
+              {updateControl}
               {manageActions}
             </div>
             {search && narrow && searchOpen && (
@@ -474,8 +477,24 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
   );
 }
 
+/** The "N updates" pill before Add: it says how many items have an update and
+ * updates all of them; none, nothing is drawn. */
+export function UpdateAllPill({ count, running, onUpdateAll }: { count: number; running: boolean; onUpdateAll: () => void }) {
+  if (count <= 0 && !running) return null;
+  const label = count === 1 ? t("connectApps.updates.one") : t("connectApps.updates.many", { count });
+  return (
+    <button type="button" data-plugins-update-all={running ? "running" : ""} disabled={running} onClick={onUpdateAll}
+      aria-label={`${t("connectApps.updates.all")}: ${label}`} title={t("connectApps.updates.all")}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-accent/15 px-3 text-[13px] leading-[18px] text-accent-text transition-colors hover:bg-accent/25 disabled:opacity-70 motion-reduce:transition-none">
+      <RefreshCw size={13} className={cn(running && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
+      <span className="@max-[760px]:hidden">{running ? t("connectApps.updates.updating") : label}</span>
+      {running ? null : <span className="hidden tabular-nums @max-[760px]:inline">{count}</span>}
+    </button>
+  );
+}
+
 /** How a list is ordered: the lists' own order, by name, or what is on first. */
-export type ConnectAppsSort = "default" | "name" | "on";
+export type ConnectAppsSort = "default" | "name" | "on" | "update";
 
 /** The sort icon button of the control row (two opposed arrows): only the
  * keys that have data here (name everywhere; "on first" on Yours). */
@@ -483,7 +502,7 @@ export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   usePopoverDismiss(open, ref, () => setOpen(false));
-  const LABEL: Record<ConnectAppsSort, LocaleKey> = { default: "connectApps.sort.default", name: "connectApps.sort.name", on: "connectApps.sort.on" };
+  const LABEL: Record<ConnectAppsSort, LocaleKey> = { default: "connectApps.sort.default", name: "connectApps.sort.name", on: "connectApps.sort.on", update: "connectApps.sort.update" };
   return (
     <div ref={ref} className="relative shrink-0" data-plugins-sort="">
       <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-sort-button="" onClick={() => setOpen((value) => !value)}
@@ -508,7 +527,8 @@ export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; 
 }
 
 /** Rows in the chosen order; "default" leaves the list's own. Stable. */
-export function sortRows<T>(rows: readonly T[], sort: ConnectAppsSort, nameOf: (row: T) => string, onOf: (row: T) => boolean): T[] {
+export function sortRows<T>(rows: readonly T[], sort: ConnectAppsSort, nameOf: (row: T) => string, onOf: (row: T) => boolean, updateOf?: (row: T) => boolean): T[] {
+  if (sort === "update" && updateOf) return [...rows].sort((a, b) => Number(updateOf(b)) - Number(updateOf(a)));
   if (sort === "name") return [...rows].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
   if (sort === "on") return [...rows].sort((a, b) => Number(onOf(b)) - Number(onOf(a)));
   return [...rows];

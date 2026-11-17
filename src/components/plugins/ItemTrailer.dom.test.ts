@@ -251,3 +251,34 @@ describe("Install under Discover", () => {
     expect(onAll).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("the update mark (#4504)", () => {
+  it("is an Update button before the state, that runs the update and never opens the row", async () => {
+    const onUpdate = vi.fn();
+    await render(row(createElement(ItemTrailer, { name: "Code Review", on: true, state: { tone: "ok", text: "Connected" }, update: { running: false, onUpdate } })));
+    const trailer = host.querySelector("[data-item-trailer]")!;
+    const order = [...trailer.children].map((child) => child.matches("[data-row-update]") ? "update" : child.matches("[data-row-state]") ? "state" : "other");
+    expect(order.slice(0, 2)).toEqual(["update", "state"]);
+    const mark = host.querySelector<HTMLButtonElement>("[data-row-update]")!;
+    expect(mark.textContent).toBe("Update");
+    expect(mark.getAttribute("aria-label")).toBe("Update: Code Review");
+    await click(mark);
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows progress while it runs and cannot be pressed twice", async () => {
+    const onUpdate = vi.fn();
+    await render(row(createElement(ItemTrailer, { name: "Code Review", on: true, update: { running: true, onUpdate } })));
+    const mark = host.querySelector<HTMLButtonElement>("[data-row-update]")!;
+    expect(mark.getAttribute("data-row-update")).toBe("running");
+    expect(mark.textContent).toContain("Updating");
+    expect(mark.disabled).toBe(true);
+    await click(mark);
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("is absent when nothing waits", async () => {
+    await render(row(createElement(ItemTrailer, { name: "Code Review", on: true, update: null })));
+    expect(host.querySelector("[data-row-update]")).toBeNull();
+  });
+});

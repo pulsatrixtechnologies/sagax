@@ -82,7 +82,9 @@ export function RowSwitch({ name, on, onChange, lockedReason, busy = false }: { 
 /** The row an item sits in: a right click on it opens the item's menu. */
 export const ITEM_ROW_ATTR = "data-item-row";
 
-export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason, busy = false, actions = {}, state, columns = true }: {
+export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason, busy = false, actions = {}, state, columns = true, update }: {
+  /** an update is waiting: the "Update" mark, which runs it and shows its progress */
+  update?: { running: boolean; onUpdate: () => void } | null;
   /** keep the right side's columns (state, switch, "...") even when one is empty, so they line up down a list */
   columns?: boolean;
   /** the row's state as one icon with its sentence as the tooltip */
@@ -149,6 +151,13 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
 
   return (
     <div ref={rootRef} className="relative flex shrink-0 items-center gap-2" data-item-trailer="">
+      {update && (
+        <button type="button" data-row-update={update.running ? "running" : ""} disabled={update.running} aria-label={t("connectApps.plugin.update") + ": " + name}
+          onClick={(event) => { event.stopPropagation(); update.onUpdate(); }}
+          className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-accent/15 px-2.5 text-[12px] leading-4 text-accent-text transition-colors hover:bg-accent/25 disabled:opacity-70 motion-reduce:transition-none">
+          {update.running ? <><LoaderCircle size={12} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />{t("connectApps.updates.updating")}</> : t("connectApps.plugin.update")}
+        </button>
+      )}
       {state ? <StateIcon state={state} /> : columns ? <span className="size-7 shrink-0" aria-hidden="true" /> : null}
       {where !== undefined && printsScope(where) && <ScopePill label={whereText(where)} />}
       {on !== undefined ? <RowSwitch name={name} on={on} onChange={onToggle} lockedReason={lockedReason} busy={busy} /> : columns ? <span className="w-8 shrink-0" aria-hidden="true" /> : null}

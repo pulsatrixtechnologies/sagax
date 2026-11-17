@@ -1,3 +1,4 @@
+import { updateKindOf, type CapabilityUpdateItem, type UpdateKind } from "@/lib/capability-updates";
 import { useEffect, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -35,7 +36,10 @@ export function PluginsPanelSubpage({
   botsForRows,
   toggleBotServers,
   products,
+  updateInfo,
 }: {
+  /** #4504: the update an item has (its kind and readable name), for its page's versions and notes */
+  updateInfo?: (kind: UpdateKind, name: string) => CapabilityUpdateItem | undefined;
   /** #4185: the person's Perspicax products (rows of Installed) */
   products: { products: PersonProduct[]; replace: (product: PersonProduct) => void };
   s: PluginsPanelState;
@@ -158,10 +162,16 @@ export function PluginsPanelSubpage({
       scope, botCard: botCard(detailItem),
     });
     const engines = engineInfo(detailItem);
+    // the versions (from, to) and the notes when the source gives them
+    const upd = updateInfo?.(updateKindOf(detailItem.kind), detailItem.name);
+    const updateRows = upd ? [
+      { label: t("connectApps.updates.versions"), value: [upd.installedVersion, upd.availableVersion].filter(Boolean).join(" \u2192 ") || t("connectApps.plugin.newerFiles") },
+      ...(upd.updateNotes ? [{ label: t("connectApps.updates.notes"), value: upd.updateNotes }] : []),
+    ] : [];
     return (
       <PluginDetailView
         {...base}
-        details={engines.row ? [...base.details, engines.row] : base.details}
+        details={[...base.details, ...(engines.row ? [engines.row] : []), ...updateRows]}
         notice={engines.notice}
         {...detailHead(detailItem)}
         displayName={identity.name}

@@ -22,6 +22,7 @@ import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { filterLabel, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
 import { ItemTrailer, ITEM_ROW_ATTR } from "./ItemTrailer";
 import { statusState } from "./StateIcon";
+import { updateKindOf } from "@/lib/capability-updates";
 import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
@@ -141,6 +142,8 @@ export interface InstalledViewProps {
   readOnlyReason?: string;
   /** the sort chosen in the control row: by name, or what is on first */
   sort?: ConnectAppsSort;
+  /** whether an item has an update waiting (kind and readable name): "Updates first" */
+  hasUpdate?: (kind: "plugin" | "skill" | "connector", name: string) => boolean;
 }
 
 export { ScopePill, RowSwitch } from "./ItemTrailer";
@@ -259,13 +262,13 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default" }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default", hasUpdate }: InstalledViewProps) {
   const [all, setAll] = useState(false);
   const [allOrganization, setAllOrganization] = useState(false);
   // #4453: one kind at a time; without one, every kind in one list
   const has = (wanted: ConnectAppsKind) => kind === undefined || kind === wanted;
-  const shownEntries = sortRows(kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off");
-  const shownSkills = has("skills") ? sortRows(skills, sort, (skill) => skill.name, (skill) => skill.status !== "off") : [];
+  const shownEntries = sortRows(kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off", (entry) => Boolean(hasUpdate?.(updateKindOf(entry.primary.kind), entry.name)));
+  const shownSkills = has("skills") ? sortRows(skills, sort, (skill) => skill.name, (skill) => skill.status !== "off", (skill) => Boolean(hasUpdate?.("skill", skill.name))) : [];
   const shownPersonal = has("connectors") ? (sort === "name" ? [...personal].sort((a, b) => a.key.localeCompare(b.key)) : personal) : [];
   const shownProducts = has("connectors") ? products : [];
   const shownOrganization = kind === undefined ? organization : organization.filter((item) => kindOf(item) === kind);

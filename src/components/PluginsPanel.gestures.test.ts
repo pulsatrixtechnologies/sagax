@@ -67,6 +67,8 @@ API["/api/me/plugins"] = { marketplaces: [{ name: "my-tools", source: "example/m
 API["/api/me/skills-library"] = { skills: [{ name: "my-writing", description: "Write my notes", source: "local-import", enabled: true, tags: [], warnings: [], assignedBots: [] }] };
 
 const dispatch = vi.fn();
+const updatePosts: unknown[] = [];
+let updatesOutstanding: Array<Record<string, unknown>> = [];
 const state = {
   pluginsSurface: "apps", pluginsPage: null, pluginsBotId: null, pluginsFocusApps: null, selectedId: "bot-a",
   groups: [],
@@ -79,8 +81,17 @@ vi.mock("@/state/store", async () => {
   return {
     ApiError,
     useStore: () => ({ state, dispatch }),
-    api: vi.fn(async (path: string) => {
+    api: vi.fn(async (path: string, init?: { method?: string; body?: string }) => {
       const pathname = path.split("?")[0]!;
+      // #4504: one update runs; the answer names it
+      if (pathname === "/api/me/capability-updates" && init?.method === "POST") {
+        updatePosts.push(JSON.parse(String(init.body)));
+        updatesOutstanding = [];
+        return { results: [{ key: "plugin:me:me:personal-review@my-tools", kind: "plugin", name: "Personal Review", status: "updated", from: "1.0.0", to: "1.1.0" }], count: 0 };
+      }
+      if (pathname === "/api/me/capability-updates") {
+        return { count: updatesOutstanding.filter((entry) => entry.canUpdate).length, checkedAt: 1, checking: false, items: updatesOutstanding };
+      }
       if (pathname === "/api/me/harness-connectors") return harness;
       if (pathname in API) return structuredClone(API[pathname]);
       throw new Error(`no stand-in for ${pathname}`);
@@ -216,6 +227,46 @@ describe("Plugins, driven like the owner does", () => {
     } finally {
       fromBotDone();
     }
+  });
+
+  it("#4504: an item with an update says so on its row and in the header; one press updates it, the mark and the count go", async () => {
+    owner = false;
+    updatePosts.length = 0;
+    updatesOutstanding = [{ key: "plugin:me:me:personal-review@my-tools", kind: "plugin", name: "Personal Review", scope: "me", installedVersion: "1.0.0", availableVersion: "1.1.0", updateAvailable: true, updateNotes: "Faster reviews.", canUpdate: true }];
+    await open(true);
+    await go("installed");
+    await kind("plugins");
+    expect($("[data-plugins-update-all]")?.textContent).toContain("1 update");
+    const row = $('[data-installed-entry="plugin:personal-review@my-tools"]')!;
+    const mark = row.querySelector<HTMLButtonElement>("[data-row-update]")!;
+    expect(mark.textContent).toBe("Update");
+    // its menu offers Update too
+    await click(row.querySelector("[data-entry-menu]"));
+    expect(row.querySelector('[data-entry-action="update"]')).not.toBeNull();
+    await click(row.querySelector("[data-entry-menu]"));
+    // its page: the versions (from, to) and the notes
+    await click(row.querySelector("button[aria-label]"));
+    expect(host.textContent).toContain("1.0.0 \u2192 1.1.0");
+    expect(host.textContent).toContain("Faster reviews.");
+    await click($("[data-plugins-back]"));
+    updatesOutstanding = [{ key: "plugin:me:me:personal-review@my-tools", kind: "plugin", name: "Personal Review", scope: "me", installedVersion: "1.0.0", availableVersion: "1.1.0", updateAvailable: true, canUpdate: true }];
+    await click($('[data-installed-entry="plugin:personal-review@my-tools"] [data-row-update]'));
+    expect(updatePosts).toEqual([{ keys: ["plugin:me:me:personal-review@my-tools"] }]);
+    // done: the mark and the pill go
+    expect($("[data-row-update]")).toBeNull();
+    expect($("[data-plugins-update-all]")).toBeNull();
+    updatesOutstanding = [];
+  });
+
+  it("#4504: the organization's item that has an update shows no mark (the console decides its version), and Update all is in the header only while updates wait", async () => {
+    owner = false;
+    updatesOutstanding = [{ key: "plugin:organization:organization:x", kind: "plugin", name: "Personal Review", scope: "organization", organization: "required", pinned: "1.0.0", updateAvailable: true, canUpdate: false }];
+    await open(true);
+    await go("installed");
+    await kind("plugins");
+    expect($("[data-row-update]")).toBeNull();
+    expect($("[data-plugins-update-all]")).toBeNull();
+    updatesOutstanding = [];
   });
 
   it("#4453: a person's plugin says where it is on, has its switch, and a right click opens its menu", async () => {

@@ -19,7 +19,7 @@ import { installedEntries, privateSkills } from "@/lib/installed-model";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { bringsLabel, InstalledView, type InstalledViewProps } from "./InstalledView";
 import { ConnectAppsSearchField } from "./ConnectAppsSearch";
-import { ConnectAppsView, DiscoverFilter, SortControl, sortRows, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
+import { ConnectAppsView, DiscoverFilter, SortControl, UpdateAllPill, sortRows, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
 import { accountConnectorRows, connectedAccountRows, connectorGroups, noticeAction, type HarnessConnectorGroup, type RegistryGrokAccount } from "./HarnessConnectorGroups";
 import type { HarnessAnswer } from "../PluginsPanel.tsx-parts/types";
 import { DiscoverView } from "./DiscoverView";
@@ -1037,5 +1037,34 @@ describe("#4453: filter and sort live inside the search field; the kinds and the
     expect(host.querySelector("[data-plugins-sort-button] [data-plugins-active-dot]")).not.toBeNull();
     await act(async () => root.unmount());
     host.remove();
+  });
+});
+
+describe("#4504: the updates pill and \"Updates first\"", () => {
+  it("says how many updates wait and updates all of them; nothing is drawn at none", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const onUpdateAll = vi.fn();
+    await act(async () => { root.render(createElement(UpdateAllPill, { count: 3, running: false, onUpdateAll })); });
+    const pill = host.querySelector<HTMLButtonElement>("[data-plugins-update-all]")!;
+    expect(pill.textContent).toContain("3 updates");
+    expect(pill.getAttribute("aria-label")).toBe("Update all: 3 updates");
+    await act(async () => { pill.click(); });
+    expect(onUpdateAll).toHaveBeenCalledTimes(1);
+    await act(async () => { root.render(createElement(UpdateAllPill, { count: 1, running: false, onUpdateAll })); });
+    expect(host.textContent).toContain("1 update");
+    await act(async () => { root.render(createElement(UpdateAllPill, { count: 3, running: true, onUpdateAll })); });
+    expect(host.querySelector<HTMLButtonElement>("[data-plugins-update-all]")?.disabled).toBe(true);
+    expect(host.textContent).toContain("Updating");
+    await act(async () => { root.render(createElement(UpdateAllPill, { count: 0, running: false, onUpdateAll })); });
+    expect(host.querySelector("[data-plugins-update-all]")).toBeNull();
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("sorts the items with an update first, the rest in their order", () => {
+    const rows = [{ n: "a", up: false }, { n: "b", up: true }, { n: "c", up: false }, { n: "d", up: true }];
+    expect(sortRows(rows, "update", (row) => row.n, () => true, (row) => row.up).map((row) => row.n)).toEqual(["b", "d", "a", "c"]);
   });
 });

@@ -15152,5 +15152,15 @@
   "connectApps.vendor.onOne": "1 activé",
   "connectApps.vendor.onMany": "{count} activés",
   "connectApps.choose.forChosen": "Pour les bots que je choisis...",
-  "connectApps.choose.install": "Installer"
+  "connectApps.choose.install": "Installer",
+  "connectApps.updates.updating": "Mise à jour...",
+  "connectApps.updates.one": "1 mise à jour",
+  "connectApps.updates.many": "{count} mises à jour",
+  "connectApps.updates.all": "Tout mettre à jour",
+  "connectApps.updates.failed": "{name} : {error} L'ancienne version reste.",
+  "connectApps.updates.dismiss": "Fermer",
+  "connectApps.updates.versions": "Mise à jour",
+  "connectApps.updates.notes": "Ce qui change",
+  "connectApps.updates.unknownError": "La mise à jour n'a pas pu se faire.",
+  "connectApps.sort.update": "Mises à jour d'abord"
 }

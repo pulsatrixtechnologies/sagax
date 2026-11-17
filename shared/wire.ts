@@ -2005,7 +2005,9 @@ export type ServerFrame =
   | { kind: "voice.call.ended"; audience: string; threadId: string; callId: string; by: "person" | "bot" }
   /** The config status object spread flat into the frame; its full typing
    * is the deferred client-model extraction (see j1-phase-bc-progress). */
-  | ({ kind: "config" } & Record<string, unknown>);
+  | ({ kind: "config" } & Record<string, unknown>)
+  // an update check changed something, or an update ran (to the person only)
+  | { kind: "capability.updates"; count: number; checkedAt: number };
 
 /** One line of what a purchase buys: an article, or a flight. */
 export interface PurchaseLine {

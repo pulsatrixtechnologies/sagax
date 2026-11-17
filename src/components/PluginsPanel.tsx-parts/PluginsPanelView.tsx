@@ -30,8 +30,9 @@ import { productRows, VendorArt, type ProductRowsContext } from "../plugins/Prod
 import { ItemTrailer, type ChooseBots, type ItemMenuActions } from "../plugins/ItemTrailer";
 import { InstallMenu } from "../plugins/InstallMenu";
 import { statusState } from "../plugins/StateIcon";
+import { updateKindOf, updateOf, useCapabilityUpdates, type UpdateKind } from "@/lib/capability-updates";
 import { usePersonProducts } from "@/lib/person-products";
-import { ConnectAppsView, DiscoverFilter, SortControl, connectAppsTabLabel, filterChips, filterLabel, type ConnectAppsSort, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import { ConnectAppsView, DiscoverFilter, SortControl, UpdateAllPill, connectAppsTabLabel, filterChips, filterLabel, type ConnectAppsSort, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
 import { BotCatalogPane } from "../lazy-bot-catalog";
@@ -83,6 +84,13 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // what the console offers the person, of each kind (their own switch)
   const orgMine = useOrgCapabilitiesForMe(personalHere && perspicaxOrg !== null);
   const [sort, setSort] = useState<ConnectAppsSort>("default");
+  // #4504: the count, the items with an update, update one and update all
+  const updates = useCapabilityUpdates();
+  const rowUpdate = (kind: UpdateKind, name: string, fallback?: () => void) => {
+    const item = updateOf(updates.data, kind, name);
+    if (item?.canUpdate) return { running: updates.updatingAll || updates.running.has(item.key), onUpdate: () => void updates.update([item.key]) };
+    return fallback ? { running: false, onUpdate: fallback } : null;
+  };
   const marketError = s.marketError;
   const marketNeedsToken = s.marketNeedsToken;
 
@@ -137,6 +145,16 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           onBots={(botIds, anchor) => void installFeatured(item, undefined, anchor, (name) => { for (const bot of editableBots) toggleBotServerNames(bot.id, [name], botIds.includes(bot.id)); })} />
       );
     }
+    // an installed item with an update waiting: the card's button is Update
+    const waiting = item.installed ? rowUpdate(updateKindOf(item.kind), item.name) : null;
+    if (waiting) {
+      return (
+        <button type="button" data-card-update={waiting.running ? "running" : ""} disabled={waiting.running} onClick={waiting.onUpdate}
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-accent/15 px-3 text-[13px] text-accent-text hover:bg-accent/25 disabled:opacity-70">
+          {waiting.running ? <Loader2 size={13} className="animate-spin" /> : null}{waiting.running ? t("connectApps.updates.updating") : t("connectApps.plugin.update")}
+        </button>
+      );
+    }
     if (!listing) return renderAction(item);
     return (
       <button type="button" data-personal-connect={item.id} disabled={personal.connecting !== null} className={pluginActionClass()}
@@ -149,6 +167,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   const notices = (
     <>
       {panelError && <div role="alert" className="mx-6 mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">{panelError}</div>}
+      {updates.failures.map((failure) => (
+        <div key={failure.key} role="alert" data-update-failure={failure.key} className="mx-6 mt-2 flex items-start gap-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">
+          <span className="min-w-0 flex-1">{t("connectApps.updates.failed", { name: failure.name, error: failure.error || t("connectApps.updates.unknownError") })}</span>
+          <button type="button" onClick={() => updates.dismissFailure(failure.key)} className="shrink-0 underline">{t("connectApps.updates.dismiss")}</button>
+        </div>
+      ))}
       {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
       <SavedKeysResetNotice panel />
     </>
@@ -190,6 +214,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       s={s}
       a={a}
       products={products}
+      updateInfo={(kind, name) => updateOf(updates.data, kind, name)}
       trail={trail}
       entries={entries}
       botsForEntry={botsForEntry}
@@ -274,8 +299,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   };
   const entryTrailer = (entry: InstalledEntry) => {
     const plugin = entry.members.find((member) => member.kind === "plugin");
-    const own = entryActions(entry);
+    const own = { ...entryActions(entry) };
     const state = statusState(entry.status, () => openItem(entry.primary));
+    const kindOfEntry = updateKindOf(entry.primary.kind);
+    const update = rowUpdate(kindOfEntry, entry.name, own.update);
+    const found = updateOf(updates.data, kindOfEntry, entry.name);
+    if (found?.canUpdate) own.update = () => void updates.update([found.key]);
     const base: ItemMenuActions = {
       detail: () => openItem(entry.primary),
       ...(own.update ? { update: own.update, updateWaiting: entry.updateAvailable } : {}),
@@ -285,11 +314,11 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     if (plugin && scope !== "workspace" && scopedPluginView) {
       const installed = botPluginState(scopedPluginView, plugin.id)?.installed;
       const change = scopedPluginView.canChange ? (next: boolean) => toggleForBot(plugin.id, next) : undefined;
-      if (!installed) return <ItemTrailer state={state} name={entry.name} where={scope === "bot" ? "bot" : noBot} actions={base} />;
-      if (scope === "bot") return <ItemTrailer state={state} name={entry.name} where="bot" on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")} actions={base} />;
+      if (!installed) return <ItemTrailer update={update} state={state} name={entry.name} where={scope === "bot" ? "bot" : noBot} actions={base} />;
+      if (scope === "bot") return <ItemTrailer update={update} state={state} name={entry.name} where="bot" on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")} actions={base} />;
       const where = installed.enabled ? everyone : noBot;
       return (
-        <ItemTrailer state={state} name={entry.name} where={where} whereKind={where.kind} on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")}
+        <ItemTrailer update={update} state={state} name={entry.name} where={where} whereKind={where.kind} on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")}
           actions={{ ...base, ...(change ? { allBots: () => change(true), offEverywhere: () => change(false) } : {}), choose: choosePluginBots(plugin.id) }} />
       );
     }
@@ -299,7 +328,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       const where = whereLabel(reached, editableBots.length);
       const everywhere = (on: boolean) => { for (const bot of editableBots) toggleBotServers(entry, bot.id, on); };
       return (
-        <ItemTrailer state={state} name={entry.name} where={where} whereKind={where.kind} on={server ? server.enabled : undefined} busy={mcp.busy !== null}
+        <ItemTrailer update={update} state={state} name={entry.name} where={where} whereKind={where.kind} on={server ? server.enabled : undefined} busy={mcp.busy !== null}
           onToggle={server && !mcp.restricted ? () => void mcp.toggle(server) : undefined}
           lockedReason={mcp.policy ? t("policy.mcpRestricted", { organization: mcp.policy.organizationName }) : undefined}
           actions={{
@@ -315,7 +344,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           }} />
       );
     }
-    return <ItemTrailer state={state} name={entry.name} actions={base} />;
+    return <ItemTrailer update={update} state={state} name={entry.name} actions={base} />;
   };
   const [skillBusy, setSkillBusy] = useState<string | null>(null);
   const skillTrailer = (item: PluginItem) => {
@@ -331,9 +360,10 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
         .finally(() => setSkillBusy(null));
     };
     const where = scope === "bot" ? "bot" as const : skill.enabled ? everyone : noBot;
+    const skillUpdate = updateOf(updates.data, "skill", item.name);
     return (
-      <ItemTrailer name={item.name} where={where} whereKind={typeof where === "string" ? undefined : where.kind} on={skill.enabled} busy={skillBusy !== null} onToggle={reason ? undefined : flip} lockedReason={reason}
-        actions={{ ...detail, ...(reason || scope === "bot" ? {} : { allBots: () => flip(true), offEverywhere: () => flip(false) }) }} />
+      <ItemTrailer update={rowUpdate("skill", item.name)} name={item.name} where={where} whereKind={typeof where === "string" ? undefined : where.kind} on={skill.enabled} busy={skillBusy !== null} onToggle={reason ? undefined : flip} lockedReason={reason}
+        actions={{ ...detail, ...(skillUpdate?.canUpdate ? { update: () => void updates.update([skillUpdate.key]) } : {}), ...(reason || scope === "bot" ? {} : { allBots: () => flip(true), offEverywhere: () => flip(false) }) }} />
     );
   };
 
@@ -420,7 +450,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           kindCounts={kindCounts}
           botName={scope === "bot" ? scopeBot?.name : undefined}
           filterControl={filterControl}
-          sortControl={<SortControl sort={sort} onSort={setSort} options={tab === "discover" ? ["default", "name"] : ["default", "name", "on"]} />}
+          sortControl={<SortControl sort={sort} onSort={setSort} options={tab === "discover" ? ["default", "name"] : (updates.data?.count ?? 0) > 0 ? ["default", "name", "on", "update"] : ["default", "name", "on"]} />}
+          updateControl={<UpdateAllPill count={updates.data?.count ?? 0} running={updates.updatingAll} onUpdateAll={() => void updates.updateAll()} />}
           scopeNote={scopeControl}
           manageActions={addActions.length > 0 ? <AddMenu actions={addActions} filled /> : undefined}
           search={searchField}
@@ -433,6 +464,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           installed={(
             <InstalledView
               sort={sort}
+              hasUpdate={(kind, name) => Boolean(updateOf(updates.data, kind, name))}
               loading={mcp.servers === null}
               kind={kind}
               entries={entries}

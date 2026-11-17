@@ -350,6 +350,18 @@ if (params.get("empty") === "plugins") {
   MANAGE_API["/api/me/plugins"] = { ...mine, plugins: [], marketplaces: mine.marketplaces.map((market) => ({ ...market, plugins: market.plugins.map((plugin) => ({ ...plugin, installed: false })) })) };
 }
 
+// #4504: what has an update waiting (invented items): two plugins (one will fail when run),
+// a skill, and one the organization console pins (no mark: the console decides its version)
+let galleryUpdates = [
+  { key: "plugin:me:me:code-review@claude-plugins-official", kind: "plugin", name: "Code Review", scope: "me", installedVersion: "1.2.0", availableVersion: "1.3.0", updateAvailable: true, updateNotes: "Reviews now run on the whole branch, and the summary names the files it skipped.", canUpdate: true },
+  { key: "plugin:me:me:cursor-team-kit@cursor-plugins", kind: "plugin", name: "Cursor Team Kit", scope: "me", installedVersion: "0.9.1", availableVersion: "0.10.0", updateAvailable: true, canUpdate: true },
+  { key: "skill:me:me:weekly-summary", kind: "skill", name: "weekly-summary", scope: "me", installedVersion: "a1b2c3d", availableVersion: "e4f5a6b", updateAvailable: true, canUpdate: true },
+  { key: "plugin:organization:organization:compliance-pack", kind: "plugin", name: "Compliance Pack", scope: "organization", organization: "required", pinned: "0.9.4", installedVersion: "0.9.4", availableVersion: "0.9.5", updateAvailable: true, canUpdate: false },
+] as Array<Record<string, unknown> & { key: string; name: string; canUpdate: boolean; installedVersion?: string; availableVersion?: string }>;
+if (params.has("updates")) {
+  MANAGE_API["/api/me/capability-updates"] = { get count() { return galleryUpdates.filter((item) => item.canUpdate).length; }, checkedAt: Date.now(), checking: false, get items() { return galleryUpdates; } };
+}
+
 // ?superseded=1: the real member panel, with an obsolete bot tenant copy.
 // All /api responses and the removal stay inside this gallery.
 const superseded = params.has("superseded");
@@ -519,6 +531,16 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
         const text = `---\nname: ${name}\ndescription: ${listed.description || name}\n---\n\nRead the week's threads, then write a short recap: what moved, what waits, what needs a decision.\n`;
         return json({ name, text, description: listed.description, source: listed.source, enabled: listed.enabled, changedAfterReview: false, reviewedText: null, warnings: [], files: [], editable: true, origin: "library" });
       }
+    }
+    if (params.has("updates") && url.pathname === "/api/me/capability-updates" && method === "POST") {
+      const asked = JSON.parse(String(init?.body ?? "{}")) as { keys?: string[]; all?: true };
+      const wanted = galleryUpdates.filter((item) => item.canUpdate && (asked.all || asked.keys?.includes(item.key)));
+      await new Promise((resolve) => setTimeout(resolve, params.get("updates") === "slow" ? 4000 : 400));
+      const results = wanted.map((item) => item.name === "Cursor Team Kit"
+        ? { key: item.key, kind: item.kind, name: item.name, status: "failed", error: "The marketplace could not be reached." }
+        : { key: item.key, kind: item.kind, name: item.name, status: "updated", from: item.installedVersion, to: item.availableVersion });
+      galleryUpdates = galleryUpdates.filter((item) => !results.some((result) => result.key === item.key && result.status === "updated"));
+      return json({ results, count: galleryUpdates.filter((item) => item.canUpdate).length });
     }
     const body = MANAGE_API[url.pathname];
     if (body !== undefined && method === "GET") return json(body);

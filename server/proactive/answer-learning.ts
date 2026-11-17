@@ -205,12 +205,12 @@ function optionsSignature(options: readonly string[]): string[] {
 
 /** #4558: words naming an item, whose number is the item's id ("billet
  * 1013", "invoice 88"), in every language of the app. Nouns only: a word
- * that is also a verb ("order", "commande") is left out, so "Commander 2
- * licences ?" keeps its 2. */
+ * that is also a verb or a common word elsewhere ("order", "commande",
+ * "fall") is left out, so "Commander 2 licences ?" keeps its 2. */
 const ITEM_WORDS = [
   "ticket", "tickets", "invoice", "incident", "case", // en
   "billet", "facture", "dossier", // fr
-  "rechnung", "vorfall", "fall", // de
+  "rechnung", "vorfall", // de
   "factura", "incidente", "caso", "expediente", // es
   "chamado", "fatura", // pt-br
   "тікет", "заявка", "інцидент", "справа", // uk
@@ -218,35 +218,37 @@ const ITEM_WORDS = [
   "チケット", "請求書", "インシデント", "案件", // ja
   "工单", "工單", "发票", "發票", "事件", "案例", // zh, zh-tw
 ];
-/** A mark that says the number after it is an id ("#1013", "n° 1013"). */
-const ID_MARK = "(?:#|№|n°|nº|no\\.|nr\\.|núm\\.)";
-const ITEM_NUMBER = new RegExp(`((?<![\\p{L}])(?:${ITEM_WORDS.join("|")}))\\s*(?:${ID_MARK}\\s*)?\\d[\\p{L}\\p{N}_-]*`, "gu");
-const MARKED_NUMBER = new RegExp(`${ID_MARK}\\s*[\\p{L}\\p{N}_-]*\\d[\\p{L}\\p{N}_-]*`, "gu");
-/** Dates and times written with digits alone (any language): 2026-11-17,
- * 2026-11-17T09:30, 17/11/2026, 17.11.26, 09:30. A day written with a
- * month's name keeps its number (in doubt, the number counts). */
-const DIGIT_DATE = /(?<![\p{N}])(?:\d{4}-\d{1,2}-\d{1,2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?)?|\d{1,2}[./]\d{1,2}[./]\d{2,4}|\d{1,2}:\d{2}(?::\d{2})?)(?![\p{N}])/gu;
-/** A token that is an id by its form: letters and digits mixed (INC0012,
- * T-1013, a hash, a UUID), never a quantity written with its unit (10mg,
- * 2h, 40licences). */
-function idToken(token: string): boolean {
-  return token.length >= 3 && /\d/.test(token) && /\p{L}/u.test(token) && !/^\d[\d.,]*\p{L}+$/u.test(token);
-}
+/** An explicit id mark, never the end of a word ("#1013", "n° 1013"). */
+const MARKED_ID = /(?<![\p{L}\p{N}])(?:#|№|n°|nº)\s*[\p{L}\p{N}_-]*\d[\p{L}\p{N}_-]*/gu;
+/** An item word and right after it a bare whole number (1013) or an id that
+ * starts with a letter (INC0012, T-1013); never a decimal, a time or h:mm.
+ * In Chinese and Japanese the next word follows without a space. */
+const ITEM_NUMBER = new RegExp(`(?<![\\p{L}])(${ITEM_WORDS.join("|")})\\s*(\\p{L}[\\p{L}\\p{N}_-]*\\d[\\p{L}\\p{N}_-]*|\\d+)(?!(?![\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}])[\\p{L}\\p{N}_]|[.,:]\\d)`, "gu");
+/** A money, unit, percent or duration mark next to the number: then it is
+ * an amount or a quantity, never the item's id ("facture 500 $"). */
+const NEAR_UNIT = /^\s*(?:[$€£¥₹₴%円元件個个時分日月年]|(?:usd|cad|eur|euros?|dollars?|k|m|h|hrs?|hours?|heures?|min|mins|minutes?|s|secs?|seconds?|secondes?|days?|jours?|weeks?|semaines?|months?|mois|years?|ans?|années?|gb|go|mb|mo|tb|to|kg|g|km|units?|unités?)(?![\p{L}\p{N}]))/iu;
+/** A full date written with digits (year, month and day), with its time
+ * when it has one: 2026-11-17, 2026-11-17T09:30, 17/11/2026. Nothing else
+ * that looks like a date: an h:mm alone is a time or a duration and counts,
+ * a version (10.4.12) counts. */
+const FULL_DATE = /(?<![\p{N}.])(?:\d{4}-\d{1,2}-\d{1,2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?)?|\d{1,2}[/.]\d{1,2}[/.]\d{4}|\d{4}\/\d{1,2}\/\d{1,2})(?![\p{N}.])/gu;
 
-/** #4558: a question's words without the parts that name one item: an
- * item's number ("billet 1013", "#1013", "n° 1013"), an id by its form
- * (INC0012, a UUID) and a date written with digits become a mark; case and
- * spacing ignored. Every other number stays part of the question: an amount
- * ("Rembourser 50 $ ?"), a level ("niveau 1"), a quantity ("2 licences").
+/** #4558: a question's words without what names one item, case and spacing
+ * ignored: a number or id right after an explicit id mark (#1013, n° 1013),
+ * a bare whole number or a letter-led id right after an item word (billet
+ * 1013, ticket INC0012) with no money, unit, percent or duration mark next
+ * to it, and a full date in digits. Every other number stays part of the
+ * question: an amount ("Payer la facture 500 $ ?"), a level ("Tier2",
+ * "niveau 1"), a quantity ("2 licences"), a time or a duration ("1:30").
  * "Fermer le billet 1013 ?" and "Fermer le billet 1014 ?" are one question
- * asked of two items; "Rembourser 50 $ ?" and "Rembourser 5000 $ ?" are two
- * questions. In doubt the number counts: the card goes back to the person. */
+ * asked of two items; "Rembourser 50 $ ?" and "Rembourser 5000 $ ?" are two.
+ * In doubt the number counts: the card goes back to the person. */
 export function questionShape(question: string): string {
   return same(question)
-    .replace(DIGIT_DATE, "<date>")
-    .replace(ITEM_NUMBER, "$1 <id>")
-    .replace(MARKED_NUMBER, "<id>")
-    .replace(/[\p{L}\p{N}_-]+/gu, (token) => (idToken(token) ? "<id>" : token));
+    .replace(FULL_DATE, "<date>")
+    .replace(MARKED_ID, "<id>")
+    .replace(ITEM_NUMBER, (match: string, word: string, value: string, offset: number, whole: string) =>
+      /^\d/.test(value) && NEAR_UNIT.test(whole.slice(offset + match.length)) ? match : `${word} <id>`);
 }
 
 /** #4558: the answer is one of these options (case, spacing ignored). */

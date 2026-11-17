@@ -254,7 +254,7 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     // the item's number, an id, a date: the same question
     expect(covers("Fermer le billet 1013 ?", "Fermer le billet 1014 ?")).toBe(true);
     expect(covers("Close ticket #1013?", "Close ticket #2077?")).toBe(true);
-    expect(covers("Fermer INC0012 ?", "Fermer INC0457 ?")).toBe(true);
+    expect(covers("Fermer le billet INC0012 ?", "Fermer le billet INC0457 ?")).toBe(true);
     expect(covers("Reporter au 2026-11-17 ?", "Reporter au 2026-12-02 ?")).toBe(true);
     expect(covers("チケット1013を閉じますか？", "チケット1014を閉じますか？")).toBe(true);
     // an amount, a level, a quantity: another question, the card goes back to the person
@@ -264,6 +264,21 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     expect(covers("Order 2 licenses?", "Order 40 licenses?")).toBe(false);
     // a bare number is not known to be an id: in doubt, it counts
     expect(covers("Close 1013?", "Close 1014?")).toBe(false);
+    // an amount right after an item word is an amount, never the item's number
+    expect(covers("Payer la facture 500 $ ?", "Payer la facture 50000 $ ?")).toBe(false);
+    expect(covers("Pay invoice 500 $?", "Pay invoice 50000 $?")).toBe(false);
+    expect(covers("Payer la facture 500$ ?", "Payer la facture 50000$ ?")).toBe(false);
+    // a time or a duration counts, h:mm alone included
+    expect(covers("Ticket 77: 1:30 logged. Approve?", "Ticket 78: 9:45 logged. Approve?")).toBe(false);
+    expect(covers("Approuver 1:30 sur le billet 77 ?", "Approuver 8:00 sur le billet 78 ?")).toBe(false);
+    expect(covers("Ticket 77: 1:30 logged. Approve?", "Ticket 78: 1:30 logged. Approve?")).toBe(true);
+    // a word that ends like an id mark is not one
+    expect(covers("Réserver au casino. 2 places ?", "Réserver au casino. 20 places ?")).toBe(false);
+    // a level, a size or a model written in one piece counts
+    expect(covers("Passer au palier Tier2 ?", "Passer au palier Tier9 ?")).toBe(false);
+    expect(covers("Redimensionner la VM en D4s_v5 ?", "Redimensionner la VM en D64s_v5 ?")).toBe(false);
+    // a version is not a date
+    expect(covers("Mettre à jour vers 10.4.12 ?", "Mettre à jour vers 10.4.13 ?")).toBe(false);
   });
 
   it("\"always Oui\" on \"Fermer le billet 1013 ?\" covers closing another ticket, never billing one", () => {

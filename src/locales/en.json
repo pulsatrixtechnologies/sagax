@@ -14110,7 +14110,7 @@
   "routinePage.group.timing": "Timing",
   "routinePage.group.results": "Results",
   "routinePage.alwaysChoices.title": "Always answers",
-  "routinePage.alwaysChoices.help": "You chose these answers on this routine's cards with “always for this routine”. Each one covers the same question asked about another item of the same kind, with the same choices: that card is answered without asking you. An item's number, id or date may change; a different amount, level or quantity asks you again. Remove one and the routine asks you again.",
+  "routinePage.alwaysChoices.help": "You chose these answers on this routine's cards with “always for this routine”. Each one covers the same question asked about another item of the same kind, with the same choices: that card is answered without asking you. Only the item's number may change (after its word, like ticket 1013, or after #), or a full date; any other number, an amount, a level, a quantity or a time, asks you again. Remove one and the routine asks you again.",
   "routinePage.alwaysChoices.chosen": "Chosen {date}",
   "routinePage.alwaysChoices.covers": "This question for any item of this kind",
   "routinePage.alwaysChoices.coversOptions": "This question for any item of this kind, with {options}",

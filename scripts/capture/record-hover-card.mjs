@@ -28,7 +28,9 @@ async function freePort() {
   }
   throw new Error("no free port between 5176 and 5206");
 }
-const port = Number(arg("--port") ?? await freePort());
+// --attach N: use a gallery server already running on port N (a cold dev server may drop its first loads)
+const attach = arg("--attach");
+const port = Number(attach ?? arg("--port") ?? await freePort());
 const only = arg("--only");
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const langs = ["fr", "en"];
@@ -50,12 +52,26 @@ async function waitForServer(url, ms = 120_000) {
   throw new Error(`gallery did not start at ${url}`);
 }
 
-const vite = spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+/** Open a gallery page and wait for its selector; the dev server may re-optimise and drop a load, so try again. */
+async function openGallery(page, url, selector) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await page.goto(url);
+      await page.waitForSelector(selector, { timeout: 20_000 });
+      return;
+    } catch (error) {
+      if (attempt >= 4) throw error;
+      await page.waitForTimeout(1_500);
+    }
+  }
+}
+
+const vite = attach ? null : spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, NODE_ENV: "development" }, detached: true,
 });
 let log = "";
-vite.stdout?.on("data", (chunk) => { log += chunk; });
-vite.stderr?.on("data", (chunk) => { log += chunk; });
+vite?.stdout?.on("data", (chunk) => { log += chunk; });
+vite?.stderr?.on("data", (chunk) => { log += chunk; });
 
 let browser;
 try {
@@ -137,24 +153,25 @@ try {
       const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
       await page.route("https://desk.example/mark.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARK }));
       page.on("pageerror", (error) => console.error("page error:", String(error).slice(0, 400)));
+      page.on("console", (message) => { if (message.type() === "error") console.error("console:", message.text().slice(0, 300)); });
       for (const { id, lang, label } of [{ id: "pulsatrix", lang: "fr", label: "fr-dark" }, { id: "daylight", lang: "en", label: "en-light" }]) {
         for (const scene of scenes) {
           for (const pin of [false, true]) {
-            await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene, ...(pin ? { pinned: "1" } : {}) })}`);
-            await page.waitForSelector("[data-gallery-card]", { timeout: 120_000 });
+            await openGallery(page, `${base}?${new URLSearchParams({ skin: id, lang, scene, ...(pin ? { pinned: "1" } : {}) })}`, "[data-gallery-card]");
             await page.waitForTimeout(250);
             await page.screenshot({ path: join(outDir, `${scene}-${pin ? "pinned" : "hover"}-${label}-${width}.png`), fullPage: true });
           }
         }
         for (const step of ["open", "agreement", "company", "back"]) {
-          await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene: "chat2" })}`);
-          await page.waitForSelector("[data-gallery-chat]", { timeout: 120_000 });
+          await openGallery(page, `${base}?${new URLSearchParams({ skin: id, lang, scene: "chat2" })}`, "[data-gallery-chat]");
           const chip = page.locator('[data-record-link="invoice"]').first();
           await chip.scrollIntoViewIfNeeded();
           await chip.click();
           await page.waitForSelector("[data-record-card] [data-record-card-body]", { timeout: 10_000 });
           await page.waitForTimeout(500);
           if (step !== "open") {
+            // pinned, a pane ends on a row boundary: its "N more" line opens the rest
+            await page.locator("button[data-fit-more]").first().click({ timeout: 1_500 }).catch(() => {});
             await page.locator("[data-record-ref-link]", { hasText: "Managed services" }).first().click();
             await page.waitForTimeout(600);
           }
@@ -195,6 +212,6 @@ try {
   console.log(`captures in ${outDir}`);
 } finally {
   await browser?.close();
-  try { process.kill(-vite.pid); } catch { /* already gone */ }
+  try { if (vite) process.kill(-vite.pid); } catch { /* already gone */ }
   if (process.exitCode) console.error(log.slice(-2000));
 }

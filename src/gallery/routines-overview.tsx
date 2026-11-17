@@ -55,15 +55,19 @@ const run = (id: string, routineId: string, status: RoutineRun["status"], ago: n
   scheduledFor: NOW - ago * H, createdAt: NOW - ago * H, startedAt: NOW - ago * H, finishedAt: NOW - ago * H + (3 + (id.length % 5)) * 60_000, status, manual: false,
   ...(status === "failed" ? { error: "The engine stopped" } : { output: "Done." }), ...extra,
 } as RoutineRun);
+// Each routine's last runs, newest first, as the trend shows them (7 marks, oldest at the left).
+const history = (routineId: string, results: Array<RoutineRun["status"] | "problems">, gapHours: number, offset = 1): RoutineRun[] => results.map((result, index) => run(
+  `${routineId}-${index}`, routineId, result === "problems" ? "completed" : result, offset + index * gapHours,
+  result === "problems" ? { problems: "One report was missing." } : result === "nothing_to_report" ? { quiet: true } : {}));
 const runs: RoutineRun[] = empty ? [] : [
-  ...Array.from({ length: 6 }, (_, index) => run(`a${index}`, "r1", "completed", 22 + index * 24)),
-  ...Array.from({ length: 5 }, (_, index) => run(`b${index}`, "r2", index === 3 ? "nothing_to_report" : "completed", 0.5 + index * 7, (index === 3 ? { quiet: true } : {}))),
-  run("c0", "r3", "completed", 19), run("c1", "r3", "completed", 43),
-  run("d0", "r4", quiet ? "completed" : "failed", 150), run("d1", "r4", quiet ? "completed" : "completed", 30, quiet ? {} : { problems: "One report was missing." }),
-  run("e0", "r5", "completed", 4), run("e1", "r5", "completed", 28), run("e2", "r5", "completed", 52),
-  run("f0", "r7", "completed", 70),
-  run("g0", "r8", "completed", 9), run("g1", "r8", "completed", 12),
-  run("h0", "r9", quiet ? "completed" : "failed", 60),
+  ...history("r1", ["completed", "completed", "problems", "completed", "completed", "completed", "completed"], 24, 3),
+  ...history("r2", ["completed", "nothing_to_report", "completed", "completed", "completed", "completed", "completed"], 0.5, 0.6),
+  ...history("r3", ["completed", "completed", "completed", "completed", "completed", "completed", "completed"], 24, 19),
+  ...history("r4", quiet ? ["completed", "completed", "completed"] : ["problems", "failed", "failed"], 168, 30),
+  ...history("r5", ["completed", "completed", "completed", "completed", "completed", "completed", "completed"], 24, 4),
+  ...history("r7", ["completed", "completed", "blocked", "completed", "completed"], 72, 70),
+  ...history("r8", ["completed", "completed", "completed", "completed", "completed", "completed", "completed"], 3, 9),
+  ...history("r9", quiet ? ["completed"] : ["failed", "failed", "failed", "failed", "failed"], 12, 60),
   run("x2", "r2", "running", 0.05, { finishedAt: undefined }),
 ];
 

@@ -22,7 +22,8 @@ const height = 1000;
 const shots = [
   { name: "overview", query: "tab=overview" },
   { name: "filters", query: "tab=overview", filters: true },
-  { name: "grouped", query: "tab=overview&groupBy=bot" },
+  { name: "grouped-bot", query: "tab=overview&groupBy=bot" },
+  { name: "grouped-folder", query: "tab=overview&groupBy=folder" },
   { name: "logs", query: "tab=logs" },
   { name: "empty", query: "tab=overview&empty=1" },
   { name: "all-good", query: "tab=overview&quiet=1" },
@@ -31,7 +32,10 @@ const looks = [
   { skin: "pulsatrix", scheme: "dark", lang: "fr", tag: "fr-dark" },
   { skin: "daylight", scheme: "light", lang: "en", tag: "en-light" },
 ];
-const widths = [1280, 390];
+// Every width gets the overview and the grouped table; 1280 and 390 the whole set.
+// 764 is 1024 with the sidebar open; 320 to 600 are the phone widths.
+const widths = [1920, 1460, 1280, 1024, 764, 600, 480, 390, 320];
+const full = new Set([1280, 390]);
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -65,6 +69,7 @@ try {
   for (const look of looks) {
     for (const width of widths) {
       for (const shot of shots) {
+        if (!full.has(width) && !["overview", "grouped-bot"].includes(shot.name)) continue;
         const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 2, colorScheme: look.scheme });
         page.on("pageerror", (error) => { errors.push(String(error)); console.error(String(error)); });
         page.on("console", (message) => { if (message.type() === "error") console.error(message.text()); });
@@ -76,13 +81,47 @@ try {
           await page.locator('[data-routine-filter="status"]').waitFor();
         }
         await page.waitForTimeout(400);
-        // The layout at 390 (and every width): nothing scrolls sideways, no table row is wider than the page.
-        const overflow = await page.evaluate(() => {
+        // The layout, at every width: nothing scrolls sideways; from 768 up the table has its five column
+        // headers and one line per routine; the trend bars sit on the text's centre line; on the phone a row is
+        // two lines at most.
+        const layout = await page.evaluate(() => {
           const sample = document.querySelector("[data-gallery-sample]");
-          const wide = [...document.querySelectorAll("[data-routine-row]")].filter((row) => row.scrollWidth > row.clientWidth + 1).length;
-          return { page: sample.scrollWidth - sample.clientWidth, wide };
+          const visible = (element) => element.getClientRects().length > 0;
+          const rows = [...document.querySelectorAll("[data-routine-row]")];
+          const headers = [...document.querySelectorAll('[role="columnheader"]')].filter((header) => visible(header) && header.textContent.trim()).length;
+          const tallest = Math.max(0, ...rows.map((row) => row.getBoundingClientRect().height));
+          const off = Math.max(0, ...rows.map((row) => {
+            const bar = row.querySelector("[data-trend-mark]");
+            const name = row.querySelector("[data-routine-title]");
+            if (!bar || !name) return 0;
+            const a = bar.getBoundingClientRect();
+            const b = name.getBoundingClientRect();
+            return Math.abs(a.top + a.height / 2 - (b.top + 9));
+          }));
+          // the narrow gutter: the header's muted line, the first tab and the content all start 16px from the edge
+          const left = (selector) => { const element = document.querySelector(selector); return element ? Math.round(element.getBoundingClientRect().left - sample.getBoundingClientRect().left) : null; };
+          const tops = ["[data-routines-search]", "[data-automations-filters] > summary", "[data-routines-table] [data-automations-create]"].map((selector) => { const element = document.querySelector(selector); return element ? Math.round(element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2) : null; });
+          const tabs = document.querySelector("[data-routines-tabs]");
+          const first = document.querySelector('[data-page-tab="overview"]');
+          return { gutter: { subtitle: left("[data-page-subtitle]"), tab: left('[data-page-tab="overview"]'), content: left("[data-routines-runs]") }, controlsTops: tops, tabsClipped: Boolean(tabs && first && (tabs.scrollLeft > 0 || first.getBoundingClientRect().left < sample.getBoundingClientRect().left)),
+            page: sample.scrollWidth - sample.clientWidth, wide: rows.filter((row) => row.scrollWidth > row.clientWidth + 1).length, headers, tallest, off };
         });
-        if (overflow.page > 1 || overflow.wide > 0) errors.push(`${shot.name} ${look.tag} ${width}: overflow ${JSON.stringify(overflow)}`);
+        const tag = `${shot.name} ${look.tag} ${width}`;
+        if (shot.name === "overview" || shot.name.startsWith("grouped")) {
+          if (width < 640) {
+            const { subtitle, tab, content } = layout.gutter;
+            if ([subtitle, tab, content].some((value) => value === null || Math.abs(value - 16) > 1)) errors.push(`${tag}: left edges ${JSON.stringify(layout.gutter)}, the phone gutter is 16`);
+            if (layout.tabsClipped) errors.push(`${tag}: the first tab is clipped`);
+          }
+          const tops = layout.controlsTops.filter((value) => value !== null);
+          if (tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 4) errors.push(`${tag}: the heading controls are on several rows ${JSON.stringify(layout.controlsTops)}`);
+        }
+        if (layout.page > 1 || layout.wide > 0) errors.push(`${tag}: overflow ${JSON.stringify(layout)}`);
+        if (shot.name !== "empty" && shot.name !== "logs") {
+          if (width >= 764 && layout.headers < 5) errors.push(`${tag}: ${layout.headers} column headers, the table needs 5 or more`);
+          if (width >= 1024 && layout.tallest > 56) errors.push(`${tag}: a routine row is ${layout.tallest}px tall, more than one line`);
+          if (width < 640 && layout.tallest > 80) errors.push(`${tag}: a phone row is ${layout.tallest}px tall, more than two lines`);
+        }
         const file = join(outDir, `${shot.name}-${look.tag}-${width}.png`);
         await page.locator("[data-gallery-sample]").screenshot({ path: file });
         console.log(file);

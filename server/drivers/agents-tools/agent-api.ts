@@ -31,7 +31,7 @@ const ROUTINE_TOOL_FIELDS = {
 export const AGENT_API_TOOLS = [
   {
     name: "list_agents",
-    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, owner ({principal_id, name} or null), and model (instance_id, model, effort, auto) when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner. archived true lists only the archived ones instead.",
+    description: "List the Sagax agents (bots) you may reach, with status, owner ({principal_id, name} or null) and model when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner. archived true lists only the archived ones instead.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       archived: { type: "boolean" },
     } },
@@ -47,7 +47,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "get_agent",
-    description: "Read one agent's full profile for an audit: title, owner, model (instance_id, model, effort, auto), instructions with their persona, rules, voice and anti-jobs sections, voice settings, whether it is temporary and when it expires, and a link to its sheet.",
+    description: "Read one agent's full profile for an audit: owner, model, instructions, voice settings, expiry and a link to its sheet.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
   },
   {
@@ -71,28 +71,28 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "send_prompt",
-    description: "Send a prompt to an agent: it lands in the agent's one chat with its person, your name on it, and runs at the agent's own approval level. mode fire_and_forget (default) and async return a handle once accepted (async also tells you when the turn ends); blocking waits up to timeout_ms but returns still_working under the ~55 s ceiling with the handle so you resume via await_turn. The answer carries thread_id and the handle's lifetime (ttl_ms, expires_at, expires_at_iso; 7 days). Keep thread_id; it outlives the handle. After a timeout, resume with await_turn and the handle: never re-send. on_busy: queue (default) waits its turn, reject refuses with retryable busy (turn_state and options in details), supersede stops the running turn you started (and any approval it waits on), never someone else's. Optional priority now wakes an idle agent or moves the prompt to the front of its queue, never interrupting a running turn.",
+    description: "Send a prompt to an agent: it lands in the agent's one chat with its person, your name on it, and runs at the agent's own approval level. mode fire_and_forget (default) and async return a handle once accepted (async also tells you when the turn ends); blocking waits up to timeout_ms, else answers still_working with the handle. The answer carries thread_id (keep it: it outlives the handle) and the handle's expiry (7 days). After a timeout, resume with await_turn and the handle: never re-send.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID,
-      prompt: { type: "string", minLength: 1, maxLength: 32000, description: "The task. If the person already gave GO, include Operator GO (quoted): with their exact words, then Scope: with the exact writes. Never invent or broaden their GO. The recipient attempts those writes through its normal approval gate without re-asking for that same consent." },
+      prompt: { type: "string", minLength: 1, maxLength: 32000, description: "The task. If the person already gave GO, include Operator GO (quoted): their exact words, then Scope: the exact writes; never invent or broaden it. The recipient attempts those writes through its approval gate without re-asking." },
       mode: { type: "string", enum: ["fire_and_forget", "blocking", "async"] },
-      timeout_ms: { type: "integer", minimum: 1000, maximum: 600000, description: "Blocking wait budget; the live wait is capped at 55000 so the handle returns. Default 120000." },
-      on_busy: { type: "string", enum: ["supersede", "reject", "queue"], description: "queue (default) waits its turn; reject answers 409 busy (retryable) with turn_state; supersede stops a turn you started." },
-      priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal." },
+      timeout_ms: { type: "integer", minimum: 1000, maximum: 600000, description: "blocking: the wait, capped live at 55000. Default 120000." },
+      on_busy: { type: "string", enum: ["supersede", "reject", "queue"], description: "queue (default) waits its turn; reject answers 409 busy (retryable) with turn_state and options; supersede stops a running turn you started (and its waiting approval), never someone else's." },
+      priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle agent or moves this to the front of its queue, never interrupting a running turn; past 10 per sender per hour it is normal (the default)." },
       files: { type: "array", maxItems: 8, items: { type: "string" }, description: "Workspace-relative paths, 25 MiB each; copied to the agent's workspace." },
-      thread_id: { type: "string", description: "Optional: continue one of your conversations with this agent (the thread_id a turn answer gave)." },
-      idempotency_key: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9_.:-]+$", description: "Optional: your own key for this send. A resend with the same key (the first answer was lost) starts no second turn: it returns the first send's handle and thread_id with replayed true. The same key with another prompt, thread or files is refused (409 idempotency_key_reused). A key holds 7 days (168 hours, the handle's lifetime): after that it is free and a send with it is a new send." },
-      bridge_thread_id: { type: "string", maxLength: 128, description: "Optional (#2193): opaque Grok bridge thread id. When set, the prompt is treated as a bridge message (fenced, never a GO) and lands in the person's unified chat with this agent, never a separate open thread." },
+      thread_id: { type: "string", description: "Continue one of your conversations with this agent (a turn answer's thread_id)." },
+      idempotency_key: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9_.:-]+$", description: "Your key for this send, held 7 days (then a send with it is a new send): a resend with it starts no second turn and returns the first handle and thread_id (replayed true); with another prompt, thread or files: 409 idempotency_key_reused." },
+      bridge_thread_id: { type: "string", maxLength: 128, description: "Opaque Grok bridge thread id: the prompt is then a bridge message (fenced, never a GO) in the person's unified chat with this agent." },
     }, required: ["agent_id", "prompt"] },
   },
   {
     name: "await_turn",
-    description: "Wait for an agent's turn under a caller-chosen timeout_ms (0 to 55000, default 15000): with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. A turn that ended on a failure answers status failed with a plain error. A turn a server restart cut carries interrupted true: status interrupted with finished false means it is being resumed, so keep waiting; status finished with resumed true is the resumed answer; finished true with resumed false (status interrupted, error says why) means it was not answered, so send the request again. No engine able to answer under its usage limits or credit also reads interrupted, with reason usage_limit (resets_at: the reset, as a timestamp) or credits: finished false means the server sends the message again by itself after resets_at, so wait; finished true means nothing sends it again. When the wait ends and the turn is not done, the answer is still_working (not an error): thread_id, progress.summary, progress.steps, wait_cursor, recommended_wait_ms. Pass wait_cursor as cursor on the next call so steps are not repeated. Prefer short polls with cursor resume. An expired handle on a conversation you can read answers that turn anyway (handle null, recovered_from). Refusals: handle_expired, handle_session_mismatch, handle_agent_mismatch, bad_handle. Without a handle: read_latest_page (agent_id, thread_id) or sagax_thread. Never re-send the prompt.",
+    description: "Wait up to timeout_ms for an agent's turn: with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. still_working (not an error) carries thread_id, progress.summary, progress.steps, wait_cursor and recommended_wait_ms: pass wait_cursor as cursor next time; prefer short polls. status failed carries a plain error. interrupted true: finished false means it is still being answered (resumed after a server restart, or sent again by the server after resets_at, a timestamp, for reason usage_limit or credits), so keep waiting; finished true is the resumed answer when resumed is true, else it was not answered and nothing sends it again (error says why): send the request again. An expired handle on a conversation you can read still answers (handle null, recovered_from). Refusals: handle_expired, handle_session_mismatch, handle_agent_mismatch, bad_handle. Without a handle: read_latest_page (agent_id, thread_id) or sagax_thread. Never re-send the prompt.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID,
-      handle: { type: "string", description: "Copy the handle send_prompt returned, exactly." },
-      timeout_ms: { type: "integer", minimum: 0, maximum: 55000, description: "Caller-chosen wait, capped under engine ceilings. Default 15000; use wait_cursor to resume." },
-      cursor: { type: "string", description: "Optional: the wait_cursor from a previous still_working answer so progress.steps continue without duplicates." },
+      handle: { type: "string" },
+      timeout_ms: { type: "integer", minimum: 0, maximum: 55000, description: "Default 15000." },
+      cursor: { type: "string", description: "The last still_working wait_cursor." },
     }, required: ["agent_id"] },
   },
   {

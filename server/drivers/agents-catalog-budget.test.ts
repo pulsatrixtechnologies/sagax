@@ -198,6 +198,97 @@ describe("agents catalog budget strategy (#1703)", () => {
     expect(lines.length).toBeGreaterThan(5);
   });
 
+  // #4518: what left a description to bring the widest list back under its
+  // ceiling still reaches the bot, from the tool beside it or the refusal.
+  describe("trimmed text still reaches the bot (#4518)", () => {
+    type Schema = { description?: string; properties?: Record<string, Schema>; items?: Schema; type?: unknown; enum?: unknown };
+    const tool = (tools: ReturnType<typeof availableTools>, name: string) => {
+      const found = tools.find((entry) => entry.name === name);
+      expect(found, name).toBeDefined();
+      return found as unknown as { description: string; inputSchema: Schema };
+    };
+    const widest = () => availableTools(catalogProfileFromEnv(EVERYTHING));
+
+    // A Claude turn loads a deferred tool's schema alone (ToolSearch, or a
+    // pinned tool in compact mode): each of these must teach its own rules.
+    const ROUTINE_RULES: Array<[string, RegExp]> = [
+      ["cron: five fields", /5 fields \(min hour dom month dow\)/],
+      ["cron: an IANA time zone", /IANA/],
+      ["once: RFC3339 with an offset", /once: future RFC3339 with offset/],
+      ["weekly and daily: local HH:MM", /weekly\/daily: local HH:MM/],
+      ["every_day clears weekdays", /"every_day":\{"type":"boolean","description":"update: true clears/],
+      ["all_day clears the window", /"all_day":\{"type":"boolean","description":"update: true clears/],
+      ["never_ends clears ends_at", /"never_ends":\{"type":"boolean","description":"update: true clears ends_at/],
+      ["clear_timeout clears timeout_minutes", /"clear_timeout":\{"type":"boolean","description":"update: true clears timeout_minutes/],
+      ["folder null removes", /"folder":\{[^}]*"description":"(?:[^"\\]|\\.)*null removes/],
+      ["model null resets", /"model":\{[^}]*"description":"(?:[^"\\]|\\.)*null resets/],
+      ["goal null removes", /"goal":\{[^}]*"description":"(?:[^"\\]|\\.)*null removes/],
+      ["watch null clears", /"watch":\{"type":\["object","null"\],"description":"(?:[^"\\]|\\.)*null clears/],
+      ["watch shape", /kind:\\"watch\\", source: files\|command\|tool/],
+      ["act_as empty string is own access", /\\"\\" = own access/],
+    ];
+    const ARTIFACT_RULES: Array<[string, RegExp]> = [
+      ["no network, strict CSP", /no network \(strict CSP\)/],
+      ["window.sagax.data", /window\.sagax\.data/],
+      ["window.sagax.onData", /window\.sagax\.onData/],
+      ["tool source shape", /\{kind:\\"tool\\",tool,args\}/],
+      ["command source shape", /\{kind:\\"command\\",command\}/],
+      ["null removes the source", /null removes it/],
+    ];
+
+    it("teaches every routine and artifact rule in each tool loaded alone", () => {
+      const tools = widest();
+      for (const [name, rules] of [
+        ["propose_routine", ROUTINE_RULES], ["propose_routine_action", ROUTINE_RULES],
+        ["save_artifact", ARTIFACT_RULES], ["update_artifact", ARTIFACT_RULES],
+      ] as const) {
+        const alone = JSON.stringify(tool(tools, name));
+        for (const [rule, pattern] of rules) expect(alone, `${name}: ${rule}`).toMatch(pattern);
+      }
+    });
+
+    it("lists in phone_tool only the fields of the offered phone tools", () => {
+      const props = (tools: string) => Object.keys(tool(availableTools(catalogProfileFromEnv({ ...EVERYTHING, SAGAX_PHONE_TOOLS: tools })), "phone_tool").inputSchema.properties!).sort();
+      expect(props("location,status")).toEqual(["precise", "reason", "request_id", "tool"]);
+      expect(props("contacts")).toEqual(["fields", "limit", "query", "reason", "request_id", "tool"]);
+      expect(props("location,contacts,reminders,calendar,home,alarms,photos,shortcut,clipboard,status")).toEqual([
+        "action", "due", "end", "fields", "from", "home", "hour", "input", "label", "limit", "list", "location", "max", "minute", "name", "notes",
+        "precise", "query", "reason", "request_id", "scene", "start", "title", "to", "tool",
+      ]);
+    });
+
+    it("gives the form and checklist examples that left ask_choice's description in its refusal", async () => {
+      const { cardRefusalText } = await import("../../shared/card-rules.ts");
+      const description = tool(widest(), "ask_choice").description;
+      expect(description).toContain("ONE form (questions)");
+      expect(description).toContain("a checklist (items, actions)");
+      expect(description).toContain("refused with an example");
+      const form = cardRefusalText({ rule: "several-questions", reason: "two questions" }, "ask_choice");
+      expect(form).toMatch(/Example: ask_choice \{.*"questions":\[\{"question":"Standup, 9:00 to 9:15","kind":"choice","options":\[/);
+      const checklist = cardRefusalText({ rule: "list-in-prose", reason: "a list" }, "ask_choice");
+      expect(checklist).toMatch(/Example: ask_choice \{.*"items":\[.*"actions":\["Post selected","Skip tonight"\]/);
+    });
+
+    it("keeps each moved rule in the tool's own schema", () => {
+      const tools = widest();
+      const routine = tool(tools, "propose_routine").inputSchema.properties!;
+      expect(routine.for_bot_id!.description).toMatch(/ANOTHER bot.*list_bots.*permissions/);
+      expect(routine.enabled!.description).toMatch(/false creates it paused/);
+      expect(tool(tools, "propose_routine_action").inputSchema.properties!.for_bot_id!.description).toMatch(/ANOTHER bot.*keeps its owner/);
+      const send = tool(tools, "send_prompt").inputSchema.properties!;
+      expect(send.on_busy!.description).toMatch(/supersede stops a running turn you started.*never someone else's/);
+      expect(send.priority!.description).toMatch(/never interrupting a running turn/);
+      expect(send.idempotency_key!.description).toContain("409 idempotency_key_reused");
+      const mcp = tool(tools, "add_mcp_server");
+      expect(mcp.description).toMatch(/Omit any secret not given and name the missing key/);
+      expect(mcp.description).toMatch(/never both/);
+      const line = tool(tools, "phone_line_contact").inputSchema.properties!;
+      expect(line.hide_owner_name!.description).toMatch(/Never reveal/);
+      expect(line.summarize_to_owner!.description).toMatch(/Default true/);
+      expect(tool(tools, "remote_support_open").description).toMatch(/technician is their name and organization, 2 hours \(24 at most\)/);
+    });
+  });
+
   it("serves groups mode from the agents proxy", async () => {
     const env = { ...EVERYTHING, ...GROUPS_ON, SAGAX_CATALOG_BRIDGE: "0" };
     const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("SAGAX_")));

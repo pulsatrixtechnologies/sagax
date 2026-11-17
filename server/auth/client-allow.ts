@@ -468,6 +468,10 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   { methods: ["GET"], path: /^\/api\/me\/perspicax\/products(?:\/[^/]{1,256})?$/ },
   { methods: ["PUT", "DELETE"], path: /^\/api\/me\/perspicax\/products\/[^/]{1,256}\/key$/ },
   { methods: ["POST"], path: /^\/api\/me\/perspicax\/products\/[^/]{1,256}\/test$/ },
+  // #4507: the card of a record a bot's message links to, read as the
+  // session's person with their own sign-in (server/routes/record-cards.ts);
+  // only the organization's Refuse and Ask first rules apply there.
+  { methods: ["GET"], path: /^\/api\/me\/records\/[^/]{1,128}\/[^/]{1,128}\/[^/]{1,300}$/ },
   // A sign-in card's Done or Cancel. The bot's browser itself stays admin
   // scope: it can hold the owner's signed-in sessions.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/sign-in-cards\/[\w-]+\/(?:done|cancel)$/ },

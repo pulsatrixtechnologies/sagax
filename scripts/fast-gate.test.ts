@@ -576,7 +576,7 @@ describe("fast-gate.sh", () => {
     write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
     write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));
     write("docs/note.md", "a note\n");
-    const conditional = ["agents-proxy", "index-reach", "full-access-guard", "shared-cycles", "source-text", "parity-pairs"];
+    const conditional = ["agents-proxy", "agents-catalog", "index-reach", "full-access-guard", "shared-cycles", "source-text", "parity-pairs"];
     const { code, out } = gate("--base", "main", "--only", conditional.map((name) => `extra-${name}`).join(","));
     expect(code, out).toBe(0);
     for (const name of conditional) expect(out, name).toMatch(new RegExp(`skip\\s+extra-${name}\\s`));

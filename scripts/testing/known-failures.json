@@ -266,18 +266,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/drivers/agents-call-cards.test.ts",
-      "test": "the widget tools in the catalog > carry schemas a model can fill, and no read-only annotation: they post into the chat",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/org/org-member-api.e2e.test.ts",
       "test": "Perspicax AI clients: the Sagax member API > M6: a streamed send stops at a card; the AI client answers it as the person; the watch ends with the summary",
       "platforms": [
@@ -923,18 +911,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/drivers/agents-merged.test.ts",
-      "test": "agents tools listed by family > pins and measures the room listing",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "shared/plain-time-zone.test.ts",
       "test": "plainTimeZone in French (#2805) > says the zone in French, never Eastern time nor an abbreviation",
       "platforms": [
@@ -1066,18 +1042,6 @@
     {
       "file": "src/components/bot-catalog/bot-catalog.test.ts",
       "test": "the detail pane > formats routine schedules in the person's language, never raw cron or UTC",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/drivers/agents-catalog-budget.test.ts",
-      "test": "agents catalog budget strategy (#1703) > documents remaining margin per profile against the soft ceiling and tool limit",
       "platforms": [
         "macos-latest",
         "ubuntu-latest",
@@ -1276,18 +1240,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/drivers/acp/tool-scope.test.ts",
-      "test": "runs an offered Grok model on an organization turn despite a launch campaign, with no notice",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "src/components/skin-fx/skin-fx.test.ts",
       "test": "the Appearance gallery's layout > sets the preview band full width above the tabs, one grid under them, stacked in a narrow pane",
       "platforms": [
@@ -1385,18 +1337,6 @@
     {
       "file": "src/lib/library-items.test.ts",
       "test": "library grouping > mixes files and artifacts, splits this week from older, newest first",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/drivers/agents-catalog-reachability.test.ts",
-      "test": "reachability guard: the turns a person really has > names, in each tool's description and schema, only tools the same turn is shown",
       "platforms": [
         "macos-latest",
         "ubuntu-latest",
@@ -2157,26 +2097,6 @@
     {
       "file": "server/sandbox/sandbox-bot-folder.test.ts",
       "test": "WorkspaceTidier > a root tmp in a plan aimed at a bot folder is refused by the script itself",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/drivers/agents-merged.test.ts",
-      "test": "agents tools listed by family > pins and measures the direct listing",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/drivers/agents-merged.test.ts",
-      "test": "agents tools listed by family > pins and measures the external listing",
       "platforms": [
         "windows-latest"
       ],

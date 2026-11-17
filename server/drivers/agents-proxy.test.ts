@@ -986,7 +986,8 @@ describe("agents-proxy MCP surface", () => {
     ]);
     expect(create.inputSchema.properties.enabled).toMatchObject({ type: "boolean" });
     // #1138: a new routine starts active; enabled false creates it paused
-    expect(create.description).toContain("It starts active; enabled false creates it paused.");
+    // (#4518: said once, on the field)
+    expect(create.inputSchema.properties.enabled.description).toContain("false creates it paused; omit for active.");
     const action = list.result.tools.find((t: { name: string }) => t.name === "propose_routine_action");
     expect(action.inputSchema.properties.action.enum).toContain("rotate_webhook_key");
     expect(action.inputSchema.properties.changes.properties).not.toHaveProperty("enabled");
@@ -1334,7 +1335,7 @@ describe("agents-proxy MCP surface", () => {
     const start = list.result.tools.find((tool: { name: string }) => tool.name === "start_thread");
     expect(start.inputSchema.required).toEqual(["title", "message"]);
     expect(Object.keys(start.inputSchema.properties)).toEqual(["title", "message", "bot_id", "folder", "report_back", "workspace", "read_only", "thread_id"]);
-    expect(start.description).toContain("Leave bot_id out to open it on yourself");
+    expect(start.description).toContain("Without bot_id it runs on yourself");
     expect(start.description).toContain("Not for a question you need answered now");
     expect(start.description).toContain("do not retry");
   });

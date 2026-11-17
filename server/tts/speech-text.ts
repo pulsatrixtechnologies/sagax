@@ -17,6 +17,7 @@
 // Pure and synchronous on purpose: it is the piece most likely to need
 // tuning against real transcripts, so it stays trivially testable.
 
+import { withoutRecordLinks } from "../../shared/record-cards.ts";
 import { stripSpokenIdentifiers } from "../../shared/spoken-identifiers.ts";
 
 /** A fenced block becomes a mention of itself, with its language if known. */
@@ -62,7 +63,8 @@ const ENDS_SENTENCE = /[.!?:;]\s*$/;
  */
 export function speakable(input: string): string {
   if (!input) return "";
-  let text = input;
+  // #4507: a record link is said by its label, its address never
+  let text = withoutRecordLinks(input);
 
   // fenced code first — everything inside must survive none of the rules below
   text = text.replace(/```([^\n]*)\n[\s\S]*?(?:```|$)/g, (_m, fence: string) => describeCodeBlock(fence));

@@ -33,6 +33,7 @@ import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import { productKeyStateOf, withToolNote, type ProductKeyState } from "./product-key-state.ts";
+import { parseRecordsMeta, withoutRecordLinksIn, type RecordsMetaGroup } from "../../shared/record-cards.ts";
 import { describedProducts, filterNamingAnswer, flowReachOf, listedToolNames, offFamilyTools, offProductOfCall, offProductOfFamilyCall, offProductOfDescribeAnswer, productOffText, sweepArgsWithoutOff, withoutOffTools, type BotProductsView } from "./bot-products-filter.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
@@ -167,6 +168,11 @@ export interface PerspicaxMcpOptions {
    * or null when no card was raised (a routine, another bot's turn, a server
    * without product keys). Its failures never change the answer. */
   onProductKeyState?(turn: { threadId: string; botId: string; principalId: string; routine: boolean }, state: ProductKeyState): Promise<string | null>;
+  /** #4507: a tool result that names records (`_meta["pulsatrix/records"]`,
+   * shared/record-cards.ts parseRecordsMeta): keep them for the conversation
+   * and answer the one line the bot reads after the result (the ready-made
+   * record link), or null. Its failures never change the answer. */
+  onRecords?(turn: { threadId: string; generation: string; botId: string; principalId: string }, groups: RecordsMetaGroup[]): Promise<string | null>;
   /** #4359: the product ids this bot switched off (shared/bot-products.ts),
    * or null for none. Their tools leave the bot's tool list and search, and
    * a call of one is refused here (server/perspicax/bot-products-filter.ts). */
@@ -195,6 +201,8 @@ export interface PerspicaxMcpOptions {
   /** Waits that long (tests replace it). */
   sleep?: (ms: number) => Promise<void>;
 }
+/** The most conversations whose turn person is kept (turnPersonOf). */
+const TURN_PEOPLE_MAX = 5_000;
 /** HTTP answers of an edge whose upstream is down for a moment. */
 const TRANSIENT_HTTP = new Set([502, 503]);
 /** Requests that only read, safe to send again on a new session. */
@@ -621,6 +629,8 @@ export class PerspicaxMcp {
   private readonly routineRetryMs: readonly number[];
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly entries = new Map<string, Entry>();
+  /** #4507: thread and bot -> the person their latest turn was started for */
+  private readonly turnPeople = new Map<string, string>();
   /** tokens a call keeps between turns (keepWarm), by thread and speaker */
   private readonly warm = new Map<string, Entry>();
   /** A thread's retire still clearing roles and closing sessions: the next
@@ -1224,6 +1234,8 @@ export class PerspicaxMcp {
       return plan;
     }
     const who = { iss: subject.iss, sub: subject.sub };
+    // #4507: the person this turn was started for, whoever speaks later in it
+    this.noteTurnPerson(input.threadId, input.bot.id, principalId);
     // On a live call or warm engine, the last turn's parent token is still
     // good. Its MCP session is closed at the generation boundary, so role
     // state never crosses into this turn; only the account token is reused.
@@ -1459,6 +1471,13 @@ export class PerspicaxMcp {
     const products = input.mapping || (frame?.method !== "tools/list" && frame?.method !== "tools/call") ? null : await this.botProductsView(input);
     const params = frame && isObject(frame.params) ? frame.params : null;
     const tool = params && typeof params.name === "string" ? params.name : "";
+    // #4507: a record link is the app's own address: no console tool needs
+    // it (a send, a ticket note, a memory write would keep it where people
+    // outside the app read it), so every call carries the label alone
+    if (frame?.method === "tools/call" && params && isObject(params.arguments)) {
+      const args = withoutRecordLinksIn(params.arguments);
+      if (args !== params.arguments) input = { ...input, frame: { ...frame, params: { ...params, arguments: args } } };
+    }
     if (products && frame?.method === "tools/call" && frame.id !== undefined) {
       const off = offProductOfCall(products, tool, params?.arguments) ?? await offProductOfFamilyCall(products, tool, params?.arguments, this.familyMapping(input), this.flowMapping(input));
       if (off) return toolError(frame.id, productOffText(products, off));
@@ -1469,7 +1488,7 @@ export class PerspicaxMcp {
     }
     const answer = await this.relayKept(input);
     this.noteRemoteSupport(input, answer);
-    const carded = await this.withProductKeyCard(input, answer);
+    const carded = await this.withRecordsNote(input, await this.withProductKeyCard(input, answer));
     if (!products || carded.status !== 200) return carded;
     if (frame?.method === "tools/list") return { ...carded, body: withoutOffTools(products, carded.body, await offFamilyTools(products, listedToolNames(carded.body), this.familyMapping(input))) };
     if (frame?.method === "tools/call") {
@@ -1549,6 +1568,25 @@ export class PerspicaxMcp {
     if (!entry) return answer;
     try {
       const note = await hook({ threadId: input.threadId, botId: input.botId, principalId: entry.principalId, routine: entry.source === "delegation" }, state);
+      return note ? { ...answer, body: withToolNote(answer.body, note) } : answer;
+    } catch {
+      return answer;
+    }
+  }
+
+  /** #4507: a result that names records gains one line with the ready-made
+   * record link (onRecords). A result without the metadata, an error and
+   * Sagax's own mapping calls pass unchanged. */
+  private async withRecordsNote(input: { threadId: string; generation: string; botId: string; frame: unknown; mapping?: boolean }, answer: PerspicaxRelayAnswer): Promise<PerspicaxRelayAnswer> {
+    const hook = this.options.onRecords;
+    if (!hook || input.mapping || answer.status !== 200 || !isObject(input.frame) || input.frame.method !== "tools/call") return answer;
+    if (!isObject(answer.body) || !isObject(answer.body.result) || answer.body.result.isError === true) return answer;
+    const groups = parseRecordsMeta(answer.body.result);
+    if (!groups.length) return answer;
+    const principalId = this.turnPrincipal(input.threadId, input.generation, input.botId);
+    if (!principalId) return answer;
+    try {
+      const note = await hook({ threadId: input.threadId, generation: input.generation, botId: input.botId, principalId }, groups);
       return note ? { ...answer, body: withToolNote(answer.body, note) } : answer;
     } catch {
       return answer;
@@ -2189,6 +2227,20 @@ export class PerspicaxMcp {
   }
 
   /** The person this turn's Perspicax token speaks for, if connected. */
+  /** #4507: the person the latest turn of this bot in this conversation was
+   * started for (prepareTurn), kept after the turn ends; a line someone
+   * else steers into a running turn does not change it. */
+  turnPersonOf(threadId: string, botId: string): string | undefined {
+    return this.turnPeople.get(`${threadId}\u0000${botId}`);
+  }
+
+  private noteTurnPerson(threadId: string, botId: string, principalId: string): void {
+    const at = `${threadId}\u0000${botId}`;
+    this.turnPeople.delete(at);
+    this.turnPeople.set(at, principalId);
+    while (this.turnPeople.size > TURN_PEOPLE_MAX) this.turnPeople.delete(this.turnPeople.keys().next().value!);
+  }
+
   turnPrincipal(threadId: string, generation: string, botId: string): string | undefined {
     return this.turnEntry(threadId, generation, botId)?.principalId || undefined;
   }

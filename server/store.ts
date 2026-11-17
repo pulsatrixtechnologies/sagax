@@ -37,6 +37,7 @@ import { newId, type ModelSelection } from "./contracts.ts";
 import { pickBotName } from "./names.ts";
 import { redactSecretsInText } from "./redact.ts";
 import { withoutRunMarkersIn } from "../shared/routine-result.ts";
+import { splitRecordText } from "../shared/record-cards.ts";
 import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN, botAvatarProfile, clampAvatarFocus, clampAvatarZoom } from "../shared/bot-avatar.ts";
 import { approvalModeFor, delegatedLevelWidens, isApprovalException, isApprovalMode, modelSwitchNeedsAsk, threadApprovalFields, type ApprovalException, type ApprovalMode } from "../shared/approval-mode.ts";
 import { lastChangeRequestUrl } from "../shared/thread-link.ts";
@@ -428,7 +429,8 @@ function redactBotAuthored<T extends Omit<Message, "id" | "at"> & { at?: number 
   }
   // #3515: run markers are the server's to read, never stored in a message;
   // a failed or partial status line stays on the row as runStatus
-  return withoutRunMarkersIn(out);
+  // #4507: record links ride in recordText, never in text
+  return splitRecordText(withoutRunMarkersIn(out));
 }
 
 /** What changed, emitted by the store itself right after each write. The
@@ -2436,7 +2438,10 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const idx = t.messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return null;
     // #3515: a bot's text patched in (its final words, a routine's report) is stored without run markers
-    const next = withoutRunMarkersIn({ ...t.messages[idx], ...patch, card: patch.card ?? t.messages[idx].card });
+    // #4507: new words drop the old linked copy; record links ride in recordText
+    const merged = { ...t.messages[idx], ...patch, card: patch.card ?? t.messages[idx].card };
+    if ("text" in patch && !("recordText" in patch)) delete merged.recordText;
+    const next = splitRecordText(withoutRunMarkersIn(merged));
     // SQLite is the durable source of truth. Persist before changing memory so
     // a failed write cannot make this process believe a card was answered
     // while a restart would still show it as pending.

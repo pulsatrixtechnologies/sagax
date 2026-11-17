@@ -18,17 +18,17 @@ import { teamMemoryWording } from "../../memory/team-memory-scope.ts";
 export const DEF_START_THREAD = {
     name: "start_thread",
     description:
-      "Open a new thread: a separate piece of work with its own history and run. The person keeps one chat with each bot and never sees the thread as a conversation of its own. Leave bot_id out to open it on yourself, for a separate job that should run on its own (one thread per pull request to review) instead of inside this conversation. Give bot_id (from list_bots) to open it on a teammate: that is a handoff into a fresh thread, which starts after your current turn ends and whose result is delivered here, like delegate_bot. The title names the work: short and specific; when you mention it to the person, name the work by its subject, never as a thread to open. Not for a question you need answered now (ask_bot), a task for the teammate's usual conversation (delegate_bot), or a note nobody acts on. If refused, do not retry: say what you wanted opened.",
+      "Open a new thread: a separate piece of work with its own history and run; the person keeps one chat with each bot and never sees it as a conversation. Without bot_id it runs on yourself, a job apart from this conversation (one per pull request to review). With bot_id it hands a teammate a fresh thread that starts after your turn ends, its result delivered here like delegate_bot. Mention it to the person by its subject, never as a thread to open. Not for a question you need answered now (ask_bot), a task for the teammate's usual conversation (delegate_bot), or a note nobody acts on. If refused, do not retry: say what you wanted opened.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        title: { type: "string", description: "The thread's name: one short line, at most 80 characters, telling it apart from the others (e.g. \"QA: PR #412 login fix\")." },
-        message: { type: "string", description: "The complete first message of the thread: everything the run needs, since it will not see this conversation." },
-        bot_id: { type: "string", description: "Optional: the teammate's id from list_bots. Leave out to open the thread on yourself." },
-        folder: { type: "string", description: "Optional: the name of one of that bot's existing folders to file the thread under. Leave out unless the person named one." },
-        report_back: { type: "boolean", description: "Optional, on yourself only: true runs it as a parallel task of this conversation. The person sees its live card here and its result is posted back here as a reply when it finishes. Use it when the person asks for something unrelated while you are busy, so both run at once." },
-        workspace: { type: "string", enum: ["this_computer", "browser", "cloud", "local_vm"], description: "Optional, on yourself, when your Workspace is Auto: where that thread works (this_computer = their files and apps, browser = web only, cloud = keeps running while they are away, local_vm = isolated). A place not allowed or offline falls back." },
+        title: { type: "string", description: "One short specific line, at most 80 characters (\"QA: PR #412 login fix\")." },
+        message: { type: "string", description: "Everything the run needs: it will not see this conversation." },
+        bot_id: { type: "string", description: "A teammate's id from list_bots; omit for yourself." },
+        folder: { type: "string", description: "One of that bot's existing folders, only when the person named one." },
+        report_back: { type: "boolean", description: "On yourself: a parallel task of this conversation, its live card shown here and its result posted back here; for something unrelated asked while you are busy." },
+        workspace: { type: "string", enum: ["this_computer", "browser", "cloud", "local_vm"], description: "On yourself, Workspace Auto: this_computer = their files and apps, browser = web only, cloud = runs while they are away, local_vm = isolated. Not allowed or offline: falls back." },
         read_only: { type: "boolean", description: "On yourself: read-only (starts in Ask)." },
         thread_id: { type: "string", description: "On yourself: resume your earlier thread by id." },
       },
@@ -53,7 +53,7 @@ export const DEF_CREATE_BOT = {
         cwd: {
           type: "string",
           maxLength: 1024,
-          description: "Absolute path of the folder this specialist's tools read and write in (for example /Users/me/Projects/site). It must already exist. Leave it out for the specialist's private workspace.",
+          description: "Absolute path of an existing folder its tools read and write in; omit for its private workspace.",
         },
         suggestion: { type: "boolean", description: "True if the user did not ask for this bot." },
       },
@@ -83,9 +83,9 @@ export const DEF_PROPOSE_TEAM_SETUP = {
             botId: { type: "string", description: "For update: exact existing bot ID from list_team_setup." },
             fields: { type: "object", additionalProperties: false, properties: {
               name: { type: "string", maxLength: 100 }, title: { type: "string", maxLength: 200 },
-              chiefOfStaff: { type: "boolean", description: "Hand the Primary Bot role to this bot, or remove it. One Primary Bot per person: explicitly step the current Primary Bot down in the same plan when replacing it. Does not grant access to other teams or change execution permissions." },
+              chiefOfStaff: { type: "boolean", description: "Give or remove the Primary Bot role. One per person: step the current one down in the same plan when replacing it. Grants no team access or permissions." },
               description: { type: "string", maxLength: 4000 }, soul: { type: "string", description: "Standing instructions; required with name/title/modelSelection for every new bot." },
-              cwd: { type: "string", maxLength: 1024, description: "Create only: absolute path of the folder the new bot's tools read and write in. It must already exist. Leave it out for a private workspace." },
+              cwd: { type: "string", maxLength: 1024, description: "Create only: absolute path of an existing folder its tools use; omit for a private workspace." },
               section: { type: "string", maxLength: 60, description: "Exact authorized existing team, or a team explicitly named in newTeams. Empty string means General." },
               modelSelection: { type: "object", additionalProperties: false, properties: {
                 instanceId: { type: "string" }, model: { type: "string" }, effort: { type: "string" }, variant: { type: "string" },
@@ -211,7 +211,7 @@ export const DEF_PROPOSE_PROFILE = {
         cwd: {
           type: "string",
           maxLength: 1024,
-          description: "Absolute path of the folder your tools read and write in (for example /Users/me/Projects/site). It must already exist. An empty string means your private workspace. A new folder waits for the person's confirmation unless this conversation has Full access.",
+          description: "Absolute path of an existing folder your tools read and write in; \"\" = your private workspace. A new folder waits for the person's confirmation unless this conversation has Full access.",
         },
         notifications: {
           type: "boolean",
@@ -271,9 +271,9 @@ export const DEF_PROPOSE_RULE = {
       type: "object",
       additionalProperties: false,
       properties: {
-        action: { type: "string", enum: ["add", "change", "remove"], description: "add, change or remove." },
+        action: { type: "string", enum: ["add", "change", "remove"] },
         when: { type: "string", minLength: 1, maxLength: 500, description: "add: when-text (3+ words). change: prefer changes.when." },
-        behavior: { type: "string", enum: ["allow", "ask", "deny"], description: "add: allow, ask or deny. change: prefer changes.behavior." },
+        behavior: { type: "string", enum: ["allow", "ask", "deny"], description: "change: prefer changes.behavior." },
         rule_id: { type: "string", minLength: 1, description: "change/remove: id from sagax_settings list (family rules)." },
         scope_bot_id: { type: ["string", "null"], description: "Omit = this bot; null = every bot of the person; or a bot id they own." },
         risk_scope: {

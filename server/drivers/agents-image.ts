@@ -20,9 +20,9 @@ export function imageToolDefinition() {
       type: "object",
       additionalProperties: false,
       properties: {
-        prompt: { type: "string", maxLength: 4_000, description: "What the image should show, or the change to make to the attached image, in the person's words." },
+        prompt: { type: "string", maxLength: 4_000, description: "What to show or change, in the person's words." },
         image: { type: "string", maxLength: 500, description: "Optional exact attachment path or /api/attachments URL of one image in the current person's message. Default: the latest image they attached." },
-        use_attached_image: { type: "boolean", description: "Default true: edit the image attached to the person's message when there is one." },
+        use_attached_image: { type: "boolean" },
         aspect_ratio: { type: "string", enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"], description: "For a new image only." },
       },
       required: ["prompt"],

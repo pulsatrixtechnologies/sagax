@@ -18,7 +18,9 @@ electron/resources/Pulsa Bot Speech.app
 # stale helper from the removed Teach a skill recorder
 electron/resources/Sagax Recorder.app
 electron/resources/Pulsa Bot Recorder.app
-release
+# electron-builder output (electron-builder.yml directories.output), at the
+# root only: scripts/verify/release/ is tracked
+/release
 .omb-scratch
 .wrangler/
 .dev.vars

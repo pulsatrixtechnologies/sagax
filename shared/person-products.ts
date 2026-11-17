@@ -17,6 +17,11 @@
 // state reads "Needs attention", an unknown action or field is dropped).
 // No value of a key ever rides here: a key is its source, kind, masked
 // ending, expiry and last test.
+//
+// #4507: `records` are the kinds of record a product describes (a ticket, a
+// company...), read by shared/record-cards.ts: absent for a product with no
+// kind, or from a Perspicax older than record cards.
+import { parseRecordKinds, type RecordKindInfo } from "./record-cards.ts";
 
 export const PRODUCT_STATES = [
   "connected", "key_missing", "key_refused", "key_expired", "key_misfit",
@@ -110,6 +115,8 @@ export interface PersonProduct {
   description?: string;
   /** the endpoints it serves, by name, for one grey line */
   endpoints?: string[];
+  /** #4507: the record kinds it describes; absent when none */
+  records?: RecordKindInfo[];
 }
 
 /** The reason a product key card was raised for. */
@@ -248,6 +255,7 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const endpoints = Array.isArray(product.endpoints)
     ? product.endpoints.flatMap((entry): string[] => { const value = typeof entry === "string" ? text(entry, 128) : text(record(entry)?.name, 128); return value ? [value] : []; }).slice(0, 64)
     : [];
+  const records = parseRecordKinds(product.records);
   return {
     id, name, state, roles, actions,
     ...(groupId && groupName ? { group: { id: groupId, name: groupName, ...(parseLine(groupRaw?.description) ? { description: parseLine(groupRaw?.description) } : {}), ...(parseIcon(groupRaw?.icon) ? { icon: parseIcon(groupRaw?.icon) } : {}), ...(imageUrl(groupRaw?.logo) ? { logo: imageUrl(groupRaw?.logo) } : {}) } } : {}),
@@ -261,6 +269,7 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
     ...(formKind && formFields.length > 0 ? { form: { kind: formKind, fields: formFields } } : {}),
     ...(signInFields.length > 0 ? { signIn: { fields: signInFields } } : {}),
     ...(consoleUrl && /^https:\/\//i.test(consoleUrl) ? { consoleUrl } : {}),
+    ...(records.length > 0 ? { records } : {}),
   };
 }
 

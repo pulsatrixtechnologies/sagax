@@ -1309,6 +1309,11 @@ import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
 import { createPersonProductsRoutes, createSaveProductKeyCard, createSetProductKey } from "./routes/person-products.ts";
 import { productKeyCardShownText, productKeyResumeText } from "../shared/person-products.ts";
 import { createPersonProductsClient } from "./perspicax/person-products.ts";
+import { createRecordCardsClient } from "./perspicax/record-cards.ts";
+import type { PersonProduct } from "../shared/person-products.ts";
+import { createRecordLinks } from "./perspicax/record-links.ts";
+import { SeenRecords } from "./perspicax/seen-records.ts";
+import { createRecordCardsRoutes, recordReadOrgRule } from "./routes/record-cards.ts";
 import { botProductEnabled, botProductsOff, normalProductId } from "../shared/bot-products.ts";
 import { createMeEnginesRoutes } from "./routes/me-engines.ts"; import { createAccountNames } from "./engines/account-names.ts"; import { accountUserNames } from "./engines/account-users.ts";
 import { createOrgBotsRoutes } from "./routes/org-bots.ts";
@@ -18775,6 +18780,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get customRulesModel() { return customRulesModel; },
   get cwActionPasses() { return cwActionPasses; },
   get dashFreeReply() { return dashFreeReply; },
+  get recordLinksInReply() { return recordLinksInReply; },
   get dataSelfAnswerRoots() { return dataSelfAnswerRoots; },
   get declaredToolProduct() { return declaredToolProduct; },
   get decodeGeneratedImage() { return decodeGeneratedImage; },
@@ -30712,6 +30718,53 @@ ROUTES.push(createPersonProductsRoutes({
   subjectToken: personProductsSubjectToken,
   client: personProducts,
 }));
+// #4507: record links in a bot's words and the card of a record, read as
+// the person (server/perspicax/record-links.ts, server/routes/record-cards.ts)
+const seenRecords = new SeenRecords();
+async function personProductsOf(principalId: string): Promise<PersonProduct[] | null> {
+  if (!personProductsLinked()) return null;
+  const token = await personProductsSubjectToken(principalId);
+  if (!token) return null;
+  const listed = await personProducts.list(principalId, token);
+  return listed.ok ? listed.products : null;
+}
+const recordLinks = createRecordLinks({ seen: seenRecords, products: personProductsOf });
+const recordCards = createRecordCardsClient({
+  call: (method, path, body, limits) => perspicaxDirectory
+    ? perspicaxDirectory.linkJson(method, path, body, limits)
+    : Promise.resolve({ ok: false as const, error: "link" as const }),
+});
+ROUTES.push(createRecordCardsRoutes({
+  organization: personProductsLinked,
+  person: personProductsOwner,
+  subjectToken: personProductsSubjectToken,
+  client: recordCards,
+  // only the organization's Refuse and Ask first rules, as for a bot's read of that product
+  orgRule: async (principalId, token, ref) => {
+    const rules = customRules.orgRules().filter((rule) => rule.enabled);
+    if (!rules.length) return { kind: "none" };
+    const listed = await personProducts.list(principalId, token);
+    if (listed.ok) recordLinks.noteProducts(principalId, listed.products);
+    const name = listed.ok ? listed.products.find((product) => product.id === ref.product)?.name : undefined;
+    return recordReadOrgRule(rules, ref, name, serverHome());
+  },
+  language: languageOfRequest,
+}));
+/** #4507: a bot's final message with its record links checked and its plain
+ * numbers linked when that turn's person read the record in this
+ * conversation (shared/record-cards.ts). The stored message keeps them in
+ * recordText; its text never carries a record address (server/store.ts). */
+function recordLinksInReply(text: string, threadId: string, bot: { id?: string } | undefined, speakerBotId?: string): string {
+  try {
+    // the person the turn was started for (its Perspicax relay), never the
+    // conversation's latest speaker: in a shared room someone else may speak
+    const botId = bot?.id ?? speakerBotId;
+    const person = botId ? perspicaxMcp?.turnPersonOf(threadId, botId) : undefined;
+    return recordLinks.finishReply(text, person, threadId);
+  } catch {
+    return text;
+  }
+}
 // Shape avatar generate (geometry JSON via the bot's text model; fallback presets).
 // The bot tool and the editor share one generator (the bot's own text model).
 function shapeAvatarGenerator(...args: any[]) {
@@ -32017,6 +32070,8 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
       const raised = await raiseProductKeyCard(productKeyCardDeps, { bot, threadId: turn.threadId, group: Boolean(owner.group), productId: state.product });
       return raised.kind === "shown" ? productKeyCardShownText(raised.label) : null;
     },
+    // #4507: a result that names records gains the ready-made record link
+    onRecords: (turn, groups) => recordLinks.onRecords(turn, groups),
     // #4359: the products the person turned off for this bot (Connect Apps, This bot)
     botProductsOff: (botId) => {
       const off = botProductsOff(store.bot(botId));

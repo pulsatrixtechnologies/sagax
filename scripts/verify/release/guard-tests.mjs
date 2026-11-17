@@ -13,14 +13,22 @@
 //                                                 the same, only when a file
 //                                                 of $FAST_GATE_FILES is one
 //                                                 they read (SOURCE_TEXT_READS)
+//   node scripts/verify/release/guard-tests.mjs --catalog --touched
+//                                                 the catalog tests (budget,
+//                                                 loaded part, wire, families)
+//                                                 a file of
+//                                                 $FAST_GATE_FILES that feeds
+//                                                 the tool list needs, less
+//                                                 the guard tests, or one line
+//                                                 "skip: <why>"
 //   node scripts/verify/release/guard-tests.mjs --parity --touched
 //                                                 the parity tests a side of
 //                                                 which $FAST_GATE_FILES
 //                                                 touches, less those the
 //                                                 source-text line runs, or
 //                                                 one line "skip: <why>"
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, posix, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** The UI guards that scan the whole of src or the shared stylesheet: motion
@@ -205,6 +213,68 @@ export function parityPlan(files) {
   return { tests, sourceText, skip };
 }
 
+/** #4518: the tests that measure and pin the tool list a bot is sent on every
+ * turn: its ceiling, its bytes, the part a Claude turn loads up front and the
+ * listing by family. The budget test stayed red on main for a week, the
+ * loaded part and the family goldens too: the files that add tool text (a
+ * definition, a shared schema, a profile) reach them only through
+ * agents-catalog.ts, so a lot that grew a description never ran them. */
+export const CATALOG_TESTS = [
+  // pins what the widget tools' descriptions tell the bot (red since #3281)
+  "server/drivers/agents-call-cards.test.ts",
+  "server/drivers/agents-catalog-budget.test.ts",
+  "server/drivers/agents-catalog-deferred.test.ts",
+  "server/drivers/agents-catalog-wire.test.ts",
+  "server/drivers/agents-merged.test.ts",
+];
+
+/** The roots of the tool list: the catalog and its profiles, the groups and
+ * budget module, and the agents proxy that serves the list (tools/list). */
+export const CATALOG_ROOTS = ["server/drivers/agents-catalog.ts", "server/drivers/agents-catalog-budget.ts", "server/drivers/agents-proxy.ts"];
+
+/** The checked-in goldens of the list: a lot that edits one by hand runs the
+ * tests that pin it. */
+export const CATALOG_GOLDENS = /^server\/drivers\/agents-catalog-goldens\//;
+
+const TYPE_ONLY_IMPORT = /\b(?:import|export)\s+type\s+[^;]*?\bfrom\s*["'][^"']+["']/g;
+const IMPORT_FROM = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["']([^"']+)["']/g;
+const SOURCE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".mjs", ".js", "/index.ts", "/index.mjs", "/index.js"];
+
+/** Every file that feeds the tool list: the catalog roots and what they
+ * import, transitively (relative imports; a type-only import sends no byte). */
+export function catalogFeeders(root) {
+  const seen = new Set();
+  const queue = CATALOG_ROOTS.filter((file) => existsSync(join(root, file)));
+  while (queue.length) {
+    const file = queue.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    let text;
+    try { text = readFileSync(join(root, file), "utf8"); } catch { continue; }
+    for (const match of text.replace(TYPE_ONLY_IMPORT, "").matchAll(IMPORT_FROM)) {
+      if (!match[1].startsWith(".")) continue;
+      const target = posix.normalize(posix.join(posix.dirname(file), match[1]));
+      const found = SOURCE_SUFFIXES.map((suffix) => target + suffix).find((candidate) => {
+        try { return statSync(join(root, candidate)).isFile(); } catch { return false; }
+      });
+      if (found && !seen.has(found)) queue.push(found);
+    }
+  }
+  return seen;
+}
+
+/** The catalog tests a lot needs: both when it touches a file that feeds the
+ * tool list or one of the tests, none otherwise, with the reason. `run` is
+ * the part the guard-tests line does not already run on every lot. */
+export function catalogPlan(files, root) {
+  const feeders = catalogFeeders(root);
+  const touched = files.some((file) => feeders.has(file) || CATALOG_TESTS.includes(file) || CATALOG_GOLDENS.test(file));
+  const tests = touched ? CATALOG_TESTS.filter((file) => existsSync(join(root, file))) : [];
+  const run = tests.filter((file) => !GUARD_TESTS.includes(file));
+  const skip = run.length ? "" : tests.length ? "the guard tests run the catalog tests of this lot" : "no file of the tool list touched";
+  return { tests, run, skip };
+}
+
 /** Tests that hold main to a line: a key nothing reads, a route without a
  * policy row, a golden or a budget. They fail for the PR that merged last,
  * so every PR runs them. */
@@ -267,7 +337,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const root = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
   const sourceText = process.argv.includes("--source-text");
   const touched = (process.env.FAST_GATE_FILES ?? "").split("\n").filter(Boolean);
-  if (process.argv.includes("--parity")) {
+  if (process.argv.includes("--catalog")) {
+    const { run, skip } = catalogPlan(touched, root);
+    console.log(run.length ? run.join("\n") : `skip: ${skip}`);
+  } else if (process.argv.includes("--parity")) {
     const { tests, skip } = parityPlan(touched);
     const present = tests.filter((file) => existsSync(join(root, file)));
     console.log(present.length ? present.join("\n") : `skip: ${skip || "the parity tests of this lot are gone"}`);

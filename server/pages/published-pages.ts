@@ -27,6 +27,7 @@
 // content is its own file (published-pages/<pageId>/<n>, 0600 in 0700
 // folders) and is cached in memory once read (a version never changes).
 // Caps: per person, per bot, per server, versions per page, total bytes.
+import { withoutRecordLinks } from "../../shared/record-cards.ts";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -621,6 +622,8 @@ export class PublishedPages {
       if (!designed.ok) return designed;
       input = { ...input, content: designed.content };
     }
+    // #4507: a page is read outside the chat: a bot's record link keeps its label only
+    if (!input.author) input = { ...input, content: withoutRecordLinks(input.content) };
     const pages = this.snapshot();
     const now = this.clock();
     const { bytes, sha256 } = pageSourceDigest(input.content);

@@ -32,35 +32,34 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   description:
-    'cron (expression+timeZone), once (at), weekly (time+weekdays), daily (time), interval (every_minutes; optional weekdays/window/ends_at), or limit_reset (when an AI usage limit resets).',
+    'cron (expression, timeZone), once (at), weekly (time, weekdays), daily (time), interval (every_minutes), limit_reset (an AI usage limit resets).',
   properties: {
     type: {
       type: "string",
       enum: ["once", "weekly", "daily", "interval", "cron", "limit_reset"],
-      description: "Schedule kind.",
     },
     expression: {
       type: "string",
       maxLength: 256,
-      description: "Cron only: five fields (min hour dom month dow), e.g. 0 9 L * *, 0 9 * * MON#2. No seconds/year/@macros.",
+      description: "cron: 5 fields (min hour dom month dow), e.g. 0 9 L * *, 0 9 * * MON#2; no seconds, year or @macros.",
     },
     timeZone: {
       type: "string",
       maxLength: 128,
-      description: "Cron only: IANA timezone, no numeric offset.",
+      description: "cron: IANA name, not an offset.",
     },
     at: {
       type: "string",
-      description: "once only: future RFC3339 with explicit offset.",
+      description: "once: future RFC3339 with offset.",
     },
     engine: {
       type: "string",
-      description: "limit_reset only: engine id. Omit for your own.",
+      description: "limit_reset: engine id; omit for yours.",
     },
     repeat: {
       type: "string",
       enum: ["once", "every_reset"],
-      description: "limit_reset only: once (default) or every_reset.",
+      description: "limit_reset; default once.",
     },
     time: {
       type: "string",
@@ -69,25 +68,25 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     weekdays: {
       type: "array",
       items: { type: "string", enum: WEEKDAYS },
-      description: "weekly: required days. interval: optional filter. Local timezone.",
+      description: "weekly: required. interval: optional filter.",
     },
     every_minutes: {
       type: "integer",
       minimum: 5,
       maximum: 1_440,
-      description: "interval only: minutes between runs (5-1440).",
+      description: "interval: minutes between runs.",
     },
     starts_at: {
       type: "string",
-      description: "interval: optional RFC3339 cadence anchor.",
+      description: "interval: RFC3339 cadence anchor.",
     },
     window_start: {
       type: "string",
-      description: "interval: local HH:MM window start, with window_end.",
+      description: "interval: local HH:MM, with window_end.",
     },
     window_end: {
       type: "string",
-      description: "interval: local HH:MM window end, same day.",
+      description: "interval: local HH:MM, same day.",
     },
     ends_at: {
       type: "string",
@@ -95,11 +94,11 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     },
     every_day: {
       type: "boolean",
-      description: "update: true clears the weekday filter.",
+      description: "update: true clears weekdays.",
     },
     all_day: {
       type: "boolean",
-      description: "update: true clears the time window.",
+      description: "update: true clears the window.",
     },
     never_ends: {
       type: "boolean",
@@ -108,17 +107,17 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     timing: {
       type: "string",
       enum: ["exact", "flexible"],
-      description: "exact (default) or flexible (early/late windows).",
+      description: "flexible: early/late windows; default exact.",
     },
     window_early_minutes: {
       type: "integer",
       minimum: 0,
-      description: "flexible: minutes early (default 15).",
+      description: "flexible: default 15.",
     },
     window_late_minutes: {
       type: "integer",
       minimum: 0,
-      description: "flexible: minutes late (default 15; 0 = on time).",
+      description: "flexible: default 15; 0 = on time.",
     },
   },
   required: ["type"],
@@ -130,42 +129,42 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
 // it there would need $ref/$defs, which provider conversions do not survive
 // (see the note on ROUTINE_SCHEDULE_SCHEMA and #544).
 export const ROUTINE_FIELDS_SCHEMA = {
-  name: { type: "string", minLength: 1, maxLength: 80, description: "Short name shown in Routines." },
+  name: { type: "string", minLength: 1, maxLength: 80, description: "Shown in Routines." },
   instructions: {
     type: "string",
     minLength: 1,
     maxLength: 20_000,
-    description: "Full instructions for each run.",
+    description: "For each run.",
   },
   schedule: ROUTINE_SCHEDULE_SCHEMA,
   run_on: {
     type: "string",
     // "box" is Boat's historical run_on destination id (agents wire contract).
     enum: ["maus", "box"],
-    description: "maus (default): bot model+computer (incl. VPS). box: bot cloud computer.",
+    description: "maus (default): bot model+computer (incl. VPS); box: bot cloud computer.",
   },
   timeout_minutes: {
     type: "integer",
     minimum: 5,
     maximum: 240,
-    description: "Optional active-work limit (5-240 min). Omit for none.",
+    description: "Active-work limit; omit for none.",
   },
   clear_timeout: {
     type: "boolean",
-    description: "Update only: true clears timeout_minutes.",
+    description: "update: true clears timeout_minutes.",
   },
   continuity: {
     type: "boolean",
-    description: "true: feed the last run report into the next run. false starts fresh.",
+    description: "true feeds the last run report into the next run.",
   },
   run_on_startup: {
     type: "boolean",
-    description: "true: also run each time Sagax starts (repeating schedules). false stops it.",
+    description: "true: also run each time Sagax starts.",
   },
   overlap: {
     type: "string",
     enum: ["skip", "queue"],
-    description: "skip (default) or queue one while a run is working.",
+    description: "While a run works: skip (default) or queue one.",
   },
   watch: {
     type: ["object", "null"],
@@ -174,17 +173,17 @@ export const ROUTINE_FIELDS_SCHEMA = {
   folder: {
     type: ["string", "null"],
     maxLength: 60,
-    description: "Routines list folder. null removes. Not in the name.",
+    description: "Routines folder; null removes.",
   },
   model: {
     type: ["string", "null"],
     maxLength: 200,
-    description: "Model id for runs on this bot's engine; chat unchanged. null resets.",
+    description: "Runs' model id on this bot's engine; null resets.",
   },
   subagent_model: {
     type: ["string", "null"],
     maxLength: 200,
-    description: "Claude sub-agent model (Agent tool, Flow workers); main model unchanged. null clears (falls back to model, then the fast model).",
+    description: "Claude sub-agent model; null falls back to model, then the fast model.",
   },
   act_as: {
     type: ["string", "null"],
@@ -193,20 +192,20 @@ export const ROUTINE_FIELDS_SCHEMA = {
   },
   requires_computer: {
     type: "boolean",
-    description: "true: wait for the bot's computer online before a run; false drops that need.",
+    description: "true: a run waits for the bot's computer online.",
   },
   effort: {
     type: ["string", "null"],
     enum: [...EFFORT_LEVELS, null],
-    description: "Routine-run effort on this bot's engine (chat unchanged). null resets.",
+    description: "Runs' effort; null resets.",
   },
   goal: {
     type: ["string", "object", "null"],
-    description: "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Stops once reached. null removes.",
+    description: "Objective in words or {text, deadline (RFC 3339)}; stops once reached; null removes.",
   },
   delete_when_finished: {
     type: "boolean",
-    description: "Auto-delete when the schedule ends and the last run settles. false keeps it.",
+    description: "Delete when the schedule ends and the last run settles.",
   },
 } as const;
 
@@ -219,7 +218,7 @@ export const PERSON_QUOTE = {
   type: "string", maxLength: 600,
   description: "Primary Bot: the person's own words asking this now (bot named); applies at once.",
 } as const;
-export const PROPOSAL_OUTCOME = " Read the result: Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.";
+export const PROPOSAL_OUTCOME = " Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.";
 /** Routines, skills, profile and model: a bot's change to itself applies at
  * any level (server/direct-apply.ts). */
 export const SELF_CHANGE_OUTCOME = " Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result.";

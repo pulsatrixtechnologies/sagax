@@ -15,7 +15,7 @@ import { LinkPreviewCard } from "../components/LinkHoverCard";
 import { RecordCard } from "../components/RecordCard";
 import { loadLocale } from "../lib/i18n";
 import { NIMBUS_MARK, companyCard, guidCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, COMPANY_REF, GUID_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
-import { seedRecordProducts } from "../lib/record-cards";
+import { seedPersonProducts } from "../lib/person-products";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { parseRecordCardAnswer, type RecordCardAnswer, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
 import "../styles.css";
@@ -117,7 +117,7 @@ const CHAT = lang === "fr"
 | Company | [Acme Fabrication](sagax://record/nimbus_desk/company/${COMPANY_REF.id}) |`;
 
 // a stand-in console: the product list and the cards, as the routes answer
-seedRecordProducts([nimbusProduct()]);
+seedPersonProducts([nimbusProduct()]);
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

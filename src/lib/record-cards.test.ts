@@ -169,3 +169,38 @@ describe("a failed read is not read again by itself", () => {
     expect(peak).toBeLessThanOrEqual(RECORD_READS_AT_ONCE);
   });
 });
+
+
+describe("a reset", () => {
+  it("settles the reads still waiting for a turn, and the running ones never take the count below zero", async () => {
+    const releases: Array<() => void> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      calls.push(String(input));
+      await new Promise<void>((done) => releases.push(done));
+      return json(answer(ticketCard(Date.now(), "fr")));
+    }));
+    const refs = Array.from({ length: 6 }, (_, index) => ({ ...TICKET_REF, id: String(482000 + index) }));
+    const reads = refs.map((ref) => readRecordCard(ref));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls).toHaveLength(RECORD_READS_AT_ONCE);
+    resetRecordCards();
+    // the two that never got a turn settle at once, as unavailable
+    const queued = await Promise.all(reads.slice(RECORD_READS_AT_ONCE));
+    expect(queued).toEqual([{ state: "unavailable" }, { state: "unavailable" }]);
+    // the running ones finish without a throw
+    releases.forEach((release) => release());
+    await vi.advanceTimersByTimeAsync(10);
+    await Promise.all(reads.slice(0, RECORD_READS_AT_ONCE));
+    // and the limit still holds afterwards (a count under zero would let more through)
+    calls.length = 0;
+    releases.length = 0;
+    const more = Array.from({ length: 8 }, (_, index) => readRecordCard({ ...TICKET_REF, id: String(483000 + index) }));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls).toHaveLength(RECORD_READS_AT_ONCE);
+    releases.forEach((release) => release());
+    await vi.advanceTimersByTimeAsync(10);
+    releases.forEach((release) => release());
+    await vi.advanceTimersByTimeAsync(10);
+    await Promise.all(more);
+  });
+});

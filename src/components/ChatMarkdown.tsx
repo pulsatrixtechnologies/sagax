@@ -1105,7 +1105,6 @@ function ExternalLink({ href, github, children }: { href: string; github: Return
 
 const LINK_CLASS = "break-words text-accent-text underline decoration-accent/40 hover:decoration-accent [unicode-bidi:isolate]";
 
-
 // GitHub alerts: "> [!NOTE]" (and TIP, IMPORTANT, WARNING, CAUTION) as the
 // first line of a blockquote turns it into a callout. The marker is removed
 // from the text and carried as data-callout / data-callout-title.
@@ -1204,7 +1203,7 @@ const MAY_LINK_THREAD = /#[^\s#]|sagax/i;
 const NO_THREAD_REFS: ThreadRefsValue = { threads: [] };
 
 /** Render message Markdown with math, protected code, scoped attachments, and mentions. */
-function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION_PEERS, everyone = false, youtubeSendToBot, delivered, inert = false, emailDrafts = true }: {
+function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION_PEERS, everyone = false, youtubeSendToBot, delivered, inert = false, emailDrafts = true, draftId }: {
   text: string; message?: MessageAttachmentContext; botId?: string;
   /** False when this bot's email drafts are turned off. */
   emailDrafts?: boolean;
@@ -1213,6 +1212,8 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
    * write. An HTML ```widget, ```artifact or ```cw fence shows as code and a
    * YouTube link stays a link instead of a player. */
   inert?: boolean;
+  /** the composer of the surface this message is on (a record chip's "Ask" writes there) */
+  draftId?: string;
   mentionPeers?: readonly MentionPeer[]; everyone?: boolean;
   /** When set, the YouTube widget can hand a fetched transcript to the bot. */
   youtubeSendToBot?: (text: string) => void;
@@ -1409,7 +1410,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         // sagax://record/<product>/<kind>/<id>: the chip and its card; a
         // malformed link, or a surface with no card (inert), is its text
         const record = href ? parseRecordLink(href) : null;
-        if (record && !inert) return <RecordLink record={record} botId={botId} threadId={scopedMessage?.threadId}>{children}</RecordLink>;
+        if (record && !inert) return <RecordLink record={record} draftId={draftId}>{children}</RecordLink>;
         if (href && looksLikeRecordLink(href)) return <span className="break-words">{children}</span>;
         const localPath = localFilePath(href);
         if (localPath) {
@@ -1535,7 +1536,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         return <hr className="border-hairline/40" />;
       },
     } as Components;
-  }, [threadId, messageId, botId, threads, currentBotId, openFence, prefix, delivered, inert]);
+  }, [threadId, messageId, botId, threads, currentBotId, openFence, prefix, delivered, inert, draftId]);
   // KaTeX loads the first time a message actually holds math (ensureChatKatex).
   const needsMath = normalizedSourceHasMath(source);
   const [katexReady, setKatexReady] = useState(() => katexPlugin !== null);
@@ -1601,6 +1602,7 @@ export const ChatMarkdown = memo(ChatMarkdownComponent, (previous, next) => (
   && previous.botId === next.botId
   && previous.emailDrafts === next.emailDrafts
   && previous.inert === next.inert
+  && previous.draftId === next.draftId
   && sameDelivered(previous.delivered, next.delivered)
 ));
 

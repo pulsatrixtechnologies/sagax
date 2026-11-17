@@ -317,6 +317,7 @@ export function RoomTextMessage({
                   <ChatMarkdown
                     text={markdownText}
                     botId={m.from?.botId}
+                    draftId={`group:${group.id}:${group.threadId}`}
                     emailDrafts={speakerBot?.emailDrafts !== false}
                     mentionPeers={mentionPeers}
                     everyone={!group.dm}

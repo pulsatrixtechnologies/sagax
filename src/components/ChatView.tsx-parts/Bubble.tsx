@@ -420,6 +420,7 @@ export const Bubble = memo(function Bubble({
                   <ChatMarkdown
                     text={markdownText}
                     botId={botId}
+                    draftId={`bot:${botId}:${threadId}`}
                     emailDrafts={bots.find((candidate) => candidate.id === botId)?.emailDrafts !== false}
                     mentionPeers={mentionPeers}
                     message={{ threadId, messageId: message.id }}

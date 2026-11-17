@@ -150,7 +150,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *   of the anchor, and out over 120 ms; a fade only when warm or under
  *   reduced motion.
  */
-export function HoverCard({ card, kind, children, onIntent, pinnable = false, label, warm = false, motion = false }: {
+export function HoverCard({ card, kind, children, onIntent, pinnable = false, label, warm = false, motion = false, disabled = false }: {
   card: (state: HoverCardState) => ReactNode;
   kind: string;
   children: (anchor: AnchorProps) => ReactNode;
@@ -159,6 +159,8 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
   label?: string;
   warm?: boolean;
   motion?: boolean;
+  /** the anchor asks for no card (a card already open stays until it closes) */
+  disabled?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("closed");
   const open = mode !== "closed";
@@ -171,6 +173,9 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
   const pressed = useRef(false);
   const pressStart = useRef<{ x: number; y: number } | null>(null);
   const dismissed = useRef(false);
+  // whether the pointer is on the anchor or on the card right now: Escape keeps
+  // a card closed only while that holds, so a later visit is never ignored
+  const pointerOver = useRef(false);
   const openedWarm = useRef(false);
   // focus handed back to the anchor after Escape must not reopen the card
   const returning = useRef(false);
@@ -281,18 +286,21 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       const holdsFocus = cardRef.current?.contains(document.activeElement) ?? false;
-      dismissed.current = true;
+      dismissed.current = pointerOver.current;
       clear();
       setMode("closed");
-      if (holdsFocus || pinned) {
-        returning.current = true;
-        anchorRef.current?.focus({ preventScroll: true });
-        returning.current = false;
-      }
+      if (holdsFocus || pinned) returnFocus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [pinnable, open, pinned]);
+
+  /** focus goes back to the anchor without that focus opening the card again */
+  const returnFocus = () => {
+    returning.current = true;
+    anchorRef.current?.focus({ preventScroll: true });
+    returning.current = false;
+  };
 
   const togglePin = () => {
     clear();
@@ -305,7 +313,8 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     ...(pinnable ? { "aria-haspopup": "dialog" as const, "aria-expanded": pinned } : {}),
     onPointerEnter: (event) => {
       if (event.pointerType === "touch") return;
-      if (dismissed.current) return;
+      pointerOver.current = true;
+      if (dismissed.current || disabled) return;
       clearIntent();
       if (onIntent) intent.current = setTimeout(onIntent, HOVER_INTENT_MS);
       const isWarm = warm && Date.now() - warmClosedAt < HOVER_WARM_WINDOW_MS;
@@ -314,13 +323,14 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
     },
     onPointerLeave: (event) => {
       if (event.pointerType === "touch") return;
+      pointerOver.current = false;
       dismissed.current = false;
       clearIntent();
       later(false, HOVER_CLOSE_GRACE_MS);
     },
     onFocus: (event) => {
       // keyboard focus only: a click focuses the link too
-      if (!returning.current && event.currentTarget.matches(":focus-visible")) {
+      if (!returning.current && !disabled && event.currentTarget.matches(":focus-visible")) {
         clear();
         openedWarm.current = false;
         onIntent?.();
@@ -335,12 +345,13 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
       if (event.key === "Escape" && open) {
         event.stopPropagation();
         clear();
-        dismissed.current = pinnable;
+        dismissed.current = pinnable && pointerOver.current;
         setMode("closed");
         return;
       }
-      // Space presses a link like a button; Enter already clicks it
-      if (pinnable && event.key === " " && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      // Space presses a link like a button; Enter already clicks it (a real
+      // button does both itself)
+      if (pinnable && !disabled && event.currentTarget.tagName !== "BUTTON" && event.key === " " && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         togglePin();
       }
@@ -377,7 +388,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
         return;
       }
       // a click pins; Cmd or Ctrl + click is the owner's own (open it)
-      if (pinnable && !event.defaultPrevented && !event.metaKey && !event.ctrlKey) {
+      if (pinnable && !disabled && !event.defaultPrevented && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         togglePin();
       }
@@ -424,10 +435,19 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
           style={{ left: 0, top: 0, visibility: "hidden" }}
           {...(motion ? anim.exitProps : {})}
           onKeyDown={onCardKeyDown}
-          onPointerEnter={(event) => { if (event.pointerType !== "touch") clear(); }}
-          onPointerLeave={(event) => { if (event.pointerType !== "touch") later(false, HOVER_CLOSE_GRACE_MS); }}
+          onPointerEnter={(event) => { if (event.pointerType !== "touch") { pointerOver.current = true; clear(); } }}
+          onPointerLeave={(event) => { if (event.pointerType !== "touch") { pointerOver.current = false; dismissed.current = false; later(false, HOVER_CLOSE_GRACE_MS); } }}
         >
-          {card({ pinned, close: closeNow, pin: () => { clear(); setMode("pinned"); } })}
+          {card({
+            pinned,
+            // closing a pinned card by hand puts focus back on its anchor
+            close: () => {
+              const held = pinned || (cardRef.current?.contains(document.activeElement) ?? false);
+              closeNow();
+              if (held) returnFocus();
+            },
+            pin: () => { clear(); setMode("pinned"); },
+          })}
         </div>,
         document.body,
       )}

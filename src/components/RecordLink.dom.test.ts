@@ -8,9 +8,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { answer, companyCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
-import { resetRecordCards, resetRecordProducts, seedRecordProducts } from "@/lib/record-cards";
+import { resetPersonProducts, seedPersonProducts } from "@/lib/person-products";
+import { resetRecordCards } from "@/lib/record-cards";
+import * as drafts from "@/lib/drafts";
 import { HOVER_CLOSE_GRACE_MS, HOVER_OPEN_DELAY_MS, HOVER_INTENT_MS } from "./LinkHoverCard";
 import { ChatMarkdown } from "./ChatMarkdown";
+
+vi.mock("@/lib/drafts", async (original) => ({ ...(await original<typeof import("@/lib/drafts")>()), appendComposerDraft: vi.fn() }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -22,9 +26,9 @@ let reply: () => Response;
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 
 async function render(text: string, props: Record<string, unknown> = {}) {
-  await act(async () => root.render(createElement(ChatMarkdown, { text, botId: "bot-1", message: { threadId: "t-1", messageId: "m-1" }, ...props })));
+  await act(async () => root.render(createElement(ChatMarkdown, { text, botId: "bot-1", draftId: "bot:bot-1:t-1", message: { threadId: "t-1", messageId: "m-1" }, ...props })));
 }
-const chips = () => [...host.querySelectorAll<HTMLAnchorElement>("a[data-record-link]")];
+const chips = () => [...host.querySelectorAll<HTMLElement>("[data-record-link]")];
 const card = () => document.querySelector<HTMLElement>("[data-record-card]");
 const fire = (target: EventTarget, type: string, init: PointerEventInit = {}) =>
   act(() => { target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType: "mouse", ...init })); });
@@ -36,8 +40,8 @@ beforeEach(() => {
   // reduced motion: a closed card leaves at once (its exit is not what is tested)
   document.documentElement.dataset.reducedMotion = "true";
   resetRecordCards();
-  resetRecordProducts();
-  seedRecordProducts([nimbusProduct()]);
+  resetPersonProducts();
+  seedPersonProducts([nimbusProduct()]);
   reads = [];
   reply = () => json(answer(ticketCard(Date.now(), "fr")));
   vi.stubGlobal("fetch", vi.fn(async (input: string) => {
@@ -62,7 +66,11 @@ describe("the chip", () => {
     const [chip] = chips();
     expect(chip!.textContent).toBe("#481516");
     expect(chip!.className).toContain("rounded-full");
-    expect(chip!.getAttribute("target")).toBeNull();
+    // a button with no address: nothing to show in a status bar, copy or middle-click
+    expect(chip!.tagName).toBe("BUTTON");
+    expect(chip!.getAttribute("href")).toBeNull();
+    expect(host.innerHTML).not.toContain("sagax://record");
+    expect(host.querySelector("a")).toBeNull();
     expect(chip!.getAttribute("aria-label")).toBe("Billet #481516, Nimbus Desk, appuie sur Entrée pour les détails");
     expect(chip!.querySelector("img, div")).not.toBeNull();
   });
@@ -202,7 +210,7 @@ describe("the card", () => {
   });
 
   it("offers no Demander without a conversation, and keeps Ouvrir", async () => {
-    await render(`[#481516](${LINK})`, { botId: undefined, message: undefined });
+    await render(`[#481516](${LINK})`, { draftId: undefined });
     await act(async () => { chips()[0]!.click(); });
     await advance(50);
     expect(card()!.querySelector("[data-record-ask]")).toBeNull();
@@ -248,5 +256,84 @@ describe("the card", () => {
     await act(async () => { release?.(); await Promise.resolve(); });
     await advance(50);
     expect(document.activeElement?.hasAttribute("data-hover-card-first")).toBe(true);
+  });
+
+  it.each([["a bot's chat", "bot:bot-1:t-1"], ["a room", "group:room-1:t-9"]])("writes Demander into the composer of %s, the surface's own draft", async (_name, draftId) => {
+    vi.mocked(drafts.appendComposerDraft).mockClear();
+    await render(`[#481516](${LINK})`, { draftId });
+    await act(async () => { chips()[0]!.click(); });
+    await advance(50);
+    await act(async () => { card()!.querySelector<HTMLButtonElement>("[data-record-ask]")!.click(); });
+    expect(drafts.appendComposerDraft).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(drafts.appendComposerDraft).mock.calls[0]![0]).toBe(draftId);
+    expect(vi.mocked(drafts.appendComposerDraft).mock.calls[0]![1]).toContain("sagax://record/nimbus_desk/ticket/481516");
+  });
+
+  it("returns focus to the chip when a pinned card is closed with its X, without reopening it", async () => {
+    await render(`[#481516](${LINK})`);
+    const chip = chips()[0]!;
+    chip.focus();
+    await act(async () => { chip.click(); });
+    await advance(50);
+    await act(async () => { card()!.querySelector<HTMLButtonElement>("[aria-label=Fermer]")!.click(); });
+    await advance(200);
+    expect(card()).toBeNull();
+    expect(document.activeElement).toBe(chip);
+  });
+
+  it("does not ignore the next visit after an Escape pressed with the pointer elsewhere", async () => {
+    await render(`[#481516](${LINK})`);
+    const chip = chips()[0]!;
+    chip.focus();
+    await act(async () => { chip.click(); });
+    await advance(50);
+    // keyboard Escape, the pointer never was on the chip
+    act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await advance(200);
+    expect(card()).toBeNull();
+    chip.blur();
+    fire(chip, "pointerover");
+    await advance(HOVER_OPEN_DELAY_MS + 5);
+    expect(card()).not.toBeNull();
+  });
+
+  it("keeps an open card and the focus when the console turns out unable to serve cards", async () => {
+    let release: (() => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      if (String(input).includes("/api/me/records/")) await new Promise<void>((done) => { release = done; });
+      return json({ state: "unavailable" });
+    }));
+    await render(`[#481516](${LINK})`);
+    const chip = chips()[0]!;
+    chip.focus();
+    await act(async () => { chip.click(); });
+    await advance(50);
+    expect(card()?.getAttribute("role")).toBe("dialog");
+    await act(async () => { release?.(); await Promise.resolve(); });
+    await advance(50);
+    // the chip reads as plain words: the same element, still focused, the card still there
+    expect(host.querySelector("[data-record-plain]")).toBe(chip);
+    // focus is where it was (in the pinned card), not dropped on the page
+    expect(card()!.contains(document.activeElement)).toBe(true);
+    expect(card()).not.toBeNull();
+    expect(chip.getAttribute("aria-disabled")).toBe("true");
+    // and it asks for no new card
+    act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await advance(200);
+    expect(card()).toBeNull();
+    expect(document.activeElement).toBe(chip);
+    chip.blur();
+    fire(chip, "pointerover");
+    await advance(HOVER_OPEN_DELAY_MS + 5);
+    expect(card()).toBeNull();
+  });
+
+  it("reads the app's one list of products: a product connected elsewhere shows on a chip at once", async () => {
+    await render("[#9](sagax://record/other_desk/ticket/9)");
+    expect(chips()[0]!.getAttribute("aria-label")).not.toContain("Nimbus Desk");
+    await act(async () => {
+      seedPersonProducts([nimbusProduct(), { ...nimbusProduct(), id: "other_desk", name: "Other Desk" }]);
+    });
+    expect(chips()[0]!.getAttribute("aria-label")).toContain("Other Desk");
   });
 });

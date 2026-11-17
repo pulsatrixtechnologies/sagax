@@ -20,7 +20,6 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { activeLocale } from "@/lib/i18n";
-import { loadPersonProducts } from "@/lib/person-products";
 import { api, ApiError } from "@/state/store";
 import { parseRecordCardAnswer, recordKey, type RecordCard, type RecordCardAnswer, type RecordCardMiss, type RecordKindInfo, type RecordRef } from "../../shared/record-cards";
 import type { PersonProduct } from "../../shared/person-products";
@@ -88,19 +87,24 @@ function kept(answer: RecordCardAnswer): boolean {
 
 /** At most this many reads run at once; the rest wait their turn in order. */
 export const RECORD_READS_AT_ONCE = 4;
-let running = 0;
-const waiting: Array<() => void> = [];
+
+/** A queued read that a reset dropped before it started. */
+class DroppedRead extends Error {}
+
+let active = 0;
+let epoch = 0;
+const waiting: Array<{ start: () => void; drop: () => void }> = [];
 function slot<T>(run: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const start = () => {
-      running += 1;
+      active += 1;
       run().then(resolve, reject).finally(() => {
-        running -= 1;
-        waiting.shift()?.();
+        active = Math.max(0, active - 1);
+        waiting.shift()?.start();
       });
     };
-    if (running < RECORD_READS_AT_ONCE) start();
-    else waiting.push(start);
+    if (active < RECORD_READS_AT_ONCE) start();
+    else waiting.push({ start, drop: () => reject(new DroppedRead("reset")) });
   });
 }
 
@@ -115,6 +119,7 @@ export function recordBackoffLeft(product: string, now = Date.now()): number {
 }
 
 function missFromError(error: unknown): RecordCardMiss {
+  if (error instanceof DroppedRead) return { state: "unavailable" };
   if (error instanceof ApiError) {
     if (error.status === 401 || error.status === 403) return { state: "sign_in" };
     if (error.status === 404 || error.status === 405) return { state: "unavailable" };
@@ -144,8 +149,8 @@ export function readRecordCard(ref: RecordRef, options: ReadOptions = {}): Promi
   const known = entries.get(key);
   if (options.confirm) confirmed.add(recordKey(ref));
   if (!options.fresh && !options.confirm && fresh(known)) return Promise.resolve(known!.answer!);
-  const running = inFlight.get(key);
-  if (running) return running;
+  const inFlightRead = inFlight.get(key);
+  if (inFlightRead) return inFlightRead;
   const left = recordBackoffLeft(ref.product);
   if (left > 0) {
     // the vendor said it is busy: no call, the kept card or the busy state
@@ -156,7 +161,10 @@ export function readRecordCard(ref: RecordRef, options: ReadOptions = {}): Promi
   }
   publish(key, { answer: known?.answer, at: known?.at ?? 0, loading: true });
   const path = recordCardPath(ref, { lang, fresh: options.fresh, confirm: options.confirm || confirmed.has(recordKey(ref)) });
+  const startedIn = epoch;
   const read = slot(() => api<unknown>(path)).then(parseRecordCardAnswer, missFromError).then((answer) => {
+    // a reset since this read began: its answer goes to whoever awaits it, not into the new cache
+    if (startedIn !== epoch) return answer;
     inFlight.delete(key);
     if (!("card" in answer) && answer.state === "busy") {
       backoff.set(ref.product, Date.now() + (answer.retryAfter ?? RECORD_BUSY_BACKOFF_MS / 1000) * 1000);
@@ -188,10 +196,12 @@ export function confirmRecordCard(ref: RecordRef): Promise<RecordCardAnswer> {
 
 /** Forget everything (tests; a sign-out). */
 export function resetRecordCards(): void {
+  epoch += 1;
   entries.clear();
   inFlight.clear();
-  waiting.length = 0;
-  running = 0;
+  // reads still waiting for a turn settle (as unavailable) instead of hanging;
+  // reads already running finish and count themselves out
+  for (const queued of waiting.splice(0)) queued.drop();
   backoff.clear();
   confirmed.clear();
   for (const set of listeners.values()) for (const listener of set) listener();
@@ -222,8 +232,9 @@ export interface UseRecordCard {
 
 /**
  * A record's card for a component. While `enabled` it starts the read when
- * the kept answer is missing or older than the TTL (a card a person keeps
- * open past a minute reads again), and retries by itself once a busy
+ * the component mounts and the kept answer is missing or older than the TTL
+ * (a card that stays open past a minute is not read again by itself: the
+ * refresh button or a reopened card is), and it retries by itself once a busy
  * product's back-off is over. Not enabled (a chip nobody hovers): it reads
  * nothing.
  */
@@ -258,58 +269,8 @@ export function useRecordCard(ref: RecordRef, { enabled = true }: { enabled?: bo
 }
 
 // ── the person's products: the names and marks a chip wears ──────────────
-
-/** How long the product list is kept for chips (the server keeps it 30 s). */
-export const RECORD_PRODUCTS_TTL_MS = 30_000;
-
-let products: PersonProduct[] = [];
-let productsAt = 0;
-let productsRead: Promise<PersonProduct[]> | null = null;
-const productListeners = new Set<() => void>();
-
-/** The person's product list, read once for every chip. A server without the
- * route, or not linked, answers nothing: no kind is known and chips wear a
- * generic mark. */
-export function loadRecordProducts(): Promise<PersonProduct[]> {
-  if (productsRead) return productsRead;
-  if (productsAt && Date.now() - productsAt < RECORD_PRODUCTS_TTL_MS) return Promise.resolve(products);
-  productsRead = loadPersonProducts().catch((): PersonProduct[] => []).then((list) => {
-    products = list;
-    productsAt = Date.now();
-    productsRead = null;
-    for (const listener of productListeners) listener();
-    return list;
-  });
-  return productsRead;
-}
-
-/** Set the product list (a gallery, a test). */
-export function seedRecordProducts(list: PersonProduct[]): void {
-  products = list;
-  productsAt = Date.now();
-  productsRead = null;
-  for (const listener of productListeners) listener();
-}
-
-export function resetRecordProducts(): void {
-  products = [];
-  productsAt = 0;
-  productsRead = null;
-}
-
-/** The product list while a chip is on screen. */
-export function useRecordProducts(): PersonProduct[] {
-  const list = useSyncExternalStore(
-    (listener) => {
-      productListeners.add(listener);
-      return () => productListeners.delete(listener);
-    },
-    () => products,
-    () => products,
-  );
-  useEffect(() => { void loadRecordProducts(); }, []);
-  return list;
-}
+// The list is the app's one store of the person's products
+// (src/lib/person-products.ts), shared with Connect apps.
 
 /** A kind's name in the reader's language. */
 export function recordKindName(kind: RecordKindInfo | undefined, lang = recordCardLanguage()): string | undefined {

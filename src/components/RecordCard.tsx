@@ -179,7 +179,9 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
     // content that changes (a card read again) is measured again; the "N more"
     // line coming and going is not content
     const mutations = typeof MutationObserver === "undefined" ? null : new MutationObserver((records) => {
-      if (records.every((record) => [...record.addedNodes, ...record.removedNodes].every((node) => node instanceof HTMLElement && node.hasAttribute("data-fit-more")))) return;
+      // only the "N more" line coming or going is not content; a changed text is
+      const isMoreLine = (node: Node) => node instanceof HTMLElement && node.hasAttribute("data-fit-more");
+      if (records.every((record) => record.type === "childList" && [...record.addedNodes, ...record.removedNodes].every(isMoreLine))) return;
       measure();
     });
     mutations?.observe(el, { childList: true, subtree: true, characterData: true });
@@ -267,25 +269,37 @@ function CompanyChip({ name, companyRef, onOpen }: { name: string; companyRef: R
   );
 }
 
-function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> }) {
+function PriorityChip({ priority, onClip }: { priority: NonNullable<Card["priority"]>; onClip?: (clipped: boolean) => void }) {
+  const text = useRef<HTMLSpanElement>(null);
+  // a narrow head cuts the label (to its glyph at worst): the card says so, and
+  // its body then says the full name once
+  useLayoutEffect(() => {
+    const el = text.current;
+    if (!el || !onClip) return;
+    const measure = () => onClip(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    return () => observer?.disconnect();
+  }, [onClip, priority.label]);
   return (
     <Chip className={cn(LEVEL_CLASS[priority.level], "min-w-8")} title={priority.label} role="img" label={priority.label}>
       {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={cn("shrink-0", LEVEL_GLYPH[priority.level])} />}
-      <span className="max-w-[11rem] min-w-0 truncate">{priority.label}</span>
+      <span ref={text} className="max-w-[11rem] min-w-0 truncate">{priority.label}</span>
     </Chip>
   );
 }
 
 /** The dates and key fields as one description list. */
-function Facts({ card, now, lang, part = "all", stacked = false }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; stacked?: boolean }) {
+function Facts({ card, now, lang, part = "all", showPriority = false }: { card: Card; now: number; lang: string; part?: "all" | "dates" | "fields"; showPriority?: boolean }) {
   const tz = card.tz;
   const rows: Array<{ label: string; value: ReactNode; gap?: boolean; key: string }> = [];
   const dates = card.dates ?? {};
   const time = (iso: string, mode: "relative" | "absolute") => (
     <time dateTime={iso} title={formatFull(iso, lang, tz)}>{mode === "relative" ? formatRelative(iso, now, lang) : formatAbsolute(iso, now, lang, tz)}</time>
   );
-  // a narrow card truncates the priority chip in its head: the full name is a row of the body
-  if (stacked && card.priority) rows.push({ key: "priority", label: t("recordCard.priority"), value: <span dir="auto">{card.priority.label}</span> });
+  // a narrow head that cuts the priority chip: the full name is a row of the body, once
+  if (showPriority && card.priority) rows.push({ key: "priority", label: t("recordCard.priority"), value: <span dir="auto">{card.priority.label}</span> });
   if (dates.opened) rows.push({ key: "opened", label: t("recordCard.date.opened"), value: time(dates.opened, "relative") });
   if (dates.updated) rows.push({ key: "updated", label: t("recordCard.date.updated"), value: time(dates.updated, "relative") });
   if (dates.due) {
@@ -392,7 +406,7 @@ function Notes({ card, now, lang, description, pinned, stacked }: { card: Card; 
   );
 }
 
-function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean }) {
+function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false, onPriorityClip }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean; onPriorityClip?: (clipped: boolean) => void }) {
   const tab = useContext(TabContext);
   const kind = card?.kind.name ?? kindName ?? t("recordCard.kindFallback");
   const shown = card?.number ?? label;
@@ -410,7 +424,7 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
       {!hidden && <span dir="ltr" className="shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
       <span className="ms-auto flex min-w-0 items-center gap-1">
         {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[9rem] truncate">{card.state.label}</span></Chip>}
-        {card?.priority && <PriorityChip priority={card.priority} />}
+        {card?.priority && <PriorityChip priority={card.priority} onClip={onPriorityClip} />}
         {skeleton && <Bar className="h-5 w-16 rounded-full" />}
         {pinned && onClose && (
           <button type="button" tabIndex={tab} className={cn(ICON_BUTTON, "-me-1.5")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
@@ -477,6 +491,7 @@ function Shell({ wrap, width, frameClass, data, busy, children }: { wrap: RefObj
 export function RecordCard({ record, label, kindName, product, read, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, onBack, now: clock }: RecordCardProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const stacked = useStacked(wrap);
+  const [priorityClipped, setPriorityClipped] = useState(false);
   const lang = activeLocale();
   const now = clock ?? Date.now();
   const { card, miss, loading } = read;
@@ -559,7 +574,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   return (
     <TabContext.Provider value={tab}>
       <Shell wrap={wrap} width={width} frameClass={frame} data={data} busy={loading}>
-        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
+        <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} onPriorityClip={setPriorityClipped} />
         <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
         {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
         <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-2" moreRoom={16 + 8 + 8} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
@@ -580,7 +595,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
                 {owner && <PersonRow person={owner} fitKey="p-owner" />}
               </div>
             )}
-            <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} stacked={stacked} />
+            <Facts card={card} now={now} lang={lang} part={stacked && right ? "dates" : "all"} showPriority={stacked && priorityClipped} />
           </Pane>
           {right && (
             <Pane pinned={pinned} fit={!stacked} data-record-pane="right" className={cn("flex flex-col gap-2 px-3 py-2 @min-[34rem]:flex-[3_1_0%] @max-[34rem]:shrink-0", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>

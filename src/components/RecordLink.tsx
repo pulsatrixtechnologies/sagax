@@ -2,11 +2,14 @@
 // the card it opens. The chip is the pill GitHub references wear
 // (ref-pill.ts) with the product's mark; the card is the existing HoverCard
 // (LinkHoverCard.tsx) asking for its pin, its warm switch and its motion.
-// Nothing here navigates: the link's own scheme is never handed to the shell.
+// Nothing here navigates, and the chip is a button with no address: the link's
+// own scheme is never handed to the shell, shown in a status bar, copied as a
+// link address or opened by a middle click (a thread reference is the same).
 import { useState, type ReactNode } from "react";
 import { FileText } from "lucide-react";
 
 import { RecordCard, RecordProductMark } from "@/components/RecordCard";
+import { cn } from "@/lib/cn";
 import { HoverCard } from "@/components/LinkHoverCard";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
 import { openExternalLink } from "@/lib/app-links";
@@ -15,9 +18,10 @@ import { appendComposerDraft } from "@/lib/drafts";
 import { activeLocale, t } from "@/lib/i18n";
 import { isGuid } from "@/lib/record-card-format";
 import { signInAgainPath } from "@/lib/sign-in-again";
-import { findRecordKind, peekRecordCard, prefetchRecordCard, readRecordCard, recordKindName, useRecordCard, useRecordProducts } from "@/lib/record-cards";
+import { useSharedPersonProducts } from "@/lib/person-products";
+import { findRecordKind, peekRecordCard, prefetchRecordCard, readRecordCard, recordKindName, useRecordCard } from "@/lib/record-cards";
 import { useStoreOptional } from "@/state/store";
-import { recordLink, recordMarkdown, type RecordRef } from "../../shared/record-cards";
+import { recordMarkdown, type RecordRef } from "../../shared/record-cards";
 
 /** The text a link's children spell (a label is plain text). */
 export function nodeText(node: ReactNode): string {
@@ -34,8 +38,10 @@ async function openRecordInProduct(record: RecordRef): Promise<void> {
   if ("card" in answer && answer.card.openUrl) await openExternalLink(answer.card.openUrl);
 }
 
-export function RecordLink({ record, botId, threadId, children }: { record: RecordRef; botId?: string; threadId?: string; children?: ReactNode }) {
-  const products = useRecordProducts();
+/** `draftId` is the composer of the surface the message is on (a bot's chat or
+ * a room): "Ask" writes there; without one the action is not offered. */
+export function RecordLink({ record, draftId, children }: { record: RecordRef; draftId?: string; children?: ReactNode }) {
+  const products = useSharedPersonProducts();
   const { product, kind } = findRecordKind(products, record);
   const store = useStoreOptional();
   // only to learn that this console cannot serve cards (the chip is then a
@@ -47,8 +53,9 @@ export function RecordLink({ record, botId, threadId, children }: { record: Reco
   const text = label && !isGuid(label) ? label : kindName;
   const productInfo = product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined;
   const chipName = t(product ? "recordCard.chipName" : "recordCard.chipNameBare", { kind: kindName, number: text, product: product?.name ?? "" });
-  const draftId = botId && threadId ? `bot:${botId}:${threadId}` : null;
-  if (known.miss?.state === "unavailable") return <span className="break-words">{children}</span>;
+  // a console that cannot serve cards: the chip reads as plain words. The same
+  // button stays mounted, so an open card and the focus are not lost under it.
+  const plain = known.miss?.state === "unavailable";
 
   return (
     <HoverCard
@@ -57,6 +64,7 @@ export function RecordLink({ record, botId, threadId, children }: { record: Reco
       warm
       motion
       label={t("recordCard.dialogName", { kind: kindName, number: text })}
+      disabled={plain}
       onIntent={() => prefetchRecordCard(record)}
       card={({ pinned, close, pin }) => (
         <OpenRecordCard
@@ -72,27 +80,28 @@ export function RecordLink({ record, botId, threadId, children }: { record: Reco
       )}
     >
       {(anchor) => (
-        <a
+        <button
           {...anchor}
-          href={recordLink(record)}
+          type="button"
           dir="ltr"
           lang={lang}
-          aria-label={chipName}
-          data-record-link={record.kind}
-          className={REF_PILL_CLASS}
+          aria-label={plain ? undefined : chipName}
+          aria-disabled={plain ? true : undefined}
+          {...(plain ? { "data-record-plain": record.kind } : { "data-record-link": record.kind })}
+          className={plain ? "inline cursor-text break-words text-start" : cn(REF_PILL_CLASS, "cursor-pointer")}
           onClick={(event) => {
-            // Cmd or Ctrl + click opens the record in its product, as any link would
+            // Cmd or Ctrl + click opens the record in its product, as a link would
             if (event.metaKey || event.ctrlKey) {
               event.preventDefault();
-              void openRecordInProduct(record);
+              if (!plain) void openRecordInProduct(record);
               return;
             }
             anchor.onClick(event);
           }}
         >
-          {product || kind ? <RecordProductMark product={productInfo} className="size-[13px] shrink-0 self-center rounded-[3px]" /> : <FileText size={13} aria-hidden="true" className="shrink-0 self-center text-ink-tertiary" />}
+          {plain ? null : product || kind ? <RecordProductMark product={productInfo} className="size-[13px] shrink-0 self-center rounded-[3px]" /> : <FileText size={13} aria-hidden="true" className="shrink-0 self-center text-ink-tertiary" />}
           <span>{text}</span>
-        </a>
+        </button>
       )}
     </HoverCard>
   );
@@ -113,7 +122,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
 }) {
   const [trail, setTrail] = useState<Array<{ ref: RecordRef; label: string }>>([]);
   const current = trail.at(-1) ?? { ref: record, label };
-  const products = useRecordProducts();
+  const products = useSharedPersonProducts();
   const { product, kind } = findRecordKind(products, current.ref);
   const read = useRecordCard(current.ref, { enabled: true });
   return (

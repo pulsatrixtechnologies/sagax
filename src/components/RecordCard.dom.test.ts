@@ -381,6 +381,8 @@ describe("RecordCard without a layout engine's help", () => {
 
   it("keeps the full priority name readable in the body of a narrow card, and names the glyph chip", () => {
     define(HTMLElement.prototype, "clientWidth", { get() { return (this as HTMLElement).className.includes("@container") ? 374 : 0; } });
+    // the head cuts the label: its text is wider than the room it has
+    define(HTMLElement.prototype, "scrollWidth", { get() { return (this as HTMLElement).className.includes("max-w-[11rem]") ? 200 : 0; } });
     const card = show({ raw: ticketCard(NOW, "fr") });
     expect(card.querySelector("[data-record-head] [role=img]")!.getAttribute("aria-label")).toBe("Priorité 2 - Élevée");
     const facts = card.querySelector("[data-record-facts]")!;
@@ -392,5 +394,31 @@ describe("RecordCard without a layout engine's help", () => {
     root = createRoot(host);
     const wide = show({ raw: ticketCard(NOW, "fr") });
     expect(wide.querySelector("[data-record-facts]")!.textContent).not.toContain("Priorité 2");
+  });
+
+  it("says the priority in the body of a narrow card only when the head chip cuts it", () => {
+    define(HTMLElement.prototype, "clientWidth", { get() { return (this as HTMLElement).className.includes("@container") ? 374 : 0; } });
+    // the label fits: the chip says it, the body does not say it again
+    const whole = show({ raw: ticketCard(NOW, "fr") });
+    expect(whole.querySelector("[data-record-facts]")!.textContent).not.toContain("Priorité 2");
+  });
+
+  it("measures again when a text changes, not only when a row comes or goes", async () => {
+    let reads = 0;
+    define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? (reads += 1, 400) : 0; } });
+    const card = show({ raw: ticketCard(NOW, "fr") });
+    const before = reads;
+    const text = card.querySelector("[data-record-pane=left] [data-fit-row] time, [data-record-pane=left] [data-fit-row]")!.firstChild as Text | null;
+    const node = (function find(root: Node): Text | null {
+      for (const child of root.childNodes) {
+        if (child.nodeType === 3 && (child.textContent ?? "").trim()) return child as Text;
+        const hit = find(child);
+        if (hit) return hit;
+      }
+      return null;
+    })(card.querySelector("[data-record-pane=left]")!);
+    expect(node ?? text).not.toBeNull();
+    await act(async () => { (node ?? text)!.data = `${(node ?? text)!.data} (a longer text)`; await Promise.resolve(); });
+    expect(reads).toBeGreaterThan(before);
   });
 });

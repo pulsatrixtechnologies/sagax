@@ -10,7 +10,7 @@ import { RecordCard, type RecordCardProps } from "./RecordCard";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const NOW = Date.parse("2026-11-17T14:34:00-05:00");
-const product = { name: "Nimbus Desk", domain: "desk.example" };
+const product = { name: "Nimbus Desk", iconUrl: "https://desk.example/mark.svg" };
 let host: HTMLDivElement;
 let root: Root;
 const refresh = vi.fn();
@@ -144,5 +144,57 @@ describe("RecordCard", () => {
     show({ raw: ticketCard(NOW, "fr"), pinned: true, onClose: () => {} });
     expect(host.querySelector("[aria-label=Fermer]")).not.toBeNull();
     expect(text()).not.toMatch(/[–—]/);
+  });
+
+  it("keeps the footer on one row: no wrap, labels shortened to icons with tooltips where narrow", () => {
+    const split = show({ raw: ticketCard(NOW, "fr"), onAsk: () => {} });
+    const actions = split.querySelector("[data-record-actions]")!;
+    expect(actions.className).toContain("flex-nowrap");
+    expect(actions.className).not.toContain("flex-wrap");
+    expect(actions.querySelector("[data-record-ask]")!.getAttribute("title")).toBe("Demander au bot à propos de cette fiche");
+    const refresh = actions.querySelector("[data-record-refresh]")!;
+    expect(refresh.getAttribute("title")).toContain("À jour à");
+    const compact = show({ raw: companyCard(NOW, "fr"), record: COMPANY_REF, label: "Acme Fabrication", onAsk: () => {} });
+    expect(compact.querySelector("[data-record-ask] span")!.className).toContain("hidden");
+    expect(compact.querySelector("[data-record-actions] time")!.className).toContain("hidden");
+    // the open button keeps its label
+    expect(compact.querySelector("[data-record-open]")!.textContent).toBe("Ouvrir dans Nimbus Desk");
+  });
+
+  it("puts the state chip first, then the priority, in the head", () => {
+    show({ raw: ticketCard(NOW, "fr") });
+    const chips = [...host.querySelectorAll("[data-record-head] [title]")].map((node) => node.getAttribute("title"));
+    expect(chips.indexOf("En cours")).toBeGreaterThan(-1);
+    expect(chips.indexOf("En cours")).toBeLessThan(chips.indexOf("Priorité 2 - Élevée"));
+  });
+
+  it("draws a company with a ref as a chip that opens its card, and a company without as text", () => {
+    const open = vi.fn();
+    show({ raw: ticketCard(NOW, "fr"), onOpenRecord: open });
+    const link = host.querySelector<HTMLElement>("[data-record-company-link]")!;
+    act(() => { link.click(); });
+    expect(open).toHaveBeenCalledWith({ product: "nimbus_desk", kind: "company", id: "7310" }, "Acme Fabrication");
+    const raw = ticketCard(NOW, "fr");
+    (raw.company as Record<string, unknown>).ref = undefined;
+    show({ raw, onOpenRecord: open });
+    expect(host.querySelector("[data-record-company-link]")).toBeNull();
+  });
+
+  it("shows a back arrow only when it replaced another card", () => {
+    const back = vi.fn();
+    show({ raw: companyCard(NOW, "fr"), record: COMPANY_REF, onBack: back });
+    act(() => { host.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+    expect(back).toHaveBeenCalled();
+    show({ raw: companyCard(NOW, "fr"), record: COMPANY_REF });
+    expect(host.querySelector("[aria-label=Retour]")).toBeNull();
+  });
+
+  it("says nothing twice in a state card: one sentence, one action row, no skeleton", () => {
+    for (const state of ["no_access", "unknown", "not_connected", "busy", "down", "org_ask"] as const) {
+      show({ miss: { state }, onConnect: () => {} });
+      const sentences = [...host.querySelectorAll("p")].map((p) => p.textContent);
+      expect(sentences).toHaveLength(1);
+      expect(host.querySelectorAll(".animate-pulse")).toHaveLength(0);
+    }
   });
 });

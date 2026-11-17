@@ -14,7 +14,7 @@ import { ChatMarkdown } from "../components/ChatMarkdown";
 import { LinkPreviewCard } from "../components/LinkHoverCard";
 import { RecordCard } from "../components/RecordCard";
 import { loadLocale } from "../lib/i18n";
-import { companyCard, guidCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, COMPANY_REF, GUID_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
+import { NIMBUS_MARK, companyCard, guidCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, COMPANY_REF, GUID_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
 import { seedRecordProducts } from "../lib/record-cards";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { parseRecordCardAnswer, type RecordCardAnswer, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
@@ -29,7 +29,7 @@ const scene = params.get("scene") ?? "overview";
 // 2026-11-17 14:34 in Toronto
 const NOW = Date.parse("2026-11-17T14:34:00-05:00");
 
-const product = { name: "Nimbus Desk", domain: "desk.example" };
+const product = { name: "Nimbus Desk", iconUrl: NIMBUS_MARK };
 const kindNames: Record<string, string> = lang === "fr"
   ? { ticket: "Billet", company: "Entreprise", project: "Projet" }
   : { ticket: "Ticket", company: "Company", project: "Project" };
@@ -52,7 +52,7 @@ function Card({ record, label, answerOf, pinned, miss, loading }: { record: Reco
       <RecordCard
         record={record} label={label} kindName={kindNames[record.kind]} product={product}
         read={loading ? { ...base, loading: true, card: null, miss: null } : base}
-        pinned={pinned} onClose={noop} onAsk={noop} onConnect={noop} onSignIn={noop} now={NOW}
+        pinned={pinned} onClose={noop} onAsk={noop} onConnect={noop} onSignIn={noop} onOpenRecord={noop} now={NOW}
       />
     </div>
   );

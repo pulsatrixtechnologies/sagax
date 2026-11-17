@@ -3,7 +3,7 @@
 // (ref-pill.ts) with the product's mark; the card is the existing HoverCard
 // (LinkHoverCard.tsx) asking for its pin, its warm switch and its motion.
 // Nothing here navigates: the link's own scheme is never handed to the shell.
-import { useCallback, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { FileText } from "lucide-react";
 
 import { RecordCard, RecordProductMark } from "@/components/RecordCard";
@@ -45,15 +45,9 @@ export function RecordLink({ record, botId, threadId, children }: { record: Reco
   const kindName = recordKindName(kind) ?? t("recordCard.kindFallback");
   const label = nodeText(children).trim();
   const text = label && !isGuid(label) ? label : kindName;
-  const productInfo = product ? { name: product.name, ...(product.icon ? { domain: product.icon.domain } : {}) } : undefined;
+  const productInfo = product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined;
   const chipName = t(product ? "recordCard.chipName" : "recordCard.chipNameBare", { kind: kindName, number: text, product: product?.name ?? "" });
   const draftId = botId && threadId ? `bot:${botId}:${threadId}` : null;
-  const ask = useCallback(() => {
-    if (!draftId) return;
-    appendComposerDraft(draftId, `${recordMarkdown(text, record)} `);
-    setTimeout(() => focusComposer(), 0);
-  }, [draftId, text, record]);
-
   if (known.miss?.state === "unavailable") return <span className="break-words">{children}</span>;
 
   return (
@@ -64,15 +58,14 @@ export function RecordLink({ record, botId, threadId, children }: { record: Reco
       motion
       label={t("recordCard.dialogName", { kind: kindName, number: text })}
       onIntent={() => prefetchRecordCard(record)}
-      card={({ pinned, close }) => (
+      card={({ pinned, close, pin }) => (
         <OpenRecordCard
           record={record}
           label={text}
-          kindName={kindName}
-          product={productInfo}
           pinned={pinned}
+          pin={pin}
           onClose={close}
-          onAsk={draftId ? () => { close(); ask(); } : undefined}
+          onAsk={draftId ? (ref, words) => { close(); appendComposerDraft(draftId, `${recordMarkdown(words, ref)} `); setTimeout(() => focusComposer(), 0); } : undefined}
           onConnect={store ? () => { close(); store.dispatch({ type: "togglePlugins", open: true, surface: "apps" }); } : undefined}
           onSignIn={() => { void signInAgainPath().then((path) => { if (path) window.location.assign(path); }); }}
         />
@@ -105,8 +98,43 @@ export function RecordLink({ record, botId, threadId, children }: { record: Reco
   );
 }
 
-/** The card, reading while it is on screen. */
-function OpenRecordCard(props: Omit<Parameters<typeof RecordCard>[0], "read">) {
-  const read = useRecordCard(props.record, { enabled: true });
-  return <RecordCard {...props} read={read} />;
+/** The card, reading while it is on screen. A company the card names opens
+ * in this card's place (a card from a card: never two stacked), with a back
+ * arrow in the head that returns to the one it replaced. */
+function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect, onSignIn }: {
+  record: RecordRef;
+  label: string;
+  pinned: boolean;
+  pin: () => void;
+  onClose: () => void;
+  onAsk?: (ref: RecordRef, label: string) => void;
+  onConnect?: () => void;
+  onSignIn?: () => void;
+}) {
+  const [trail, setTrail] = useState<Array<{ ref: RecordRef; label: string }>>([]);
+  const current = trail.at(-1) ?? { ref: record, label };
+  const products = useRecordProducts();
+  const { product, kind } = findRecordKind(products, current.ref);
+  const read = useRecordCard(current.ref, { enabled: true });
+  return (
+    <RecordCard
+      key={`${current.ref.product}/${current.ref.kind}/${current.ref.id}`}
+      record={current.ref}
+      label={current.label}
+      kindName={recordKindName(kind)}
+      product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
+      read={read}
+      pinned={pinned}
+      onClose={onClose}
+      onAsk={onAsk ? () => onAsk(current.ref, current.label) : undefined}
+      onConnect={onConnect}
+      onSignIn={onSignIn}
+      onOpenRecord={(ref, words) => {
+        if (current.ref.product === ref.product && current.ref.kind === ref.kind && current.ref.id === ref.id) return;
+        pin();
+        setTrail((steps) => [...steps, { ref, label: words }]);
+      }}
+      onBack={trail.length ? () => setTrail((steps) => steps.slice(0, -1)) : undefined}
+    />
+  );
 }

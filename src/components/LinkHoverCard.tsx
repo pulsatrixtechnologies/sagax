@@ -117,6 +117,8 @@ export interface HoverCardState {
   pinned: boolean;
   /** close (and unpin) the card */
   close: () => void;
+  /** pin the card open (a click inside it that goes somewhere) */
+  pin: () => void;
 }
 
 type Mode = "closed" | "hover" | "pinned";
@@ -408,7 +410,7 @@ export function HoverCard({ card, kind, children, onIntent, pinnable = false, la
           onPointerEnter={(event) => { if (event.pointerType !== "touch") clear(); }}
           onPointerLeave={(event) => { if (event.pointerType !== "touch") later(false, HOVER_CLOSE_GRACE_MS); }}
         >
-          {card({ pinned, close: closeNow })}
+          {card({ pinned, close: closeNow, pin: () => { clear(); setMode("pinned"); } })}
         </div>,
         document.body,
       )}

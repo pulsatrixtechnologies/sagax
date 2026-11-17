@@ -21,7 +21,7 @@ const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "lig
 const langs = ["fr", "en"];
 const widths = [1280, 390];
 const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgask", "orgrefused", "neighbour"];
-const chatScenes = [{ name: "chat-hover", action: "hover" }, { name: "chat-pinned", action: "click" }];
+const chatScenes = [{ name: "chat-hover", action: "hover" }, { name: "chat-pinned", action: "click" }, { name: "chat-nested", action: "nested" }];
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -49,8 +49,11 @@ try {
     headless: true,
     executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   });
+  // the invented product's mark: the console serves an https address, the capture answers it
+  const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#g)"/><path d="M20 42a9 9 0 0 1 1-17.9A12 12 0 0 1 44 27a8 8 0 0 1 0 15z" fill="#fff"/></svg>`;
   for (const width of widths) {
     const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
+    await page.route("https://desk.example/mark.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARK }));
     page.on("pageerror", (error) => console.error("page error:", String(error).slice(0, 400)));
     page.on("console", (message) => { if (message.type() === "error") console.error("console:", message.text().slice(0, 300)); });
     page.on("response", (response) => { if (response.status() >= 400) console.error("http", response.status(), response.url().slice(0, 160)); });
@@ -73,6 +76,11 @@ try {
           await chip.scrollIntoViewIfNeeded();
           if (action === "hover") await chip.hover();
           else await chip.click();
+          if (action === "nested") {
+            await page.waitForSelector("[data-record-company-link]", { timeout: 10_000 });
+            await page.locator("[data-record-company-link]").hover();
+            await page.waitForTimeout(900);
+          }
           await page.waitForSelector("[data-record-card] [data-record-card-body]", { timeout: 10_000 });
           await page.waitForTimeout(700);
           await page.screenshot({ path: join(outDir, `${name}-${lang}-${label}-${width}.png`) });

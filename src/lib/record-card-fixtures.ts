@@ -8,6 +8,8 @@ import type { PersonProduct } from "../../shared/person-products";
 import type { RecordRef } from "../../shared/record-cards";
 
 export const NIMBUS_PRODUCT = "nimbus_desk";
+/** The invented product's mark (the console serves an https address; the gallery's capture script answers it with an invented SVG). */
+export const NIMBUS_MARK = "https://desk.example/mark.svg";
 export const TICKET_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "ticket", id: "481516" };
 export const COMPANY_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "company", id: "7310" };
 export const PROJECT_REF: RecordRef = { product: NIMBUS_PRODUCT, kind: "project", id: "7788" };
@@ -19,7 +21,7 @@ export function nimbusProductRaw(): Record<string, unknown> {
     id: NIMBUS_PRODUCT,
     name: "Nimbus Desk",
     state: "connected",
-    icon: { domain: "desk.example" },
+    icon: { url: NIMBUS_MARK },
     records: [
       { kind: "ticket", name: { en: "Ticket", fr: "Billet" }, plural: { en: "Tickets", fr: "Billets" } },
       { kind: "company", name: { en: "Company", fr: "Entreprise" }, plural: { en: "Companies", fr: "Entreprises" } },
@@ -45,7 +47,7 @@ export function ticketCard(now: number, lang: Lang): Record<string, unknown> {
     title: T(lang, "Imprimante de l'accueil hors ligne depuis lundi", "Front desk printer offline since Monday"),
     state: { label: T(lang, "En cours", "In progress"), tone: "open" },
     priority: { label: T(lang, "Priorité 2 - Élevée", "Priority 2 - High"), level: "high" },
-    company: { name: "Acme Fabrication" },
+    company: { name: "Acme Fabrication", ref: { product: NIMBUS_PRODUCT, kind: "company", id: "7310" } },
     people: [
       { role: "contact", label: "Contact", name: "Ada Lindqvist", detail: "418 555-0142" },
       { role: "owner", label: T(lang, "Responsable", "Owner"), name: "Noor Haddad" },
@@ -93,7 +95,7 @@ export function projectCard(now: number, lang: Lang): Record<string, unknown> {
     product, kind: { id: "project", name: T(lang, "Projet", "Project") }, id: PROJECT_REF.id, number: T(lang, "Migration du serveur", "Server migration"),
     title: T(lang, "Migration du serveur de fichiers", "File server migration"),
     state: { label: T(lang, "En cours", "In progress"), tone: "open" },
-    company: { name: "Acme Fabrication" },
+    company: { name: "Acme Fabrication", ref: { product: NIMBUS_PRODUCT, kind: "company", id: "7310" } },
     people: [
       { role: "contact", label: "Contact", name: "Ada Lindqvist" },
       { role: "owner", label: T(lang, "Responsable", "Owner"), name: "Noor Haddad" },

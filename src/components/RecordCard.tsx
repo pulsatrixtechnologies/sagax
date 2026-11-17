@@ -18,16 +18,17 @@
 // Parts of the skeleton pulse and the notes rail are adapted from Arc,
 // Copyright (c) 2026 Elia Kuratli, used under the MIT License
 // (third_party/arc-library/LICENSE).
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUpRight, Building2, Check, CircleAlert, Copy, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowUpRight, Building2, Check, CircleAlert, Copy, Lock, MessageSquareText, RotateCw, ShieldAlert, TriangleAlert, UserCheck, UserRound, WifiOff, X } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative, isGuid, percentValue, sameText } from "@/lib/record-card-format";
-import type { UseRecordCard } from "@/lib/record-cards";
+import { prefetchRecordCard, type UseRecordCard } from "@/lib/record-cards";
 import { ServiceIcon } from "@/components/plugins/PluginParts";
+import { REF_PILL_CLASS } from "@/components/ref-pill";
 import type { RecordCard as Card, RecordCardMiss, RecordLevel, RecordRef, RecordTone } from "../../shared/record-cards";
 
 /** The width below which the panes stack (the available width, in rem). */
@@ -35,8 +36,8 @@ export const RECORD_CARD_STACK_REM = 34;
 
 export interface RecordCardProduct {
   name: string;
-  /** the site whose mark stands for the product (the product list's icon) */
-  domain?: string;
+  /** the product's mark (the product list's `icon.url`, https); none: the neutral tile */
+  iconUrl?: string;
 }
 
 export interface RecordCardProps {
@@ -55,6 +56,10 @@ export interface RecordCardProps {
   onConnect?: () => void;
   /** the app's own sign-in again */
   onSignIn?: () => void;
+  /** a record the card names (its company): shown as a chip that opens that card in place */
+  onOpenRecord?: (ref: RecordRef, label: string) => void;
+  /** back to the card this one replaced */
+  onBack?: () => void;
   /** the clock, for a test or a gallery that holds time still */
   now?: number;
 }
@@ -62,10 +67,10 @@ export interface RecordCardProps {
 const MARK = "size-4 shrink-0 rounded-[4px]";
 
 /** The product's mark: the card's own icon when it came with one, else the
- * product list's site, else the first letter. */
+ * product list's, else a neutral tile with the product's first letter. */
 export function RecordProductMark({ product, iconUrl, className = MARK }: { product?: RecordCardProduct; iconUrl?: string; className?: string }) {
-  const name = product?.name ?? "";
-  return <ServiceIcon card={{ logo: iconUrl ?? null, domain: product?.domain ?? null, label: name || "?" }} className={cn(className, "text-[10px] leading-none")} />;
+  const logo = iconUrl ?? product?.iconUrl ?? null;
+  return <ServiceIcon key={logo ?? ""} card={{ logo, domain: null, label: product?.name || "?" }} className={cn(className, "text-[10px] leading-none")} />;
 }
 
 const BUTTON = "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] leading-5 text-popover-ink hover:bg-popover-hover focus-visible:bg-popover-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
@@ -145,11 +150,38 @@ function PersonRow({ person }: { person: NonNullable<Card["people"]>[number] }) 
   );
 }
 
+/** A company a ticket names: the record chip of that company. Resting on it
+ * (300 ms) or a click opens the company's card in this card's place. */
+function CompanyChip({ name, companyRef, onOpen }: { name: string; companyRef: RecordRef; onOpen: (ref: RecordRef, label: string) => void }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = undefined; };
+  useEffect(() => clear, []);
+  return (
+    <button
+      type="button"
+      dir="auto"
+      title={name}
+      data-record-company-link
+      className={cn(REF_PILL_CLASS, "-ms-1.5 min-w-0 max-w-full items-center truncate font-sans text-[1em] no-underline")}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "touch") return;
+        prefetchRecordCard(companyRef);
+        clear();
+        timer.current = setTimeout(() => onOpen(companyRef, name), 300);
+      }}
+      onPointerLeave={clear}
+      onClick={() => { clear(); onOpen(companyRef, name); }}
+    >
+      <span className="truncate">{name}</span>
+    </button>
+  );
+}
+
 function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> }) {
   return (
     <Chip className={LEVEL_CLASS[priority.level]} title={priority.label}>
       {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className="shrink-0" />}
-      <span className="truncate">{priority.label}</span>
+      <span className="max-w-[11rem] truncate">{priority.label}</span>
     </Chip>
   );
 }
@@ -195,7 +227,7 @@ function Facts({ card, now, lang }: { card: Card; now: number; lang: string }) {
   if (!rows.length) return null;
   return (
     <>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[13px] leading-[18px]" data-record-facts>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 text-[13px] leading-[18px]" data-record-facts>
         {rows.map((row) => (
           <div key={row.key} className="contents">
             <dt className={cn("max-w-[9rem] truncate whitespace-nowrap text-[12px] leading-4 text-popover-ink-secondary", row.gap && "mt-1")} title={row.label}>{row.label}</dt>
@@ -244,19 +276,24 @@ function Notes({ card, now, lang, description, pinned }: { card: Card; now: numb
   );
 }
 
-function Head({ card, label, kindName, product, onClose, pinned, skeleton = false }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose"> & { card: Card | null; pinned: boolean; skeleton?: boolean }) {
+function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleton = false }: Pick<RecordCardProps, "label" | "kindName" | "product" | "onClose" | "onBack"> & { card: Card | null; pinned: boolean; skeleton?: boolean }) {
   const kind = card?.kind.name ?? kindName ?? t("recordCard.kindFallback");
   const shown = card?.number ?? label;
-  // a number that is the title (a company's name) is said once; a GUID never
-  const hidden = isGuid(shown) || (card ? shown.trim().toLowerCase() === card.title.trim().toLowerCase() : false);
+  // a number that is the title, or begins it (a company's or a project's name), is said once; a GUID never
+  const hidden = isGuid(shown) || (card ? card.title.trim().toLowerCase().startsWith(shown.trim().toLowerCase()) : false);
   return (
     <div className="flex min-w-0 items-center gap-2 px-3 pt-2.5" data-record-head>
-      <RecordProductMark product={card ? { name: card.product.name, domain: product?.domain } : product} iconUrl={card?.product.icon?.url} />
+      {onBack && (
+        <button type="button" className={cn(ICON_BUTTON, "-ms-1.5 -my-1 size-6")} aria-label={t("recordCard.back")} title={t("recordCard.back")} onClick={onBack}>
+          <ArrowLeft size={14} aria-hidden="true" className="rtl:-scale-x-100" />
+        </button>
+      )}
+      <RecordProductMark product={card ? { name: card.product.name, iconUrl: product?.iconUrl } : product} iconUrl={card?.product.icon?.url} />
       <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
-      {!hidden && <span dir="ltr" className="min-w-0 truncate font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
+      {!hidden && <span dir="ltr" className="min-w-12 truncate font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
       <span className="ms-auto flex shrink-0 items-center gap-1">
+        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "min-w-0")} title={card.state.label}><span className="max-w-[9rem] truncate">{card.state.label}</span></Chip>}
         {card?.priority && <PriorityChip priority={card.priority} />}
-        {card?.state && <Chip className={TONE_CLASS[card.state.tone]} title={card.state.label}><span className="max-w-[12rem] truncate">{card.state.label}</span></Chip>}
         {skeleton && <Bar className="h-5 w-16 rounded-full" />}
         {pinned && onClose && (
           <button type="button" className={cn(ICON_BUTTON, "-me-1.5")} aria-label={t("recordCard.close")} title={t("recordCard.close")} onClick={onClose}>
@@ -309,7 +346,7 @@ export function missSentence(miss: RecordCardMiss, product: RecordCardProduct | 
   return t(MISS[miss.state].sentence as Parameters<typeof t>[0], { product: product?.name ?? t("recordCard.productFallback") });
 }
 
-export function RecordCard({ record, label, kindName, product, read, pinned = false, onClose, onAsk, onConnect, onSignIn, now: clock }: RecordCardProps) {
+export function RecordCard({ record, label, kindName, product, read, pinned = false, onClose, onAsk, onConnect, onSignIn, onOpenRecord, onBack, now: clock }: RecordCardProps) {
   const lang = activeLocale();
   const now = clock ?? Date.now();
   const { card, miss, loading } = read;
@@ -337,7 +374,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
     })();
     return (
       <div className={frame} {...data}>
-        <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} pinned={pinned} />
+        <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
         <div role="status" className="flex flex-col items-center gap-1 px-6 pb-1 pt-4 text-center" title={miss.rule?.text}>
           <Icon size={16} aria-hidden="true" className="text-popover-ink-secondary" />
           <p className="max-w-[28rem] text-[13px] leading-5">{missSentence(miss, product)}</p>
@@ -354,7 +391,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   if (!card) {
     return (
       <div className={frame} {...data} aria-busy="true">
-        <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} pinned={pinned} skeleton />
+        <Head card={null} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} skeleton />
         <div className="px-3 pb-2.5 pt-1.5"><Bar className="h-5 w-3/5" /></div>
         <div className="flex min-h-0 flex-1 border-t border-popover-hairline max-[35rem]:flex-col">
           <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 min-[35rem]:flex-[2_1_0%] min-[35rem]:border-e min-[35rem]:border-popover-hairline">
@@ -381,10 +418,11 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
   const openUrl = card.openUrl;
   const clockText = (card.asOf ?? (read.at ? new Date(read.at).toISOString() : undefined));
   const productLabel = productName ?? product?.name;
+  const upToDate = clockText ? t("recordCard.upToDate", { time: formatClock(clockText, lang, card.tz) }) : "";
 
   return (
     <div className={frame} {...data} aria-busy={loading ? "true" : undefined}>
-      <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} pinned={pinned} />
+      <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
       <p dir="auto" className="line-clamp-2 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
       <Pane pinned={pinned} stack className="flex flex-1 border-t border-popover-hairline max-[35rem]:flex-col" data-record-panes="">
         <Pane pinned={pinned} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? "min-[35rem]:flex-[2_1_0%] min-[35rem]:border-e min-[35rem]:border-popover-hairline max-[35rem]:border-b max-[35rem]:border-popover-hairline" : "flex-1")}>
@@ -393,7 +431,11 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
               {card.company && (
                 <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-company>
                   <Building2 size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
-                  <span dir="auto" className="min-w-0 flex-1 truncate" title={card.company.name}>{card.company.name}</span>
+                  {card.company.ref && onOpenRecord ? (
+                    <CompanyChip name={card.company.name} companyRef={card.company.ref} onOpen={onOpenRecord} />
+                  ) : (
+                    <span dir="auto" className="min-w-0 flex-1 truncate" title={card.company.name}>{card.company.name}</span>
+                  )}
                 </div>
               )}
               {others.map((person, index) => <PersonRow key={`${person.role}-${index}`} person={person} />)}
@@ -410,23 +452,24 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
           </Pane>
         )}
       </Pane>
-      <div className="flex flex-wrap items-center gap-x-0.5 gap-y-0 border-t border-popover-hairline px-1.5 py-1" data-record-actions>
+      <div className="flex flex-nowrap items-center gap-x-0.5 border-t border-popover-hairline px-1.5 py-1" data-record-actions>
         {openUrl && (
-          <button type="button" className={cn(BUTTON_PRIMARY, "max-w-[16rem]")} onClick={() => { void openExternalLink(openUrl); }} data-hover-card-first="" data-record-open>
+          <button type="button" className={cn(BUTTON_PRIMARY, "min-w-0 shrink")} onClick={() => { void openExternalLink(openUrl); }} data-hover-card-first="" data-record-open>
             <span className="truncate">{productLabel ? t("recordCard.openIn", { product: productLabel }) : t("recordCard.open")}</span>
             <ArrowUpRight size={14} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
           </button>
         )}
         {onAsk && (
-          <button type="button" className={BUTTON} onClick={onAsk} title={t("recordCard.askTitle")} data-record-ask {...(openUrl ? {} : { "data-hover-card-first": "" })}>
+          // the label stays for the wide two-pane card; narrow or left-pane-only, an icon with its tooltip
+          <button type="button" className={cn(BUTTON, "px-1.5")} onClick={onAsk} aria-label={t("recordCard.ask")} title={t("recordCard.askTitle")} data-record-ask {...(openUrl ? {} : { "data-hover-card-first": "" })}>
             <MessageSquareText size={14} aria-hidden="true" className="shrink-0" />
-            <span>{t("recordCard.ask")}</span>
+            <span className={split ? "max-[35rem]:hidden" : "hidden"}>{t("recordCard.ask")}</span>
           </button>
         )}
         <CopyNumber text={copy} className={ICON_BUTTON} />
-        <span className="ms-auto flex items-center gap-0.5 ps-2 text-[12px] leading-4 text-popover-ink-secondary">
-          {clockText && <time dateTime={clockText} title={formatFull(clockText, lang, card.tz)} className="whitespace-nowrap">{t("recordCard.upToDate", { time: formatClock(clockText, lang, card.tz) })}</time>}
-          <button type="button" className={ICON_BUTTON} aria-label={t("recordCard.refresh")} title={t("recordCard.refresh")} onClick={read.refresh} data-record-refresh>
+        <span className="ms-auto flex shrink-0 items-center gap-0.5 ps-1 text-[12px] leading-4 text-popover-ink-secondary">
+          {clockText && <time dateTime={clockText} className={cn("whitespace-nowrap", split ? "max-[35rem]:hidden" : "hidden")}>{upToDate}</time>}
+          <button type="button" className={ICON_BUTTON} aria-label={upToDate ? `${t("recordCard.refresh")}. ${upToDate}` : t("recordCard.refresh")} title={upToDate ? `${upToDate} (${t("recordCard.refresh")})` : t("recordCard.refresh")} onClick={read.refresh} data-record-refresh>
             <RotateCw size={14} aria-hidden="true" className={cn(loading && "animate-spin motion-reduce:animate-none")} />
           </button>
         </span>

@@ -15188,5 +15188,6 @@
   "recordCard.state.busy": "{product} is busy. Trying again shortly.",
   "recordCard.state.orgRefused": "Your organization blocks this read.",
   "recordCard.state.orgAsk": "Your organization asks you to confirm before reading.",
-  "recordCard.state.unavailable": "Record cards are not available here."
+  "recordCard.state.unavailable": "Record cards are not available here.",
+  "recordCard.back": "Back"
 }

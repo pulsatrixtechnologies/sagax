@@ -7,7 +7,7 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { answer, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
+import { answer, companyCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
 import { resetRecordCards, resetRecordProducts, seedRecordProducts } from "@/lib/record-cards";
 import { HOVER_CLOSE_GRACE_MS, HOVER_OPEN_DELAY_MS, HOVER_INTENT_MS } from "./LinkHoverCard";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -207,5 +207,28 @@ describe("the card", () => {
     await advance(50);
     expect(card()!.querySelector("[data-record-ask]")).toBeNull();
     expect(card()!.querySelector("[data-record-open]")).not.toBeNull();
+  });
+
+  it("opens the company's card in the same card, with a back arrow, never two cards", async () => {
+    reply = () => json(answer(ticketCard(Date.now(), "fr")));
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = String(input);
+      if (url.includes("/company/")) { reads.push(url); return json(answer(companyCard(Date.now(), "fr"))); }
+      if (url.includes("/api/me/records/")) reads.push(url);
+      return reply();
+    }));
+    await render(`[#481516](${LINK})`);
+    await act(async () => { chips()[0]!.click(); });
+    await advance(50);
+    const link = card()!.querySelector<HTMLElement>("[data-record-company-link]")!;
+    await act(async () => { link.click(); });
+    await advance(50);
+    expect(document.querySelectorAll("[data-record-card]")).toHaveLength(1);
+    expect(card()!.getAttribute("role")).toBe("dialog");
+    expect(card()!.textContent).toContain("Entreprise");
+    expect(reads.some((url) => url.includes("/company/7310"))).toBe(true);
+    await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+    await advance(50);
+    expect(card()!.textContent).toContain("Imprimante de l'accueil");
   });
 });

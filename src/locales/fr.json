@@ -15188,5 +15188,6 @@
   "recordCard.state.busy": "{product} est occupé. Nouvel essai dans un instant.",
   "recordCard.state.orgRefused": "Ton organisation bloque cette lecture.",
   "recordCard.state.orgAsk": "Ton organisation te demande de confirmer avant de lire.",
-  "recordCard.state.unavailable": "Les fiches ne sont pas offertes ici."
+  "recordCard.state.unavailable": "Les fiches ne sont pas offertes ici.",
+  "recordCard.back": "Retour"
 }

@@ -25,7 +25,7 @@ import {
 } from "../engines/claude-accounts.ts";
 import { pinnedClaudeUpdateRefusal, updateClaudeCli } from "../engines/claude-update.ts";
 import { accountInUseRefusal, accountUserNames } from "../engines/account-users.ts";
-import { addedAccount } from "../../shared/added-account.ts";
+import { ONLY_ACCOUNT_ERROR, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
 import {
   engineLaunches,
   persistableInstanceConfigs,
@@ -141,17 +141,18 @@ function busyProviderSelections(deps: Pick<InstancesRouteDeps, "bots" | "tasks" 
 /** What removing an added account needs (the instance routes and a
  * person's own list, server/routes/me-engines.ts, share it). */
 export type AddedAccountRemovalDeps = Pick<InstancesRouteDeps,
-  "cfg" | "getProviderConfigBusy" | "setProviderConfigBusy" | "providerInstancesChanging" | "persistProviderInstance" |
+  "cfg" | "saveConfig" | "getProviderConfigBusy" | "setProviderConfigBusy" | "providerInstancesChanging" | "persistProviderInstance" |
   "bots" | "tasks" | "threadBusy" | "botForThread" | "activeGroupTurnForBot">;
 
 export type AddedAccountRemoval =
   | { ok: true }
   | { ok: false; status: number; body: { error: string; code?: string; [key: string]: unknown } };
 
-/** Removes the entry of an account added beside a provider's first one
- * (#4415, #4435). `inUse` is the caller's refusal for bots that still use
- * it; a turn in flight on it always waits. `beforeRemove` runs once nothing
- * refuses, while the entry is still there (a sign-out reads it). */
+/** Removes one account of a provider, the first one too while another
+ * remains (#4415, #4426, #4435). `inUse` is the caller's refusal for bots
+ * that still use it; a turn in flight on it always waits. `beforeRemove`
+ * runs once nothing refuses, while the entry is still there (a sign-out
+ * reads it). */
 export async function removeAddedAccount(
   deps: AddedAccountRemovalDeps,
   instanceId: string,
@@ -160,10 +161,13 @@ export async function removeAddedAccount(
   if (deps.getProviderConfigBusy()) return { ok: false, status: 409, body: { error: "provider settings are already being updated" } };
   const instances = persistableInstanceConfigs(deps.cfg);
   if (!Object.hasOwn(instances, instanceId)) return { ok: false, status: 404, body: { error: "unknown instance" } };
-  // #4415: every account added beside a provider's first one, of any
-  // provider (Claude, the ChatGPT plan, Antigravity), not Claude's only
-  if (!addedAccount(instanceId, instances[instanceId].driver)) {
-    return { ok: false, status: 400, body: { error: "Only an account added beside the provider's first one can be removed." } };
+  // #4415, #4426: any account of any provider (Claude, the ChatGPT plan,
+  // Antigravity), the first one too, while the provider keeps another.
+  // A key engine of the same tool is a key, not an account.
+  const entry = instances[instanceId];
+  const accounts = Object.keys(instances).filter((id) => instances[id]?.driver === entry.driver && instances[id]?.access !== "api");
+  if (entry.access === "api" || !removableAccount(instanceId, accounts)) {
+    return { ok: false, status: 400, body: { error: ONLY_ACCOUNT_ERROR } };
   }
   const refused = options.inUse?.();
   if (refused) return refused;
@@ -175,6 +179,13 @@ export async function removeAddedAccount(
   try {
     await options.beforeRemove?.();
     delete instances[instanceId];
+    // #4426: a built-in engine (the ChatGPT plan) is added back to a fleet
+    // on every load; one the person removed stays removed.
+    if (!separateAccountInstance(instanceId) && !deps.cfg.removedInstances?.includes(instanceId)) {
+      const removedInstances = [...(deps.cfg.removedInstances ?? []), instanceId];
+      deps.saveConfig({ removedInstances });
+      deps.cfg.removedInstances = removedInstances;
+    }
     await deps.persistProviderInstance(instanceId, instances);
     return { ok: true };
   } finally {

@@ -7,7 +7,7 @@
  * `botslink=none|off|org|paused-delivery`: the bots link's states, `noxai=1`:
  * no xAI account, `people=alone|others` (#4360): a server with no organization
  * whose owner is alone on it, or that has let one more person in,
- * `accounts=claude|openai|openai-solo|xai` (#4415): a provider's Accounts). */
+ * `accounts=claude|claude-one|openai|openai-solo|xai` (#4415, #4426): a provider's Accounts). */
 export function settingsPagesApi(params: URLSearchParams): Record<string, unknown> {
   const DAY = 86_400_000;
   const NOW = Date.UTC(2026, 9, 28, 14);
@@ -249,7 +249,7 @@ function accountProviders(accounts: string | null): { providers?: unknown[] } {
   return { providers: lists.slice(0, Math.max(1, Math.min(3, Number(accounts) || 1))) };
 }
 
-/** &accounts=claude|openai|openai-solo|xai (#4415): a provider's Accounts in
+/** &accounts=claude|claude-one|openai|openai-solo|xai (#4415, #4426): a provider's Accounts in
  * each state the owner met: several accounts all signed out, one sign-in
  * read by two engines (one row), a second sign-in of one engine, and the
  * answers a sign-in in progress gets (a pasted code, a device code, the
@@ -288,6 +288,15 @@ function accountScenes(scene: string, config: Record<string, unknown>, role: "ad
       "/api/me/providers": { keys: [], servers: [] },
       [`/api/me/engines/${ids[1]}/login/start`]: waiting({ authorizationUrl: "https://claude.ai/oauth/authorize?code=true" }),
       [`/api/me/engines/${ids[1]}/login/status`]: waiting({ authorizationUrl: "https://claude.ai/oauth/authorize?code=true" }),
+    };
+  }
+  // #4426: a provider's only account, signed in: nothing to remove
+  if (scene === "claude-one") {
+    return {
+      ...org,
+      "/api/instances": { instances: [engine("claude", "claudeAgent", "Claude", true), pi] },
+      "/api/me/engines": { engines: [mine("claude", "claudeAgent", "Claude", true), piMine] },
+      "/api/me/providers": { keys: [], servers: [] },
     };
   }
   if (scene === "openai") {

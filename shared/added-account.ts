@@ -1,9 +1,10 @@
-// Which accounts of a provider a person can remove (#4415, Providers > a
-// provider > Accounts: "I should be able to delete accounts"). The first
-// account of a driver is the provider itself (its engine, its sign-in folder
-// since the beginning); every account added beside it can go. The server
-// (DELETE /api/instances/:id, DELETE /api/me/engines/:id) and the page read
-// this one rule.
+// Which accounts of a provider a person can remove (#4415, #4426, Providers >
+// a provider > Accounts: "I should be able to delete accounts"). Any account,
+// the first one included, while the provider keeps another one; the only
+// account is where to sign in, so there is nothing to remove. `addedAccount`
+// stays the older "added beside the first" test (#4435: ownership and
+// sign-in folders). The server (DELETE /api/instances/:id, DELETE
+// /api/me/engines/:id) and the page read `removableAccount`.
 
 /** 2026-11-06 (#2373): an account added next to a driver's first one
  * (Providers > Add account: `claude-<uuid>`, `chatgpt-<uuid>`,
@@ -34,3 +35,15 @@ export function providerFirstAccount(instanceId: string, driver: string): string
   if (!addedAccount(instanceId, driver)) return undefined;
   return separateAccountInstance(instanceId) ? instanceId.slice(0, -37) : "claude";
 }
+
+const companyAccount = (instanceId: string) => instanceId.startsWith("company.");
+
+/** Whether an account can be removed: never a company account (managed in
+ * desktop Settings), else whenever its provider keeps another account.
+ * `accounts` lists the provider's accounts; this one may be among them. */
+export function removableAccount(instanceId: string, accounts: readonly string[]): boolean {
+  return !companyAccount(instanceId) && accounts.some((id) => id !== instanceId && !companyAccount(id));
+}
+
+/** Why the server refused: the page offers no Remove there. */
+export const ONLY_ACCOUNT_ERROR = "A provider's only account cannot be removed.";

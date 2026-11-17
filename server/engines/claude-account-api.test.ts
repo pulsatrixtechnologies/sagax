@@ -179,7 +179,9 @@ describe("Claude account HTTP API", () => {
     expect(saved().instances).toHaveProperty("claude");
     expect(readFileSync(marker, "utf8")).toBe("Keep the user's CLI account files");
     expect((await api("GET", "/api/instances")).body.instances.some((row: any) => row.instanceId === first.id)).toBe(false);
-    expect((await api("DELETE", "/api/instances/claude")).status).toBe(400);
+    // #4426: the first account can go while another Claude account remains
+    expect((await api("DELETE", "/api/instances/claude")).status).toBe(200);
+    expect(saved().instances).not.toHaveProperty("claude");
     expect((await api("DELETE", "/api/instances/ghost")).status).toBe(400);
   });
 

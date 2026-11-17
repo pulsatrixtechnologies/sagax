@@ -143,7 +143,6 @@
   "Sources": "connectApps.manage.tab.sources",
   "Search plugins, skills, MCP servers, bots, templates, pages and sources": "connectApps.search.placeholder",
   "Plugins installed here go to %@ only, with their agents, commands and skills. Hooks and the plugin's own MCP servers are left out.": "connectApps.scope.botNote",
-  "List": "routines.view.list",
   "Filters": "routineCalendar.filters",
   "Upcoming": "routines.upcoming.title",
   "Drag a bot from the left sidebar onto a time to schedule it.": "routines.upcoming.dragHint",

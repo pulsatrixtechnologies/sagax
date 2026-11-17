@@ -14148,7 +14148,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatisations. Des bots qui s'exécutent à l'horaire, ou quand un webhook les appelle. Ouvrons-la."
+            "value": "Automatisations. Des bots qui s'exécutent à l'horaire, ou quand un webhook les appelle. Ouvrons-les."
           }
         }
       }
@@ -118402,7 +118402,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Routines. Des bots qui s'exécutent à l'horaire, ou quand un webhook les appelle. Ouvrons-la."
+            "value": "Routines. Des bots qui s'exécutent à l'horaire, ou quand un webhook les appelle. Ouvrons-les."
           }
         }
       }

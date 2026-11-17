@@ -81,7 +81,23 @@ function toolDisplayNameUnsafe(name: string, product?: string): string {
  * times`) read as its name in words. */
 const TOOL_ID_IN_TEXT = /(?<![\w-])(?:[A-Za-z0-9][\w.-]*?__[\w.-]*[A-Za-z0-9]|(?:user|team|org|workspace)-[\w.-]+___\d+)(?![\w-])/g;
 
+/** An engine's answer to a call of a name it does not have. */
+const MISSING_TOOL_BEFORE = /(?:tool not found|unknown tool):\s*$/i;
+
+/** The connection part of an MCP id (`mcp__perspicax__flow` reads
+ * `perspicax`), or undefined for a name without one. */
+function toolConnection(id: string): string | undefined {
+  const parts = id.trim().replace(/^mcp__/, "").split("__").filter(Boolean);
+  return parts.length > 1 ? parts[0] : undefined;
+}
+
 export function humanizeToolIds(text: string | undefined): string {
   if (!text) return "";
-  return text.replace(TOOL_ID_IN_TEXT, (id) => toolDisplayName(id));
+  return text.replace(TOOL_ID_IN_TEXT, (id: string, offset: number) => {
+    // #4432: in "Tool not found: <id>" the name the bot called is the whole
+    // fact. Its own part alone ("Tool not found: Flow") read as a call to a
+    // tool named `Flow`; the connection it was called on stays, in words.
+    const connection = MISSING_TOOL_BEFORE.test(text.slice(Math.max(0, offset - 40), offset)) && !gatewayToolId(id) ? toolConnection(id) : undefined;
+    return connection ? toolDisplayName(id, connection) : toolDisplayName(id);
+  });
 }

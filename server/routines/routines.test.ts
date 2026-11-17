@@ -5621,6 +5621,43 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).error).toContain("flow_run failed");
   });
 
+  it("a tool called on a connection that lacks it, then run on one that has it, is a clean run (#4432)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__gateway__flow", false, "Tool not found: gateway__flow");
+    tool(h, "thread-1", "b", "mcp__gateway__flow", false, "Tool not found: gateway__flow");
+    tool(h, "thread-1", "c", "mcp__own_connection__flow", true);
+    say(h, "thread-1", "The journal is up to date.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).problems).toBeUndefined();
+  });
+
+  it("a missing tool no other connection ran stays a problem, and names its connection (#4432)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__gateway__flow", false, "Tool not found: gateway__flow");
+    tool(h, "thread-1", "b", "mcp__gateway__flow", false, "Tool not found: gateway__flow");
+    tool(h, "thread-1", "c", "mcp__own_connection__flow_stats", true);
+    say(h, "thread-1", "Stats read.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("Flow failed 2 times and never succeeded after: Tool not found: Flow · gateway");
+  });
+
+  it("a real failure of one connection's tool is not settled by the same tool name on another (#4432)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__outlook__get_message", false, "403 Forbidden");
+    tool(h, "thread-1", "b", "mcp__outlook__get_message", false, "403 Forbidden");
+    tool(h, "thread-1", "c", "mcp__gmail__get_message", true);
+    say(h, "thread-1", "Read the message.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("Get message failed 2 times and never succeeded after: 403 Forbidden");
+  });
+
   it("a tool that kept failing under its alias still names the title it was first called by", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

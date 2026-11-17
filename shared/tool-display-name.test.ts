@@ -26,6 +26,16 @@ describe("humanizeToolIds", () => {
     expect(humanizeToolIds("user-Outlook-get_5fmail_5fmessage___12 failed 2 times")).toMatch(/^Get mail message · Outlook.* failed 2 times$/);
   });
 
+  it("a missing tool keeps its connection: the name is the whole fact (#4432)", () => {
+    // Read as "Tool not found: Flow", the miss looked like a call to a tool
+    // named `Flow`; the call named one connection's `flow`.
+    const line = humanizeToolIds("mcp__perspicax__flow failed 2 times and never succeeded after: Tool not found: perspicax__flow");
+    expect(line).toBe("Flow failed 2 times and never succeeded after: Tool not found: Flow · perspicax");
+    expect(humanizeToolIds("Unknown tool: mcp__sagax-environment__read_file")).toBe("Unknown tool: Read file · sagax-environment");
+    expect(humanizeToolIds("tool not found: some_server__cw_psa__query")).toBe("tool not found: Query · some_server");
+    expect(line).not.toContain("__");
+  });
+
   it("leaves ordinary words alone", () => {
     const plain = "Wren's work failed: the ticket was closed (see /workspace/notes_2.md)";
     expect(humanizeToolIds(plain)).toBe(plain);

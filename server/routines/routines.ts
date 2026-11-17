@@ -331,6 +331,18 @@ export function troubleToolKey(title: string): string {
   return title.replace(/^mcp__/, "").replace(/_{2,}/g, "_");
 }
 
+/** #4432: the engine's answer to a call of a tool name it does not have
+ * (Grok "Tool not found: <name>", the gate "Unknown tool: <name>"). */
+const MISSING_TOOL = /\b(?:tool not found|unknown tool)\b/i;
+
+/** A tool's own name without the connection it was called on:
+ * `mcp__gateway__flow` and `own_connection__flow` are both `flow`, and a
+ * connector name and its gate alias (`cw_psa__query`, `cw_psa_query`) one. */
+export function ownToolKey(title: string): string {
+  const parts = title.trim().replace(/^mcp__/, "").split("__").filter(Boolean);
+  return (parts.length > 1 ? parts.slice(1) : parts).join("_").replace(/_{2,}/g, "_").toLowerCase();
+}
+
 /** Grok's refusal of `use_tool` naming one of its own native tools
  * ("search_tool is a native tool, not an MCP integration tool"): a routing
  * slip the bot recovers from by calling that native tool directly (#2970).
@@ -4598,6 +4610,14 @@ export class RoutineManager {
       const key = troubleToolKey(title);
       if (event.ok) {
         trouble.unresolved.delete(key);
+        // #4432: a call on a connection that does not have the tool (the
+        // engine answered "Tool not found"), then the same tool run on one
+        // that has it: the bot found it, the work ran. A real failure of a
+        // tool that exists stays reported whatever another connection did.
+        const own = ownToolKey(title);
+        for (const [other, failure] of trouble.unresolved) {
+          if (MISSING_TOOL.test(failure.output) && ownToolKey(failure.title) === own) trouble.unresolved.delete(other);
+        }
         // QA 0.8.67 (#2970): Grok refuses `use_tool` aimed at one of its
         // native tools ("search_tool is a native tool, not an MCP
         // integration tool"); the bot then calls it directly, under another

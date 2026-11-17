@@ -89,6 +89,32 @@ class ChatPreferencesTest {
     }
 
     @Test
+    fun aRoutineRunThatOnlySaysNothingLeavesTheChat() {
+        fun run(id: String, summary: String, forPerson: Boolean = false, startedBy: String? = null) = Message(
+            id = id,
+            role = Message.Role.BOT,
+            kind = Message.Kind.ROUTINE_RUN,
+            at = 1.0,
+            routineRun = RoutineRunCard(
+                runId = id,
+                routineName = "Watch",
+                status = "completed",
+                summary = summary,
+                wakeTopic = "watch",
+                forPerson = forPerson,
+                startedBy = startedBy,
+            ),
+        )
+        val messages = listOf(
+            text("a"),
+            run("n", "Rien à remonter.", forPerson = true),
+            run("k", "Three meetings today.", forPerson = true),
+            run("m", "Rien à remonter.", startedBy = "person"),
+        )
+        assertEquals(listOf("a", "k", "m"), transcriptRows(messages, ActivityDetail.FULL).map { it.id })
+    }
+
+    @Test
     fun quietTurnsDoNotLeaveAnEmptyDigestRowAtAnyActivityLevel() {
         val quiet = digest("quiet").copy(text = "[digest] · no tool activity observed in this turn · files: none changed · reply: hello")
         for (detail in ActivityDetail.entries) {

@@ -22,9 +22,12 @@ public enum RoutineRunRows {
         case "queued", "running", "waiting", "failed", "missed":
             return false
         case "completed":
-            // an empty text says nothing, as on the desktop (a falsy string)
+            // an empty text says nothing, as on the desktop (a falsy string).
+            // #3990: a summary that is only a nothing phrase leaves too
+            // (shared/routine-result.ts routineSaysNothing), brief excluded.
             return run.problems?.isEmpty == false || run.recovered != nil
                 || (run.wakeTopic?.isEmpty == false && !run.forPerson)
+                || Self.saysNothing(run.summary)
         default:
             return true
         }
@@ -61,4 +64,38 @@ public enum RoutineRunRows {
         }
         return firstRuns
     }
+
+    /// #3990: the whole summary is only a nothing phrase
+    /// (shared/routine-result.ts `routineSaysNothing`). The brief is not read.
+    private static func saysNothing(_ text: String?) -> Bool {
+        guard let text else { return false }
+        var plain = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while plain.first == "*" || plain.first == "_" { plain.removeFirst() }
+        while plain.last == "*" || plain.last == "_" { plain.removeLast() }
+        plain = plain.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !plain.isEmpty, !plain.contains("?") else { return false }
+        let range = NSRange(plain.startIndex..., in: plain)
+        return nothingPhrase.firstMatch(in: plain, range: range) != nil
+    }
+
+    /// Same phrases as `ROUTINE_NOTHING_PHRASES` in shared/routine-result.ts.
+    private static let nothingPhrase: NSRegularExpression = {
+        let phrases = [
+            "nothing (?:new |else |more )?to (?:report|do(?: on your side)?|flag|signal|bring up)",
+            "no (?:action|follow[- ]up|change)s? (?:is |are )?(?:needed|required)",
+            "nothing (?:found|changed|happened|new)",
+            "nothing (?:for you|needs you)",
+            "you have nothing to do",
+            "nothing[\\s_-]to[\\s_-]report",
+            "rien (?:de nouveau |d[\\u2019']autre |de plus )?à (?:signaler|faire(?: de (?:ton|votre) c(?:ô|o)t[eé])?|rapporter|remonter)",
+            "rien de (?:nouveau|neuf)",
+            "aucune? (?:action|suivi|changement)s? (?:n[\\u2019']est )?(?:requis|requise|nécessaire)",
+            "rien (?:pour toi|pour vous)",
+            "tu n[\\u2019']as rien à faire",
+            "vous n[\\u2019']avez rien à faire",
+            "rien n[\\u2019']est bloqué",
+        ].joined(separator: "|")
+        let pattern = "^(?:(?:ok(?:ay)?|done|all (?:good|clear|set|quiet))[\\s,.;:\\u2014\\u2013-]+)?(?:\(phrases))(?:[\\s,;]+(?:et |and )?(?:\(phrases)))?[\\s.!\\u2026]*$"
+        return try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+    }()
 }

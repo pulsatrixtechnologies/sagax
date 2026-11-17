@@ -35,5 +35,7 @@ describe("lastSpokenLine (#3990)", () => {
     expect(lastSpokenLine([reply, problems, worksAgain])).toBe(reply);
     const result = { kind: "routine.run", routineRun: { status: "completed", summary: "Three meetings today." } };
     expect(lastSpokenLine([reply, result])).toBe(result);
+    const nothing = { kind: "routine.run", routineRun: { status: "completed", summary: "Rien à remonter.", wakeTopic: "watch", forPerson: true } };
+    expect(lastSpokenLine([reply, nothing])).toBe(reply);
   });
 });

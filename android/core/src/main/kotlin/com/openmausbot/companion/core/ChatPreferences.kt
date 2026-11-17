@@ -186,6 +186,8 @@ fun isActivityReceipt(message: Message): Boolean = when (message.kind) {
 fun transcriptRows(messages: List<Message>, detail: ActivityDetail): List<TranscriptRow> {
     // Only a server completion marker makes narration foldable. Legacy and
     // unfinished turns stay visible, matching desktop and iOS.
+    // #3990: the first run a stored count names leaves with the count.
+    val countedRuns = RoutineRunRows.counted(messages)
     val narration = mutableMapOf<String, MutableList<Message>>()
     val startedAt = mutableMapOf<String, Double>()
     var lastUserAt: Double? = null
@@ -222,6 +224,8 @@ fun transcriptRows(messages: List<Message>, detail: ActivityDetail): List<Transc
             // chip or an empty row after every ordinary conversational reply.
             if (message.kind == Message.Kind.DIGEST && TurnDigest.parse(message.text).sections.isEmpty()) return@forEach
             if (isHiddenStatusNotice(message)) return@forEach
+            // #3990: a routine run the desktop chat leaves out stays out here too.
+            if (RoutineRunRows.outOfChat(message, countedRuns)) return@forEach
             val turn = folds[message.id]
             if (turn != null) {
                 flush()

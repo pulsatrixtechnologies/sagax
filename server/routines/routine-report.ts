@@ -13,13 +13,14 @@
  *
  * The bot says "nothing to report" explicitly by ending its final message
  * with ROUTINE_QUIET_MARKER (the contract is in ROUTINE_EXECUTION_PROMPT).
- * A short final message that only says nothing happened ("nothing to
- * report", "rien à signaler") counts too, so a bot that forgets the marker
- * does not ring the person for nothing. */
+ * A whole final message that only says nothing happened ("nothing to
+ * report", "rien à signaler", "rien à remonter", "nothing to do on your
+ * side") counts too (shared/routine-result.ts routineSaysNothing), so a
+ * bot that forgets the marker does not ring the person for nothing. */
 
 import type { RoutineGoalStatus, RoutineRunStatus } from "../../shared/routines.ts";
 import {
-  findStructure, meaningfulLine, withoutRoutineMarkers,
+  findStructure, meaningfulLine, routineSaysNothing, withoutRoutineMarkers,
   QUIET_MARKER_LINE, ROUTINE_QUIET_MARKER, ROUTINE_SAME_PROBLEM_MARKER, ROUTINE_STATUS_MARKER, SAME_PROBLEM_LINE,
 } from "../../shared/routine-result.ts";
 import { personAttention, RUN_STATUS_PROBLEM_LINE } from "../../shared/person-attention.ts";
@@ -37,7 +38,9 @@ export { ROUTINE_QUIET_MARKER, ROUTINE_SAME_PROBLEM_MARKER, ROUTINE_STATUS_MARKE
 
 /** #3990: a run with nothing to do did its work. Said to every routine run
  * and every proactive wake (both read ROUTINE_REPORT_CONTRACT), so the bot
- * itself ends such a run as quiet; the server never guesses it from words. */
+ * itself ends such a run as quiet. The nothing-to-report line is the bot's
+ * word for that (nothingToDo). A whole message that only says nothing
+ * happened is quiet too (routineSaysNothing), without that word. */
 export const ROUTINE_NOTHING_TO_DO_RULE = `A run that found nothing to do, or whose only finding is that nothing needs the person (the item was already handled, is gone, or needs no answer), did its work: end it with the line ${ROUTINE_QUIET_MARKER}, never with a partial or failed ${ROUTINE_STATUS_MARKER} line. Use that status line only when a step the work needed failed or work that was needed was left undone.`;
 
 /** #4205: a run that leaves the person several items to decide asks each
@@ -48,26 +51,6 @@ export const ROUTINE_ASK_EACH_ITEM_RULE =
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =
   ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. ${ROUTINE_NOTHING_TO_DO_RULE} If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Write the report as plain prose or a short list, never a markdown table. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. The person first sees only that last line, on a card; the rest opens behind Details. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing. ${ROUTINE_ASK_EACH_ITEM_RULE}`;
-
-/** The no-op phrases: a message that says only that nothing happened. */
-const NO_OP_PHRASES = [
-  "nothing (?:new |else |more )?to (?:report|do|flag|signal)",
-  "no (?:action|follow[- ]up|change)s? (?:is |are )?(?:needed|required)",
-  "nothing (?:found|changed|happened|new)",
-  "rien (?:de nouveau |d'autre |de plus )?à (?:signaler|faire|rapporter)",
-  "rien de (?:nouveau|neuf)",
-  "aucune? (?:action|suivi|changement)s? (?:n'est )?(?:requis|requise|nécessaire)",
-].join("|");
-
-/** The WHOLE message is one of those phrases (review 2026-10-22): a real
- * finding that merely contains a no-op phrase ("DB01 is down. Nothing to flag
- * on the others.") must still reach the person, so this matches the full
- * string, a short benign lead-in and trailing punctuation aside — never a
- * no-op clause tacked onto a report. */
-const NO_OP_FULL = new RegExp(
-  `^(?:(?:ok(?:ay)?|done|all (?:good|clear|set|quiet))[\\s,.;:—-]+)?(?:${NO_OP_PHRASES})[\\s.!…]*$`,
-  "i",
-);
 
 export interface RoutineReportOutcome {
   /** Nothing for the person: post nothing. */
@@ -229,9 +212,10 @@ function rawReportOutcome(output: string | undefined): RoutineReportOutcome {
   if (QUIET_MARKER_LINE.test(lines[0]!.trim())) {
     return { quiet: true, report: lines.slice(1).join("\n").trim(), nothingToDo: true };
   }
-  // A question is always for the person; otherwise only a whole-message no-op
-  // is silent (the marker is the real mechanism, this is a safety net).
-  const quiet = !text.includes("?") && NO_OP_FULL.test(text);
+  // A question is always for the person; otherwise only a whole-message
+  // nothing phrase is silent (the marker is the real mechanism, this is a
+  // safety net: routineSaysNothing).
+  const quiet = routineSaysNothing(text);
   return { quiet, report: text };
 }
 

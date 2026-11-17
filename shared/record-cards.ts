@@ -507,7 +507,7 @@ export type RecordLinesState = typeof RECORD_LINES_STATES[number];
 /** The card caps (the console's own, enforced again). */
 export const RECORD_CARD_CAPS = {
   title: 200, description: 600, note: 400, fieldValue: 120, name: 80, label: 80,
-  people: 4, fields: 10, notes: 3, chips: 2, lines: 6, lineLabel: 160, lineDetail: 80, lineValue: 80, title: 80,
+  people: 4, fields: 10, notes: 3, chips: 2, lines: 6, lineLabel: 160, lineDetail: 80, lineValue: 80, heading: 80,
 } as const;
 
 /** One key field. `value` is the product's own ready text; the typed parts
@@ -794,7 +794,7 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
         items.push({ label: lineLabel.text, ...(detail ? { detail: detail.text } : {}), ...(value ? { value: value.text } : {}), ...(ref ? { ref } : {}) });
       }
     }
-    const linesTitle = capped(lines.title, RECORD_CARD_CAPS.title);
+    const linesTitle = capped(lines.title, RECORD_CARD_CAPS.heading);
     const total = typeof lines.total === "number" && Number.isInteger(lines.total) && lines.total >= 0 ? lines.total : undefined;
     out.lines = {
       state, items,
@@ -829,7 +829,7 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
       }
     }
     const total = typeof notes.total === "number" && Number.isInteger(notes.total) && notes.total >= 0 ? notes.total : undefined;
-    const notesTitle = capped(notes.title, RECORD_CARD_CAPS.title);
+    const notesTitle = capped(notes.title, RECORD_CARD_CAPS.heading);
     out.notes = {
       state, items,
       ...(notesTitle ? { title: notesTitle.text } : {}),

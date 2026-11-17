@@ -27,7 +27,7 @@ describe("record link", () => {
       "sagax://record/Nimbus/ticket/1", "sagax://record/n/ticket/1", "sagax://record/nimbus_desk/ticket/..",
       "sagax://record/nimbus_desk/ticket/%2E%2E", "sagax://record/nimbus_desk/ticket/a%2Fb", "sagax://record/nimbus_desk/ticket/a b",
       "sagax://record/nimbus_desk/ticket/1?x=1", "sagax://record/nimbus_desk/ticket/1#x", "sagax://record/nimbus_desk/ticket/%E0%A4%A",
-      `sagax://record/nimbus_desk/ticket/${"9".repeat(97)}`, "sagax://record/nimbus_desk/tick-et/1", "sagax://permission/1",
+      `sagax://record/nimbus_desk/ticket/${"9".repeat(129)}`, "sagax://record/nimbus_desk/tick-et/1", "sagax://permission/1",
       "https://desk.example/ticket/1", "javascript:alert(1)", "", 42, null,
     ]) expect(parseRecordLink(href), String(href)).toBeNull();
     expect(looksLikeRecordLink("SAGAX://RECORD/x")).toBe(true);
@@ -265,7 +265,74 @@ describe("record card contract", () => {
     expect(parseRecordCardAnswer({ card })).toMatchObject({ card: { id: "481516" } });
     expect(parseRecordCardAnswer({ card: { id: "x" } })).toEqual({ state: "unavailable" });
     expect(parseRecordCardAnswer({ state: "busy", code: "vendor_busy", retryAfter: 12.2 })).toEqual({ state: "busy", code: "vendor_busy", retryAfter: 13 });
-    expect(parseRecordCardAnswer({ state: "org_ask", rule: { id: "r1", text: "Demander avant de lire Nimbus Desk" } })).toEqual({ state: "org_ask", rule: { id: "r1", text: "Demander avant de lire Nimbus Desk" } });
+    expect(parseRecordCardAnswer({ state: "org_refused", rule: { id: "r1", text: "Ne pas lire Nimbus Desk" } })).toEqual({ state: "org_refused", rule: { id: "r1", text: "Ne pas lire Nimbus Desk" } });
+    // there is no "ask" state any more: an answer that names one reads as unavailable
+    expect(parseRecordCardAnswer({ state: "org_ask" })).toEqual({ state: "unavailable" });
     expect(parseRecordCardAnswer({ state: "weird" })).toEqual({ state: "unavailable" });
   });
 });
+
+describe("a card of any kind (#4572)", () => {
+  const base = { product: { id: "nimbus_desk", name: "Nimbus Desk" }, kind: { id: "invoice", name: "Facture" }, id: "5150", number: "INV-1042", title: "Example Org" };
+  const parse = (extra: Record<string, unknown>) => parseRecordCard({ ...base, ...extra })!;
+  const REF = { product: "nimbus_desk", kind: "agreement", id: "412" };
+
+  it("keeps the typed parts of a field, and its ready value", () => {
+    const card = parse({ fields: [
+      { label: "Total", value: "1 234,50 $", type: "money", amount: "1234.5", currency: "CAD" },
+      { label: "Date", value: "2026-10-06", type: "date", at: "2026-10-06", day: true },
+      { label: "Vu", value: "x", type: "ago", at: "2026-11-17T14:00:00-05:00" },
+      { label: "Marge", value: "40 %", type: "percent", share: 40 },
+      { label: "Entente", value: "Managed services", type: "ref", ref: REF },
+      { label: "Qui", value: "Ada", type: "person", role: "owner", detail: "poste 4", ref: REF },
+      { label: "Statut", value: "En retard", type: "state", tone: "alert" },
+      { label: "Durée", value: "3,5 h", type: "duration" },
+    ] });
+    expect(card.fields).toEqual([
+      { label: "Total", value: "1 234,50 $", type: "money", amount: "1234.5", currency: "CAD" },
+      { label: "Date", value: "2026-10-06", type: "date", at: "2026-10-06", day: true },
+      { label: "Vu", value: "x", type: "ago", at: "2026-11-17T14:00:00-05:00" },
+      { label: "Marge", value: "40 %", type: "percent", share: 40 },
+      { label: "Entente", value: "Managed services", type: "ref", ref: REF },
+      { label: "Qui", value: "Ada", type: "person", detail: "poste 4", role: "owner", ref: REF },
+      { label: "Statut", value: "En retard", type: "state", tone: "alert" },
+      { label: "Durée", value: "3,5 h", type: "duration" },
+    ]);
+  });
+
+  it("reads an unknown type as text, and a bad typed part as a flat row that stays", () => {
+    const card = parse({ fields: [
+      { label: "A", value: "tel quel", type: "hologram", extra: 1 },
+      { label: "B", value: "12 $", type: "money", amount: "12 dollars" },
+      { label: "C", value: "x", type: "date", at: "someday" },
+      { label: "D", value: "50", type: "percent", share: 140 },
+      { label: "E", value: "Managed services", type: "ref", ref: { kind: "agreement", id: "412" } },
+      { label: "F", value: "2026-10-06T10:00:00Z", type: "date", at: "2026-10-06T10:00:00Z", day: true },
+    ] });
+    expect(card.fields).toEqual([
+      { label: "A", value: "tel quel" }, { label: "B", value: "12 $" }, { label: "C", value: "x" }, { label: "D", value: "50" },
+      { label: "E", value: "Managed services" }, { label: "F", value: "2026-10-06T10:00:00Z", type: "date", at: "2026-10-06T10:00:00Z" },
+    ]);
+  });
+
+  it("caps at ten fields, two chips, six lines, with the activity's title", () => {
+    const card = parse({
+      fields: Array.from({ length: 14 }, (_, index) => ({ label: `F${index}`, value: `V${index}` })),
+      chips: [{ label: "a" }, { label: "b", tone: "waiting" }, { label: "c" }],
+      lines: { state: "ok", title: "Lignes", total: 9, items: Array.from({ length: 8 }, (_, index) => ({ label: `L${index}`, value: "1 $", ref: REF })) },
+      notes: { state: "none", title: "Chronologie", items: [] },
+    });
+    expect(card.fields).toHaveLength(10);
+    expect(card.chips).toEqual([{ label: "a", tone: "open" }, { label: "b", tone: "waiting" }]);
+    expect(card.lines).toMatchObject({ state: "ok", title: "Lignes", total: 9, more: true });
+    expect(card.lines!.items).toHaveLength(6);
+    expect(card.notes.title).toBe("Chronologie");
+  });
+
+  it("reads a person's ref, and a record id of up to 128 characters", () => {
+    expect(parse({ people: [{ role: "contact", label: "Contact", name: "Sam", ref: REF }] }).people![0]!.ref).toEqual(REF);
+    expect(parseRecordLink(`sagax://record/nimbus_desk/invoice/${"9".repeat(128)}`)).not.toBeNull();
+    expect(parseRecordLink(`sagax://record/nimbus_desk/invoice/${"9".repeat(129)}`)).toBeNull();
+  });
+});
+

@@ -45,7 +45,10 @@ const measure = () => {
   const actions = [...(header?.querySelectorAll("[data-page-actions] button, [data-page-actions] summary") ?? [])];
   const close = box(actions.at(-1));
   const toolbar = box(header?.querySelector("[data-page-toolbar]"));
-  return { icon, title, close, toolbar, headerRect: box(header), scrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+  // The calendar's right rail: where its content ends (its sections' padding taken off), against the header's X
+  const rail = document.querySelector("[data-right-rail]");
+  const railContent = rail ? Math.max(...[...rail.querySelectorAll(":scope > section")].map((el) => el.getBoundingClientRect().right - parseFloat(getComputedStyle(el).paddingRight))) : null;
+  return { railContent, icon, title, close, toolbar, headerRect: box(header), scrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth };
 };
 const contentEdges = () => {
   const el = document.querySelector("[data-routines-overview]") ?? document.querySelector('section[aria-label]:not([data-page-header])') ?? document.querySelector("[data-triggers-view] > div") ?? document.querySelector("[data-routines-grid]");
@@ -90,6 +93,7 @@ try {
           if (Math.abs(r.title.bottom - m.title.bottom) > 1) errors.push(`${tag}: the title's baseline is ${r.title.bottom}, Memory's ${m.title.bottom}`);
           if (c && tab !== "calendar" && (Math.abs(c.left - r.icon.left) > 1 || Math.abs(c.right - (r.headerRect.right - (r.headerRect.right - r.close.right))) > 1)) errors.push(`${tag}: the content spans ${c.left} to ${c.right}, the header ${r.icon.left} to ${r.close.right}`);
         }
+        if (r.railContent !== null && Math.abs(r.railContent - r.close.right) > 1) errors.push(`${tag}: the calendar's side panel ends at ${r.railContent}, the header's X at ${r.close.right}`);
         if (r.scrollX > 1) errors.push(`${tag}: the page scrolls sideways by ${r.scrollX}`);
         // guide lines at Memory's measurements, on both pages
         const lines = { left: m.icon.left, right: m.close.right, base: m.title.bottom };

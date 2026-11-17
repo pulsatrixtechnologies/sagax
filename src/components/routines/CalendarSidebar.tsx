@@ -41,8 +41,9 @@ export interface CalendarSidebarProps {
  * already lists them, so this panel no longer repeats them. */
 export const CalendarSidebar = memo(function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false, hideNarrow = false }: CalendarSidebarProps) {
   return (
-    // The shared right rail (RightRail.tsx), the same as the Memory explorer's.
-    <RightRailPanel label={t("routines.upcoming.sidebar")} onCollapse={onCollapse} hideLabel={t("routines.upcoming.hide")} hideNarrow={hideNarrow}>
+    // The shared right rail (RightRail.tsx), the same as the Memory explorer's. pr-3 brings its content's right edge to the
+    // page header's (the close X): the rail itself reaches the window's edge, its content keeps the page's 24 px margin.
+    <RightRailPanel className="pr-3" label={t("routines.upcoming.sidebar")} onCollapse={onCollapse} hideLabel={t("routines.upcoming.hide")} hideNarrow={hideNarrow}>
       <MiniMonth anchor={anchor} onSelect={onSelectDate} />
 
       <div className="mx-4 border-t border-hairline/40" />

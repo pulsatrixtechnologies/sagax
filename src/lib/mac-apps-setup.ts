@@ -3,7 +3,7 @@
 // Organization server: the desktop app over IPC (window.ogb.macApps).
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
-import type { MacAppPermissionNeed, MacAppSetupId, MacAppsSetupStatus, MacAppTestResult } from "../../shared/mac-apps-setup.ts";
+import { macAppPrivacyAnchor, type MacAppPermissionNeed, type MacAppSetupId, type MacAppsSetupStatus, type MacAppTestResult } from "../../shared/mac-apps-setup.ts";
 import type { MessagesSetupStatus } from "../../shared/mac-messages-setup.ts";
 import { desktopMacApps, viaServerOrDesktop } from "./mac-messages-setup";
 
@@ -56,7 +56,7 @@ export async function askMacAppAutomation(app: MacAppSetupId): Promise<MacAppsSe
 export async function openMacAppPermissionPane(pane: MacAppPermissionNeed): Promise<void> {
   const macApps = desktopMacApps();
   if (macApps) {
-    await macApps.openSettings(pane);
+    await macApps.openSettings(macAppPrivacyAnchor(pane));
     return;
   }
   if (window.ogb?.permOpenSettings && (pane === "fullDiskAccess" || pane === "automation")) {

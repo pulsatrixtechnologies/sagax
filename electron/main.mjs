@@ -4231,17 +4231,11 @@ ipcMain.handle("mac-apps:set", desktopUiOnly("mac-apps:set", (_event, appId, ena
   return macAppsStatus(app.getPath("userData"), { platform: process.platform });
 }));
 ipcMain.handle("mac-apps:test", desktopUiOnly("mac-apps:test", (_event, appId) => testMacApp(app.getPath("userData"), appId)));
-ipcMain.handle("mac-apps:open-settings", desktopUiOnly("mac-apps:open-settings", (_event, pane) => {
+// The renderer names the pane by its System Settings anchor, from the one map
+// (shared/mac-apps-setup.ts macAppPrivacyAnchor); only a Privacy_ anchor opens.
+ipcMain.handle("mac-apps:open-settings", desktopUiOnly("mac-apps:open-settings", (_event, anchor) => {
   if (process.platform !== "darwin") return false;
-  const anchors = {
-    fullDiskAccess: "Privacy_AllFiles",
-    automation: "Privacy_Automation",
-    calendars: "Privacy_Calendars",
-    reminders: "Privacy_Reminders",
-    contacts: "Privacy_Contacts",
-  };
-  const anchor = anchors[pane];
-  if (!anchor) return false;
+  if (typeof anchor !== "string" || !/^Privacy_[A-Za-z]+$/.test(anchor)) return false;
   return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${anchor}`).then(() => true);
 }));
 ipcMain.handle("local-models:key-bases", desktopUiOnly("local-models:key-bases", () => desktopBridgeLocalModelKeys().bases()));

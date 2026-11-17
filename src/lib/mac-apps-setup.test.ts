@@ -7,8 +7,8 @@ const api = vi.fn();
 vi.mock("@/state/store", () => ({ api: (...args: unknown[]) => api(...args) }));
 vi.mock("@/lib/i18n", () => ({ t: (key: string) => key }));
 
-import { loadMessagesSetup, messagesFromMacApps, notOnThisMac } from "./mac-messages-setup";
-import { loadMacApps, setMacAppEnabled, testMacApp } from "./mac-apps-setup";
+import { loadMessagesSetup, messagesFromMacApps, notOnThisMac, openMessagesPermissionPane } from "./mac-messages-setup";
+import { loadMacApps, openMacAppPermissionPane, setMacAppEnabled, testMacApp } from "./mac-apps-setup";
 import { macAppDetailActions, macAppPrivacyAnchor, macAppsSectionVisible } from "../../shared/mac-apps-setup.ts";
 
 const notHere = Object.assign(new Error("not here"), { status: 404, body: { code: "messages_not_on_this_mac" } });
@@ -85,6 +85,15 @@ describe("Apple apps setup in the app", () => {
     expect(macAppPrivacyAnchor("calendars")).toBe("Privacy_Calendars");
     expect(macAppPrivacyAnchor("reminders")).toBe("Privacy_Reminders");
     expect(macAppPrivacyAnchor("contacts")).toBe("Privacy_Contacts");
+  });
+
+  it("opens a permission pane on the Mac by its anchor from the one map, never by a second list in the desktop app", async () => {
+    const openSettings = vi.fn(async () => true);
+    (window as Win).ogb = { platform: "darwin", macApps: { openSettings } };
+    await openMacAppPermissionPane("calendars");
+    await openMacAppPermissionPane("fullDiskAccess");
+    await openMessagesPermissionPane("automation");
+    expect(openSettings.mock.calls.map((call) => call[0])).toEqual(["Privacy_Calendars", "Privacy_AllFiles", "Privacy_Automation"]);
   });
 
   it("other failures are not mistaken for 'not on this Mac'", async () => {

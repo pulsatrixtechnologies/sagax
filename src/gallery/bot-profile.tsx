@@ -82,7 +82,7 @@ const bot = {
   // Header captures: ?name= ?title= (an empty title too), ?picture=1 (a picture instead of the mascot), ?reader=1 (a member who cannot edit this bot).
   ...(params.has("name") ? { name: params.get("name") } : {}),
   ...(params.has("title") ? { title: params.get("title") } : {}),
-  ...(params.get("picture") ? { avatarCrop: "circle", avatarUrl: "/api/attachments/avatar.svg" } : {}),
+  ...(params.get("picture") ? { avatarCrop: "circle", avatarUrl: "/api/attachments/avatar.png" } : {}),
   ...(params.get("reader") ? { ownerUserId: "pr_sam" } : {}),
 } as unknown as Bot;
 const neighbours = [

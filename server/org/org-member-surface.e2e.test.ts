@@ -20,6 +20,8 @@
 //       one total per person, no conversation or bot id, no log row of it
 //   S6  erasing the person erases the bot and its conversations; its usage
 //       rows stay (no text), and nothing of it reappears for an administrator
+//   S7  a retry of a new conversation's send after a restart lands in the
+//       same conversation and runs nothing twice
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
@@ -240,11 +242,19 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     expect(tasks.one?.modelSelection?.instanceId ?? "claude").toBe("claude");
     expect(tasks.two.modelSelection).toMatchObject({ instanceId: "second", model: "fake-model" });
 
-    // its turns get the agents tools without the ones that reach another bot (the peerHop profile)
+    // one turn of an ordinary bot of the person, to compare with
+    expect((await member("POST", `bots/${orion}/messages`, BOB, { text: "plain turn", wait: 60 })).status).toBe(200);
+    // its turns get the agents tools without the ones that reach another bot
+    // ("exchange"), and keep the rest of a turn (skills, own threads) as an ordinary bot's
     const turns = readFileSync(join(home, "turns.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { mcpConfig?: { mcpServers?: Record<string, { env?: Record<string, string> }> } });
     const agentsEnvs = turns.flatMap((turn) => Object.values(turn.mcpConfig?.mcpServers ?? {}).map((server) => server.env ?? {})).filter((env) => env.SAGAX_BOT_ID === surface);
     expect(agentsEnvs.length).toBeGreaterThan(0);
-    for (const env of agentsEnvs) expect(env.SAGAX_PEER_HOP).toBe("1");
+    const ordinary = turns.flatMap((turn) => Object.values(turn.mcpConfig?.mcpServers ?? {}).map((server) => server.env ?? {})).find((env) => env.SAGAX_BOT_ID === orion)!;
+    expect(ordinary.SAGAX_PEER_HOP).toBe("0");
+    for (const env of agentsEnvs) {
+      expect(env.SAGAX_PEER_HOP).toBe("exchange");
+      for (const key of ["SAGAX_SKILL_AUTHORING_ENABLED", "SAGAX_OWN_THREAD_CREATION", "SAGAX_ROOM_TURN"]) expect(env[key], key).toBe(ordinary[key]);
+    }
 
     await sleep(500);
     events.close();
@@ -348,7 +358,10 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     const byBot = await api("GET", `/api/usage?${range}&groupBy=bot`, alice);
     expect((byBot.body.groups as Array<any>).filter((group) => group.label === "Chat")).toHaveLength(1);
     const byDay = await api("GET", `/api/usage?from=${day.slice(0, 8)}01&to=${day}&groupBy=day`, alice);
-    expect((byDay.body.groups as Array<any>).map((group) => group.key)).toEqual([`day:${day.slice(0, 8)}01`]);
+    // the chat's spend sits on the 1st (Orion's own turn stays on its day)
+    const chat = (byBot.body.groups as Array<any>).find((group) => group.label === "Chat");
+    const first = (byDay.body.groups as Array<any>).find((group) => group.key === `day:${day.slice(0, 8)}01`);
+    if (!day.endsWith("-01")) expect(first?.costUsd).toBeCloseTo(chat.costUsd, 6);
     // its tool calls: the person's stats count them, an administrator's never
     const ownStats = await api("GET", `/api/me/usage/stats?${range}`, bob);
     const adminStats = await api("GET", `/api/usage/stats?${range}`, alice);
@@ -398,4 +411,24 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     }
     expect(bobId).toBeTruthy();
   }, 60_000);
+
+  it("S7: a retry of a new conversation's send after a restart lands in it, and runs nothing twice", async () => {
+    const made = await member("POST", "surface-bot", ALICE, { name: "Front" });
+    expect(made.status, made.text).toBe(201);
+    const bot = made.body.bot.id as string;
+    const body = { text: "only once please", newThread: true, sendId: "s7-send-0000000001", wait: 60 };
+    const first = await member("POST", `bots/${bot}/messages`, ALICE, body);
+    expect(first.status, first.text).toBe(200);
+    const threadId = first.body.threadId as string;
+    // the server restarts (the receipt is durable, in the server's database)
+    child.kill("SIGTERM");
+    await waitForExit(child);
+    await start();
+    const again = await member("POST", `bots/${bot}/messages`, ALICE, body);
+    expect(again.status, again.text).toBe(200);
+    expect(again.body.threadId).toBe(threadId);
+    const read = await member("GET", `threads/${threadId}?limit=200`, ALICE);
+    expect(read.status, read.text).toBe(200);
+    expect((read.body.messages as Array<{ role: string; text: string }>).filter((row) => row.role === "user" && row.text === "only once please")).toHaveLength(1);
+  }, 90_000);
 });

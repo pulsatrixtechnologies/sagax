@@ -112,9 +112,8 @@ export const SURFACE_BOT_NAME_DEFAULT = "Assistant";
 /** Lot S1: how long a delete waits for a stopped turn to settle. */
 export const MEMBER_STOP_SETTLE_MS = 5_000;
 /** Lot S1: how long a `sendId` keeps the conversation its `newThread` send
- * opened, so a retry lands in it (memory only). */
+ * opened, so a retry lands in it (a durable receipt, server/commands.ts). */
 export const MEMBER_NEW_THREAD_SEND_TTL_MS = 24 * 3_600_000;
-const MEMBER_NEW_THREAD_SENDS_MAX = 10_000;
 
 /** The acting person, once the assertion verified. */
 export interface MemberPerson {
@@ -210,6 +209,10 @@ export interface OrgMemberRouteDeps {
   /** Lot S1: whether this bot is a surface bot (every send to it is hidden;
    * another person's is refused once, by the app's own routes). */
   surfaceBot?(botId: string): boolean;
+  /** Lot S1: the conversation a `newThread` send opened, by its key (the
+   * person, the bot and its `sendId`), kept as a durable receipt (#1265's,
+   * server/commands.ts) so a retry after a restart lands in it. */
+  newThreadReceipt?: { get(key: string): string | null; put(key: string, threadId: string): void };
   /** Lot S1: sends queued in this conversation and not started yet. */
   threadQueued?(threadId: string): boolean;
   /** Lot S1: a hidden conversation was deleted: what the logs kept of it
@@ -1645,22 +1648,6 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
   // read at each call, like the rest of deps
   const now = () => (deps.now ?? Date.now)();
   const sleep = (ms: number) => (deps.sleep ? deps.sleep(ms) : new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  // Lot S1: the conversation a `newThread` send opened, by its `sendId`:
-  // a retry of that send (the client never read the answer) lands in it,
-  // never in another new one.
-  const openedBySend = new Map<string, { threadId: string; at: number }>();
-  const openedFor = (key: string): string | undefined => {
-    const found = openedBySend.get(key);
-    if (found && now() - found.at < MEMBER_NEW_THREAD_SEND_TTL_MS) return found.threadId;
-    if (found) openedBySend.delete(key);
-    return undefined;
-  };
-  const rememberOpened = (key: string, threadId: string) => {
-    if (openedBySend.size >= MEMBER_NEW_THREAD_SENDS_MAX) {
-      for (const [old, entry] of openedBySend) if (now() - entry.at >= MEMBER_NEW_THREAD_SEND_TTL_MS || openedBySend.size >= MEMBER_NEW_THREAD_SENDS_MAX) openedBySend.delete(old);
-    }
-    openedBySend.set(key, { threadId, at: now() });
-  };
   // Lot S1: the sends of one conversation, one at a time, in arrival order.
   const sending = new Map<string, Promise<unknown>>();
   const inOrder = <T>(threadId: string | undefined, work: () => Promise<T>): Promise<T> => {
@@ -1758,7 +1745,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         // ever works in hidden ones.
         const hidden = person.actor !== "console" || input.hidden === true || surface;
         const sendKey = input.newThread === true && input.sendId ? `${person.principalId}|${botId}|${input.sendId as string}` : null;
-        if (sendKey && !threadId) threadId = openedFor(sendKey);
+        if (sendKey && !threadId) threadId = deps.newThreadReceipt?.get(sendKey) ?? undefined;
         const opening = !threadId;
         if (!threadId && hidden && deps.agentConversation) {
           threadId = deps.agentConversation(botId, person, input.newThread === true) ?? undefined;
@@ -1774,8 +1761,10 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
           threadId = str(objectOf(objectOf(created.body)?.task)?.threadId) ?? undefined;
           if (!threadId) return fail(502, "server_error", "The new conversation has no id.");
         }
-        // Lot S1: opened before anything is sent; a retry with this sendId finds it
-        if (sendKey && opening && threadId) rememberOpened(sendKey, threadId);
+        // Lot S1: opened before anything is sent, and kept durably: a retry
+        // with this sendId, after a restart too, lands in it, and the
+        // message route's own sendId check never runs the work twice
+        if (sendKey && opening && threadId) deps.newThreadReceipt?.put(sendKey, threadId);
         // Lot S1: the member API's sends of one conversation go one at a
         // time, in order (any bot). A send that changes the conversation's
         // model (set the way the app's model picker sets it, same checks as

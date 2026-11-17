@@ -1408,6 +1408,7 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     deps.agentConversation = undefined;
     deps.threadQueued = undefined;
     deps.forgetThread = undefined;
+    deps.newThreadReceipt = undefined;
   });
   /** A Sagax that takes sends and model switches, and answers each send done. */
   const serveSends = () => {
@@ -1476,8 +1477,11 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     expect(performed.filter((p) => p.person.principalId === "pr_ann").map((p) => p.request.path)).toEqual(["/api/bots/sb/messages"]);
   });
 
-  it("a new hidden conversation: its id with the answer (body, and a header before the stream's first event), and a retry of the same sendId lands in it", async () => {
+  it("a new hidden conversation: its id with the answer (body, and a header before the stream's first event), and a retry of the same sendId lands in it, after a restart too", async () => {
     serveSends();
+    // the durable receipts (server/commands.ts): they outlive the process
+    const receipts = new Map<string, string>();
+    deps.newThreadReceipt = { get: (key) => receipts.get(key) ?? null, put: (key, threadId) => { receipts.set(key, threadId); } };
     const first = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0001" });
     expect(first.body.threadId).toBe("ac_1");
     const again = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi", newThread: true, sendId: "send-0001" });
@@ -1498,6 +1502,28 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     expect(res.headers.get("x-sagax-thread-id")).toBe("ac_4");
     const lines = (await res.text()).trim().split("\n").map((line) => JSON.parse(line) as { event: string; threadId?: string });
     expect(lines[0]).toMatchObject({ event: "started", threadId: "ac_4" });
+
+    // a restart: a new process (fresh routes), the same receipts. The retry
+    // lands in the same conversation with the same sendId (the message
+    // route then answers it as the same message): nothing opened or run twice
+    const restarted = createOrgMemberRoutes(deps);
+    const second = createServer(async (req, res) => {
+      if (!(await restarted(req, res, new URL(req.url ?? "/", "http://localhost")))) { res.writeHead(418); res.end(); }
+    });
+    await new Promise<void>((resolve) => second.listen(0, "127.0.0.1", resolve));
+    try {
+      performed = [];
+      const after = await fetch(`http://127.0.0.1:${(second.address() as AddressInfo).port}/api/org/member/bots/sb/messages`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token("bob", "employee", "console")}`, "content-type": "application/json" },
+        body: JSON.stringify({ text: "hi", newThread: true, sendId: "send-0001" }),
+      });
+      expect(((await after.json()) as { threadId: string }).threadId).toBe("ac_1");
+      expect(opened).toHaveLength(4);
+      expect(performed.filter((p) => p.request.path === "/api/bots/sb/messages").map((p) => p.request.body)).toEqual([expect.objectContaining({ threadId: "ac_1", sendId: "send-0001" })]);
+    } finally {
+      await new Promise<void>((resolve) => second.close(() => resolve()));
+    }
   });
 
   it("two sends at once in one conversation on two models: queued, the second switches once the first is done", async () => {

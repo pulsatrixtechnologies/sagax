@@ -132,9 +132,10 @@ any other shape, so the plan's `clients.bots.read` is written
 - `wait`: 0 to 120 seconds (default 0). The request stays open until the bot
   has answered, a card waits, or the time is up.
 - `sendId`: 8 to 80 of `[A-Za-z0-9_-]`; a retry with the same id is the same
-  message. With `newThread: true`, a retry with the same `sendId` (for 24 h,
-  memory only, the person and bot alike) lands in the conversation the
-  first send opened, never in another new one (lot S1).
+  message. With `newThread: true`, a retry with the same `sendId` (same
+  person and bot, for 24 h, kept as a durable receipt like `send_prompt`'s,
+  so after a restart too) lands in the conversation the first send opened,
+  never in another new one, and the work runs once (lot S1).
 - The conversation is opened before anything is sent, and its id comes
   with the answer: `threadId` in the JSON body, and for `stream: true` the
   `X-Sagax-Thread-Id` header with the status line, before the `started`
@@ -151,8 +152,10 @@ any other shape, so the plan's `clients.bots.read` is written
   conversation already runs on it. Each conversation keeps its own model, so
   two sends on two conversations never mix. With no conversation named, the
   person's chat with the bot (or a new conversation) is used.
-- Every send of this API to one conversation, on any bot, goes one at a
-  time, in arrival order. A send that changes the conversation's model
+- Every send of this API (not the agent API's `send_prompt`) to one
+  conversation, on any bot, goes one at a time, in arrival order; what
+  happens to it does not change (queued, or joined to the running turn,
+  never refused). A send that changes the conversation's model
   first waits, within its own `wait`, for the turns before it (running or
   queued) to finish on their own model: two models never cross in one
   conversation. Still busy at the end of its `wait` (at once with `wait` 0)
@@ -212,9 +215,11 @@ answer in their name through one service bot of theirs, the **surface bot**:
   command card above), the decision history of the console, Today (but the
   waiting line above), a team manager's list, or search.
 - It reaches no other bot and no bot reaches it (peers, both ways): its
-  turns get the agents tools without the ones that reach another bot (the
-  existing `peerHop` profile, `PEER_HOP_ABSENT_TOOLS`), and the routes refuse
-  them anyway. It joins no room (`POST /api/groups` and adding members
+  turns list no tool that reaches another bot (`PEER_HOP_ABSENT_TOOLS`
+  without `start_thread` and `run_with_engine`, `PEER_EXCHANGE_TOOLS`, the
+  `exchange` value of `SAGAX_PEER_HOP`), and the routes refuse them anyway.
+  Everything else of its turn stays as for any bot: skills, `/setup`, its
+  own threads, a part on another engine. It joins no room (`POST /api/groups` and adding members
   answer `403`). The bots a host chat invites are the host product's to
   orchestrate.
 - It never holds a routine or an automation: the routine store and the
@@ -228,7 +233,9 @@ answer in their name through one service bot of theirs, the **surface bot**:
   Anyone else (the ledger, its CSV, traces, stats, the console's usage) reads
   one row per person, calendar month (dated the 1st, as the ledger and the
   spend cap), engine and model, labelled `Chat`, with no conversation or bot
-  id and no day; the stats leave out its tool calls
+  id and no day; that row counts as one turn (costs and tokens are exact,
+  the number of turns is not), and a range that starts after the 1st leaves
+  it out; the stats leave out its tool calls
   (`server/usage/surface-usage.ts`). No cap.
 - Logs: every admin activity row and every decision about it is marked
   `surface` when written (whoever writes it: the member API, the agent API,

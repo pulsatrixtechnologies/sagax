@@ -1367,7 +1367,7 @@ import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "
 import type { OrgRecord } from "./org/org-record.ts";
 import { createOidcLoginRoutes, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, MANAGED_PROFILE_REFUSAL, oidcSessionFields, profileManagement, writesManagedProfile } from "./auth/oidc-login.ts";
 import { OidcRelyingParty } from "./auth/oidc-rp.ts";
-import { createOrgMemberRoutes, ORG_MEMBER_ASSERTION_ACTORS, queuedSendWillStart, type MemberPerson } from "./org/org-member-routes.ts";
+import { createOrgMemberRoutes, MEMBER_NEW_THREAD_SEND_TTL_MS, ORG_MEMBER_ASSERTION_ACTORS, queuedSendWillStart, type MemberPerson } from "./org/org-member-routes.ts";
 import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
@@ -10412,10 +10412,9 @@ function revokeInternalCapabilityForProviderEvent(event: RuntimeEvent): void {
 const MAX_COMMS_DEPTH = 1;
 /** 2026-10-28: a teammate's turn one hop away that is not a coordinated
  * node (coordinate_bots, a room handoff): its agents tools are mounted
- * without the peer tools (SAGAX_PEER_HOP). Lot S1: every turn of a surface
- * bot too, which reaches no bot (its host product invites bots itself). */
-function peerHopTurn(depth: number, coordinated: boolean, bot?: { temporary?: { surface?: unknown } } | null): boolean {
-  return isSurfaceBot(bot) || (depth >= MAX_COMMS_DEPTH && !coordinated);
+ * without the peer tools (SAGAX_PEER_HOP). */
+function peerHopTurn(depth: number, coordinated: boolean): boolean {
+  return depth >= MAX_COMMS_DEPTH && !coordinated;
 }
 const MAX_WORKSPACE_BOTS = 100;
 
@@ -34755,6 +34754,16 @@ const orgMember = createOrgMemberRoutes({
   surfaceBot: (botId) => isSurfaceBot(store.bot(botId)),
   // a send that will still start (an interrupted one left behind never keeps it busy)
   threadQueued: (threadId) => queuedSendWillStart(chatFollowups("bot"), threadId),
+  newThreadReceipt: {
+    get: (key) => {
+      const found = commandReceipt<{ threadId?: unknown }>("member.new_thread", key);
+      return found && Date.now() - found.at < MEMBER_NEW_THREAD_SEND_TTL_MS && typeof found.result.threadId === "string" && store.botByThread(found.result.threadId) ? found.result.threadId : null;
+    },
+    put: (key, threadId) => {
+      expireCommandReceipts("member.new_thread", MEMBER_NEW_THREAD_SEND_TTL_MS);
+      setCommandReceipt("member.new_thread", key, { threadId });
+    },
+  },
   // what the decision log kept of a deleted hidden conversation goes down to its metadata
   forgetThread: (threadId, principalId) => { void scrubSurfaceThreadDecisions(threadId, principalId).catch(reportBackgroundError); },
   hiddenConversationOf,

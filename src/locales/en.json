@@ -14380,7 +14380,7 @@
   "botAccess.tools.native": "Engine tools",
   "botAccess.tools.groupAll": "All tools",
   "botAccess.tools.keepGroup": "Not listed up front",
-  "botAccess.tools.keepStatus": "{count} left out, found by search when needed",
+  "botAccess.tools.keepStatus": "{count} left out",
   "botAccess.tools.keepAlwaysStatus": "{count} kept listed always",
   "botAccess.tools.leftOut": "Left out",
   "botAccess.tools.alwaysListed": "Always listed",

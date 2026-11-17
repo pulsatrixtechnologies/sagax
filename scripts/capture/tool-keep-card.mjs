@@ -45,7 +45,7 @@ try {
   await waitForServer(base);
   const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
   await mkdir(outDir, { recursive: true });
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_VERIFY_BROWSER_CHROME ? { executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME } : {}) });
   for (const look of looks) {
     for (const width of [1280, 390]) {
       for (const state of states) {

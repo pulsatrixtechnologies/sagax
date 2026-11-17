@@ -14381,7 +14381,7 @@
   "botAccess.tools.native": "Outils du moteur",
   "botAccess.tools.groupAll": "Tous les outils",
   "botAccess.tools.keepGroup": "Pas listés d'avance",
-  "botAccess.tools.keepStatus": "{count} mis de côté, retrouvés par recherche au besoin",
+  "botAccess.tools.keepStatus": "{count} mis de côté",
   "botAccess.tools.keepAlwaysStatus": "{count} toujours listés",
   "botAccess.tools.leftOut": "Mis de côté",
   "botAccess.tools.alwaysListed": "Toujours listé",

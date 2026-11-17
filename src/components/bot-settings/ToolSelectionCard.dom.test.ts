@@ -141,7 +141,7 @@ describe("ToolSelectionCard, tools the bot stopped listing (#4527)", () => {
     await render(bot());
     const row = $('[data-tool-group="tool-keep"]');
     expect(row?.textContent).toContain("Not listed up front");
-    expect(row?.textContent).toContain("2 left out, found by search when needed");
+    expect(row?.textContent).toContain("2 left out");
     await click('[data-tool-group="tool-keep"] button[aria-expanded]');
     expect($('[data-tool-row="agents/list_rooms"]')?.textContent).toContain("List rooms");
     expect($('[data-tool-row="agents/list_rooms"]')?.textContent).toContain("Left out");

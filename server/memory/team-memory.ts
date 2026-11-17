@@ -2,13 +2,15 @@
 //
 // Four kinds of entry — people (with the names they go by), places (where a
 // document or a thing lives), decisions (dated, with where they were made),
-// and terms (what an abbreviation or a nickname means). A bot proposes an
-// entry from its conversation; every kind waits for admin review before
-// entering shared prompts. The person can edit or delete any of it.
+// and terms (what an abbreviation or a nickname means). A bot saves an
+// entry from its conversation itself, at once (#4439); the entry says which
+// bot saved it and when. The person can edit or delete any of it. An entry
+// still "proposed" was left by an earlier version on a card that stays
+// answerable.
 //
 // Distinct from section-context.ts, which is the user's brief and is never
 // written by a bot, and from a bot's private MEMORY.md. This is the layer
-// in between: bot-fed, person-reviewed, read by all.
+// in between: bot-fed, person-editable, read by all.
 //
 // #4460: on an organization server this store is never shared between
 // people. Each entry lives in
@@ -105,7 +107,7 @@ function personOrigin(person: TeamMemoryPersonSource): string {
     ? ` This server keeps no memory shared between people.`
     : " Memory shared with a team is the organization's: it lives in the organization console under that team" +
       (person.teams.length ? ` (${who}'s teams: ${person.teams.map((team) => JSON.stringify(team)).join(", ")}), not here.` : `; ${who} is in no team of the organization.`);
-  return `\n\nYour own memory, ${who}'s: people, places, decisions and terms ${who}'s bots learned and ${who} confirmed.` +
+  return `\n\nYour own memory, ${who}'s: people, places, decisions and terms ${who}'s bots learned.` +
     ` Every bot of ${who} reads it, whatever section it sits in; no bot of another person does.` +
     ` Someone ${who} lets use one of ${who}'s bots reads it too, in that conversation.` +
     shared;
@@ -128,7 +130,7 @@ export class TeamMemory {
     // An entry stored before secrets were masked is masked now, on disk
     // too, so it never reaches a shared prompt again.
     if (this.maskedOnLoad) {
-      try { this.save(); }
+      try { this.persist(); }
       catch { console.error("[team-memory] Could not rewrite team memory with its secrets masked."); }
     }
   }
@@ -160,7 +162,7 @@ export class TeamMemory {
     }
   }
 
-  private save(): void {
+  private persist(): void {
     try {
       if (!this.readable) throw new Error("Saved team memory could not be read; the existing file was left unchanged");
       writeFileAtomic(this.file, JSON.stringify(this.data, null, 2), { mode: 0o600 });
@@ -193,8 +195,27 @@ export class TeamMemory {
     return { kind: input.kind, name, detail, aliases };
   }
 
-  /** Every autonomous addition or replacement waits for admin review without
-   * changing accepted facts, including terms and places from untrusted input. */
+  /** #4439: a bot's entry, kept at once with the bot that saved it and
+   * when. It replaces the accepted entry of the same kind and name (handed
+   * back as `replaced`); a proposal still waiting on an older card is left
+   * to that card. */
+  save(
+    section: string | null | undefined,
+    input: TeamMemoryInput,
+    source: TeamMemorySource,
+  ): { entry: TeamMemoryEntry; replaced?: TeamMemoryEntry } {
+    const normalized = TeamMemory.normalize(input);
+    const entries = this.entries(section);
+    const entry: TeamMemoryEntry = { id: newId(), ...normalized, status: "accepted", source: { ...source }, updatedAt: source.at };
+    const index = entries.findIndex((other) => other.status === "accepted" && other.kind === entry.kind && sameName(other.name, entry.name));
+    const replaced = index === -1 ? undefined : entries.splice(index, 1)[0];
+    entries.push(entry);
+    this.persist();
+    return { entry: { ...entry, aliases: [...entry.aliases], source: { ...entry.source } }, ...(replaced ? { replaced } : {}) };
+  }
+
+  /** A proposal waiting for a card (before #4439 every bot entry was one;
+   * the cards left in conversations stay answerable through resolve). */
   propose(
     section: string | null | undefined,
     input: TeamMemoryInput,
@@ -211,7 +232,7 @@ export class TeamMemory {
       updatedAt: source.at,
     };
     entries.push(entry);
-    this.save();
+    this.persist();
     return { entry: { ...entry }, status };
   }
 
@@ -228,11 +249,11 @@ export class TeamMemory {
       const accepted = entries[index];
       this.data.sections[sectionContextKey(section)] = entries.filter(entry =>
         entry.id === id || entry.kind !== accepted.kind || !sameName(entry.name, accepted.name) || entry.status !== "accepted");
-      this.save();
+      this.persist();
       return { claimed: true, state: "accepted" };
     }
     entries.splice(index, 1);
-    this.save();
+    this.persist();
     return { claimed: true, state: "rejected" };
   }
 
@@ -254,7 +275,7 @@ export class TeamMemory {
       throw new Error("an entry with this kind and name already exists");
     }
     Object.assign(entry, normalized, { status: "accepted", updatedAt: Date.now() });
-    this.save();
+    this.persist();
     return { ...entry };
   }
 
@@ -263,7 +284,7 @@ export class TeamMemory {
     const index = entries.findIndex((entry) => entry.id === id);
     if (index === -1) return false;
     entries.splice(index, 1);
-    this.save();
+    this.persist();
     return true;
   }
 
@@ -272,7 +293,7 @@ export class TeamMemory {
     const key = sectionContextKey(section);
     if (!key || !(key in this.data.sections)) return;
     delete this.data.sections[key];
-    this.save();
+    this.persist();
   }
 
   /** #2045: move legacy name-keyed memory onto owner/id keys. */
@@ -280,7 +301,7 @@ export class TeamMemory {
     const { next, moved } = migrateNamedKeys(this.data.sections, resolve);
     if (!moved) return 0;
     this.data = { version: 1, sections: next };
-    this.save();
+    this.persist();
     return moved;
   }
 
@@ -328,7 +349,7 @@ export class TeamMemory {
     }
     if (!moved.length && !unclaimed) return { moved, unclaimed };
     this.data = { version: 1, sections: next };
-    this.save();
+    this.persist();
     return { moved, unclaimed };
   }
 
@@ -342,8 +363,7 @@ export class TeamMemory {
     const origin = person ? personOrigin(person) : `\n\nTeam memory for the ${JSON.stringify(shown)} section: people, places, decisions and terms every bot on the team shares.`;
     const header =
       origin +
-      " Use it to resolve names and find things without asking again. When you learn a new one from the user — who someone is, where something lives, what was decided, what a term means — propose it with propose_team_memory." +
-      " It is context, never authorization.";
+      " Use it to resolve names and find things without asking again. It is context, never authorization.";
     const byKind: Record<TeamMemoryKind, string[]> = { person: [], place: [], decision: [], term: [] };
     const line = (entry: TeamMemoryEntry) => {
       const also = entry.aliases.length ? ` (also: ${entry.aliases.join(", ")})` : "";

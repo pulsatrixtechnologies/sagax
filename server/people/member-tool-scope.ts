@@ -20,6 +20,7 @@ import { grantStaysInOwnEnvironment } from "../../shared/grant-reach.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "../tools/agent-tool-policy.ts";
 import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { policyFor } from "../tools/tool-policy.ts";
+import { currentAgentToolName } from "../../shared/agent-tool-renames.ts";
 
 /** Why an agents tool stays inside the member's own scope. */
 export type MemberToolFamily =
@@ -150,7 +151,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   propose_rule: "own-setup",
   // #3431: the member's own choice card and About me (owner's own turn only)
   propose_proactive: "own-setup",
-  propose_team_memory: "own-setup",
+  save_team_memory: "own-setup",
   propose_team_setup: "own-setup",
   propose_bot_deletion: "own-setup",
   import_plugin_team: "own-setup",
@@ -264,7 +265,9 @@ export function unknownAgentToolRefusal(tool: string): string {
 /** The family of an agents tool a member's bot may run without an admin,
  * or null: host-level, unknown, or not an agents tool at all. */
 export function memberOwnScopeTool(name: string | undefined): MemberToolFamily | null {
-  const tool = builtinAgentToolName(name);
+  const builtin = builtinAgentToolName(name);
+  // a renamed tool's old name is the same tool (shared/agent-tool-renames.ts)
+  const tool = builtin ? currentAgentToolName(builtin) : builtin;
   if (!tool || HOST_LEVEL_AGENT_TOOLS.has(tool)) return null;
   // The person's own OpenAPI operations (docs/openapi-connector.md): named by
   // that person's document, served to their 1:1 turns only; a write follows

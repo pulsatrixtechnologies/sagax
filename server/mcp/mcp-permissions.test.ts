@@ -393,7 +393,7 @@ describe("false denials in shadow (#1098)", () => {
   const as = (role: string) => ({ id: "pr_alice", role });
 
   it("gives an operator at least what a member holds in their own environment", () => {
-    for (const tool of ["create_bot", "propose_bot_deletion", "archive_bot", "create_room", "propose_team_memory", "vm_exec", "act"]) {
+    for (const tool of ["create_bot", "propose_bot_deletion", "archive_bot", "create_room", "save_team_memory", "propose_team_memory", "vm_exec", "act"]) {
       expect(decide(as("operator"), tool, "self").allowed, tool).toBe(true);
     }
     // the operator's own wider tiers stay, and admin-only tools stay refused
@@ -401,8 +401,9 @@ describe("false denials in shadow (#1098)", () => {
     expect(decide(as("operator"), "api_reload").allowed).toBe(false);
   });
 
-  it("lets a member run their own Local VM, act as themselves and propose team memory, never a service", () => {
-    for (const tool of ["vm_exec", "act", "propose_team_memory"]) {
+  it("lets a member run their own Local VM, act as themselves and save team memory, never a service", () => {
+    // #4439: save_team_memory, and its old name a hidden alias
+    for (const tool of ["vm_exec", "act", "save_team_memory", "propose_team_memory"]) {
       expect(decide(as("member"), tool, "self").allowed, tool).toBe(true);
       expect(decide(as("member"), tool, "team").allowed, tool).toBe(false);
     }

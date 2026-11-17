@@ -9792,7 +9792,7 @@
   "teamShare.choices": "What goes in",
   "teamShare.file": "File details",
   "teamMemory.title": "{label} team memory",
-  "teamMemory.intro": "People, places, decisions and terms every bot in this section shares. Every bot proposal waits for a member of this team, or an organization admin, before it is shared. Your own additions are shared immediately. Edit or remove anything.",
+  "teamMemory.intro": "People, places, decisions and terms every bot in this section shares. A bot saves what it learns at once, with its name and the time. Your own additions are shared immediately too. Edit or remove anything.",
   "teamMemory.close": "Close team memory",
   "teamMemory.loading": "Loading team memory",
   "teamMemory.waiting": "Waiting for you",

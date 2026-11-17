@@ -801,7 +801,7 @@ describe("agents-proxy MCP surface", () => {
       "propose_profile",
       "propose_model",
       "propose_rule",
-      "propose_team_memory",
+      "save_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",

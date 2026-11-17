@@ -108,6 +108,8 @@ const BARE: Record<string, Kind> = {
   run_with_engine: "subagent",
   close_thread: "closeThread",
   list_threads: "listThreads",
+  // #4439: a bot saves team memory itself (propose_team_memory: its old name)
+  save_team_memory: "memory", propose_team_memory: "memory",
   memory_update: "memory", memory_log: "memory", group_memory_update: "memory", rules_update: "memory", docs_update: "memory", memory_write: "memory",
   memory_save: "memory", memory_remove: "memory", memory_forget: "memory", memory_suggestions: "memory",
   memory_search: "memorySearch", memory_recall: "memorySearch", memory_find: "memorySearch",

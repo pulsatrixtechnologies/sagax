@@ -61,44 +61,45 @@ export function teamMemoryScope(input: TeamMemoryScopeInput): TeamMemoryScope {
 /** What the bot, its tool and the person are told about team memory: one
  * source per wording, by mode (#4460). On a server several people use, an
  * entry goes to the bot owner's own memory, read by that person's bots only;
- * a team's shared memory lives in an organization console, never here. */
+ * a team's shared memory lives in an organization console, never here.
+ * #4439: the bot saves an entry itself, at once; nobody confirms it. */
 export interface TeamMemoryWording {
   /** The instruction appended after the memory block (system prompt). */
   prompt: string;
-  /** propose_team_memory's description. */
+  /** save_team_memory's description. */
   toolDescription: string;
-  /** The card's and its notification's title. */
+  /** The title of a card an earlier version left waiting (before #4439). */
   cardTitle: string;
   /** What Always allow keeps on that card. */
   ruleDescription: (kind: string) => string;
-  /** Why a restricted conversation cannot propose an entry. */
+  /** Why a restricted conversation cannot save an entry. */
   restrictedRefusal: string;
-  /** Where the tool's result says the entry goes, after its name. */
+  /** Where the tool's result says the entry went, after its name. */
   resultTarget: string;
 }
 
-const LEARN = "When you learn who someone is, where something lives, what was decided, or what a term or nickname means, propose it with propose_team_memory.";
+const LEARN = "When you learn who someone is, where something lives, what was decided, or what a term or nickname means, save it at once with save_team_memory and say so in a short line.";
 const KINDS = "who a person is (person), where something lives (place), what was decided (decision), or what a name means (term)";
-const UNTIL = "End the turn and do not claim it is remembered before confirmation; accepted facts stay unchanged until then.";
+const KEPT = "Kept at once; the same kind and name replaces the older entry. The person edits or removes it on the memory page.";
 
 const SECTION_WORDING: TeamMemoryWording = {
-  prompt: ` ${LEARN} Every addition or replacement waits for a member of this team, or an organization admin, to confirm a card before it enters shared prompts; do not claim it is remembered before then.`,
-  toolDescription: `Propose something every bot on the team should know: ${KINDS}. Every addition or replacement waits for a member of this team, or an organization admin, to confirm its card before entering shared prompts. ${UNTIL}`,
+  prompt: ` ${LEARN}`,
+  toolDescription: `Save what every bot on the team should know: ${KINDS}. ${KEPT}`,
   cardTitle: "Remember this for the team?",
   ruleDescription: (kind) => `Remember ${kind} entries for the team`,
-  restrictedRefusal: "restricted conversations cannot publish section-wide memory; ask an admin to add it",
-  resultTarget: "for the team",
+  restrictedRefusal: "restricted conversations cannot write section-wide memory; add it on the team memory page",
+  resultTarget: "to the team memory",
 };
 
 const OWN = "the own memory of the person this bot belongs to: only that person's bots read it (and whoever they let use one of those bots, in that conversation), no other person's bot does. Memory shared with a team is kept only in an organization console, never here.";
 
 const PERSON_WORDING: TeamMemoryWording = {
-  prompt: ` ${LEARN} It goes to ${OWN} Every addition or replacement waits for a confirmation on its card in this conversation; do not claim it is remembered before then.`,
-  toolDescription: `Propose something to keep in ${OWN} What to keep: ${KINDS}. Every addition or replacement waits for a confirmation on its card in this conversation. ${UNTIL}`,
+  prompt: ` ${LEARN} It goes to ${OWN}`,
+  toolDescription: `Save in ${OWN} What to keep: ${KINDS}. ${KEPT}`,
   cardTitle: "Remember this in the bot owner's own memory?",
   ruleDescription: (kind) => `Remember ${kind} entries in the bot owner's own memory`,
   restrictedRefusal: "restricted conversations cannot add to the bot owner's own memory: every bot of that person reads it",
-  resultTarget: "in the bot owner's own memory",
+  resultTarget: "to the bot owner's own memory",
 };
 
 export function teamMemoryWording(personScoped: boolean): TeamMemoryWording {

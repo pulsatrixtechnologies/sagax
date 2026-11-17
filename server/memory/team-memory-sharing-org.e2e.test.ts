@@ -1,13 +1,10 @@
 // Per-bot team memory sharing on a Perspicax organization server, through
 // the real server, the fake provider (server/testing/fake-oidc-provider.ts)
-// and the fake Claude CLI. Each 1:1 thread with a bot is its person's own,
-// so a team-memory card proposed in one person's thread lists for them and
-// never for another member of the section, "shared" or "private". A room's
-// card lists for the room's people, as the conversation and the live stream
-// deliver it, and never for a member outside the room. The team-memory page
-// settling an entry closes that card for all of them. A stored value the
-// API never writes reads as private and never breaks export, import or a
-// console clone.
+// and the fake Claude CLI. #4439: a bot saves team memory itself, at once,
+// into its owner's own memory (#4460), from a person's 1:1 thread or a room:
+// no card, inbox row or notification reaches anyone, "shared" or "private",
+// and a member outside never reads it. A stored value the API never writes
+// reads as private and never breaks export, import or a console clone.
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -106,8 +103,8 @@ async function start() {
   }
 }
 
-/** The bot's shell proposes a team-memory entry from this thread. */
-async function proposeTeamMemory(botId: string, threadId: string, name: string): Promise<string> {
+/** The bot's shell saves a team-memory entry from this thread (#4439: at once). */
+async function saveTeamMemory(botId: string, threadId: string, name: string): Promise<string> {
   const minted = await fetch(`${BASE}/api/testing/internal-capability`, {
     method: "POST", headers: { "content-type": "application/json", "x-openmausbot-test-capability": CAPABILITY_KEY },
     body: JSON.stringify({ botId, threadId, kind: "agents" }),
@@ -118,9 +115,10 @@ async function proposeTeamMemory(botId: string, threadId: string, name: string):
     method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({ fromBotId: botId, fromThreadId: threadId, kind: "term", name, detail: `${name} means the dispatch board` }),
   });
-  const body = await proposed.json() as { status: string; requestId: string };
+  const body = await proposed.json() as { status: string; entryId: string };
   expect(proposed.status, JSON.stringify(body)).toBe(201);
-  return body.requestId;
+  expect(body.status).toBe("saved");
+  return body.entryId;
 }
 
 /** A person's live event stream, parsed frame by frame. */
@@ -197,82 +195,47 @@ posixOnly("Perspicax organization: per-bot team memory sharing", () => {
     if (home) removeTempDir(home);
   });
 
-  it("lists a card in its person's own thread only, shared or private", async () => {
-    const makeBot = async (name: string, member: string) => {
-      const created = await api("POST", "/api/bots", alice, { name });
-      expect(created.status, created.text).toBe(201);
-      const id = created.body.bot.id as string;
-      const patched = await api("PATCH", `/api/bots/${id}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" }, section: "Ops" });
-      expect(patched.status, patched.text).toBe(200);
-      const shared = await api("PUT", `/api/bots/${id}/grants`, alice, { target: `user:${ids[member]}`, level: "use" });
-      expect(shared.status, shared.text).toBe(200);
-      return id;
-    };
-    const botId = await makeBot("Ops one", "bob");
-    await makeBot("Ops two", "carol");
-    // Bob's own thread on the bot
-    const bobThread = await waitFor(async () => ((await api("GET", "/api/bots", bob)).body.bots as Array<{ id: string; threadId: string }> | undefined)
-      ?.find((bot) => bot.id === botId)?.threadId);
-    const inbox = async (auth: Auth, requestId: string) => ((await api("GET", "/api/approvals", auth)).body.pending ?? [])
-      .filter((item: any) => item.requestId === requestId);
-
-    for (const sharing of ["shared", "private"] as const) {
-      expect((await api("PATCH", `/api/bots/${botId}`, alice, { teamMemorySharing: sharing })).status).toBe(200);
-      const requestId = await proposeTeamMemory(botId, bobThread, `Ops board ${sharing}`);
-      // the person whose thread it is gets it, answerable
-      const bobs = await waitFor(async () => { const rows = await inbox(bob, requestId); return rows.length ? rows : null; }, 10_000);
-      expect(bobs[0], sharing).toMatchObject({ threadId: bobThread, decidable: true });
-      // another member of the section, without this bot: nothing, whatever the setting
-      const carols = await api("GET", "/api/approvals", carol);
-      expect(carols.status).toBe(200);
-      expect(JSON.stringify(carols.body), sharing).not.toContain(requestId);
-      expect(JSON.stringify(carols.body), sharing).not.toContain(`Ops board ${sharing}`);
-      expect((await api("POST", `/api/threads/${bobThread}/respond`, carol, { requestId, behavior: "allow" })).status, sharing).toBeOneOf([403, 404]);
-      expect((await api("POST", `/api/threads/${bobThread}/respond`, bob, { requestId, behavior: "deny" })).status, sharing).toBe(200);
-    }
-  }, 90_000);
-
-  it("lists a room's card for the room's people, as the conversation and the stream do, and the page closes it for them", async () => {
-    const created = await api("POST", "/api/bots", alice, { name: "Ops room bot" });
+  it("saves from a person's own thread and from a room with no card, row or notification for anyone, shared or private", async () => {
+    const created = await api("POST", "/api/bots", alice, { name: "Ops one" });
     expect(created.status, created.text).toBe(201);
     const botId = created.body.bot.id as string;
-    expect((await api("PATCH", `/api/bots/${botId}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" }, section: "Rooms" })).status).toBe(200);
+    expect((await api("PATCH", `/api/bots/${botId}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" }, section: "Ops" })).status).toBe(200);
     for (const login of ["bob", "carol"]) {
       expect((await api("PUT", `/api/bots/${botId}/grants`, alice, { target: `user:${ids[login]}`, level: "use" })).status).toBe(200);
     }
+    const bobThread = await waitFor(async () => ((await api("GET", "/api/bots", bob)).body.bots as Array<{ id: string; threadId: string }> | undefined)
+      ?.find((bot) => bot.id === botId)?.threadId);
     const room = await api("POST", "/api/groups", alice, { name: "Alice and Bob", memberIds: [botId], humanIds: [ids.alice, ids.bob], setup: { bulletin: "", defaultResponder: { kind: "everyone" } } });
     expect(room.status, room.text).toBe(201);
-    const threadId = room.body.group.threadId as string;
-    const inbox = async (auth: Auth, requestId: string) => ((await api("GET", "/api/approvals", auth)).body.pending ?? [])
-      .filter((item: any) => item.requestId === requestId);
-    const streams = { bob: openStream(bob), carol: openStream(carol) };
+    const roomThread = room.body.group.threadId as string;
+    const ownList = async (auth: Auth) => JSON.stringify((await api("GET", "/api/team-memory?section=Ops", auth)).body);
+    const streams = { alice: openStream(alice), bob: openStream(bob), carol: openStream(carol) };
     try {
       await Promise.all(Object.values(streams).map((stream) => stream.ready()));
       for (const sharing of ["shared", "private"] as const) {
         expect((await api("PATCH", `/api/bots/${botId}`, alice, { teamMemorySharing: sharing })).status).toBe(200);
-        const name = `Room board ${sharing}`;
-        const requestId = await proposeTeamMemory(botId, threadId, name);
-        // Bob, in the room: the notification, the card in the conversation, and now the inbox row
-        expect(await waitFor(async () => streams.bob.frames.find((frame) => frame.kind === "notify" && frame.notification?.requestId === requestId) ?? null, 5_000), sharing).not.toBeNull();
-        const card = ((await api("GET", `/api/threads/${threadId}/messages`, bob)).body.messages ?? []).find((m: any) => m.card?.requestId === requestId);
-        expect(card?.card?.answered, sharing).toBeUndefined();
-        const rows = await waitFor(async () => { const found = await inbox(bob, requestId); return found.length ? found : null; }, 10_000);
-        expect(rows[0], sharing).toMatchObject({ threadId, roomName: "Alice and Bob", decidable: true });
-        expect(rows[0].message?.card?.requestId, sharing).toBe(requestId);
-        // Carol, of the section but outside the room: nothing
-        const carols = await api("GET", "/api/approvals", carol);
-        expect(JSON.stringify(carols.body), sharing).not.toContain(requestId);
-        expect(JSON.stringify(carols.body), sharing).not.toContain("Alice and Bob");
-        expect(streams.carol.frames.some((frame) => JSON.stringify(frame).includes(requestId)), sharing).toBe(false);
-        // Alice accepts on the team-memory page: Bob's card and row close, live
-        expect((await api("PATCH", `/api/team-memory/${requestId}?section=Rooms`, alice, { accept: true })).status, sharing).toBe(200);
-        expect(await waitFor(async () => streams.bob.frames.find((frame) => frame.kind === "message.patch" && frame.message?.card?.requestId === requestId && frame.message.card.answered === "allow") ?? null, 5_000), sharing).not.toBeNull();
-        expect(await inbox(bob, requestId), sharing).toHaveLength(0);
-        const late = await api("POST", `/api/threads/${threadId}/respond`, bob, { requestId, behavior: "deny" });
-        expect(late.status, `${sharing}: ${late.text}`).toBe(409);
-        expect(late.body, sharing).toMatchObject({ code: "team_memory_settled", outcome: "allowed-once", settledBy: "Alice" });
-        expect(streams.carol.frames.some((frame) => JSON.stringify(frame).includes(requestId)), sharing).toBe(false);
+        for (const [where, threadId] of [["thread", bobThread], ["room", roomThread]] as const) {
+          const name = `Ops board ${sharing} ${where}`;
+          const entryId = await saveTeamMemory(botId, threadId, name);
+          // kept at once in the bot owner's own memory, nobody asked
+          expect(await ownList(alice), name).toContain(name);
+          for (const auth of [alice, bob, carol]) {
+            const inbox = JSON.stringify((await api("GET", "/api/approvals", auth)).body);
+            expect(inbox, name).not.toContain(entryId);
+            expect(inbox, name).not.toContain(name);
+          }
+          const messages = (await api("GET", `/api/threads/${threadId}/messages`, bob)).body.messages as any[];
+          expect(messages.some((m) => m.card?.teamMemoryRequest), name).toBe(false);
+          // another person never reads it in their own memory
+          expect(await ownList(bob), name).not.toContain(name);
+          expect(await ownList(carol), name).not.toContain(name);
+        }
       }
+      await sleep(500);
+      for (const stream of Object.values(streams)) {
+        expect(stream.frames.some((frame) => frame.kind === "notify" && JSON.stringify(frame).includes("Ops board"))).toBe(false);
+      }
+      expect(streams.carol.frames.some((frame) => JSON.stringify(frame).includes("Ops board"))).toBe(false);
     } finally {
       for (const stream of Object.values(streams)) stream.close();
     }

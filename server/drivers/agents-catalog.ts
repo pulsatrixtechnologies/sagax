@@ -52,6 +52,7 @@ import * as routinesTools from "./agents-tools/routines.ts";
 import { DEF_CALL_CONNECTOR, DEF_CONNECTORS } from "./agents-tools/connectors.ts";
 import * as settingsFamilyTools from "./agents-tools/settings.ts";
 import * as teamTools from "./agents-tools/team.ts";
+import { currentAgentToolName } from "../../shared/agent-tool-renames.ts";
 import * as transcriptsTools from "./agents-tools/transcripts.ts";
 
 /** Which tools a turn is shown. The harness decides each of these when it
@@ -106,7 +107,7 @@ export interface CatalogProfile {
   memoryEnabled?: boolean;
   /** A room turn in a group whose shared memory is on (server/memory/group-memory.ts). */
   groupMemory?: boolean;
-  /** #4460: a server several people use: propose_team_memory writes to the
+  /** #4460: a server several people use: save_team_memory writes to the
    * bot owner's own memory, and its description says so. Absent is off, so
    * the wire goldens stay. */
   ownTeamMemory?: boolean;
@@ -286,7 +287,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   teamTools.DEF_PROPOSE_PROFILE,
   teamTools.DEF_PROPOSE_MODEL,
   teamTools.DEF_PROPOSE_RULE,
-  teamTools.DEF_PROPOSE_TEAM_MEMORY,
+  teamTools.DEF_SAVE_TEAM_MEMORY,
   coreTools.DEF_ANSWER_APPROVAL,
   teamTools.DEF_NUDGE_PERSON,
   teamTools.DEF_PROPOSE_PROACTIVE,
@@ -393,7 +394,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // a routine can check or run it without a ToolSearch step that may miss them.
   "propose_routine", "propose_routine_action", "event_subscriptions",
   "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "import_plugin_team", "archive_bot",
-  "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
+  "save_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
   "add_mcp_server", "skill_manage", "skills_find", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
   "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
@@ -589,7 +590,7 @@ function catalogTools(profile: CatalogProfile) {
   const core = product || profile.ownTeamMemory
     ? coreCatalogTools(profile).map((tool) => product && tool.name === "propose_routine" ? routinesTools.withProductTrigger(tool as typeof routinesTools.DEF_PROPOSE_ROUTINE)
       // #4460: the bot owner's own memory on a server several people use
-      : profile.ownTeamMemory && tool.name === "propose_team_memory" ? teamTools.proposeTeamMemoryDef(true)
+      : profile.ownTeamMemory && tool.name === "save_team_memory" ? teamTools.saveTeamMemoryDef(true)
       : tool)
     : coreCatalogTools(profile);
   const base = [
@@ -629,6 +630,8 @@ function catalogTools(profile: CatalogProfile) {
 let everyAgentTool: ReadonlySet<string> | undefined;
 export function knownAgentToolName(name: string): boolean {
   if (isOpenApiTool(name)) return true;
+  // a renamed tool's old name is a hidden alias of the new one
+  name = currentAgentToolName(name);
   if (!everyAgentTool) {
     const widest: Omit<CatalogProfile, "coordinating" | "voiceCall"> = {
       externalRuntime: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,

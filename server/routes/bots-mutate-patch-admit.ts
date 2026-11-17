@@ -2,6 +2,7 @@
 // Never imports server/index.ts.
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { teamPatchPlan } from "../team/team-defaults.ts";
+import { applyToolKeepChange, parseToolKeepChange, toolKeepEngine, toolKeepPersonFor } from "../tools/tool-keep-person.ts";
 
 export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m } = state;
@@ -14,6 +15,30 @@ export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): P
   // never a bot field.
   const patchStepUp = body.stepUp;
   delete body.stepUp;
+  // #4527 lot E: the tools the bot keeps listed for this person (server/tools/
+  // tool-keep-person.ts). A request of its own: nothing else rides along.
+  // Any person who may use the bot changes their own list only, never
+  // another person's, so no administrator is involved.
+  if (Object.prototype.hasOwnProperty.call(body, "toolKeep")) {
+    const target = env.store.bot(m[1]);
+    if (!target || env.viewerBotLevel(env.auth, target) === null) {
+      env.json(env.res, 404, { error: "no such bot" });
+      return true;
+    }
+    const change = Object.keys(body).length === 1 ? parseToolKeepChange(body.toolKeep) : { error: "toolKeep is sent alone." };
+    if ("error" in change) {
+      env.json(env.res, 400, { error: change.error });
+      return true;
+    }
+    const person = toolKeepPersonFor({ organization: env.IDENTITY.kind === "perspicax", sessionPrincipal: env.sessionPrincipal, effectiveBotOwner: env.effectiveBotOwner }, env.auth, target);
+    if (!person) {
+      env.json(env.res, 403, { error: "toolKeep changes the signed-in person's own list." });
+      return true;
+    }
+    const engine = toolKeepEngine(target, env.registry?.get(target.modelSelection?.instanceId)?.driverKind);
+    env.json(env.res, 200, { toolKeep: applyToolKeepChange(target.id, person, change, engine) });
+    return true;
+  }
   // I2: the team's model and computer join the body here, before every
   // field gate below checks them as if the request had sent them.
   const team = teamPatchPlan({

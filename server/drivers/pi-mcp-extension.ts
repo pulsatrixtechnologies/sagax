@@ -60,6 +60,10 @@ interface McpConfig {
   splitStable?: boolean;
   /** Where this pi writes the request that warms that cache (no credentials). */
   warmPath?: string;
+  /** #4527: where to record the upstream names this extension folded into
+   * pi's lower-case names (`{ piName: "server/Tool" }`), so Sagax counts a
+   * call under the tool's own name (pi-send-events.ts readPiToolNames) */
+  toolNamesPath?: string;
   /** The request a standby pi sends once its session is resumed. */
   warm?: Record<string, unknown>;
   /** #1276: a warm before the conversation's first message (the person
@@ -814,6 +818,14 @@ export default async function (pi: PiExtensionApi): Promise<void> {
 
   const used = new Set<string>();
   const identities = new Map<string, ToolIdentity>();
+  /** #4527: pi names whose upstream spelling the name lost (capitals,
+   * other characters), written for the driver when one is added */
+  const folded: Record<string, string> = {};
+  const recordFolded = (piName: string, server: string, tool: string) => {
+    if (!config.toolNamesPath || folded[piName] !== undefined || piName.slice(-tool.length) === tool) return;
+    folded[piName] = `${server}/${tool}`;
+    try { writeFileSync(config.toolNamesPath, JSON.stringify(folded), { mode: 0o600 }); } catch { /* the lower-case name is counted then */ }
+  };
   /** Registered directory tools and their server. The proxy narrowed their
    * catalog to the selection; call_tool's target is checked when it runs. */
   const directoryTools = new Map<string, string>();
@@ -1025,6 +1037,7 @@ export default async function (pi: PiExtensionApi): Promise<void> {
           }
           used.add(name);
           allocated.set(toolName, name);
+          recordFolded(name, serverName, toolName);
           advertised.add(name);
           identities.set(name, identity);
           if (directoryTool) directoryTools.set(name, serverName);

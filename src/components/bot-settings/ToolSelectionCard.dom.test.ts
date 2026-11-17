@@ -11,7 +11,12 @@ import { setLocale } from "@/lib/i18n";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const fixture = vi.hoisted(() => ({ api: vi.fn() }));
+const fixture = vi.hoisted(() => ({ api: vi.fn(), toolKeep: undefined as undefined | { leftOut: string[]; alwaysListed: string[] }, reload: vi.fn() }));
+// #4527 lot E: the person's own left out tools ride the bot's capabilities
+vi.mock("@/lib/capabilities", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/capabilities")>(),
+  useBotCapabilities: () => ({ data: fixture.toolKeep ? { botId: "bot-1", engine: { kind: "grok", label: "Grok" }, items: [], toolKeep: fixture.toolKeep } : null, error: null, loading: false, reload: fixture.reload }),
+}));
 vi.mock("@/lib/mcp-servers", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/mcp-servers")>(),
   useMcpServers: () => ({ servers: [{ name: "mail", enabled: true }, { name: "github", enabled: true }], error: false, refresh: async () => [] }),
@@ -47,6 +52,8 @@ const saved = () => fixture.api.mock.calls.map((call) => JSON.parse((call[1] as 
 beforeEach(() => {
   setLocale("en");
   fixture.api = vi.fn(async () => ({}));
+  fixture.toolKeep = undefined;
+  fixture.reload = vi.fn(async () => {});
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -120,5 +127,42 @@ describe("ToolSelectionCard on the profile page (plain surface)", () => {
     const save = [...host.querySelectorAll("button")].find((button) => button.textContent === "Save tool selection");
     expect(save?.className).toContain("ui-button");
     expectReferenceLook();
+  });
+});
+
+describe("ToolSelectionCard, tools the bot stopped listing (#4527)", () => {
+  it("shows nothing more when the bot left nothing out", async () => {
+    await render(bot());
+    expect($('[data-tool-group="tool-keep"]')).toBeNull();
+  });
+
+  it("lists the left out tools, brings them all back in one action, and keeps one listed always", async () => {
+    fixture.toolKeep = { leftOut: ["agents/list_rooms", "agents/run_routine"], alwaysListed: ["crm/list_deals"] };
+    await render(bot());
+    const row = $('[data-tool-group="tool-keep"]');
+    expect(row?.textContent).toContain("Not listed up front");
+    expect(row?.textContent).toContain("2 left out");
+    await click('[data-tool-group="tool-keep"] button[aria-expanded]');
+    expect($('[data-tool-row="agents/list_rooms"]')?.textContent).toContain("List rooms");
+    expect($('[data-tool-row="agents/list_rooms"]')?.textContent).toContain("Left out");
+    expect($('[data-tool-row="crm/list_deals"]')?.textContent).toContain("Always listed");
+    // the raw id stays in the tooltip, never on the row
+    expect($('[data-tool-row="agents/list_rooms"]')?.textContent).not.toContain("agents/");
+    await click('[data-tool-row="agents/list_rooms"] [role="switch"]');
+    expect(fixture.api).toHaveBeenLastCalledWith("/api/bots/bot-1", expect.objectContaining({ method: "PATCH" }));
+    expect(saved().at(-1)).toEqual({ toolKeep: { tool: "agents/list_rooms", alwaysListed: true } });
+    await click("[data-tool-keep-all]");
+    expect(saved().at(-1)).toEqual({ toolKeep: { bringAllBack: true } });
+    expect(fixture.reload).toHaveBeenCalledTimes(2);
+  });
+
+  it("speaks French with tu", async () => {
+    setLocale("fr");
+    fixture.toolKeep = { leftOut: ["agents/list_rooms"], alwaysListed: [] };
+    await render(bot());
+    expect($('[data-tool-group="tool-keep"]')?.textContent).toContain("Pas listés d'avance");
+    expect($("[data-tool-keep-all]")?.textContent).toBe("Tout ramener");
+    await click('[data-tool-group="tool-keep"] button[aria-expanded]');
+    expect(host.textContent).toContain("Ton changement s'applique à sa prochaine conversation.");
   });
 });

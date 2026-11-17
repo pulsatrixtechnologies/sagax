@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "../config.ts";
 import { createCompactPromptFor } from "../index-leaves/compactPromptFor.ts";
 import {
-  bringAllToolsBack, emptyToolKeep, EVIDENCE_SESSIONS, foldToolSession, forgetToolKeep, forgetToolKeepInMemory, LEFT_OUT_PROMPT_SESSIONS, LEFT_OUT_PROMPTS,
+  bringAllToolsBack, emptyToolKeep, setToolAlwaysListed, toolKeepOffered, EVIDENCE_SESSIONS, foldToolSession, forgetToolKeep, forgetToolKeepInMemory, LEFT_OUT_PROMPT_SESSIONS, LEFT_OUT_PROMPTS,
   LEFT_OUT_SESSIONS, meetsLeftOutRule, namedByToolScope, neverPruned, readToolKeep, saveToolKeep, sessionLeftOut, toolKeepBindTurn, toolKeepDir, toolKeepSteps, toolKeepTurn, toolKeepVerdict,
   type ToolKeepState, type ToolTurn,
 } from "./tool-keep.ts";
@@ -279,9 +279,19 @@ describe("calls belong to the turn that made them", () => {
 
   it("never leaves out a tool the session's prompt or a rule names by its own name", () => {
     const state = stale(1, 5);
-    expect(toolKeepVerdict(state, { namedText: ["Use stale for the weekly report."] }).leftOut).toEqual([]);
+    // a one-word name counts written as code or as its id, never as a word of a sentence
+    expect(toolKeepVerdict(state, { namedText: ["Use `stale` for the weekly report."] }).leftOut).toEqual([]);
+    expect(toolKeepVerdict(state, { namedText: ["Run crm/stale every Monday."] }).leftOut).toEqual([]);
+    expect(toolKeepVerdict(state, { namedText: ["Call mcp__crm__stale first."] }).leftOut).toEqual([]);
+    expect(toolKeepVerdict(state, { namedText: ["Use stale for the weekly report."] }).leftOut).toEqual(["crm/stale"]);
     expect(toolKeepVerdict(state, { namedText: ["A stalemate is not a tool name."] }).leftOut).toEqual(["crm/stale"]);
-    expect(sessionLeftOut(["crm/stale", "crm/old"], { namedText: ["call stale now"] })).toEqual(["crm/old"]);
+    expect(sessionLeftOut(["crm/stale", "crm/old"], { namedText: ["call `stale` now"] })).toEqual(["crm/old"]);
+  });
+
+  it("a compound name counts as a whole token, never as part of a longer one", () => {
+    const state = sessions(sessions(emptyToolKeep(), 1, 1, ["crm/list_deals", "crm/other"]), 5, 1, ["crm/other"]);
+    expect(toolKeepVerdict(state, { namedText: ["Then list_deals for the week."] }).leftOut).toEqual([]);
+    expect(toolKeepVerdict(state, { namedText: ["Then list_deals_v2 for the week."] }).leftOut).toEqual(["crm/list_deals"]);
   });
 });
 
@@ -309,5 +319,115 @@ describe("compactPromptFor (#4527)", () => {
     expect(third.memoryDir).toContain("claude-auto-memory");
     // another person on the same bot starts from nothing
     expect(prompt("c-9", "bob").agents).toEqual({ core: "default", pinned: [] });
+  });
+});
+
+describe("lots C and E: the session's list, what it was offered, the person's choices (#4527)", () => {
+  const turn = (threadId: string, extra: Partial<Parameters<typeof toolKeepTurn>[0]> = {}) =>
+    startTurn({ botId: "bot-1", person: "alice@example.test", threadId, prompt: true, ...extra });
+  function conversations(count: number, used: string[], from = 0) {
+    for (let n = from; n < from + count; n++) {
+      turn(`t-${n}`);
+      for (const id of used) toolKeepCall(`t-${n}`, id);
+    }
+  }
+
+
+  it("a routine's instruction (the turn's own text) keeps the tool it names listed before its first run", () => {
+    conversations(1, ["crm/stale", "crm/other"]);
+    conversations(5, ["crm/other"], 1);
+    expect(turn("t-plain").leftOut).toEqual(["crm/stale"]);
+    expect(turn("t-routine", { routine: true, context: { namedText: ["Every Monday, run crm/stale and post the result."] } }).leftOut).toEqual([]);
+  });
+
+  it("a tool named later in a conversation comes back from that turn on, for the rest of its session only", () => {
+    conversations(1, ["crm/stale", "crm/old", "crm/other"]);
+    conversations(5, ["crm/other"], 1);
+    expect(turn("t-live").leftOut).toEqual(["crm/old", "crm/stale"]);
+    // the others stay as the session froze them
+    expect(turn("t-live", { context: { namedText: ["now use crm/stale"] } }).leftOut).toEqual(["crm/old"]);
+    expect(turn("t-live").leftOut).toEqual(["crm/old"]);
+    // a new conversation reads the rule again
+    expect(turn("t-next").leftOut).toEqual(["crm/old", "crm/stale"]);
+  });
+
+  it("records only the offered tools it does not know yet, and writes nothing when they are already there", () => {
+    turn("t-offer");
+    toolKeepOffered("bot-1", "alice@example.test", "t-offer", ["agents/list_bots", "agents/list_rooms"]);
+    expect(readToolKeep("bot-1", "alice@example.test").open[Object.keys(readToolKeep("bot-1", "alice@example.test").open)[0]!]!.offered).toEqual(["agents/list_bots", "agents/list_rooms"]);
+    const before = readToolKeep("bot-1", "alice@example.test");
+    toolKeepOffered("bot-1", "alice@example.test", "t-offer", ["agents/list_bots", "agents/list_rooms"]);
+    // the same list again: the very same state object, nothing to write
+    expect(readToolKeep("bot-1", "alice@example.test")).toBe(before);
+    turn("t-offer-2");
+    // known now: a later session keeps none of them with it
+    toolKeepOffered("bot-1", "alice@example.test", "t-offer-2", ["agents/list_bots", "agents/list_rooms"]);
+    const open = Object.values(readToolKeep("bot-1", "alice@example.test").open);
+    expect(open.find((session) => session.offered.length === 0)).toBeDefined();
+    expect(readToolKeep("bot-1", "alice@example.test").tools["agents/list_rooms"]).toEqual({ sessions: 0, prompts: 0, uses: 0 });
+  });
+
+  it("offered tools never called are left out after the rule, and a call through search brings one back at once", () => {
+    for (let n = 0; n < 7; n++) {
+      turn(`t-o${n}`);
+      toolKeepOffered("bot-1", "alice@example.test", `t-o${n}`, ["agents/list_bots", "agents/list_rooms"]);
+      toolKeepCall(`t-o${n}`, "agents/list_bots");
+    }
+    expect(turn("t-o7").leftOut).toEqual(["agents/list_rooms"]);
+    // the bot found it by search and ran it: the next session lists it again
+    toolKeepCall("t-o7", "agents/list_rooms");
+    expect(turn("t-o8").leftOut).toEqual([]);
+  });
+
+  it("a tool the person keeps listed always is never left out, and goes back to the rule when unset", () => {
+    conversations(1, ["crm/stale", "crm/other"]);
+    conversations(5, ["crm/other"], 1);
+    expect(turn("t-a").leftOut).toEqual(["crm/stale"]);
+    expect(setToolAlwaysListed("bot-1", "alice@example.test", "crm/stale", true)).toBe(true);
+    expect(readToolKeep("bot-1", "alice@example.test").leftOut).toEqual([]);
+    expect(turn("t-b").leftOut).toEqual([]);
+    setToolAlwaysListed("bot-1", "alice@example.test", "crm/stale", false);
+    expect(turn("t-c").leftOut).toEqual(["crm/stale"]);
+    expect(setToolAlwaysListed("bot-1", "alice@example.test", "not an id", true)).toBe(false);
+  });
+
+  it("bring all back shows at the next conversation; a running one keeps its frozen list", () => {
+    // another person on the same bot, with the same left out tool
+    const bob = (threadId: string, used: string[]) => {
+      startTurn({ botId: "bot-1", person: "bob@example.test", threadId, prompt: true });
+      for (const id of used) toolKeepCall(threadId, id);
+    };
+    bob("b-0", ["crm/stale", "crm/other"]);
+    for (let n = 1; n < 7; n++) bob(`b-${n}`, ["crm/other"]);
+    conversations(1, ["crm/stale", "crm/other"]);
+    conversations(5, ["crm/other"], 1);
+    expect(turn("t-run").leftOut).toEqual(["crm/stale"]);
+    bringAllToolsBack("bot-1", "alice@example.test");
+    expect(turn("t-run").leftOut).toEqual(["crm/stale"]);
+    expect(turn("t-new").leftOut).toEqual([]);
+    // another person's list on the same bot is untouched
+    expect(readToolKeep("bot-1", "bob@example.test").leftOut).toEqual(["crm/stale"]);
+  });
+});
+
+// #4527 review: a turn's tool names come from what stays put in a conversation
+describe("toolKeepNamedText", () => {
+  it("reads the stable prompt, the routine's instruction, the turn's text and the rules, never a memory", async () => {
+    const { toolKeepNamedText } = await import("./tool-keep.ts");
+    const texts = toolKeepNamedText({
+      stable: "Identity. Use `list_bots`.",
+      sections: [
+        { id: "memory", text: "Last week the person ran `run_routine` twice." },
+        { id: "routine-execution", text: "Run the routine with `export_report`." },
+      ],
+    }, "please list_rooms", ["refuse agents__delete_bot"]);
+    const all = texts.join("\n");
+    expect(all).toContain("list_bots");
+    expect(all).toContain("export_report");
+    expect(all).toContain("list_rooms");
+    expect(all).toContain("agents__delete_bot");
+    expect(all).not.toContain("run_routine");
+    // so a memory naming a left out tool does not bring it back mid-conversation
+    expect(sessionLeftOut(["agents/run_routine", "agents/export_report"], { namedText: texts })).toEqual(["agents/run_routine"]);
   });
 });

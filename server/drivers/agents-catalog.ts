@@ -449,28 +449,46 @@ export const COMPACT_CORE_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
 /** The agents tools a compact turn lists whole (#1276). `core` "default" is
  * every tool Claude Code would load up front (all but the deferred ones),
  * which a bot with no recorded use keeps; "used" is the heart of a chat turn
- * plus `pinned`, the bot's own most used tools. shared_computer is always
- * listed: it is the one agents tool Claude asks about itself, so it never
- * runs through call_tool. Every other tool is found with search_tools. */
-export function compactListed(name: string, input: { core: "default" | "used"; pinned: ReadonlySet<string>; coordinating: boolean }): boolean {
+ * plus `pinned`, the bot's own most used tools. #4527 lot C: "kept" is every
+ * tool but `leftOut`, the tools the bot's session leaves out
+ * (server/tools/tool-keep.ts), on an engine with no tool search of its own.
+ * shared_computer is always listed: it is the one agents tool Claude asks
+ * about itself, so it never runs through call_tool. Every other tool is
+ * found with search_tools. */
+export function compactListed(name: string, input: { core: CompactCore; pinned: ReadonlySet<string>; coordinating: boolean; leftOut?: ReadonlySet<string> }): boolean {
   if (name === "shared_computer" || input.pinned.has(name)) return true;
+  if (input.core === "kept") return !input.leftOut?.has(name);
   if (input.core === "used") return COMPACT_CORE_AGENT_TOOL_NAMES.has(name);
   return !DEFERRED_AGENT_TOOL_NAMES.has(name) && !(input.coordinating && DEFERRED_WHEN_COORDINATING.has(name));
 }
 
+export type CompactCore = "default" | "used" | "kept";
+export interface CompactTools { core: CompactCore; pinned: ReadonlySet<string>; leftOut?: ReadonlySet<string> }
+
+const toolNames = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((name): name is string => typeof name === "string" && name.length > 0 && name.length <= 100) : [];
+
 /** SAGAX_COMPACT_TOOLS, read by the agents proxy; undefined lists as before. */
-export function compactToolsFromEnv(env: Record<string, string | undefined>): { core: "default" | "used"; pinned: ReadonlySet<string> } | undefined {
+export function compactToolsFromEnv(env: Record<string, string | undefined>): CompactTools | undefined {
   const raw = env.SAGAX_COMPACT_TOOLS;
   if (!raw) return undefined;
   try {
-    const value = JSON.parse(raw) as { core?: unknown; pinned?: unknown };
-    const core = value.core === "used" ? "used" : "default";
-    const pinned = Array.isArray(value.pinned) ? value.pinned.filter((name): name is string => typeof name === "string" && name.length > 0 && name.length <= 100) : [];
-    return { core, pinned: new Set(pinned) };
+    const value = JSON.parse(raw) as { core?: unknown; pinned?: unknown; leftOut?: unknown };
+    const pinned = new Set(toolNames(value.pinned));
+    if (value.core === "kept") return { core: "kept", pinned, leftOut: new Set(toolNames(value.leftOut)) };
+    return { core: value.core === "used" ? "used" : "default", pinned };
   } catch {
     return { core: "default", pinned: new Set() };
   }
 }
+
+/** #4527 lot C: the SAGAX_COMPACT_TOOLS of a session that leaves out these
+ * agents tools (bare names), on an engine with no tool search of its own.
+ * Sorted, so one verdict gives the same bytes in every conversation. */
+export function keptToolsEnv(leftOut: readonly string[]): string {
+  return JSON.stringify({ core: "kept", pinned: [], leftOut: [...new Set(leftOut)].sort() });
+}
+
 
 /** Deferred only in a coordinating turn, where it opens a separate job on
  * the bot itself and only when the person asked for one; elsewhere the

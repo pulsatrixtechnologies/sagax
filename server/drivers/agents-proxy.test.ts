@@ -2964,6 +2964,89 @@ describe("the whole catalog listed by family (SAGAX_MERGED_TOOLS)", () => {
   });
 });
 
+// #4527 lot C: an engine with no tool search of its own lists the agents
+// tools but the ones its session leaves out; those run through call_tool,
+// in the same turn, through the same guard as a listed call.
+describe("#4527: a kept listing (SAGAX_COMPACT_TOOLS core kept)", () => {
+  const spawnProxy = (extra: Record<string, string>) => {
+    const child = spawn(process.execPath, [PROXY], {
+      env: { ...childEnv(), SAGAX_HARNESS_URL: `http://127.0.0.1:${stubPort}`, SAGAX_BOT_ID: "bot-asker", SAGAX_THREAD_ID: "thread-asker-routine", SAGAX_COMMS_TOKEN: TOKEN, SAGAX_TURN_DEPTH: "0", SAGAX_CHIEF_OF_STAFF: "1", SAGAX_CATALOG_BRIDGE: "0", ...extra },
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    const waiting = new Map<number, (msg: any) => void>();
+    let nextId = 4527_000;
+    let buf = "";
+    child.stdout!.on("data", (c) => {
+      buf += c;
+      let nl;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line);
+        waiting.get(msg.id)?.(msg);
+        waiting.delete(msg.id);
+      }
+    });
+    const ask = (method: string, params?: unknown): Promise<any> => new Promise((resolve, reject) => {
+      const id = nextId++;
+      waiting.set(id, resolve);
+      child.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+      setTimeout(() => { if (waiting.delete(id)) reject(new Error(`${method} timed out`)); }, 10_000).unref?.();
+    });
+    return { child, ask };
+  };
+  const kept = JSON.stringify({ core: "kept", pinned: [], leftOut: ["list_rooms", "run_routine"] });
+  let plain: ReturnType<typeof spawnProxy>;
+  let codex: ReturnType<typeof spawnProxy>;
+  let guarded: ReturnType<typeof spawnProxy>;
+  beforeAll(async () => {
+    plain = spawnProxy({ SAGAX_COMPACT_TOOLS: kept });
+    codex = spawnProxy({ SAGAX_COMPACT_TOOLS: kept, SAGAX_MERGED_TOOLS: "1" });
+    guarded = spawnProxy({ SAGAX_COMPACT_TOOLS: kept, SAGAX_MCP_PERMISSIONS: "enforce", SAGAX_MCP_ROLE: "viewer", SAGAX_MCP_PRINCIPAL: "pr_viewer" });
+    await Promise.all([plain, codex, guarded].map((proxy) => proxy.ask("initialize", { protocolVersion: "2024-11-05" })));
+  });
+  afterAll(async () => { await Promise.all([plain, codex, guarded].filter(Boolean).map((proxy) => waitForExit(proxy.child, { signal: "SIGTERM" }))); });
+
+  it("lists every tool but the left out ones, plus the directory tools", async () => {
+    const names: string[] = (await plain.ask("tools/list")).result.tools.map((tool: { name: string }) => tool.name);
+    expect(names).not.toContain("list_rooms");
+    expect(names).not.toContain("run_routine");
+    expect(names).toEqual(expect.arrayContaining(["list_bots", "post_to_room", "memory_update", "search_tools", "describe_tool", "call_tool"]));
+    const found = await plain.ask("tools/call", { name: "search_tools", arguments: { query: "rooms" } });
+    expect(found.result.content[0].text).toContain("list_rooms");
+  });
+
+  it("runs a left out tool through call_tool in the same turn, as the tool itself", async () => {
+    roomsResponse = { rooms: [{ id: "room-kept", name: "Kept", members: ["Asker"] }] };
+    const res = await plain.ask("tools/call", { name: "call_tool", arguments: { name: "list_rooms", arguments: {} } });
+    expect(res.result.isError).toBeFalsy();
+    expect(res.result.content[0].text).toContain("room-kept");
+  });
+
+  it("puts a left out tool through the same guard as a direct call", async () => {
+    lastRoutineRunBody = null;
+    auditPosts.length = 0;
+    const refused = await guarded.ask("tools/call", { name: "call_tool", arguments: { name: "run_routine", arguments: { routine_id: "routine-1" } } });
+    expect(refused.result.isError).toBe(true);
+    expect(refused.result.content[0].text).toMatch(/^Permission denied: routines:run/);
+    expect(lastRoutineRunBody).toBeNull();
+    await vi.waitFor(() => expect(auditPosts).toHaveLength(1));
+    expect(auditPosts[0]).toMatchObject({ tool: "run_routine", decision: "denied" });
+  });
+
+  it("on Codex, still lists what stays by family", async () => {
+    const names: string[] = (await codex.ask("tools/list")).result.tools.map((tool: { name: string }) => tool.name);
+    expect(names).toContain("call_tool");
+    expect(names).not.toContain("list_rooms");
+    // the family's members that stay are one tool
+    expect(names).toContain("rooms");
+    expect(names).not.toContain("post_to_room");
+    const res = await codex.ask("tools/call", { name: "call_tool", arguments: { name: "list_rooms", arguments: {} } });
+    expect(res.result.isError).toBeFalsy();
+  });
+});
+
 describe("#1935: a compact agents catalog and a Perspicax profile tool", () => {
   let compact: ChildProcess;
   const waiting = new Map<number, (msg: any) => void>();

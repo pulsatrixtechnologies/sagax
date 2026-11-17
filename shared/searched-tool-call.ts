@@ -168,6 +168,55 @@ export function searchedToolCall(name: string, input: unknown, searched: Readonl
   return { name: `mcp__${server}__${target}`, input: isRecord(input.arguments) ? input.arguments : {}, searched: true };
 }
 
+/** #4527 lot C: whether Sagax's own agents server, mounted with this env,
+ * lists only part of its catalog and serves the rest through search_tools /
+ * call_tool (SAGAX_COMPACT_TOOLS on an engine with no tool search of its
+ * own; Claude Code's native deferral and the find_tool bridge are not this).
+ * Every layer that reads a call then reads its call_tool as the tool it runs. */
+export function agentsSearchedFromEnv(env: Record<string, string | undefined> | undefined | null): boolean {
+  return Boolean(env?.SAGAX_COMPACT_TOOLS) && env?.SAGAX_DEFER_RARE_TOOLS !== "1" && env?.SAGAX_CATALOG_BRIDGE !== "1";
+}
+
+/** #4527 lot C: an engine's call_tool on Sagax's own agents server, in any
+ * spelling (`agents__call_tool`, `mcp__agents__call_tool`, the chat engines'
+ * and Muse Code's `agents_call_tool`), as the agents tool it runs: that
+ * tool's `agents__<tool>` name (a request's `mcpTool`), its id and its own
+ * arguments. Null for any other call, and for a call_tool that runs nothing. */
+export function agentsSearchedCall(title: unknown, input: unknown): { mcpTool: string; id: string; input: unknown } | null {
+  if (typeof title !== "string") return null;
+  const raw = title.trim();
+  const tool = AGENTS_SPELLING.exec(raw)?.[2] ?? CHAT_AGENTS_SPELLING.exec(raw)?.[1];
+  if (tool !== SEARCH_CALL_TOOL) return null;
+  const runs = searchedToolCall(`mcp__${BRIDGE_SERVER}__${SEARCH_CALL_TOOL}`, input, new Set([BRIDGE_SERVER]));
+  if (!runs.searched || runs.refused) return null;
+  const id = toolIdOf(runs.name);
+  return id ? { mcpTool: runs.name.slice("mcp__".length), id, input: runs.input } : null;
+}
+
+/** #4527: the id of a tool an engine names `<server>_<tool>` (Pi's own MCP
+ * extension, lower-cased; Muse Code): the server is the longest mounted one
+ * the name starts with, a searched server's call_tool is the tool it names.
+ * `lower`: the engine lower-cased and folded the name (Pi), so the server is
+ * matched that way and the tool's own spelling comes from `originals` (the
+ * engine's name to the upstream id) when known. Null for an engine's own
+ * tools. */
+export function prefixedToolId(name: string | undefined, args: unknown, servers: readonly string[], searched: ReadonlySet<string>, options: { lower?: boolean; originals?: ReadonlyMap<string, string> } = {}): string | null {
+  if (!name) return null;
+  const fold = (text: string) => options.lower ? text.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") : text;
+  const prefix = (server: string) => `${fold(server)}_`;
+  const server = [...servers].sort((a, b) => b.length - a.length).find((candidate) => name.startsWith(prefix(candidate)) && name.length > prefix(candidate).length);
+  if (!server) return null;
+  const input = isRecord(args) ? args : {};
+  const tool = name.slice(prefix(server).length);
+  if (tool === SEARCH_CALL_TOOL && searched.has(server)) {
+    return typeof input.name === "string" ? mcpCallToolId(server, input.name.trim(), input.arguments) : null;
+  }
+  const original = options.originals?.get(name);
+  const parts = original ? toolIdParts(original) : null;
+  if (parts && parts.server === server) return mcpCallToolId(server, parts.tool, input);
+  return mcpCallToolId(server, tool, input);
+}
+
 /** The names of the searched servers, from the private setting a driver
  * hands its permission proxy (SAGAX_PERMISSION_SEARCHED). */
 export function searchedServersFromEnv(raw: string | undefined): ReadonlySet<string> {

@@ -61,6 +61,7 @@
 // reads the state, bringAllToolsBack empties the streaks.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { stepToolId, toolIdParts } from "../../shared/searched-tool-call.ts";
@@ -148,6 +149,8 @@ export interface ToolKeepState {
   leftOut: string[];
   /** when the person brought every tool back (epoch ms), or null */
   restoredAt: number | null;
+  /** tools the person keeps listed always (the tool selection card, lot E) */
+  alwaysListed: string[];
   open: Record<string, OpenToolSession>;
 }
 
@@ -157,13 +160,16 @@ export interface ToolKeepContext {
   voiceCall?: boolean;
   /** tools named by the person's tool selection: any spelling, read as ids */
   named?: Iterable<string>;
-  /** texts that may name a tool by its own name (the turn's system prompt,
-   * the organization's and the person's rules): a known tool whose name is
-   * a word of one of them is never left out */
+  /** texts that may name a tool (the turn's system prompt, the turn's own
+   * text, the organization's and the person's rules): a known tool named in
+   * one of them is never left out. A name is read as a whole token: its id
+   * in any spelling (`crm/list_deals`, `mcp__crm__list_deals`), a compound
+   * name as it is (`list_deals`), and a one-word name only as code
+   * (`` `deals` ``), so a common word of a sentence keeps nothing listed. */
   namedText?: Iterable<string>;
 }
 
-export const emptyToolKeep = (): ToolKeepState => ({ v: VERSION, sessions: 0, tools: {}, routineTools: [], leftOut: [], restoredAt: null, open: {} });
+export const emptyToolKeep = (): ToolKeepState => ({ v: VERSION, sessions: 0, tools: {}, routineTools: [], leftOut: [], restoredAt: null, alwaysListed: [], open: {} });
 
 /** Agents tools that are never left out: the heart of a chat turn
  * (COMPACT_CORE_AGENT_TOOL_NAMES), approvals and cards, the tools that
@@ -202,11 +208,49 @@ export function namedByToolScope(scope: { allow?: readonly string[] } | undefine
   return named;
 }
 
-/** The words of some texts, as a tool's own name is written. */
-function wordsOf(texts: Iterable<string> | undefined): Set<string> {
-  const words = new Set<string>();
-  for (const text of texts ?? []) for (const word of text.match(/[A-Za-z0-9][\w.-]*[A-Za-z0-9]|[A-Za-z0-9]/g) ?? []) words.add(word);
-  return words;
+/** What some texts name: whole tokens, the tool ids they spell, and the
+ * names written as code. */
+export interface NamedTokens { words: Set<string>; ids: Set<string>; code: Set<string> }
+
+/** The tokens of some texts that may name a tool (see ToolKeepContext). */
+export function namedTokens(texts: Iterable<string> | undefined): NamedTokens {
+  const named: NamedTokens = { words: new Set(), ids: new Set(), code: new Set() };
+  for (const text of texts ?? []) {
+    for (const token of text.match(/[A-Za-z0-9][\w./:-]*[A-Za-z0-9]|[A-Za-z0-9]/g) ?? []) {
+      named.words.add(token);
+      const id = toolIdParts(token) ? stepToolId({ tool: token }) : stepToolId({ title: token });
+      if (id) named.ids.add(id);
+    }
+    for (const match of text.matchAll(/`([A-Za-z0-9][\w.:-]{0,199})`/g)) named.code.add(match[1]!);
+  }
+  return named;
+}
+
+/** A tool's own name that reads as a name, not as a common word: two words
+ * or more joined (`list_deals`, `send-mail`, `crm.read`, `listDeals`). */
+const compoundName = (tool: string) => /[_.:-]/.test(tool) || /[a-z][A-Z]/.test(tool);
+
+/** Whether some texts name this tool (an id). */
+export function namedIn(id: string, named: NamedTokens): boolean {
+  if (named.ids.has(id)) return true;
+  const tool = toolIdParts(id)?.tool;
+  if (!tool) return false;
+  return named.code.has(tool) || (compoundName(tool) && named.words.has(tool));
+}
+
+/** The system prompt's section that carries a routine's instruction: it
+ * sits in the volatile half, yet names the tools the routine runs. */
+const ROUTINE_SECTION = "routine-execution";
+
+/** The texts a turn's tool names are read from (ToolKeepContext.namedText):
+ * the stable system prompt, the routine's instruction, the turn's own text
+ * and the rules. Never the rest of the volatile half (a memory, the date,
+ * recent work): its words change from turn to turn, and a memory that names
+ * a tool would bring it back mid-conversation and break the cached prefix
+ * more often than intended (the tool stays one search away). */
+export function toolKeepNamedText(prompt: { stable: string; sections?: readonly { id: string; text: string }[] }, text: unknown, rules: readonly string[]): string[] {
+  const routine = (prompt.sections ?? []).filter((section) => section.id === ROUTINE_SECTION).map((section) => section.text);
+  return [prompt.stable, ...routine, typeof text === "string" ? text : "", ...rules];
 }
 
 /** The rules' words that may name a tool for one bot and person: the
@@ -223,12 +267,12 @@ export function ruleTextsFor(botId: string, person: string): string[] {
 }
 
 /** Whether a tool is never left out, whatever its streak. */
-export function neverPruned(id: string, routineTools: ReadonlySet<string>, named: ReadonlySet<string>, context: ToolKeepContext = {}, words: ReadonlySet<string> = new Set()): boolean {
+export function neverPruned(id: string, routineTools: ReadonlySet<string>, named: ReadonlySet<string>, context: ToolKeepContext = {}, words: NamedTokens = namedTokens([])): boolean {
   const parts = toolIdParts(id);
   if (!parts) return true;
   if (routineTools.has(id) || named.has(id)) return true;
   const { server, tool } = parts;
-  if (words.has(tool)) return true;
+  if (namedIn(id, words)) return true;
   if (tool.startsWith("memory_")) return true;
   if (server === "agents") return NEVER_PRUNED_AGENT_TOOLS.has(tool) || (context.voiceCall === true && LIVE_CALL_TOOLS.has(tool));
   // a connector's own finding tools, and the Perspicax bridge's core
@@ -246,8 +290,8 @@ const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export function toolKeepVerdict(state: ToolKeepState, context: ToolKeepContext = {}): ToolKeepVerdict {
   const evidence = state.sessions >= EVIDENCE_SESSIONS;
   const routine = new Set(state.routineTools);
-  const named = idsOf(context.named);
-  const words = wordsOf(context.namedText);
+  const named = idsOf([...(context.named ?? []), ...state.alwaysListed]);
+  const words = namedTokens(context.namedText);
   const leftOut: string[] = [];
   const kept: Array<[string, ToolStreak]> = [];
   for (const [id, streak] of Object.entries(state.tools)) {
@@ -282,18 +326,27 @@ export function foldToolSession(state: ToolKeepState, session: { prompts: number
   return { ...next, leftOut: toolKeepVerdict({ ...next, sessions: Math.max(next.sessions, EVIDENCE_SESSIONS) }).leftOut };
 }
 
-/** Lot C: a frozen `leftOut` read again for one turn, without the tools
- * this turn names (its prompt, a rule): only ever fewer tools, so a prompt
- * never points at a tool its turn does not list. */
+/** A frozen `leftOut` read again for one turn, without the tools this turn
+ * names (its prompt, its text, a rule, the person's always listed ones):
+ * only ever fewer tools, so a prompt never points at a tool its turn does
+ * not list. toolKeepTurn keeps the result for the rest of the session. */
 export function sessionLeftOut(leftOut: readonly string[], context: ToolKeepContext = {}): string[] {
   const named = idsOf(context.named);
-  const words = wordsOf(context.namedText);
-  return leftOut.filter((id) => !named.has(id) && !words.has(toolIdParts(id)?.tool ?? ""));
+  const words = namedTokens(context.namedText);
+  return leftOut.filter((id) => !named.has(id) && !namedIn(id, words));
 }
 
-/** "Bring all back": every streak emptied, nothing left out (pure). */
+/** "Bring all back": every streak emptied, nothing left out (pure). The
+ * open sessions keep their frozen list: the change shows at the bot's next
+ * conversation, and every tool stays one search away meanwhile. */
 export function restoreAllTools(state: ToolKeepState, now: number): ToolKeepState {
   return { ...state, tools: {}, leftOut: [], restoredAt: now };
+}
+
+/** One tool kept listed always, or given back to the rule (pure). */
+export function keepToolListed(state: ToolKeepState, id: string, on: boolean): ToolKeepState {
+  const alwaysListed = on ? [...new Set([...state.alwaysListed, id])].sort(byName).slice(0, TOOLS_MAX) : state.alwaysListed.filter((entry) => entry !== id);
+  return { ...state, alwaysListed, leftOut: on ? state.leftOut.filter((entry) => entry !== id) : state.leftOut };
 }
 
 /** What a compact prompt lists whole, from a session's verdict: the core
@@ -359,8 +412,10 @@ function parseStored(text: string): ToolKeepState | null {
   }
   const routineTools = ids(value.routineTools, TOOLS_MAX);
   const leftOut = ids(value.leftOut, TOOLS_MAX);
-  if (!routineTools || !leftOut) return null;
-  return { v: VERSION, sessions: value.sessions, tools, routineTools, leftOut, restoredAt: count(value.restoredAt) ? value.restoredAt : null, open };
+  // written before lot E: none kept always
+  const alwaysListed = value.alwaysListed === undefined ? [] : ids(value.alwaysListed, TOOLS_MAX);
+  if (!routineTools || !leftOut || !alwaysListed) return null;
+  return { v: VERSION, sessions: value.sessions, tools, routineTools, leftOut, restoredAt: count(value.restoredAt) ? value.restoredAt : null, alwaysListed, open };
 }
 
 const TOOL_NAME = /^[A-Za-z0-9][\w.:-]{0,199}$/;
@@ -479,6 +534,15 @@ export function toolKeepTurn(turn: ToolTurn): ToolSessionVerdict {
     const others = Object.entries(state.open).filter(([other]) => other !== hash).sort(([, a], [, b]) => b.at - a.at).slice(0, OPEN_MAX - 1);
     state = { ...state, open: { ...Object.fromEntries(others), [hash]: open } };
   }
+  else if (turn.context && open!.frozen.leftOut.length) {
+    // a tool this turn names comes back from this turn on, for the rest of
+    // the session; the others keep the session's frozen list
+    const leftOut = sessionLeftOut(open!.frozen.leftOut, { ...turn.context, named: [...(turn.context.named ?? []), ...state.alwaysListed] });
+    if (leftOut.length !== open!.frozen.leftOut.length) {
+      open = { ...open!, frozen: { ...open!.frozen, leftOut } };
+      state = { ...state, open: { ...state.open, [hash]: open } };
+    }
+  }
   if (turn.prompt) {
     open = { ...open!, prompts: open!.prompts + 1, at: Date.now(), ...(turn.routine ? { routine: 1 as const } : {}) };
     state = { ...state, open: { ...state.open, [hash]: open } };
@@ -554,7 +618,8 @@ export function toolKeepSteps(threadId: string, records: readonly Record<string,
   if (!journalRemoved) {
     journalRemoved = true;
     // the per-conversation counts kept before #4527 lot B have no reader
-    try { rmSync(join(DATA_DIR, "tool-uses"), { recursive: true, force: true }); } catch { /* removed at the next start */ }
+    // off the event path: a big old folder must not hold the bus
+    void rm(join(DATA_DIR, "tool-uses"), { recursive: true, force: true }).catch(() => { /* removed at the next start */ });
   }
   for (const record of records) {
     const turnId = record.turnId;
@@ -568,11 +633,19 @@ export function toolKeepSteps(threadId: string, records: readonly Record<string,
   }
 }
 
-/** Lot C: the tools a session really listed (ids), so the fold counts a
- * tool never called in it as unused. */
+/** The tools a session really listed (ids, lot C), so the fold counts a
+ * tool never called in it as unused. Only the ones the bot does not know
+ * yet are kept with the session (a tool it knows is folded anyway), and
+ * nothing is written when they are already there: the same list on every
+ * turn costs neither memory nor a rewrite. */
 export function toolKeepOffered(botId: string, person: string, threadId: string, offered: Iterable<string>): void {
-  const list = [...idsOf(offered)].sort(byName).slice(0, TOOLS_MAX);
-  applyToOpen({ botId, person, threadId }, (open) => ({ ...open, offered: list }));
+  const state = load(botId, person);
+  const open = state.open[hashOf(threadId)];
+  if (!open) return;
+  const fresh = [...idsOf(offered)].filter((id) => !state.tools[id] && !open.offered.includes(id));
+  if (!fresh.length) return;
+  const list = [...open.offered, ...fresh].sort(byName).slice(0, TOOLS_MAX);
+  applyToOpen({ botId, person, threadId }, (current) => ({ ...current, offered: list }));
 }
 
 /** Lot E: the person's state for one bot (read only). */
@@ -584,6 +657,15 @@ export function readToolKeep(botId: string, person: string): ToolKeepState {
 export function bringAllToolsBack(botId: string, person: string): void {
   store(botId, person, restoreAllTools(load(botId, person), Date.now()));
   saveOne(memoryKey(botId, person));
+}
+
+/** Lot E: one tool kept listed always for one bot and person, or given back
+ * to the rule. False for an id that names no tool. */
+export function setToolAlwaysListed(botId: string, person: string, id: string, on: boolean): boolean {
+  if (!toolIdParts(id) || !ID_KEY.test(id)) return false;
+  store(botId, person, keepToolListed(load(botId, person), id, on));
+  saveOne(memoryKey(botId, person));
+  return true;
 }
 
 /** A deleted bot: its files and memory go with it. */

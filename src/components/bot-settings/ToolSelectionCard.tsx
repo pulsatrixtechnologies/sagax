@@ -12,10 +12,16 @@ import { PILL, PLAIN_FIELD, PRIMARY_PILL, Switch, SwitchRow } from "../SettingsP
 import { inputCls } from "./field";
 import { PaneSection, usePaneRows } from "./PaneSection";
 import { readableError } from "@/lib/plain-error";
+import { useBotCapabilities } from "@/lib/capabilities";
 
 type Draft = { custom: boolean; onlyListed: boolean; allow: string; deny: string };
 const lines = (text: string) => text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 const uniq = (list: string[]) => [...new Set(list)];
+
+/** The tools the bot stopped listing up front (#4527): one more row. */
+const KEEP_GROUP = "tool-keep";
+/** A tool id's own name (`agents/list_bots` reads `list_bots`). */
+const toolOf = (id: string) => id.slice(id.indexOf("/") + 1);
 
 /** A group of tools: the engine's own ("native") or one MCP server. */
 type Group = { ns: string; label: string; mounted: boolean };
@@ -117,6 +123,27 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
   // pills, nothing outlined or underlined.
   const rows = usePaneRows();
   const { plain } = rows;
+  // #4527 lot E: the tools this bot stopped listing up front for the person
+  // reading (their own list only), with "Bring all back" and, per tool, keep
+  // it listed always. Shown only when there is one.
+  const capabilities = useBotCapabilities(bot.id);
+  const kept = capabilities.data?.toolKeep;
+  const keepRows = kept ? [...kept.leftOut.map(id => ({ id, always: false })), ...kept.alwaysListed.map(id => ({ id, always: true }))]
+    .sort((a, b) => toolLabel(toolOf(a.id)).localeCompare(toolLabel(toolOf(b.id)))) : [];
+  const [keepBusy, setKeepBusy] = useState(false);
+  const changeKeep = async (toolKeep: { bringAllBack: true } | { tool: string; alwaysListed: boolean }) => {
+    if (keepBusy) return;
+    setKeepBusy(true); setError(null);
+    try {
+      await request(`/api/bots/${bot.id}`, { method: "PATCH", body: JSON.stringify({ toolKeep }) });
+      await capabilities.reload();
+    } catch (cause) {
+      if (alive.current) setError(readableError(cause));
+    } finally {
+      if (alive.current) setKeepBusy(false);
+    }
+  };
+  const keepOpen = open === KEEP_GROUP;
   const field = plain ? PLAIN_FIELD : inputCls;
   const example = engineKind === "piAgent" ? "native:read\nnative:edit\nnative:write"
     : engineKind === "grokAgent" ? "native:read_file\nnative:search_replace\nnative:write"
@@ -174,6 +201,35 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
           </div>}
         </div>;
       })}
+      {keepRows.length > 0 && kept && <div data-tool-group={KEEP_GROUP}>
+        <div className={cn("flex min-h-[44px] items-center gap-2 py-2", rows.row)}>
+          <button type="button" aria-expanded={keepOpen} aria-label={t("botAccess.tools.expand", { name: t("botAccess.tools.keepGroup") })}
+            onClick={() => { setOpen(keepOpen ? null : KEEP_GROUP); setAdding(""); }}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left">
+            <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform motion-reduce:transition-none", keepOpen && "rotate-90")} />
+            <span className="min-w-0">
+              <span className={cn("block truncate text-ink", rows.title)}>{t("botAccess.tools.keepGroup")}</span>
+              <span className={cn("block truncate text-ink-secondary", rows.note)}>
+                {kept.leftOut.length ? t("botAccess.tools.keepStatus", { count: kept.leftOut.length }) : t("botAccess.tools.keepAlwaysStatus", { count: kept.alwaysListed.length })}
+              </span>
+            </span>
+          </button>
+          {kept.leftOut.length > 0 && <button type="button" data-tool-keep-all disabled={keepBusy} onClick={() => void changeKeep({ bringAllBack: true })}
+            className={plain ? cn(PILL, "shrink-0") : "shrink-0 text-[12.5px] text-accent disabled:opacity-50"}>{t("botAccess.tools.bringAllBack")}</button>}
+        </div>
+        {keepOpen && <div className={cn("flex flex-col gap-1 pb-3", plain ? "pl-[38px] pr-4" : "pl-9 pr-3.5")}>
+          {keepRows.map(({ id, always }) => {
+            const name = toolLabel(toolOf(id));
+            return <div key={id} data-tool-row={id} className="flex min-h-[32px] items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink" title={id}>{name}</span>
+              <span className="text-[11.5px] text-ink-secondary">{t(always ? "botAccess.tools.alwaysListed" : "botAccess.tools.leftOut")}</span>
+              <Switch checked={always} disabled={keepBusy} aria-label={t("botAccess.tools.keepAria", { name })}
+                onClick={() => void changeKeep({ tool: id, alwaysListed: !always })} className="disabled:cursor-not-allowed" />
+            </div>;
+          })}
+          <p className="text-[12px] text-ink-secondary">{t("botAccess.tools.keepHint")}</p>
+        </div>}
+      </div>}
     </div>
     <details data-tool-advanced className="group/adv mt-3">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12.5px] text-ink-secondary [&::-webkit-details-marker]:hidden">

@@ -50,6 +50,23 @@ import { shellCredentialPaths } from "../safety/sensitive-path.ts";
 import { confidentialCardAnswerable } from "../threads/confidential-threads.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 import { presentRequestOpened } from "./request-opened-present.ts";
+/** The call a request names, as the person's and the organization's rules
+ * read it (shared/custom-rules.ts): an engine's request.opened, whichever
+ * engine asked. */
+export function customRuleCallOf(event: any, defaultInstanceId: string): CustomRuleCall {
+  return {
+    tool: event.tool,
+    ...(event.mcpTool ? { mcpTool: event.mcpTool } : {}),
+    ...(typeof event.input === "string" ? { input: event.input } : {}),
+    ...(event.command?.command ? { command: event.command.command } : {}),
+    // compared only by an exact command's binding
+    ...(event.command?.cwd ? { cwd: event.command.cwd } : {}),
+    providerInstanceId: event.providerInstanceId ?? defaultInstanceId,
+    ...(event.paths?.length ? { paths: event.paths } : {}),
+    summary: event.summary,
+  };
+}
+
 export function handleRequestOpened(event: any, ctx: any, host: any): void {
   const {
     bot, group, speaker, pushMessage,
@@ -438,17 +455,7 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
       // own route may (never an admin card, a guest's turn, a safety hold or
       // a sandbox widening) and only within its risk scope.
       const customCall: CustomRuleCall | null = permission && asker && event.requestId
-        ? {
-          tool: event.tool,
-          ...(event.mcpTool ? { mcpTool: event.mcpTool } : {}),
-          ...(typeof event.input === "string" ? { input: event.input } : {}),
-          ...(event.command?.command ? { command: event.command.command } : {}),
-          // compared only by an exact command's binding
-          ...(event.command?.cwd ? { cwd: event.command.cwd } : {}),
-          providerInstanceId: event.providerInstanceId ?? asker!.modelSelection.instanceId,
-          ...(event.paths?.length ? { paths: event.paths } : {}),
-          summary: event.summary
-        }
+        ? customRuleCallOf(event, asker.modelSelection.instanceId)
         : null;
       const customReview = customCall && asker
         ? reviewCustomRules(host.customRules.rulesOf(cardAnswerer, asker.id, { ownSandbox: ownSandboxCall }), customCall, asker.id, serverHome(), { ...host.ruleProductsOf(asker.id), startedBy: host.turnStartFor(event.threadId) })

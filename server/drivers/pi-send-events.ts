@@ -2,11 +2,13 @@
 import { newId } from "../contracts.ts";
 import { MAX_QUESTION_TEXT, parseAskQuestions, parseChoices, questionAnswersByQuestion } from "../../shared/ask-question.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
-import { mcpCallToolId } from "../../shared/searched-tool-call.ts";
+import { mcpCallToolId, prefixedToolId } from "../../shared/searched-tool-call.ts";
+import { readFileSync } from "node:fs";
 import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
 import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
 import { filesField, writtenFilesFromToolInput } from "../threads/thread-files.ts";
 import { deletePromptSplitReceipt } from "./prompt-split.ts";
+import { contextFoldedNotice } from "../context/context-renewal.ts";
 import { appendNative } from "./native.ts";
 import type { PiSendCtx } from "./pi-turn-ctx.ts";
 
@@ -33,20 +35,28 @@ interface PiEvent {
 }
 
 /** #4527: a tool of pi-mcp-extension, named `<server>_<tool>` lower-cased
- * (pi-mcp-extension.ts sanitizeToolName), as the id of the tool it runs:
- * the server is the longest mounted one the name starts with; a searched
- * server's call_tool is the tool it names. Null for pi's own tools. */
-export function piExtensionToolId(name: string | undefined, args: unknown, servers: readonly string[], searched: ReadonlySet<string>): string | null {
-  if (!name) return null;
-  const prefix = (server: string) => `${server.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "")}_`;
-  const server = [...servers].sort((a, b) => b.length - a.length).find((candidate) => name.startsWith(prefix(candidate)) && name.length > prefix(candidate).length);
-  if (!server) return null;
-  const tool = name.slice(prefix(server).length);
-  const input = args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : {};
-  if (tool === "call_tool" && searched.has(server)) {
-    return typeof input.name === "string" ? mcpCallToolId(server, input.name.trim(), input.arguments) : null;
+ * (pi-mcp-extension.ts sanitizeToolName), as the id of the tool it runs
+ * (shared/searched-tool-call.ts prefixedToolId). `originals`: the
+ * extension's own record of the upstream names it folded
+ * (PI_TOOL_NAMES_FILE), so a tool spelled with capitals keeps its id. */
+export function piExtensionToolId(name: string | undefined, args: unknown, servers: readonly string[], searched: ReadonlySet<string>, originals?: ReadonlyMap<string, string>): string | null {
+  return prefixedToolId(name, args, servers, searched, { lower: true, ...(originals ? { originals } : {}) });
+}
+
+/** Where pi-mcp-extension writes the upstream names it folded, in the
+ * turn's MCP folder (its config's `toolNamesPath`). */
+export const PI_TOOL_NAMES_FILE = "tool-names.json";
+
+/** The extension's record of folded names (`{ piName: "server/Tool" }`),
+ * read when a call names a tool of a mounted server; empty when absent. */
+export function readPiToolNames(path: string | undefined): ReadonlyMap<string, string> | undefined {
+  if (!path) return undefined;
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return new Map(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  } catch {
+    return undefined;
   }
-  return mcpCallToolId(server, tool, input);
 }
 
 export function handlePiEvent(ctx: PiSendCtx, evt: PiEvent): void {
@@ -90,7 +100,8 @@ export function handlePiEvent(ctx: PiSendCtx, evt: PiEvent): void {
       if (typeof evt.toolCallId === "string") toolArgs.set(evt.toolCallId, args);
       // #4527: the id of the tool this call runs, as on every other engine
       const toolId = gateway?.kind === "tool" ? mcpCallToolId(gateway.server, gateway.tool, gateway.args)
-        : piExtensionToolId(typeof evt.toolName === "string" ? evt.toolName : undefined, evt.args, mcpServerNames, searchedServers);
+        : piExtensionToolId(typeof evt.toolName === "string" ? evt.toolName : undefined, evt.args, mcpServerNames, searchedServers,
+          typeof evt.toolName === "string" && !evt.toolName.startsWith("agents_") ? readPiToolNames(ctx.toolNamesPath) : undefined);
       emit({
         ...base(threadId, turnId),
         type: "item.started",
@@ -233,6 +244,11 @@ export function handlePiEvent(ctx: PiSendCtx, evt: PiEvent): void {
       if (ctx.sessionReady && ctx.sessionFile) {
         ctx.compactionObserved = true;
         deletePromptSplitReceipt("pi", JSON.stringify([threadId, ctx.sessionFile]));
+      }
+      // #4527: a summarized session is a new one for the tools the bot keeps
+      // listed (server/tools/tool-keep.ts reads contextRenewed)
+      if (evt.type === "compaction_end" || evt.type === "auto_compaction_end") {
+        emit({ ...base(threadId, turnId), type: "runtime.notice", message: contextFoldedNotice("Pi"), contextRenewed: true });
       }
       return;
     }

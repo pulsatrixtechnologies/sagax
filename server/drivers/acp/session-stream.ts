@@ -2,6 +2,7 @@
 import { isCwTool } from "../../../shared/cw-widgets/tool-call.ts";
 import { isMailboxTool } from "../../../shared/mailbox-user.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
+import { agentsSearchedCall, agentsSearchedFromEnv } from "../../../shared/searched-tool-call.ts";
 import { cwToolResult, commandSummary, toolDetailPreview } from "../../tools/tool-summary.ts";
 import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
 import { acpLateToolInput, acpToolEndEvents } from "./tool-items.ts";
@@ -151,7 +152,9 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
               }
               // Grok's use_tool reads as the MCP tool it runs, not "Use Tool"
               const useTool = readUseToolCall(u.rawInput, { title: u.title, meta: u._meta });
-              const toolTitle = useTool?.id ?? (typeof u.title === "string" ? u.title : undefined);
+              // #4527 lot C: the agents server's call_tool reads as the tool it runs
+              const searched = !useTool && agentsSearchedFromEnv(current.turn?.integrations?.agents?.env) ? agentsSearchedCall(u.title, u.rawInput) : null;
+              const toolTitle = useTool?.id ?? searched?.mcpTool ?? (typeof u.title === "string" ? u.title : undefined);
               if (typeof u.toolCallId === "string" && toolTitle && isCwTool(toolTitle)) {
                 (current.cwToolNames ??= new Map()).set(u.toolCallId, toolTitle);
               }
@@ -159,7 +162,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
               // tool_call_update after it: end it here, and keep an unkeyed one out of the queue running calls pair by.
               const itemId = (typeof u.toolCallId === "string" && u.toolCallId) ? u.toolCallId
                 : finished ? `acp-tool-unkeyed-${allocUnkeyedToolSeq()}` : nextUnkeyedToolId(current);
-              const startInput = toolDetailPreview(useTool ? useTool.args : u.rawInput);
+              const startInput = toolDetailPreview(useTool ? useTool.args : searched ? searched.input : u.rawInput);
               if (typeof u.toolCallId === "string" && u.toolCallId) {
                 (current.toolCalls ??= new Map()).set(u.toolCallId, {
                   title: typeof u.title === "string" ? u.title : undefined, start: startInput, raw: u.rawInput,
@@ -170,8 +173,9 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
                 type: "item.started",
                 itemType: "tool",
                 itemId,
-                title: String(useTool?.id ?? u.rawInput?.command ?? u.title ?? "tool").slice(0, 80),
-                summary: commandSummary(useTool ? useTool.args : u.rawInput),
+                title: String(useTool?.id ?? searched?.mcpTool ?? u.rawInput?.command ?? u.title ?? "tool").slice(0, 80),
+                ...(searched ? { tool: searched.id } : {}),
+                summary: commandSummary(useTool ? useTool.args : searched ? searched.input : u.rawInput),
                 input: startInput,
                 ...filesField(acpWrittenFiles(u)),
               });

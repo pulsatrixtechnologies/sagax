@@ -68,38 +68,63 @@ struct QuestionSheetHeader: View {
     var dismissLabel: String? = nil
     var dismissId: String? = nil
 
-    var body: some View {
-            HStack(alignment: .top, spacing: 8) {
-                Text(title)
-                    .font(colors.font(14, .semibold))
-                    .foregroundStyle(colors.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                Spacer(minLength: 4)
-                if let meta {
-                    Text(meta)
-                        .font(colors.font(11.5).monospacedDigit())
+    private var titleText: some View {
+        Text(title)
+            .font(colors.font(14, .semibold))
+            .foregroundStyle(colors.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+
+    private var metaText: some View {
+        Text(meta ?? "")
+            .font(colors.font(11.5).monospacedDigit())
+            .foregroundStyle(colors.inkSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var dismissButton: some View {
+        Group {
+            if let onDismiss {
+                Button {
+                    Haptics.selection()
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(colors.inkSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
-                if let onDismiss {
-                    Button {
-                        Haptics.selection()
-                        onDismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(colors.inkSecondary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, -13)
-                    .padding(.trailing, -14)
-                    .padding(.bottom, -13)
-                    .accessibilityLabel(dismissLabel.map { Text(verbatim: $0) } ?? Text("Dismiss"))
-                    .accessibilityIdentifier(dismissId ?? "question-dismiss")
-                }
+                .buttonStyle(.plain)
+                .padding(.top, -13)
+                .padding(.trailing, -14)
+                .padding(.bottom, -13)
+                .accessibilityLabel(dismissLabel.map { Text(verbatim: $0) } ?? Text("Dismiss"))
+                .accessibilityIdentifier(dismissId ?? "question-dismiss")
             }
+        }
+    }
+
+    var body: some View {
+        // title and progress share a line when both fit; otherwise the progress
+        // goes under the title, so no word is ever broken to make room
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 8) {
+                titleText
+                Spacer(minLength: 4)
+                if meta != nil { metaText }
+                dismissButton
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .top, spacing: 8) {
+                    titleText
+                    Spacer(minLength: 4)
+                    dismissButton
+                }
+                if meta != nil { metaText }
+            }
+        }
     }
 }
 

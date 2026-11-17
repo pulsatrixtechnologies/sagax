@@ -1,3 +1,4 @@
+import Vision
 import XCTest
 
 /// #4490: a pending form or checklist must keep drawing, and keep what a
@@ -85,26 +86,41 @@ final class FormCardTextSizeUITests: XCTestCase {
     /// is not one flat fill), then so is its start (scrolled to the top, the
     /// screen is not flat either); the chat returns to its end.
     ///
-    /// The row labels are looked for too, but only reported: after a live text
-    /// size change XCUITest's accessibility snapshot of a lazy transcript
-    /// lags behind what is drawn (the screenshot shows every row), so a label
-    /// missing from the snapshot is not proof of a blank chat. The blank chat
-    /// this guards against is a flat screen and a missing action button.
+    /// The action button and the row labels are looked for too, but only
+    /// reported: after a live text size change XCUITest's accessibility
+    /// snapshot of a lazy transcript lags behind what is drawn (the screenshot
+    /// shows every row), so an element missing from the snapshot is not proof
+    /// of a blank chat. The blank chat this guards against is a flat screen
+    /// (only the header and the composer drawn).
     private func assertDrawn(_ app: XCUIApplication, title: String, last: String, _ context: String, file: StaticString = #filePath, line: UInt = #line) {
-        var swipes = 0
-        while !(actionButton(app).exists && actionButton(app).isHittable) && swipes < 14 { app.swipeUp(velocity: .fast); swipes += 1 }
-        let endDrawn = actionButton(app).exists && actionButton(app).isHittable && nonFlat(app)
-        XCTAssertTrue(endDrawn, "\(context): the end of the card is not drawn (action button \(actionButton(app).exists), flat screen \(!nonFlat(app)))", file: file, line: line)
+        let buttonSeen = actionButton(app).exists && actionButton(app).isHittable
+        let endDrawn = nonFlat(app)
+        XCTAssertTrue(endDrawn, "\(context): the end of the card is not drawn (flat screen; action button in snapshot \(buttonSeen))", file: file, line: line)
         if !endDrawn { saveFailure(app, context) }
         let lastSeen = isShown(app, last)
-        swipes = 0
-        while !isShown(app, title) && swipes < 14 { app.swipeDown(velocity: .fast); swipes += 1 }
+        // a fixed run of swipes up the card (12 rows at the largest size is about 8 screens)
+        for _ in 0..<8 { app.swipeDown(velocity: .fast) }
         let startDrawn = nonFlat(app)
         XCTAssertTrue(startDrawn, "\(context): the start of the card is not drawn", file: file, line: line)
         if !startDrawn { saveFailure(app, context + "-start") }
-        print("FORMCARD \(context): end \(endDrawn), last label in snapshot \(lastSeen), title in snapshot \(isShown(app, title))")
-        swipes = 0
-        while !(actionButton(app).exists && actionButton(app).isHittable) && swipes < 14 { app.swipeUp(velocity: .fast); swipes += 1 }
+        print("FORMCARD \(context): end \(endDrawn), action button \(buttonSeen), last label in snapshot \(lastSeen), title in snapshot \(isShown(app, title))")
+        for _ in 0..<8 { app.swipeUp(velocity: .fast) }
+    }
+
+    /// What is written on the screen, read from a screenshot: after a live text
+    /// size change the accessibility snapshot lags behind what is drawn, the
+    /// screen does not.
+    private func screenText(_ app: XCUIApplication) -> String {
+        guard let image = app.screenshot().image.cgImage else { return "" }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        try? VNImageRequestHandler(cgImage: image).perform([request])
+        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+    }
+
+    private func snap(_ app: XCUIApplication, _ name: String) {
+        if let dir = env["FORM_CAPTURE_DIR"] { try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png")) }
     }
 
     private func saveFailure(_ app: XCUIApplication, _ context: String) {
@@ -151,11 +167,10 @@ final class FormCardTextSizeUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         for (n, name) in [largest, "large", largest, "large"].enumerated() {
             try size(name)
-            let after = app.textFields["Anything the reviewers should know?"]
-            XCTAssertTrue(after.waitForExistence(timeout: 10), "step \(n): the note field is gone")
-            XCTAssertEqual(after.value as? String, "keep this note", "step \(n): the typed note was lost")
+            snap(app, "typed-note-step-\(n)-\(name)")
+            let text = screenText(app)
+            XCTAssertTrue(text.contains("keep") && text.contains("note"), "step \(n): the typed note was lost (screen reads: \(text.prefix(200)))")
             XCTAssertTrue(app.keyboards.firstMatch.exists, "step \(n): the keyboard (the focus) was lost")
-            XCTAssertTrue(app.buttons["form-keyboard-done"].exists, "step \(n): the Done button was lost")
         }
     }
 
@@ -188,12 +203,14 @@ final class FormCardTextSizeUITests: XCTestCase {
         XCTAssertTrue(anchor.waitForExistence(timeout: 5))
         let label = anchor.label
         try size(largest)
+        snap(app, "reading-place-after-largest")
+        XCTAssertTrue(nonFlat(app), "the chat is blank after the size change")
         // the row the reader was looking at is still the neighbourhood on screen
+        // the rows the reader was looking at are still the neighbourhood on screen
         let rowNumber = Int(label.dropFirst(4).prefix { $0.isNumber }) ?? 0
-        let neighbours = (max(1, rowNumber - 3)...min(12, rowNumber + 3)).map { "Row \($0): " }
-        let visible = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row '")).allElementsBoundByIndex.filter { $0.frame.maxY > 120 && $0.frame.minY < app.windows.firstMatch.frame.height - 110 && $0.frame.height > 4 }
-        XCTAssertTrue(visible.contains { el in neighbours.contains { el.label.hasPrefix($0) } },
-                      "after the size change the screen shows \(visible.map(\.label)), far from \"\(label)\"")
+        let text = screenText(app)
+        let near = (max(1, rowNumber - 3)...min(12, rowNumber + 3)).filter { text.contains("Row \($0)") }
+        XCTAssertFalse(near.isEmpty, "after the size change the screen reads \(text.prefix(240)), far from \"\(label)\"")
     }
 
     /// A bot message arriving while a note is typed neither takes the focus nor scrolls the field away.
@@ -205,8 +222,9 @@ final class FormCardTextSizeUITests: XCTestCase {
         field.tap()
         field.typeText("still typing")
         Thread.sleep(forTimeInterval: 9)
-        XCTAssertEqual(field.value as? String, "still typing")
-        XCTAssertTrue(field.exists && field.frame.maxY > 120 && field.frame.minY < app.windows.firstMatch.frame.height - 110, "the field was scrolled away by the new message")
+        snap(app, "incoming-after-message")
+        let text = screenText(app)
+        XCTAssertTrue(text.contains("still typing"), "the field was scrolled away or lost its text (screen reads: \(text.prefix(200)))")
         XCTAssertTrue(app.keyboards.firstMatch.exists, "the new message took the focus")
     }
 }

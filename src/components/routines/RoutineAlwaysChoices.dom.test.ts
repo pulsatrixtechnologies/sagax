@@ -41,7 +41,9 @@ describe("the routine page's \"always\" answers (#4558)", () => {
     expect(rows.map((row) => row.getAttribute("data-routine-always-choice"))).toEqual(["0123456789abcdef", "fedcba9876543210"]);
     // the question and the options in words, never a key
     expect(rows[0]!.textContent).toContain("Approuver cette entrée de temps ?");
-    expect(rows[0]!.textContent).toContain("Approuver · Refuser");
+    // what it covers: that question for any item of its kind, with its options
+    expect(rows[0]!.textContent).toContain("Cette question pour tout objet de ce genre, avec Approuver · Refuser");
+    expect(rows[1]!.textContent).toContain("Cette question pour tout objet de ce genre ·");
     expect(rows[0]!.textContent).toContain("Choisie le");
     expect(host.textContent).not.toMatch(/ticket|0123456789abcdef/);
     await act(async () => { (rows[0]!.querySelector("[data-routine-always-remove]") as HTMLButtonElement).click(); });

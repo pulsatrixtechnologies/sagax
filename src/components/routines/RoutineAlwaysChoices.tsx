@@ -1,9 +1,10 @@
 // #4558: the person's "always" answers on a routine's cards, kept as their
 // preferences (server/proactive/answer-learning.ts), never in the routine's
 // instructions. The routine page's Settings tab lists them like its other
-// groups (a muted heading, then rows): the card's question in words, the
-// options it offered and when it was chosen, the answer and Remove (for
-// good). Never the card's key. Nothing shows when there is none.
+// groups (a muted heading, then rows): the card's question in words, what
+// the choice covers (that question for any item of its kind, with its
+// options) and when it was chosen, the answer and Remove (for good). Never
+// the card's key. Nothing shows when there is none.
 import { useCallback, useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { routineDateTime } from "@/lib/routine-display";
@@ -48,7 +49,7 @@ export function RoutineAlwaysChoicesView({ choices, onRemove }: { choices: reado
           key={choice.id}
           data-routine-always-choice={choice.id}
           label={<span title={label} className="line-clamp-2">{label}</span>}
-          hint={choice.options.length ? `${choice.options.join(" · ")} · ${date}` : date}
+          hint={`${choice.options.length ? t("routinePage.alwaysChoices.coversOptions", { options: choice.options.join(" · ") }) : t("routinePage.alwaysChoices.covers")} · ${date}`}
           help={t("routinePage.alwaysChoices.help")}
         >
           <PanelValue className="max-w-[60%]"><span title={choice.answer}>{choice.answer}</span></PanelValue>

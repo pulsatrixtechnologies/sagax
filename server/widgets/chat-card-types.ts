@@ -29,7 +29,9 @@ export type AgentCardResult =
       /** #3488: what the bot gave, when the stored source differs, and why. */
       given?: PageSourceDigest;
       changedBy?: PageSourceChange[];
-      answered?: { choice: string; question: string };
+      /** `standing` (#4558): answered with the person's "always" choice for
+       * this question of the routine, not by Full access. */
+      answered?: { choice: string; question: string; standing?: true };
       waitsForPerson?: true;
       /** #4205: ask_choice with a key that had a pending card: replaced in
        * place. `retired`: how many cards a retire closed (0 or 1). `holds`

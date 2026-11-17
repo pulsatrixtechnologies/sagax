@@ -16868,7 +16868,8 @@ function learnFromKeyedCard(threadId: string, messageId: string, key: string, me
   }
   const scope = keyedCardScope(threadId, message);
   if (!scope) return;
-  const question = card.questionRequest?.questions?.[0]?.question || card.subtitle || card.title || "";
+  // the words the card was raised with (chat-widgets.ts learnCard reads the same)
+  const question = card.subtitle || card.questionRequest?.questions?.[0]?.question || card.title || "";
   learnFromAnsweredCard(signalLedger, scope, { askKey: key, threadId, messageId, answer, question, options: card.options ?? [], ...(card.answerLearning ? { learning: card.answerLearning } : {}) });
 }
 
@@ -16883,7 +16884,7 @@ function routineAnswerLearning(threadId: string): Parameters<typeof createAgentC
   return {
     routineId: routine.id,
     answers: (key) => answersOnKind(signalLedger, scope, key),
-    always: (kind, options) => alwaysChoiceOn(signalLedger, scope, kind, options),
+    always: (kind, question, options) => alwaysChoiceOn(signalLedger, scope, kind, question, options),
     language: personLanguageCode(languageOfPerson(scope.person || undefined)),
   };
 }

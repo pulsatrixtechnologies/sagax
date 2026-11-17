@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import type { AppSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { SETTINGS_SUB_PAGES, type SettingsSubPageId } from "@/lib/settings-sections";
-import { AboutMeEditor } from "../AboutMeSettings";
 import { AvatarCropPage } from "./OwnAvatarField";
 import { UsageTraces } from "../usage/UsageTraces";
 import { fetchMyTraces } from "@/lib/usage-trace";
@@ -59,7 +58,6 @@ function ShortcutsPage() {
  * stack (sub-page-entry.tsx says who sees each). `inline: false`: an editor, not
  * settings, so a search does not draw it inline on its page. */
 const SUB_PAGE_CONTENT: Record<SettingsSubPageId, { render: (scope: SettingsPageScope) => ReactNode; inline?: false }> = {
-  "general.aboutMe": { render: () => <AboutMeEditor />, inline: false },
   "account.crop": { render: () => <AvatarCropPage />, inline: false },
   "general.appearance": { render: () => <AppearanceSettings /> },
   "general.notifications": { render: (scope) => <NotificationSettings organization={scope.organization} /> },

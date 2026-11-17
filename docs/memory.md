@@ -237,15 +237,17 @@ off. It keeps the notes in shape without the bot having to decide to:
   model's choice), and a line judged core is not asked about again. At most 20 lines move in one pass; each file's change
   is a journal row (*filed into topics*) that can be undone.
 - **About me.** A lasting fact about the person, taken from their own words,
-  is added to **Settings → General → About me**, which every bot reads, as a
-  dated line `- 2026-09-25 · learned by Scout · …`. **Added by your bots**
-  under About me lists each one with **Remove**; a removed fact is never
-  added again. On a shared installation, another person's messages never add
+  is added to the person's About me, which every bot of theirs reads, as a
+  dated line `- 2026-09-25 · learned by Scout · …`. About me has no settings
+  page since 2026-11-17 (the owner's choice): the person's bots keep it, with
+  `sagax_settings` `account.aboutMe` (read or replace the text) and
+  `account.learned` (list what upkeep added, remove a fact by its id); a
+  removed fact is never added again. On a shared installation, another person's messages never add
   to the owner's About me. On an organization server About me is each
   person's own: a member's bots read the member's About me (never the
   operator's), what they learn lands in the member's About me and list
   (`principals/<id>/person-settings.json` and `profile-learned.json`), and
-  the member writes it in Settings without an administrator.
+  the member's own bots write it, without an administrator.
 - **Nightly tidy-up.** Once a day after 3 am (`memory.tidyHour`), or at the
   next check if the computer was asleep, never while the bot is working, and
   on **Tidy up now**: expired entries move to `memory/archive.md` (from

@@ -12,7 +12,7 @@ import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { withTourReset } from "@/lib/guided-tour";
 import { completionPatch } from "@/lib/onboarding";
-import { CompactRow, DescribedRow, LinkRow, SettingsGroup } from "../SettingsPrimitives";
+import { CompactRow, LinkRow, SettingsGroup } from "../SettingsPrimitives";
 import { OpenAtLoginRow } from "../OpenAtLoginOffer";
 import { isSoloDesktop, SendFeedbackRow } from "./AdvancedSettings";
 import { OrganizationBotRows } from "./OrganizationBotRules";
@@ -27,8 +27,6 @@ import {
 import { localeChoices } from "@/locales";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/language-preference";
 import { PillSelect } from "../SettingsPrimitives";
-import { aboutMeFirstLine } from "../AboutMeSettings";
-import { usePersonLabel } from "@/lib/person-labels";
 import { useSettingsPage } from "../SettingsSubPage";
 import { NotificationQuickRows } from "../lazy-settings-sections";
 import { AccountCard, type LockedServer } from "./AccountCard";
@@ -75,30 +73,6 @@ export function GuidedToursRow() {
   );
 }
 
-/** About me, after the Team row of the account card: the person's label and the
- * first line of their text as the muted value, one plain pill to edit both
- * (the sub-page holds the label field and the text). 16px sides like the card. */
-function AboutMeRow() {
-  const { state } = useStore();
-  const scope = useSettingsPage();
-  const principalId = state.config?.viewer?.principalId?.trim() || null;
-  const label = usePersonLabel(principalId);
-  const about = aboutMeFirstLine(state.config?.profile?.aboutMe);
-  return (
-    <div data-settings-card="general.aboutMe" data-settings-subpage-row className="[&>div]:px-4">
-      <DescribedRow
-        label={t("settings.profile.aboutMe")}
-        description={label ? `${label} · ${about}` : about}
-        rowId="general.aboutMe"
-      >
-        <button type="button" onClick={() => scope.openSubPage("general.aboutMe")} className="ui-button">
-          {t("settings.aboutMe.edit")}
-        </button>
-      </DescribedRow>
-    </div>
-  );
-}
-
 function LanguageRow() {
   const { state } = useStore();
   // Follows the account: anyone can switch, including a chat-only teammate,
@@ -118,7 +92,7 @@ function LanguageRow() {
 }
 
 /** General (#4457, the owner 2026-11-16): the reference app's General, five
- * cards. Account (who is signed in, About me); Appearance (theme, accent,
+ * cards. Account (who is signed in; About me is kept by the bots); Appearance (theme, accent,
  * language, time zone, spell check, send key, then More appearance);
  * Notifications (desktop notifications, the approval chime, then More
  * notifications); Mascots; System (microphone, hardware acceleration, open at
@@ -136,8 +110,6 @@ export function GeneralPage({ remoteActive = false, lockedServer = null }: { rem
       {scope.allowed("account") && (
         <SettingsGroup title={t("settings.section.account")} groupId="account">
           <AccountCard lockedServer={lockedServer} />
-          {/* #3432: each person's own About me (#3424), for a member too; the reference card has no such row, so it follows Team with the same plain pill button */}
-          <AboutMeRow />
         </SettingsGroup>
       )}
 

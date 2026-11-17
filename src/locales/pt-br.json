@@ -1389,8 +1389,6 @@
   "organization.adminApprovals.requestedBy": "{bot}, pedido por {person}",
   "personLabel.add": "Adicionar um rótulo",
   "personLabel.edit": "Editar rótulo",
-  "personLabel.mine": "Meu rótulo",
-  "personLabel.mineHint": "Exibido ao lado do seu nome, como o rótulo de um bot.",
   "personLabel.saveError": "Não foi possível salvar o rótulo.",
   "persona.action.rename": "Renomear",
   "persona.files.badName": "Use um nome com letras, dígitos, espaços, pontos, hifens ou sublinhados.",

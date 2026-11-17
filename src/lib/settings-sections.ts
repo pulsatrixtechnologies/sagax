@@ -179,7 +179,6 @@ export interface SettingsSubPageInfo {
  * removed, some things are one page further. */
 const SUB_PAGES_DEFINED = {
   // General
-  "general.aboutMe": { section: "general", titleKey: "settings.profile.aboutMe" },
   "account.crop": { section: "general", titleKey: "settings.profile.photoCropTitle" },
   "general.appearance": { section: "general", titleKey: "settings.sub.moreAppearance", gate: "appearance" },
   "general.notifications": { section: "general", titleKey: "settings.sub.moreNotifications", gate: "notifications" },

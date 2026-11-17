@@ -83,7 +83,9 @@ describe("Settings rail (#4457)", () => {
   it("General holds Account, Appearance, Notifications, Mascots and System, with its rows one page further", () => {
     const html = render();
     for (const group of ["account", "generalAppearance", "generalNotifications", "generalMascots", "generalSystem"]) expect(html, group).toContain(`data-settings-group="${group}"`);
-    for (const row of ["general.aboutMe", "general.appearance", "general.notifications", "general.mascots", "general.backups"]) expect(html, row).toContain(`data-settings-card="${row}"`);
+    for (const row of ["general.appearance", "general.notifications", "general.mascots", "general.backups"]) expect(html, row).toContain(`data-settings-card="${row}"`);
+    // the owner 2026-11-17: About me left the settings (the bots keep it)
+    expect(html).not.toContain('data-settings-card="general.aboutMe"');
     // the order of the cards
     const at = ["account", "generalAppearance", "generalNotifications", "generalMascots", "generalSystem"].map((group) => html.indexOf(`data-settings-group="${group}"`));
     expect([...at].sort((x, y) => x - y)).toEqual(at);

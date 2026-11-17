@@ -2615,15 +2615,14 @@ bordered box in a bordered box; `ManagedProfileIdentity flat` in General).
 A setting too long for a card gets a sub-page instead of a growing card
 (`src/components/SettingsSubPage.tsx`): the section shows a
 `SettingsSubPageRow` (title, one-line summary, Edit) and the page replaces
-the section with a back arrow and the breadcrumb "General > About me".
+the section with a back arrow and the breadcrumb "General > More appearance".
 Back, the breadcrumb and Escape return to the section (Escape is taken in
 the capture phase, so it never closes Settings from a sub-page). The open
 page is `appSettingsSubPage` in the store (`toggleAppSettings` with
 `subPage`; any other navigation clears it); register a page in `SUB_PAGES`
-in `SettingsModal.tsx`. About me is the first: a full-height editor that
-saves as you type, a character count (24,000 max, `server/config.ts`), a
-short guide with an outline, and the block bots read
-(`userProfileSystemPrompt`). Tests: `src/components/SettingsSubPage.test.ts`,
+in `SettingsModal.tsx`. About me was the first; it left the settings on
+2026-11-17 (the owner: the person's bots keep it, `sagax_settings`
+`account.aboutMe`), so General > More appearance is the example now. Tests: `src/components/SettingsSubPage.test.ts`,
 `src/components/SettingsModal.serverMode.test.ts`.
 
 #### Settings split: Account, Security, Vault, Models, Voice (2026-10-28)

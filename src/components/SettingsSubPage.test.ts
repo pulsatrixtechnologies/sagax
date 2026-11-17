@@ -1,5 +1,5 @@
-// Settings sub-pages (src/components/SettingsSubPage.tsx): General > About me
-// opens as its own page in the Settings modal, with a back arrow and the
+// Settings sub-pages (src/components/SettingsSubPage.tsx): General > More
+// appearance opens as its own page in the Settings modal, with a back arrow and the
 // breadcrumb, and Escape goes back to the section before it closes Settings.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,9 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 import { initialState, reducer, type AppSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
-import { createAboutMeDraft } from "./about-me-draft";
 import { subPageKeyAction } from "./SettingsSubPage";
-import { aboutMeBotPreview, aboutMeCount, withOutline, ABOUT_ME_MAX } from "./AboutMeSettings";
 import { resolveSubPage } from "./settings/settings-sub-pages";
 import { SETTINGS_SUB_PAGES as SUB_PAGES } from "@/lib/settings-sections";
 import { providerCardTarget } from "@/lib/settings-sections";
@@ -18,14 +16,13 @@ import { providerCardTarget } from "@/lib/settings-sections";
 const fixture = vi.hoisted(() => ({
   section: "account" as AppSettingsSection,
   subPage: null as string | null,
-  aboutMe: "## Who I am\nIT lead at Example.",
 }));
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: vi.fn(() => new Promise(() => {})),
   useStore: () => ({
-    state: { appSettingsSection: fixture.section, appSettingsSubPage: fixture.subPage, instances: [], bots: [], groups: [], config: { rooms: { turnTimeoutMinutes: 5 }, profile: { aboutMe: fixture.aboutMe } } },
+    state: { appSettingsSection: fixture.section, appSettingsSubPage: fixture.subPage, instances: [], bots: [], groups: [], config: { rooms: { turnTimeoutMinutes: 5 } } },
     dispatch: vi.fn(),
   }),
 }));
@@ -55,11 +52,10 @@ const render = async () => {
 
 describe("sub-page navigation", () => {
   it("opens from the row, keeps its section, and any other navigation clears it", () => {
-    // the row opens the page on its home section (SUB_PAGES): Account is a
-    // card of General since #4457, so About me names General
-    const open = reducer(initialState, { type: "toggleAppSettings", open: true, section: SUB_PAGES["general.aboutMe"]!.section, subPage: "general.aboutMe" });
+    // the row opens the page on its home section (SUB_PAGES)
+    const open = reducer(initialState, { type: "toggleAppSettings", open: true, section: SUB_PAGES["general.appearance"]!.section, subPage: "general.appearance" });
     expect(open.appSettingsSection).toBe("general");
-    expect(open.appSettingsSubPage).toBe("general.aboutMe");
+    expect(open.appSettingsSubPage).toBe("general.appearance");
     // back: the section again, no page
     expect(reducer(open, { type: "toggleAppSettings", open: true, section: "general" }).appSettingsSubPage).toBeNull();
     // another section, or closing Settings
@@ -81,31 +77,32 @@ describe("sub-page navigation", () => {
     expect(subPageKeyAction({ key: "Escape", defaultPrevented: false, target: inEditor as never })).toBe("back");
   });
 
-  it("General > About me shows the breadcrumb, the back arrow and the editor in place of the section", async () => {
-    fixture.subPage = "general.aboutMe";
+  it("General > More appearance shows the breadcrumb, the back arrow and its page in place of the section", async () => {
+    fixture.subPage = "general.appearance";
     const html = await render();
-    expect(html).toContain('data-settings-subpage="general.aboutMe"');
+    expect(html).toContain('data-settings-subpage="general.appearance"');
     expect(html).toContain('aria-label="Back to General"');
-    expect(html).toMatch(/<nav aria-label="Settings path"[^>]*>.*>General<\/button>.*aria-current="page"[^>]*>About me</);
-    expect(html).toContain('id="profile-about-me"');
-    expect(html).toContain("IT lead at Example.");
-    expect(html).toContain("What to write");
-    expect(html).toContain("How bots see it");
-    expect(html).toContain("About the user (shared with all bots):");
-    expect(html).toContain("Saves as you type");
-    expect(html).toContain(aboutMeCount(fixture.aboutMe.length));
+    expect(html).toMatch(/<nav aria-label="Settings path"[^>]*>.*>General<\/button>.*aria-current="page"[^>]*>More appearance</);
     // the section itself is not drawn under the page
     expect(html).not.toContain('data-settings-card="general.account"');
   });
 
-  it("reads Général > À propos de moi in French", async () => {
+  it("reads Général > Plus d'apparence in French", async () => {
     setLocale("fr");
-    fixture.subPage = "general.aboutMe";
+    fixture.subPage = "general.appearance";
     const html = await render();
     expect(html).toContain('aria-label="Retour à Général"');
-    expect(html).toContain(">À propos de moi<");
-    expect(html).toContain("Quoi écrire");
-    expect(html).toContain("Enregistré au fil de la saisie");
+    expect(html).toMatch(/aria-current="page"[^>]*>Plus d(?:'|&#x27;)apparence</);
+  });
+
+  // the owner 2026-11-17: About me left the settings; an old link to its
+  // page opens nothing (the person's bots keep the text)
+  it("an old About me link opens no page", async () => {
+    expect(resolveSubPage("general.aboutMe")).toBeNull();
+    fixture.subPage = "general.aboutMe";
+    const html = await render();
+    expect(html).not.toContain("data-settings-subpage=");
+    expect(html).not.toContain('id="profile-about-me"');
   });
 
   // #4329 lot 1: one provider's page is a sub-page of Providers.
@@ -133,34 +130,8 @@ describe("sub-page navigation", () => {
 
   it("a page of another section is ignored", async () => {
     fixture.section = "usage";
-    fixture.subPage = "general.aboutMe";
+    fixture.subPage = "general.appearance";
     const html = await render();
     expect(html).not.toContain("data-settings-subpage=");
-    expect(html).not.toContain('id="profile-about-me"');
-  });
-});
-
-describe("About me editor", () => {
-  it("saves on its own a moment after typing stops", async () => {
-    vi.useFakeTimers();
-    const save = vi.fn(async () => {});
-    const draft = createAboutMeDraft("", save);
-    draft.edit("I run");
-    draft.edit("I run IT");
-    await vi.advanceTimersByTimeAsync(599);
-    expect(save).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith("I run IT");
-    expect(draft.getSnapshot().status).toBe("saved");
-  });
-
-  it("counts characters, previews what bots read, and inserts the outline after the text", () => {
-    expect(aboutMeCount(0)).toBe(`0 / ${ABOUT_ME_MAX.toLocaleString("en")} characters`);
-    expect(aboutMeBotPreview("  \n")).toBe("");
-    expect(aboutMeBotPreview(" Hi \n")).toBe("About the user (shared with all bots):\nHi");
-    expect(withOutline("", "## A")).toBe("## A");
-    expect(withOutline("Hi\n\n", "## A")).toBe("Hi\n\n## A");
-    expect(withOutline("x".repeat(ABOUT_ME_MAX), "## A")).toHaveLength(ABOUT_ME_MAX);
   });
 });

@@ -306,14 +306,14 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
-| How people see your name | Settings > General | `sagax_settings` get, set `account.label` | simple |
+| How people see your name | Your own person panel > Label | `sagax_settings` get, set `account.label` | simple |
 | Your photo (a data URL, null removes) | Settings > General | `sagax_settings` set `account.avatar` | simple |
-| About me | Settings > General > About me | `sagax_settings` get, set `account.aboutMe` | simple |
+| What the person's bots know about them (text, every bot of theirs reads it) | None: their bots keep it (this setting) | `sagax_settings` get, set `account.aboutMe` | simple |
 | Your own model and notifications for a shared bot | Shared bot > Model / Notifications | `sagax_settings` get, set `account.botOverride` | simple |
 | Your time zone (an IANA zone such as America/Toronto; turns automatic detection off) | Settings > General > Appearance > Time zone | `sagax_settings` get, set `account.timeZone` | simple |
 | Detect your time zone automatically (the app then follows this computer's zone) | Settings > General > Appearance > Time zone | `sagax_settings` get, set `account.timeZoneAuto` | simple |
 | Your name, email and photo on this computer ({name, email, avatarUrl}) | Settings > General | `sagax_settings` get, set `account.profile` | simple; organisation : organisation |
-| What upkeep learned about you (get lists them; set with a fact's id removes it) | Settings > General > About me | `sagax_settings` get, set `account.learned` | suppression |
+| What upkeep learned about you (get lists them; set with a fact's id removes it) | None: their bots keep it (this setting) | `sagax_settings` get, set `account.learned` | suppression |
 | Anonymous usage counts to this server | Settings > General > Advanced > Usage meter | `sagax_settings` get, set `account.usageMeter` | simple |
 | Your monthly spend limit in USD (null removes; personal server) | Settings > Usage > Monthly limit | `sagax_settings` get, set `account.spendCap` | simple |
 | Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Updates > Advanced > Experimental; Settings > General > Appearance > More appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |

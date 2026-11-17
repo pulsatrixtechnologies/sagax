@@ -30,7 +30,6 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 
 const { PersonPanel } = await import("./PersonPanel");
-const { MyLabelField } = await import("./settings/MyLabelField");
 
 const directory = { people: [{ principalId: "pr_ada", name: "Ada", login: "ada", role: "member" as const, disabled: false, teams: [] }], teams: [] };
 const labelField = () => fixture.fields.find((field) => field.ariaLabel === "Edit label");
@@ -70,8 +69,12 @@ describe("editing a person's label", () => {
     expect(labelField()?.onSave).toBeUndefined();
   });
 
-  it("a person sets their own in Settings, and a refusal says so", async () => {
-    renderToStaticMarkup(createElement(MyLabelField));
+  // the owner 2026-11-17: no label field in Settings any more; a person sets
+  // their own on their own sheet (or asks their bot: account.label)
+  it("a person sets their own on their own sheet, and a refusal says so", async () => {
+    fixture.role = "member";
+    const self = { people: [...directory.people, { principalId: "pr_me", name: "Me", login: "me", role: "member" as const, disabled: false, teams: [] }], teams: [] };
+    renderToStaticMarkup(createElement(PersonPanel, { personId: "pr_me", directory: self }));
     const field = labelField();
     expect(field).toMatchObject({ placeholder: "Add a label", maxLength: 40 });
     field!.onSave!("CTO");

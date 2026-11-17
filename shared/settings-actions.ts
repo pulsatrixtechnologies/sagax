@@ -759,7 +759,7 @@ add({
 
 // ── account (the person) ───────────────────────────────────────────────
 add({
-  key: "account.label", family: "account", target: "self", value: "string", label: "How people see your name", where: "Settings > General",
+  key: "account.label", family: "account", target: "self", value: "string", label: "How people see your name", where: "Your own person panel > Label",
   read: (ids) => ({ path: "/api/people/labels", field: `labels.${ids.target!}` }),
   write: (ids, v) => ({ method: "PUT", path: `/api/people/${enc(ids.target!)}/label`, body: { label: v } }),
 });
@@ -768,9 +768,10 @@ add({
   write: (_ids, v) => v === null ? { method: "DELETE", path: "/api/me/avatar" } : { method: "PUT", path: "/api/me/avatar", body: { avatarUrl: v } },
 });
 add({
-  key: "account.aboutMe", family: "account", target: "none", value: "text", label: "About me", where: "Settings > General > About me",
+  key: "account.aboutMe", family: "account", target: "none", value: "text", label: "What the person's bots know about them (text, every bot of theirs reads it)", where: "None: their bots keep it (this setting)",
   // #3424: the person's own on an organization server (the operator's is the
-  // server's profile), read by their own bots only
+  // server's profile), read by their own bots only. The owner 2026-11-17: no
+  // settings row any more; the person's bots write it here, nowhere else
   read: () => ({ path: "/api/me/about-me", field: "aboutMe" }),
   write: (_ids, v) => ({ method: "PUT", path: "/api/me/about-me", body: { aboutMe: v } }),
 });
@@ -1437,7 +1438,7 @@ add({
 // account
 config("account.profile", "account", "profile", "object", "Your name, email and photo on this computer ({name, email, avatarUrl})", "Settings > General");
 add({
-  key: "account.learned", family: "account", target: "none", value: "string", label: "What upkeep learned about you (get lists them; set with a fact's id removes it)", where: "Settings > General > About me",
+  key: "account.learned", family: "account", target: "none", value: "string", label: "What upkeep learned about you (get lists them; set with a fact's id removes it)", where: "None: their bots keep it (this setting)",
   read: () => ({ path: "/api/profile/learned", field: "learned" }),
   write: (_ids, v) => typeof v === "string" && v ? { method: "POST", path: `/api/profile/learned/${enc(v)}/remove`, body: {} } : "value is the id of a learned fact.",
   classes: always("delete"),

@@ -68,19 +68,25 @@ function nestedCardBorders(html: string): string[] {
 }
 
 describe("Settings in server mode", () => {
-  it("General's Account row: who, label, email, managed by the organization, Sign out at the right, no help paragraph", () => {
+  it("General's Account card is the reference's: name, email, pills, then Team; the server and the managed note in Team's tooltip", () => {
     fixture.serverMode = { active: true, name: "Example", origin: "https://bot.example.test" };
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com", profileManagedBy: "perspicax", profileManageUrl: "https://px.example.test/console/me" };
     const html = render();
     const card = html.slice(html.indexOf('data-settings-card="general.account"'));
     expect(html.match(/data-settings-card="general\.(?:account|profile|serverMode)"/g)).toEqual(['data-settings-card="general.account"']);
-    // the identity row is name then email; the pills sit at its right; Team and the managed note come below
-    const order = [">Jean Tremblay<", ">jean@example.com<", "Sign out</button>", "Managed by your organization", "Edit in Perspicax"];
+    // the identity row is name then email; the pills sit at its right; Team comes below
+    const order = [">Jean Tremblay<", ">jean@example.com<", "Sign out</button>", "data-account-team"];
     const positions = order.map((text) => card.indexOf(text));
     expect(positions.every((at) => at >= 0)).toBe(true);
     expect([...positions].sort((x, y) => x - y)).toEqual(positions);
-    // the server and the organization one hover away, never repeated as text
-    expect(card).toContain('title="Connected to bot.example.test · Organization: Example"');
+    // the owner 2026-11-17: no Server row and no managed line; the address,
+    // then the managed note, are the tooltip of the organization's name,
+    // which opens the Perspicax profile
+    expect(card).toMatch(/data-account-team[^>]*><span[^>]*>Team<\/span><button type="button" title="Connected to bot\.example\.test · Managed by your organization · Edit in Perspicax"[^>]*>Example<\/button>/);
+    expect(html).not.toContain("data-server-connected");
+    expect(html).not.toContain("data-account-managed");
+    expect(html).not.toMatch(/>Managed by your organization</);
+    expect(html).not.toMatch(/>Edit in Perspicax</);
     expect(html).not.toContain("Signed in as");
     expect(html.match(/Jean Tremblay/g)).toHaveLength(1);
     expect(html.match(/jean@example\.com/g)).toHaveLength(1);
@@ -90,10 +96,9 @@ describe("Settings in server mode", () => {
     expect(card).toContain('aria-label="Copy email"');
     expect(html).not.toMatch(/>Change<\/button>/);
     expect(html).not.toContain("Switch server");
-    // the reference card (#4457): a small "Account" label above it, the organization on a Team row
-    expect(html).toMatch(/data-account-team[^>]*>.*Team.*Example/);
     expect(html.indexOf(">Account<")).toBeLessThan(html.indexOf('data-settings-card="general.account"'));
-    expect(html.indexOf("data-account-team")).toBeLessThan(html.indexOf('data-settings-card="general.aboutMe"'));
+    // About me left the settings: the person's bots keep it
+    expect(html).not.toContain('data-settings-card="general.aboutMe"');
   });
 
   it("reads Se déconnecter in French", () => {
@@ -104,18 +109,16 @@ describe("Settings in server mode", () => {
     expect(html).toContain("Se déconnecter");
     expect(html).toContain("Équipe");
     expect(html).not.toContain("Ajouter une étiquette");
-    expect(html).toContain("Géré par ton organisation");
-    expect(html).toContain("Modifier dans Perspicax");
-    expect(html).toContain('title="Connecté à bot.example.test · Organisation : Example"');
+    expect(html).not.toContain("À propos de moi");
+    expect(html).toContain('title="Connecté à bot.example.test · Géré par ton organisation · Modifier dans Perspicax"');
   });
 
-  it("a server whose profile is not managed names the server on the account's second line", () => {
+  it("a server whose profile is not managed: the address is the tooltip of the organization on Team", () => {
     fixture.serverMode = { active: true, name: "Example", origin: "https://bot.example.test" };
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com" };
     const html = render();
-    // the server's address here, the organization on the Team row (said once)
-    expect(html).toMatch(/data-server-connected[^>]*><span[^>]*>Server<\/span><span[^>]*>bot\.example\.test<\/span>/);
-    expect(html).toMatch(/data-account-team[^>]*>.*Team.*Example/);
+    expect(html).toMatch(/data-account-team[^>]*><span[^>]*>Team<\/span><span title="Connected to bot\.example\.test"[^>]*>Example<\/span>/);
+    expect(html).not.toContain("data-server-connected");
     expect(html).not.toContain("Managed by your organization");
     expect(html).toContain("Sign out</button>");
   });
@@ -126,11 +129,9 @@ describe("Settings in server mode", () => {
     const html = render();
     expect(html).toContain('data-testid="account-identity"');
     expect(nestedCardBorders(html)).toEqual([]);
-    // #3432: About me is each person's own since #3424 (/api/me/about-me),
-    // so a member of an organization server sees its row with their first
-    // line; it is a row that opens the sub-page, never a card or a field here.
-    expect(html).toContain('data-settings-card="general.aboutMe"');
-    expect(html).toContain("I run IT at Example.");
+    // the owner 2026-11-17: About me is no row here any more (the bots keep it)
+    expect(html).not.toContain('data-settings-card="general.aboutMe"');
+    expect(html).not.toContain("I run IT at Example.");
     expect(html).not.toContain("<textarea");
   });
 
@@ -142,7 +143,7 @@ describe("Settings in server mode", () => {
     expect(html.match(/data-settings-card="general\.(?:account|profile|serverMode)"/g)).toEqual(['data-settings-card="general.account"']);
     expect(html).toContain('aria-label="Your name"');
     expect(html).not.toContain("Add a label");
-    expect(html).toMatch(/<button type="button" aria-haspopup="menu" aria-expanded="false" class="ui-button">Add account<\/button>/);
+    expect(html).toMatch(/<button type="button" aria-haspopup="menu" aria-expanded="false" class="ui-button[^"]*">Add account<\/button>/);
     expect(html).not.toContain("Switch server");
     expect(html).not.toContain("data-account-team");
     expect(html).not.toContain("data-account-help");

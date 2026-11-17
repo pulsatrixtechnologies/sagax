@@ -5,7 +5,7 @@
 // the match's page or tab. The keyboard stays in the field: the arrows walk
 // the rows, Enter opens the lit one (the first by default), Escape empties
 // the field (then, empty, Escape steps back or closes as before).
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { FileText, GitBranch, Search, Store, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -48,10 +48,12 @@ export interface ConnectAppsSearchFieldProps {
   active: number;
   onActive: (index: number) => void;
   onOpen: (result: SearchResult) => void;
+  /** the filter and sort buttons, inside the field at its right end (#4453) */
+  trailing?: ReactNode;
 }
 
 /** The field: a combobox over the results below the tabs. */
-export function ConnectAppsSearchField({ query, onQuery, groups, opened, active, onActive, onOpen }: ConnectAppsSearchFieldProps) {
+export function ConnectAppsSearchField({ query, onQuery, groups, opened, active, onActive, onOpen, trailing }: ConnectAppsSearchFieldProps) {
   const rows = visibleResults(groups, opened);
   const searching = query.trim() !== "";
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -98,6 +100,7 @@ export function ConnectAppsSearchField({ query, onQuery, groups, opened, active,
           <X size={14} aria-hidden="true" />
         </button>
       )}
+      {trailing}
     </label>
   );
 }

@@ -54,9 +54,9 @@ describe("Plugins panel views", () => {
     expect(html).not.toContain("Manage plugins and skills");
     // the kinds, in the reference's order, the chosen one pressed, a count only where there is one
     expect([...html.matchAll(/data-plugins-kind-tab="([a-z]+)"/g)].map((match) => match[1])).toEqual(["skills", "connectors", "plugins"]);
-    expect(html).toMatch(/role="tab" aria-selected="true" data-plugins-kind-tab="connectors"/);
+    expect(html).toMatch(/role="tab"[^>]*data-plugins-kind-tab="connectors"[^>]*aria-selected="true"/);
     // the owner's layout (2026-11-16): the pill tabs carry no counts
-    expect(html).toMatch(/data-plugins-kind-tab="skills"[^>]*>Skills<\/button>/);
+    expect(html).toMatch(/data-plugins-kind-tab="skills"[\s\S]*?>Skills<\/span><\/button>/);
     expect(html).not.toContain("data-plugins-kind-count");
     // the title line: the title and "..."; then ONE row: the kinds, a separator, Yours | Discover, the search, Add
     expect(html).toMatch(/data-plugins-head[\s\S]*?data-plugins-more-button[\s\S]*?data-plugins-kind-row[\s\S]*?data-plugins-kinds=""[\s\S]*?data-plugins-separator[\s\S]*?data-plugins-views=""[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-test-add/);
@@ -68,12 +68,15 @@ describe("Plugins panel views", () => {
     // #4453 (2026-11-16): no scope control in the header: it is chosen on the item
     expect(html).not.toContain("data-plugins-scope-slot");
     expect(html).not.toContain("SCOPE");
-    // pill tabs: only the chosen one is filled, no underline
+    // the shared pill tabs (PillTabs): the chosen one carries the sliding fill, the others do not; no underline
     expect(html).not.toMatch(/data-plugins-kinds=""[\s\S]*?after:h-0\.5/);
-    const tabClass = (id: string) => html.match(new RegExp(`data-plugins-kind-tab="${id}"[^>]*class="([^"]*)"`))?.[1] ?? "";
-    expect(tabClass("connectors")).toMatch(/(^|\s)bg-ink\/\[0\.12\]/);
-    for (const id of ["skills", "plugins"]) expect(tabClass(id)).not.toMatch(/(^|\s)bg-ink\/\[0\.12\]/);
-    expect(html).toMatch(/role="radio" aria-checked="true" data-plugins-view="installed"/);
+    expect(html).toMatch(/role="tablist"[^>]*data-plugins-kinds=""/);
+    const tab = (id: string) => html.match(new RegExp(`<button[^>]*data-plugins-kind-tab="${id}"[^>]*>([\\s\\S]*?)</button>`))?.[1] ?? "";
+    expect(tab("connectors")).toContain("data-tab-indicator");
+    for (const id of ["skills", "plugins"]) expect(tab(id)).not.toContain("data-tab-indicator");
+    // Yours | Discover is the shared segmented control, arrows move its choice
+    expect(html).toMatch(/data-plugins-views=""/);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*data-plugins-view="installed"/);
     expect(html).toContain("INSTALLED");
     // the title row stays out of the list, which alone scrolls
     expect(html.indexOf("data-plugins-title-row")).toBeLessThan(html.indexOf("data-plugins-list"));
@@ -86,7 +89,7 @@ describe("Plugins panel views", () => {
     // Discover: the same head, its list
     const discover = page({});
     expect(discover).toContain("data-plugins-discover");
-    expect(discover).toMatch(/role="radio" aria-checked="true" data-plugins-view="discover"/);
+    expect(discover).toMatch(/role="radio" aria-checked="true"[^>]*data-plugins-view="discover"/);
     // the filter button of Discover sits on the same row when the panel gives one
     const filtered = page({ search: createElement("input"), filterControl: createElement("button", { "data-test-filter": "" }) });
     expect(filtered).toMatch(/data-plugins-kind-row[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-filter/);
@@ -139,17 +142,16 @@ describe("Plugins panel views", () => {
       ...discoverProps, items: rows, owned: ["Stripe"],
     }));
     const sections = [...html.matchAll(/data-plugins-section="([^"]+)"/g)].map((match) => match[1]);
-    expect(sections.slice(0, 2)).toEqual(["featured", "recommended"]);
+    // two curated picks: both are slides of the one featured block, none is left for a shelf
+    expect(sections[0]).toBe("featured");
+    expect(sections).not.toContain("recommended");
     expect(sections).not.toContain("from-sagax");
-    const after = html.indexOf("data-plugins-section=", html.indexOf('data-plugins-section="featured"') + 1);
-    const banner = html.slice(html.indexOf('data-plugins-section="featured"'), after < 0 ? undefined : after);
-    const next = html.indexOf("data-plugins-section=", after + 1);
-    const shelf = html.slice(banner.length ? html.indexOf('data-plugins-section="featured"') : 0, next < 0 ? undefined : next);
-    // the basics first (chat before tickets: the banner, then the shelf), what the person has left out, the private network tool not picked
-    expect([...shelf.matchAll(/data-plugin-row="([^"]+)"/g)].map((match) => match[1])).toEqual(["featured:slack", "featured:linear"]);
-    expect(shelf).toContain("Reads and posts in your team&#x27;s chat and meetings");
-    expect(shelf).toMatch(/title="Channels"/);
-    expect(shelf).toMatch(/>Connect</);
+    const featured = html.slice(html.indexOf('data-plugins-section="featured"'));
+    // the basics first (chat before tickets), what the person has left out, the private network tool not picked
+    expect(featured).toMatch(/data-featured-slide="featured:slack"/);
+    expect((featured.match(/data-featured-dot=/g) ?? []).length).toBe(2);
+    expect(featured).toContain("Reads and posts in your team&#x27;s chat and meetings");
+    expect(featured).toMatch(/>Connect</);
     // an account connector counts only once connected: one waiting for a sign-in leaves chat open
     const teams = (status: "connected" | "needs_auth") => [{
       group: { id: "claude" as const, name: "Claude", source: "From Anthropic", manageUrl: "", connectors: [] },

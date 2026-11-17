@@ -11,7 +11,7 @@
 // #4453: Discover of one kind (Skills, Connectors or Plugins); "From Sagax"
 // left the home, it repeated Yours.
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -24,6 +24,8 @@ import { PLUGINS } from "./plugins-style";
 import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, accountRowMatches, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
 
 const PAGE = 60;
+/** How many curated picks the featured set holds (a few, not all). */
+const FEATURED_PICKS = 3;
 
 export interface DiscoverViewProps {
   /** rows not installed yet (discoverItems) */
@@ -65,11 +67,13 @@ export interface DiscoverViewProps {
   /** where Recommended for you picks from, when it is wider than `items`
    * (Me: the catalog's apps too); absent: `items` */
   recommendFrom?: readonly PluginItem[];
+  /** one slide per vendor the organization console offers the person (Connectors) */
+  vendorSlides?: ReadonlyArray<{ key: string; consoleName: string; name: string; line: string; art: ReactNode; onGo: () => void }>;
   /** the sort chosen in the control row; "name" orders each section by name */
   sort?: ConnectAppsSort;
 }
 
-export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom, sort = "default" }: DiscoverViewProps) {
+export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom, sort = "default", vendorSlides = [] }: DiscoverViewProps) {
   // #4453: the kind tab says what is listed (the type filter's apps, MCP
   // servers or skills); the engine accounts and the custom connector are
   // connectors
@@ -93,10 +97,23 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
     ? recommendedPicks(recommendFrom ?? items, { names: [...owned, ...accountOwned.map((row) => row.name)], capabilities: accountOwned.flatMap((row) => row.capabilities) }, canConnect)
     : [];
   const recommended = listsPicks ? picks : picks.slice(0, SECTION_PREVIEW);
-  // a banner only when there is something real to feature: the first recommended
-  // item (no collection, no carousel); the shelf below does not repeat it
-  const banner = !single && !listsPicks && recommended.length > 0 && recommended[0]!.item.action !== null ? recommended[0]! : null;
-  const shelf = banner ? recommended.slice(1) : recommended;
+  // the featured set: a few curated picks, and one slide per vendor the
+  // console offers; nothing to feature, no block; the shelf does not repeat a pick
+  const featuredPicks = !single && !listsPicks ? recommended.filter((row) => row.item.action !== null).slice(0, FEATURED_PICKS) : [];
+  const slides: FeaturedSlide[] = [
+    ...featuredPicks.map(({ item, pick }): FeaturedSlide => ({
+      key: item.key, itemKey: item.key, source: t("connectApps.featured.from", { source: sourceLabel(item.source) }), name: item.name, line: t(PICK_WHY[pick.kind]),
+      art: <PluginIcon item={item} faviconSize={256} className="size-20 rounded-2xl" />, action: renderAction(item, "banner"),
+    })),
+    ...(connectors && !single && !listsPicks ? vendorSlides : []).map((vendor): FeaturedSlide => ({
+      key: vendor.key, source: t("connectApps.featured.fromConsole", { console: vendor.consoleName }), name: vendor.name, line: vendor.line,
+      art: vendor.art, action: (
+        <button type="button" data-featured-vendor-go={vendor.key} onClick={vendor.onGo} className={cn(PLUGINS.fillPill, "h-8")}>{t("connectApps.featured.seeProducts")}</button>
+      ),
+    })),
+  ];
+  const featuredKeys = new Set(featuredPicks.map((row) => row.item.key));
+  const shelf = recommended.filter((row) => !featuredKeys.has(row.item.key));
   const sections = listsPicks ? [] : mainSections(items, "", filter, type, extraSources, focus, recommended.map((row) => row.item.key));
   // a category or a type keeps the account rows it matches; the notices
   // (no account, nothing read yet) show on All only
@@ -112,12 +129,10 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
           </button>
         </div>
       )}
-      {banner && (
-        <FeaturedBanner item={banner.item} sub={t(PICK_WHY[banner.pick.kind])} from={sourceLabel(banner.item.source)} action={renderAction(banner.item, "banner")} onOpen={onOpenItem} />
-      )}
+      {slides.length > 0 && <FeaturedCarousel slides={slides} />}
       {shelf.length > 0 && (
         <section data-plugins-section="recommended" className="mt-[30px] first:mt-4">
-          <SectionHead title={sectionTitle({ id: "recommended" })} id="recommended" count={listsPicks ? shelf.length : picks.length - (banner ? 1 : 0)} onViewAll={!single && picks.length > recommended.length ? () => onType("recommended") : undefined} />
+          <SectionHead title={sectionTitle({ id: "recommended" })} id="recommended" count={listsPicks ? shelf.length : picks.length - featuredPicks.length} onViewAll={!single && picks.length > recommended.length ? () => onType("recommended") : undefined} />
           <div className={CARD_GRID}>
             {shelf.map(({ item, pick }) => (
               <DiscoverCard key={item.key} item={item} sub={t(PICK_WHY[pick.kind])} from={sourceLabel(item.source)} onOpen={onOpenItem} action={renderAction(item)} />
@@ -203,25 +218,72 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
   );
 }
 
-/** The one featured block of Discover (#4453): a wide rounded card with its
- * source line, a large name, one line of description, the item's Install and
- * its artwork at the right. Drawn only when there is something real to feature. */
-function FeaturedBanner({ item, sub, from, action, onOpen }: { item: PluginItem; sub: string; from: string; action: ReactNode; onOpen: (item: PluginItem) => void }) {
+/** A slide of the featured set: a curated pick, or a vendor the organization
+ * console offers the person (its name, logo and line come from the console's
+ * data, never from this code). */
+export interface FeaturedSlide {
+  key: string;
+  /** the small line over the name ("From <source>") */
+  source: string;
+  name: string;
+  line: string;
+  /** the artwork at the right: an SVG or the largest image there is */
+  art: ReactNode;
+  action: ReactNode;
+  /** a curated pick's row key, so the shelf does not repeat it */
+  itemKey?: string;
+}
+
+const SLIDE_MS = 6000;
+
+/** The featured block of Discover (#4453): one wide rounded card that cycles
+ * through its slides by itself every few seconds, pauses on hover and on
+ * keyboard focus, never moves by itself under the system's reduced-motion
+ * setting, has dots to jump to a slide and previous/next buttons the keyboard
+ * reaches. One slide is visible at a time. */
+export function FeaturedCarousel({ slides }: { slides: readonly FeaturedSlide[] }) {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const count = slides.length;
+  const current = slides[Math.min(index, Math.max(count - 1, 0))];
+  const reduced = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  useEffect(() => { if (index >= count) setIndex(0); }, [count, index]);
+  useEffect(() => {
+    if (count < 2 || paused || reduced) return;
+    const timer = window.setTimeout(() => setIndex((value) => (value + 1) % count), SLIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [count, index, paused, reduced]);
+  if (!current) return null;
+  const go = (next: number) => setIndex((next + count) % count);
   return (
-    <section data-plugins-section="featured" data-featured-banner="" data-plugin-row={item.key} className="mt-4 flex items-center gap-4 overflow-hidden rounded-2xl border-[0.5px] border-ink/[0.1] bg-gradient-to-br from-ink/[0.07] to-ink/[0.02] p-5">
-      <div className="min-w-0 flex-1">
-        <p className="text-[12px] leading-4 text-ink-secondary" data-featured-source="">{t("connectApps.featured.from", { source: from })}</p>
-        <h3 className="mt-1 truncate text-[18px] font-normal leading-7 text-ink">{item.name}</h3>
-        <p className="mt-0.5 line-clamp-1 text-[13px] leading-[18px] text-ink-secondary" title={item.description}>{sub || item.description}</p>
-        <div className="mt-3 flex items-center gap-2">
-          {action ?? (
-            <button type="button" onClick={() => onOpen(item)} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink/[0.12] px-3.5 text-[13px] text-ink"><Check size={13} aria-hidden="true" />{t("connectApps.card.added")}</button>
-          )}
+    <section data-plugins-section="featured" data-featured-banner="" data-plugin-row={current.itemKey ?? current.key}
+      aria-roledescription="carousel" aria-label={t("connectApps.featured.aria")}
+      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false); }}
+      className="relative mt-4 overflow-hidden rounded-2xl border-[0.5px] border-ink/[0.1] bg-gradient-to-br from-ink/[0.07] to-ink/[0.02] p-5 pb-9">
+      <div role="group" aria-roledescription="slide" aria-label={`${Math.min(index, count - 1) + 1} / ${count}`} aria-live={paused || count < 2 ? "polite" : "off"} data-featured-slide={current.key} className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] leading-4 text-ink-secondary" data-featured-source="">{current.source}</p>
+          <h3 className="mt-1 truncate text-[18px] font-normal leading-7 text-ink">{current.name}</h3>
+          <p className="mt-0.5 line-clamp-1 text-[13px] leading-[18px] text-ink-secondary" title={current.line}>{current.line}</p>
+          <div className="mt-3 flex items-center gap-2">{current.action}</div>
         </div>
+        <div className="flex size-20 shrink-0 items-center justify-center max-sm:hidden" aria-hidden="true" data-featured-art="">{current.art}</div>
       </div>
-      <div className="relative flex shrink-0 items-center justify-center max-sm:hidden" aria-hidden="true" data-featured-art="">
-        <PluginIcon item={item} className="size-20 rounded-2xl" />
-      </div>
+      {count > 1 && (
+        <div className="absolute inset-x-5 bottom-2.5 flex items-center justify-between" data-featured-controls="">
+          <div className="flex items-center gap-1.5" role="group" aria-label={t("connectApps.featured.dots")}>
+            {slides.map((slide, position) => (
+              <button key={slide.key} type="button" data-featured-dot={position} aria-label={t("connectApps.featured.goTo", { name: slide.name })} aria-current={position === index ? "true" : undefined}
+                onClick={() => go(position)} className={cn("size-2 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none", position === index ? "bg-ink" : "bg-ink/25 hover:bg-ink/50")} />
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <button type="button" data-featured-prev="" aria-label={t("connectApps.featured.prev")} title={t("connectApps.featured.prev")} onClick={() => go(index - 1)} className="inline-flex size-6 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><ChevronLeft size={14} aria-hidden="true" /></button>
+            <button type="button" data-featured-next="" aria-label={t("connectApps.featured.next")} title={t("connectApps.featured.next")} onClick={() => go(index + 1)} className="inline-flex size-6 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><ChevronRight size={14} aria-hidden="true" /></button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

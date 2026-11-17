@@ -308,13 +308,20 @@ if (params.has("products")) {
   // #4453: the console files products under their vendor (invented names):
   // one vendor row unfolds into its products; a product of no vendor stands alone
   if (params.get("products") === "many") {
-    const filed: Record<string, { group: { id: string; name: string }; endpoints?: string[] }> = {
-      "prod-psa": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Tickets", "Time entries", "Projects", "Agreements", "Invoices", "Companies", "Contacts", "Schedule", "Configurations", "Reports"] },
-      "prod-more-0": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Devices", "Alerts", "Scripts"] },
-      "prod-more-6": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Quotes", "Catalog", "Orders"] },
-      "prod-more-7": { group: { id: "harbor", name: "Harbor Suite" }, endpoints: ["Gauges", "Dashboards"] },
-      "prod-edr": { group: { id: "beacon", name: "Beacon Security" } },
-      "prod-more-1": { group: { id: "beacon", name: "Beacon Security" } },
+    // example marks the console would serve: inline SVG, invented shapes (no real brand)
+    const mark = (fill: string, body: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${fill}"/>${body}</svg>`)}`;
+    const harbor = mark("#1d4ed8", '<path d="M32 12v26M20 24h24M14 38c3 10 11 14 18 14s15-4 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="14" r="4" fill="#fff"/>');
+    const beacon = mark("#be185d", '<path d="M32 12l16 28H16z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="48" r="4" fill="#fff"/>');
+    const tile = (fill: string, body: string) => mark(fill, body);
+    const vendorHarbor = { id: "harbor", name: "Harbor Suite", icon: { url: harbor }, logo: harbor };
+    const vendorBeacon = { id: "beacon", name: "Beacon Security", icon: { url: beacon }, logo: beacon };
+    const filed: Record<string, { group: typeof vendorHarbor; endpoints?: string[]; icon?: { url: string }; description?: string }> = {
+      "prod-psa": { group: vendorHarbor, icon: { url: tile("#0f766e", '<path d="M18 20h28v24H18zM18 28h28" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') }, description: "Tickets, time and agreements for the service desk", endpoints: ["Tickets", "Time entries", "Projects", "Agreements", "Invoices", "Companies", "Contacts", "Schedule", "Configurations", "Reports"] },
+      "prod-more-0": { group: vendorHarbor, icon: { url: tile("#7c3aed", '<rect x="16" y="18" width="32" height="20" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M26 46h12" stroke="#fff" stroke-width="4" stroke-linecap="round"/>') }, endpoints: ["Devices", "Alerts", "Scripts"] },
+      "prod-more-6": { group: vendorHarbor, icon: { url: tile("#b45309", '<path d="M20 22h24l-3 20H23zM28 22v-4a4 4 0 018 0v4" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') }, endpoints: ["Quotes", "Catalog", "Orders"] },
+      "prod-more-7": { group: vendorHarbor, endpoints: ["Gauges", "Dashboards"] },
+      "prod-edr": { group: vendorBeacon, icon: { url: tile("#9f1239", '<path d="M32 14l14 6v12c0 9-6 15-14 18-8-3-14-9-14-18V20z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>') } },
+      "prod-more-1": { group: vendorBeacon },
     };
     for (const product of products as Array<{ id: string }>) Object.assign(product, filed[product.id] ?? {});
   }

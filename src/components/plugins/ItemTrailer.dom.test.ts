@@ -45,15 +45,50 @@ describe("where an item is on", () => {
     expect(whereText("bot")).toBe("This bot");
   });
 
-  it("is plain words, then the switch, then the \"...\", in that order", async () => {
-    await render(row(createElement(ItemTrailer, { name: "Notes", where: { kind: "all" }, whereKind: "all", on: true, onToggle: noop, actions: { detail: noop } })));
+  it("reads state icon, scope chip only if narrower, switch, \"...\", in that order, in fixed columns", async () => {
+    await render(row(createElement(ItemTrailer, { name: "Notes", where: { kind: "some", count: 2 }, whereKind: "some", on: true, onToggle: noop, actions: { detail: noop }, state: { tone: "ok", text: "Connected" } })));
     const trailer = host.querySelector("[data-item-trailer]")!;
-    const order = [...trailer.children].map((child) => child.matches("[data-row-scope]") ? "where" : child.matches("[data-row-switch]") ? "switch" : child.matches("[data-entry-menu]") ? "menu" : "other");
-    expect(order).toEqual(["where", "switch", "menu"]);
-    const where = trailer.querySelector("[data-row-scope]")!;
-    expect(where.textContent).toBe("All your bots");
-    // plain words: no pill fill
-    expect(where.className).not.toMatch(/\bbg-/);
+    const order = [...trailer.children].map((child) => child.matches("[data-row-state]") ? "state" : child.matches("[data-row-scope]") ? "scope" : child.matches("[data-row-switch]") ? "switch" : child.matches("[data-entry-menu]") ? "menu" : "other");
+    expect(order).toEqual(["state", "scope", "switch", "menu"]);
+    expect(trailer.querySelector("[data-row-scope]")?.textContent).toBe("2 bots");
+  });
+
+  it("does not print \"All your bots\" on every row: the default is the menu's first line", async () => {
+    await render(row(createElement(ItemTrailer, { name: "Notes", where: { kind: "all" }, whereKind: "all", on: true, onToggle: noop, actions: { detail: noop } })));
+    expect(host.querySelector("[data-row-scope]")).toBeNull();
+    // the empty state column and the present switch keep the columns lined up
+    const trailer = host.querySelector("[data-item-trailer]")!;
+    expect(trailer.children).toHaveLength(3);
+    await click(host.querySelector("[data-entry-menu]"));
+    expect(host.querySelector("[data-item-where]")?.textContent).toBe("All your bots");
+  });
+
+  it("says No bot as a chip, and \"This bot\" only in the menu", async () => {
+    await render(row(createElement(ItemTrailer, { name: "Notes", where: { kind: "none" }, whereKind: "none", on: false, onToggle: noop, actions: { detail: noop } })));
+    expect(host.querySelector("[data-row-scope]")?.textContent).toBe("No bot");
+    await render(row(createElement(ItemTrailer, { name: "Notes", where: "bot", on: true, onToggle: noop, actions: { detail: noop } })));
+    expect(host.querySelector("[data-row-scope]")).toBeNull();
+  });
+
+  it("a state is ONE icon: its sentence is the tooltip and the accessible name; a warning is a button that fixes", async () => {
+    const fix = vi.fn();
+    await render(row(createElement(ItemTrailer, { name: "Notes", on: true, onToggle: noop, state: { tone: "fix", text: "Key expired", onFix: fix } })));
+    const button = host.querySelector<HTMLButtonElement>("[data-row-state-fix]")!;
+    expect(button.getAttribute("aria-label")).toBe("Key expired");
+    expect(button.textContent).toBe("");
+    const tip = host.querySelector('[role="tooltip"]')!;
+    expect(tip.textContent).toBe("Key expired");
+    expect(button.getAttribute("aria-describedby")).toBe(tip.id);
+    await click(button);
+    expect(fix).toHaveBeenCalledTimes(1);
+    // a check and an info are focusable icons with the same tooltip
+    for (const [tone, text] of [["ok", "Connected"], ["info", "Not offered on this deployment"]] as const) {
+      await render(row(createElement(ItemTrailer, { name: "Notes", on: true, state: { tone, text } })));
+      const icon = host.querySelector<HTMLElement>(`[data-row-state="${tone}"] [role="img"]`)!;
+      expect(icon.getAttribute("aria-label")).toBe(text);
+      expect(icon.tabIndex).toBe(0);
+      expect(host.querySelector('[role="tooltip"]')?.textContent).toBe(text);
+    }
   });
 
   it("the switch writes for all the person's bots at once and never opens the row", async () => {
@@ -186,22 +221,25 @@ describe("Choose the bots", () => {
 });
 
 describe("Install under Discover", () => {
-  it("is Install with a small menu: For all my bots, For one bot...", async () => {
+  it("is Install with a small menu: For all my bots, For the bots I choose... (the same checklist as Choose the bots)", async () => {
     const onAll = vi.fn();
-    const onBot = vi.fn();
-    await render(createElement(InstallMenu, { name: "Notes", label: "Install", onAll, bots: [{ id: "bot-a", name: "Rocket" }, { id: "bot-b", name: "Orbit" }], onBot }));
+    const onBots = vi.fn();
+    await render(createElement(InstallMenu, { name: "Notes", label: "Install", onAll, bots: [{ id: "bot-a", name: "Rocket" }, { id: "bot-b", name: "Orbit" }], onBots }));
     const button = host.querySelector("[data-install-button]")!;
     expect(button.textContent).toBe("Install");
     await click(button);
-    expect([...host.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual(["For all my bots", "For one bot..."]);
+    expect([...host.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual(["For all my bots", "For the bots I choose..."]);
     await click(host.querySelector("[data-install-all]"));
     expect(onAll).toHaveBeenCalledTimes(1);
-    // one bot: a short list, one press installs it there
+    // the bots I choose: the checklist, confirmed with Install, installs on those bots only
     await click(host.querySelector("[data-install-button]"));
     await click(host.querySelector("[data-install-one]"));
-    expect([...host.querySelectorAll("[data-install-bot]")].map((item) => item.textContent)).toEqual(["Rocket", "Orbit"]);
-    await click(host.querySelector('[data-install-bot="bot-b"]'));
-    expect(onBot).toHaveBeenCalledWith("bot-b", expect.anything());
+    expect([...host.querySelectorAll("[data-choose-bot]")].map((item) => item.textContent)).toEqual(["Rocket", "Orbit"]);
+    expect(host.querySelector<HTMLButtonElement>("[data-choose-save]")!.disabled).toBe(true);
+    await click(host.querySelector('[data-choose-bot="bot-b"]'));
+    expect(host.querySelector("[data-choose-save]")?.textContent).toBe("Install");
+    await click(host.querySelector("[data-choose-save]"));
+    expect(onBots).toHaveBeenCalledWith(["bot-b"], expect.anything());
     expect(host.querySelector('[role="menu"]')).toBeNull();
   });
 

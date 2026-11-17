@@ -208,7 +208,8 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     expect([...row.querySelectorAll("[data-entry-action]")].map((item) => item.getAttribute("data-entry-action"))).toEqual(["off", "edit", "signout", "remove"]);
     // #4453: on or off is the row's own switch, after where it is on (all the person's bots)
     expect(row.querySelector("[data-row-switch]")?.getAttribute("role")).toBe("switch");
-    expect(row.querySelector("[data-row-scope]")?.textContent).toBe("All your bots");
+    // all the person's bots is the default: not printed on the row, said in the menu
+    expect(row.querySelector("[data-row-scope]")).toBeNull();
     await act(async () => { row.querySelector<HTMLButtonElement>("[data-entry-action=\"edit\"]")!.click(); });
     const form = host.querySelector<HTMLFormElement>("[data-edit-personal-server=\"notes\"]")!;
     expect(form).not.toBeNull();
@@ -293,10 +294,12 @@ describe("Connect Apps > Me: Recommended for you first, from the catalog", () =>
     await home();
     const sections = [...host.querySelectorAll("[data-plugins-section]")].map((section) => section.getAttribute("data-plugins-section"));
     // the first pick is the one featured banner, the rest is the shelf (no carousel)
-    expect(sections.slice(0, 2)).toEqual(["featured", "recommended"]);
+    expect(sections[0]).toBe("featured");
     expect(host.querySelector('[data-plugins-section="featured"]')?.getAttribute("data-plugin-row")).toBe("featured:slack");
-    // chat before tickets; what the person has, a key to paste and a data center to choose are left out
-    expect(shelf()).toEqual(["featured:linear"]);
+    // chat before tickets; what the person has, a key to paste and a data center to choose are left out:
+    // both picks are slides of the featured block, so no shelf is left
+    expect(host.querySelectorAll("[data-featured-dot]")).toHaveLength(2);
+    expect(shelf()).toEqual([]);
   });
 
   it("Connect adds the app as the person's own server, then opens its sign-in", async () => {

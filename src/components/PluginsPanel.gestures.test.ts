@@ -225,8 +225,8 @@ describe("Plugins, driven like the owner does", () => {
     await kind("plugins");
     const row = $('[data-installed-entry="plugin:personal-review@my-tools"]')!;
     expect(row).not.toBeNull();
-    // where it is on, the switch, then "...": no pill for the scope
-    expect(row.querySelector("[data-row-scope]")?.textContent).toBe("All your bots");
+    // the state icon column, the switch, then "...": the default scope is not printed
+    expect(row.querySelector("[data-row-scope]")).toBeNull();
     expect(row.querySelector("[data-row-switch]")?.getAttribute("aria-checked")).toBe("true");
     expect(row.querySelector("[data-entry-menu]")).not.toBeNull();
     // a right click anywhere on the row opens the same menu

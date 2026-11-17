@@ -6,7 +6,7 @@
 // everywhere, See the detail, Uninstall. "Choose the bots" is a small
 // checklist of the person's bots with Save, in the menu's own place. The
 // scope is chosen here, on the item, never in the window's header.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronRight, LoaderCircle, MoreHorizontal, RotateCw, Trash2, Users, Eye, Power, PowerOff } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -15,6 +15,7 @@ import type { WhereLabel } from "@/lib/capability-kinds";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
 import { Switch } from "../SettingsPrimitives";
+import { StateIcon, type RowState } from "./StateIcon";
 
 /** One of the person's bots in the checklist, and whether the item is on it. */
 export interface BotChoice {
@@ -51,9 +52,16 @@ export function whereText(where: WhereLabel | "bot" | string): string {
   return where.count === 1 ? t("connectApps.where.one") : t("connectApps.where.many", { count: where.count });
 }
 
-/** Where a row is kept, at its right, before its switch: plain words. */
+/** A scope narrower than "all your bots" (2 bots, No bot), a small chip before
+ * the switch. The broad default is not printed on every row (the owner's
+ * review of after-v4); the full scope is the first line of the "..." menu. */
 export function ScopePill({ label, title }: { label: string; title?: string }) {
-  return <span data-row-scope="" title={title} className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink-secondary">{label}</span>;
+  return <span data-row-scope="" title={title} className="shrink-0 whitespace-nowrap rounded-full bg-ink/[0.06] px-2 text-[12px] leading-5 text-ink-secondary">{label}</span>;
+}
+
+/** Whether a row prints its scope: only a narrower one. One place to revert. */
+export function printsScope(where: WhereLabel | string | undefined): boolean {
+  return typeof where === "object" && where.kind !== "all";
 }
 
 /** A row's switch, at its far right. Without `onChange` it is locked
@@ -74,7 +82,11 @@ export function RowSwitch({ name, on, onChange, lockedReason, busy = false }: { 
 /** The row an item sits in: a right click on it opens the item's menu. */
 export const ITEM_ROW_ATTR = "data-item-row";
 
-export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason, busy = false, actions = {} }: {
+export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason, busy = false, actions = {}, state, columns = true }: {
+  /** keep the right side's columns (state, switch, "...") even when one is empty, so they line up down a list */
+  columns?: boolean;
+  /** the row's state as one icon with its sentence as the tooltip */
+  state?: RowState | null;
   name: string;
   /** the label at the right: a WhereLabel, or the words themselves */
   where?: WhereLabel | string;
@@ -115,6 +127,15 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
   }, [hasMenu]);
 
   const close = () => { setOpen(null); setPanel("menu"); };
+  // a menu that would run past the window's bottom opens upward instead
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [flip, setFlip] = useState(false);
+  useLayoutEffect(() => {
+    if (!open || !menuRef.current) { setFlip(false); return; }
+    const box = menuRef.current.getBoundingClientRect();
+    const room = window.innerHeight - 8;
+    setFlip((was) => was ? box.top > box.height + 8 : box.bottom > room && box.top - box.height - 40 > 0);
+  }, [open, panel]);
   const all = whereKind === "all";
   const none = whereKind === "none";
   const lines: Array<{ id: string; label: string; icon: ReactNode; run: () => void; danger?: boolean }> = [];
@@ -128,8 +149,9 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
 
   return (
     <div ref={rootRef} className="relative flex shrink-0 items-center gap-2" data-item-trailer="">
-      {where !== undefined && <ScopePill label={whereText(where)} />}
-      {on !== undefined && <RowSwitch name={name} on={on} onChange={onToggle} lockedReason={lockedReason} busy={busy} />}
+      {state ? <StateIcon state={state} /> : columns ? <span className="size-7 shrink-0" aria-hidden="true" /> : null}
+      {where !== undefined && printsScope(where) && <ScopePill label={whereText(where)} />}
+      {on !== undefined ? <RowSwitch name={name} on={on} onChange={onToggle} lockedReason={lockedReason} busy={busy} /> : columns ? <span className="w-8 shrink-0" aria-hidden="true" /> : null}
       {hasMenu ? (
         <button type="button" data-entry-menu="" aria-haspopup="menu" aria-expanded={open !== null} aria-label={t("connectApps.entry.menuAria", { name })}
           onClick={() => { setPanel("menu"); setOpen((value) => value ? null : { side: "right", x: 0, y: 4 }); }}
@@ -139,8 +161,11 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
         </button>
       ) : <span className="size-7 shrink-0" aria-hidden="true" />}
       {open && (
-        <div role="menu" data-item-menu={panel} style={{ [open.side]: open.x, top: `calc(100% + ${open.y}px)` }}
+        <div ref={menuRef} role="menu" data-item-menu={panel} data-item-menu-flipped={flip ? "" : undefined} style={{ [open.side]: open.x, ...(flip ? { bottom: "calc(100% + 4px)" } : { top: `calc(100% + ${open.y}px)` }) }}
           className={cn(MENU_SURFACE, "absolute z-30 w-max min-w-[228px] max-w-[min(320px,calc(100vw-16px))]")}>
+          {panel === "menu" && where !== undefined && (
+            <div role="presentation" data-item-where="" className="px-2 pb-1 pt-0.5 text-[12px] leading-4 text-ink-tertiary">{whereText(where)}</div>
+          )}
           {panel === "menu" ? lines.map((line) => (
             <button key={line.id} type="button" role="menuitem" data-entry-action={line.id}
               onClick={() => { if (line.id === "choose") { line.run(); return; } close(); line.run(); }}
@@ -157,7 +182,7 @@ export function ItemTrailer({ name, where, whereKind, on, onToggle, lockedReason
 }
 
 /** "Choose the bots": the person's bots, a check on each, Save. */
-export function ChooseBotsPanel({ choose, onDone }: { choose: ChooseBots; onDone: () => void }) {
+export function ChooseBotsPanel({ choose, onDone, saveLabel }: { choose: ChooseBots; onDone: () => void; /** the confirming word (Save; Install in the Install menu) */ saveLabel?: string }) {
   const [bots, setBots] = useState<BotChoice[] | null>(null);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -201,10 +226,10 @@ export function ChooseBotsPanel({ choose, onDone }: { choose: ChooseBots; onDone
         </button>
       ))}
       <div className="mt-1 flex items-center justify-end gap-2 px-1 pb-0.5">
-        <button type="button" onClick={onDone} className="inline-flex h-7 items-center rounded-full px-3 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink">{t("common.cancel")}</button>
-        <button type="button" data-choose-save="" disabled={saving || bots === null || changed.length === 0} onClick={() => void save()}
+        <button type="button" role="menuitem" onClick={onDone} className="inline-flex h-7 items-center rounded-full px-3 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink">{t("common.cancel")}</button>
+        <button type="button" role="menuitem" data-choose-save="" disabled={saving || bots === null || changed.length === 0} onClick={() => void save()}
           className="inline-flex h-7 items-center rounded-full bg-ink px-3 text-[13px] font-medium text-app transition-opacity hover:opacity-90 disabled:opacity-30">
-          {t("connectApps.choose.save")}
+          {saveLabel ?? t("connectApps.choose.save")}
         </button>
       </div>
     </div>

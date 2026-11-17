@@ -160,6 +160,43 @@ try {
   await shot("11-more-menu");
   await page.keyboard.press("Escape");
 
+  // a state icon's tooltip, open (hover on the first warning icon of Yours)
+  await open("view=manage&role=member&products=many");
+  await kind("connectors");
+  await view("installed");
+  const fixIcon = page.locator("[data-row-state-fix]").first();
+  if (await fixIcon.count()) {
+    await fixIcon.hover();
+    await page.waitForTimeout(250);
+    await shot("18-state-tooltip-open");
+    await page.mouse.move(5, 5);
+  }
+
+  // the featured block on two slides: a curated pick and the organization's vendor, dots visible
+  await view("discover");
+  const dots = page.locator("[data-featured-dot]");
+  const count = await dots.count();
+  if (count > 0) {
+    await dots.first().click();
+    await page.locator("[data-featured-banner]").hover();
+    await page.waitForTimeout(250);
+    await shot("19-featured-curated-slide");
+    await dots.nth(count - 1).click();
+    await page.locator("[data-featured-banner]").hover();
+    await page.waitForTimeout(250);
+    await shot("20-featured-vendor-slide");
+    await page.mouse.move(5, 5);
+  }
+
+  // the header with a filter active (Discover) and a sort that is not the default (Yours)
+  await clickIf("[data-plugins-filter-button]");
+  await clickIf('[data-plugins-chip="communication"]');
+  await clickIf("[data-plugins-sort-button]");
+  await clickIf('[data-plugins-sort-option="name"]');
+  await shot("21-header-discover-filter-active");
+  await view("installed");
+  await shot("22-header-yours-sort-active");
+
   // Plugins: Yours with the console's section, Yours with none of their own (the first banner), Discover
   await kind("plugins");
   await view("installed");
@@ -193,6 +230,17 @@ try {
     return out;
   });
   console.log("type sizes", tag, JSON.stringify(sizes));
+
+  // the narrowest window the control row is meant for: the search is an icon, the row holds
+  const narrowCtx = await browser.newContext({ viewport: { width: 700, height: 800 }, deviceScaleFactor: 2, colorScheme: scheme });
+  const narrowPage = await narrowCtx.newPage();
+  await narrowPage.goto(`${base}?view=manage&role=member&products=many&skin=${skin}&lang=${lang}`, { waitUntil: "networkidle" });
+  await narrowPage.waitForSelector("[data-plugins-main]", { timeout: 30_000 });
+  await narrowPage.click('[data-plugins-kind-tab="connectors"]');
+  await narrowPage.waitForTimeout(600);
+  await narrowPage.screenshot({ path: join(outDir, `23-narrow-header-700x800-${scheme}-${lang}.png`) });
+  console.log("shot narrow", scheme, lang);
+  await narrowCtx.close();
 
   // the neighbour page that follows the reference, same window
   await page.goto(`${base}?view=settings-subpage&skin=${skin}&lang=${lang}`, { waitUntil: "networkidle" });

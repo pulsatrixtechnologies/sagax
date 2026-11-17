@@ -11,7 +11,7 @@ import { botSwitchPatch, installationServerName, organizationRows, visibleCapabi
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { loadBotPlugins, installPlugin as installBotPlugin, uninstallPlugin as uninstallBotPlugin } from "@/lib/my-connections";
 import { normalProductId } from "../../../shared/bot-products";
-import { declarationForms, entryKind, kindCounts as countKinds, kindOf, whereLabel, type ConnectAppsKind } from "@/lib/capability-kinds";
+import { declarationForms, entryKind, groupByVendor, kindCounts as countKinds, kindOf, whereLabel, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { botPluginState } from "@/lib/plugin-scope";
 import { api } from "@/state/store";
 import { openSettings } from "@/lib/settings-link";
@@ -26,9 +26,10 @@ import {
 import { DeveloperLink } from "../settings/DeveloperLink";
 import { MyGithubSummary } from "../settings/MyConnectionsSettings";
 import { usePersonalMcp } from "../plugins/PersonalServers";
-import { productRows, type ProductRowsContext } from "../plugins/ProductRows";
+import { productRows, VendorArt, type ProductRowsContext } from "../plugins/ProductRows";
 import { ItemTrailer, type ChooseBots, type ItemMenuActions } from "../plugins/ItemTrailer";
 import { InstallMenu } from "../plugins/InstallMenu";
+import { statusState } from "../plugins/StateIcon";
 import { usePersonProducts } from "@/lib/person-products";
 import { ConnectAppsView, DiscoverFilter, SortControl, connectAppsTabLabel, filterChips, filterLabel, type ConnectAppsSort, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
@@ -39,8 +40,7 @@ import { PLUGINS, pluginActionClass } from "../plugins/plugins-style";
 import { DiscoverView } from "../plugins/DiscoverView";
 import { AccountsView } from "../plugins/AccountsView";
 import { SourcesView } from "../plugins/SourcesView";
-import { OrgSourcesAccess } from "../plugins/OrgSourcesAccess";
-import { OrgCapabilitiesAdmin, OrgCapabilitiesForMe, orgCapabilitiesOfForms, useOrgCapabilitiesForMe } from "../plugins/OrgCapabilitiesSection";
+import { OrgCapabilitiesForMe, orgCapabilitiesOfForms, useOrgCapabilitiesForMe } from "../plugins/OrgCapabilitiesSection";
 import { accountConnectorRows, connectorGroups, type AccountConnectorRow } from "../plugins/HarnessConnectorGroups";
 import { PublishedPagesSettings } from "../PublishedPages";
 import { MarketplacesSection } from "../plugins/MarketplacesSection";
@@ -121,7 +121,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       return (
         <InstallMenu iconOnly={variant === "card"} name={item.name} label={label} busy={busy} disabled={installing !== null || botBusy !== null} onAll={allBots}
           bots={scope === "me" && at > 0 ? menuBots : undefined}
-          onBot={(botId) => { void installBotPlugin(botId, item.id.slice(at + 1), item.id.slice(0, at)).then(() => refreshAll(), (cause) => setPanelError(readableError(cause))); }} />
+          onBots={(botIds) => { void Promise.all(botIds.map((botId) => installBotPlugin(botId, item.id.slice(at + 1), item.id.slice(0, at)))).then(() => refreshAll(), (cause) => setPanelError(readableError(cause))); }} />
       );
     }
     if (!handled && !item.installed && item.kind === "featured") {
@@ -134,7 +134,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
             void installFeatured(item, undefined, anchor);
           }}
           bots={oneBot ? menuBots : undefined}
-          onBot={(botId, anchor) => void installFeatured(item, undefined, anchor, (name) => { for (const bot of editableBots) toggleBotServerNames(bot.id, [name], bot.id === botId); })} />
+          onBots={(botIds, anchor) => void installFeatured(item, undefined, anchor, (name) => { for (const bot of editableBots) toggleBotServerNames(bot.id, [name], botIds.includes(bot.id)); })} />
       );
     }
     if (!listing) return renderAction(item);
@@ -213,11 +213,9 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   };
   const { searchField, searchResults } = usePluginsSearch(s, a, accountSections);
 
-  const isOrgAdmin = perspicaxOrg?.viewerRole === "admin";
-  const orgHere = isOrgAdmin && scope === "workspace" && perspicaxOrg !== null;
   // #4453: Yours and Discover are the two views of each kind; Bot templates,
   // Published pages and Sources open from the title bar's "..."
-  const sourcesHere = githubHere || marketRoute !== null || (marketSummaries?.length ?? 0) > 0 || orgHere;
+  const sourcesHere = githubHere || marketRoute !== null || (marketSummaries?.length ?? 0) > 0;
   const tabs: ConnectAppsTab[] = ["installed", "discover", "bots", "pages", ...(sourcesHere ? ["sources" as const] : [])];
 
   // The one "+ Add" (#2104; #4453: by kind): every way to add something of
@@ -277,6 +275,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   const entryTrailer = (entry: InstalledEntry) => {
     const plugin = entry.members.find((member) => member.kind === "plugin");
     const own = entryActions(entry);
+    const state = statusState(entry.status, () => openItem(entry.primary));
     const base: ItemMenuActions = {
       detail: () => openItem(entry.primary),
       ...(own.update ? { update: own.update, updateWaiting: entry.updateAvailable } : {}),
@@ -286,11 +285,11 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     if (plugin && scope !== "workspace" && scopedPluginView) {
       const installed = botPluginState(scopedPluginView, plugin.id)?.installed;
       const change = scopedPluginView.canChange ? (next: boolean) => toggleForBot(plugin.id, next) : undefined;
-      if (!installed) return <ItemTrailer name={entry.name} where={scope === "bot" ? "bot" : noBot} actions={base} />;
-      if (scope === "bot") return <ItemTrailer name={entry.name} where="bot" on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")} actions={base} />;
+      if (!installed) return <ItemTrailer state={state} name={entry.name} where={scope === "bot" ? "bot" : noBot} actions={base} />;
+      if (scope === "bot") return <ItemTrailer state={state} name={entry.name} where="bot" on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")} actions={base} />;
       const where = installed.enabled ? everyone : noBot;
       return (
-        <ItemTrailer name={entry.name} where={where} whereKind={where.kind} on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")}
+        <ItemTrailer state={state} name={entry.name} where={where} whereKind={where.kind} on={installed.enabled} busy={botBusy !== null} onToggle={change} lockedReason={t("plugins.readOnly")}
           actions={{ ...base, ...(change ? { allBots: () => change(true), offEverywhere: () => change(false) } : {}), choose: choosePluginBots(plugin.id) }} />
       );
     }
@@ -300,7 +299,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       const where = whereLabel(reached, editableBots.length);
       const everywhere = (on: boolean) => { for (const bot of editableBots) toggleBotServers(entry, bot.id, on); };
       return (
-        <ItemTrailer name={entry.name} where={where} whereKind={where.kind} on={server ? server.enabled : undefined} busy={mcp.busy !== null}
+        <ItemTrailer state={state} name={entry.name} where={where} whereKind={where.kind} on={server ? server.enabled : undefined} busy={mcp.busy !== null}
           onToggle={server && !mcp.restricted ? () => void mcp.toggle(server) : undefined}
           lockedReason={mcp.policy ? t("policy.mcpRestricted", { organization: mcp.policy.organizationName }) : undefined}
           actions={{
@@ -316,7 +315,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           }} />
       );
     }
-    return <ItemTrailer name={entry.name} actions={base} />;
+    return <ItemTrailer state={state} name={entry.name} actions={base} />;
   };
   const [skillBusy, setSkillBusy] = useState<string | null>(null);
   const skillTrailer = (item: PluginItem) => {
@@ -356,6 +355,16 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     setProducts,
     onOpen: (product) => push({ page: "product", id: product.id }),
   };
+  // one featured slide per vendor the console files products under: its name, logo and
+  // line are the console's data (never written here)
+  const vendorSlides = perspicaxOrg !== null ? groupByVendor(products.products).filter((vendor) => vendor.products.some((product) => product.group)).map((vendor) => ({
+    key: vendor.key,
+    consoleName: t("connectApps.console.title", { org: perspicaxOrg.org.name }),
+    name: vendor.name,
+    line: vendor.products.map((product) => product.description).find(Boolean) ?? (vendor.products.length === 1 ? t("connectApps.vendor.productOne") : t("connectApps.vendor.productMany", { count: vendor.products.length })),
+    art: <VendorArt vendor={vendor} />,
+    onGo: () => chooseTab("installed"),
+  })) : [];
   // the filter of Discover: the categories of the chosen kind, in a menu
   const filterControl = tab === "discover" ? (
     <DiscoverFilter
@@ -468,9 +477,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               // one "+ Add" menu (#2104), in the title bar (#4453: by kind)
               add={addActions}
               addInTitle
-              // lot 4: the organization's declarations (Perspicax), folded
-              // at the end, the kind's forms only (#4453)
-              organizationAdmin={scope === "workspace" && orgHere ? <OrgCapabilitiesAdmin forms={declarationForms(kind)} /> : undefined}
               onDiscover={() => setTab("discover")}
               macApps={scope !== "bot" && macAppsVisible ? (
                 <MacAppsInstalledSection
@@ -507,6 +513,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           discover={(
             <DiscoverView
               sort={sort}
+              vendorSlides={vendorSlides}
               kind={kind}
               items={discoverItems(scopedItems, state.pluginsFocusApps ?? undefined)}
               loading={mcp.servers === null || (scope !== "workspace" && scopedPluginView === null)}
@@ -560,7 +567,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
                   onOpenGithub={githubHere ? openGithub : undefined}
                 />
               ) : undefined}
-              organization={orgHere ? <OrgSourcesAccess initial={perspicaxOrg.settings} flat /> : undefined}
             />
           )}
         />

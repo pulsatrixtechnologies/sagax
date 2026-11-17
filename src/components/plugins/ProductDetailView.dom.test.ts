@@ -65,44 +65,41 @@ afterEach(() => {
 });
 
 describe("product rows", () => {
-  it("keep the name readable at phone width: the state wraps beside it, never shrink-0", async () => {
-    const rows = productRows([px({ name: "Endpoint Security", state: "key_refused" })], ctx());
-    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
-    const state = view.querySelector("[data-person-product] [data-plugin-status]")!;
-    // the state never holds its width against the name: it may go to its own line under it
-    expect(state.className).not.toMatch(/\bshrink-0\b/);
-    expect(state.parentElement?.matches("[data-person-product-line]")).toBe(true);
-    expect(state.parentElement?.className).toMatch(/\bflex-wrap\b/);
-  });
-
-  it("say each state in words, at the row's right, once", async () => {
+  it("say a product's state as ONE icon at the row's right, its sentence the tooltip, never a printed word", async () => {
     const states: PersonProduct["state"][] = ["connected", "key_missing", "key_refused", "not_served"];
     const rows = productRows(states.map((state, index) => px({ id: `p${index}`, name: `Product ${index}`, state })), ctx());
     const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
-    const words = [...view.querySelectorAll("[data-person-product]")].map((row) => row.querySelector("[data-plugin-status]")?.textContent?.trim());
-    expect(words).toEqual(["Connected", "Key missing", "Key refused by the vendor", "Not served on this deployment"]);
-    // the grey line is the roles, never the state again, and no id shows
-    expect(view.textContent).toContain("Technicians");
+    const sentences = [...view.querySelectorAll("[data-person-product]")].map((row) => row.querySelector("[data-row-state] [role=tooltip]")?.textContent);
+    expect(sentences).toEqual(["Connected", "Key missing", "Key refused by the vendor", "Not served on this deployment"]);
+    expect([...view.querySelectorAll("[data-person-product]")].map((row) => row.querySelector("[data-row-state]")?.getAttribute("data-row-state"))).toEqual(["ok", "fix", "fix", "info"]);
+    // no state word is printed in the row itself; each sentence is said once (the tooltip)
+    expect(view.querySelector("[data-product-state]")).toBeNull();
     expect(view.textContent?.match(/Key missing/g)).toHaveLength(1);
+    expect(view.textContent).toContain("Technicians");
     expect(view.textContent).not.toContain("p1");
   });
 
-  it("line up with the Installed rows: the neighbours' state text and their trailing \"...\"", async () => {
+  it("a key the person can fix is a button that opens the product's page; the others are icons the keyboard reaches", async () => {
+    const opened = vi.fn();
+    const rows = productRows([px({ id: "k", name: "Keyed", state: "key_expired" }), px({ id: "n", name: "Away", state: "not_served" })], ctx(opened));
+    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
+    const fix = view.querySelector<HTMLButtonElement>("[data-person-product='k'] [data-row-state-fix]")!;
+    expect(fix.getAttribute("aria-label")).toBe("Key expired");
+    await act(async () => { fix.click(); });
+    expect(opened).toHaveBeenCalledWith(expect.objectContaining({ id: "k" }));
+    const info = view.querySelector<HTMLElement>("[data-person-product='n'] [data-row-state='info'] [role=img]")!;
+    expect(info.tabIndex).toBe(0);
+    expect(view.querySelector("[data-person-product='n'] [data-row-state-fix]")).toBeNull();
+  });
+
+  it("line up with the Installed rows: the same trailing columns and the \"...\" last", async () => {
     const states: PersonProduct["state"][] = ["connected", "key_missing", "key_refused", "not_served"];
     const rows = productRows(states.map((state, index) => px({ id: `p${index}`, name: `Product ${index}`, state, console_url: "https://console.example/p" })), ctx());
     const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
     for (const row of view.querySelectorAll("[data-person-product]")) {
-      // the same trailing slot as every neighbour row, so the states sit in one column
       expect(row.lastElementChild?.querySelector("[data-entry-menu]")).not.toBeNull();
-      const state = row.querySelector<HTMLElement>("[data-product-state]");
-      if (state) {
-        expect(state.className).toContain("text-[12px]");
-        expect(state.className).toContain("font-normal");
-        expect(state.className).not.toContain("font-medium");
-      }
+      expect(row.lastElementChild?.lastElementChild?.matches("[data-entry-menu]")).toBe(true);
     }
-    const refused = view.querySelector<HTMLElement>("[data-person-product='p2'] [data-product-state]")!;
-    expect(refused.className).toContain("text-warning");
   });
 
   it("offer the page's own \"...\" actions in the row: open in Perspicax, copy the id", async () => {
@@ -165,7 +162,8 @@ describe("vendor rows (#4453, 2026-11-16: one row per vendor, its products under
     const row = view.querySelector("[data-vendor] > div")!;
     const toggle = row.querySelector<HTMLButtonElement>("[data-row-switch]")!;
     expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(row.textContent).toContain("All your bots");
+    // the default scope is not printed on every row; it is the menu's first line
+    expect(row.querySelector("[data-row-scope]")).toBeNull();
     await act(async () => { toggle.click(); });
     expect(setProducts).toHaveBeenCalledWith(["bot-a", "bot-b"], ["desk", "rmm"], false);
   });
@@ -181,7 +179,7 @@ describe("vendor rows (#4453, 2026-11-16: one row per vendor, its products under
     const setProducts = vi.fn();
     const bot = { id: "bot-a", name: "Rocket", products: { desk: false } };
     const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk")], ctx(() => {}, { forBot: bot, setProducts }))[0]!.node));
-    expect(view.querySelector("[data-row-scope]")?.textContent).toBe("This bot");
+    expect(view.querySelector("[data-row-scope]")).toBeNull();
     const toggle = view.querySelector<HTMLButtonElement>("[data-row-switch]")!;
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     await act(async () => { toggle.click(); });
@@ -367,35 +365,42 @@ describe("marks of products and vendors (#4453, 2026-11-16: not one grey icon fo
     return view;
   };
 
-  it("a product with no icon of its own gets the lettered tile with its initial, never the one grey connector glyph", async () => {
+  it("a product with no icon of its own gets the one neutral tile with its initial, never a coloured letter or the grey connector glyph", async () => {
     const view = await marks([px({ id: "a", name: "Service Desk" }), px({ id: "b", name: "Knowledge Base" })]);
     const tiles = [...view.querySelectorAll<HTMLElement>("[data-letter-tile]")];
     expect(tiles.map((tile) => tile.textContent)).toEqual(["S", "K"]);
     expect(view.querySelector("svg.lucide-server-cog")).toBeNull();
-    // tinted from the app's own palette
-    for (const tile of tiles) expect(["blue", "purple", "teal", "orange", "pink", "green"]).toContain(tile.getAttribute("data-letter-tile"));
+    for (const tile of tiles) {
+      expect(tile.className).toContain("bg-raised");
+      expect(tile.className).toContain("text-ink-secondary");
+      expect(tile.getAttribute("style")).toBeNull();
+    }
+    expect(new Set(tiles.map((tile) => tile.className)).size).toBe(1);
   });
 
-  it("the same name always has the same tint, and the list is told apart", async () => {
-    const first = await marks([px({ id: "a", name: "Service Desk" })]);
-    const tint = first.querySelector<HTMLElement>("[data-letter-tile]")!.getAttribute("data-letter-tile");
-    const again = await marks([px({ id: "a", name: "Service Desk" })]);
-    expect(again.querySelector<HTMLElement>("[data-letter-tile]")!.getAttribute("data-letter-tile")).toBe(tint);
+  it("an item has no tint of its own: eight names, one look", async () => {
     const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"];
     const view = await marks(names.map((name, index) => px({ id: `p${index}`, name })));
-    const tints = new Set([...view.querySelectorAll<HTMLElement>("[data-letter-tile]")].map((tile) => tile.getAttribute("data-letter-tile")));
-    expect(tints.size).toBeGreaterThan(2);
+    const looks = new Set([...view.querySelectorAll<HTMLElement>("[data-letter-tile]")].map((tile) => `${tile.className}|${tile.getAttribute("style")}`));
+    expect(looks.size).toBe(1);
   });
 
   it("a product that carries its own icon shows it, not a tile", async () => {
     const view = await marks([px({ id: "a", name: "Service Desk", icon: { domain: "desk.example.com" } })]);
     expect(view.querySelector("[data-letter-tile]")).toBeNull();
     expect(view.querySelector("img")?.getAttribute("src")).toContain("desk.example.com");
+    // an image address the console serves is used as is: crisp at any size
+    const served = await marks([px({ id: "b", name: "Quoting", icon: { url: "https://cdn.example.test/quoting.svg" } })]);
+    expect(served.querySelector("[data-product-icon]")?.getAttribute("src")).toBe("https://cdn.example.test/quoting.svg");
+    expect(served.querySelector("[data-letter-tile]")).toBeNull();
   });
 
   it("a vendor takes the icon of one of its products when one has it, else its own initial", async () => {
     const withIcon = await marks([{ ...px({ id: "a", name: "Service Desk", icon: { domain: "desk.example.com" } }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }]);
     expect(withIcon.querySelector("[data-vendor] > div img")?.getAttribute("src")).toContain("desk.example.com");
+    // the vendor's own icon, when the console serves one, wins
+    const served = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }, { ...px({ id: "b", name: "Monitoring" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }]);
+    expect(served.querySelector("[data-vendor] > div [data-product-icon]")?.getAttribute("src")).toBe("https://cdn.example.test/harbor.svg");
     const without = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }]);
     expect(without.querySelector("[data-vendor] > div [data-letter-tile]")?.textContent).toBe("H");
   });

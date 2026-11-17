@@ -104,7 +104,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
       <PluginPageHeader title={product.name} trail={trail} onBack={onBack} named />
       <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-4 pb-8 pt-[34px] sm:px-[34px]" data-person-product-page={product.id}>
         <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
-          <ProductMark name={product.name} domain={product.icon?.domain} className="size-14 rounded-[14px]" />
+          <ProductMark name={product.name} icon={product.icon} className="size-14 rounded-[14px]" />
           <div className="min-w-0 flex-[1_1_220px] pl-0.5">
             <h2 className="truncate text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink" data-plugins-detail-name>{product.name}</h2>
           </div>

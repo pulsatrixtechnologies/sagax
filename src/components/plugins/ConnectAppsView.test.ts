@@ -18,7 +18,8 @@ import { buildPluginItems } from "@/lib/plugins-model";
 import { installedEntries, privateSkills } from "@/lib/installed-model";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { bringsLabel, InstalledView, type InstalledViewProps } from "./InstalledView";
-import { ConnectAppsView, SortControl, sortRows, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
+import { ConnectAppsSearchField } from "./ConnectAppsSearch";
+import { ConnectAppsView, DiscoverFilter, SortControl, sortRows, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
 import { accountConnectorRows, connectedAccountRows, connectorGroups, noticeAction, type HarnessConnectorGroup, type RegistryGrokAccount } from "./HarnessConnectorGroups";
 import type { HarnessAnswer } from "../PluginsPanel.tsx-parts/types";
 import { DiscoverView } from "./DiscoverView";
@@ -249,7 +250,7 @@ describe("the \"...\" menu of an entry", () => {
     expect(host.querySelector('[role="menu"]')).toBeNull();
     click(github.querySelector("[data-entry-menu]"));
     const actions = [...host.querySelectorAll("[data-entry-action]")].map((node) => [node.getAttribute("data-entry-action"), node.textContent]);
-    expect(actions).toEqual([["update", "Update"], ["bots", "For which bots"], ["remove", "Remove"]]);
+    expect(actions).toEqual([["update", "Update"], ["bots", "For which bots"], ["remove", "Uninstall"]]);
     click(host.querySelector('[data-entry-action="bots"]'));
     expect(bots).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[role="menu"]')).toBeNull();
@@ -262,7 +263,7 @@ describe("the \"...\" menu of an entry", () => {
     setLocale("fr");
     flushSync(() => root.render(createElement(ManageView, props({ entryActions: () => ({ update: noop, bots: noop, remove: noop }) }))));
     click(host.querySelector("[data-entry-menu]"));
-    expect([...host.querySelectorAll("[data-entry-action]")].map((node) => node.textContent)).toEqual(["Mettre à jour", "Pour quels bots", "Retirer"]);
+    expect([...host.querySelectorAll("[data-entry-action]")].map((node) => node.textContent)).toEqual(["Mettre à jour", "Pour quels bots", "Désinstaller"]);
     flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab: noop, refreshing: false, onRefresh: noop })));
     expect(host.querySelector("#plugins-title")?.textContent).toBe("Connecter des apps");
     expect([...host.querySelectorAll("[data-plugins-kind-tab]")].map((node) => node.textContent)).toEqual(["Skills", "Connecteurs", "Plugins"]);
@@ -547,7 +548,7 @@ describe("Connect Apps (once Capabilities, then Plugins), the engine accounts (o
     setLocale("fr");
     try {
       expect(t("connectApps.title")).toBe("Connecter des apps");
-      expect(t("connectApps.search.short")).toBe("Chercher");
+      expect(t("connectApps.search.short")).toBe("Rechercher");
       expect(connectAppsTabLabel("pages")).toBe("Pages");
     } finally {
       setLocale("en");
@@ -629,7 +630,7 @@ describe("#4453: Yours and Discover of one kind", () => {
     expect(names(view("skills"))).toEqual([]);
     expect(view("skills")).toContain("weekly-summary");
     expect(view("connectors")).not.toContain("weekly-summary");
-    expect(view("connectors")).toMatch(/data-installed-entry="account:claude:Gmail"[\s\S]*?data-row-scope=""[^>]*>Engine account<[\s\S]*?data-row-switch="locked"/);
+    expect(view("connectors")).toMatch(/data-installed-entry="account:claude:Gmail"[\s\S]*?data-row-state="ok"[\s\S]*?data-row-switch="locked"/);
     // the group's count at its right
     expect(view("connectors")).toMatch(/>Yours<[\s\S]*?data-section-count="2"/);
     // none of their own of a kind: the first block says so, with a way to Discover
@@ -743,7 +744,7 @@ describe("#4453 (2026-11-16): the title line never wraps; the search gives way",
     await width(900);
     expect(host.querySelector("[data-plugins-kind-row] [data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
     expect(host.querySelector("[data-plugins-search-toggle]")).toBeNull();
-    expect(host.querySelector("[data-plugins-kind-row]")?.className).not.toMatch(/\bflex-wrap\b/);
+    // the row wraps only when its controls cannot fit at all; the search gives way long before
     await width(500);
     expect(host.querySelector("[data-plugins-search]")).toBeNull();
     const toggle = host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!;
@@ -792,15 +793,15 @@ describe("#4453 (2026-11-16, the owner's references): Discover's cards, banner a
   }));
 
   it("draws cards in two columns: icon tile, name with the reviewed mark, two lines, where it comes from, the action at the top right", () => {
-    const html = discover();
-    expect(html).toContain("@container grid grid-cols-2");
-    const card = html.slice(html.indexOf('data-discover-card=""'));
+    const grid = discover({ items: buildPluginItems({ featured: Array.from({ length: 4 }, (_, index) => ({ id: `app${index}`, name: `App ${index}`, description: "d", url: `https://mcp${index}.example.net/mcp`, domain: `app${index}.example.net`, auth: index === 0 ? "none" : "oauth", category: "productivity" })) }) });
+    expect(grid).toContain("@container grid grid-cols-2");
+    const card = grid.slice(grid.indexOf('data-discover-card=""'));
     expect(card).toContain("data-card-verified");
     expect(card).toMatch(/data-card-meta[\s\S]*?Sagax catalog/);
     expect(card).toMatch(/data-card-action[\s\S]*?data-test-action="card"/);
     // the item that needs no sign-in carries the small outlined chip, an account one does not
-    expect(html).toMatch(/Linear[\s\S]*?data-card-chip[^>]*>No sign-in</);
-    expect(html.match(/data-card-chip/g)).toHaveLength(1);
+    expect(grid).toMatch(/App 0[\s\S]*?data-card-chip[^>]*>No sign-in</);
+    expect(grid.match(/data-card-chip/g)).toHaveLength(1);
   });
 
   it("an installed item shows Added with a check, then where it comes from, and a green check at the corner", () => {
@@ -813,18 +814,78 @@ describe("#4453 (2026-11-16, the owner's references): Discover's cards, banner a
     expect(html).toContain("data-card-installed");
   });
 
-  it("has one featured banner, from the first recommended item, with its labelled button; the shelf does not repeat it", () => {
+  it("has one featured block: the first curated pick's slide with its labelled button, its source line and its artwork", () => {
     const html = discover();
     expect(html).toContain('data-plugins-section="featured"');
-    const banner = html.slice(html.indexOf('data-plugins-section="featured"'), html.indexOf('data-plugins-section="recommended"'));
+    const banner = html.slice(html.indexOf('data-plugins-section="featured"'));
     expect(banner).toMatch(/From Sagax catalog/);
     expect(banner).toContain('data-test-action="banner"');
     expect(banner).toContain("data-featured-art");
-    const banners = (html.match(/data-featured-banner/g) ?? []).length;
-    expect(banners).toBe(1);
-    const featuredKey = html.match(/data-featured-banner="" data-plugin-row="([^"]+)"/)?.[1];
-    const shelf = html.slice(html.indexOf('data-plugins-section="recommended"'));
-    expect(shelf).not.toContain(`data-plugin-row="${featuredKey}"`);
+    expect((html.match(/data-featured-banner/g) ?? []).length).toBe(1);
+    // one slide visible at a time; the picks that are slides are not repeated on the shelf
+    expect((html.match(/data-featured-slide=/g) ?? []).length).toBe(1);
+    const slideKeys = [...html.matchAll(/data-featured-dot="(\d+)"/g)];
+    expect(slideKeys.length).toBeGreaterThan(1);
+  });
+
+  it("cycles: dots to jump, previous and next the keyboard reaches, paused on hover and focus, still under reduced motion", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const mountWith = async (motion: boolean) => {
+      vi.stubGlobal("matchMedia", () => ({ matches: !motion, addEventListener() {}, removeEventListener() {} }));
+      await act(async () => { root.render(createElement(DiscoverView, {
+        kind: "connectors", items: catalog, filter: "all", onFilter: noop, type: "any", onType: noop, sourceLabel: (source: string) => source, onOpenItem: noop, renderAction: () => null,
+      })); });
+    };
+    const shown = () => host.querySelector("[data-featured-slide]")?.getAttribute("data-featured-slide");
+    await mountWith(true);
+    const first = shown();
+    await act(async () => { vi.advanceTimersByTime(6100); });
+    expect(shown()).not.toBe(first);
+    // hover pauses it
+    const section = host.querySelector("[data-featured-banner]")!;
+    await act(async () => { section.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); section.dispatchEvent(new Event("mouseenter")); });
+    const paused = shown();
+    await act(async () => { vi.advanceTimersByTime(20_000); });
+    expect(shown()).toBe(paused);
+    await act(async () => { section.dispatchEvent(new Event("mouseleave")); });
+    // dots jump, previous and next step, both reachable buttons
+    await act(async () => { host.querySelector<HTMLButtonElement>('[data-featured-dot="0"]')!.click(); });
+    expect(shown()).toBe(first);
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-featured-next]")!.click(); });
+    expect(shown()).not.toBe(first);
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-featured-prev]")!.click(); });
+    expect(shown()).toBe(first);
+    expect(host.querySelector('[data-featured-dot="0"]')?.getAttribute("aria-current")).toBe("true");
+    expect(host.querySelector("[data-featured-prev]")?.getAttribute("aria-label")).toBe("Previous");
+    // reduced motion: it never moves by itself
+    await act(async () => root.unmount());
+    const root2 = createRoot(host);
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    await act(async () => { root2.render(createElement(DiscoverView, { kind: "connectors", items: catalog, filter: "all", onFilter: noop, type: "any", onType: noop, sourceLabel: (source: string) => source, onOpenItem: noop, renderAction: () => null })); });
+    const still = shown();
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(shown()).toBe(still);
+    await act(async () => root2.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("adds one slide per vendor the console offers, from the console's data: its name, its line, its artwork and a button to its products", () => {
+    const html = discover({ vendorSlides: [{ key: "vendor:harbor", consoleName: "Console \u00b7 Example Org", name: "Harbor Suite", line: "Service desk, monitoring and quoting", art: createElement("img", { "data-vendor-art": "", src: "https://cdn.example.test/harbor.svg" }), onGo: noop }] });
+    expect(html).toContain('data-featured-dot="3"');
+    expect((html.match(/data-featured-dot=/g) ?? []).length).toBe(4);
+    // with nothing curated to show first, the vendor's slide stands alone
+    const only = discover({ items: [], owned: ["Linear", "Slack", "Stripe"], vendorSlides: [{ key: "vendor:harbor", consoleName: "Console \u00b7 Example Org", name: "Harbor Suite", line: "Service desk", art: createElement("img", { "data-vendor-art": "" }), onGo: noop }] });
+    expect(only).toContain('data-featured-slide="vendor:harbor"');
+    expect(only).toMatch(/From Console · Example Org/);
+    expect(only).toContain("Harbor Suite");
+    expect(only).toContain('data-featured-vendor-go="vendor:harbor"');
+    expect(only).toContain("data-vendor-art");
+    expect(only).not.toContain("data-featured-dot");
   });
 
   it("has no banner and no section when there is nothing to recommend", () => {
@@ -897,6 +958,83 @@ describe("#4453: the sort button", () => {
     expect(host.querySelector('[data-plugins-sort-option="name"]')?.getAttribute("aria-checked")).toBe("true");
     await act(async () => { host.querySelector<HTMLButtonElement>('[data-plugins-sort-option="default"]')!.click(); });
     expect(onSort).toHaveBeenCalledWith("default");
+    await act(async () => root.unmount());
+    host.remove();
+  });
+});
+
+describe("#4453: filter and sort live inside the search field; the kinds and the switch are the shared controls", () => {
+  const mountView = async (extra: Record<string, unknown> = {}) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const onTab = vi.fn();
+    const onKind = vi.fn();
+    await act(async () => {
+      root.render(createElement(ConnectAppsView, {
+        tab: "discover", onTab, onKind, kind: "connectors", refreshing: false, onRefresh: noop, installed: "I", discover: "D",
+        search: createElement(ConnectAppsSearchField, { query: "", onQuery: noop, groups: [], opened: new Set<never>(), active: -1, onActive: noop, onOpen: noop }),
+        filterControl: createElement("button", { "data-test-filter": "", "data-plugins-filter-button": "" }, "F"),
+        sortControl: createElement("button", { "data-test-sort": "", "data-plugins-sort-button": "" }, "S"),
+        ...extra,
+      }));
+    });
+    return { host, root, onTab, onKind };
+  };
+
+  it("sit at the field's right end, after the text, behind a thin separator, in that keyboard order", async () => {
+    const { host, root } = await mountView();
+    const box = host.querySelector("[data-plugins-search-box]")!;
+    const controls = box.querySelector("[data-plugins-search-controls]")!;
+    expect(controls).not.toBeNull();
+    expect(controls.className).toMatch(/border-l/);
+    const order = [...box.querySelectorAll("input, button")].map((node) => node.matches("input") ? "text" : node.hasAttribute("data-test-filter") ? "filter" : node.hasAttribute("data-test-sort") ? "sort" : "other");
+    expect(order).toEqual(["text", "filter", "sort"]);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("show the filter on Discover only; the sort on both", async () => {
+    const { host, root } = await mountView({ tab: "installed" });
+    expect(host.querySelector("[data-test-filter]")).toBeNull();
+    expect(host.querySelector("[data-test-sort]")).not.toBeNull();
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("the kinds are the shared PillTabs: roving tab stop, aria-controls, arrows move the kind", async () => {
+    const { host, root, onKind } = await mountView();
+    const tabs = [...host.querySelectorAll<HTMLElement>('[data-plugins-kinds] [role="tab"]')];
+    expect(tabs.map((tab) => tab.getAttribute("tabindex"))).toEqual(["-1", "0", "-1"]);
+    expect(tabs[0]!.getAttribute("aria-controls")).toBe("connect-apps-kind-panel-skills");
+    await act(async () => { host.querySelector("[data-plugins-kinds]")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
+    expect(onKind).toHaveBeenCalledWith("plugins");
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("Yours | Discover is the shared segmented control, with arrows on the radio group", async () => {
+    const { host, root, onTab } = await mountView({ tab: "installed" });
+    const group = host.querySelector("[data-plugins-views]")!;
+    expect(group.className).toContain("rounded-full border");
+    expect([...group.querySelectorAll("[role=radio]")].map((node) => node.getAttribute("tabindex"))).toEqual(["0", "-1"]);
+    await act(async () => { group.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
+    expect(onTab).toHaveBeenCalledWith("discover");
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it("show a small dot on a filter or a sort that is not the default, and none on the default", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => { root.render(createElement("div", null,
+      createElement(DiscoverFilter, { chips: ["all", "design"], filter: "design", onPick: noop, label: (chip: string) => chip }),
+      createElement(SortControl, { sort: "default", onSort: noop, options: ["default", "name"] }))); });
+    expect(host.querySelector("[data-plugins-filter-button] [data-plugins-active-dot]")).not.toBeNull();
+    expect(host.querySelector("[data-plugins-sort-button] [data-plugins-active-dot]")).toBeNull();
+    await act(async () => { root.render(createElement(SortControl, { sort: "name", onSort: noop, options: ["default", "name"] })); });
+    expect(host.querySelector("[data-plugins-sort-button] [data-plugins-active-dot]")).not.toBeNull();
     await act(async () => root.unmount());
     host.remove();
   });

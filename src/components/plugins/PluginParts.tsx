@@ -1,7 +1,7 @@
 // Small pieces the three Plugins views share: the icon, the status word and
 // the page header with its back arrow.
 import { useState, type ReactNode } from "react";
-import { BookOpen, Check, ChevronLeft, Puzzle, ServerCog } from "lucide-react";
+import { BookOpen, Check, ChevronLeft, Puzzle, ServerCog, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -9,7 +9,7 @@ import type { LocaleKey } from "@/locales";
 import { WHOP_KEY, type PluginItem, type PluginStatus } from "@/lib/plugins-model";
 import type { Crumb } from "../Breadcrumb";
 import { WhopIcon } from "../WhopIcon";
-import { MASCOT_COLOR_HEX, type MascotColorName } from "../../../shared/mascot-colors";
+import { builtinGlyph } from "@/lib/builtin-icons";
 
 /** A connectable app's catalog card, as the Connect apps views read it. */
 export interface ToolkitCard {
@@ -23,7 +23,7 @@ export interface ToolkitCard {
 }
 
 /** A toolkit's mark: official logo, else favicon by domain, else monogram. */
-export function ServiceIcon({ card, className = "size-11" }: { card: Pick<ToolkitCard, "logo" | "domain" | "label">; className?: string }) {
+export function ServiceIcon({ card, className = "size-11", glyph, faviconSize = 64 }: { /** the favicon source size: a banner asks for the largest, so it stays crisp */ faviconSize?: number; card: Pick<ToolkitCard, "logo" | "domain" | "label">; className?: string; /** what a built-in item shows when its site mark is missing or cannot load */ glyph?: LucideIcon }) {
   // 0 = official logo, 1 = favicon by domain, 2 = monogram
   const [stage, setStage] = useState(card.logo ? 0 : card.domain ? 1 : 2);
   if (stage === 0 && card.logo) {
@@ -40,7 +40,7 @@ export function ServiceIcon({ card, className = "size-11" }: { card: Pick<Toolki
   if (stage === 1 && card.domain) {
     return (
       <img
-        src={`https://www.google.com/s2/favicons?domain=${card.domain}&sz=64`}
+        src={`https://www.google.com/s2/favicons?domain=${card.domain}&sz=${faviconSize}`}
         alt=""
         loading="lazy"
         className={cn("rounded-xl object-contain", className)}
@@ -48,38 +48,35 @@ export function ServiceIcon({ card, className = "size-11" }: { card: Pick<Toolki
       />
     );
   }
-  return (
-    <div className={cn("flex items-center justify-center rounded-xl bg-raised text-[15px] font-semibold text-ink-secondary", className)}>
-      {card.label.slice(0, 1).toUpperCase()}
-    </div>
-  );
+  return glyph ? <GlyphTile glyph={glyph} className={className} /> : <LetterTile name={card.label} className={className} />;
 }
 
-/** The colours a lettered tile picks from: the app's own bot palette. */
-const TILE_COLORS = ["blue", "purple", "teal", "orange", "pink", "green"] as MascotColorName[];
-
-/** An item with no mark of its own: its initial on a tile tinted from the
- * app's bot palette (the same name always has the same tint), so a list of
- * them is told apart at a glance. */
+/** An item with no mark at all: ONE neutral tile, the app's quiet surface with
+ * a grey letter, identical for every item (never a coloured letter). */
 export function LetterTile({ name, className = "size-10" }: { name: string; className?: string }) {
-  let hash = 0;
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  const colorName = TILE_COLORS[hash % TILE_COLORS.length] ?? "blue";
-  const color = MASCOT_COLOR_HEX[colorName] ?? "#888888";
   return (
-    <div data-letter-tile={colorName} aria-hidden="true" className={cn("flex shrink-0 items-center justify-center rounded-[10px] text-[14px] font-semibold", className)}
-      style={{ backgroundColor: `color-mix(in srgb, ${color} 22%, transparent)`, color: `color-mix(in srgb, ${color} 80%, var(--color-ink, #888))` }}>
+    <div data-letter-tile="" aria-hidden="true" className={cn("flex shrink-0 items-center justify-center rounded-[10px] bg-raised text-[14px] font-semibold text-ink-secondary", className)}>
       {(name.trim().slice(0, 1) || "?").toUpperCase()}
     </div>
   );
 }
 
-export function PluginIcon({ item, className = "size-10" }: { item: Pick<PluginItem, "kind" | "name" | "logo" | "domain"> & { key?: string }; className?: string }) {
+/** A shipped glyph on the quiet tile (a built-in item with no site mark). */
+export function GlyphTile({ glyph: Glyph, className = "size-10" }: { glyph: LucideIcon; className?: string }) {
+  return (
+    <div data-glyph-tile="" className={cn("flex shrink-0 items-center justify-center rounded-xl bg-raised text-ink-secondary", className)}>
+      <Glyph size={20} strokeWidth={1.75} aria-hidden="true" />
+    </div>
+  );
+}
+
+export function PluginIcon({ item, className = "size-10", faviconSize }: { faviconSize?: number; item: Pick<PluginItem, "kind" | "name" | "logo" | "domain"> & { key?: string }; className?: string }) {
   if (item.key === WHOP_KEY) {
     return <WhopIcon className={className} />;
   }
+  const glyph = builtinGlyph(item);
   if (item.kind === "skill") {
-    return (
+    return glyph ? <GlyphTile glyph={glyph} className={className} /> : (
       <div className={cn("flex shrink-0 items-center justify-center rounded-xl bg-raised text-ink-secondary", className)}>
         <BookOpen size={18} aria-hidden="true" />
       </div>
@@ -88,6 +85,7 @@ export function PluginIcon({ item, className = "size-10" }: { item: Pick<PluginI
   // a plugin with a real mark (its declared icon, its site, the app it is
   // named for: pluginMark) shows it as an app does; the puzzle is the last resort
   if (item.kind === "plugin" && !item.logo && !item.domain) {
+    if (glyph) return <GlyphTile glyph={glyph} className={className} />;
     return (
       <div className={cn("flex shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent-text", className)}>
         <Puzzle size={18} aria-hidden="true" />
@@ -95,13 +93,14 @@ export function PluginIcon({ item, className = "size-10" }: { item: Pick<PluginI
     );
   }
   if (item.kind === "mcp" && !item.domain && !item.logo) {
+    if (glyph) return <GlyphTile glyph={glyph} className={className} />;
     return (
       <div className={cn("flex shrink-0 items-center justify-center rounded-xl bg-raised text-ink-secondary", className)}>
         <ServerCog size={18} aria-hidden="true" />
       </div>
     );
   }
-  return <ServiceIcon key={item.logo ?? item.domain ?? ""} card={{ logo: item.logo ?? null, domain: item.domain ?? null, label: item.name }} className={cn("shrink-0", className)} />;
+  return <ServiceIcon key={item.logo ?? item.domain ?? ""} card={{ logo: item.logo ?? null, domain: item.domain ?? null, label: item.name }} glyph={glyph} faviconSize={faviconSize} className={cn("shrink-0", className)} />;
 }
 
 const STATUS_KEY: Record<PluginStatus, LocaleKey> = {

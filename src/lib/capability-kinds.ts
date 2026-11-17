@@ -89,19 +89,22 @@ export interface ProductVendor<P> {
   key: string;
   name: string;
   products: P[];
+  /** the mark and the larger logo the console serves for the vendor, when it does */
+  icon?: { domain?: string; url?: string };
+  logo?: string;
 }
 
 /** Groups products by the vendor the console names (`group`), in the order
  * the first product of each vendor appears. A product with no vendor stands
  * alone, so nothing is guessed from a name. */
-export function groupByVendor<P extends { id: string; name: string; group?: { id: string; name: string } }>(products: readonly P[]): Array<ProductVendor<P>> {
+export function groupByVendor<P extends { id: string; name: string; group?: { id: string; name: string; icon?: { domain?: string; url?: string }; logo?: string } }>(products: readonly P[]): Array<ProductVendor<P>> {
   const vendors: Array<ProductVendor<P>> = [];
   const byKey = new Map<string, ProductVendor<P>>();
   for (const product of products) {
     const key = product.group ? `vendor:${product.group.id}` : `product:${product.id}`;
     let vendor = byKey.get(key);
     if (!vendor) {
-      vendor = { key, name: product.group?.name ?? product.name, products: [] };
+      vendor = { key, name: product.group?.name ?? product.name, products: [], ...(product.group?.icon ? { icon: product.group.icon } : {}), ...(product.group?.logo ? { logo: product.group.logo } : {}) };
       byKey.set(key, vendor);
       vendors.push(vendor);
     }

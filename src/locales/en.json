@@ -15114,7 +15114,6 @@
   "connectApps.choose.save": "Save",
   "connectApps.install": "Install",
   "connectApps.install.allBots": "For all my bots",
-  "connectApps.install.oneBot": "For one bot...",
   "connectApps.install.aria": "Install {name}",
   "connectApps.titleForBot": "Connect Apps · {name}",
   "connectApps.filter.button": "Filter",
@@ -15122,7 +15121,6 @@
   "connectApps.group.added": "Added by you",
   "connectApps.vendor.productOne": "1 product",
   "connectApps.vendor.productMany": "{count} products",
-  "connectApps.vendor.on": "{count} on",
   "connectApps.vendor.fold": "Fold {name}",
   "connectApps.vendor.unfold": "Unfold {name}",
   "connectApps.refresh": "Refresh",
@@ -15143,5 +15141,16 @@
   "connectApps.first.skills": "Add your first skill",
   "connectApps.first.connectors": "Add your first connector",
   "connectApps.first.plugins": "Add your first plugin",
-  "connectApps.first.line": "Browse Discover to find one."
+  "connectApps.first.line": "Browse Discover to find one.",
+  "connectApps.featured.fromConsole": "From {console}",
+  "connectApps.featured.seeProducts": "See the products",
+  "connectApps.featured.aria": "Featured",
+  "connectApps.featured.dots": "Choose a slide",
+  "connectApps.featured.goTo": "Show {name}",
+  "connectApps.featured.prev": "Previous",
+  "connectApps.featured.next": "Next",
+  "connectApps.vendor.onOne": "1 on",
+  "connectApps.vendor.onMany": "{count} on",
+  "connectApps.choose.forChosen": "For the bots I choose...",
+  "connectApps.choose.install": "Install"
 }

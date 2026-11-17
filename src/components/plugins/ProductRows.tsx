@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn";
 import { groupByVendor, whereLabel, type ProductVendor } from "@/lib/capability-kinds";
 import { botProductEnabled } from "../../../shared/bot-products";
 import { ITEM_ROW_ATTR, ItemTrailer, type ItemMenuActions } from "./ItemTrailer";
+import type { RowState } from "./StateIcon";
 import { LetterTile, PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
@@ -55,11 +56,25 @@ export function ProductStateLabel({ product, wrap = false }: { product: Pick<Per
   );
 }
 
-/** A product's (or a vendor's) mark: its own icon when the console sends
- * one, else the app's lettered tile. */
-export function ProductMark({ name, domain, className }: { name: string; domain?: string; className: string }) {
-  if (domain) return <PluginIcon item={{ key: `perspicax-product:${name}`, kind: "app", name, domain }} className={cn("shrink-0 rounded-[10px]", className)} />;
+/** A product's (or a vendor's) mark: the icon the console serves (an image
+ * address, crisp at any size), else its site's mark, else ONE neutral tile.
+ * Never a coloured letter. */
+export function ProductMark({ name, icon, className }: { name: string; icon?: { domain?: string; url?: string }; className: string }) {
+  if (icon?.url) return <img src={icon.url} alt="" data-product-icon="" className={cn("shrink-0 rounded-[10px] object-contain", className)} />;
+  if (icon?.domain) return <PluginIcon item={{ key: `perspicax-product:${name}`, kind: "app", name, domain: icon.domain }} className={cn("shrink-0 rounded-[10px]", className)} />;
   return <LetterTile name={name} className={className} />;
+}
+
+/** A vendor's artwork at the banner's size: the largest image the console
+ * serves (a logo, else the icon), crisp as an image; else its site's mark at
+ * the largest size; else the one neutral tile. */
+export function VendorArt({ vendor }: { vendor: ProductVendor<PersonProduct> }) {
+  const first = vendor.products.find((product) => product.logo || product.icon);
+  const url = vendor.logo ?? vendor.icon?.url ?? first?.logo ?? first?.icon?.url;
+  if (url) return <img src={url} alt="" data-vendor-art="" className="size-20 object-contain" />;
+  const domain = vendor.icon?.domain ?? first?.icon?.domain;
+  if (domain) return <PluginIcon item={{ key: `perspicax-vendor:${vendor.key}`, kind: "app", name: vendor.name, domain }} faviconSize={256} className="size-20 rounded-2xl" />;
+  return <LetterTile name={vendor.name} className="size-20 rounded-2xl text-[28px]" />;
 }
 
 /** The bots a product row reads and writes: the person's own, with each
@@ -86,13 +101,22 @@ export interface ProductRowsContext {
 const reachedBots = (ctx: ProductRowsContext, ids: readonly string[]) =>
   ctx.bots.filter((bot) => ids.length > 0 && ids.every((id) => botProductEnabled(bot, id)));
 
+/** A product's state as one icon: connected is a check, a key the person can
+ * fix is a warning that opens what fixes it, an administrator's step is a
+ * grey info. The sentence is the tooltip. */
+export function productRowState(product: Pick<PersonProduct, "state" | "stateCode">, onFix?: () => void): RowState {
+  const tone = productStateTone(product.state);
+  const text = productStateLabel(product.state);
+  return tone === "connected" ? { tone: "ok", text } : tone === "attention" ? { tone: "fix", text, onFix } : { tone: "info", text };
+}
+
 /** The control at a product's (or a vendor's) right: where it is on, its
  * switch for every bot (or the one bot), the "..." menu, the Choose the bots
  * checklist. */
-function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly string[], extra: ItemMenuActions) {
+function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly string[], extra: ItemMenuActions, state?: RowState) {
   if (ctx.forBot) {
     const on = ids.every((id) => botProductEnabled(ctx.forBot, id));
-    return <ItemTrailer name={name} where="bot" on={on} onToggle={ctx.lockedReason ? undefined : (next) => ctx.setProducts([ctx.forBot!.id], ids, next)} lockedReason={ctx.lockedReason} actions={extra} />;
+    return <ItemTrailer state={state} name={name} where="bot" on={on} onToggle={ctx.lockedReason ? undefined : (next) => ctx.setProducts([ctx.forBot!.id], ids, next)} lockedReason={ctx.lockedReason} actions={extra} />;
   }
   const reached = reachedBots(ctx, ids);
   const where = whereLabel(reached.length, ctx.bots.length);
@@ -112,7 +136,7 @@ function productTrailer(ctx: ProductRowsContext, name: string, ids: readonly str
     } : {}),
     ...extra,
   };
-  return <ItemTrailer name={name} where={where} whereKind={where.kind} on={where.kind === "all"} onToggle={(next) => ctx.setProducts(ctx.bots.map((bot) => bot.id), ids, next)} actions={actions} />;
+  return <ItemTrailer state={state} name={name} where={where} whereKind={where.kind} on={where.kind === "all"} onToggle={(next) => ctx.setProducts(ctx.bots.map((bot) => bot.id), ids, next)} actions={actions} />;
 }
 
 /** The worst state of a vendor's products, for its one line. */
@@ -131,17 +155,14 @@ function ProductRow({ product, ctx, nested = false }: { product: PersonProduct; 
     <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       <button type="button" onClick={() => ctx.onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
         aria-label={t("connectApps.openAria", { name: product.name })}>
-        <ProductMark name={product.name} domain={product.icon?.domain} className={nested ? "size-8" : "size-10"} />
+        <ProductMark name={product.name} icon={product.icon} className={nested ? "size-8" : "size-10"} />
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1" data-person-product-line>
-          <span className="min-w-0 max-w-full flex-[1_1_16rem]">
-            <span className={PLUGINS.rowName}>{product.name}</span>
-            {sub && <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={sub}>{sub}</span>}
-          </span>
-          <ProductStateLabel product={product} wrap />
+        <span className="min-w-0 flex-1" data-person-product-line>
+          <span className={PLUGINS.rowName}>{product.name}</span>
+          {sub && <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={sub}>{sub}</span>}
         </span>
       </button>
-      {productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) })}
+      {productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) }, productRowState(product, () => ctx.onOpen(product)))}
     </div>
   );
 }
@@ -153,26 +174,25 @@ function VendorRow({ vendor, ctx }: { vendor: ProductVendor<PersonProduct>; ctx:
   const ids = vendor.products.map((product) => product.id);
   const worst = worstState(vendor.products);
   const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
-  const sub = [vendor.products.length === 1 ? t("connectApps.vendor.productOne") : t("connectApps.vendor.productMany", { count: vendor.products.length }), t("connectApps.vendor.on", { count: on })].join(" \u00b7 ");
+  const sub = [vendor.products.length === 1 ? t("connectApps.vendor.productOne") : t("connectApps.vendor.productMany", { count: vendor.products.length }), (on === 1 ? t("connectApps.vendor.onOne") : t("connectApps.vendor.onMany", { count: on }))].join(" \u00b7 ");
   return (
     <div data-vendor={vendor.key} data-vendor-open={open ? "" : undefined}>
       <div className="group flex items-center gap-3 py-3" {...{ [ITEM_ROW_ATTR]: "" }}>
         <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} data-vendor-toggle=""
           aria-label={t(open ? "connectApps.vendor.fold" : "connectApps.vendor.unfold", { name: vendor.name })}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
-          <ProductMark name={vendor.name} domain={vendor.products.find((product) => product.icon)?.icon?.domain} className="size-10" />
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="min-w-0 max-w-full flex-[1_0_auto]">
+          <ProductMark name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-10" />
+          <span className="flex min-w-0 flex-1 items-center gap-x-3">
+            <span className="min-w-0 max-w-full flex-1">
               <span className={cn(PLUGINS.rowName, "flex items-center gap-1")}>
                 <span className="truncate">{vendor.name}</span>
                 <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform duration-100 motion-reduce:transition-none", open && "rotate-90")} />
               </span>
               <span className={PLUGINS.rowSub}>{sub}</span>
             </span>
-            <ProductStateLabel product={worst} wrap />
           </span>
         </button>
-        {productTrailer(ctx, vendor.name, ids, {})}
+        {productTrailer(ctx, vendor.name, ids, {}, productRowState(worst, () => setOpen(true)))}
       </div>
       {open && (
         <div className="mb-1" data-vendor-products="">

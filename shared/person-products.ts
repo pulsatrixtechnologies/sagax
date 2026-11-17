@@ -87,7 +87,10 @@ export interface ProductRole {
 export interface PersonProduct {
   id: string;
   name: string;
-  icon?: { domain: string };
+  /** the mark the console serves (Perspicax #2071): its site, and an image address */
+  icon?: { domain?: string; url?: string };
+  /** a larger image, when the console serves one (the banner's artwork) */
+  logo?: string;
   state: ProductState;
   /** Perspicax's stable reason code (a tooltip only) */
   stateCode?: string;
@@ -102,7 +105,7 @@ export interface PersonProduct {
   consoleUrl?: string;
   /** the vendor the console files it under (#4453): products of one vendor
    * sit under one row; absent, the product stands alone */
-  group?: { id: string; name: string };
+  group?: { id: string; name: string; icon?: { domain?: string; url?: string }; logo?: string };
   /** what it does, one line */
   description?: string;
   /** the endpoints it serves, by name, for one grey line */
@@ -121,6 +124,17 @@ const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const text = (value: unknown, max = 2_048): string | undefined =>
   typeof value === "string" && value.trim() && value.length <= max ? value.trim() : undefined;
+/** An image address the console serves: https, or an inline image (never a script address). */
+const imageUrl = (value: unknown): string | undefined => {
+  const raw = text(value, 64 * 1024);
+  return raw && (/^https:\/\//i.test(raw) || /^data:image\/(?:svg\+xml|png|webp|jpeg)[;,]/i.test(raw)) ? raw : undefined;
+};
+const parseIcon = (value: unknown): { domain?: string; url?: string } | undefined => {
+  const icon = record(value);
+  const domain = text(icon?.domain, 253);
+  const url = imageUrl(icon?.url);
+  return domain || url ? { ...(domain ? { domain } : {}), ...(url ? { url } : {}) } : undefined;
+};
 
 function parseTest(raw: unknown): ProductKeyTest | undefined {
   const test = record(raw);
@@ -201,7 +215,8 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
   const state: ProductState = (PRODUCT_STATES as readonly string[]).includes(product.state as string) ? product.state as KnownProductState : "unknown";
   const stateCode = text(product.reason_code, 128);
   const address = text(product.base_url);
-  const domain = text(record(product.icon)?.domain, 253);
+  const icon = parseIcon(product.icon);
+  const logo = imageUrl(product.logo);
   const roles = Array.isArray(product.profiles)
     ? product.profiles.flatMap((entry): ProductRole[] => {
       const profile = record(entry);
@@ -226,10 +241,11 @@ export function parsePersonProduct(raw: unknown): PersonProduct | null {
     : [];
   return {
     id, name, state, roles, actions,
-    ...(groupId && groupName ? { group: { id: groupId, name: groupName } } : {}),
+    ...(groupId && groupName ? { group: { id: groupId, name: groupName, ...(parseIcon(groupRaw?.icon) ? { icon: parseIcon(groupRaw?.icon) } : {}), ...(imageUrl(groupRaw?.logo) ? { logo: imageUrl(groupRaw?.logo) } : {}) } } : {}),
     ...(description ? { description } : {}),
     ...(endpoints.length > 0 ? { endpoints } : {}),
-    ...(domain ? { icon: { domain } } : {}),
+    ...(icon ? { icon } : {}),
+    ...(logo ? { logo } : {}),
     ...(stateCode ? { stateCode } : {}),
     ...(address ? { address } : {}),
     ...(key ? { key } : {}),

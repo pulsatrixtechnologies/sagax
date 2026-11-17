@@ -155,10 +155,11 @@ describe("View all and the breadcrumb", () => {
     });
     const action = (item: { action: string | null }) => (item.action ? createElement("button", { type: "button" }, "Connect") : null);
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onType, renderAction: action }))));
-    // the first pick is the one featured banner, the shelf holds the other five: six in all
+    // the shelf previews six picks: the first three are the slides of the featured block, the other three its cards
     expect(host.querySelector("[data-featured-banner]")).not.toBeNull();
-    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(5);
-    expect(host.querySelector('[data-plugins-section="recommended"] [data-section-count]')?.getAttribute("data-section-count")).toBe("7");
+    expect(host.querySelectorAll("[data-featured-dot]")).toHaveLength(3);
+    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(3);
+    expect(host.querySelector('[data-plugins-section="recommended"] [data-section-count]')?.getAttribute("data-section-count")).toBe("5");
     const viewAll = host.querySelector("[data-plugins-view-all=\"recommended\"]");
     expect(viewAll).not.toBeNull();
     click(viewAll);

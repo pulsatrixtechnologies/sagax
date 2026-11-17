@@ -246,10 +246,9 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
               <span className="block truncate text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>
               <span className="mt-px block truncate text-[12px] leading-4 text-ink-secondary" title={line} data-capability-origin={origin ? "" : undefined}>{line}</span>
             </span>
-            {tone && !required && <span className={cn("shrink-0 text-[12px] leading-4", tone === "good" ? "text-success" : tone === "warn" ? "text-warning" : "text-ink-secondary")} data-capability-state-chip="" title={reason ?? undefined}>{stateWord(item.state)}</span>}
           </button>
           {actions}
-          <ItemTrailer name={name} where={scopeWord(item.scope)} on={required ? undefined : switchable || lockedReason ? item.enabled : undefined}
+          <ItemTrailer state={required || !tone ? null : { tone: tone === "good" ? "ok" : tone === "warn" ? "fix" : "info", text: reason ? `${stateWord(item.state)} \u00b7 ${reason}` : stateWord(item.state), onFix: onExpand }} name={name} where={scopeWord(item.scope)} on={required ? undefined : switchable || lockedReason ? item.enabled : undefined}
             onToggle={switchable && !busy ? onToggle : undefined} busy={busy || locked && switchable} lockedReason={lockedReason} actions={menu} />
         </div>
         {item.supersededBy && <p data-capability-superseded="" className="pb-2.5 pl-[52px] text-[12px] leading-4 text-ink-secondary">{reason}</p>}

@@ -17,8 +17,8 @@ import {
 } from "@/lib/my-connections";
 import { PersonalImportForm, PersonalServerForm, stateLabel, useMyConnections } from "../settings/MyConnectionsSettings";
 import { ITEM_ROW_ATTR, ItemTrailer } from "./ItemTrailer";
+import { statusState } from "./StateIcon";
 import type { EntryActions } from "./InstalledView";
-import { PluginStatusLabel } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
 type Form = { kind: "add" } | { kind: "import" } | { kind: "edit"; name: string } | null;
@@ -98,12 +98,12 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
               </span>
               {server.kind === "remote" && server.authError && <span className="block truncate text-[12px] leading-4 text-danger">{server.authError}</span>}
             </span>
-            {!(server.enabled && waitsForSignIn(server)) && <PluginStatusLabel status={status} className="text-[12px] font-normal" />}
+            
           </button>
           {server.enabled && waitsForSignIn(server) && (
             <button type="button" className="ui-button shrink-0" data-personal-sign-in={server.name} disabled={busy !== null} onClick={() => void signIn(server.name)}>{t("myConnections.servers.signIn")}</button>
           )}
-          <ItemTrailer name={server.name} where={server.enabled ? { kind: "all" } : { kind: "none" }} whereKind={server.enabled ? "all" : "none"} on={server.enabled} busy={busy !== null}
+          <ItemTrailer state={server.enabled && waitsForSignIn(server) ? null : statusState(status, () => setForm({ kind: "edit", name: server.name }))} name={server.name} where={server.enabled ? { kind: "all" } : { kind: "none" }} whereKind={server.enabled ? "all" : "none"} on={server.enabled} busy={busy !== null}
             onToggle={(next) => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, next))}
             actions={{ allBots: () => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, true)), offEverywhere: () => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, false)), links: actions.links, remove: actions.remove }} />
         </div>

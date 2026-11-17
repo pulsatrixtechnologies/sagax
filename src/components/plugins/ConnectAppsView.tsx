@@ -1,11 +1,11 @@
-// Connect Apps (#2104, the reference's look; #4453, JC 2026-11-16: "to be
+// Connect Apps (#2104, the reference's look; #4453, a person asking "to be
 // able to see what are skills, connectors, plugins"). Three kind tabs
 // (Skills, Connectors, Plugins), each with Yours (what is here, in the chosen
 // scope) and Discover (what can be added); Bot templates, Published pages and
 // Sources under the title bar's "...". A page opened from a view (a plugin, a
 // skill, a custom connector) takes the whole pane under its own bar. The
 // shared row parts (pills, section titles, PluginRow) live here too.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { ArrowUpDown, BadgeCheck, Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -24,6 +24,8 @@ import { CONNECT_APPS_KINDS, type ConnectAppsKind } from "@/lib/capability-kinds
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look";
 import { BackButton } from "../Breadcrumb";
+import { PillTabs } from "../PillTabs";
+import { SEGMENT_GROUP, segmentOptionClass } from "./ScopeToggle";
 import { ConnectedMark, PluginIcon, PluginStatusLabel } from "./PluginParts";
 
 export { ConnectedMark };
@@ -140,30 +142,14 @@ export function connectAppsTabLabel(tab: ConnectAppsTab): string {
   return t(TAB_KEY[tab]);
 }
 
-/** A kind tab (#4453, the owner's layout): plain text, the chosen one a
- * filled rounded pill; the reference's tab metrics (13px, 10px side padding),
- * 32px high like every element of the row. */
-export function kindTabClass(active: boolean): string {
-  return cn(
-    "inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[13px] font-medium leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
-    active ? "bg-ink/[0.12] text-ink" : "text-ink-secondary hover:bg-ink/[0.05] hover:text-ink",
-  );
-}
-
-/** Yours | Discover: a rounded container holding the two, the chosen one a
- * filled pill inside it. */
-export const SEGMENT_TRACK = "flex h-8 w-fit items-center gap-0.5 rounded-full bg-ink/[0.06] p-0.5";
-export function segmentTrackOption(active: boolean): string {
-  return cn(
-    "flex h-7 min-w-0 items-center rounded-full px-3 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
-    active ? "bg-ink/[0.14] font-medium text-ink" : "text-ink-secondary hover:text-ink",
-  );
-}
-
 /** Below this width of the control row the search is an icon that opens. */
 export const SEARCH_ICON_BELOW = 560;
 /** The narrowest the search field is allowed to be before it becomes an icon. */
-export const SEARCH_MIN = 120;
+export const SEARCH_MIN = 150;
+
+/** The filter and sort buttons live inside the search field at its right end:
+ * quiet icon buttons with no round background of their own. */
+const FIELD_ICON_BUTTON = "relative inline-flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none";
 
 export interface ConnectAppsViewProps {
   tab: ConnectAppsTab;
@@ -236,7 +222,7 @@ const MORE_VIEWS: ReadonlyArray<{ id: Extract<ConnectAppsTab, "bots" | "pages" |
   { id: "sources", key: "connectApps.manage.tab.sources", icon: <Library size={14} aria-hidden="true" /> },
 ];
 
-/** Connect Apps (#4453, the reference's Customize, JC 2026-11-16): the title
+/** Connect Apps (#4453, the reference's Customize): the title
  * and "..." (Bot templates, Published pages, Sources); the three kind tabs
  * (Skills, Connectors, Plugins) with their counts, the one search and the
  * one "+ Add"; Yours or Discover with the refresh, and no scope (it is
@@ -261,7 +247,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
       // the search shrinks first; under SEARCH_MIN it is an icon that opens. The room it has is the
       // row's width less the kinds, the switch, the other buttons and the gaps (never its own state)
       const px = (selector: string) => Array.from(head.querySelectorAll<HTMLElement>(selector));
-      const others = px("[data-plugins-actions] > :not([data-plugins-search-slot]):not([data-plugins-search-toggle])");
+      const others = px("[data-plugins-actions] > :not([data-plugins-search-slot]):not([data-plugins-search-toggle]):not([data-plugins-search-controls])");
       const fixed = px("[data-plugins-kinds], [data-plugins-views]").reduce((sum, node) => sum + node.offsetWidth, 0)
         + others.reduce((sum, node) => sum + node.offsetWidth, 0);
       // no layout to measure (a test renderer): the width alone decides
@@ -289,6 +275,17 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
 
   if (shown === "installed" || shown === "discover") {
     const moreViews = MORE_VIEWS.filter((view) => tabs.includes(view.id));
+    // the filter (Discover) and the sort, after the text, inside the field (a thin separator before them)
+    const controls = (filterControl || sortControl) ? (
+      <span className="ml-auto flex shrink-0 items-center gap-0.5 border-l border-ink/10 pl-1" data-plugins-search-controls="">
+        {shown === "discover" && filterControl}
+        {sortControl}
+      </span>
+    ) : null;
+    const cloned = Boolean(search && isValidElement(search) && typeof search.type !== "string");
+    const field = cloned
+      ? cloneElement(search as ReactElement<{ trailing?: ReactNode }>, { trailing: controls })
+      : <>{search}{controls}</>;
     return (
       <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown} data-plugins-kind={kind}>
         {/* the title, the kind tabs and the view row stay put: only the list
@@ -312,38 +309,50 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               icon only) and "+ Add". Every element is 32px high on one
               baseline; narrow, the search shrinks, then is an icon button
               that opens over the row; it never wraps. */}
-          <div ref={headRef} className="relative mt-3 flex h-8 items-center gap-3" data-plugins-kind-row="">
-            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex shrink-0 items-center gap-1" data-plugins-kinds="">
-              {CONNECT_APPS_KINDS.map((id) => (
-                <button key={id} type="button" role="tab" aria-selected={kind === id} data-plugins-kind-tab={id}
-                  onClick={() => onKind?.(id)} className={kindTabClass(kind === id)}>
-                  {connectAppsKindLabel(id)}
-                </button>
-              ))}
-            </div>
+          <div ref={headRef} className="@container relative mt-3 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2" data-plugins-kind-row="">
+            <PillTabs
+              tabs={CONNECT_APPS_KINDS}
+              tab={kind}
+              onTab={(id) => onKind?.(id)}
+              ariaLabel={t("connectApps.kind.aria")}
+              idPrefix="connect-apps-kind"
+              label={connectAppsKindLabel}
+              tabAttributes={(id) => ({ "data-plugins-kind-tab": id })}
+              tabClassName={() => "h-8 px-3.5 font-medium"}
+              className="shrink-0 flex-nowrap"
+              data-plugins-kinds=""
+            />
             <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-ink/10" data-plugins-separator="" />
-            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={cn(SEGMENT_TRACK, "shrink-0")} data-plugins-views="">
+            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={cn(SEGMENT_GROUP, "shrink-0")} data-plugins-views=""
+              onKeyDown={(event) => {
+                // arrow keys move the choice, as in any radio group
+                const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = shown === "installed" ? "discover" : "installed";
+                onTab(next);
+                event.currentTarget.querySelector<HTMLElement>(`[data-plugins-view="${next}"]`)?.focus();
+              }}>
               {(["installed", "discover"] as const).map((id) => (
-                <button key={id} type="button" role="radio" aria-checked={shown === id} data-plugins-view={id}
-                  onClick={() => onTab(id)} className={segmentTrackOption(shown === id)}>
+                <button key={id} type="button" role="radio" aria-checked={shown === id} tabIndex={shown === id ? 0 : -1} data-plugins-view={id}
+                  onClick={() => onTab(id)} className={segmentOptionClass(shown === id)}>
                   {t(id === "installed" ? "connectApps.view.yours" : "connectApps.manage.tab.discover")}
                 </button>
               ))}
             </div>
             <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-3" data-plugins-actions="">
-              {search && !narrow && <div className="min-w-[120px] max-w-[260px] flex-1" data-plugins-search-slot="">{search}</div>}
+              {field && !narrow && <div className="min-w-[150px] max-w-[300px] flex-1" data-plugins-search-slot="">{field}</div>}
+              {narrow && controls}
               {search && narrow && (
                 <button type="button" onClick={() => setSearchOpen(true)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
                   <Search size={15} aria-hidden="true" />
                 </button>
               )}
-              {shown === "discover" && filterControl}
-              {sortControl}
               {manageActions}
             </div>
             {search && narrow && searchOpen && (
               <div className="absolute inset-0 z-10 flex items-center gap-2 bg-inset" data-plugins-search-slot="" data-plugins-search-expanded="">
-                <div className="min-w-0 flex-1">{search}</div>
+                <div className="min-w-0 flex-1">{field}</div>
                 <button type="button" onClick={() => setSearchOpen(false)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.close")} title={t("connectApps.search.close")} data-plugins-search-close="">
                   <X size={15} aria-hidden="true" />
                 </button>
@@ -446,11 +455,12 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
       <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-filter-button="" onClick={() => setOpen((value) => !value)}
         aria-label={filter === "all" ? t("connectApps.filter.button") : `${t("connectApps.filter.button")}: ${label(filter)}`}
         title={filter === "all" ? t("connectApps.filter.button") : label(filter)}
-        className={cn(PLUGINS.quietPill, "size-8 px-0", filter !== "all" && "bg-ink/[0.14] text-ink")}>
+        className={cn(FIELD_ICON_BUTTON, filter !== "all" && "text-ink")}>
         <ListFilter size={15} aria-hidden="true" />
+        {filter !== "all" && <span data-plugins-active-dot="" className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" aria-label={t("connectApps.filtersAria")} className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+        <div role="menu" aria-label={t("connectApps.filtersAria")} className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-48")}>
           {chips.map((chip) => (
             <button key={chip} type="button" role="menuitemradio" aria-checked={filter === chip} data-plugins-chip={chip}
               onClick={() => { setOpen(false); onPick(chip); }} className={filter === chip ? MENU_ROW_ACTIVE : MENU_ROW}>
@@ -478,11 +488,12 @@ export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; 
     <div ref={ref} className="relative shrink-0" data-plugins-sort="">
       <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-sort-button="" onClick={() => setOpen((value) => !value)}
         aria-label={t("connectApps.sort.button")} title={t("connectApps.sort.button")}
-        className={cn(PLUGINS.quietPill, "size-8 px-0", sort !== "default" && "bg-ink/[0.14] text-ink")}>
+        className={cn(FIELD_ICON_BUTTON, sort !== "default" && "text-ink")}>
         <ArrowUpDown size={15} aria-hidden="true" />
+        {sort !== "default" && <span data-plugins-active-dot="" className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" aria-label={t("connectApps.sort.button")} className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+        <div role="menu" aria-label={t("connectApps.sort.button")} className={cn(MENU_SURFACE, "absolute right-0 top-8 z-20 min-w-48")}>
           {options.map((option) => (
             <button key={option} type="button" role="menuitemradio" aria-checked={sort === option} data-plugins-sort-option={option}
               onClick={() => { setOpen(false); onSort(option); }} className={sort === option ? MENU_ROW_ACTIVE : MENU_ROW}>

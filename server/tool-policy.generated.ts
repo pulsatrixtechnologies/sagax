@@ -714,7 +714,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"pattern","route":"^\\/api\\/internal\\/delegations\\/[\\w-]+$","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/internal\\/listening\\/([^/]+)$","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/internal\\/threads\\/([\\w-]+)\\/close$","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
-  {"method":"ANY","kind":"pattern","route":"^\\/api\\/listening\\/([^/]+)(?:\\/(lines|stop))?$","tier":"write","readOnly":false,"scope":"listening:write","defaultEnabled":true},
+  {"method":"ANY","kind":"pattern","route":"^\\/api\\/listening\\/(ls_[a-f0-9]{20})(?:\\/(lines|stop))?$","tier":"write","readOnly":false,"scope":"listening:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/local-computer\\/(pull|run|start|stop|remove)$","tier":"write","readOnly":false,"scope":"local-computer:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/machine-runs\\/([0-9a-f]{24})\\/answer$","tier":"admin","readOnly":false,"scope":"machine-runs:admin","defaultEnabled":false},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/marketplaces\\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})\\/plugins\\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})\\/files$","tier":"read","readOnly":true,"scope":"marketplaces:read","defaultEnabled":true},

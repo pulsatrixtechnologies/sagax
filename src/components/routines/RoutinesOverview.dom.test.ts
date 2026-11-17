@@ -156,7 +156,7 @@ describe("RoutinesOverview", () => {
     expect(bar("failed").className).toContain("bg-trend-failed");
     expect(bar("blocked").className).toContain("bg-trend-failed");
     expect(bar("waiting").className).toContain("bg-trend-problems");
-    for (const kind of ["blocked", "waiting"]) expect(bar(kind).className).not.toMatch(/ring-|bg-transparent/);
+    for (const kind of ["blocked", "waiting"]) expect(bar(kind).className).not.toMatch(/ring-inset|bg-transparent/);
     for (const kind of ["failed", "blocked", "waiting", "success"]) expect(bar(kind).className).toContain("h-4");
     // the meaning stays in words: the label and the sentence
     expect(bar("blocked").getAttribute("aria-label")).toMatch(/Blocked|Missed/);

@@ -36,6 +36,7 @@ import { dirname } from "node:path";
 import type { WireMessage } from "../../shared/wire.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { MAX_SKILL_REVIEW_STEPS } from "../config.ts";
+import { subscriptionSignInRefused } from "../engines/engine-access.ts";
 import { AUTHORING_STANDARDS } from "./skill-learn.ts";
 
 export const SKILL_REVIEW_MARKER = "You are the SKILL REVIEW step";
@@ -540,6 +541,8 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
   const now = () => deps.now?.() ?? Date.now();
   const log = (line: string) => deps.log?.(`skill review: ${line}`);
   const counters = new Map<string, Counter>();
+  /** One server line per bot for a sign-in the review cannot heal. */
+  const signInLogged = new Set<string>();
   const running = new Map<string, { threadId: string; controller: AbortController; done: Promise<ReviewReport> }>();
   const waiting = new Map<string, PendingApply>();
   const settling = new Map<string, ReturnType<typeof setTimeout>>();
@@ -608,6 +611,20 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
     return { state: "failed", applied: [], note };
   };
 
+  /** The account already needs a sign-in. Hold the review and say it once. */
+  const signInFailed = (botId: string, threadId: string, message: string): ReviewReport => {
+    const counter = counters.get(key(botId, threadId));
+    if (counter) {
+      counter.failedAt = now();
+      save();
+    }
+    if (!signInLogged.has(botId)) {
+      signInLogged.add(botId);
+      log(`${botId}: the review call failed (${message})`);
+    }
+    return { state: "failed", applied: [], note: `the review call failed (${message})` };
+  };
+
   const applyPending = (botId: string, pending: PendingApply): ReviewReport => {
     waiting.delete(botId);
     if (!deps.enabled(botId) || !deps.bot(botId)) return { state: "skipped", applied: [], note: "switched off" };
@@ -657,7 +674,9 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
       ]);
     } catch (error) {
       if (controller.signal.aborted) return { state: "cancelled", applied: [] };
-      return failed(botId, threadId, `the review call failed (${error instanceof Error ? error.message : "unknown"})`);
+      const message = error instanceof Error ? error.message : "unknown";
+      if (subscriptionSignInRefused(message)) return signInFailed(botId, threadId, message);
+      return failed(botId, threadId, `the review call failed (${message})`);
     }
     if (controller.signal.aborted) return { state: "cancelled", applied: [] };
     const { changes, note } = parseSkillReview(typeof answer === "string" ? answer : "", skills, shown);

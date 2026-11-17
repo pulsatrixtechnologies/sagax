@@ -55,6 +55,10 @@ export interface OneShotSignInDeps<B extends OneShotBot, I extends OneShotInstan
   renew(bot: B, instance: I, payerPrincipalId: string): Promise<boolean>;
   /** A call on this account signed in: what waited on its sign-in closes. */
   signedIn?(bot: B, instance: I, ranOn: OneShotRanOn | undefined): void;
+  /** The person's engine card still says sign in again. While this is true
+   * the model is not called. Absent or false: a later call may run, so a
+   * sign-in that works again is seen. */
+  stillRefused?(bot: B, instance: I, ranOn: OneShotRanOn | undefined): boolean;
   /** One server log line. */
   log(line: string): void;
   /** Takes tokens out of the provider's words before they are logged. */
@@ -78,6 +82,8 @@ export function createOneShotSignIn<B extends OneShotBot, I extends OneShotInsta
   /** Accounts whose sign-in was refused after its renew: no renew again and
    * nothing recorded again until a call on them signs in. */
   const refused = new Set<string>();
+  /** The provider's words from that refusal, so a later skip says the same thing. */
+  const refusedReason = new Map<string, string>();
   /** One renew per account at a time, however many bots fail on it. */
   const renewing = new Map<string, Promise<boolean>>();
   /** Account and cause already in the log. */
@@ -95,6 +101,7 @@ export function createOneShotSignIn<B extends OneShotBot, I extends OneShotInsta
   };
   const settled = (key: string) => {
     refused.delete(key);
+    refusedReason.delete(key);
     for (const id of logged) if (id.startsWith(`${key}\u0000`)) logged.delete(id);
   };
   const renewOnce = (bot: B, instance: I, key: string, payer: string): Promise<boolean> => {
@@ -123,6 +130,19 @@ export function createOneShotSignIn<B extends OneShotBot, I extends OneShotInsta
       let account = await resolve();
       for (let attempt = 0; ; attempt += 1) {
         const key = accountKey(instance, account.ranOn);
+        // Known expired on the person's card: do not start the model again.
+        // A card that no longer says so drops the hold, and this call may run.
+        // Absent means this caller does not track the card: the call still runs.
+        if (refused.has(key)) {
+          const held = deps.stillRefused?.(bot, instance, account.ranOn);
+          if (held) {
+            throw new Error(refusedReason.get(key) ?? "Failed to authenticate: OAuth session expired and could not be refreshed");
+          }
+          if (held === false) {
+            refused.delete(key);
+            refusedReason.delete(key);
+          }
+        }
         try {
           const result = await call(account.access);
           settled(key);
@@ -137,6 +157,7 @@ export function createOneShotSignIn<B extends OneShotBot, I extends OneShotInsta
             throw error;
           }
           logOnce(key, "sign_in_refused", instance, message);
+          refusedReason.set(key, message);
           // Refused after its renew already: recorded once, nothing more.
           if (refused.has(key) || attempt > 0) throw error;
           // The single renew a refused turn gets: renewed, the same call goes

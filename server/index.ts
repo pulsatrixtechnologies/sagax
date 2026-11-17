@@ -17952,6 +17952,14 @@ const oneShotSignIn = createOneShotSignIn<BotRecord, ProviderInstance>({
   signedIn: (_bot, instance, ranOn) => {
     if (ranOn?.payerPrincipalId) signInCards.signedIn(ranOn.payerPrincipalId, { instanceId: instance.instanceId });
   },
+  stillRefused: (bot, instance, ranOn) => {
+    const slot = turnSlotFor(bot, instance);
+    const payer = ranOn?.payerPrincipalId?.trim();
+    if (!payer) return signedOutHeld(instance.instanceId, refusalAccount("server", undefined, slot), Date.now());
+    const account = refusalAccount(ranOn?.via ?? "subscription", payer, slot);
+    if (signedOutHeld(instance.instanceId, account, Date.now())) return true;
+    return Boolean(engineLogins?.expired(payer, instance.driverKind, slot, instance.instanceId));
+  },
   log: (line) => console.info(line),
   redact: (text) => redactSecretsInText(text),
 });

@@ -14,6 +14,7 @@ import type {
   TurnAccessInput,
 } from "../../contracts.ts";
 import { runKeepWarmPing } from "../claude-keepwarm.ts";
+import { claudeSignInExpired } from "../claude-errors.ts";
 import { DRIVER_KIND, NO_ANTHROPIC_KEY, resolveClaudeConfigDir } from "./config.ts";
 
 export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstance {
@@ -117,6 +118,12 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
     new Promise((resolve, reject) => {
       if (config.requireApiKey && !input.environment.ANTHROPIC_API_KEY) {
         reject(new Error(NO_ANTHROPIC_KEY));
+        return;
+      }
+      // A person's subscription with no login directory must not start on
+      // this server's own Claude folder. That folder cannot renew.
+      if (access?.via === "subscription" && !access.claudeConfigDir?.trim()) {
+        reject(new Error(claudeSignInExpired("this account has no Claude login directory")));
         return;
       }
       const model = config.managedModels?.[0] ?? "claude-haiku-4-5";

@@ -23,13 +23,13 @@ import { newEventId, newId } from "../contracts.ts";
 import { augmentedPath } from "../env-path.ts";
 import { execCli } from "../procs.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { commandSummary, toolDetailPreview } from "../tools/tool-summary.ts";
+import { askInputDetail, commandSummary, toolDetailPreview } from "../tools/tool-summary.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { parseProtocolAskQuestions, questionAnswersById, type ProtocolAskQuestion } from "../../shared/ask-question.ts";
 import type { EffortLevel } from "../../shared/wire.ts";
 import { promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt, type PromptSplitReceipt } from "./prompt-split.ts";
 import { turnStdioMcpServers } from "./turn-mcp.ts";
-import { agentsSearchedFromEnv, prefixedToolId } from "../../shared/searched-tool-call.ts";
+import { agentsSearchedCall, agentsSearchedFromEnv, prefixedToolId, toolIdParts } from "../../shared/searched-tool-call.ts";
 
 const DRIVER_KIND = "museCode";
 const PROVIDER_ID = "meta";
@@ -112,6 +112,9 @@ interface MuseApproval {
   sessionId: string;
   turnId?: string;
   toolName?: string;
+  /** the call's own arguments (JSON), and the item that asks */
+  rawArgs?: string;
+  itemId?: string;
   currentRequirementId: unknown;
   availableChoices: MuseChoice[];
   subject?: { kind?: string; command?: string; path?: string; host?: string; target?: string; toolName?: string; workspaceRoot?: string };
@@ -183,6 +186,26 @@ export function museToolStart(item: MuseItem, mounts?: MuseMounts): { title: str
   return { title, ...(summary ? { summary } : {}), ...(input ? { input } : {}), ...(tool ? { tool } : {}) };
 }
 
+/** #4527: the MCP tool a Muse Code approval asks about, as every other
+ * engine names it (`<server>__<tool>`, `mcpTool`) with its own arguments, so
+ * an organization or personal rule, a grant and the card read that tool. A
+ * searched server's call_tool is the tool it runs. `callTool` marks a
+ * call_tool on the agents server whose target cannot be read: it is never
+ * allowed for the session (that would open every left out tool). Null for
+ * Muse's own tools (shell, files, network). */
+export function museAskedTool(approval: { toolName?: string; rawArgs?: string; subject?: { toolName?: string } }, mounts: MuseMounts | undefined, itemArgs?: string):
+  { mcpTool: string; input: unknown; searched?: true } | { callTool: true } | null {
+  const name = approval.toolName || approval.subject?.toolName;
+  if (!name || !mounts) return null;
+  const args = parseArgs(approval.rawArgs) ?? parseArgs(itemArgs);
+  if (mounts.searched.has("agents") && /^(?:mcp__)?agents(?:__|_)call_tool$/.test(name.trim())) {
+    const call = agentsSearchedCall(name, args ?? {});
+    return call ? { mcpTool: call.mcpTool, input: call.input, searched: true } : { callTool: true };
+  }
+  const parts = toolIdParts(prefixedToolId(name, args ?? {}, mounts.names, mounts.searched));
+  return parts ? { mcpTool: `${parts.server}__${parts.tool}`, input: args ?? {} } : null;
+}
+
 export function museToolOutput(item: MuseItem): { ok: boolean; output?: string } {
   const ok = item.status === "completed" && item.exitCode === undefined ? true
     : item.status === "completed" && item.exitCode === 0;
@@ -205,6 +228,11 @@ interface Pending {
   kind: "approval" | "question";
   sessionId: string;
   approval?: MuseApproval;
+  /** #4527: the agents tool a call_tool runs: "Always allow this session"
+   * is kept here for that tool, never handed to Muse for call_tool */
+  searched?: string;
+  /** a call_tool whose target cannot be read: allowed once at most */
+  once?: true;
   userInputId?: string;
   questions?: ProtocolAskQuestion[];
 }
@@ -241,6 +269,9 @@ interface ThreadState {
   pending: Map<string, Pending>;
   /** the session's mounted servers (#4527: a call's tool id) */
   mounts?: MuseMounts;
+  /** #4527: the agents tools reached through call_tool that the person
+   * allowed for this session, each one alone */
+  searchedAllows?: Set<string>;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -467,14 +498,30 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
           }
           const subject = approval.subject ?? {};
           const command = subject.command;
-          state.pending.set(approval.approvalId, { kind: "approval", sessionId: approval.sessionId, approval });
+          // #4527: an MCP tool is asked about by its own name and arguments;
+          // the agents server's call_tool as the tool it runs
+          const asked = museAskedTool(approval, state.mounts, approval.itemId ? active.items.get(approval.itemId)?.args : undefined);
+          const searched = asked && "searched" in asked ? asked.mcpTool : undefined;
+          if (searched && state.searchedAllows?.has(searched)) {
+            // allowed for this session, that one tool: once to Muse
+            const choice = museChoice(approval.availableChoices, "allow");
+            if (choice) {
+              void decide(state, approval, choice).catch(() => {});
+              return;
+            }
+          }
+          const once = Boolean(asked && "callTool" in asked);
+          state.pending.set(approval.approvalId, { kind: "approval", sessionId: approval.sessionId, approval, ...(searched ? { searched } : {}), ...(once ? { once: true as const } : {}) });
+          const mcp = asked && "mcpTool" in asked ? asked : undefined;
           // full-access: engine-bridge (answered in index.ts request.opened)
           emit({
             type: "request.opened", threadId, turnId: active.turnId, requestId: approval.approvalId, requestType: "permission",
-            tool: approval.toolName || subject.toolName || subject.kind || "tool",
-            summary: redactSecretsInText(command ?? subject.path ?? subject.host ?? subject.target ?? approval.toolName ?? "Muse Code asks to continue"),
+            // a call_tool reads as Muse's name for the tool it runs
+            tool: searched ? `agents_${searched.slice("agents__".length)}` : approval.toolName || subject.toolName || subject.kind || "tool",
+            summary: redactSecretsInText(searched ?? command ?? subject.path ?? subject.host ?? subject.target ?? approval.toolName ?? "Muse Code asks to continue"),
             ...(command ? { command: { command, cwd: subject.workspaceRoot ?? "" } } : {}),
-            allowSession: Boolean(museChoice(approval.availableChoices, "allow", true)?.decision.startsWith("approvedFor")
+            ...(mcp ? { mcpTool: mcp.mcpTool, input: askInputDetail(mcp.input) ?? "{}" } : {}),
+            allowSession: !once && Boolean(searched || museChoice(approval.availableChoices, "allow", true)?.decision.startsWith("approvedFor")
               || approval.availableChoices.some(choice => choice.scope === "session")),
           });
           return;
@@ -680,9 +727,13 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
         try {
           if (pending.kind === "approval" && pending.approval) {
             const behavior = decision.behavior === "allow" ? "allow" : "deny";
-            const choice = museChoice(pending.approval.availableChoices, behavior, decision.always);
+            // #4527: Muse's own session allow on call_tool would open every
+            // left out tool: allow once, and keep the tool it runs instead
+            const engineAlways = decision.always && !pending.searched && !pending.once;
+            const choice = museChoice(pending.approval.availableChoices, behavior, engineAlways);
             if (!choice) return "unavailable";
             await decide(state, pending.approval, choice);
+            if (behavior === "allow" && decision.always && pending.searched) (state.searchedAllows ??= new Set()).add(pending.searched);
             emit({ type: "request.resolved", threadId, ...(turnId ? { turnId } : {}), requestId, behavior, source: "user" });
             return behavior === "allow" ? "allowed-once" : "rejected";
           }

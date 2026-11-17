@@ -9,7 +9,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
-import { BotPageModal } from "./BotPageModal";
+import { BOT_PAGE_MODAL, BotPageModal } from "./BotPageModal";
+import { SUBPAGE_META, SUBPAGE_SIZE } from "./BotProfilePage.tsx-parts/subpages";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -34,7 +35,7 @@ function Page() {
         createElement("button", { type: "button", "data-menu": "", "aria-haspopup": "listbox", "aria-expanded": menu ? "true" : "false", onClick: () => setMenu(true) }, "Pick"),
       ),
     }),
-    second && createElement(BotPageModal, { id: "second", title: "Memory", size: "page", bare: true, onClose: () => setSecond(false), children: createElement("p", null, "notes") }),
+    second && createElement(BotPageModal, { id: "second", title: "Memory", size: "large", bare: true, onClose: () => setSecond(false), children: createElement("p", null, "notes") }),
   );
 }
 
@@ -62,15 +63,35 @@ afterEach(() => {
   host.remove();
 });
 
+describe("bot page modals are larger (owner: we barely see anything)", () => {
+  it("the large size is most of the window, the medium one wider than 560px and sized to its content, on one shared grid", () => {
+    expect(BOT_PAGE_MODAL.size.large).toContain("w-[min(1100px,calc(100vw-32px))]");
+    expect(BOT_PAGE_MODAL.size.large).toContain("h-[calc(100dvh-96px)]");
+    expect(BOT_PAGE_MODAL.size.large).toContain("--bot-modal-fill");
+    expect(BOT_PAGE_MODAL.size.medium).toContain("w-[min(720px,calc(100vw-32px))]");
+    expect(BOT_PAGE_MODAL.size.medium, "content height, never a fixed tall box").not.toMatch(/(^| )h-\[/);
+    // header, body and footer share the 24px side edge
+    expect(BOT_PAGE_MODAL.header).toContain("px-6");
+    expect(BOT_PAGE_MODAL.body).toContain("px-6");
+    expect(BOT_PAGE_MODAL.footer).toContain("pl-6");
+  });
+
+  it("every sub-page of the bot page has a size: editors, lists and tables large, a few fields medium", () => {
+    expect(Object.keys(SUBPAGE_SIZE).sort()).toEqual(Object.keys(SUBPAGE_META).sort());
+    for (const page of ["rules", "personality", "versions", "beforeActing", "folder", "routines"] as const) expect(SUBPAGE_SIZE[page], page).toBe("large");
+    for (const page of ["model", "voice", "sharing"] as const) expect(SUBPAGE_SIZE[page], page).toBe("medium");
+  });
+});
+
 describe("regression #4470: the bot page's modal shell", () => {
-  it("draws the reference's modal: 560px by 700px, 20px corners, a hairline, the centred title and its line, the close at the top right, pills at the bottom right", async () => {
+  it("draws the reference's modal (medium: 720px wide, as tall as its content): 20px corners, a hairline, the centred title and its line, the close at the top right, pills at the bottom right", async () => {
     await click(host.querySelector("[data-open-first]"));
     const frame = modal("first")!;
     expect(frame, "portalled to the body, over the page").not.toBeNull();
     expect(host.contains(frame)).toBe(false);
     expect(frame.getAttribute("role")).toBe("dialog");
     expect(frame.getAttribute("aria-modal")).toBe("true");
-    for (const cls of ["w-[min(560px,calc(100vw-32px))]", "h-[min(700px,calc(100dvh-96px))]", "rounded-[20px]", "border-[0.5px]", "bg-app"]) expect(frame.className).toContain(cls);
+    for (const cls of ["w-[min(720px,calc(100vw-32px))]", "max-h-[calc(100dvh-96px)]", "rounded-[20px]", "border-[0.5px]", "bg-app"]) expect(frame.className).toContain(cls);
     // the scrim at half black, the window centred in it
     const layer = frame.parentElement!;
     expect(layer.hasAttribute("data-dialog-layer")).toBe(true);
@@ -78,7 +99,7 @@ describe("regression #4470: the bot page's modal shell", () => {
     expect(layer.className).toContain("items-center");
     // the header: 40px from the top and sides, centred; 22px over 28, medium
     const header = frame.querySelector<HTMLElement>("[data-bot-page-modal-header]")!;
-    for (const cls of ["pt-10", "px-10", "pb-3", "text-center", "items-center"]) expect(header.className).toContain(cls);
+    for (const cls of ["pt-10", "px-6", "pb-3", "text-center", "items-center"]) expect(header.className).toContain(cls);
     const title = header.querySelector("h2")!;
     expect(title.textContent).toBe("Personality");
     for (const cls of ["text-[22px]", "leading-7", "font-medium", "tracking-[-0.012em]"]) expect(title.className).toContain(cls);

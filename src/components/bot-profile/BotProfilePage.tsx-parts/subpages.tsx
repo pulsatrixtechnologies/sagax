@@ -22,7 +22,7 @@ import {
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import type { BotProfileSubPage } from "@/lib/persona-sections";
-import { BotPageModal } from "../BotPageModal";
+import { BotPageModal, type BotPageModalSize } from "../BotPageModal";
 
 type Meta = { icon: ReactNode; title: LocaleKey; desc: LocaleKey; intro: LocaleKey };
 
@@ -42,6 +42,22 @@ export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
   versions: meta(<History />, "botProfile.v6.page.versions.title", "botProfile.v6.page.versions.desc", "botProfile.v6.page.versions.intro"),
   routines: meta(<Repeat />, "botProfile.v6.page.routines.title", "botProfile.v6.page.routines.desc", "botProfile.v6.page.routines.intro"),
   folder: meta(<FolderOpen />, "botProfile.v6.page.folder.title", "botProfile.v6.page.folder.desc", "botProfile.v6.page.folder.intro"),
+};
+
+/** Each sub-page's modal size: an editor, a list or a table gets the large
+ * one, a few fields the medium one (BOT_PAGE_MODAL.size). */
+export const SUBPAGE_SIZE: Record<BotProfileSubPage, BotPageModalSize> = {
+  personality: "large",
+  model: "medium",
+  beforeActing: "large",
+  sharing: "medium",
+  rules: "large",
+  actsAlone: "large",
+  voice: "medium",
+  advanced: "large",
+  versions: "large",
+  routines: "large",
+  folder: "large",
 };
 
 /** The grey label over each group of rows (the channels and accounts
@@ -90,7 +106,7 @@ export function SubPageRow({ page, value, onOpen, title, hit = false }: {
 export function SubPageModal({ page, children, title, onClose }: { page: BotProfileSubPage; children: ReactNode; title?: LocaleKey; onClose: () => void }) {
   const entry = { ...SUBPAGE_META[page], ...(title ? { title } : {}) };
   return (
-    <BotPageModal id={`page-${page}`} title={t(entry.title)} description={t(entry.intro)} onClose={onClose}>
+    <BotPageModal id={`page-${page}`} title={t(entry.title)} description={t(entry.intro)} size={SUBPAGE_SIZE[page]} onClose={onClose}>
       <div data-bot-profile-subpage={page} className="flex min-w-0 flex-col gap-6">{children}</div>
     </BotPageModal>
   );

@@ -1,8 +1,13 @@
 // The one modal of the bot page (#4470): every button or row of the page
 // that opens another surface opens it here, over the page, as the reference
 // app does (its bot page's setup dialog shell, measured on the installed
-// bundle): a 560px window (the room's width less 16px each side on a
-// phone), a fixed 700px height (less 48px above and below in a short room),
+// bundle: 560px over 700px, its large dialog 880px wide and at most 640px
+// tall, its modal body 24px in). Two sizes here, set once for every row of
+// the page (the owner found 560px too small to edit in): "large" for a
+// surface that holds an editor, a list or a table, 1100px wide and the room's
+// height less 48px above and below; "medium" for a few fields, 720px wide
+// and as tall as its content (never a tall half-empty box). Both take the
+// room's width less 16px each side on a phone. The look is the reference's:
 // 20px corners, a half-pixel hairline, the scrim at half black; the title
 // centred, 22px over 28, medium, -0.012em, 40px from the top and the sides,
 // its grey line under it at 14px over 20; the round close at 10px from the
@@ -27,12 +32,13 @@ export const BOT_PAGE_MODAL = {
   // DIALOG.frame's entrance; the reference's radius and hairline
   frame: "relative flex flex-col overflow-hidden rounded-[20px] border-[0.5px] border-border bg-app text-ink outline-none transition-[opacity,scale] duration-base ease-out-quint starting:scale-98 starting:opacity-0 motion-reduce:transition-none",
   size: {
-    /** the reference's wide shell: 560px, 700px tall */
-    wide: "h-[min(700px,calc(100dvh-96px))] w-[min(560px,calc(100vw-32px))]",
-    /** a page of the app in a modal (Memory): the Settings window's size */
-    page: "h-[min(700px,calc(100dvh-96px))] w-[min(900px,calc(100vw-32px))]",
+    /** an editor, a list or a table: most of the window; the editors inside
+     * grow with it through --bot-modal-fill (MarkdownEditor's fillModal) */
+    large: "h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:calc(100dvh-520px)]",
+    /** a few fields: wider than the reference's 560px, as tall as its content */
+    medium: "max-h-[calc(100dvh-96px)] w-[min(720px,calc(100vw-32px))]",
   },
-  header: "relative flex shrink-0 flex-col items-center gap-1 px-10 pb-3 pt-10 text-center",
+  header: "relative flex shrink-0 flex-col items-center gap-1 px-6 pb-3 pt-10 text-center",
   title: "w-full min-w-0 text-[22px] font-medium leading-7 tracking-[-0.012em] text-ink",
   description: "w-full min-w-0 text-[14px] leading-5 tracking-[-0.006em] text-ink-secondary",
   body: "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-2",
@@ -43,7 +49,7 @@ export type BotPageModalSize = keyof typeof BOT_PAGE_MODAL.size;
 
 /** A modal of the bot page. `id` names what it holds (a sub-page, a
  * channel, Memory) for the page's links and tests. */
-export function BotPageModal({ id, title, description, size = "wide", footer, bare = false, onClose, children }: {
+export function BotPageModal({ id, title, description, size = "medium", footer, bare = false, onClose, children }: {
   id: string;
   title: ReactNode;
   description?: ReactNode;

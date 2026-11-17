@@ -29,6 +29,7 @@ export function RuleSetEditor({ current, plain, draft, count, conflict, busy, di
         value={draft}
         onChange={onChange}
         minHeight={220}
+        fillModal
         dataField="rules"
         placeholder={t("persona.rules.placeholder")}
         invalid={count.over}

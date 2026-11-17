@@ -175,18 +175,19 @@ const ROUTINE_NOTHING_PHRASES = [
 ].join("|");
 
 /** The whole message is one of those phrases (a second nothing phrase may
- * follow, joined by a comma). Never a no-op clause after a real finding. */
-const ROUTINE_SAYS_NOTHING = new RegExp(
-  `^(?:(?:ok(?:ay)?|done|all (?:good|clear|set|quiet))[\\s,.;:\\u2014\\u2013-]+)?(?:${ROUTINE_NOTHING_PHRASES})(?:[\\s,;]+(?:et |and )?(?:${ROUTINE_NOTHING_PHRASES}))?[\\s.!\\u2026]*$`,
-  "i",
-);
+ * follow, joined by a comma). Never a no-op clause after a real finding.
+ * The one source of the pattern: the phones read it from the files
+ * scripts/gen-routine-nothing-pattern.mjs writes (case-insensitive). */
+export const ROUTINE_SAYS_NOTHING_SOURCE =
+  `^(?:(?:ok(?:ay)?|done|all (?:good|clear|set|quiet))[\\s,.;:\\u2014\\u2013-]+)?(?:${ROUTINE_NOTHING_PHRASES})(?:[\\s,;]+(?:et |and )?(?:${ROUTINE_NOTHING_PHRASES}))?[\\s.!\\u2026]*$`;
+const ROUTINE_SAYS_NOTHING = new RegExp(ROUTINE_SAYS_NOTHING_SOURCE, "i");
 
 /** #3990: the whole message says nothing happened ("Rien à remonter.",
  * "Nothing to do on your side.", "Rien à faire de ton côté."). The
  * nothing-to-report line is the signal the bot is asked to write; this is
  * the safety net when it forgets the line. A question, an empty text, or a
- * report that merely mentions the words is not one. iOS RoutineRunRows and
- * Android RoutineRunRows keep the same phrases. */
+ * report that merely mentions the words is not one. iOS and Android
+ * RoutineRunRows read the same pattern (RoutineNothingPattern, generated). */
 export function routineSaysNothing(text: string | undefined): boolean {
   const trimmed = (text ?? "").trim().replace(/^[*_]+|[*_]+$/g, "").trim();
   if (!trimmed || trimmed.includes("?")) return false;

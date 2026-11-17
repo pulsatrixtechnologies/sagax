@@ -600,6 +600,8 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
         return { text: turn.text, rebuilt: false, started: false };
       }
       await closeHost(state);
+      // a session allow kept by the driver lasts as long as Muse's own would
+      state.searchedAllows = undefined;
       const host = await startHost(museServeArgs(turn.approvalMode), cwd, key, servers.length > 0);
       state.host = host;
       attach(state, host);

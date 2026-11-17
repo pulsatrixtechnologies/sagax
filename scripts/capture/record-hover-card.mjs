@@ -32,7 +32,7 @@ const port = Number(arg("--port") ?? await freePort());
 const only = arg("--only");
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const langs = ["fr", "en"];
-const widths = [1280, 390];
+const widths = [1280, 600, 544, 390];
 const variantScenes = ["longtitle", "fields12", "nonotes", "longnames"];
 const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgask", "orgrefused", "neighbour"];
 const chatScenes = [{ name: "chat-hover", action: "hover" }, { name: "chat-pinned", action: "click" }, { name: "chat-nested", action: "nested" }];
@@ -80,6 +80,7 @@ try {
           await page.waitForTimeout(250);
         };
         for (const scene of cardScenes) {
+          if (width !== 1280 && width !== 390) continue;
           if (width < 600 && !["overview", "ticket", "company", "pinned", "noaccess"].includes(scene)) continue;
           await open(scene);
           await page.screenshot({ path: join(outDir, `${scene}-${lang}-${label}-${width}.png`), fullPage: true });
@@ -91,6 +92,18 @@ try {
             await page.waitForSelector("[data-gallery-card]", { timeout: 120_000 });
             await page.waitForTimeout(250);
             await page.screenshot({ path: join(outDir, `g-var-${scene}-${pin ? "pinned" : "hover"}-${lang}-${label}-${width}.png`), fullPage: true });
+            if (pin && width <= 600) {
+              // a pinned card scrolls inside: look at it a third of the way down and at its foot
+              for (const [name, at] of [["scroll35", 0.35], ["scrollend", 1]]) {
+                await page.evaluate((fraction) => {
+                  for (const pane of document.querySelectorAll("[data-record-panes], [data-record-pane]")) {
+                    if (pane.scrollHeight > pane.clientHeight + 2) pane.scrollTop = (pane.scrollHeight - pane.clientHeight) * fraction;
+                  }
+                }, at);
+                await page.waitForTimeout(250);
+                await page.screenshot({ path: join(outDir, `g-var-${scene}-pinned-${name}-${lang}-${label}-${width}.png`), fullPage: true });
+              }
+            }
           }
         }
         for (const { name, action } of chatScenes) {

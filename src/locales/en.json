@@ -15191,5 +15191,8 @@
   "recordCard.state.unavailable": "Record cards are not available here.",
   "recordCard.back": "Back",
   "recordCard.notes.title": "Notes ({count})",
-  "recordCard.moreRows": "{count} more"
+  "recordCard.more.fieldOne": "1 more field",
+  "recordCard.more.fieldMany": "{count} more fields",
+  "recordCard.more.rowOne": "1 more row",
+  "recordCard.more.rowMany": "{count} more rows"
 }

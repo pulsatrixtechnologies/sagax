@@ -3124,6 +3124,20 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   from { transform: none; opacity: 1; }
   to { transform: scale(0.98); opacity: 0; }
 }
+/* A pinned record card's scrolling pane (RecordCard.tsx Pane): a partial row
+   shows only under a real 16px fade at an edge, and only while there is more
+   in that direction; rows snap softly, so a rest lands on a row boundary. */
+.record-scroll {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  scroll-snap-type: y proximity;
+  scroll-padding-block: 8px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+}
+.record-scroll[data-more-above] { --fade-top: 16px; }
+.record-scroll[data-more-below] { --fade-bottom: 16px; }
+.record-scroll [data-fit-row] { scroll-snap-align: start; }
 /* A record card (HoverCard `motion`): it fades in over 160ms with a 4px rise
    from the side of its chip and a scale from 0.98, and out over 120ms; a
    card that opens right after another closed only fades (90ms); under

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditKnowledgeText, buildKnowledge, KNOWLEDGE_FILE, serializeKnowledge, settingsSectionRows } from "./build.ts";
 import { GUIDES } from "./guides.ts";
-import { slug, splitHeadings } from "./markdown.ts";
+import { plainText, slug, splitHeadings } from "./markdown.ts";
 import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge/self-knowledge-types.ts";
 import { availableTools } from "../../server/drivers/agents-catalog.ts";
 import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
@@ -191,5 +191,12 @@ describe("self-knowledge: team chat channels removed", () => {
     expect(ids(fresh)).not.toContain("bot-setting:slack");
     expect(ids(committed)).not.toContain("bot-setting:slack");
     expect(ids(fresh)).toContain("bot-setting:voice");
+  });
+});
+
+describe("plainText links", () => {
+  it("keeps a link's words, and a link written in a code span as the literal form", () => {
+    expect(plainText("See [the page](https://example.com/page) now")).toBe("See the page now");
+    expect(plainText("A record link is `[#481516](sagax://record/{product}/{kind}/{id})` here")).toBe("A record link is `[#481516](sagax://record/{product}/{kind}/{id})` here");
   });
 });

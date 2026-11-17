@@ -26,6 +26,7 @@ import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatClock, formatFull, formatLateness, formatRelative, isGuid, percentValue, sameText } from "@/lib/record-card-format";
+import { fitRows, moreKind, type MoreKind } from "@/lib/record-card-fit";
 import { prefetchRecordCard, type UseRecordCard } from "@/lib/record-cards";
 import { ServiceIcon } from "@/components/plugins/PluginParts";
 import { REF_PILL_CLASS } from "@/components/ref-pill";
@@ -118,77 +119,87 @@ function Bar({ className }: { className: string }) {
   return <span aria-hidden="true" className={cn("block animate-pulse rounded-md bg-popover-ink/10 motion-reduce:animate-none", className)} />;
 }
 
-/** The room a "+N" takes at the foot of a pane that drops rows. */
-const MORE_ROOM = 20;
+/** The room the "N more" line takes at a pane's foot: its 16px and 6px of margin. */
+const MORE_ROOM = 22;
 
 /**
- * A pane. Pinned, it scrolls inside (a quiet fade at its foot while more
- * waits). Only hovered (`fit`), it shows WHOLE rows: the rows that do not fit
- * (`data-fit-row`, a row being one or two elements sharing a key) are dropped
- * and a quiet "+N" says how many; nothing is ever clipped through a row.
+ * A pane. Pinned, it scrolls inside, with a 16px fade at an edge only while
+ * there is more in that direction, and rows that snap softly. Only hovered
+ * (`fit`), it shows WHOLE rows (src/lib/record-card-fit.ts): the rows that do
+ * not fit (`data-fit-row`, a row being one or two elements sharing a key) are
+ * left out, and a quiet "N more" at the pane's foot says how many and of what.
+ * The pass runs when the pane's size or its content changes, never on a render.
  */
-function Pane({ pinned, fit = false, className, moreClass = "pt-1", children, ...data }: { pinned: boolean; fit?: boolean; className?: string; moreClass?: string; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
+function Pane({ pinned, fit = false, className, moreClass = "start-3", children, ...data }: { pinned: boolean; fit?: boolean; className?: string; moreClass?: string; children: ReactNode; [key: `data-${string}`]: string | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [more, setMore] = useState(false);
-  const [hidden, setHidden] = useState(0);
+  const [edges, setEdges] = useState({ above: false, below: false });
+  const [left, setLeft] = useState<{ count: number; kind: MoreKind } | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => {
-      setMore(pinned && el.scrollHeight - el.scrollTop - el.clientHeight > 2);
+    const measureScroll = () => {
+      const above = pinned && el.scrollTop > 2;
+      const below = pinned && el.scrollHeight - el.scrollTop - el.clientHeight > 2;
+      setEdges((current) => (current.above === above && current.below === below ? current : { above, below }));
+    };
+    const measureRows = () => {
+      // a pinned card shows every row; a pane that does not fit leaves the rows
+      // alone (the rows of another pane, inside it, are that pane's to hide)
+      if (pinned) for (const node of el.querySelectorAll("[data-fit-hidden]")) node.removeAttribute("data-fit-hidden");
+      if (pinned || !fit) {
+        setLeft((current) => (current === null ? current : null));
+        return;
+      }
       const groups = new Map<string, HTMLElement[]>();
       for (const node of el.querySelectorAll<HTMLElement>("[data-fit-row]")) {
         node.removeAttribute("data-fit-hidden");
         const key = node.dataset.fitRow ?? "";
         groups.set(key, [...(groups.get(key) ?? []), node]);
       }
-      if (!fit || pinned || !groups.size) {
-        setHidden(0);
+      if (!groups.size) {
+        setLeft((current) => (current === null ? current : null));
         return;
       }
       const top = el.getBoundingClientRect().top - el.scrollTop;
-      const limit = el.clientHeight - (parseFloat(getComputedStyle(el).paddingBottom) || 0);
-      const bottom = (nodes: HTMLElement[]) => Math.max(...nodes.map((node) => node.getBoundingClientRect().bottom - top));
-      const rows = [...groups.values()];
-      if (!rows.some((nodes) => bottom(nodes) > limit + 0.5)) {
-        setHidden(0);
-        return;
-      }
-      let dropped = 0;
-      let cut = false;
-      for (const nodes of rows) {
-        if (cut || bottom(nodes) > limit - MORE_ROOM) {
-          cut = true;
-          dropped += 1;
-          for (const node of nodes) node.setAttribute("data-fit-hidden", "");
-        }
-      }
-      setHidden(dropped);
+      const paddingBottom = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      const entries = [...groups.entries()];
+      const bottoms = entries.map(([, nodes]) => Math.max(...nodes.map((node) => node.getBoundingClientRect().bottom - top)));
+      const shown = fitRows({ bottoms, full: el.clientHeight - paddingBottom, partial: el.clientHeight - MORE_ROOM });
+      const hiddenKeys = entries.slice(shown).map(([key]) => key);
+      for (const [, nodes] of entries.slice(shown)) for (const node of nodes) node.setAttribute("data-fit-hidden", "");
+      const next = hiddenKeys.length ? { count: hiddenKeys.length, kind: moreKind(hiddenKeys) } : null;
+      setLeft((current) => (current?.count === next?.count && current?.kind === next?.kind ? current : next));
     };
+    const measure = () => { measureRows(); measureScroll(); };
     measure();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    observer?.observe(el);
-    el.addEventListener("scroll", measure, { passive: true });
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    resize?.observe(el);
+    // content that changes (a card read again) is measured again; the "N more"
+    // line coming and going is not content
+    const mutations = typeof MutationObserver === "undefined" ? null : new MutationObserver((records) => {
+      if (records.every((record) => [...record.addedNodes, ...record.removedNodes].every((node) => node instanceof HTMLElement && node.hasAttribute("data-fit-more")))) return;
+      measure();
+    });
+    mutations?.observe(el, { childList: true, subtree: true, characterData: true });
+    el.addEventListener("scroll", measureScroll, { passive: true });
     return () => {
-      observer?.disconnect();
-      el.removeEventListener("scroll", measure);
+      resize?.disconnect();
+      mutations?.disconnect();
+      el.removeEventListener("scroll", measureScroll);
     };
-  });
+  }, [fit, pinned]);
+  const label = left ? t(`recordCard.more.${left.kind}${left.count === 1 ? "One" : "Many"}` as Parameters<typeof t>[0], { count: left.count }) : "";
   return (
     <div
       ref={ref}
       {...data}
-      data-more={more ? "below" : undefined}
-      tabIndex={pinned && more ? 0 : undefined}
-      className={cn("menu-scroll min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", pinned ? "overflow-y-auto" : "overflow-hidden", className)}
+      data-more-above={edges.above ? "" : undefined}
+      data-more-below={edges.below ? "" : undefined}
+      tabIndex={pinned && (edges.above || edges.below) ? 0 : undefined}
+      className={cn("relative min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", pinned ? "record-scroll overflow-y-auto" : "overflow-hidden", className)}
     >
       {children}
-      {hidden > 0 && (
-        <p data-fit-more className={cn("text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>
-          <span aria-hidden="true">+{hidden}</span>
-          <span className="sr-only">{t("recordCard.moreRows", { count: hidden })}</span>
-        </p>
-      )}
+      {left && <p data-fit-more className={cn("pointer-events-none absolute bottom-1.5 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>}
     </div>
   );
 }
@@ -215,13 +226,12 @@ function useStacked(ref: RefObject<HTMLElement | null>): boolean {
 function PersonRow({ person, fitKey }: { person: NonNullable<Card["people"]>[number]; fitKey: string }) {
   const Icon = person.role === "owner" ? UserCheck : UserRound;
   return (
-    <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-person={person.role} data-fit-row={fitKey}>
+    <div className="flex min-w-0 items-center gap-2 leading-[18px]" data-record-person={person.role} data-fit-row={fitKey} title={person.label ? `${person.label}: ${person.name}` : person.name}>
       <Icon size={14} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
-      <span className="min-w-0 flex-1 truncate" title={person.label ? `${person.label}: ${person.name}` : person.name}>
-        {person.label && <span className="sr-only">{person.label}: </span>}
-        <span dir="auto">{person.name}</span>
-        {person.detail && <span dir="ltr" className="ms-1.5 text-popover-ink-secondary [unicode-bidi:isolate]">{person.detail}</span>}
-      </span>
+      {person.label && <span className="sr-only">{person.label}: </span>}
+      {/* the name gives way, the number beside it does not */}
+      <span dir="auto" className="min-w-0 truncate">{person.name}</span>
+      {person.detail && <span dir="ltr" className="shrink-0 whitespace-nowrap text-popover-ink-secondary [unicode-bidi:isolate]">{person.detail}</span>}
     </div>
   );
 }
@@ -395,7 +405,7 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
       <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
       {!hidden && <span dir="ltr" className="shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
       <span className="ms-auto flex min-w-0 items-center gap-1">
-        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "min-w-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[9rem] min-w-0 truncate">{card.state.label}</span></Chip>}
+        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[14rem] truncate">{card.state.label}</span></Chip>}
         {card?.priority && <PriorityChip priority={card.priority} />}
         {skeleton && <Bar className="h-5 w-16 rounded-full" />}
         {pinned && onClose && (
@@ -548,7 +558,7 @@ export function RecordCard({ record, label, kindName, product, read, pinned = fa
         <Head card={card} label={label} kindName={kindName} product={product} onClose={onClose} onBack={onBack} pinned={pinned} />
         <p dir="auto" className="line-clamp-2 shrink-0 break-words px-3 pb-2 pt-0.5 text-[15px] font-semibold leading-5" title={card.title}>{card.title}</p>
         {/* side by side each pane keeps whole rows (or scrolls, pinned); stacked, the body does */}
-        <Pane pinned={pinned} fit={stacked} moreClass="px-3 pb-2 pt-1" className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
+        <Pane pinned={pinned} fit={stacked} className="flex flex-1 border-t border-popover-hairline @max-[34rem]:flex-col" data-record-panes="">
           <Pane pinned={pinned} fit={!stacked} data-record-pane="left" className={cn("flex flex-col gap-2 px-3 py-2", right ? "@min-[34rem]:flex-[2_1_0%] @min-[34rem]:border-e @min-[34rem]:border-popover-hairline @max-[34rem]:shrink-0 @max-[34rem]:border-b @max-[34rem]:border-popover-hairline" : "flex-1", stacked && "!overflow-visible [&:not(:has([data-fit-row]:not([data-fit-hidden])))]:hidden")}>
             {showPeopleBlock && (
               <div className="flex flex-col gap-1">

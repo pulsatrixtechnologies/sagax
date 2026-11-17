@@ -18936,7 +18936,10 @@
       "recordCard.state.unavailable": "d0513631fa47c9ea6b9398eaf9edaffb8374ed157ad99375fd2759e7cfd67c61",
       "recordCard.back": "76900f1bfd16c8d4dd3d25e6f46638d7165aee23883ccea6bfe071c514421769",
       "recordCard.notes.title": "b3ed2cb8932d0121c44a7f4bb65b35817ea0ed6ca1967b5e604eb7f6518891ae",
-      "recordCard.moreRows": "5f4f590acbda8ee3ef5686113938693ce4ea990c751396e88a64d49ed3449460"
+      "recordCard.more.fieldOne": "f24cd6703bd240da2ad87413a5b2d09f3cba991e02cdcff471fca482b897fd0b",
+      "recordCard.more.fieldMany": "259aa67d8e88f5b7ea0d5694e42bce22548dc0cf266eac93de8c831dad28133c",
+      "recordCard.more.rowOne": "590a3cf1170756a7aa788eb169cb07577d928e011a6557464ba39e47e36742c8",
+      "recordCard.more.rowMany": "b677128f06a869114acf0d50b1f3388f3abafd3875a26c10b7f9f062f08d7a4a"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

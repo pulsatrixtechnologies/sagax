@@ -980,7 +980,7 @@ browser's choice, so it follows the server language there.
 
 After the dashes, `pushAssistantText` passes the final text through
 `recordLinksInReply` (`server/index.ts`, `server/perspicax/record-links.ts`):
-a record link (`sagax://record/<product>/<kind>/<id>`) that does not parse
+a record link (`sagax://record/{product}/{kind}/{id}`) that does not parse
 becomes its text (one whose product or kind the person's list does not hold
 stays: its card says why); a plain number is linked only when the records
 the turn's own person read in that conversation (the person the turn was

@@ -250,7 +250,7 @@ describe("RecordCard without a layout engine's help", () => {
   };
   afterEach(() => { restore.forEach((undo) => undo()); restore = []; });
 
-  it("drops the rows that do not fit, whole, and says how many with a quiet +N", () => {
+  it("drops the rows that do not fit, whole, and says how many and of what at the pane's foot", () => {
     // a pane 110px tall; rows 30px apart, 28px tall: the third row would end at 88 > 110 - 20
     define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? 110 : 0; } });
     define(Element.prototype, "getBoundingClientRect", {
@@ -272,7 +272,15 @@ describe("RecordCard without a layout engine's help", () => {
     expect(new Set(hidden).size).toBe(keys.length - 3);
     expect(hidden).not.toContain(keys[0]);
     expect(hidden).not.toContain(keys[2]);
-    expect(left.querySelector("[data-fit-more]")!.textContent).toContain(`+${keys.length - 3}`);
+    // the count is of ROWS (a date row is two nodes), it says what it counts, and the
+    // line sits inside the pane's box, at its foot
+    const more = left.querySelector<HTMLElement>("[data-fit-more]")!;
+    expect(more.parentElement).toBe(left);
+    expect(more.className).toMatch(/\babsolute\b/);
+    expect(more.className).toMatch(/\bbottom-/);
+    const dropped = keys.length - 3;
+    expect(more.textContent).toMatch(new RegExp(`^${dropped} (champs|lignes) de plus$`));
+    expect(hidden.length).toBeGreaterThan(dropped - 1);
     // pinned: nothing dropped, the pane scrolls
     const pinned = show({ raw: ticketCard(NOW, "fr"), pinned: true, onClose: () => {} });
     expect(pinned.querySelector("[data-fit-hidden]")).toBeNull();
@@ -293,5 +301,38 @@ describe("RecordCard without a layout engine's help", () => {
     // the identity rows and the description come first
     expect(pinned.textContent!.indexOf("Acme Fabrication")).toBeLessThan(pinned.textContent!.indexOf("L'imprimante du comptoir"));
     expect(pinned.textContent!.indexOf("L'imprimante du comptoir")).toBeLessThan(pinned.textContent!.indexOf("Notes (7)"));
+  });
+
+  it("says fields when only key fields were left out, and a plain row count otherwise", () => {
+    define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? 400 : 0; } });
+    define(Element.prototype, "getBoundingClientRect", {
+      value(this: HTMLElement) {
+        const key = this.dataset?.fitRow;
+        if (this.dataset?.recordPane === "left") return rect(0, 400);
+        if (!key) return rect(0, 0);
+        const keys = [...new Set([...document.querySelectorAll<HTMLElement>("[data-record-pane=left] [data-fit-row]")].map((node) => node.dataset.fitRow))];
+        const at = keys.indexOf(key);
+        return rect(at * 30, at * 30 + 28);
+      },
+    });
+    const raw = ticketCard(NOW, "fr");
+    raw.fields = Array.from({ length: 8 }, (_, index) => ({ label: `Champ ${index}`, value: `Valeur ${index}` }));
+    // 3 people + 3 dates = 6 rows end by 178; fields follow at 28px each; room for 400 - 22 = 378
+    const card = show({ raw });
+    const left = card.querySelector("[data-record-pane=left]")!;
+    const more = left.querySelector<HTMLElement>("[data-fit-more]");
+    expect(more?.textContent).toMatch(/^\d+ champs de plus$/);
+    const hiddenKeys = new Set([...left.querySelectorAll<HTMLElement>("[data-fit-hidden]")].map((node) => node.dataset.fitRow));
+    expect([...hiddenKeys].every((key) => key!.startsWith("f-field-"))).toBe(true);
+    expect(Number(more!.textContent!.split(" ")[0])).toBe(hiddenKeys.size);
+  });
+
+  it("measures when the size changes, not on every render", () => {
+    let reads = 0;
+    define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? (reads += 1, 400) : 0; } });
+    show({ raw: ticketCard(NOW, "fr") });
+    const first = reads;
+    for (let again = 0; again < 5; again += 1) show({ raw: ticketCard(NOW, "fr") });
+    expect(reads).toBe(first);
   });
 });

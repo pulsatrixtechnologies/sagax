@@ -38,6 +38,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { clientRouteOwnerBot } from "./request-auth.ts";
+import { zipArchive } from "../testing/archive-fixtures.mjs";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { fillShape, memberRouteShapes, OWNED_KINDS, rowsBehindFeatures, type RouteShape, type Slot } from "../testing/authz-routes.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
@@ -156,6 +157,20 @@ async function createBot(auth: Auth, name: string): Promise<{ id: string; thread
   return { id: created.body.bot.id, threadId: created.body.bot.threadId };
 }
 
+/** A 1x1 PNG: the attachment route serves stored images (and audio) only. */
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+
+/** POST /api/files (a document) or /api/attachments (an image, `name` null)
+ * as `auth`: the stored file's path, or the answer. */
+async function upload(auth: Auth, name: string | null, type: string, body: Buffer): Promise<{ path?: string; answer: Answer }> {
+  const route = name === null ? "/api/attachments" : `/api/files?name=${encodeURIComponent(name)}`;
+  const res = await fetch(`${BASE}${route}`, { method: "POST", headers: { "content-type": type, cookie: auth.cookie }, body });
+  const text = await res.text();
+  let parsed: any = {};
+  try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+  return { ...(res.status === 201 && typeof parsed.path === "string" ? { path: parsed.path } : {}), answer: { status: res.status, body: parsed, text } };
+}
+
 /** Creates what a person owns. Each step is best effort: a kind the server
  * does not let the fixture create stays a fake id, and is reported. */
 async function furnish(auth: Auth, principal: string, label: string, marker: string): Promise<{ things: Things; missing: string[] }> {
@@ -198,6 +213,9 @@ async function furnish(auth: Auth, principal: string, label: string, marker: str
   take("calendarCall", call.body.call?.id, call);
   const listening = await api("POST", `/api/bots/${bot.id}/listening`, auth, {});
   take("listeningSession", listening.body.session?.sessionId, listening);
+  // a file uploaded and not sent yet: no conversation uses it, it is the uploader's only
+  const file = await upload(auth, null, "image/png", PNG);
+  take("attachment", file.path?.split("/").at(-1), file.answer);
   const search = await api("PUT", "/api/me/web-search", auth, { provider: "brave", key: `brave-${marker}` });
   if (search.status >= 300) missing.push(`web search key: ${search.status} ${search.text.slice(0, 160)}`);
   return { things, missing };
@@ -629,6 +647,55 @@ posixOnly("authorization matrix: person and person, member and admin (2026-10-27
     expect((await api("GET", list, b.auth)).body.choices).toHaveLength(1);
     expect(await api("DELETE", one, b.auth)).toMatchObject({ status: 200, body: { ok: true } });
     expect((await api("GET", list, b.auth)).body.choices).toEqual([]);
+  }, 60_000);
+
+  it("an uploaded file is its uploader's until a conversation someone reads uses it; never another person's nor an admin's", async () => {
+    // an image (its bytes are served) and an archive (its manifest is)
+    const image = await upload(a.auth, null, "image/png", PNG);
+    expect(image.answer.status, image.answer.text).toBe(201);
+    const zip = await upload(a.auth, "plans.zip", "application/zip", zipArchive([{ name: "plans/notes.md", data: "zqattachmentmark\n" }]));
+    expect(zip.answer.status, zip.answer.text).toBe(201);
+    const nameOf = (path: string) => path.split("/").at(-1)!;
+    const paths = [`/api/attachments/${nameOf(image.path!)}`, `/api/attachments/${nameOf(zip.path!)}/manifest`];
+    const reads = async (auth: Auth) => Promise.all(paths.map(async (path) => (await api("GET", path, auth)).status));
+    const refused = (statuses: number[]) => statuses.every((status) => status === 403 || status === 404);
+    // before any conversation uses it: the uploader only (her read first, as the composer's preview does)
+    expect(await reads(a.auth)).toEqual([200, 200]);
+    expect(refused(await reads(b.auth)), "B before the send").toBe(true);
+    expect(refused(await reads(admin)), "admin before the send").toBe(true);
+    // A's own conversation uses it: still hers only, at once (no cached "unused")
+    const tag = `<attached-file path="${zip.path}" name="plans.zip" />\n<attached-image path="${image.path}" name="plan.png" />`;
+    const sent = await api("POST", `/api/bots/${a.things.bot}/messages`, a.auth, { text: `read this\n\n${tag}`, threadId: a.things.thread });
+    expect(sent.status, sent.text).toBe(202);
+    expect(await reads(a.auth)).toEqual([200, 200]);
+    expect(refused(await reads(b.auth)), "B after A's own turn").toBe(true);
+    expect(refused(await reads(admin)), "admin after A's own turn").toBe(true);
+    // a room A and B share uses it: B reads it as a member, the admin still does not
+    const room = await api("POST", "/api/groups", a.auth, { name: "Plans room", memberIds: [a.things.bot], humanIds: [a.things.principal, b.things.principal] });
+    expect(room.status, room.text).toBeLessThan(300);
+    const posted = await api("POST", `/api/groups/${room.body.group.id}/messages`, a.auth, { text: `the plans\n\n${tag}` });
+    expect(posted.status, posted.text).toBeLessThan(300);
+    expect(await reads(b.auth)).toEqual([200, 200]);
+    expect(refused(await reads(admin)), "admin outside the room").toBe(true);
+  }, 120_000);
+
+  it("a bot's picture is seen by whoever sees the bot: shared, A sees it; private, A and an admin get not found", async () => {
+    const statusOf = async (path: string, auth: Auth) => (await api("GET", path, auth)).status;
+    const pictureOn = async (botId: string) => {
+      const image = await upload(b.auth, null, "image/png", PNG);
+      expect(image.answer.status, image.answer.text).toBe(201);
+      const avatarUrl = `/api/attachments/${image.path!.split("/").at(-1)}`;
+      const set = await api("PATCH", `/api/bots/${botId}/profile`, b.auth, { avatarUrl, avatarCrop: "square" });
+      expect(set.status, set.text).toBe(200);
+      return avatarUrl;
+    };
+    const privatePicture = await pictureOn(b.things.bot!);
+    const sharedPicture = await pictureOn(shared.bot!);
+    expect(await statusOf(privatePicture, b.auth)).toBe(200);
+    expect([403, 404]).toContain(await statusOf(privatePicture, a.auth));
+    expect([403, 404]).toContain(await statusOf(privatePicture, admin));
+    expect(await statusOf(sharedPicture, a.auth)).toBe(200);
+    expect([403, 404]).toContain(await statusOf(sharedPicture, admin));
   }, 60_000);
 
   it("own: A does everything on her own things without an admin", async () => {

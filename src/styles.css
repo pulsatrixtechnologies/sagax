@@ -571,6 +571,13 @@
   /* The composer's edge while it holds focus: a step above the hairline,
      still soft, 3:1 against the field so a keyboard user sees it. */
   --composer-focus-edge: color-mix(in srgb, var(--color-ink) 45%, transparent);
+  /* A card that floats over the conversation (the record card, #4572): the
+     reference's popup shadow (three layers, `0 3px 8px`, `0 2px 5px`,
+     `0 1px 1px`, in its fixed black at 12%) plus one wide soft lift, and the
+     menu fill one step lighter (6% of the ink) so a dark card reads above
+     the bubbles that share the page's grey. The hairline is the menus'. */
+  --float-fill: color-mix(in srgb, var(--menu-fill) 94%, var(--color-ink));
+  --float-shadow: 0 3px 8px 0 rgb(0 0 0 / 0.12), 0 2px 5px 0 rgb(0 0 0 / 0.12), 0 1px 1px 0 rgb(0 0 0 / 0.12), 0 12px 32px 0 rgb(0 0 0 / 0.5);
 }
 
 /* The reference's light appearance: a 12% hairline, glyphs at 66%, and its
@@ -579,6 +586,9 @@
   --menu-hairline: color-mix(in srgb, var(--color-ink) 12%, transparent);
   --menu-glyph: color-mix(in srgb, var(--color-ink) 66%, transparent);
   --menu-shadow: 0 3px 8px 0 color-mix(in srgb, var(--color-ink) 7%, transparent), 0 2px 5px 0 color-mix(in srgb, var(--color-ink) 7%, transparent), 0 1px 1px 0 color-mix(in srgb, var(--color-ink) 7%, transparent);
+  /* a light page takes the shadow alone: the fill stays the menus' */
+  --float-fill: var(--menu-fill);
+  --float-shadow: 0 3px 8px 0 rgb(0 0 0 / 0.12), 0 2px 5px 0 rgb(0 0 0 / 0.12), 0 1px 1px 0 rgb(0 0 0 / 0.12), 0 10px 28px 0 rgb(0 0 0 / 0.16);
 }
 
 /* Worn by every floating surface: popovers, menus, pickers, sheets. A band

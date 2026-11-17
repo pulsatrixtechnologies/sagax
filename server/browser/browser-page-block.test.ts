@@ -109,7 +109,8 @@ describe("pageBlock on real pages (#4394)", () => {
   afterAll(async () => {
     await browser?.close();
     await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
+    // Closing a real Chrome under load: the same limit as its launch above.
+  }, 120_000);
 
   const observe = async (path: string): Promise<PageState> => {
     const tab = await browser!.newPage();

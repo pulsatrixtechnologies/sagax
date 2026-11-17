@@ -55,3 +55,7 @@ dist-gallery
 # Durable proofs that need a raw URL live on the orphan branch `pr-assets/shared`.
 pr-assets/
 artifacts/shape-gen/
+
+# Generated locally by development, tests and packaging.
+/server/self-knowledge/knowledge.generated.json
+/server/self-knowledge/knowledge.generated.json.*.tmp

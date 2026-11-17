@@ -17,6 +17,7 @@
 // dev and falling back to the sibling .js in the packaged tree. outbase keeps
 // drivers/ nested; import.meta.url still resolves to the same location, so
 // that lookup is unaffected.
+import { ensureGeneratedKnowledge } from "./self-knowledge/ensure.mjs";
 import { build } from "esbuild";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,7 @@ import { markModuleScope } from "./mark-module-scope.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const server = join(root, "server");
+await ensureGeneratedKnowledge(root, true);
 
 // yaml's Node export is CommonJS and contains dynamic requires that cannot run
 // after it is inlined into our ESM-only packaged server. Its browser export is

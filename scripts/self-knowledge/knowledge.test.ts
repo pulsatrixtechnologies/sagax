@@ -1,6 +1,6 @@
 // The sagax_help knowledge base (server/self-knowledge/knowledge.generated.json)
 // matches the code: a tool, a permission, a Settings page, a menu entry, an
-// engine or a guide that changed without `pnpm gen:self-knowledge` fails
+// engine or a guide that cannot be regenerated fails
 // here. Docs, AGENTS.md and release notes may drift between builds: every
 // `pnpm build:server` regenerates the whole base.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -9,20 +9,20 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditKnowledgeText, buildKnowledge, KNOWLEDGE_FILE, serializeKnowledge, settingsSectionRows } from "./build.ts";
 import { GUIDES } from "./guides.ts";
-import { slug, splitHeadings } from "./markdown.ts";
+import { plainText, slug, splitHeadings } from "./markdown.ts";
 import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge/self-knowledge-types.ts";
 import { availableTools } from "../../server/drivers/agents-catalog.ts";
 import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 
-/** Developer notes left out of the committed base (see build.ts; moved to docs/code/ by #3292). */
+/** Developer notes left out of the generated base (see build.ts; moved to docs/code/ by #3292). */
 const AGENTS_NOTES_LEFT_OUT = new Set(["doc:docs/code/security.md#misuse-guardrails-2026-10-12"]);
 
 const root = join(import.meta.dirname, "..", "..");
-const committed = JSON.parse(readFileSync(join(root, KNOWLEDGE_FILE), "utf8")) as KnowledgeBase;
-const fresh = buildKnowledge(root, committed.generated);
+const generated = JSON.parse(readFileSync(join(root, KNOWLEDGE_FILE), "utf8")) as KnowledgeBase;
+const fresh = buildKnowledge(root, generated.generated);
 const STRICT = new Set(["tool", "setting", "menu", "engine", "guide"]);
 const strict = (base: KnowledgeBase) => base.sections.filter((section) => STRICT.has(section.kind));
-const RUN = "stale: run `pnpm gen:self-knowledge` and commit server/self-knowledge/knowledge.generated.json";
+const RUN = "stale: run `pnpm gen:self-knowledge` to generate the local knowledge base";
 
 describe("self-knowledge base", () => {
   // 2026-11-05 (#2053): SECTIONS lives in settings-nav.ts; an empty parse used
@@ -54,24 +54,24 @@ describe("self-knowledge base", () => {
 
   it("is up to date with the tools, permissions, Settings, menus, engines and guides", () => {
     const want = new Map(strict(fresh).map((section) => [section.id, section]));
-    const have = new Map(strict(committed).map((section) => [section.id, section]));
+    const have = new Map(strict(generated).map((section) => [section.id, section]));
     expect([...have.keys()], RUN).toEqual([...want.keys()]);
     for (const [id, section] of want) expect(have.get(id), `${id} ${RUN}`).toEqual(section);
-    expect(committed.version, RUN).toBe(fresh.version);
+    expect(generated.version, RUN).toBe(fresh.version);
   });
 
   it("covers every tool of the catalog with its permission", () => {
-    const ids = new Set(committed.sections.map((section) => section.id));
+    const ids = new Set(generated.sections.map((section) => section.id));
     const full = availableTools({
       externalRuntime: false, coordinating: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
       voiceNotes: true, meetings: true, cloudHome: false, memoryEnabled: true, chief: true, createBots: true,
       botId: "b", agentApi: true, perspicax: true, claims: true,
     }) as Array<{ name: string }>;
     for (const tool of full) expect(ids.has(`tool:${tool.name}`), `tool:${tool.name} ${RUN}`).toBe(true);
-    const help = committed.sections.find((section) => section.id === "tool:sagax_help")!;
+    const help = generated.sections.find((section) => section.id === "tool:sagax_help")!;
     expect(help.access).toContain("help:read");
     for (const permission of MCP_PERMISSIONS.filter((entry) => entry.tool && entry.source === "sagax")) {
-      const section = committed.sections.find((entry) => entry.id === `tool:${permission.tool}`);
+      const section = generated.sections.find((entry) => entry.id === `tool:${permission.tool}`);
       if (section) expect(section.access, permission.key).toContain(permission.key);
     }
   });
@@ -79,7 +79,7 @@ describe("self-knowledge base", () => {
   // #2714: a bot asked to install Sagax Remote Access unattended must know
   // the flow from sagax_help and the tool descriptions, never search the disk.
   it("loads the remote control knowledge and describes the unattended tools", () => {
-    const guide = committed.sections.find((section) => section.id === "guide:remote-access-unattended");
+    const guide = generated.sections.find((section) => section.id === "guide:remote-access-unattended");
     expect(guide, `guide:remote-access-unattended ${RUN}`).toBeDefined();
     for (const word of ["remote_support_hosts", "remote_support_host_code", "install_commands", "host_id", "sudo", "PowerShell", "remote_support_not_permitted", "remote_support_host_refused", "Talon"]) {
       expect(guide!.text, word).toContain(word);
@@ -99,7 +99,7 @@ describe("self-knowledge base", () => {
     for (const name of ["remote_support_hosts", "remote_support_host_code", "remote_support_host_revoke"]) {
       expect(tool(name), name).toBeDefined();
       expect(tool(name)!.description).toMatch(/unattended/i);
-      expect(committed.sections.some((section) => section.id === `tool:${name}`), `tool:${name} ${RUN}`).toBe(true);
+      expect(generated.sections.some((section) => section.id === `tool:${name}`), `tool:${name} ${RUN}`).toBe(true);
     }
     expect(tool("remote_support_host_code")!.description).toContain("install_commands");
     expect(tool("remote_support_host_code")!.description).toMatch(/Do not search this computer/);
@@ -116,11 +116,11 @@ describe("self-knowledge base", () => {
   });
 
   it("is deterministic and carries its version and day", () => {
-    expect(serializeKnowledge(buildKnowledge(root, committed.generated))).toBe(serializeKnowledge(fresh));
+    expect(serializeKnowledge(buildKnowledge(root, generated.generated))).toBe(serializeKnowledge(fresh));
     expect(buildKnowledge(root, "2000-01-01").hash).toBe(fresh.hash);
-    expect(committed.version).toBe(JSON.parse(readFileSync(join(root, "package.json"), "utf8")).forkVersion);
-    expect(committed.generated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(committed.perspicax?.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(generated.version).toBe(JSON.parse(readFileSync(join(root, "package.json"), "utf8")).forkVersion);
+    expect(generated.generated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(generated.perspicax?.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it("holds no secret and stays small", () => {
@@ -136,7 +136,7 @@ describe("self-knowledge base", () => {
   });
 
   it("keeps each section short and sourced", () => {
-    for (const section of committed.sections as KnowledgeSection[]) {
+    for (const section of generated.sections as KnowledgeSection[]) {
       expect(section.text.length, section.id).toBeLessThanOrEqual(3000);
       expect(section.source, section.id).toBeTruthy();
     }
@@ -189,7 +189,14 @@ describe("self-knowledge: team chat channels removed", () => {
     const ids = (base: KnowledgeBase) => base.sections.map((section) => section.id);
     expect(TEAM_CHAT_CHANNELS_OFFERED).toBe(false);
     expect(ids(fresh)).not.toContain("bot-setting:slack");
-    expect(ids(committed)).not.toContain("bot-setting:slack");
+    expect(ids(generated)).not.toContain("bot-setting:slack");
     expect(ids(fresh)).toContain("bot-setting:voice");
+  });
+});
+
+describe("plainText links", () => {
+  it("keeps a link's words, and a link written in a code span as the literal form", () => {
+    expect(plainText("See [the page](https://example.com/page) now")).toBe("See the page now");
+    expect(plainText("A record link is `[#481516](sagax://record/{product}/{kind}/{id})` here")).toBe("A record link is `[#481516](sagax://record/{product}/{kind}/{id})` here");
   });
 });

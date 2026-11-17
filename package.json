@@ -76,7 +76,7 @@
     "check:no-phone-home": "node scripts/check-no-phone-home.mjs --require-bundles",
     "preview": "vite preview",
     "gen:bodies": "node --experimental-strip-types scripts/gen-mascot-bodies.ts",
-    "build:server": "node --experimental-strip-types scripts/self-knowledge/generate.ts && tsc -p server/tsconfig.build.json && node scripts/bundle-server.mjs",
+    "build:server": "tsc -p server/tsconfig.build.json && node scripts/bundle-server.mjs",
     "gen:self-knowledge": "node --experimental-strip-types scripts/self-knowledge/generate.ts",
     "gen:settings-doc": "node --experimental-strip-types scripts/settings-actions/doc.ts",
     "build:companion": "tsc -p companion/tsconfig.build.json && node scripts/mark-module-scope.mjs dist-companion",

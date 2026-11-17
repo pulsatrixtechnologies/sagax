@@ -326,6 +326,15 @@ const POPOVER_PAIRS = [
     ["--color-popover", "--color-popover-field", "--color-popover-hover"].map((s) => [ink, s, 4.5])),
   ["--color-popover-accent", "--color-popover", 4.5],
   ["--color-popover-accent", "--color-popover-hover", 4.5],
+  // a record card's state and priority chips (RecordCard.tsx): the words are
+  // in the popover ink over the tone's own tint, the tone is a 3:1 dot or
+  // glyph. The card's fill is the menu family's (`--menu-fill`: raised).
+  ...["--color-danger", "--color-success", "--color-warning"].flatMap((tone) => [
+    ["--color-popover-ink", `${tone}/15`, 4.5, "--color-raised"],
+    ["--color-popover-ink", `${tone}/15`, 4.5, "--color-popover"],
+    [tone, "--color-raised", 3],
+    [tone, "--color-popover", 3],
+  ]),
   // the field outline and the popover's own edge identify them: 3:1
   ["--color-popover-border", "--color-popover", 3],
   ["--color-popover-border", "--color-popover-field", 3],

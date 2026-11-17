@@ -119,7 +119,6 @@ describe("person products contract", () => {
   });
 });
 
-
 describe("the marks the console serves for a product and its vendor (#4503, Perspicax #2071)", () => {
   const wire = { id: "desk", name: "Service Desk", state: "connected" };
   it("reads an icon (its site and an image address) and a larger logo on the product and on its vendor", () => {
@@ -141,5 +140,13 @@ describe("the marks the console serves for a product and its vendor (#4503, Pers
   it("keeps every field optional: a product the console sends none of is read as before", () => {
     const plain = parsePersonProduct(wire);
     for (const key of ["icon", "logo", "group"]) expect(plain).not.toHaveProperty(key);
+  });
+});
+
+describe("a product's mark", () => {
+  it("reads the console's https icon address, and drops any other", () => {
+    expect(parsePersonProduct({ id: "p", name: "P", icon: { url: "https://console.example/icons/p.svg?v=3", domain: "p.example" } })?.icon).toEqual({ domain: "p.example", url: "https://console.example/icons/p.svg?v=3" });
+    expect(parsePersonProduct({ id: "p", name: "P", icon: { url: "http://console.example/p.svg" } })?.icon).toBeUndefined();
+    expect(parsePersonProduct({ id: "p", name: "P", icon: { url: "javascript:alert(1)", domain: "p.example" } })?.icon).toEqual({ domain: "p.example" });
   });
 });

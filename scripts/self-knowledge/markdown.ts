@@ -21,7 +21,9 @@ export function plainText(markdown: string): string {
     })
     .replace(/^\s*(import|export)\s.*$/gm, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    // links keep their words, but a link written inside a code span is the
+    // literal form being shown (a doc that explains how a link is written)
+    .replace(/(`[^`\n]*`)|\[([^\]]+)\]\([^)]*\)/g, (whole, code: string | undefined, words: string | undefined) => (code ? code : words ?? whole))
     .replace(/<\/?[A-Za-z][^>]*>/g, " ")
     .replace(/^\s*[-*+]\s+/gm, "- ")
     .replace(/^\s*\|?[-: |]+\|?\s*$/gm, " ")

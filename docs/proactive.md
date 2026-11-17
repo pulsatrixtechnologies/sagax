@@ -452,17 +452,32 @@ An "always" answer is the person's, never the routine's text:
   is never written into the routine's instructions, which stay the author's
   text (a person's, or a plugin's that keeps its routine up to date).
 - It covers the SAME question asked of another item of the kind, with the
-  same options, never another question. The question's shape is its words
-  with every word holding a digit (an item number, a date, an amount, an id)
-  set aside, case and spacing ignored (`questionShape`): "always Oui" on
-  "Fermer le billet 1013 ?" (Oui / Non) covers "Fermer le billet 1014 ?",
-  never "Facturer le billet 1014 au client ?", though both offer Oui / Non.
-  A question whose name or title changes is another question: its card is
-  raised, never covered by mistake.
+  same options, never another question. The question's shape
+  (`questionShape`, case and spacing ignored) sets aside only what names one
+  item: a number after an item word ("billet 1013", "ticket #1013", in every
+  language of the app, nouns only: ticket, invoice, incident, case, billet,
+  facture, dossier, Rechnung, Vorfall, Fall, factura, incidente, caso,
+  expediente, chamado, fatura, тікет, заявка, інцидент, справа, टिकट, चालान,
+  घटना, チケット, 請求書, インシデント, 案件, 工单, 工單, 发票, 發票, 事件, 案例), a number after an id
+  mark (#, №, n°, no., nr., núm.), a token mixing letters and digits
+  (INC0012, a UUID; never a quantity with its unit like 10mg), and a date or
+  time written with digits (2026-11-17, 17/11/2026, 09:30). Every other
+  number is part of the question: an amount, a level, a quantity. "always
+  Oui" on "Fermer le billet 1013 ?" covers "Fermer le billet 1014 ?", never
+  "Facturer le billet 1014 au client ?"; "Rembourser 50 $ ?" never covers
+  "Rembourser 5000 $ ?", "niveau 1" never "niveau 3", "2 licences" never
+  "40 licences". In doubt the number counts (a bare "1013", a day written
+  with a month's name): the card goes back to the person. A word that is
+  also a verb ("order", "commande") is not an item word.
 - The server decides what is covered, not the bot: a routine's run raises
   every card as usual, and a card the person chose "always" for is answered
   at once with their choice (`autoApplied`, ask_choice's result says
-  `answered.standing`); any other card is the person's to answer. A choice
+  `answered.standing`); any other card is the person's to answer. The
+  answered card stays in the conversation (a chat question, settled, its
+  answer marked, no sound) and says "Your “always” answer for this routine:
+  Oui." with a link to the routine's settings; a card Full access answered
+  says so too ("Answered for you under Full access"). The run's result says
+  what was answered. A choice
   that kept no options (moved from an older line) covers the same question
   when its answer is one of the card's options.
 - A run's prompt names each choice with the question it was chosen on, its
@@ -483,7 +498,8 @@ An "always" answer is the person's, never the routine's text:
 - The routine's page lists them in its Settings tab, under "Always answers",
   before More: the question, what it covers ("This question for any item of
   this kind, with Oui · Non"), when it was chosen, the answer and Remove;
-  never a key. Nothing shows when there is none.
+  never a key. Its help says it in one sentence: an item's number, id or
+  date may change; a different amount, level or quantity asks again. Nothing shows when there is none.
   `GET /api/routines/:id/always-choices` lists them and
   `DELETE /api/routines/:id/always-choices/:id` removes one for good, for the
   routine's person only (another person, an admin included, gets 404).

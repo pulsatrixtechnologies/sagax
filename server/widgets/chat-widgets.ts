@@ -17,7 +17,7 @@ import type { MausColor } from "../../shared/wire.ts";
 import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, OPTIONS_CARD_LIMITS, parseAskChoiceInput } from "../../shared/options-card.ts";
-import { alwaysOffer, cardKindOf, learnedOptions, type AlwaysChoice, type CardAnswerLearning, type KindAnswers, type LearningLanguage } from "../proactive/answer-learning.ts";
+import { alwaysOffer, answerIsOption, cardKindOf, learnedOptions, type AlwaysChoice, type CardAnswerLearning, type KindAnswers, type LearningLanguage } from "../proactive/answer-learning.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
 import { questionCardTitle } from "../approvals/approval-words.ts";
@@ -411,7 +411,9 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // choice, whatever the bot judged; any other question is the person's
   if (standing) {
     const settled = args.store.appendMessage(args.threadId, {
-      role: "bot", kind: "options", card: { ...shownCard, ...learned, answered: "answer", answeredText: standing.answer, autoApplied: true },
+      // a question of the chat, settled: it stays in the conversation with the
+      // answer marked and says it is the person's "always" answer (#4558)
+      role: "bot", kind: "options", card: { ...shownCard, ...learned, requestType: "question", answered: "answer", answeredText: standing.answer, autoApplied: true, standingAnswer: { routineId: learned.answerLearning!.routineId } },
       ...from,
     });
     args.authored?.(settled.id);
@@ -421,7 +423,9 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   if (answered) {
     // full-access: ask-choice
     const settled = args.store.appendMessage(args.threadId, {
-      role: "bot", kind: "options", card: { ...shownCard, answered: "answer", answeredText: answered.choice, autoApplied: true },
+      // #4558: a question of the chat, settled, so it stays visible (an
+      // untyped card read as the first-run quiz and hid once answered)
+      role: "bot", kind: "options", card: { ...shownCard, requestType: "question", answered: "answer", answeredText: answered.choice, autoApplied: true },
       ...from,
     });
     args.authored?.(settled.id);
@@ -477,7 +481,7 @@ function learnCard(
   const answers = learning.answers(askKey);
   const chosen = learning.always(cardKindOf(askKey), value.subtitle, value.options);
   // the choice's answer must still be one of this card's options
-  const standing = chosen && value.options.some((option) => option.trim().toLowerCase() === chosen.answer.trim().toLowerCase()) ? chosen : null;
+  const standing = chosen && answerIsOption(chosen.answer, value.options) ? chosen : null;
   const always = alwaysOffer(answers, { options: value.options, chosen, language: learning.language });
   const next = learnedOptions(value.options, value.details, answers?.usual, always, OPTIONS_CARD_LIMITS.maxOptions);
   value.options = next.options;

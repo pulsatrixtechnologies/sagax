@@ -109,6 +109,9 @@ export interface OptionCardData {
   autoApplied?: boolean;
   /** A person undid that change. */
   undone?: boolean;
+  /** #4558: answered by the server with the person's "always" answer for
+   * this routine's question (shared/wire.ts). */
+  standingAnswer?: { routineId: string };
   /** Persisted proposal used by the server when the user confirms it. */
   routineRequest?: RoutineRequestCardData;
   /** Staged learned-skill change; applied only after the user confirms this card. */

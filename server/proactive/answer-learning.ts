@@ -203,14 +203,55 @@ function optionsSignature(options: readonly string[]): string[] {
   return [...new Set(options.map(same).filter(Boolean))].sort();
 }
 
-/** #4558: a question's words without its variable parts: every word that
- * holds a digit (an item number, a date, an amount, an id) becomes "#", case
- * and spacing ignored. "Close ticket 1013?" and "Close ticket 1014?" are one
- * question asked of two items; "Bill ticket 1014?" is another question. A
- * name or a title that changes makes another question: its card is raised,
- * never covered by mistake. */
+/** #4558: words naming an item, whose number is the item's id ("billet
+ * 1013", "invoice 88"), in every language of the app. Nouns only: a word
+ * that is also a verb ("order", "commande") is left out, so "Commander 2
+ * licences ?" keeps its 2. */
+const ITEM_WORDS = [
+  "ticket", "tickets", "invoice", "incident", "case", // en
+  "billet", "facture", "dossier", // fr
+  "rechnung", "vorfall", "fall", // de
+  "factura", "incidente", "caso", "expediente", // es
+  "chamado", "fatura", // pt-br
+  "тікет", "заявка", "інцидент", "справа", // uk
+  "टिकट", "चालान", "घटना", // hi
+  "チケット", "請求書", "インシデント", "案件", // ja
+  "工单", "工單", "发票", "發票", "事件", "案例", // zh, zh-tw
+];
+/** A mark that says the number after it is an id ("#1013", "n° 1013"). */
+const ID_MARK = "(?:#|№|n°|nº|no\\.|nr\\.|núm\\.)";
+const ITEM_NUMBER = new RegExp(`((?<![\\p{L}])(?:${ITEM_WORDS.join("|")}))\\s*(?:${ID_MARK}\\s*)?\\d[\\p{L}\\p{N}_-]*`, "gu");
+const MARKED_NUMBER = new RegExp(`${ID_MARK}\\s*[\\p{L}\\p{N}_-]*\\d[\\p{L}\\p{N}_-]*`, "gu");
+/** Dates and times written with digits alone (any language): 2026-11-17,
+ * 2026-11-17T09:30, 17/11/2026, 17.11.26, 09:30. A day written with a
+ * month's name keeps its number (in doubt, the number counts). */
+const DIGIT_DATE = /(?<![\p{N}])(?:\d{4}-\d{1,2}-\d{1,2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?)?|\d{1,2}[./]\d{1,2}[./]\d{2,4}|\d{1,2}:\d{2}(?::\d{2})?)(?![\p{N}])/gu;
+/** A token that is an id by its form: letters and digits mixed (INC0012,
+ * T-1013, a hash, a UUID), never a quantity written with its unit (10mg,
+ * 2h, 40licences). */
+function idToken(token: string): boolean {
+  return token.length >= 3 && /\d/.test(token) && /\p{L}/u.test(token) && !/^\d[\d.,]*\p{L}+$/u.test(token);
+}
+
+/** #4558: a question's words without the parts that name one item: an
+ * item's number ("billet 1013", "#1013", "n° 1013"), an id by its form
+ * (INC0012, a UUID) and a date written with digits become a mark; case and
+ * spacing ignored. Every other number stays part of the question: an amount
+ * ("Rembourser 50 $ ?"), a level ("niveau 1"), a quantity ("2 licences").
+ * "Fermer le billet 1013 ?" and "Fermer le billet 1014 ?" are one question
+ * asked of two items; "Rembourser 50 $ ?" and "Rembourser 5000 $ ?" are two
+ * questions. In doubt the number counts: the card goes back to the person. */
 export function questionShape(question: string): string {
-  return same(question).replace(/[^\s]*\d[^\s]*/gu, "#");
+  return same(question)
+    .replace(DIGIT_DATE, "<date>")
+    .replace(ITEM_NUMBER, "$1 <id>")
+    .replace(MARKED_NUMBER, "<id>")
+    .replace(/[\p{L}\p{N}_-]+/gu, (token) => (idToken(token) ? "<id>" : token));
+}
+
+/** #4558: the answer is one of these options (case, spacing ignored). */
+export function answerIsOption(answer: string, options: readonly string[]): boolean {
+  return options.some((option) => same(option) === same(answer));
 }
 
 /** #4558: a choice's id: its card kind, the shape of the question it was
@@ -302,7 +343,7 @@ export function alwaysChoiceOn(ledger: SignalLedger, scope: AnswerScope, kind: s
   const exact = alwaysChoiceById(ledger, scope, alwaysChoiceId(kind, question, options));
   if (exact) return exact;
   const older = alwaysChoiceById(ledger, scope, alwaysChoiceId(kind, question, []));
-  return older && options.some((option) => same(option) === same(older.answer)) ? older : null;
+  return older && answerIsOption(older.answer, options) ? older : null;
 }
 
 /** #4558: the person removes one of their "always" choices (by its id). */
@@ -331,8 +372,8 @@ export function answerLearningNote(history: readonly KindAnswers[], always: read
   if (chosen.length) {
     lines.push(
       "The person's standing choices for this routine's cards, each chosen on a card with \"always for this routine\": the card's kind (its key without the item id), the question it was chosen on and the options it offered.",
-      "A choice covers only that same question asked of another item of the kind (the same words, only its numbers, dates or ids differ) with the same options. Any other question raises its card as usual, even one offering the same options.",
-      "Raise every card as usual: for a covered one, ask_choice answers at once with the person's choice (its result says so) and you go on with it; any other is the person's to answer. A choice never widens what the routine may do.",
+      "A choice covers only that same question asked of another item of the kind (the same words, only the item's number, id or date differs) with the same options. Any other question raises its card as usual, even one offering the same options or a different amount, level or quantity.",
+      "Raise every card as usual: for a covered one, ask_choice answers at once with the person's choice (its result says so, and the card shows it in the conversation) and you go on with it, saying in the run's result what was answered for them; any other is the person's to answer. A choice never widens what the routine may do.",
       ...chosen.map((choice) => choiceLine(choice, quote)),
     );
   }

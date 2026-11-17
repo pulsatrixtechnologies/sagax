@@ -241,8 +241,29 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     const note = answerLearningNote(answerHistory(ledger, SCOPE), alwaysChoices(ledger, SCOPE))!;
     expect(note).toContain("- kind \"ticket\", the question \"Ticket 77: 2 h logged. Approve?\" offering \"Approve\" / \"Refuse\": always \"Approve\"");
     expect(note).toContain("only that same question asked of another item of the kind");
-    expect(note).toContain("Any other question raises its card as usual, even one offering the same options.");
+    expect(note).toContain("Any other question raises its card as usual, even one offering the same options or a different amount, level or quantity.");
     expect(answerLearningNote([], [])).toBeUndefined();
+  });
+
+  it("an item's number, id or date may change; an amount, a level or a quantity is part of the question", () => {
+    const covers = (chosenOn: string, asked: string) => {
+      const ledger = ledgerOn(tempDir());
+      rememberAlwaysChoice(ledger, SCOPE, { kind: "ticket", question: chosenOn, options: ["Oui", "Non"], answer: "Oui" });
+      return alwaysChoiceOn(ledger, SCOPE, "ticket", asked, ["Oui", "Non"]) !== null;
+    };
+    // the item's number, an id, a date: the same question
+    expect(covers("Fermer le billet 1013 ?", "Fermer le billet 1014 ?")).toBe(true);
+    expect(covers("Close ticket #1013?", "Close ticket #2077?")).toBe(true);
+    expect(covers("Fermer INC0012 ?", "Fermer INC0457 ?")).toBe(true);
+    expect(covers("Reporter au 2026-11-17 ?", "Reporter au 2026-12-02 ?")).toBe(true);
+    expect(covers("チケット1013を閉じますか？", "チケット1014を閉じますか？")).toBe(true);
+    // an amount, a level, a quantity: another question, the card goes back to the person
+    expect(covers("Rembourser 50 $ ?", "Rembourser 5000 $ ?")).toBe(false);
+    expect(covers("Donner l'accès niveau 1 ?", "Donner l'accès niveau 3 ?")).toBe(false);
+    expect(covers("Commander 2 licences ?", "Commander 40 licences ?")).toBe(false);
+    expect(covers("Order 2 licenses?", "Order 40 licenses?")).toBe(false);
+    // a bare number is not known to be an id: in doubt, it counts
+    expect(covers("Close 1013?", "Close 1014?")).toBe(false);
   });
 
   it("\"always Oui\" on \"Fermer le billet 1013 ?\" covers closing another ticket, never billing one", () => {
@@ -403,7 +424,8 @@ describe("the card: usual answer first, the offer, never an automatic answer", (
     const close = w.ask({ key: "ticket-1014", question: "Fermer le billet 1014 ?", options: ["Oui", "Non"], wait: false }) as { messageId: string; answered?: { choice: string; standing?: true } };
     expect(close.answered).toMatchObject({ choice: "Oui", standing: true });
     const closed = w.of("run-1").find((row) => row.id === close.messageId)!.card!;
-    expect(closed).toMatchObject({ answered: "answer", answeredText: "Oui", autoApplied: true });
+    // a question of the chat, settled and marked as the person's "always" answer: never hidden
+    expect(closed).toMatchObject({ requestType: "question", answered: "answer", answeredText: "Oui", autoApplied: true, standingAnswer: { routineId: "r1" } });
     const bill = w.ask({ key: "ticket-1015", question: "Facturer le billet 1015 au client ?", options: ["Oui", "Non"], wait: false }) as { messageId: string; answered?: unknown };
     expect(bill.answered).toBeUndefined();
     const billed = w.of("run-1").find((row) => row.id === bill.messageId)!.card!;
@@ -411,7 +433,7 @@ describe("the card: usual answer first, the offer, never an automatic answer", (
     expect(billed.autoApplied).toBeUndefined();
   });
 
-    it("an answered keyed card leaves the index for the learning to read it", () => {
+  it("an answered keyed card leaves the index for the learning to read it", () => {
     const ledger = ledgerOn(tempDir());
     const w = world(ledger);
     const posted = w.ask({ key: "ticket-80", question: "Approve this time entry?", options: ["Approve", "Refuse"], wait: false }) as { messageId: string };

@@ -219,8 +219,19 @@ export function OptionCard({
           fieldId={message.id}
         />
       )}
-      {settled && !closed && (reading.rest || (!reading.picked.length && !given)) && (
+      {settled && !closed && !card.autoApplied && (reading.rest || (!reading.picked.length && !given)) && (
         <SheetNote>{reading.rest || t("question.status.answered")}</SheetNote>
+      )}
+      {/* #4558: answered without the person: say by what, never silently */}
+      {settled && !closed && card.autoApplied && (
+        <SheetNote>
+          {card.standingAnswer
+            ? <>
+              {t("question.standingAnswer", { answer: given })}{" "}
+              <button type="button" data-standing-answer-settings="" className="font-medium text-accent-text hover:underline" onClick={() => dispatch({ type: "openRoutine", botId, routineId: card.standingAnswer!.routineId })}>{t("question.standingAnswer.settings")}</button>
+            </>
+            : t("question.fullAccessAnswer", { answer: given })}
+        </SheetNote>
       )}
       {closed && <SheetNote closed>{card.skipped ? t("waitingCard.skipped") : card.answerNote || (card.expired ? t("waitingCard.expired") : t("question.status.closed"))}</SheetNote>}
       {card.proactiveProposal && (!groupId || (bot && viewerOwnsBot(state.config, bot))) && (

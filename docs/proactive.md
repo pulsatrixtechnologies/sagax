@@ -456,16 +456,21 @@ An "always" answer is the person's, never the routine's text:
   (`questionShape`, case and spacing ignored) sets aside only what names one
   item, and leans to "the number counts":
   - a number or id right after an explicit id mark (#1013, № 1013, n° 1013),
-    never the end of a word ("casino. 2" counts);
-  - right after an item word, a bare whole number (billet 1013) or an id
-    that starts with a letter (ticket INC0012), with no money, unit, percent
-    or duration mark next to it ("facture 500 $" counts), no decimal and no
-    ":". Item words, nouns only, in every language of the app: ticket,
-    invoice, incident, case, billet, facture, dossier, Rechnung, Vorfall,
-    factura, incidente, caso, expediente, chamado, fatura, тікет, заявка,
-    інцидент, справа, टिकट, चालान, घटना, チケット, 請求書, インシデント, 案件, 工单, 工單, 发票, 發票,
-    事件, 案例 (a word that is also a verb or another common word, "order",
-    "commande", "fall", is left out).
+    in one block (no other digits joined by a space or a separator), never
+    the end of a word ("casino. 2" counts);
+  - right after an item word, a whole number in one block (billet 1013), or
+    an id that starts with a letter and holds at least three digits (ticket
+    INC0012; "billet P1" counts), followed by the end of the question, an
+    end punctuation (? ! . ; , :) or a linking word of a short closed list
+    per language (and, or, of, for, to, et, ou, du, de, pour, au, und, für,
+    y, para, e, do, і, та, और, の, を, 的, …). Any other word after the number
+    (a unit, a currency, "fois", a month, anything unknown) makes it count.
+    Item words, nouns only, in every language of the app: ticket, invoice,
+    incident, case, billet, facture, dossier, Rechnung, Vorfall, factura,
+    incidente, caso, expediente, chamado, fatura, тікет, заявка, інцидент,
+    справа, टिकट, चालान, घटना, チケット, 請求書, インシデント, 案件, 工单, 工單, 发票, 發票, 事件, 案例
+    (a word that is also a verb or another common word, "order", "commande",
+    "fall", is left out).
 
   Every other number is part of the question: an amount, a level or a size
   (Tier2, D4s_v5), a quantity, a time or a duration (1:30), a version
@@ -474,8 +479,10 @@ An "always" answer is the person's, never the routine's text:
   "Reporter au 30 juin ?"). "always Oui" on "Fermer le billet 1013 ?" covers "Fermer le
   billet 1014 ?", never "Facturer le billet 1014 au client ?";
   "Rembourser 50 $ ?" never covers "Rembourser 5000 $ ?", "Payer la facture
-  500 $ ?" never "50000 $", "niveau 1" never "niveau 3", "2 licences" never
-  "40 licences", "1:30 logged" never "9:45 logged". In doubt the number
+  500 $ ?" never "50000 $", "facture 1 500 $" never "9 500 $", "fatura 500
+  reais" never "50000 reais", "billet 3 fois" never "300 fois", "niveau 1"
+  never "niveau 3", "2 licences" never "40 licences", "1:30 logged" never
+  "9:45 logged". In doubt the number
   counts: the card goes back to the person.
 - The server decides what is covered, not the bot: a routine's run raises
   every card as usual, and a card the person chose "always" for is answered
@@ -506,9 +513,9 @@ An "always" answer is the person's, never the routine's text:
 - The routine's page lists them in its Settings tab, under "Always answers",
   before More: the question, what it covers ("This question for any item of
   this kind, with Oui · Non"), when it was chosen, the answer and Remove;
-  never a key. Its help says it in one sentence: only the item's number
-  (after its word or after #) may change; any other number, a date
-  included, asks again. Nothing shows when there is none.
+  never a key. Its help says it in one sentence: only the item's own number
+  (right after # or right after its word, at the end or before a linking
+  word) may change; any other number, a date included, asks again. Nothing shows when there is none.
   `GET /api/routines/:id/always-choices` lists them and
   `DELETE /api/routines/:id/always-choices/:id` removes one for good, for the
   routine's person only (another person, an admin included, gets 404).

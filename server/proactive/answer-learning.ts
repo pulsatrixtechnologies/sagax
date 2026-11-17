@@ -219,30 +219,51 @@ const ITEM_WORDS = [
   "工单", "工單", "发票", "發票", "事件", "案例", // zh, zh-tw
 ];
 /** An explicit id mark, never the end of a word ("#1013", "n° 1013"). */
-const MARKED_ID = /(?<![\p{L}\p{N}])(?:#|№|n°|nº)\s*[\p{L}\p{N}_-]*\d[\p{L}\p{N}_-]*/gu;
-/** An item word and right after it a bare whole number (1013) or an id that
- * starts with a letter (INC0012, T-1013); never a decimal, a time or h:mm.
- * In Chinese and Japanese the next word follows without a space. */
-const ITEM_NUMBER = new RegExp(`(?<![\\p{L}])(${ITEM_WORDS.join("|")})\\s*(\\p{L}[\\p{L}\\p{N}_-]*\\d[\\p{L}\\p{N}_-]*|\\d+)(?!(?![\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}])[\\p{L}\\p{N}_]|[.,:]\\d)`, "gu");
-/** A money, unit, percent or duration mark next to the number: then it is
- * an amount or a quantity, never the item's id ("facture 500 $"). */
-const NEAR_UNIT = /^\s*(?:[$€£¥₹₴%円元件個个時分日月年]|(?:usd|cad|eur|euros?|dollars?|k|m|h|hrs?|hours?|heures?|min|mins|minutes?|s|secs?|seconds?|secondes?|days?|jours?|weeks?|semaines?|months?|mois|years?|ans?|années?|gb|go|mb|mo|tb|to|kg|g|km|units?|unités?)(?![\p{L}\p{N}]))/iu;
+const MARKED_ID = /(?<![\p{L}\p{N}])((?:#|№|n°|nº)\s*)([\p{L}\p{N}_-]*\d[\p{L}\p{N}_-]*)/gu;
+/** An item word and right after it a number or a letter-led id. */
+const ITEM_NUMBER = new RegExp(`(?<![\\p{L}])(${ITEM_WORDS.join("|")})(\\s*)(\\p{L}[\\p{L}\\p{N}_-]*|\\d+)`, "gu");
+/** Another block of digits joined to this one (1 500, 17/11/2026, 1.5,
+ * 1:30, 12-3): the number is not in one block. */
+const JOINED_DIGITS = /^(?:\s+\d|[.,/:-]\d)/u;
+/** Words that link an item's number to the rest of the question, a short
+ * closed list per language of the app. Any other word after the number (a
+ * unit, a currency, "fois", a month, anything unknown) makes it count. */
+const LINK_WORDS = [
+  "and", "or", "of", "for", "to", "in", "on", "from", "with", // en
+  "et", "ou", "du", "de", "des", "pour", "au", "aux", "à", "avec", "sur", "dans", // fr
+  "und", "oder", "für", "von", "vom", "zu", "mit", "im", // de
+  "y", "o", "del", "para", "a", "al", "con", "en", // es
+  "e", "do", "da", "ao", "com", "em", // pt-br
+  "і", "й", "та", "або", "для", "до", "з", "у", "в", // uk
+  "और", "या", "के", "की", "का", "को", "में", "से", // hi
+];
+/** Chinese and Japanese particles, written right after the number. */
+const LINK_PARTICLES = ["を", "の", "は", "が", "に", "と", "で", "も", "的", "和", "或", "给", "給", "到", "在"];
+const ITEM_NUMBER_END = new RegExp(`^(?:\\s*$|\\s*[?!.;,:)»"'…？！。、；，：](?!\\d)|\\s+(?:${LINK_WORDS.join("|")})(?![\\p{L}\\p{N}])|(?:${LINK_PARTICLES.join("|")}))`, "u");
+
 /** #4558: a question's words without what names one item, case and spacing
- * ignored: a number or id right after an explicit id mark (#1013, n° 1013),
- * and a bare whole number or a letter-led id right after an item word
- * (billet 1013, ticket INC0012) with no money, unit, percent or duration
- * mark next to it. Every other number stays part of the question: an amount
- * ("Payer la facture 500 $ ?"), a level ("Tier2", "niveau 1"), a quantity
- * ("2 licences"), a time or a duration ("1:30"), a date in digits or in
+ * ignored. A number is set aside only:
+ * - right after an explicit id mark (#1013, n° 1013), in one block;
+ * - right after an item word (billet 1013, ticket INC0012), when it is a
+ *   whole number in one block (or an id that starts with a letter and holds
+ *   at least three digits) followed by the end of the question, an end
+ *   punctuation or a linking word of a short closed list ("du", "for").
+ * Every other number stays part of the question: an amount ("facture 500 $",
+ * "1 500 $", "500 reais"), a level ("Tier2", "billet P1"), a quantity ("3
+ * fois", "2 licences"), a time or a duration ("1:30"), a date in digits or in
  * words ("Reporter au 3 décembre ?" is not "Reporter au 30 juin ?").
  * "Fermer le billet 1013 ?" and "Fermer le billet 1014 ?" are one question
- * asked of two items; "Rembourser 50 $ ?" and "Rembourser 5000 $ ?" are two.
- * In doubt the number counts: the card goes back to the person. */
+ * asked of two items. In doubt the number counts: the card goes back to the
+ * person. */
 export function questionShape(question: string): string {
   return same(question)
-    .replace(MARKED_ID, "<id>")
-    .replace(ITEM_NUMBER, (match: string, word: string, value: string, offset: number, whole: string) =>
-      /^\d/.test(value) && NEAR_UNIT.test(whole.slice(offset + match.length)) ? match : `${word} <id>`);
+    .replace(MARKED_ID, (match: string, mark: string, _value: string, offset: number, whole: string) =>
+      (JOINED_DIGITS.test(whole.slice(offset + match.length)) ? match : `${mark.trim()}<id>`))
+    .replace(ITEM_NUMBER, (match: string, word: string, space: string, value: string, offset: number, whole: string) => {
+      const after = whole.slice(offset + match.length);
+      const id = /^\d/.test(value) || (value.match(/\d/g)?.length ?? 0) >= 3;
+      return id && !JOINED_DIGITS.test(after) && ITEM_NUMBER_END.test(after) ? `${word}${space}<id>` : match;
+    });
 }
 
 /** #4558: the answer is one of these options (case, spacing ignored). */

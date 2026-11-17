@@ -283,6 +283,23 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     expect(covers("Reporter au 3 décembre ?", "Reporter au 30 décembre ?")).toBe(false);
     expect(covers("Postpone to December 3?", "Postpone to June 30?")).toBe(false);
     expect(covers("Fermer le billet 1013 du 3 décembre ?", "Fermer le billet 1014 du 3 décembre ?")).toBe(true);
+    // after an item word only a whole number in one block, then the end, an
+    // end punctuation or a linking word: anything else counts
+    expect(covers("Payer la facture 1 500 $ ?", "Payer la facture 9 500 $ ?")).toBe(false);
+    expect(covers("Pagar fatura 500 reais?", "Pagar fatura 50000 reais?")).toBe(false);
+    expect(covers("Pagar factura 500 dólares?", "Pagar factura 50000 dólares?")).toBe(false);
+    expect(covers("Сплатити заявка 500 грн?", "Сплатити заявка 50000 грн?")).toBe(false);
+    expect(covers("請求書500ドルを支払いますか？", "請求書50000ドルを支払いますか？")).toBe(false);
+    expect(covers("Dupliquer le billet 3 fois ?", "Dupliquer le billet 300 fois ?")).toBe(false);
+    expect(covers("Envoyer la facture 3 décembre ?", "Envoyer la facture 30 décembre ?")).toBe(false);
+    expect(covers("Send invoice 17/11/2026?", "Send invoice 03/11/2026?")).toBe(false);
+    expect(covers("Close ticket #1 500?", "Close ticket #9 500?")).toBe(false);
+    // a letter-led id holds at least three digits
+    expect(covers("Fermer le billet P1 ?", "Fermer le billet P4 ?")).toBe(false);
+    // a linking word, an end punctuation: the item's number
+    expect(covers("Close ticket 1013 for the client?", "Close ticket 1014 for the client?")).toBe(true);
+    expect(covers("Fermer le billet 1013, puis notifier ?", "Fermer le billet 1014, puis notifier ?")).toBe(true);
+    expect(covers("工单1013的状态改为关闭？", "工单1014的状态改为关闭？")).toBe(true);
     // a version is not a date
     expect(covers("Mettre à jour vers 10.4.12 ?", "Mettre à jour vers 10.4.13 ?")).toBe(false);
   });

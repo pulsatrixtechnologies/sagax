@@ -39,6 +39,7 @@ import { navigateThreadMenu } from "../BotProjects";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { DialogFrame, DialogLayer, FIELD, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { DiffView } from "../code/DiffView";
+import { revealBridge } from "../AttachmentPreview";
 import { readableError } from "@/lib/plain-error";
 import { MENU_SURFACE, MenuDivider, MenuGlyph, menuRow, MENU_FIT_ROW, useMenuInWindow } from "@/components/menu-look";
 
@@ -186,11 +187,6 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
 }
 
 export type BranchMenuAction = "retry" | "commit" | "push" | "pr" | "openPr" | "diff" | "reveal" | "computer" | "archive" | "unarchive" | "github" | "copyLink" | "ignore" | "delete";
-
-function revealBridge(): ((path: string) => Promise<"shown" | "missing" | "invalid">) | undefined {
-  const ogb = typeof window === "undefined" ? undefined : window.ogb;
-  return ogb?.remoteClient?.active ? undefined : ogb?.revealInFolder;
-}
 
 /** The "..." button and its menu (portalled: the grouped card clips). */
 export function BranchMenu({ branch, info, pull, archived, botName, readFailed = false, details, canIgnore = false, onAct }: {

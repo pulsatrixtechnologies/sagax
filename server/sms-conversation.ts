@@ -1,3 +1,4 @@
+import { withoutRecordLinks } from "../shared/record-cards.ts";
 import { reportBackgroundError } from "./background-error.ts";
 // Own-line turns into the unified chat (2026-10-29 SMS; 2026-11-06 call
 // requests, #2194). The person reaches their Perspicax Voice line from a
@@ -96,7 +97,8 @@ export function ownLineVia(event: string): OwnLineVia {
 
 /** The text that goes back: the bot's words, cut to one SMS_REPLY_MAX text. */
 export function smsReplyBody(reply: string, language: "fr" | "en"): string {
-  const flat = reply.replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  // #4507: a record link is the app's own; a text carries its label only
+  const flat = withoutRecordLinks(reply).replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
   if (flat.length <= SMS_REPLY_MAX) return flat;
   const more = language === "fr" ? " … (suite dans Sagax)" : " … (more in Sagax)";
   return `${flat.slice(0, SMS_REPLY_MAX - more.length).trimEnd()}${more}`;

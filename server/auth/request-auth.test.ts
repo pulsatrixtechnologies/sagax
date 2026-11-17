@@ -142,9 +142,9 @@ describe("scopes", () => {
   // #4507: the card of a record is the person's own read (the handler reads
   // as the session's person with their own sign-in), never an admin's
   it("lets a person read the card of a record without an admin", () => {
-    expect(requiredScope("GET", "/api/me/records/nimbus_desk/ticket/297048")).toBe("client");
+    expect(requiredScope("GET", "/api/me/records/nimbus_desk/ticket/481516")).toBe("client");
     expect(requiredScope("GET", "/api/me/records/nimbus_desk/ticket/ST%3A4.2")).toBe("client");
-    expect(requiredScope("POST", "/api/me/records/nimbus_desk/ticket/297048")).toBe("admin");
+    expect(requiredScope("POST", "/api/me/records/nimbus_desk/ticket/481516")).toBe("admin");
     expect(requiredScope("GET", "/api/me/records/nimbus_desk/ticket")).toBe("admin");
   });
   // #3471: a question in words of the person's own conversation is marked

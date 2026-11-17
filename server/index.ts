@@ -30749,12 +30749,16 @@ ROUTES.push(createRecordCardsRoutes({
   },
   language: languageOfRequest,
 }));
-/** #4507: a bot's final message with its record links checked against the
- * person's product list and its plain numbers linked when the conversation
- * read that record (shared/record-cards.ts). */
-function recordLinksInReply(text: string, threadId: string, bot: { ownerUserId?: unknown } | undefined): string {
+/** #4507: a bot's final message with its record links checked and its plain
+ * numbers linked when that turn's person read the record in this
+ * conversation (shared/record-cards.ts). The stored message keeps them in
+ * recordText; its text never carries a record address (server/store.ts). */
+function recordLinksInReply(text: string, threadId: string, bot: { id?: string } | undefined, speakerBotId?: string): string {
   try {
-    const person = connectorSetupSpeaker(threadId) ?? (bot ? effectiveBotOwner(bot) : undefined);
+    // the person the turn was started for (its Perspicax relay), never the
+    // conversation's latest speaker: in a shared room someone else may speak
+    const botId = bot?.id ?? speakerBotId;
+    const person = botId ? perspicaxMcp?.turnPersonOf(threadId, botId) : undefined;
     return recordLinks.finishReply(text, person, threadId);
   } catch {
     return text;

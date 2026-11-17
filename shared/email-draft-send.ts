@@ -15,6 +15,7 @@
 //
 // Pure: validation, the card's words, the instruction and the pass check.
 
+import { withoutRecordLinks } from "./record-cards.ts";
 import { parseArgs } from "./approval-describe.ts";
 import { isOutboundTool } from "./outbound.ts";
 
@@ -181,10 +182,11 @@ export function normalizeDraftForSend(value: unknown): { draft: EmailDraftToSend
   const bcc = addressList(input.bcc, "bcc", problems);
   if (!to.length) problems.push("to needs at least one address");
   if (to.length + cc.length + bcc.length > MAX_RECIPIENTS) problems.push(`at most ${MAX_RECIPIENTS} recipients`);
-  const subject = typeof input.subject === "string" ? input.subject.replace(/[\r\n]+/g, " ").trim() : "";
+  // #4507: a record link is the app's own; a mail carries its label only
+  const subject = typeof input.subject === "string" ? withoutRecordLinks(input.subject).replace(/[\r\n]+/g, " ").trim() : "";
   if (INVISIBLE.test(subject)) problems.push("subject holds invisible or direction characters");
   if (subject.length > MAX_SUBJECT) problems.push(`subject is longer than ${MAX_SUBJECT} characters`);
-  const body = typeof input.body === "string" ? input.body.replace(/\r\n/g, "\n") : "";
+  const body = typeof input.body === "string" ? withoutRecordLinks(input.body).replace(/\r\n/g, "\n") : "";
   if (INVISIBLE.test(body)) problems.push("body holds invisible or direction characters");
   if (body.length > MAX_BODY) problems.push(`body is longer than ${MAX_BODY} characters`);
   if (!subject && !body.trim()) problems.push("an email needs a subject or a body");

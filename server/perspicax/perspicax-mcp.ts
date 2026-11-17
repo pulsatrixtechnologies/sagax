@@ -33,7 +33,8 @@ import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import { productKeyStateOf, withToolNote, type ProductKeyState } from "./product-key-state.ts";
-import { parseRecordsMeta, type RecordsMetaGroup } from "../../shared/record-cards.ts";
+import { parseRecordsMeta, withoutRecordLinksIn, type RecordsMetaGroup } from "../../shared/record-cards.ts";
+import { isOutboundTool } from "../../shared/outbound.ts";
 import { describedProducts, filterNamingAnswer, flowReachOf, listedToolNames, offFamilyTools, offProductOfCall, offProductOfFamilyCall, offProductOfDescribeAnswer, productOffText, sweepArgsWithoutOff, withoutOffTools, type BotProductsView } from "./bot-products-filter.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
@@ -201,6 +202,8 @@ export interface PerspicaxMcpOptions {
   /** Waits that long (tests replace it). */
   sleep?: (ms: number) => Promise<void>;
 }
+/** The most conversations whose turn person is kept (turnPersonOf). */
+const TURN_PEOPLE_MAX = 5_000;
 /** HTTP answers of an edge whose upstream is down for a moment. */
 const TRANSIENT_HTTP = new Set([502, 503]);
 /** Requests that only read, safe to send again on a new session. */
@@ -627,6 +630,8 @@ export class PerspicaxMcp {
   private readonly routineRetryMs: readonly number[];
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly entries = new Map<string, Entry>();
+  /** #4507: thread and bot -> the person their latest turn was started for */
+  private readonly turnPeople = new Map<string, string>();
   /** tokens a call keeps between turns (keepWarm), by thread and speaker */
   private readonly warm = new Map<string, Entry>();
   /** A thread's retire still clearing roles and closing sessions: the next
@@ -1230,6 +1235,8 @@ export class PerspicaxMcp {
       return plan;
     }
     const who = { iss: subject.iss, sub: subject.sub };
+    // #4507: the person this turn was started for, whoever speaks later in it
+    this.noteTurnPerson(input.threadId, input.bot.id, principalId);
     // On a live call or warm engine, the last turn's parent token is still
     // good. Its MCP session is closed at the generation boundary, so role
     // state never crosses into this turn; only the account token is reused.
@@ -1465,6 +1472,12 @@ export class PerspicaxMcp {
     const products = input.mapping || (frame?.method !== "tools/list" && frame?.method !== "tools/call") ? null : await this.botProductsView(input);
     const params = frame && isObject(frame.params) ? frame.params : null;
     const tool = params && typeof params.name === "string" ? params.name : "";
+    // #4507: a record link is the app's own: a send to someone outside it
+    // (a text, a mail, a call) carries the label alone
+    if (frame?.method === "tools/call" && params && isObject(params.arguments) && isOutboundTool(tool, params.arguments)) {
+      const args = withoutRecordLinksIn(params.arguments);
+      if (JSON.stringify(args) !== JSON.stringify(params.arguments)) input = { ...input, frame: { ...frame, params: { ...params, arguments: args } } };
+    }
     if (products && frame?.method === "tools/call" && frame.id !== undefined) {
       const off = offProductOfCall(products, tool, params?.arguments) ?? await offProductOfFamilyCall(products, tool, params?.arguments, this.familyMapping(input), this.flowMapping(input));
       if (off) return toolError(frame.id, productOffText(products, off));
@@ -2214,6 +2227,20 @@ export class PerspicaxMcp {
   }
 
   /** The person this turn's Perspicax token speaks for, if connected. */
+  /** #4507: the person the latest turn of this bot in this conversation was
+   * started for (prepareTurn), kept after the turn ends; a line someone
+   * else steers into a running turn does not change it. */
+  turnPersonOf(threadId: string, botId: string): string | undefined {
+    return this.turnPeople.get(`${threadId}\u0000${botId}`);
+  }
+
+  private noteTurnPerson(threadId: string, botId: string, principalId: string): void {
+    const at = `${threadId}\u0000${botId}`;
+    this.turnPeople.delete(at);
+    this.turnPeople.set(at, principalId);
+    while (this.turnPeople.size > TURN_PEOPLE_MAX) this.turnPeople.delete(this.turnPeople.keys().next().value!);
+  }
+
   turnPrincipal(threadId: string, generation: string, botId: string): string | undefined {
     return this.turnEntry(threadId, generation, botId)?.principalId || undefined;
   }

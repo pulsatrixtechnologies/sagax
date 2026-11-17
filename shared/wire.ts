@@ -967,6 +967,11 @@ export interface WireMessage extends WaitLineField {
   role: "bot" | "user";
   kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "productKey" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
   text?: string;
+  /** #4507: a bot's `text` with its record links
+   * (`[#481516](sagax://record/<product>/<kind>/<id>)`), for a client that
+   * draws them (shared/record-cards.ts recordTextOf). `text` never holds a
+   * record address: every other client and surface reads it as plain words. */
+  recordText?: string;
   /** kind "routines" (2026-10-15): one compact line in the conversation
    * saying this turn turned routines on or off (server/routines/routine-chat-events.ts).
    * Each viewer receives only the routines they can see; `text` is the

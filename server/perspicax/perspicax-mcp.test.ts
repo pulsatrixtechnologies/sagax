@@ -1132,21 +1132,45 @@ describe("PerspicaxMcp records on a tool result (#4507)", () => {
     const answer = body.method === "tools/call" ? result : { tools: [] };
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: answer }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
   };
-  const content = [{ type: "text", text: JSON.stringify({ id: 297048, summary: "Imprimante hors ligne" }) }];
-  const records = { "pulsatrix/records": [{ product: "nimbus_desk", kind: "ticket", records: [{ id: "297048", label: "#297048" }], more: 0 }] };
+  const content = [{ type: "text", text: JSON.stringify({ id: 481516, summary: "Imprimante hors ligne" }) }];
+  const records = { "pulsatrix/records": [{ product: "nimbus_desk", kind: "ticket", records: [{ id: "481516", label: "#481516" }], more: 0 }] };
   const call = (id: number) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "nimbus_desk_query", arguments: {} } });
 
   it("hands the records to the hook and appends its one line after the result", async () => {
     const seen: unknown[] = [];
     const h = harness({
-      records: async (turnInfo, groups) => { seen.push({ turnInfo, groups }); return "Mention it as [#297048](sagax://record/nimbus_desk/ticket/297048)."; },
+      records: async (turnInfo, groups) => { seen.push({ turnInfo, groups }); return "Mention it as [#481516](sagax://record/nimbus_desk/ticket/481516)."; },
       mcp: answering({ content, _meta: records }),
     });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
     const answer = await h.mcp.relay({ ...turn, botId: "x", frame: call(7) });
     expect(seen).toEqual([{ turnInfo: { threadId: "t1", generation: "g1", botId: "x", principalId: "pr_bob" }, groups: records["pulsatrix/records"] }]);
     const result = (answer.body as { result: { content: Array<{ type: string; text: string }> } }).result;
-    expect(result.content).toEqual([...content, { type: "text", text: "Mention it as [#297048](sagax://record/nimbus_desk/ticket/297048)." }]);
+    expect(result.content).toEqual([...content, { type: "text", text: "Mention it as [#481516](sagax://record/nimbus_desk/ticket/481516)." }]);
+  });
+
+  it("sends an outbound tool's words with each record link reduced to its label", async () => {
+    const h = harness({ mcp: answering({ content }) });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const args = { to: "+15550100", body: "Votre billet [#481516](sagax://record/nimbus_desk/ticket/481516) est fermé." };
+    await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "nimbus_messaging_send_message", arguments: args } } });
+    const sent = h.mcpCalls.find((entry) => entry.body?.method === "tools/call" && entry.body.id === 9)!;
+    expect(sent.body.params.arguments).toEqual({ to: "+15550100", body: "Votre billet #481516 est fermé." });
+    // a read keeps its arguments as they are
+    await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "nimbus_desk_query", arguments: { q: "[#1](sagax://record/nimbus_desk/ticket/1)" } } } });
+    expect(h.mcpCalls.find((entry) => entry.body?.id === 10)!.body.params.arguments).toEqual({ q: "[#1](sagax://record/nimbus_desk/ticket/1)" });
+  });
+
+  it("names the person a turn was started for, not whoever speaks into it later", async () => {
+    const h = harness({ mcp: answering({ content }) });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: ALICE, speakerOrigin: "person" });
+    expect(h.mcp.turnPersonOf("t1", "x")).toBe(ALICE);
+    await h.mcp.endGeneration("t1", "g1");
+    expect(h.mcp.turnPersonOf("t1", "x")).toBe(ALICE);
+    await h.mcp.prepareTurn({ threadId: "t1", generation: "g2", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    expect(h.mcp.turnPersonOf("t1", "x")).toBe(BOB);
+    expect(h.mcp.turnPersonOf("t2", "x")).toBeUndefined();
+    await h.mcp.endAll();
   });
 
   it("leaves a result without the metadata, an error, a mapping call and a failing hook byte for byte unchanged", async () => {

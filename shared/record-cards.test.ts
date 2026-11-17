@@ -5,20 +5,20 @@ import { describe, expect, it } from "vitest";
 
 import {
   RECORDS_NOTE_MAX_BYTES, linkSeenRecords, looksLikeRecordLink, parseRecordCard, parseRecordCardAnswer, parseRecordLink,
-  parseRecordsMeta, recordLink, recordMarkdown, recordsNote, unlinkUnknownRecords, type SeenRecord,
+  parseRecordsMeta, recordLink, recordMarkdown, recordTextOf, recordsNote, splitRecordText, unlinkUnknownRecords, withoutRecordLinks, withoutRecordLinksIn, type SeenRecord,
 } from "./record-cards.ts";
 
-const TICKET = { product: "nimbus_desk", kind: "ticket", id: "297048" };
+const TICKET = { product: "nimbus_desk", kind: "ticket", id: "481516" };
 
 describe("record link", () => {
   it("round-trips product, kind and id, each segment encoded", () => {
-    expect(recordLink(TICKET)).toBe("sagax://record/nimbus_desk/ticket/297048");
+    expect(recordLink(TICKET)).toBe("sagax://record/nimbus_desk/ticket/481516");
     expect(parseRecordLink(recordLink(TICKET))).toEqual(TICKET);
     const odd = { product: "nimbus_desk", kind: "station", id: "ST:4.2-a_b" };
     expect(parseRecordLink(recordLink(odd))).toEqual(odd);
     expect(parseRecordLink("sagax://record/nimbus_desk/station/ST%3A4.2-a_b")).toEqual(odd);
-    expect(recordMarkdown("#297048", TICKET)).toBe("[#297048](sagax://record/nimbus_desk/ticket/297048)");
-    expect(recordMarkdown("Acme [main]\nsite", TICKET)).toBe("[Acme \\[main\\] site](sagax://record/nimbus_desk/ticket/297048)");
+    expect(recordMarkdown("#481516", TICKET)).toBe("[#481516](sagax://record/nimbus_desk/ticket/481516)");
+    expect(recordMarkdown("Acme [main]\nsite", TICKET)).toBe("[Acme \\[main\\] site](sagax://record/nimbus_desk/ticket/481516)");
   });
 
   it("refuses every malformed link", () => {
@@ -40,30 +40,30 @@ describe("records metadata on a tool result", () => {
 
   it("reads the console's groups and drops what does not validate", () => {
     expect(parseRecordsMeta(meta([
-      { product: "nimbus_desk", kind: "ticket", records: [{ id: "297048", label: "#297048" }, { id: "../x", label: "bad" }, { id: "297048", label: "twice" }], more: 0 },
+      { product: "nimbus_desk", kind: "ticket", records: [{ id: "481516", label: "#481516" }, { id: "../x", label: "bad" }, { id: "481516", label: "twice" }], more: 0 },
       { product: "Nimbus", kind: "ticket", records: [{ id: "1", label: "#1" }] },
-      { product: "nimbus_desk", kind: "company", records: [{ id: "19301", label: "Acme\nFabrication" }], more: 3, extra: true },
+      { product: "nimbus_desk", kind: "company", records: [{ id: "7310", label: "Acme\nFabrication" }], more: 3, extra: true },
       { product: "nimbus_desk", kind: "site", records: [] },
     ]))).toEqual([
-      { product: "nimbus_desk", kind: "ticket", records: [{ id: "297048", label: "#297048" }], more: 0 },
-      { product: "nimbus_desk", kind: "company", records: [{ id: "19301", label: "Acme Fabrication" }], more: 3 },
+      { product: "nimbus_desk", kind: "ticket", records: [{ id: "481516", label: "#481516" }], more: 0 },
+      { product: "nimbus_desk", kind: "company", records: [{ id: "7310", label: "Acme Fabrication" }], more: 3 },
     ]);
     expect(parseRecordsMeta({ content: [] })).toEqual([]);
     expect(parseRecordsMeta(null)).toEqual([]);
-    const sixty = Array.from({ length: 60 }, (_, i) => ({ id: String(300000 + i), label: `#${300000 + i}` }));
+    const sixty = Array.from({ length: 60 }, (_, i) => ({ id: String(600000 + i), label: `#${600000 + i}` }));
     const [group] = parseRecordsMeta(meta([{ product: "nimbus_desk", kind: "ticket", records: sixty, more: 0 }]));
     expect(group!.records).toHaveLength(50);
     expect(group!.more).toBe(10);
   });
 
   it("gives one record its ready-made link, and several the form once", () => {
-    const one = parseRecordsMeta(meta([{ product: "nimbus_desk", kind: "ticket", records: [{ id: "297048", label: "#297048" }], more: 0 }]));
-    expect(recordsNote(one)).toBe("Mention it as [#297048](sagax://record/nimbus_desk/ticket/297048).");
+    const one = parseRecordsMeta(meta([{ product: "nimbus_desk", kind: "ticket", records: [{ id: "481516", label: "#481516" }], more: 0 }]));
+    expect(recordsNote(one)).toBe("In your chat reply only (never in a text, mail or message you send), mention it as [#481516](sagax://record/nimbus_desk/ticket/481516).");
     const several = parseRecordsMeta(meta([{ product: "nimbus_desk", kind: "ticket", records: [{ id: "1", label: "#1" }, { id: "2", label: "#2" }], more: 5 }]));
-    expect(recordsNote(several)).toBe("Mention one of these as [#<id>](sagax://record/nimbus_desk/ticket/<id>).");
+    expect(recordsNote(several)).toBe("In your chat reply only (never in a text, mail or message you send), mention one of these as [#<id>](sagax://record/nimbus_desk/ticket/<id>).");
     expect(recordsNote(several, () => false)).toBeNull();
     const named = parseRecordsMeta(meta([{ product: "nimbus_desk", kind: "company", records: [{ id: "1", label: "Acme" }, { id: "2", label: "Globex" }], more: 0 }]));
-    expect(recordsNote(named)).toBe("Mention one of these as [<label>](sagax://record/nimbus_desk/company/<id>).");
+    expect(recordsNote(named)).toBe("In your chat reply only (never in a text, mail or message you send), mention one of these as [<label>](sagax://record/nimbus_desk/company/<id>).");
     expect(recordsNote([])).toBeNull();
   });
 
@@ -77,7 +77,7 @@ describe("records metadata on a tool result", () => {
 
 describe("a plain number linked at the end of a turn", () => {
   const seen: SeenRecord[] = [
-    { product: "nimbus_desk", kind: "ticket", id: "297048", label: "#297048" },
+    { product: "nimbus_desk", kind: "ticket", id: "481516", label: "#481516" },
     { product: "nimbus_desk", kind: "ticket", id: "4821", label: "#4821" },
     { product: "nimbus_desk", kind: "ticket", id: "555123" },
     { product: "nimbus_desk", kind: "project", id: "555123" },
@@ -86,15 +86,15 @@ describe("a plain number linked at the end of a turn", () => {
   const link = (text: string) => linkSeenRecords(text, seen, names);
 
   it("links a seen number, with or without #, keeping what the bot wrote", () => {
-    expect(link("J'ai fermé le billet 297048.")).toBe("J'ai fermé le billet [297048](sagax://record/nimbus_desk/ticket/297048).");
-    expect(link("Voir #297048, merci")).toBe("Voir [#297048](sagax://record/nimbus_desk/ticket/297048), merci");
+    expect(link("J'ai fermé le billet 481516.")).toBe("J'ai fermé le billet [481516](sagax://record/nimbus_desk/ticket/481516).");
+    expect(link("Voir #481516, merci")).toBe("Voir [#481516](sagax://record/nimbus_desk/ticket/481516), merci");
   });
 
   it("never links an unseen number, one seen for two kinds, or a pattern", () => {
-    expect(link("Le billet 297049 est ouvert.")).toBe("Le billet 297049 est ouvert.");
+    expect(link("Le billet 481517 est ouvert.")).toBe("Le billet 481517 est ouvert.");
     expect(link("Le numéro 555123 est ambigu.")).toBe("Le numéro 555123 est ambigu.");
-    expect(link("3297048 et 2970481 et 297048x et 1297048")).toBe("3297048 et 2970481 et 297048x et 1297048");
-    expect(link("Montant 297048.50 $, heure 297048:10")).toBe("Montant 297048.50 $, heure 297048:10");
+    expect(link("3481516 et 4815161 et 481516x et 1481516")).toBe("3481516 et 4815161 et 481516x et 1481516");
+    expect(link("Montant 481516.50 $, heure 481516:10")).toBe("Montant 481516.50 $, heure 481516:10");
   });
 
   it("links a short id only after # or the kind's name", () => {
@@ -106,30 +106,37 @@ describe("a plain number linked at the end of a turn", () => {
 
   it("leaves code, math, links, images and addresses alone, and a second pass changes nothing", () => {
     const text = [
-      "Inline `297048` and $297048$ and [see 297048](https://desk.example/297048) and ![297048](https://desk.example/i.png)",
-      "https://desk.example/t/297048 <https://desk.example/297048>",
+      "Inline `481516` and $481516$ and [see 481516](https://desk.example/481516) and ![481516](https://desk.example/i.png)",
+      "https://desk.example/t/481516 <https://desk.example/481516>",
       "```",
-      "ticket 297048",
+      "ticket 481516",
       "```",
       "$$",
-      "297048",
+      "481516",
       "$$",
-      "    297048 indented code",
-      "Already [#297048](sagax://record/nimbus_desk/ticket/297048).",
+      "    481516 indented code",
+      "Already [#481516](sagax://record/nimbus_desk/ticket/481516).",
     ].join("\n");
     expect(link(text)).toBe(text);
-    const once = link("Billet 297048, puis #4821.");
+    const once = link("Billet 481516, puis #4821.");
     expect(link(once)).toBe(once);
   });
 
+  it("never links a number inside a link that has a title, or one followed by -digits", () => {
+    const titled = `See [the ticket](https://desk.example/t "ticket 481516") and ![x](https://desk.example/i.png 'n 481516')`;
+    expect(link(titled)).toBe(titled);
+    expect(link("Lot 481516-1 et 481516-22")).toBe("Lot 481516-1 et 481516-22");
+    expect(link("Billet 481516 - fermé")).toBe("Billet [481516](sagax://record/nimbus_desk/ticket/481516) - fermé");
+  });
+
   it("links inside list items and table cells", () => {
-    expect(link("- billet 297048\n| 297048 | ouvert |")).toBe(
-      "- billet [297048](sagax://record/nimbus_desk/ticket/297048)\n| [297048](sagax://record/nimbus_desk/ticket/297048) | ouvert |",
+    expect(link("- billet 481516\n| 481516 | ouvert |")).toBe(
+      "- billet [481516](sagax://record/nimbus_desk/ticket/481516)\n| [481516](sagax://record/nimbus_desk/ticket/481516) | ouvert |",
     );
   });
 
   it("does nothing without seen records", () => {
-    expect(linkSeenRecords("Billet 297048", [])).toBe("Billet 297048");
+    expect(linkSeenRecords("Billet 481516", [])).toBe("Billet 481516");
   });
 });
 
@@ -142,15 +149,47 @@ describe("a record link the person's product list does not know", () => {
   });
 });
 
+describe("nothing outside the chat carries a record address", () => {
+  const linked = "Billet [#481516](sagax://record/nimbus_desk/ticket/481516), voir <sagax://record/nimbus_desk/ticket/2> et sagax://record/nimbus_desk/ticket/3 ou [doc](https://desk.example/a \"t\").";
+
+  it("reduces every record link to its label and drops a bare record address", () => {
+    const out = withoutRecordLinks(linked);
+    expect(out).toBe("Billet #481516, voir  et  ou [doc](https://desk.example/a \"t\").");
+    expect(out).not.toMatch(/sagax:/i);
+    expect(withoutRecordLinks("`[#4](sagax://record/nimbus_desk/ticket/4)`")).not.toMatch(/sagax:/i);
+    expect(withoutRecordLinks("Rien")).toBe("Rien");
+    expect(withoutRecordLinksIn({ to: ["+15550100"], body: linked, n: 2, nested: [{ text: linked }] })).toEqual({
+      to: ["+15550100"], body: withoutRecordLinks(linked), n: 2, nested: [{ text: withoutRecordLinks(linked) }],
+    });
+  });
+
+  it("stores a bot's words as plain text with the links beside them, for a client that draws them", () => {
+    const stored = splitRecordText({ role: "bot", kind: "text", text: linked });
+    expect(stored.text).toBe(withoutRecordLinks(linked));
+    expect(stored.recordText).toBe(linked);
+    // a client that does not know record links reads text: no address
+    expect(stored.text).not.toMatch(/sagax:/i);
+    // a client that draws them reads the linked words
+    expect(recordTextOf(stored)).toBe(linked);
+    // words changed since: the linked copy no longer applies
+    expect(recordTextOf({ ...stored, text: "Autre chose" })).toBe("Autre chose");
+    // the person's own words and a message without a link stay as they are
+    const typed = { role: "user", text: linked };
+    expect(splitRecordText(typed)).toBe(typed);
+    const plain = { role: "bot", text: "Billet 481516" };
+    expect(splitRecordText(plain)).toBe(plain);
+  });
+});
+
 describe("record card contract", () => {
   const card = {
     product: { id: "nimbus_desk", name: "Nimbus Desk", icon: { url: "https://console.example/icons/nimbus.svg?v=1" }, secret: "x" },
     kind: { id: "ticket", name: "Billet" },
-    id: "297048", number: "#297048",
+    id: "481516", number: "#481516",
     title: "Imprimante de l'accueil hors ligne depuis lundi",
     state: { label: "En cours", tone: "open" },
     priority: { label: "Priorité 2", level: "high" },
-    company: { name: "Acme Fabrication", ref: { product: "nimbus_desk", kind: "company", id: "19301" } },
+    company: { name: "Acme Fabrication", ref: { product: "nimbus_desk", kind: "company", id: "7310" } },
     people: [
       { role: "contact", label: "Contact", name: "Ada", detail: "418 555-0142", internal_id: 7 },
       { role: "owner", label: "Responsable", name: "Marc" },
@@ -168,7 +207,7 @@ describe("record card contract", () => {
       ],
       total: 7, more: true,
     },
-    open_url: "https://desk.example/open?id=297048",
+    open_url: "https://desk.example/open?id=481516",
     tz: "America/Toronto", as_of: "2026-11-16T14:32:10-05:00", cached: false,
     vendor_raw: { anything: true },
   };
@@ -177,12 +216,12 @@ describe("record card contract", () => {
     const parsed = parseRecordCard(card)!;
     expect(parsed).toMatchObject({
       product: { id: "nimbus_desk", name: "Nimbus Desk", icon: { url: "https://console.example/icons/nimbus.svg?v=1" } },
-      kind: { id: "ticket", name: "Billet" }, id: "297048", number: "#297048",
+      kind: { id: "ticket", name: "Billet" }, id: "481516", number: "#481516",
       state: { label: "En cours", tone: "open" }, priority: { label: "Priorité 2", level: "high" },
-      company: { name: "Acme Fabrication", ref: { product: "nimbus_desk", kind: "company", id: "19301" } },
+      company: { name: "Acme Fabrication", ref: { product: "nimbus_desk", kind: "company", id: "7310" } },
       dates: { opened: "2026-11-13T09:12:00-05:00", updated: "2026-11-16T14:03:00-05:00" },
       fields: [{ label: "Tableau", value: "Soutien" }, { label: "Heures", value: "3,5 / 8" }],
-      openUrl: "https://desk.example/open?id=297048", tz: "America/Toronto", asOf: "2026-11-16T14:32:10-05:00", cached: false,
+      openUrl: "https://desk.example/open?id=481516", tz: "America/Toronto", asOf: "2026-11-16T14:32:10-05:00", cached: false,
     });
     expect(JSON.stringify(parsed)).not.toMatch(/vendor_raw|secret|internal_id/);
     expect(parsed.people).toHaveLength(4);
@@ -213,7 +252,7 @@ describe("record card contract", () => {
   });
 
   it("reads the route's answer as a card or a state", () => {
-    expect(parseRecordCardAnswer({ card })).toMatchObject({ card: { id: "297048" } });
+    expect(parseRecordCardAnswer({ card })).toMatchObject({ card: { id: "481516" } });
     expect(parseRecordCardAnswer({ card: { id: "x" } })).toEqual({ state: "unavailable" });
     expect(parseRecordCardAnswer({ state: "busy", code: "vendor_busy", retryAfter: 12.2 })).toEqual({ state: "busy", code: "vendor_busy", retryAfter: 13 });
     expect(parseRecordCardAnswer({ state: "org_ask", rule: { id: "r1", text: "Demander avant de lire Nimbus Desk" } })).toEqual({ state: "org_ask", rule: { id: "r1", text: "Demander avant de lire Nimbus Desk" } });

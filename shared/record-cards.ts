@@ -3,7 +3,7 @@
 //
 // The link a bot writes is a Markdown link in the app's own scheme:
 //
-//   [#297048](sagax://record/<product>/<kind>/<id>)
+//   [#481516](sagax://record/<product>/<kind>/<id>)
 //
 // `product` is a product id of the person's product list
 // (shared/person-products.ts), `kind` one of that product's record kinds
@@ -207,6 +207,10 @@ export function parseRecordsMeta(result: unknown): RecordsMetaGroup[] {
   return out;
 }
 
+/** The link draws in the app's chat only: never in a text, a mail or a
+ * message a bot sends (those carry the label alone). */
+const CHAT_ONLY = "In your chat reply only (never in a text, mail or message you send), ";
+
 /** The longest line the relay appends to a tool result. */
 export const RECORDS_NOTE_MAX_BYTES = 600;
 
@@ -221,11 +225,11 @@ export function recordsNote(groups: readonly RecordsMetaGroup[], severalFirst: (
     let part: string | null = null;
     if (group.records.length === 1 && group.more === 0) {
       const only = group.records[0]!;
-      part = `Mention it as ${recordMarkdown(only.label, { product: group.product, kind: group.kind, id: only.id })}.`;
+      part = `${CHAT_ONLY}mention it as ${recordMarkdown(only.label, { product: group.product, kind: group.kind, id: only.id })}.`;
     } else if (severalFirst(group)) {
       const numbered = group.records.every((item) => item.label === `#${item.id}`);
       const href = `${RECORD_LINK_PREFIX}${group.product}/${group.kind}/<id>`;
-      part = `Mention one of these as [${numbered ? "#<id>" : "<label>"}](${href}).`;
+      part = `${CHAT_ONLY}mention one of these as [${numbered ? "#<id>" : "<label>"}](${href}).`;
     }
     if (!part) continue;
     const size = new TextEncoder().encode(part).length + (parts.length ? 1 : 0);
@@ -243,9 +247,12 @@ type Segment = { text: string; kind: "plain" | "code" | "link" };
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const MATH_BLOCK = /^ {0,3}\$\$/;
 const INDENTED_CODE = /^(?: {4}|\t)(?!\s*(?:[-*+]|\d{1,9}[.)])\s)/;
+/** A link's destination, with an optional title (`"t"`, `'t'` or `(t)`). */
+const DESTINATION = String.raw`\(\s*[^)\s]*(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\s*\)`;
+const LABEL = String.raw`\[(?:\\.|[^\]\\\n])*\]`;
 /** Inline spans no number is linked in: code, math, images, links,
  * autolinks and HTML, bare addresses. A link is its own kind. */
-const INLINE = /(`+)[\s\S]*?\1|\$\$[\s\S]*?\$\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$[^$\n]+\$|!\[(?:\\.|[^\]\\\n])*\]\([^)\n]*\)|(\[(?:\\.|[^\]\\\n])*\]\([^)\s]*\))|\[(?:\\.|[^\]\\\n])*\]\[[^\]\n]*\]|<[^>\n]+>|(?:https?:\/\/|www\.)[^\s)]+/g;
+const INLINE = new RegExp(String.raw`(\u0060+)[\s\S]*?\1|\$\$[\s\S]*?\$\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$[^$\n]+\$|!${LABEL}${DESTINATION}|(${LABEL}${DESTINATION})|${LABEL}\[[^\]\n]*\]|<[^>\n]+>|(?:https?:\/\/|www\.)[^\s)]+`, "g");
 
 function inlineSegments(line: string, out: Segment[]): void {
   let at = 0;
@@ -297,7 +304,7 @@ function segments(text: string): Segment[] {
   return out;
 }
 
-const LINK_PARTS = /^\[((?:\\.|[^\]\\])*)\]\(([^)\s]*)\)$/;
+const LINK_PARTS = /^\[((?:\\.|[^\]\\])*)\]\(\s*([^)\s]*)[\s\S]*\)$/;
 
 /** A record link whose product, kind or id is not known for the person
  * (`known` false, or a link that does not parse) becomes its text. */
@@ -312,6 +319,54 @@ export function unlinkUnknownRecords(text: string, known: (ref: RecordRef) => bo
   }).join("");
 }
 
+/** A record address written outside a Markdown link (bare, in an
+ * autolink, in an HTML attribute). */
+const BARE_RECORD = /<?sagax:\/\/record\/[^\s"'<>)\]]*>?/gi;
+
+/**
+ * The text with no record address left: each record link reduced to its
+ * label, any other record address dropped. What leaves the app (a text, a
+ * mail, speech, a push, a message to another bot, a page) never carries a
+ * `sagax://` address. The same rule as unlinkUnknownRecords, every link
+ * unknown.
+ */
+export function withoutRecordLinks(text: string): string {
+  if (!text.toLowerCase().includes(RECORD_LINK_PREFIX)) return text;
+  return unlinkUnknownRecords(text, () => false).replace(BARE_RECORD, "");
+}
+
+/** Every string of a tool's arguments without a record address (depth and
+ * size bounded; anything else as it is). */
+export function withoutRecordLinksIn<T>(value: T, depth = 0): T {
+  if (typeof value === "string") return withoutRecordLinks(value) as T;
+  if (depth > 12 || !value || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((item) => withoutRecordLinksIn(item, depth + 1)) as T;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) out[key] = withoutRecordLinksIn(item, depth + 1);
+  return out as T;
+}
+
+/**
+ * A bot's message as stored (#4507): `text` is what every surface and
+ * every client reads, so it holds no record address; `recordText` is the
+ * same words with their record links, for a client that draws them.
+ * A message without a record link is returned as it is.
+ */
+export function splitRecordText<T extends { role?: string; text?: unknown; recordText?: unknown }>(message: T): T {
+  if (message.role !== "bot" || typeof message.text !== "string" || !message.text.toLowerCase().includes(RECORD_LINK_PREFIX)) return message;
+  const plainText = withoutRecordLinks(message.text);
+  if (plainText === message.text) return message;
+  return { ...message, text: plainText, recordText: message.text };
+}
+
+/** The words a client that draws record links shows: `recordText` while it
+ * is still the same message as `text`, else `text`. */
+export function recordTextOf(message: { text?: string; recordText?: string }): string | undefined {
+  const linked = message.recordText;
+  if (typeof linked !== "string" || typeof message.text !== "string") return message.text;
+  return withoutRecordLinks(linked) === message.text ? linked : message.text;
+}
+
 /** A record a conversation's tool results named. */
 export interface SeenRecord extends RecordRef {
   label?: string;
@@ -319,7 +374,7 @@ export interface SeenRecord extends RecordRef {
 
 /** Ids shorter than this are linked only after `#` or the kind's name. */
 const SHORT_ID = 5;
-const NUMBER = /(^|[^\p{L}\p{N}_#/.,:@$\\-])(#?)(\d{1,96})(?![\p{L}\p{N}_]|[.,:]\d)/gu;
+const NUMBER = /(^|[^\p{L}\p{N}_#/.,:@$\\-])(#?)(\d{1,96})(?![\p{L}\p{N}_]|[.,:-]\d)/gu;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -385,7 +440,7 @@ export interface RecordCard {
   product: { id: string; name: string; icon?: { url: string } };
   kind: { id: string; name: string };
   id: string;
-  /** the human label (`#297048`, a company's name): never an internal id */
+  /** the human label (`#481516`, a company's name): never an internal id */
   number: string;
   title: string;
   state?: { label: string; tone: RecordTone };

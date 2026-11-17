@@ -29,14 +29,14 @@ function harness(list: typeof products | null = products) {
 describe("records in a tool result", () => {
   it("gives the bot one line with the ready-made link, read with the person's own list", async () => {
     const h = harness();
-    expect(await h.links.onRecords(turn(), [ticket("297048")])).toBe("Mention it as [#297048](sagax://record/nimbus_desk/ticket/297048).");
+    expect(await h.links.onRecords(turn(), [ticket("481516")])).toBe("In your chat reply only (never in a text, mail or message you send), mention it as [#481516](sagax://record/nimbus_desk/ticket/481516).");
     expect(h.reads).toEqual(["p-ada"]);
-    expect(h.seen.of("p-ada", "t1")).toEqual([{ product: "nimbus_desk", kind: "ticket", id: "297048", label: "#297048" }]);
+    expect(h.seen.of("p-ada", "t1")).toEqual([{ product: "nimbus_desk", kind: "ticket", id: "481516", label: "#481516" }]);
   });
 
   it("gives the several-records line once per kind and turn", async () => {
     const h = harness();
-    expect(await h.links.onRecords(turn("g1"), [ticket("1", "2")])).toBe("Mention one of these as [#<id>](sagax://record/nimbus_desk/ticket/<id>).");
+    expect(await h.links.onRecords(turn("g1"), [ticket("1", "2")])).toBe("In your chat reply only (never in a text, mail or message you send), mention one of these as [#<id>](sagax://record/nimbus_desk/ticket/<id>).");
     expect(await h.links.onRecords(turn("g1"), [ticket("3", "4")])).toBeNull();
     expect(await h.links.onRecords(turn("g2"), [ticket("5", "6")])).not.toBeNull();
     expect(h.seen.of("p-ada", "t1").map((item) => item.id)).toEqual(["1", "2", "3", "4", "5", "6"]);
@@ -48,7 +48,7 @@ describe("records in a tool result", () => {
     expect(await h.links.onRecords(turn(), [{ product: "nimbus_desk", kind: "alert", records: [{ id: "1", label: "#1" }], more: 0 }])).toBeNull();
     expect(h.seen.of("p-ada", "t1")).toEqual([]);
     const none = harness(null);
-    expect(await none.links.onRecords(turn(), [ticket("297048")])).toBeNull();
+    expect(await none.links.onRecords(turn(), [ticket("481516")])).toBeNull();
   });
 
   it("keeps what a conversation saw per person and conversation, at most 500", async () => {
@@ -63,20 +63,18 @@ describe("records in a tool result", () => {
     const kept = h.seen.of("p-ada", "t3");
     expect(kept).toHaveLength(SEEN_RECORDS_PER_CONVERSATION);
     expect(kept[0]!.id).toBe(many[20]);
-    h.seen.forgetThread("t3");
-    expect(h.seen.of("p-ada", "t3")).toEqual([]);
   });
 });
 
 describe("the end of a bot's turn", () => {
   it("links a number the conversation read, and keeps no record content", async () => {
     const h = harness();
-    await h.links.onRecords(turn(), [ticket("297048", "4821")]);
-    const reply = h.links.finishReply("J'ai fermé le billet 297048 et le billet 4821; 297049 reste ouvert.", "p-ada", "t1");
-    expect(reply).toBe("J'ai fermé le billet [297048](sagax://record/nimbus_desk/ticket/297048) et le billet [4821](sagax://record/nimbus_desk/ticket/4821); 297049 reste ouvert.");
+    await h.links.onRecords(turn(), [ticket("481516", "4821")]);
+    const reply = h.links.finishReply("J'ai fermé le billet 481516 et le billet 4821; 481517 reste ouvert.", "p-ada", "t1");
+    expect(reply).toBe("J'ai fermé le billet [481516](sagax://record/nimbus_desk/ticket/481516) et le billet [4821](sagax://record/nimbus_desk/ticket/4821); 481517 reste ouvert.");
     // another person's or another conversation's reply links nothing
-    expect(h.links.finishReply("billet 297048", "p-ben", "t1")).toBe("billet 297048");
-    expect(h.links.finishReply("billet 297048", "p-ada", "t2")).toBe("billet 297048");
+    expect(h.links.finishReply("billet 481516", "p-ben", "t1")).toBe("billet 481516");
+    expect(h.links.finishReply("billet 481516", "p-ada", "t2")).toBe("billet 481516");
   });
 
   it("does not link an id the conversation read for two kinds", async () => {
@@ -85,13 +83,15 @@ describe("the end of a bot's turn", () => {
     expect(h.links.finishReply("Le 555123 est prêt.", "p-ada", "t1")).toBe("Le 555123 est prêt.");
   });
 
-  it("turns a link the person's list does not know into its text, and keeps a known one", async () => {
+  it("turns only a link that does not parse into its text, whatever the person's list holds", async () => {
     const h = harness();
     h.links.noteProducts("p-ada", products);
-    const text = "[#1](sagax://record/nimbus_desk/ticket/1) et [#2](sagax://record/plain_tool/ticket/2) et [#3](sagax://record/nimbus_desk/alert/3)";
-    expect(h.links.finishReply(text, "p-ada", "t1")).toBe("[#1](sagax://record/nimbus_desk/ticket/1) et #2 et #3");
-    // a person whose list was never read: no record link survives
-    expect(h.links.finishReply(text, "p-ben", "t1")).toBe("#1 et #2 et #3");
+    const text = "[#1](sagax://record/nimbus_desk/ticket/1) et [#2](sagax://record/plain_tool/ticket/2) et [x](sagax://record/nimbus_desk/ticket/..)";
+    const kept = "[#1](sagax://record/nimbus_desk/ticket/1) et [#2](sagax://record/plain_tool/ticket/2) et x";
+    expect(h.links.finishReply(text, "p-ada", "t1")).toBe(kept);
+    // after a restart (no list read yet) and without a person, nothing valid is lost
+    expect(harness().links.finishReply(text, "p-ben", "t1")).toBe(kept);
+    expect(h.links.finishReply(text, null, "t1")).toBe(kept);
     expect(h.links.finishReply("Rien à lier.", null, "t1")).toBe("Rien à lier.");
   });
 });

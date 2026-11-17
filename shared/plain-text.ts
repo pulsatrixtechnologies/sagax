@@ -13,6 +13,7 @@
 
 import { replaceBareImageUrls } from "./bare-image-urls.ts";
 import { stripChatSpecialTokens } from "./chat-special-tokens.ts";
+import { withoutRecordLinks } from "./record-cards.ts";
 
 export interface PlainTextOptions {
   /** A fenced block whose info string (```lang) this accepts is dropped
@@ -53,7 +54,8 @@ export function replaceAttachmentTags(text: string, labels: AttachmentLabels = E
 
 /** One line of plain text: Markdown gone, whitespace collapsed. */
 export function markdownToPlainText(raw: string, options: PlainTextOptions = {}): string {
-  return plainTextBody(stripChatSpecialTokens(raw ?? ""), options);
+  // #4507: a record link reads as its label, its address never
+  return plainTextBody(withoutRecordLinks(stripChatSpecialTokens(raw ?? "")), options);
 }
 
 /** One line for a banner or a preview, at most `max` characters, cut at a

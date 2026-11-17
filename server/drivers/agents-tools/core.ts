@@ -3,6 +3,7 @@
 // dispatched by agents-call.ts. Never import server/index.ts.
 
 import { BOT_REACTIONS } from "../../../shared/reactions.ts";
+import { withoutRecordLinksIn } from "../../../shared/record-cards.ts";
 import { COORDINATE_MESSAGE_MAX_CHARS } from "../../../shared/turn-limits.ts";
 import { BOT_NOTIFY_PARAM, botNotifyArg } from "../../../shared/notification.ts";
 import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../../shared/credential-request.ts";
@@ -458,11 +459,17 @@ export function savedResultMisuse(id: unknown): string {
 }
 
 /** Handle a tool of this family, or return null when the name is not ours. */
+/** The tools that hand words to another bot or a room. */
+const PEER_TOOLS: ReadonlySet<string> = new Set(["send_to_bot", "post_to_room", "coordinate_bots", "ask_bot", "delegate_bot", "route_message"]);
+
 export async function callCoreTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
   const { externalRuntime: EXTERNAL_RUNTIME } = context;
   const { api, apiResponse } = context.client;
   const OURS = new Set([...CORE_TOOL_NAMES, "remove_reaction"]);
   if (!OURS.has(name)) return null;
+  // #4507: a message to another bot or a room carries a record's label,
+  // never the app's own record address
+  if (PEER_TOOLS.has(name)) args = withoutRecordLinksIn(args);
   if (name === "attach_file") {
     const { ok, body } = await apiResponse("/api/internal/attach-file", {
       method: "POST",

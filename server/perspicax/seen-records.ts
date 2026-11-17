@@ -60,10 +60,4 @@ export class SeenRecords {
     noted.add(kind);
     return true;
   }
-
-  /** A deleted conversation forgets what it saw. */
-  forgetThread(threadId: string): void {
-    const suffix = `\u0001${threadId}`;
-    for (const key of this.conversations.keys()) if (key.endsWith(suffix)) this.conversations.delete(key);
-  }
 }

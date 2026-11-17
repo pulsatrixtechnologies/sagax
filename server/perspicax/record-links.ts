@@ -6,9 +6,10 @@
 //    conversation (server/perspicax/seen-records.ts) and the result gains
 //    one line with the ready-made link, so the bot only copies it. Nothing
 //    goes into the system prompt or a tool description.
-// 2. When the bot's message is final, `finishReply` turns a record link the
-//    person's product list does not know into its text, and links a plain
-//    number the conversation's tool results hold for exactly one kind.
+// 2. When the bot's message is final, `finishReply` turns a record link that
+//    does not parse into its text, and links a plain number the
+//    conversation's tool results hold for exactly one kind (records kept
+//    only when the person's product list described their kind).
 //
 // The product list is the person's own (read as them, kept 30 s by
 // server/perspicax/person-products.ts); the kinds it last listed are kept
@@ -32,7 +33,8 @@ export interface RecordLinks {
   onRecords(turn: { threadId: string; generation: string; principalId: string }, groups: RecordsMetaGroup[]): Promise<string | null>;
   /** The person's product list as last read: its kinds are what links. */
   noteProducts(principalId: string, products: readonly PersonProduct[]): void;
-  /** A bot's final message, its record links checked and its plain numbers linked. */
+  /** A bot's final message, its record links checked and its plain numbers
+   * linked from the records the turn's own person read in this conversation. */
   finishReply(text: string, principalId: string | null | undefined, threadId: string): string;
 }
 
@@ -62,12 +64,12 @@ export function createRecordLinks(deps: RecordLinksDeps): RecordLinks {
     },
     finishReply(text, principalId, threadId) {
       if (!text) return text;
-      const person = principalId ?? "";
-      const isKnown = knows(person);
-      const checked = unlinkUnknownRecords(text, isKnown);
-      const seen = person ? deps.seen.of(person, threadId).filter(isKnown) : [];
+      // only a link that does not parse becomes its text: one whose product
+      // or kind the person's list does not hold still draws, and its card says why
+      const checked = unlinkUnknownRecords(text, () => true);
+      const seen = principalId ? deps.seen.of(principalId, threadId) : [];
       if (!seen.length) return checked;
-      const kinds = known.get(person);
+      const kinds = known.get(principalId!);
       return linkSeenRecords(checked, seen, (product, kind) => {
         const info = kinds?.get(recordKindKey(product, kind));
         return info ? [info.name.en, info.name.fr, info.plural?.en, info.plural?.fr].filter((name): name is string => Boolean(name)) : [];

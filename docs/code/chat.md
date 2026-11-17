@@ -980,12 +980,25 @@ browser's choice, so it follows the server language there.
 
 After the dashes, `pushAssistantText` passes the final text through
 `recordLinksInReply` (`server/index.ts`, `server/perspicax/record-links.ts`):
-a record link (`sagax://record/<product>/<kind>/<id>`) whose product or kind
-the person's product list does not describe, or that does not parse, becomes
-its text; a plain number is linked only when that conversation's tool results
-held that exact id for exactly one product and kind (`linkSeenRecords` in
+a record link (`sagax://record/<product>/<kind>/<id>`) that does not parse
+becomes its text (one whose product or kind the person's list does not hold
+stays: its card says why); a plain number is linked only when the records
+the turn's own person read in that conversation (the person the turn was
+started for, `PerspicaxMcp.turnPersonOf`, never a later speaker) hold that
+exact id for exactly one product and kind (`linkSeenRecords` in
 `shared/record-cards.ts`), never by a pattern. Only text outside code, math,
-links, images and addresses changes; an id of fewer than five digits only
-after `#` or the kind's name; the link text keeps what the bot wrote; a second
-pass changes nothing. The message keeps the link only, never a record's
+links (with or without a title), images and addresses changes; an id of
+fewer than five digits only after `#` or the kind's name; `481516-1` is not
+an id; the link text keeps what the bot wrote; a second pass changes nothing.
+
+Storage and delivery: the store (`server/store.ts`, `splitRecordText`) keeps
+a bot message's `text` free of any record address and the linked words in
+`recordText`. Every client and every surface reads `text`; only a client
+that draws record links reads `recordText` (`recordTextOf`, which falls back
+to `text` when the words changed since). Nothing that leaves the chat carries
+the address: a text (`smsReplyBody`), a mail draft (`normalizeDraftForSend`),
+speech (`speakable`), a push or reach-me line (`markdownToPlainText`), a
+message to another bot or room (`callCoreTool`), a page a bot publishes, and
+the arguments of an outbound console tool all reduce a link to its label
+(`withoutRecordLinks`). A message keeps the link only, never a record's
 content.

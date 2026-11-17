@@ -6,10 +6,10 @@
 // through the same call as the person's product list (PersonProductsCall:
 // the link token says which server calls, the person's live sign-in token
 // says who reads). The console applies the person's own access (their key,
-// scopes and data policy) and keeps a card 60 s per person; this client
-// adds a short cache per person on top and one read in flight per person
-// and record, so a burst of hovers makes one call. A card is kept in memory
-// only, never written anywhere, and never served to another person.
+// scopes and data policy) and keeps a card 60 s per person: it owns the
+// staleness, so this client keeps no card. It shares one read in flight per
+// person, record and language, so a burst of hovers makes one call. A card
+// is never written anywhere and never served to another person.
 //
 // The console's answers (body `{ code, message, details }`) map to the
 // page's states:
@@ -30,19 +30,13 @@ import { parseRecordCard, recordKey, type RecordCard, type RecordCardMiss, type 
 
 export const RECORD_CARD_TIMEOUT_MS = 15_000;
 export const RECORD_CARD_MAX_BYTES = 64 * 1024;
-/** How long a card is kept per person here (the console keeps it 60 s). */
-export const RECORD_CARD_MEMO_MS = 20_000;
-/** The most cards kept in memory, all persons together. */
-export const RECORD_CARD_MEMO_MAX = 500;
 
 export type RecordCardLanguage = "fr" | "en";
 export type RecordCardRead = { ok: true; card: RecordCard } | ({ ok: false } & RecordCardMiss);
 
 export interface RecordCardsClient {
-  /** One card for the person; `fresh` skips both caches. */
+  /** One card for the person; `fresh` skips the console's cache. */
   get(principalId: string, subjectToken: string, ref: RecordRef, lang: RecordCardLanguage, fresh?: boolean): Promise<RecordCardRead>;
-  /** drop a person's kept cards */
-  forget(principalId: string): void;
 }
 
 export function recordCardPath(ref: RecordRef, lang: RecordCardLanguage, fresh = false): string {
@@ -87,43 +81,26 @@ export function recordCardMiss(result: Extract<LinkPostResult, { ok: false }>): 
   return { state: "down", ...(code ? { code } : {}) };
 }
 
-export function createRecordCardsClient(deps: { call: PersonProductsCall; now?: () => number }): RecordCardsClient {
-  const now = deps.now ?? Date.now;
-  const memo = new Map<string, { at: number; card: RecordCard }>();
+export function createRecordCardsClient(deps: { call: PersonProductsCall }): RecordCardsClient {
   const inFlight = new Map<string, Promise<RecordCardRead>>();
-  const keyOf = (principalId: string, ref: RecordRef, lang: RecordCardLanguage) => `${principalId}\u0001${lang}\u0001${recordKey(ref)}`;
-  const read = async (principalId: string, subjectToken: string, ref: RecordRef, lang: RecordCardLanguage, fresh: boolean): Promise<RecordCardRead> => {
+  const read = async (subjectToken: string, ref: RecordRef, lang: RecordCardLanguage, fresh: boolean): Promise<RecordCardRead> => {
     const result = await deps.call("GET", recordCardPath(ref, lang, fresh), undefined, { timeoutMs: RECORD_CARD_TIMEOUT_MS, maxBytes: RECORD_CARD_MAX_BYTES, subjectToken });
     if (!result.ok) return { ok: false, ...recordCardMiss(result) };
     const card = parseRecordCard(result.body);
     // a card for another record than the one asked is never shown
     if (!card || card.product.id !== ref.product || card.kind.id !== ref.kind || card.id !== ref.id) return { ok: false, state: "unavailable" };
-    const key = keyOf(principalId, ref, lang);
-    memo.delete(key);
-    memo.set(key, { at: now(), card });
-    while (memo.size > RECORD_CARD_MEMO_MAX) memo.delete(memo.keys().next().value!);
     return { ok: true, card };
   };
   return {
-    async get(principalId, subjectToken, ref, lang, fresh = false) {
-      const key = keyOf(principalId, ref, lang);
-      if (!fresh) {
-        const kept = memo.get(key);
-        if (kept && now() - kept.at < RECORD_CARD_MEMO_MS) return { ok: true, card: { ...kept.card, cached: true } };
-        if (kept) memo.delete(key);
-      }
+    get(principalId, subjectToken, ref, lang, fresh = false) {
       // one read in flight per person, record and language; a fresh read
-      // waits for none and is shared only with other fresh reads
-      const flightKey = `${key}\u0001${fresh ? "fresh" : ""}`;
-      const running = inFlight.get(flightKey);
+      // is shared only with other fresh reads
+      const key = `${principalId}\u0001${lang}\u0001${fresh ? "fresh" : ""}\u0001${recordKey(ref)}`;
+      const running = inFlight.get(key);
       if (running) return running;
-      const started = read(principalId, subjectToken, ref, lang, fresh).finally(() => inFlight.delete(flightKey));
-      inFlight.set(flightKey, started);
+      const started = read(subjectToken, ref, lang, fresh).finally(() => inFlight.delete(key));
+      inFlight.set(key, started);
       return started;
-    },
-    forget(principalId) {
-      const prefix = `${principalId}\u0001`;
-      for (const key of memo.keys()) if (key.startsWith(prefix)) memo.delete(key);
     },
   };
 }

@@ -1,20 +1,21 @@
 // #4507: the card of a record, read as the signed-in person: their own
 // sign-in token on the call, the console's eight error codes mapped to the
-// page's states, one read in flight per person and record, a short cache
-// per person, and only the organization's Refuse and Ask first rules.
+// page's states, one read in flight per person and record (no cache here:
+// the console owns staleness), and only the organization's Refuse and Ask
+// first rules.
 // Every product, record and person here is invented.
 import { describe, expect, it } from "vitest";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { CustomRule } from "../../shared/custom-rules.ts";
 import type { PersonProductsCall } from "../perspicax/person-products.ts";
-import { RECORD_CARD_MEMO_MS, createRecordCardsClient, recordCardPath } from "../perspicax/record-cards.ts";
+import { createRecordCardsClient, recordCardPath } from "../perspicax/record-cards.ts";
 import { createRecordCardsRoutes, recordReadOrgRule, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
 import { PASS } from "./table.ts";
 
-const REF = { product: "nimbus_desk", kind: "ticket", id: "297048" };
-const PATH = "/api/me/records/nimbus_desk/ticket/297048";
-const card = (id = "297048", extra: Record<string, unknown> = {}) => ({
+const REF = { product: "nimbus_desk", kind: "ticket", id: "481516" };
+const PATH = "/api/me/records/nimbus_desk/ticket/481516";
+const card = (id = "481516", extra: Record<string, unknown> = {}) => ({
   product: { id: "nimbus_desk", name: "Nimbus Desk" }, kind: { id: "ticket", name: "Billet" },
   id, number: `#${id}`, title: "Imprimante hors ligne", notes: { state: "none", items: [], more: false }, cached: false, ...extra,
 });
@@ -41,11 +42,10 @@ function harness(options: {
   person?: boolean;
   token?: string | null;
   rule?: RecordReadRule;
-  now?: () => number;
   language?: string;
 } = {}) {
   const px = fakeConsole(options.answer);
-  const client = createRecordCardsClient({ call: px.call, ...(options.now ? { now: options.now } : {}) });
+  const client = createRecordCardsClient({ call: px.call });
   const ruleCalls: string[] = [];
   const deps: RecordCardsRouteDeps = {
     organization: () => options.linked ?? true,
@@ -77,9 +77,9 @@ describe("record card route", () => {
     const h = harness();
     const answer = await h.request(PATH);
     expect(answer.status).toBe(200);
-    expect(answer.body.card).toMatchObject({ id: "297048", number: "#297048", title: "Imprimante hors ligne" });
+    expect(answer.body.card).toMatchObject({ id: "481516", number: "#481516", title: "Imprimante hors ligne" });
     expect(answer.headers["cache-control"]).toBe("private, no-store");
-    expect(h.calls).toEqual([{ method: "GET", path: "/api/v1/pulsabot/people/me/products/nimbus_desk/records/ticket/297048?lang=fr", token: "token-of-p-ada" }]);
+    expect(h.calls).toEqual([{ method: "GET", path: "/api/v1/pulsabot/people/me/products/nimbus_desk/records/ticket/481516?lang=fr", token: "token-of-p-ada" }]);
     await h.request(`${PATH}?lang=en`, BEN);
     expect(h.calls[1]).toEqual({ method: "GET", path: recordCardPath(REF, "en"), token: "token-of-p-ben" });
   });
@@ -140,7 +140,7 @@ describe("record card route", () => {
     const h = harness({ rule: { kind: "ask", rule: { id: "org-2", text: "Demander avant de lire Nimbus Desk" } } });
     expect((await h.request(PATH)).body).toEqual({ state: "org_ask", rule: { id: "org-2", text: "Demander avant de lire Nimbus Desk" } });
     expect(h.calls).toEqual([]);
-    expect((await h.request(`${PATH}?confirm=1`)).body.card).toMatchObject({ id: "297048" });
+    expect((await h.request(`${PATH}?confirm=1`)).body.card).toMatchObject({ id: "481516" });
     expect(h.calls).toHaveLength(1);
     expect(h.ruleCalls).toEqual(["p-ada", "p-ada"]);
   });
@@ -160,7 +160,7 @@ describe("record cards client", () => {
     expect(px.calls).toHaveLength(1);
   });
 
-  it("never lets a second person ride the first one's read or cache", async () => {
+  it("never lets a second person ride the first one's read", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const px = fakeConsole(async (_path, token) => {
@@ -174,34 +174,25 @@ describe("record cards client", () => {
     expect((await ada).ok).toBe(true);
     expect(await ben).toEqual({ ok: false, state: "no_access", code: "record_forbidden" });
     expect(px.calls.map((call) => call.token)).toEqual(["token-a", "token-b"]);
-    // Ada's kept card is hers only
-    expect((await client.get("p-ben", "token-b", REF, "fr")).ok).toBe(false);
-    expect(px.calls).toHaveLength(3);
   });
 
-  it("keeps a card a short while per person; fresh reads again; a miss is never kept", async () => {
-    let clock = 1_000;
-    let fail = true;
-    const px = fakeConsole(() => fail ? { ok: false, status: 502, body: { code: "vendor_down", message: "m" } } : { ok: true, status: 200, body: card() });
-    const client = createRecordCardsClient({ call: px.call, now: () => clock });
-    expect((await client.get("p-ada", "t", REF, "fr")).ok).toBe(false);
-    fail = false;
-    const read = await client.get("p-ada", "t", REF, "fr");
-    expect(read.ok && read.card.cached).toBe(false);
-    const kept = await client.get("p-ada", "t", REF, "fr");
-    expect(kept.ok && kept.card.cached).toBe(true);
-    expect(px.calls).toHaveLength(2);
-    // another language is another card
+  it("keeps no card: once a read is done the next one asks the console, which owns the staleness", async () => {
+    const px = fakeConsole();
+    const client = createRecordCardsClient({ call: px.call });
+    await client.get("p-ada", "t", REF, "fr");
+    await client.get("p-ada", "t", REF, "fr");
     await client.get("p-ada", "t", REF, "en");
-    expect(px.calls).toHaveLength(3);
     await client.get("p-ada", "t", REF, "fr", true);
-    expect(px.calls.at(-1)!.path).toBe(recordCardPath(REF, "fr", true));
-    clock += RECORD_CARD_MEMO_MS + 1;
-    await client.get("p-ada", "t", REF, "fr");
-    expect(px.calls).toHaveLength(5);
-    client.forget("p-ada");
-    await client.get("p-ada", "t", REF, "fr");
-    expect(px.calls).toHaveLength(6);
+    expect(px.calls.map((call) => call.path)).toEqual([recordCardPath(REF, "fr"), recordCardPath(REF, "fr"), recordCardPath(REF, "en"), recordCardPath(REF, "fr", true)]);
+  });
+
+  it("refuses a card for another record than the one asked", async () => {
+    for (const body of [card("999999"), { ...card(), kind: { id: "project", name: "Projet" } }, { ...card(), product: { id: "other_desk", name: "Other" } }]) {
+      const client = createRecordCardsClient({ call: fakeConsole(() => ({ ok: true, status: 200, body })).call });
+      expect(await client.get("p-ada", "t", REF, "fr")).toEqual({ ok: false, state: "unavailable" });
+    }
+    const client = createRecordCardsClient({ call: fakeConsole().call });
+    expect((await client.get("p-ada", "t", REF, "fr")).ok).toBe(true);
   });
 });
 

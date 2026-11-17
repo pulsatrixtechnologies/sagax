@@ -249,8 +249,8 @@ export const DEF_ATTACH_FILE = {
       type: "object",
       additionalProperties: false,
       properties: {
-        path: { type: "string", description: "The file's path, for example /home/cua/workspace/report.pdf." },
-        name: { type: "string", description: "Optional file name to show the user. Defaults to the file's own name." },
+        path: { type: "string" },
+        name: { type: "string", description: "Name shown to the user; default the file's own." },
       },
       required: ["path"],
     },
@@ -259,7 +259,7 @@ export const DEF_ATTACH_FILE = {
 export const DEF_REACT_TO_MESSAGE = {
     name: "react_to_message",
     description:
-      "React with one emoji to a message in this conversation, like a colleague in a chat, when a short acknowledgement says it: 👍 noted, ✅ a small thing you were asked is done, 👀 you are starting on something that takes a while, ❤️ or 🙏 for a thank-you, 🎉 for good news. Sparingly: most messages get none, one per message at most, never on your own messages. Never instead of an answer the person needs, nor with a sentence saying the same thing: if the reaction says it all, end the turn without text (no empty reply is shown). Omit message_id for the message you are answering.",
+      "React with one emoji to a message in this conversation, like a colleague in a chat, when a short acknowledgement says it: 👍 noted, ✅ a small thing you were asked is done, 👀 you are starting on something that takes a while, ❤️ or 🙏 for a thank-you, 🎉 for good news. Sparingly: most messages get none, one per message at most, never on your own messages. Never instead of an answer the person needs, nor with a sentence saying the same thing: if the reaction says it all, end the turn without text (no empty reply is shown).",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -322,9 +322,9 @@ export const DEF_MEMORY_UPDATE = {
       additionalProperties: false,
       properties: {
         action: { type: "string", enum: ["append", "replace", "remove", "supersede"] },
-        text: { type: "string", minLength: 1, maxLength: 1000, description: "Non-blank new text for append, replace, or supersede: the fact itself, without a date or bullet. Omit for remove; use remove to delete a passage." },
+        text: { type: "string", minLength: 1, maxLength: 1000, description: "Non-blank new text for append, replace, or supersede: the fact itself, without a date or bullet. Omit for remove." },
         old_text: { type: "string", minLength: 1, description: "Exact unique existing passage for replace, supersede, or remove. Omit for append." },
-        until: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Optional, for append or supersede: YYYY-MM-DD, the last day a temporary fact holds (an exam this weekend, a trip next week). After that day the entry is hidden from your memory." },
+        until: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "append or supersede: the last day a temporary fact holds (a trip next week); after it the entry is hidden." },
       },
       required: ["action"],
     },
@@ -354,18 +354,18 @@ export const DEF_SESSION_SEARCH = {
       properties: {
         query: {
           type: "string",
-          description: "Two to five content words that would appear in the message you want, for example \"pricing audit broken links\". Every content word must match; skip filler words like \"the\", \"on\", \"what\". Optional when since is given.",
+          description: "Two to five content words of the message you want (\"pricing audit broken links\"), all of which must match; no filler words. Optional with since.",
         },
         since: {
           type: "string",
-          description: "Only messages from this time on: a span back from now like \"24h\", \"3d\", \"2w\"; \"today\" or \"yesterday\"; or a date. With no query, lists everything in that window, newest first.",
+          description: "From this time on: \"24h\", \"3d\", \"2w\", \"today\", \"yesterday\" or a date. With no query, lists that window, newest first.",
         },
         until: { type: "string", description: "Only messages up to this time; same forms as since." },
-        limit: { type: "integer", minimum: 1, maximum: 25, description: "Maximum hits to return; default 12." },
+        limit: { type: "integer", minimum: 1, maximum: 25, description: "Default 12." },
         scope: {
           type: "string",
           enum: ["all", "conversations", "memory"],
-          description: "What to search. Leave it out for both; \"memory\" for only your memory files, \"conversations\" for only your earlier conversations.",
+          description: "Omit for both.",
         },
       },
     },

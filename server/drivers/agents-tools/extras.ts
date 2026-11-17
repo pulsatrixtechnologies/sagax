@@ -34,12 +34,12 @@ export const DEF_CREATE_OPTIONS_CARD = {
 export const ASK_CHOICE_DEF = {
     name: ASK_CHOICE_TOOL,
     description:
-      "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool, routine runs and MCP-started turns included; never end with a plain-text confirmation request. Then end your turn. A write the request or an exact quoted GO covers: use its approval gate, never re-ask. Not for may-I permission on in-scope work, nor teammate contact when Ask before contacting bots is off. One question per control: several things to decide are ONE form (questions, e.g. [{\"question\":\"Standup\",\"kind\":\"choice\",\"options\":[\"Done\",\"Move\"]},{\"question\":\"Review length\",\"kind\":\"duration\"}]); a list to pick from is a checklist (items, actions [\"Post selected\",\"Skip tonight\"]); question is then one line of context. Several questions in one text, a list in prose or answers named only in the text: refused, with how to ask again. Separate items: one call and card each (no maximum), a key to replace or retire one later; only wait false cards can follow one another in one turn.",
+      "Ask the person to choose with clickable options when you need a decision their request did not cover and your engine offers no question tool. Recommended option first; an Other field takes a typed answer. A blocking decision MUST use this card or a native question tool (routine runs and MCP-started turns included), never a plain-text confirmation request; then end your turn. Never for a write the request or an exact quoted GO covers (use its approval gate), may-I permission on in-scope work, or teammate contact when Ask before contacting bots is off. One question per control: several things to decide are ONE form (questions); a list to pick from is a checklist (items, actions); question is then one line of context. Several questions in one text, a list in prose or answers only in the text are refused with an example. Separate items: one card each, a key to replace or retire it; only wait false cards can follow one another in one turn.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "The question, what happened and why you wait: enough to answer from a notification at a glance. With questions or items: one line of context." },
+        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "What happened and why you wait, enough to answer from a notification." },
         title: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.title, description: "Optional short heading." },
         options: {
           type: "array",
@@ -47,7 +47,7 @@ export const ASK_CHOICE_DEF = {
           maxItems: OPTIONS_CARD_LIMITS.maxOptions,
           uniqueItems: true,
           items: { type: "string", minLength: 1, maxLength: OPTIONS_CARD_LIMITS.option },
-          description: "2-6 answers of a few words, the recommended one first. \"A or B?\" takes A and B, never Yes / No. Not with questions or items.",
+          description: "A few words each. \"A or B?\" takes A and B, never Yes / No. Not with questions or items.",
         },
         details: {
           type: "array",
@@ -90,12 +90,12 @@ export const ASK_CHOICE_DEF = {
           },
         },
         actions: { type: "array", maxItems: MAX_ACTIONS, items: { type: "string", maxLength: MAX_ACTION_LABEL }, description: "With items: the buttons, main first." },
-        key: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.key, description: "Optional stable key (an item id such as ticket-1234): the same key here replaces its pending card; the answer brings it verbatim with the chosen option. A keyed card is a decision: never answered for the person." },
-        wait: { type: "boolean", description: "Default true: holds your turn and a routine run; on some engines the turn then ends with this call. Default false in a background run of a routine that runs several times a day. false: the card stays pending and holds nothing; go on (ask the next item) and end normally; each answer comes later as its own turn." },
-        decision: { type: "boolean", description: "true for a business decision only the person makes: never answered for them, at any level." },
-        retire: { type: "boolean", description: "true with key: close that pending card now (other fields ignored except reason); a later answer starts nothing." },
-        reason: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.reason, description: "With retire: one short line the closed card shows, why it closed (\"Already approved on Nov 16\")." },
-        to: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.to, description: "Room only: the one person (person id or name) whose answer counts; others see the card. Same key, new to: re-addressed." },
+        key: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.key, description: "Stable item id (ticket-1234): replaces its pending card; the answer brings it back. A keyed card is never answered for the person." },
+        wait: { type: "boolean", description: "Default true (false in a routine run several times a day): holds your turn or run; on some engines the turn then ends with this call. false: the card stays pending; go on and end normally; each answer comes later as its own turn." },
+        decision: { type: "boolean", description: "A business decision only the person makes: never answered for them, at any level." },
+        retire: { type: "boolean", description: "With key: close that pending card now (other fields ignored but reason); a later answer starts nothing." },
+        reason: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.reason, description: "With retire: the short line the closed card shows (\"Already approved on Nov 16\")." },
+        to: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.to, description: "Room only: the person (id or name) whose answer counts. Same key, new to: re-addressed." },
         tell: { type: "boolean", description: "A fact to know, no answer; options []." },
       },
       required: ["question"],

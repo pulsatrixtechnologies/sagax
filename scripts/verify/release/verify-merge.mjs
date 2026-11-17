@@ -18,7 +18,8 @@
 //      foo.e2e.test.ts), the tests beside a changed route's module, the
 //      tests that import a changed source, and the tests of an area the diff
 //      touches (AREA_TESTS: the connector matrix and the hosts' launch
-//      contract for the connector paths)
+//      contract for the connector paths; catalogPlan of guard-tests.mjs: the
+//      catalog budget and wire tests for a file that feeds the tool list)
 //   3b. the related tests: the tests that reach a changed source through
 //      other files, under a time ceiling (#4316). Both lists come from
 //      scripts/fast-gate.sh, the one selection of both gates: a shared list,
@@ -65,7 +66,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { existingGuardTests } from "./guard-tests.mjs";
+import { catalogPlan, existingGuardTests } from "./guard-tests.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const VITEST = join(ROOT, "node_modules", "vitest", "vitest.mjs");
@@ -265,6 +266,8 @@ function plan(options) {
     }
   }
   for (const test of areaTests(changed)) if (existsSync(join(ROOT, test))) tests.add(test);
+  // #4518: the catalog budget and wire tests for any file that feeds the tool list
+  for (const test of catalogPlan(changed, ROOT).tests) tests.add(test);
   const dependent = dependentTests(options.base);
   for (const test of dependent.tests) tests.add(test);
   const related = dependent.related.filter((test) => !tests.has(test));

@@ -198,6 +198,91 @@ describe("agents catalog budget strategy (#1703)", () => {
     expect(lines.length).toBeGreaterThan(5);
   });
 
+  // #4518: what left a description to bring the widest list back under its
+  // ceiling still reaches the bot, from the tool beside it or the refusal.
+  describe("trimmed text still reaches the bot (#4518)", () => {
+    type Schema = { description?: string; properties?: Record<string, Schema>; items?: Schema; type?: unknown; enum?: unknown };
+    const tool = (tools: ReturnType<typeof availableTools>, name: string) => {
+      const found = tools.find((entry) => entry.name === name);
+      expect(found, name).toBeDefined();
+      return found as unknown as { description: string; inputSchema: Schema };
+    };
+    const widest = () => availableTools(catalogProfileFromEnv(EVERYTHING));
+
+    it("describes every field of propose_routine_action's changes in propose_routine, listed in the same turn", () => {
+      for (const env of [EVERYTHING, { SAGAX_BOT_ID: "bot-a", SAGAX_CHIEF_OF_STAFF: "0" }, { ...EVERYTHING, SAGAX_ROOM_TURN: "1", SAGAX_GROUP_TURN: "1" }]) {
+        const tools = availableTools(catalogProfileFromEnv(env));
+        const changes = tool(tools, "propose_routine_action").inputSchema.properties!.changes!;
+        const fields = tool(tools, "propose_routine").inputSchema.properties!;
+        expect(changes.description).toContain("propose_routine");
+        for (const [key, schema] of Object.entries(changes.properties!)) {
+          expect(fields[key]?.description, key).toBeTruthy();
+          expect(schema.type, key).toEqual(fields[key]!.type);
+          expect(schema.enum, key).toEqual(fields[key]!.enum);
+        }
+        // the schedule's own fields too
+        for (const key of Object.keys(changes.properties!.schedule!.properties!)) {
+          expect(fields.schedule!.properties![key]!.description, `schedule.${key}`).toBeTruthy();
+        }
+      }
+    });
+
+    it("describes every field update_artifact shares with save_artifact in save_artifact", () => {
+      const tools = widest();
+      const update = tool(tools, "update_artifact");
+      const save = tool(tools, "save_artifact").inputSchema.properties!;
+      expect(update.description).toContain("save_artifact");
+      for (const [key, schema] of Object.entries(update.inputSchema.properties!)) {
+        if (!(key in save)) continue;
+        expect(schema.description, key).toBeUndefined();
+        expect(save[key]!.type, key).toEqual(schema.type);
+      }
+      expect(save.html!.description).toContain("window.sagax.onData");
+      expect(save.source!.description).toContain("null removes it");
+    });
+
+    it("lists in phone_tool only the fields of the offered phone tools", () => {
+      const props = (tools: string) => Object.keys(tool(availableTools(catalogProfileFromEnv({ ...EVERYTHING, SAGAX_PHONE_TOOLS: tools })), "phone_tool").inputSchema.properties!).sort();
+      expect(props("location,status")).toEqual(["precise", "reason", "request_id", "tool"]);
+      expect(props("contacts")).toEqual(["fields", "limit", "query", "reason", "request_id", "tool"]);
+      expect(props("location,contacts,reminders,calendar,home,alarms,photos,shortcut,clipboard,status")).toEqual([
+        "action", "due", "end", "fields", "from", "home", "hour", "input", "label", "limit", "list", "location", "max", "minute", "name", "notes",
+        "precise", "query", "reason", "request_id", "scene", "start", "title", "to", "tool",
+      ]);
+    });
+
+    it("gives the form and checklist examples that left ask_choice's description in its refusal", async () => {
+      const { cardRefusalText } = await import("../../shared/card-rules.ts");
+      const description = tool(widest(), "ask_choice").description;
+      expect(description).toContain("ONE form (questions)");
+      expect(description).toContain("a checklist (items, actions)");
+      expect(description).toContain("refused with an example");
+      const form = cardRefusalText({ rule: "several-questions", reason: "two questions" }, "ask_choice");
+      expect(form).toMatch(/Example: ask_choice \{.*"questions":\[\{"question":"Standup, 9:00 to 9:15","kind":"choice","options":\[/);
+      const checklist = cardRefusalText({ rule: "list-in-prose", reason: "a list" }, "ask_choice");
+      expect(checklist).toMatch(/Example: ask_choice \{.*"items":\[.*"actions":\["Post selected","Skip tonight"\]/);
+    });
+
+    it("keeps each moved rule in the tool's own schema", () => {
+      const tools = widest();
+      const routine = tool(tools, "propose_routine").inputSchema.properties!;
+      expect(routine.for_bot_id!.description).toMatch(/ANOTHER bot.*list_bots.*permissions/);
+      expect(routine.enabled!.description).toMatch(/false creates it paused/);
+      expect(tool(tools, "propose_routine_action").inputSchema.properties!.for_bot_id!.description).toMatch(/ANOTHER bot.*keeps its owner/);
+      const send = tool(tools, "send_prompt").inputSchema.properties!;
+      expect(send.on_busy!.description).toMatch(/supersede stops a running turn you started.*never someone else's/);
+      expect(send.priority!.description).toMatch(/never interrupting a running turn/);
+      expect(send.idempotency_key!.description).toContain("409 idempotency_key_reused");
+      const mcp = tool(tools, "add_mcp_server");
+      expect(mcp.description).toMatch(/Omit any secret not given and name the missing key/);
+      expect(mcp.description).toMatch(/never both/);
+      const line = tool(tools, "phone_line_contact").inputSchema.properties!;
+      expect(line.hide_owner_name!.description).toMatch(/Never reveal/);
+      expect(line.summarize_to_owner!.description).toMatch(/Default true/);
+      expect(tool(tools, "remote_support_open").description).toMatch(/technician is their name and organization, 2 hours \(24 at most\)/);
+    });
+  });
+
   it("serves groups mode from the agents proxy", async () => {
     const env = { ...EVERYTHING, ...GROUPS_ON, SAGAX_CATALOG_BRIDGE: "0" };
     const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("SAGAX_")));

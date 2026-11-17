@@ -923,18 +923,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/drivers/agents-merged.test.ts",
-      "test": "agents tools listed by family > pins and measures the room listing",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "shared/plain-time-zone.test.ts",
       "test": "plainTimeZone in French (#2805) > says the zone in French, never Eastern time nor an abbreviation",
       "platforms": [
@@ -1066,18 +1054,6 @@
     {
       "file": "src/components/bot-catalog/bot-catalog.test.ts",
       "test": "the detail pane > formats routine schedules in the person's language, never raw cron or UTC",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/drivers/agents-catalog-budget.test.ts",
-      "test": "agents catalog budget strategy (#1703) > documents remaining margin per profile against the soft ceiling and tool limit",
       "platforms": [
         "macos-latest",
         "ubuntu-latest",
@@ -2157,26 +2133,6 @@
     {
       "file": "server/sandbox/sandbox-bot-folder.test.ts",
       "test": "WorkspaceTidier > a root tmp in a plan aimed at a bot folder is refused by the script itself",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/drivers/agents-merged.test.ts",
-      "test": "agents tools listed by family > pins and measures the direct listing",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/drivers/agents-merged.test.ts",
-      "test": "agents tools listed by family > pins and measures the external listing",
       "platforms": [
         "windows-latest"
       ],

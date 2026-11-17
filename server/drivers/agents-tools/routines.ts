@@ -16,6 +16,7 @@ import {
   routineFields,
   confirmationResult,
 } from "./shared.ts";
+import { withoutFieldDescriptions } from "../catalog-schema.ts";
 
 export const DEF_LIST_ROUTINES = {
     name: "list_routines",
@@ -60,7 +61,7 @@ export const DEF_EVENT_SUBSCRIPTIONS = {
 export const DEF_PROPOSE_ROUTINE = {
     name: "propose_routine",
     description:
-      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. It starts active; enabled false creates it paused. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a five-field cron schedule with an explicit IANA timeZone; keep every-N-minutes work as interval. Never approximate an unsupported request with another schedule or an AI date-check routine; explain the limit. Resolve ambiguity with the user first; one-time schedules need an RFC3339 offset. To run as ANOTHER bot in your section, pass its id (list_bots) as for_bot_id; runs keep that bot's permissions." + SELF_CHANGE_OUTCOME,
+      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a five-field cron schedule with an explicit IANA timeZone; keep every-N-minutes work as interval. Never approximate an unsupported request with another schedule or an AI date-check routine; explain the limit. Resolve ambiguity with the user first; one-time schedules need an RFC3339 offset." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -90,12 +91,12 @@ export const DEF_PROPOSE_ROUTINE = {
         enabled: {
           type: "boolean",
           description:
-            "true starts it on its schedule; false creates it paused. Omit for active. Pause and resume are propose_routine_action.",
+            "false creates it paused; omit for active. Pause and resume: propose_routine_action.",
         },
         for_bot_id: {
           type: "string",
           description:
-            "Only to schedule for ANOTHER bot in your section: its id from list_bots. Omit for yourself. The routine then belongs to that bot.",
+            "ANOTHER bot in your section only: its id from list_bots; the routine belongs to it and runs with its permissions. Omit for yourself.",
         },
         quote: PERSON_QUOTE,
       },
@@ -137,7 +138,7 @@ export function withProductTrigger(def: typeof DEF_PROPOSE_ROUTINE): typeof DEF_
 export const DEF_PROPOSE_ROUTINE_ACTION = {
     name: "propose_routine_action",
     description:
-      "Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client edits without a card via sagax_routine_update. For ANOTHER bot's routine in your section, pass its id (list_bots) as for_bot_id; the routine keeps its owner." + SELF_CHANGE_OUTCOME,
+      "Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client edits without a card via sagax_routine_update." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -146,7 +147,7 @@ export const DEF_PROPOSE_ROUTINE_ACTION = {
         for_bot_id: {
           type: "string",
           description:
-            "Only for ANOTHER bot's routine in your section: its id from list_bots (that bot's list_routines gives the routine id). Omit for your own.",
+            "ANOTHER bot's routine in your section only: its id from list_bots (that bot's list_routines gives the routine id); the routine keeps its owner. Omit for your own.",
         },
         action: {
           type: "string",
@@ -156,8 +157,9 @@ export const DEF_PROPOSE_ROUTINE_ACTION = {
         changes: {
           type: "object",
           additionalProperties: false,
-          properties: ROUTINE_FIELDS_SCHEMA,
-          description: "Fields to change when action is update. Omit for every other action.",
+          // #4518: propose_routine, always listed beside it, describes each field
+          properties: withoutFieldDescriptions(ROUTINE_FIELDS_SCHEMA),
+          description: "update only: the fields to change, each meaning what propose_routine says.",
         },
         quote: PERSON_QUOTE,
       },

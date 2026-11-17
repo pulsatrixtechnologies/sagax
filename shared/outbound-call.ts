@@ -213,17 +213,17 @@ export function voiceCallArgs(request: OutboundCallRequest, input: { botName: st
 export const PLACE_PHONE_CALL_TOOL_SPEC = {
   name: PLACE_PHONE_CALL_TOOL,
   description:
-    "Place a phone call for the person to a Canadian number. Every call is a live two-way conversation with your voice, never a recorded or spoken message: it leaves from the person's own Perspicax Voice line, which opens with \"Hello, this is <you>, an AI assistant calling on behalf of <the person>\"; then you talk live, pursue the objective (the conversation goal, never a script read aloud), follow the instructions, and hang up politely when it is reached, when asked, or at max_minutes (5 by default, 20 at most); a voicemail gets your short message; a callee who asks not to be called again is never called again. Needs objective. When the live voice cannot take the call, nothing is dialed and the answer says why and who can fix it: tell the person. The first call shows the person an approval card (number, objective, guidance, maximum duration; a dry run checks it, nothing is placed). After they choose Call, call again with the very same arguments to place it; one approval places one call. The result returns in a new turn as a card: end your turn after placing it. Never call twilio_api_write Calls or voice_call yourself. To call the person with structured questions, prefer phone_call_owner.",
+    "Place a phone call for the person to a Canadian number: always a live two-way conversation in your voice, never a recorded or spoken message. It leaves from the person's own Perspicax Voice line, opening with \"Hello, this is <you>, an AI assistant calling on behalf of <the person>\"; you pursue the objective live (never a script read aloud), follow the instructions, and hang up politely when it is reached, when asked, or at max_minutes; a voicemail gets your short message; a callee who asks not to be called again never is. When the live voice cannot take the call, nothing is dialed and the answer says why and who can fix it: tell the person. The first call shows the person an approval card (a dry run, nothing placed); after they choose Call, call again with the very same arguments; one approval places one call. The result returns in a new turn as a card: end your turn after placing it. Never call twilio_api_write Calls or voice_call yourself. To call the person with structured questions, prefer phone_call_owner.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
     properties: {
-      to: { type: "string", description: "The number to call, such as +1 514 555 0142. Canada only." },
-      objective: { type: "string", description: "The conversation goal: what you must obtain or say on this call, at most 200 characters. Shown on the card." },
-      instructions: { type: "string", description: "Your guidance during the call (what you may say or accept, what to avoid), at most 1000 characters." },
-      max_minutes: { type: "integer", minimum: 1, maximum: 20, description: "The most the call may last, in minutes (5 when left out)." },
-      voicemail: { type: "string", description: "The short message left if a voicemail answers, at most 300 characters. Nothing confidential." },
-      language: { type: "string", enum: ["fr", "en"], description: "The call's language. Defaults to the person's." },
+      to: { type: "string", description: "Such as +1 514 555 0142. Canada only." },
+      objective: { type: "string", description: "The conversation goal, at most 200 characters, shown on the card." },
+      instructions: { type: "string", description: "What you may say or accept, what to avoid; at most 1000 characters." },
+      max_minutes: { type: "integer", minimum: 1, maximum: 20, description: "Default 5." },
+      voicemail: { type: "string", description: "Left if a voicemail answers, at most 300 characters; nothing confidential." },
+      language: { type: "string", enum: ["fr", "en"], description: "Defaults to the person's." },
     },
     required: ["to", "objective"],
   },
@@ -232,7 +232,7 @@ export const PLACE_PHONE_CALL_TOOL_SPEC = {
 export const PHONE_CALL_OWNER_TOOL_SPEC = {
   name: PHONE_CALL_OWNER_TOOL,
   description:
-    "Call the person themself on their own verified Perspicax Voice number with structured questions (#2194). Goes out through place_phone_call conversation mode on their line (Perspicax voice_call): one short opening, then one question at a time, then hang up. Answers come back as the call_result in this chat. Needs questions (1 to 8 short ones). Optional context briefs the call. Optional to is their E.164 number; when left out, Sagax uses the number they set under Reach me by text, after voice_line confirms it is verified on their line. Same approval card as place_phone_call (one yes, one call). Never call voice_call yourself.",
+    "Call the person themself on their own verified Perspicax Voice number with structured questions, through place_phone_call conversation mode on their line (Perspicax voice_call): one short opening, then one question at a time, then hang up. Answers come back as the call_result in this chat. Same approval card as place_phone_call (one yes, one call). Never call voice_call yourself.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -241,13 +241,13 @@ export const PHONE_CALL_OWNER_TOOL_SPEC = {
         type: "array",
         minItems: 1,
         maxItems: OWNER_CALL_LIMITS.questions,
-        items: { type: "string", description: `One short question, at most ${OWNER_CALL_LIMITS.question} characters.` },
-        description: "The questions to ask, one at a time, in order.",
+        items: { type: "string", description: `At most ${OWNER_CALL_LIMITS.question} characters.` },
+        description: "Short questions, asked one at a time, in order.",
       },
-      context: { type: "string", description: `Optional brief for the call (why you call, what you already know), at most ${OWNER_CALL_LIMITS.context} characters.` },
-      to: { type: "string", description: "Optional: the person's own verified number to call. When left out, uses their Reach me SMS number once voice_line verifies it." },
-      language: { type: "string", enum: ["fr", "en"], description: "The call's language. Defaults to the person's." },
-      max_minutes: { type: "integer", minimum: 1, maximum: 20, description: `At most how long the call may last, in minutes (${OWNER_CALL_LIMITS.defaultMinutes} when left out).` },
+      context: { type: "string", description: `Why you call, what you already know; at most ${OWNER_CALL_LIMITS.context} characters.` },
+      to: { type: "string", description: "Their own verified E.164 number; omit for their Reach me by text number once voice_line verifies it." },
+      language: { type: "string", enum: ["fr", "en"], description: "Defaults to the person's." },
+      max_minutes: { type: "integer", minimum: 1, maximum: 20, description: `Default ${OWNER_CALL_LIMITS.defaultMinutes}.` },
     },
     required: ["questions"],
   },

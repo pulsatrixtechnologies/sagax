@@ -4,6 +4,8 @@
 // agents-call-artifacts.ts carries a call to the internal route and
 // server/artifacts/artifacts.ts stores the result. Every word here is sent to the
 // model on every turn and pinned by agents-catalog-wire.test.ts.
+import { withoutFieldDescriptions } from "./catalog-schema.ts";
+
 const FIELDS = {
   title: { type: "string" },
   html: { type: "string", description: "Self-contained HTML with inline CSS and JS; no network (strict CSP). Read window.sagax.data; window.sagax.onData(fn) gets each refresh's JSON." },
@@ -29,7 +31,7 @@ export const ARTIFACT_TOOL_DEFINITIONS = [
   {
     name: "update_artifact",
     description: "Change one of your artifacts: any save_artifact field, or paused to stop or resume its refresh. Omitted fields stay.",
-    inputSchema: { type: "object", additionalProperties: false, properties: { artifact_id: { type: "string" }, ...FIELDS, paused: { type: "boolean" } }, required: ["artifact_id"] },
+    inputSchema: { type: "object", additionalProperties: false, properties: { artifact_id: { type: "string" }, ...withoutFieldDescriptions(FIELDS), paused: { type: "boolean" } }, required: ["artifact_id"] },
   },
   {
     name: "list_artifacts",

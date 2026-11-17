@@ -34,6 +34,7 @@ import { build } from "esbuild";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { waitForExit } from "../testing/cleanup.ts";
 import { availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
+import { withoutFieldDescriptions } from "./catalog-schema.ts";
 import {
   AGENTS_CATALOG_BYTES_SOFT_CEILING,
   AGENTS_CATALOG_TOOL_COUNT_LIMIT,
@@ -218,56 +219,60 @@ const BUDGET_BASELINE: Record<string, number> = {
   // pair room+own-thread+skills+shared(+voice) moved +2,836 because its old
   // baseline already sat 1.8% under its wire (earlier lots), so all room
   // non-chief profiles move to the measured wire together.
-  "direct": 108058,
-  "direct+voice": 109022,
-  "direct+shared": 109952,
-  "direct+shared+voice": 110916,
-  "direct+skills": 109419,
-  "direct+skills+voice": 110383,
-  "direct+skills+shared": 111313,
-  "direct+skills+shared+voice": 112277,
-  "room": 98496,
-  "room+voice": 99460,
-  "room+shared": 100390,
-  "room+shared+voice": 101354,
-  "room+skills": 99857,
-  "room+skills+voice": 100821,
-  "room+skills+shared": 101751,
-  "room+skills+shared+voice": 102715,
-  "room+own-thread": 100523,
-  "room+own-thread+voice": 101487,
-  "room+own-thread+shared": 102417,
-  "room+own-thread+shared+voice": 103381,
-  "room+own-thread+skills": 101884,
-  "room+own-thread+skills+voice": 102848,
-  "room+own-thread+skills+shared": 103778,
-  "room+own-thread+skills+shared+voice": 104742,
+  // 2026-11-17 (#4518): trimmed to bring the widest profile back under the
+  // soft ceiling (repeated field texts, examples the refusal gives, prose
+  // restating a schema); every profile lowered to the measured wire so the
+  // saving cannot creep back.
+  "direct": 101538,
+  "direct+voice": 102502,
+  "direct+shared": 103432,
+  "direct+shared+voice": 104396,
+  "direct+skills": 102899,
+  "direct+skills+voice": 103863,
+  "direct+skills+shared": 104793,
+  "direct+skills+shared+voice": 105757,
+  "room": 93129,
+  "room+voice": 94093,
+  "room+shared": 95023,
+  "room+shared+voice": 95987,
+  "room+skills": 94490,
+  "room+skills+voice": 95454,
+  "room+skills+shared": 96384,
+  "room+skills+shared+voice": 97348,
+  "room+own-thread": 94825,
+  "room+own-thread+voice": 95789,
+  "room+own-thread+shared": 96719,
+  "room+own-thread+shared+voice": 97683,
+  "room+own-thread+skills": 96186,
+  "room+own-thread+skills+voice": 97150,
+  "room+own-thread+skills+shared": 98080,
+  "room+own-thread+skills+shared+voice": 99044,
   // #2048: choose_page_target joins the catalog (measured wire).
-  "direct+non-chief": 97286,
-  "direct+voice+non-chief": 98250,
-  "direct+shared+non-chief": 99180,
-  "direct+shared+voice+non-chief": 100144,
-  "direct+skills+non-chief": 98647,
-  "direct+skills+voice+non-chief": 99611,
-  "direct+skills+shared+non-chief": 100541,
-  "direct+skills+shared+voice+non-chief": 101505,
+  "direct+non-chief": 90980,
+  "direct+voice+non-chief": 91944,
+  "direct+shared+non-chief": 92874,
+  "direct+shared+voice+non-chief": 93838,
+  "direct+skills+non-chief": 92341,
+  "direct+skills+voice+non-chief": 93305,
+  "direct+skills+shared+non-chief": 94235,
+  "direct+skills+shared+voice+non-chief": 95199,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
-  "room+non-chief": 87718,
-  "room+voice+non-chief": 88682,
-  "room+shared+non-chief": 89612,
-  "room+shared+voice+non-chief": 90576,
-  "room+skills+non-chief": 89079,
-  "room+skills+voice+non-chief": 90043,
-  "room+skills+shared+non-chief": 90973,
-  "room+skills+shared+voice+non-chief": 91937,
-  "room+own-thread+non-chief": 89745,
-  "room+own-thread+voice+non-chief": 90709,
-  "room+own-thread+shared+non-chief": 91639,
-  "room+own-thread+shared+voice+non-chief": 92603,
-  "room+own-thread+skills+non-chief": 91106,
-  "room+own-thread+skills+voice+non-chief": 92070,
-  "room+own-thread+skills+shared+non-chief": 93000,
-  "room+own-thread+skills+shared+voice+non-chief": 93964,
+  "room+non-chief": 82565,
+  "room+voice+non-chief": 83529,
+  "room+shared+non-chief": 84459,
+  "room+shared+voice+non-chief": 85423,
+  "room+skills+non-chief": 83926,
+  "room+skills+voice+non-chief": 84890,
+  "room+skills+shared+non-chief": 85820,
+  "room+skills+shared+voice+non-chief": 86784,
+  "room+own-thread+non-chief": 84261,
+  "room+own-thread+voice+non-chief": 85225,
+  "room+own-thread+shared+non-chief": 86155,
+  "room+own-thread+shared+voice+non-chief": 87119,
+  "room+own-thread+skills+non-chief": 85622,
+  "room+own-thread+skills+voice+non-chief": 86586,
+  "room+own-thread+skills+shared+non-chief": 87516,
+  "room+own-thread+skills+shared+voice+non-chief": 88480,
   // Annotations on check_delegation / wait_delegation (read-only policy).
   // External runtime does not mount send_meme (or the rest of the agents catalog).
   // 2026-11-06 #2519 (#2204 port): coordinate_bots and assignment_status on external (measured wire).
@@ -445,15 +450,20 @@ describe("agents proxy tools/list golden", () => {
     }
   });
 
-  it("writes the routine fields out identically in both routine tools", () => {
-    // One source constant, serialized in full twice: see the wire-size table
-    // for what that costs, and the next test for why it is not a $ref.
+  it("writes the routine fields out with the same shape in both routine tools", () => {
+    // One source constant, serialized twice: see the next test for why it is
+    // not a $ref. #4518: propose_routine_action's changes carry the shape
+    // (types, enums, limits) without the field descriptions, which
+    // propose_routine, always listed beside it, sends once.
     type RoutineTool = Tool & { inputSchema: { properties: Record<string, unknown> & { changes: { properties: Record<string, unknown> } } } };
     const tools = new Map(toolsOf(wires[FULL.direct]!).map((tool) => [tool.name, tool as RoutineTool]));
     const created = tools.get("propose_routine")!.inputSchema.properties;
     const changed = tools.get("propose_routine_action")!.inputSchema.properties.changes.properties;
     expect(Object.keys(changed).length).toBeGreaterThan(0);
-    for (const field of Object.keys(changed)) expect(JSON.stringify(created[field]), field).toBe(JSON.stringify(changed[field]));
+    for (const field of Object.keys(changed)) {
+      expect(JSON.stringify(withoutFieldDescriptions(created[field])), field).toBe(JSON.stringify(changed[field]));
+      expect(JSON.stringify(changed[field]), field).not.toContain('"description"');
+    }
     expect(Object.keys(created).slice(0, Object.keys(changed).length)).toEqual(Object.keys(changed));
   });
 

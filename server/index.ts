@@ -15357,8 +15357,8 @@ openRemoteShell = (args) => {
   return remoteSessions.openShell({ principalId, botId: args.botId, threadId: args.threadId });
 };
 // The admin Remote Sessions page: the install-time unattended consent store,
-// and the aggregator that enforces who sees which session (a workspace admin
-// sees the organization's sessions; anyone else only their own).
+// and the aggregator that enforces who sees which session (each person, an
+// admin included, only the sessions they or their own bots opened).
 const unattendedConsent = createUnattendedConsentStore({ dataDir: DATA_DIR });
 const remoteSessionsAdmin = createRemoteSessionsAdmin({
   rows: () => remoteSessions.adminRows(),

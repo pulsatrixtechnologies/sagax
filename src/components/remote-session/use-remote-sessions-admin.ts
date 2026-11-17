@@ -8,7 +8,7 @@ import { api } from "@/state/store";
 
 export interface RemoteSessionsAdminState {
   rows: RemoteSessionAdminRow[];
-  /** The viewer is a workspace admin (sees the organization's sessions). */
+  /** The viewer is a workspace admin (revokes unattended access on any host; sees only their own sessions like anyone). */
   admin: boolean;
   loading: boolean;
   reload: () => void;

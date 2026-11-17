@@ -63,7 +63,8 @@ describe("admin remote-sessions routes", () => {
   });
 
   it("lists sessions and filters by active/unattended/search", async () => {
-    const { base } = await serve([row({ id: "aaaaaaaaaaaa", state: "connected" }), row({ id: "bbbbbbbbbbbb", state: "ended", hostname: "PC-B", serial: "SN-B" })], true);
+    const mine = { ownerId: "viewer@example.com", openedBy: "viewer@example.com" };
+    const { base } = await serve([row({ id: "aaaaaaaaaaaa", state: "connected", ...mine }), row({ id: "bbbbbbbbbbbb", state: "ended", hostname: "PC-B", serial: "SN-B", ...mine })], true);
     const all = await (await fetch(`${base}/api/admin/remote-sessions`)).json() as { sessions: { id: string }[]; admin: boolean };
     expect(all.sessions).toHaveLength(2);
     expect(all.admin).toBe(true);
@@ -74,7 +75,7 @@ describe("admin remote-sessions routes", () => {
   });
 
   it("serves a redacted log and ends a session", async () => {
-    const { base, closeById } = await serve([row({ id: "cccccccccccc" })], true);
+    const { base, closeById } = await serve([row({ id: "cccccccccccc", ownerId: "viewer@example.com", openedBy: "viewer@example.com" })], true);
     const logs = await (await fetch(`${base}/api/admin/remote-sessions/cccccccccccc/logs`)).json() as { entries: { kind: string; command?: string }[] };
     expect(logs.entries[0]).toMatchObject({ kind: "exec", command: "whoami" });
     const end = await fetch(`${base}/api/admin/remote-sessions/cccccccccccc/end`, { method: "POST" });
@@ -101,10 +102,19 @@ describe("admin remote-sessions routes", () => {
     expect(consent.get("sn-a")).toBeTruthy();
   });
 
-  it("a non-admin cannot see another person's session or grant consent", async () => {
+  it("another person's session is not listed and its log and End answer not found, for a member and an admin", async () => {
+    for (const orgAdmin of [false, true]) {
+      const { base, closeById } = await serve([row({ id: "eeeeeeeeeeee", ownerId: "other@example.com", openedBy: "other@example.com" })], orgAdmin);
+      const list = await (await fetch(`${base}/api/admin/remote-sessions`)).json() as { sessions: unknown[] };
+      expect(list.sessions).toEqual([]);
+      expect((await fetch(`${base}/api/admin/remote-sessions/eeeeeeeeeeee/logs`)).status).toBe(404);
+      expect((await fetch(`${base}/api/admin/remote-sessions/eeeeeeeeeeee/end`, { method: "POST" })).status).toBe(404);
+      expect(closeById).not.toHaveBeenCalled();
+    }
+  });
+
+  it("a non-admin cannot grant consent on a host running another person's session", async () => {
     const { base } = await serve([row({ id: "eeeeeeeeeeee", ownerId: "other@example.com" })], false);
-    const logs = await fetch(`${base}/api/admin/remote-sessions/eeeeeeeeeeee/logs`);
-    expect(logs.status).toBe(403);
     // SN-A runs another person's session: not the caller's host.
     const grant = await fetch(`${base}/api/admin/remote-sessions/unattended`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ host_key: "sn-a", org: "acme", installed_by: "x" }) });
     expect(grant.status).toBe(403);

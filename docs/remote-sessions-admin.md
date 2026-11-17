@@ -101,9 +101,13 @@ One Sagax server is one organization. The server routes are admin scoped
 (`/api/admin/remote-sessions...`), so the tool policy marks them
 `defaultEnabled: false`: an agent tool never reaches them without an explicit
 grant. A signed in person reaches the page from the account menu, and the
-server then enforces: a workspace admin sees the organization's sessions;
-anyone else sees only the sessions they own. The same rule gates the log and
-the End action. Recording or revoking unattended consent is admin only.
+server then enforces person isolation: every person, a workspace admin
+included, sees only the sessions they opened themselves or that their own bots
+opened for them. The same rule gates the log and the End action: another
+person's session answers not found. An organization-wide view belongs to the
+organization console, not to this page. Any person records unattended consent
+for a host of their own and revokes the consent they recorded; an admin does
+both for any host.
 
 ## Unattended access (install time consent, Access model)
 

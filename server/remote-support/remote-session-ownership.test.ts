@@ -10,6 +10,8 @@ import { isTailcatAddress, parseRemoteSessionEnd, TAILCAT_ADDRESS_MAX } from "..
 import type { Message, Store } from "../store.ts";
 import { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
 import { createRemoteSessionService } from "./remote-sessions.ts";
+import { createRemoteSessionsAdmin } from "./remote-sessions-admin.ts";
+import { createUnattendedConsentStore } from "./remote-session-consent-store.ts";
 import { readSupportTunnel, readTunnel, type RunCommand } from "./remote-session-probe.ts";
 import { createRemoteSessionRegistrar } from "./remote-session-register.ts";
 import { createRemoteSessionInternalRoutes } from "../routes/remote-sessions.ts";
@@ -148,6 +150,32 @@ describe("support tunnel ownership (finding 1)", () => {
     });
     expect(answer.isError).toBe(true);
     expect(existsSync(path.join(dir, "sessions", CODE, "address"))).toBe(false);
+  });
+});
+
+describe("Remote Sessions page isolation", () => {
+  it("a session A's bot opened for A shows to A and to A's bot only; another member and an admin see neither it nor its log", async () => {
+    const dir = await supportFolder();
+    const { svc } = service(dir, quietRun);
+    await svc.publish({ id: ID, code: CODE, botId: BOT, threadId: THREAD, principalId: A, os: "windows", elevated: true, endAt: END });
+    const page = createRemoteSessionsAdmin({
+      rows: () => svc.adminRows(),
+      botLabel: () => "Wren",
+      consent: createUnattendedConsentStore({ dataDir: temp("sagax-consent-") }),
+      log: () => [{ at: "2026-10-21T15:00:00Z", kind: "exec", command: "whoami", readOnly: true }],
+      closeById: async () => true,
+    });
+    const C = "person-c";
+    expect(page.list({ principalId: A, orgAdmin: false }).map((row) => row.id)).toEqual([ID]);
+    expect(page.logs({ principalId: A, orgAdmin: false }, ID)).toHaveLength(1);
+    // A's bot, acting for A, lists it through its own route (speaker = A).
+    expect(svc.list(A, BOT).map((row) => row.id)).toEqual([ID]);
+    for (const viewer of [{ principalId: B, orgAdmin: false }, { principalId: C, orgAdmin: true }]) {
+      expect(page.list(viewer)).toEqual([]);
+      expect(page.logs(viewer, ID)).toBeNull();
+      expect(await page.end(viewer, ID)).toBe(false);
+      expect(svc.list(viewer.principalId, BOT)).toEqual([]);
+    }
   });
 });
 

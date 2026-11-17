@@ -1,7 +1,7 @@
 {
   "version": "0.8.131",
   "generated": "2026-11-17",
-  "hash": "d7dbb9c2d5a84a6a",
+  "hash": "21076ef72b3dee8a",
   "perspicax": {"version":"1.8.45","commit":"e0fce674","date":"2026-10-21"},
   "counts": {"setting":56,"notes":326,"doc":671,"engine":17,"guide":32,"menu":18,"perspicax":42,"release":48,"route":96,"tool":172},
   "sections": [

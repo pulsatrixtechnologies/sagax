@@ -975,3 +975,17 @@ links stay as they are; tool calls and reasoning never go through it. The
 setting is the person's own (`sagax.voiceDashes.v1`, Settings > Models and
 voice > Voice), on by default for French. A solo server cannot read the
 browser's choice, so it follows the server language there.
+
+## Record links in a bot's reply (2026-11-16, #4507)
+
+After the dashes, `pushAssistantText` passes the final text through
+`recordLinksInReply` (`server/index.ts`, `server/perspicax/record-links.ts`):
+a record link (`sagax://record/<product>/<kind>/<id>`) whose product or kind
+the person's product list does not describe, or that does not parse, becomes
+its text; a plain number is linked only when that conversation's tool results
+held that exact id for exactly one product and kind (`linkSeenRecords` in
+`shared/record-cards.ts`), never by a pattern. Only text outside code, math,
+links, images and addresses changes; an id of fewer than five digits only
+after `#` or the kind's name; the link text keeps what the bot wrote; a second
+pass changes nothing. The message keeps the link only, never a record's
+content.

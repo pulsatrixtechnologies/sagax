@@ -23,6 +23,7 @@ function harness(options: {
   guard?: PerspicaxMcpOptions["permissionGuard"];
   remoteSupport?: PerspicaxMcpOptions["onRemoteSupport"];
   productKeyState?: PerspicaxMcpOptions["onProductKeyState"];
+  records?: PerspicaxMcpOptions["onRecords"];
   botProductsOff?: PerspicaxMcpOptions["botProductsOff"];
   askGo?: PerspicaxMcpOptions["askGo"];
 } = {}) {
@@ -110,6 +111,7 @@ function harness(options: {
     ...(options.guard ? { permissionGuard: options.guard } : {}),
     ...(options.remoteSupport ? { onRemoteSupport: options.remoteSupport } : {}),
     ...(options.productKeyState ? { onProductKeyState: options.productKeyState } : {}),
+    ...(options.records ? { onRecords: options.records } : {}),
     ...(options.botProductsOff ? { botProductsOff: options.botProductsOff } : {}),
     ...(options.askGo ? { askGo: options.askGo } : {}),
     fetch: fetcher,
@@ -1118,6 +1120,49 @@ describe("PerspicaxMcp product key state (#4185)", () => {
       await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
       const answer = await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "cw_psa_query", arguments: {} } } });
       expect((answer.body as { result: { content: unknown[] } }).result.content).toHaveLength(1);
+    }
+    expect(calls).toBe(2);
+  });
+});
+
+describe("PerspicaxMcp records on a tool result (#4507)", () => {
+  // invented product and records; the console's own metadata shape
+  const answering = (result: Record<string, unknown>) => ({ body }: { body: any }) => {
+    if (body.id === undefined) return new Response(null, { status: 202 });
+    const answer = body.method === "tools/call" ? result : { tools: [] };
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: answer }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
+  };
+  const content = [{ type: "text", text: JSON.stringify({ id: 297048, summary: "Imprimante hors ligne" }) }];
+  const records = { "pulsatrix/records": [{ product: "nimbus_desk", kind: "ticket", records: [{ id: "297048", label: "#297048" }], more: 0 }] };
+  const call = (id: number) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "nimbus_desk_query", arguments: {} } });
+
+  it("hands the records to the hook and appends its one line after the result", async () => {
+    const seen: unknown[] = [];
+    const h = harness({
+      records: async (turnInfo, groups) => { seen.push({ turnInfo, groups }); return "Mention it as [#297048](sagax://record/nimbus_desk/ticket/297048)."; },
+      mcp: answering({ content, _meta: records }),
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: call(7) });
+    expect(seen).toEqual([{ turnInfo: { threadId: "t1", generation: "g1", botId: "x", principalId: "pr_bob" }, groups: records["pulsatrix/records"] }]);
+    const result = (answer.body as { result: { content: Array<{ type: string; text: string }> } }).result;
+    expect(result.content).toEqual([...content, { type: "text", text: "Mention it as [#297048](sagax://record/nimbus_desk/ticket/297048)." }]);
+  });
+
+  it("leaves a result without the metadata, an error, a mapping call and a failing hook byte for byte unchanged", async () => {
+    let calls = 0;
+    for (const [result, hook, mapping] of [
+      [{ content }, async () => { calls++; return "never"; }, false],
+      [{ content, _meta: { other: true } }, async () => { calls++; return "never"; }, false],
+      [{ isError: true, content, _meta: records }, async () => { calls++; return "never"; }, false],
+      [{ content, _meta: records }, async () => { calls++; return "never"; }, true],
+      [{ content, _meta: records }, async () => { calls++; throw new Error("never changes the answer"); }, false],
+      [{ content, _meta: records }, async () => { calls++; return null; }, false],
+    ] as const) {
+      const h = harness({ records: hook, mcp: answering(result as Record<string, unknown>) });
+      await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+      const answer = await h.mcp.relay({ ...turn, botId: "x", frame: call(8), ...(mapping ? { mapping: true } : {}) });
+      expect(JSON.stringify((answer.body as { result: unknown }).result)).toBe(JSON.stringify(result));
     }
     expect(calls).toBe(2);
   });

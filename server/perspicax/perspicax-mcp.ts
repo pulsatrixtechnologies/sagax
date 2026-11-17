@@ -33,6 +33,7 @@ import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import { productKeyStateOf, withToolNote, type ProductKeyState } from "./product-key-state.ts";
+import { parseRecordsMeta, type RecordsMetaGroup } from "../../shared/record-cards.ts";
 import { describedProducts, filterNamingAnswer, flowReachOf, listedToolNames, offFamilyTools, offProductOfCall, offProductOfFamilyCall, offProductOfDescribeAnswer, productOffText, sweepArgsWithoutOff, withoutOffTools, type BotProductsView } from "./bot-products-filter.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
@@ -167,6 +168,11 @@ export interface PerspicaxMcpOptions {
    * or null when no card was raised (a routine, another bot's turn, a server
    * without product keys). Its failures never change the answer. */
   onProductKeyState?(turn: { threadId: string; botId: string; principalId: string; routine: boolean }, state: ProductKeyState): Promise<string | null>;
+  /** #4507: a tool result that names records (`_meta["pulsatrix/records"]`,
+   * shared/record-cards.ts parseRecordsMeta): keep them for the conversation
+   * and answer the one line the bot reads after the result (the ready-made
+   * record link), or null. Its failures never change the answer. */
+  onRecords?(turn: { threadId: string; generation: string; botId: string; principalId: string }, groups: RecordsMetaGroup[]): Promise<string | null>;
   /** #4359: the product ids this bot switched off (shared/bot-products.ts),
    * or null for none. Their tools leave the bot's tool list and search, and
    * a call of one is refused here (server/perspicax/bot-products-filter.ts). */
@@ -1469,7 +1475,7 @@ export class PerspicaxMcp {
     }
     const answer = await this.relayKept(input);
     this.noteRemoteSupport(input, answer);
-    const carded = await this.withProductKeyCard(input, answer);
+    const carded = await this.withRecordsNote(input, await this.withProductKeyCard(input, answer));
     if (!products || carded.status !== 200) return carded;
     if (frame?.method === "tools/list") return { ...carded, body: withoutOffTools(products, carded.body, await offFamilyTools(products, listedToolNames(carded.body), this.familyMapping(input))) };
     if (frame?.method === "tools/call") {
@@ -1549,6 +1555,25 @@ export class PerspicaxMcp {
     if (!entry) return answer;
     try {
       const note = await hook({ threadId: input.threadId, botId: input.botId, principalId: entry.principalId, routine: entry.source === "delegation" }, state);
+      return note ? { ...answer, body: withToolNote(answer.body, note) } : answer;
+    } catch {
+      return answer;
+    }
+  }
+
+  /** #4507: a result that names records gains one line with the ready-made
+   * record link (onRecords). A result without the metadata, an error and
+   * Sagax's own mapping calls pass unchanged. */
+  private async withRecordsNote(input: { threadId: string; generation: string; botId: string; frame: unknown; mapping?: boolean }, answer: PerspicaxRelayAnswer): Promise<PerspicaxRelayAnswer> {
+    const hook = this.options.onRecords;
+    if (!hook || input.mapping || answer.status !== 200 || !isObject(input.frame) || input.frame.method !== "tools/call") return answer;
+    if (!isObject(answer.body) || !isObject(answer.body.result) || answer.body.result.isError === true) return answer;
+    const groups = parseRecordsMeta(answer.body.result);
+    if (!groups.length) return answer;
+    const principalId = this.turnPrincipal(input.threadId, input.generation, input.botId);
+    if (!principalId) return answer;
+    try {
+      const note = await hook({ threadId: input.threadId, generation: input.generation, botId: input.botId, principalId }, groups);
       return note ? { ...answer, body: withToolNote(answer.body, note) } : answer;
     } catch {
       return answer;

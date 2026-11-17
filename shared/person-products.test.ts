@@ -49,6 +49,25 @@ describe("person products contract", () => {
     expect(JSON.stringify(parsed)).not.toContain("future_field");
   });
 
+  // #4507: the kinds of record a product describes, read as tolerantly
+  it("reads a product's record kinds, and lists none when it describes none", () => {
+    const parsed = parsePersonProduct({ ...product, id: "nimbus_desk", records: [
+      { kind: "ticket", name: { en: "Ticket", fr: "Billet" }, plural: { en: "Tickets", fr: "Billets" }, fields: ["secret"] },
+      { kind: "ticket", name: { en: "Twice" } },
+      { kind: "Bad Kind", name: { en: "Nope" } },
+      { kind: "site" },
+      { kind: "station", name: "Station" },
+    ] })!;
+    expect(parsed.records).toEqual([
+      { kind: "ticket", name: { en: "Ticket", fr: "Billet" }, plural: { en: "Tickets", fr: "Billets" } },
+      { kind: "station", name: { en: "Station" } },
+    ]);
+    expect(parsePersonProduct(product)!.records).toBeUndefined();
+    expect(parsePersonProduct({ ...product, records: [] })!.records).toBeUndefined();
+    const many = Array.from({ length: 40 }, (_, i) => ({ kind: `kind_${i}`, name: { en: `Kind ${i}` } }));
+    expect(parsePersonProduct({ ...product, records: many })!.records).toHaveLength(24);
+  });
+
   it("words each key source Perspicax names, and keeps no key when none serves", () => {
     const keyOf = (key: Record<string, unknown>) => parsePersonProduct({ ...product, key })?.key;
     expect(keyOf({ source: "profile", named: false, own: false })).toMatchObject({ source: "role", own: false, named: false });

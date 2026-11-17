@@ -169,8 +169,8 @@ const ROUTINE_NOTHING_PHRASES = [
   "rien de (?:nouveau|neuf)",
   "aucune? (?:action|suivi|changement)s? (?:n[\\u2019']est )?(?:requis|requise|nécessaire)",
   "rien (?:pour toi|pour vous)",
-  "tu n[\\u2019']as rien à faire",
-  "vous n[\\u2019']avez rien à faire",
+  // a matcher of the bot's words, not a sentence to the person
+  "(?:tu n[\\u2019']as|vous n[\\u2019']avez) rien à faire",
   "rien n[\\u2019']est bloqué",
 ].join("|");
 

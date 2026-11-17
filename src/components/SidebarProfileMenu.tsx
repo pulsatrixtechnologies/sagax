@@ -13,7 +13,8 @@
 // sessions, Achievements), then a hairline. Team map left the Automations
 // header for Tools (owner, 2026-10-27); the command palette opens it too.
 // Archived bots, when there
-// are any, sit above that pair with their own hairline. Your phone and
+// are any, sit above that pair with their own hairline. On the wide foot
+// the same entries stay listed above the name (#4541). Your phone and
 // Help Center are not in this menu: the phone stays in Settings and on
 // the collapsed rail, and docs stay on About. Connected apps and Browse Bots
 // stay rows above this one while Sidebar shortcuts is on (SidebarPlaces). It opens on
@@ -62,7 +63,7 @@ import { useOrgApprovalsCount } from "@/lib/org-approvals";
 import { waitingOnPersonCount } from "@/lib/bot-unread";
 
 import { InitialsAvatar } from "./Avatar";
-import { SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
+import { SidebarDockedMenu, SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
 import { useServerMode } from "./ServerModeSettings";
 import { api } from "@/state/store";
 import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usageSummary, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
@@ -598,9 +599,12 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const dispatch = useStoreDispatch();
   const state = useStoreSelector((current) => ({ config: current.config, activeView: current.activeView, memoryManagerOpen: current.memoryManagerOpen }), shallowEqual);
   const update = useUpdateItem();
-  // the menu's figures (plan, cost, saved servers) are read the first time
-  // it opens, not with every sidebar
-  const [menuOpened, setMenuOpened] = useState(false);
+  // Plan, cost and saved servers load the first time the menu opens.
+  // The wide foot lists Usage at once, so those figures load with the row (#4541).
+  const [menuOpened, setMenuOpened] = useState(withName);
+  useEffect(() => {
+    if (withName) setMenuOpened(true);
+  }, [withName]);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const achievements = useAchievements();
   // conversations waiting on the person's answer (a plain count, no hook)
@@ -948,9 +952,15 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   ) : null;
 
   return (
-    <div className={cn("relative", avatarOnly && withName && "min-w-[3.5rem] flex-1")} data-foot-profile={avatarOnly && withName ? "" : undefined}>
-      {avatarOnly && approvalsBadge}
-      {avatarOnly ? <div className="relative">{accountRow}{approvalsDot}</div> : (
+    <div className={cn("relative", avatarOnly && withName && "flex min-w-[3.5rem] flex-1 flex-col gap-0.5")} data-foot-profile={avatarOnly && withName ? "" : undefined}>
+      {avatarOnly && withName && <SidebarDockedMenu items={items} />}
+      {avatarOnly ? (
+        <div className="relative">
+          {approvalsBadge}
+          {accountRow}
+          {approvalsDot}
+        </div>
+      ) : (
         <div className="flex items-center gap-2">
           <div
             data-sidebar-account-row=""

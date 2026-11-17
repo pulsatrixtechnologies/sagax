@@ -102,10 +102,13 @@ export function SidebarFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]
   return (
     <div data-sidebar-account-row className="-mx-1.5 flex items-center gap-1.5">
       <SidebarProfileMenu avatarOnly withName places={places} />
-      {/* an update in progress: the same kind of round button, beside the grid */}
-      <SidebarUpdatePill layout="compact" />
-      <FootConnectApps apps={apps} onOpen={onOpenApps} />
-      <SidebarRoutinesBadge />
+      {/* the round buttons stay on the name's line, under the pinned entries */}
+      <div className="flex shrink-0 items-center gap-1.5 self-end">
+        {/* an update in progress: the same kind of round button, beside the grid */}
+        <SidebarUpdatePill layout="compact" />
+        <FootConnectApps apps={apps} onOpen={onOpenApps} />
+        <SidebarRoutinesBadge />
+      </div>
     </div>
   );
 }

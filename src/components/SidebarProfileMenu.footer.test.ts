@@ -221,6 +221,26 @@ describe("sidebar footer row", () => {
 });
 
 describe("the foot's profile (the reference design's row)", () => {
+  it("lists the account menu above the name, still opening that menu from the name (#4541)", () => {
+    const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
+    const pins = html.indexOf("data-sidebar-account-pins");
+    const name = html.indexOf("data-account-pill-name");
+    expect(pins).toBeGreaterThan(-1);
+    expect(name).toBeGreaterThan(pins);
+    for (const key of ["usage", "help", "settings", "tools"]) {
+      const at = html.indexOf(`data-account-pin="${key}"`);
+      expect(at).toBeGreaterThan(-1);
+      expect(at).toBeLessThan(name);
+    }
+    expect(html.indexOf('data-account-pin="usage"')).toBeLessThan(html.indexOf('data-account-pin="help"'));
+    expect(html.indexOf('data-account-pin="help"')).toBeLessThan(html.indexOf('data-account-pin="settings"'));
+    expect(html.indexOf('data-account-pin="settings"')).toBeLessThan(html.indexOf('data-account-pin="tools"'));
+    expect(html).toContain(">Usage</span>");
+    expect(html).toContain(">Help</span>");
+    expect(html).toContain(">Settings</span>");
+    expect(html).toContain(">Tools</span>");
+  });
+
   it("draws the avatar and the name, no background pill, that opens the account menu", () => {
     const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
     const pill = /<span[^>]*data-sidebar-account-pill=""[^>]*>/.exec(html)?.[0] ?? "";

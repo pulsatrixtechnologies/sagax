@@ -17,6 +17,7 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { trackInputModality } from "@/lib/input-modality";
 import { GLASS_POPUP_CHROME_TOP } from "@/lib/glass-popup";
 import { MENU_FIT, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
+import { PLACE_ROW } from "./SidebarPlaces";
 
 export interface SidebarMenuItem {
   key: string;
@@ -609,6 +610,175 @@ export function SidebarPopoverMenu({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The wide foot's account entries, always visible above the name (#4541).
+ * Same rows as the account menu (Usage, Help, Settings, Tools, Switch
+ * account, Sign out, and whatever else that menu lists). A row with a
+ * second level opens it beside itself, the menu's own card. The name under
+ * this list still opens that menu: nothing there is removed. */
+export function SidebarDockedMenu({ items }: { items: SidebarMenuItem[] }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [sub, setSub] = useState<string | null>(null);
+  const subTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverSub = (key: string | null) => {
+    if (subTimer.current) clearTimeout(subTimer.current);
+    subTimer.current = setTimeout(() => setSub(key), key ? OPEN_DELAY_MS : CLOSE_DELAY_MS);
+  };
+  useEffect(() => () => { if (subTimer.current) clearTimeout(subTimer.current); }, []);
+  const subRef = useRef<HTMLDivElement>(null);
+  const [subAt, setSubAt] = useState<SubmenuPlace | null>(null);
+  const [subMore, setSubMore] = useState(false);
+  const [subFold, setSubFold] = useState<number | null>(null);
+  const placeSub = useRef<() => void>(() => {});
+  placeSub.current = () => {
+    if (!sub) return;
+    const row = rootRef.current?.querySelector<HTMLElement>(`[data-menu-key="${CSS.escape(sub)}"]`);
+    if (!row) return;
+    const level = subRef.current;
+    const rows = level?.querySelector<HTMLElement>("[data-submenu-rows]");
+    const height = level ? level.offsetHeight + (rows ? rows.scrollHeight - rows.clientHeight : 0) : 0;
+    const next = submenuPlace(
+      row.getBoundingClientRect(),
+      level ? { width: level.offsetWidth, height } : null,
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    setSubAt((current) => (current && current.left === next.left && current.top === next.top && current.maxHeight === next.maxHeight ? current : next));
+    setSubFold(level && rows ? measureRowsFold(level, rows, next.maxHeight) : null);
+    setSubMore(rows ? moreBelow(rows) : false);
+  };
+  useLayoutEffect(() => {
+    if (!sub) { setSubAt(null); setSubFold(null); return; }
+    placeSub.current();
+    const onResize = () => placeSub.current();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [sub, items]);
+  const subShown = subAt !== null;
+  useLayoutEffect(() => {
+    const level = subRef.current;
+    if (!sub || !subShown || !level) return;
+    placeSub.current();
+    const rows = level.querySelector<HTMLElement>("[data-submenu-rows]");
+    const onScroll = () => { if (rows) setSubMore(moreBelow(rows)); };
+    rows?.addEventListener("scroll", onScroll, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => placeSub.current());
+    observer?.observe(level);
+    return () => {
+      rows?.removeEventListener("scroll", onScroll);
+      observer?.disconnect();
+    };
+  }, [sub, subShown]);
+  useEffect(() => {
+    if (!sub) return;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (rootRef.current?.contains(target) || subRef.current?.contains(target)) return;
+      setSub(null);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, [sub]);
+  const closeSub = () => setSub(null);
+  const focusSub = (key: string) => {
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-submenu="${CSS.escape(key)}"] [role="menuitem"]:not([disabled])`)?.focus());
+  };
+  if (items.length === 0) return null;
+  return (
+    <div ref={rootRef} data-sidebar-account-pins="" className="flex w-full flex-col gap-0.5">
+      {items.map((item) => (
+        <div
+          key={item.key}
+          onPointerOver={() => { if (sub !== (item.submenu ? item.key : null)) hoverSub(item.submenu ? item.key : null); }}
+        >
+          {item.separatorBefore && <div role="separator" data-account-pin-separator="" className="mx-2 my-1 h-px shrink-0 bg-sidebar-hairline" />}
+          <button
+            type="button"
+            data-account-pin={item.key}
+            data-tour={item.tourId}
+            data-menu-key={item.key}
+            disabled={item.disabled}
+            aria-haspopup={item.submenu ? "menu" : undefined}
+            aria-expanded={item.submenu ? sub === item.key : undefined}
+            onKeyDown={item.submenu ? (event) => {
+              if (event.key !== "ArrowRight") return;
+              event.preventDefault();
+              setSub(item.key);
+              focusSub(item.key);
+            } : undefined}
+            onClick={() => {
+              if (item.submenu) {
+                const next = sub === item.key ? null : item.key;
+                setSub(next);
+                if (next) focusSub(next);
+                return;
+              }
+              item.onSelect();
+            }}
+            className={cn(
+              "group relative flex w-full items-center rounded-lg text-left transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+              PLACE_ROW,
+              "gap-2.5 px-2",
+              item.active || (item.submenu && sub === item.key)
+                ? "bg-sidebar-selected font-medium text-sidebar-ink"
+                : "text-sidebar-ink-secondary hover:bg-sidebar-hover hover:text-sidebar-ink",
+            )}
+          >
+            {item.icon && <span className="shrink-0" aria-hidden="true">{item.icon}</span>}
+            <span className="min-w-0 flex-1 truncate text-[13px] leading-5">{item.label}</span>
+            {item.value && <span data-menu-value="" className="shrink-0 text-[12px] tabular-nums text-sidebar-ink-tertiary">{item.value}</span>}
+            {item.trailing}
+            {item.attention && (
+              <span
+                className={cn("size-2 shrink-0 rounded-full", item.attentionTone === "accent" ? "bg-accent" : "bg-danger")}
+              />
+            )}
+            {item.submenu && <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-sidebar-ink-tertiary" />}
+          </button>
+          {item.submenu && sub === item.key && subAt && createPortal(
+            <div
+              ref={subRef}
+              role="menu"
+              aria-label={item.label}
+              data-submenu={item.key}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowLeft" && event.key !== "Escape") return;
+                event.preventDefault();
+                event.stopPropagation();
+                setSub(null);
+                rootRef.current?.querySelector<HTMLElement>(`[data-menu-key="${CSS.escape(item.key)}"]`)?.focus();
+              }}
+              data-sidebar
+              style={{ minWidth: item.submenuWidth ?? 180, ...subAt }}
+              className={cn(MENU_SURFACE, MENU_FIT, "fixed z-[70] overflow-hidden")}
+            >
+              <div
+                data-submenu-rows=""
+                data-more={subMore ? "below" : undefined}
+                style={subFold === null ? undefined : { maxHeight: subFold }}
+                className="menu-scroll flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain"
+              >
+                {item.submenu.filter((entry) => !entry.foot).map((entry) => (
+                  <SubmenuEntryRow key={entry.key} entry={entry} starSlot={hasStarSlot(item.submenu!)} onClose={closeSub} />
+                ))}
+              </div>
+              {item.submenu.some((entry) => entry.foot) && (
+                <div data-submenu-foot="" className="flex shrink-0 flex-col gap-0.5">
+                  {subFold !== null && <MenuDivider />}
+                  {item.submenu.filter((entry) => entry.foot).map((entry) => (
+                    <SubmenuEntryRow key={entry.key} entry={entry} starSlot={hasStarSlot(item.submenu!)} onClose={closeSub} />
+                  ))}
+                </div>
+              )}
+            </div>,
+            document.body,
+          )}
+        </div>
+      ))}
     </div>
   );
 }

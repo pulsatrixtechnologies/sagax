@@ -42,7 +42,9 @@ afterEach(() => {
   container.remove();
 });
 
-const button = () => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
+// The wide foot lists the account entries above the name (#4541). Those
+// rows also carry aria-haspopup, so the name's own button is the pill.
+const button = () => container.querySelector("[data-sidebar-account-pill]")!.closest("button") as HTMLButtonElement;
 const css = readFileSync("src/styles.css", "utf8");
 
 const pill = () => container.querySelector("[data-sidebar-account-pill]")!;

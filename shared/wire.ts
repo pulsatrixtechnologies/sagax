@@ -1579,6 +1579,9 @@ export interface OptionCardData extends WaitCardField {
    * raised, or replaced in place by its key. Absent: the message's `at`.
    * A card nothing re-checks says since when its facts were read. */
   factsAt?: number;
+  /** #4579: a routine fix card answered with Run a check: the run its line
+   * then reports on, until that run ends. */
+  checkRunId?: string;
   /** #4438: the raw words behind a server card (a tool's own error, its
    * code), folded under Details; the card's text says it in plain words. */
   technicalDetails?: string;

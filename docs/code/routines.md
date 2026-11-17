@@ -44,8 +44,10 @@ server does each choice at once, with no model turn
 run of the routine now, as Run now does, and when that run (or the one
 already going) ends, the answered card's line says what it did: the routine
 worked (the problem is cleared), the same problem came back, or the run was
-stopped before the end (`RoutineCheckFollowUps`, #4579; kept in memory, a
-restart while the check runs leaves the first line). Words of the person's
+stopped before the end, a run cut by a server restart included
+(`RoutineCheckFollowUps`, #4579). The answered card carries the run it
+follows (`checkRunId`, written with its first line), so a restart during
+the check changes nothing; told once. Words of the person's
 own reach the bot with the card's key, as any keyed card's. It rings once, as a
 question, when raised; later problem runs replace its words in place (the
 count); the first good run retires it; an answered card is not raised again

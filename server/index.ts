@@ -180,7 +180,7 @@ import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
 import { AskKeyIndex, closedAskCard, openCardsNote, raiseTextKeyedAsk, type OpenCardFacts } from "./widgets/ask-choice-keys.ts";
 import { CARD_CHECK_CALLER, CARD_CHECK_CONVERSATION_ROWS, OpenCardsRecheck, type WaitingKeyedCard } from "./widgets/open-cards-recheck.ts";
-import { serverCardKind, serverCardRoutineId } from "../shared/fix-card-keys.ts";
+import { serverCardKind } from "../shared/fix-card-keys.ts";
 import { backfillPeerOutcomes, PeerOutcomeLedger, settlePeerOutcome, type PeerOutcomeDeps } from "./turns/peer-outcome-relay.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
@@ -17086,7 +17086,7 @@ function routineFixNeed(routine: Routine): RoutineNeedsPerson | null {
  * Pause the routine and Open the routine, each as the person who answered,
  * with the same rights as Run now and the routine's switch. Null: the
  * answer is words of the person's own, which the bot reads. */
-function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where: { opens?: boolean; threadId?: string; messageId?: string } = {}): RoutineFixAnswer | null {
+function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where: { opens?: boolean } = {}): RoutineFixAnswer | null {
   if (!routines) return null;
   const done = answerRoutineFix<Routine>(key, answer, {
     opens: where.opens === true,
@@ -17112,11 +17112,8 @@ function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where:
   // the routine's need moved (a run started, it was turned off): its frame
   // and its fix card follow at the watch's next pass
   if (done) routineNeedsWatch.touch();
-  // #4579: the card then says what that run did
-  const routineId = serverCardRoutineId(key);
-  if (done?.checkRunId && routineId && where.threadId && where.messageId) {
-    routineCheckFollowUps.remember(done.checkRunId, { routineId, threadId: where.threadId, messageId: where.messageId });
-  }
+  // #4579: the answered card carries `checkRunId` (deliverLateQuestionAnswer)
+  // and then says what that run did (routineCheckFollowUps)
   return done;
 }
 
@@ -17131,6 +17128,18 @@ const routineCheckFollowUps = new RoutineCheckFollowUps({
   stillWrong: (routineId) => {
     const routine = routines?.routineById(routineId);
     return Boolean(routine && lastingProblem(routineFixNeed(routine)));
+  },
+  cardFor: (routineId, runId) => {
+    const routine = routines?.routineById(routineId);
+    const place = routine ? routineProblemPlace(routine, false) : null;
+    if (!place) return null;
+    const key = routineProblemKey(routineId);
+    const rows = store.messagesFor(place.threadId);
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const row = rows[index]!;
+      if (row.kind === "options" && row.card?.askKey === key && row.card.checkRunId === runId) return { routineId, threadId: place.threadId, messageId: row.id };
+    }
+    return null;
   },
   tell: (card, note) => {
     const row = store.messagesFor(card.threadId).find((message) => message.id === card.messageId);

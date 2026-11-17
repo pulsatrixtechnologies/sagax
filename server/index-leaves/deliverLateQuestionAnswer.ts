@@ -69,7 +69,10 @@ async function deliverLateQuestionAnswer(
       // an app released before answerNote draws only answeredText: a device
       // that did not say it reads the note gets the line there too
       const answeredText = opens === true && via !== "call" ? answer : answerWithNote(answer, direct.note);
-      host.store.patchMessage(threadId, cardMessage.id, { card: { ...latest, answered: "answer", answeredText, answerNote: direct.note, dismissed: false } });
+      // #4579: Run a check: the card carries the run it follows, written with
+      // its first line, so the line its end writes comes after (and a restart
+      // keeps it)
+      host.store.patchMessage(threadId, cardMessage.id, { card: { ...latest, answered: "answer", answeredText, answerNote: direct.note, dismissed: false, ...(direct.checkRunId ? { checkRunId: direct.checkRunId } : {}) } });
       host.cardTurnSettled?.(threadId, cardMessage.id);
       return { queued: false, direct: true, ...(direct.open ? { open: direct.open } : {}) };
     }

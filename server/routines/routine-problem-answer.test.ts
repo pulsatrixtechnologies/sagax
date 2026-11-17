@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ENGLISH_WORDS } from "../../shared/approval-describe.ts";
 import type { RoutineNeedsPerson } from "../../shared/routines.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
+import { ROUTINE_RESTARTED } from "./routines.ts";
 import { answerRoutineFix, cardWithCheckNote, RoutineCheckFollowUps, routineFixChoice, type RoutineFixAnswerDeps } from "./routine-problem-answer.ts";
 import { plainProblemText, routineProblemCardInput } from "./routine-problem-card.ts";
 
@@ -116,39 +117,70 @@ describe("Run a check: the card says what that run did (#4579)", () => {
     expect(answerRoutineFix("routine-problem:r1", "Run a check", busy)).toEqual({ note: ENGLISH_WORDS.t("routine.problemCard.checkRunning"), checkRunId: "run-8" });
   });
 
-  it("when that run ends, the card's line says clean, the same problem again, or stopped; once", () => {
-    const notes: Array<[string, string, string]> = [];
+  /** The answered fix cards of a conversation, as the store keeps them. */
+  function world() {
+    const cards = new Map<string, { askKey: string; checkRunId?: string; answeredText?: string; answerNote?: string }>();
+    const notes: Array<[string, string]> = [];
     let wrong = false;
-    const followUps = new RoutineCheckFollowUps({
+    const followUps = () => new RoutineCheckFollowUps({
       words: () => ENGLISH_WORDS,
       stillWrong: () => wrong,
-      tell: (card, note) => { notes.push([card.threadId, card.messageId, note]); },
+      cardFor: (routineId, runId) => {
+        for (const [messageId, card] of cards) {
+          if (card.askKey === `routine-problem:${routineId}` && card.checkRunId === runId) return { routineId, threadId: "t1", messageId };
+        }
+        return null;
+      },
+      tell: (card, note) => {
+        notes.push([card.messageId, note]);
+        cards.set(card.messageId, cardWithCheckNote(cards.get(card.messageId)!, note));
+      },
     });
-    followUps.remember("run-1", { routineId: "r1", threadId: "t1", messageId: "m1" });
-    followUps.remember("run-2", { routineId: "r1", threadId: "t1", messageId: "m2" });
-    followUps.remember("run-3", { routineId: "r1", threadId: "t1", messageId: "m3" });
+    return { cards, notes, followUps, setWrong: (value: boolean) => { wrong = value; } };
+  }
+
+  it("when that run ends, the card's line says clean, the same problem again, or stopped; once", () => {
+    const w = world();
+    for (const [messageId, runId] of [["m1", "run-1"], ["m2", "run-2"], ["m3", "run-3"]]) w.cards.set(messageId!, { askKey: "routine-problem:r1", checkRunId: runId });
+    const followUps = w.followUps();
     // still going: nothing said yet
     followUps.runChanged({ id: "run-1", routineId: "r1", status: "running" });
-    expect(notes).toEqual([]);
+    expect(w.notes).toEqual([]);
     followUps.runChanged({ id: "run-1", routineId: "r1", status: "completed" });
-    wrong = true;
+    w.setWrong(true);
     followUps.runChanged({ id: "run-2", routineId: "r1", status: "failed" });
     followUps.runChanged({ id: "run-3", routineId: "r1", status: "cancelled" });
-    // a run nobody asked to follow, or told again: nothing
+    // told again, or a run no card follows: nothing
     followUps.runChanged({ id: "run-1", routineId: "r1", status: "completed" });
     followUps.runChanged({ id: "run-4", routineId: "r1", status: "failed" });
-    expect(notes).toEqual([
-      ["t1", "m1", ENGLISH_WORDS.t("routine.problemCard.checkClean")],
-      ["t1", "m2", ENGLISH_WORDS.t("routine.problemCard.checkStill")],
-      ["t1", "m3", ENGLISH_WORDS.t("routine.problemCard.checkStopped")],
+    expect(w.notes).toEqual([
+      ["m1", ENGLISH_WORDS.t("routine.problemCard.checkClean")],
+      ["m2", ENGLISH_WORDS.t("routine.problemCard.checkStill")],
+      ["m3", ENGLISH_WORDS.t("routine.problemCard.checkStopped")],
     ]);
-    expect(new Set(notes.map(([, , note]) => note)).size).toBe(3);
+    expect(w.cards.get("m1")!.checkRunId).toBeUndefined();
+  });
+
+  it("a server restart during the check: the card still gets its line, and a run the restart cut is stopped, not the same problem", () => {
+    const w = world();
+    w.cards.set("m1", { askKey: "routine-problem:r1", checkRunId: "run-1", answeredText: "Run a check", answerNote: ENGLISH_WORDS.t("routine.problemCard.checkStarted") });
+    w.cards.set("m2", { askKey: "routine-problem:r1", checkRunId: "run-2" });
+    w.setWrong(true);
+    // a new process: nothing in memory, the card says which run it follows
+    const after = w.followUps();
+    after.runChanged({ id: "run-1", routineId: "r1", status: "failed", error: ROUTINE_RESTARTED });
+    after.runChanged({ id: "run-2", routineId: "r1", status: "failed", error: "The mailbox refused the sign-in" });
+    expect(w.notes).toEqual([
+      ["m1", ENGLISH_WORDS.t("routine.problemCard.checkStopped")],
+      ["m2", ENGLISH_WORDS.t("routine.problemCard.checkStill")],
+    ]);
+    expect(w.cards.get("m1")!.answerNote).toBe(ENGLISH_WORDS.t("routine.problemCard.checkStopped"));
   });
 
   it("the new line replaces the card's note, and the one after its words for an app that reads only those", () => {
     const started = ENGLISH_WORDS.t("routine.problemCard.checkStarted");
     const clean = ENGLISH_WORDS.t("routine.problemCard.checkClean");
-    expect(cardWithCheckNote({ answeredText: "Run a check", answerNote: started }, clean)).toEqual({ answeredText: "Run a check", answerNote: clean });
+    expect(cardWithCheckNote({ answeredText: "Run a check", answerNote: started, checkRunId: "run-1" }, clean)).toEqual({ answeredText: "Run a check", answerNote: clean });
     expect(cardWithCheckNote({ answeredText: `Run a check\n\n${started}`, answerNote: started }, clean)).toEqual({ answeredText: `Run a check\n\n${clean}`, answerNote: clean });
   });
 });

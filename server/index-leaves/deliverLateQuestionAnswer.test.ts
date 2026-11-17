@@ -94,6 +94,15 @@ describe("an answered card closes at once (#4438)", () => {
     expect(world.host.cardTurnSettled).toHaveBeenCalledWith(THREAD, "m1");
   });
 
+  it("Run a check: the answered card carries the run it follows, written with its first line (#4579)", async () => {
+    const serverCardAnswer = vi.fn(async () => ({ note: "Check started: the routine runs once now. This card says how it went.", checkRunId: "run-7" }));
+    const world = host(card(), { serverCardAnswer });
+    const deliver = createDeliverLateQuestionAnswer(() => world.host);
+    const answer = formatQuestionAnswers(world.rows[0]!.card!.questionRequest!.questions, [["Run a check"]]);
+    await deliver({}, THREAD, "ask-choice-1", answer, world.rows[0]!, BOT);
+    expect(world.rows[0]!.card).toMatchObject({ answered: "answer", answerNote: "Check started: the routine runs once now. This card says how it went.", checkRunId: "run-7" });
+  });
+
   it("words of the person's own on a server card still reach the bot", async () => {
     const serverCardAnswer = vi.fn(async () => null);
     const world = host(card(), { serverCardAnswer });

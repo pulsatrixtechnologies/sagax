@@ -1206,6 +1206,14 @@ describe("default fleet", () => {
     expect(map.openaiCompat?.driver).toBe("openai-compat");
   });
 
+  it("never brings back a built-in engine the person removed as an account (#4426)", () => {
+    const map = instanceConfigs({ instances: { codex: { driver: "codex" } }, removedInstances: ["chatgpt"] });
+    expect(map.chatgpt).toBeUndefined();
+    expect(map.cursor?.driver).toBe("cursorAgent");
+    // a fleet whose first accounts all went still picks up new engines
+    expect(instanceConfigs({ instances: { "claude-00000001-aaaa-4bbb-8ccc-dddddddddddd": { driver: "claudeAgent" } }, removedInstances: ["claude", "codex", "grok"] }).cursor?.driver).toBe("cursorAgent");
+  });
+
   it("does not expand a one-off shadow fleet", () => {
     const map = instanceConfigs({ instances: { ghost: { driver: "not-a-real-driver" } } });
     expect(Object.keys(map)).toEqual(["ghost"]);

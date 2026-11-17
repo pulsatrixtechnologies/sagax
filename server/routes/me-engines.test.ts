@@ -169,7 +169,7 @@ describe("createMeEnginesRoutes", () => {
     ]);
   });
 
-  it("takes an added account off the person's own list, signs them out of it, and leaves the first account (#4415)", async () => {
+  it("takes an added account off the person's own list and signs them out of it (#4415)", async () => {
     const deps = personDeps();
     const route = createMeEnginesRoutes(deps);
     const id = "chatgpt-00000001-aaaa-4bbb-8ccc-dddddddddddd";
@@ -178,10 +178,29 @@ describe("createMeEnginesRoutes", () => {
     expect(removed.sent[0]).toEqual({ status: 200, body: { ok: true } });
     expect(deps.logins.signOut).toHaveBeenCalledWith("pr_1", id, "loopback");
     expect(deps.accountNames.remove).toHaveBeenCalledWith("pr_1", id);
+    expect(deps.accountNames.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes the first of several accounts, connected, in one gesture: every engine on its sign-in goes and it is signed out (#4426)", async () => {
+    const deps = personDeps();
+    const route = createMeEnginesRoutes(deps);
     const first = ctx("/api/me/engines/chatgpt", "DELETE");
     await route(first.context);
-    expect(first.sent[0]?.status).toBe(400);
-    expect(deps.accountNames.remove).toHaveBeenCalledTimes(1);
+    expect(first.sent[0]).toEqual({ status: 200, body: { ok: true } });
+    // Codex and the ChatGPT plan read the person's one folder: one account
+    expect(deps.accountNames.remove.mock.calls).toEqual([["pr_1", "codex"], ["pr_1", "chatgpt"]]);
+    expect(deps.logins.signOut).toHaveBeenCalledWith("pr_1", "chatgpt", "loopback");
+    expect(deps.logins.signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a provider's only account, the row where to sign in, and keeps it (#4426)", async () => {
+    const deps = personDeps({ orgOfferedEngines: () => [{ instanceId: "codex", live: { driverKind: "codex" } }, { instanceId: "chatgpt", live: { driverKind: "codex" } }] });
+    const route = createMeEnginesRoutes(deps);
+    const only = ctx("/api/me/engines/codex", "DELETE");
+    await route(only.context);
+    expect(only.sent[0]).toEqual({ status: 400, body: { error: "A provider's only account cannot be removed." } });
+    expect(deps.accountNames.remove).not.toHaveBeenCalled();
+    expect(deps.logins.signOut).not.toHaveBeenCalled();
   });
 
   it("refuses with the person's bots that still use it, and lists no removed account (#4415)", async () => {

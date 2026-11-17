@@ -1,7 +1,7 @@
 // Characterization: provider instance routes extracted from server/index.ts (#1388 P5).
 import { describe, expect, it, vi } from "vitest";
 
-import type { AppConfig } from "../config.ts";
+import { instanceConfigs, type AppConfig } from "../config.ts";
 import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
 import { createInstancesRoutes, type InstancesRouteDeps } from "./instances.ts";
@@ -218,15 +218,31 @@ describe("instances routes", () => {
     expect(cfg.instances?.ghost?.displayName).toBe("Preserved shadow");
   });
 
-  it("refuses deleting a provider's first account (Claude's, the ChatGPT plan's)", async () => {
+  it("removes a provider's first account while it keeps another one, and never brings it back (#4426)", async () => {
+    const { call, cfg, deps } = harness();
+    // Claude's first account beside an added one, connected or not: one gesture
+    expect((await call("DELETE", "/api/instances/claude")).sent?.status).toBe(200);
+    expect(cfg.instances?.claude).toBeUndefined();
+    expect(cfg.instances?.["claude-extra"]).toBeDefined();
+    // the ChatGPT plan is a built-in engine a product fleet picks up on every load
+    cfg.instances!.codex = { driver: "codex", displayName: "Codex" };
+    expect((await call("DELETE", "/api/instances/chatgpt")).sent?.status).toBe(200);
+    expect(cfg.removedInstances).toEqual(["claude", "chatgpt"]);
+    expect(deps.saveConfig).toHaveBeenLastCalledWith({ removedInstances: ["claude", "chatgpt"] });
+    expect(instanceConfigs(cfg).chatgpt, "removed stays removed").toBeUndefined();
+    expect(instanceConfigs(cfg).cursor?.driver, "other built-ins still arrive").toBe("cursorAgent");
+  });
+
+  it("refuses a provider's only account: its row is where to sign in (#4426)", async () => {
     const { call, cfg } = harness();
-    cfg.instances!.chatgpt = { driver: "codex", displayName: "ChatGPT plan", config: { authMode: "chatgpt-plan" } };
-    for (const id of ["claude", "chatgpt"]) {
-      expect((await call("DELETE", `/api/instances/${id}`)).sent, id).toEqual({
-        status: 400,
-        body: { error: "Only an account added beside the provider's first one can be removed." },
-      });
-    }
+    expect((await call("DELETE", "/api/instances/mistral")).sent).toEqual({
+      status: 400,
+      body: { error: "A provider's only account cannot be removed." },
+    });
+    expect((await call("DELETE", "/api/instances/claude-extra")).sent?.status).toBe(200);
+    // the first one is now the only Claude account
+    expect((await call("DELETE", "/api/instances/claude")).sent?.status).toBe(400);
+    expect(cfg.instances?.claude).toBeDefined();
   });
 
   it("removes an added account of any provider, not Claude's only (#4415)", async () => {

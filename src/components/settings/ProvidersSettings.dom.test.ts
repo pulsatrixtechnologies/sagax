@@ -452,7 +452,8 @@ describe("One provider's page (#4329 B3)", () => {
     const line = host.querySelector<HTMLElement>('[data-provider-line="account:claude-alex"]')!;
     expect(line.querySelector('[data-provider-action="remove"]'), "Remove on the account's row").not.toBeNull();
     expect(line.querySelector('[data-provider-action="signOut"]'), "no sign-out on this computer").toBeNull();
-    expect(host.querySelector('[data-provider-line="account:claude"] [data-provider-action="remove"]'), "the provider's first account stays").toBeNull();
+    // #4426: the first account goes like the others while another one stays
+    expect(host.querySelector('[data-provider-line="account:claude"] [data-provider-action="remove"]'), "the first account too").not.toBeNull();
     await click(host.querySelector('[data-settings-card="providers.page.advanced.anthropic"] button[aria-expanded]'));
     const advanced = host.querySelector<HTMLElement>('[data-provider-advanced="account:claude-alex"]')!;
     expect(advanced.textContent).toContain("Check account");
@@ -541,7 +542,8 @@ describe("A provider's accounts (#4376: named, renamed in place, the key never o
     expect(lines.map((line) => line.querySelector("[data-account-name]")!.textContent)).toEqual(["Account 1", "Account 2", "ChatGPT plan"]);
     const ada = host.querySelector<HTMLElement>('[data-provider-line="account:codex"]')!;
     expect(ada.querySelector("[data-provider-account-line]")!.textContent).toBe("ada@example.com · Connected");
-    expect(ada.querySelectorAll("[data-provider-action]")).toHaveLength(1);
+    // #4426: and Remove, while the provider keeps another account
+    expect([...ada.querySelectorAll("[data-provider-action]")].map((node) => node.getAttribute("data-provider-action"))).toEqual(["signOut", "remove"]);
     expect(ada.querySelector('[data-provider-action="signOut"]')!.getAttribute("aria-label")).toBe("Sign out · Account 1");
     expect(host.querySelector('[data-provider-line="account:chatgpt"] [data-provider-action="signIn"]')).not.toBeNull();
   });
@@ -826,7 +828,7 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       fixture.config = { viewer: { operator: false, role: "admin" } };
     });
 
-    it("Claude, four accounts all signed out: one Sign in per account, Remove on the added ones, no 'Connect Claude' anywhere", async () => {
+    it("Claude, four accounts all signed out: one Sign in per account, Remove on each, no 'Connect Claude' anywhere", async () => {
       const ids = ["claude", `claude-${uuid(1)}`, `claude-${uuid(2)}`, `claude-${uuid(3)}`];
       const names = ["Claude Code", "Work", "Lab", "Side"];
       fixture.instances = ids.map((id, at) => instance(id, "claudeAgent", names[at]!, signedOut));
@@ -839,7 +841,8 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
         expect(row.querySelectorAll('[data-provider-action="signIn"]'), row.dataset.providerLine).toHaveLength(1);
         expect(row.querySelector("[data-provider-account-line]")!.textContent).toContain("Not connected");
       }
-      expect(rows.map((row) => Boolean(row.querySelector('[data-provider-action="remove"]')))).toEqual([false, true, true, true]);
+      // #4426: the first account too, while the provider keeps another one
+      expect(rows.map((row) => Boolean(row.querySelector('[data-provider-action="remove"]')))).toEqual([true, true, true, true]);
       noOldBlocks(accounts);
     });
 
@@ -965,17 +968,67 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       fixture.mine = [mine("codex", "codex", "Codex", { subscription: { supported: true, signedIn: false } }), mine(id, "codex", "Side plan", { subscription: { supported: true, signedIn: false } })];
       fixture.answer = (path, init) => path === `/api/me/engines/${id}` && init?.method === "DELETE" ? { ok: true } : undefined;
       await page("openai");
-      expect(line("account:codex").querySelector('[data-provider-action="remove"]')).toBeNull();
       const remove = line(`account:${id}`).querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
       await click(remove);
       expect(remove.textContent, "armed first, as a key's Remove").toBe("Confirm removal");
       await click(remove);
       expect(vi.mocked(apiMock).mock.calls.some(([path, init]) => path === `/api/me/engines/${id}` && (init as RequestInit | undefined)?.method === "DELETE")).toBe(true);
     });
+
+    // #4426 ("I should be able to delete accounts"): the first account too
+    it("removes the first of several accounts, connected, in one gesture: Sign out and Remove side by side", async () => {
+      const id = `chatgpt-${uuid(8)}`;
+      fixture.instances = [instance("codex", "codex", "Codex", { access: "subscription" }), instance("chatgpt", "codex", "ChatGPT plan", { access: "subscription" }), instance(id, "codex", "Side plan", signedOut)];
+      fixture.mine = [
+        mine("codex", "codex", "Codex", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" }),
+        mine("chatgpt", "codex", "ChatGPT plan", { subscription: { supported: true, signedIn: true }, myTurns: "subscription", sharesSignInWith: "codex" }),
+        mine(id, "codex", "Side plan", { subscription: { supported: true, signedIn: false } }),
+      ];
+      fixture.answer = (path, init) => path === "/api/me/engines/codex" && init?.method === "DELETE" ? { ok: true } : undefined;
+      await page("openai");
+      vi.mocked(apiMock).mockClear();
+      const first = line("account:codex");
+      expect([...first.querySelectorAll("[data-provider-action]")].map((node) => node.getAttribute("data-provider-action"))).toEqual(["signOut", "remove"]);
+      const remove = first.querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
+      await click(remove);
+      expect(remove.textContent, "the page's one confirm").toBe("Confirm removal");
+      await click(remove);
+      expect(vi.mocked(apiMock).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "DELETE").map(([path]) => path)).toEqual(["/api/me/engines/codex"]);
+      expect(posts().some(([path]) => String(path).endsWith("/login/sign-out")), "no sign-out first").toBe(false);
+    });
+
+    it("the only account has nothing to remove: its row is where to sign in", async () => {
+      fixture.instances = [instance("claude", "claudeAgent", "Claude Code", { access: "subscription" })];
+      fixture.mine = [mine("claude", "claudeAgent", "Claude Code", { subscription: { supported: true, signedIn: true }, myTurns: "subscription" })];
+      await page("anthropic");
+      expect([...line("account:claude").querySelectorAll("[data-provider-action]")].map((node) => node.getAttribute("data-provider-action"))).toEqual(["signOut"]);
+      fixture.mine = [mine("claude", "claudeAgent", "Claude Code", { subscription: { supported: true, signedIn: false } })];
+      await page("anthropic");
+      expect([...line("account:claude").querySelectorAll("[data-provider-action]")].map((node) => node.getAttribute("data-provider-action"))).toEqual(["signIn"]);
+    });
   });
 
   describe("on a solo server (the server's own sign-ins)", () => {
-    it("OpenAI, several accounts all signed out: one Sign in each, Remove on the added plan only", async () => {
+    it("Claude, the first account, connected, is removed from the server in one gesture; the only one has nothing to remove (#4426)", async () => {
+      const id = `claude-${uuid(9)}`;
+      const connected = { access: "subscription" as const, snapshot: { state: "available" as const, authenticated: true, account: { email: "ada@example.com" } } };
+      fixture.instances = [instance("claude", "claudeAgent", "Claude Code", connected), instance(id, "claudeAgent", "Work", connected)];
+      fixture.answer = (path, init) => {
+        if (path !== "/api/instances/claude" || init?.method !== "DELETE") return undefined;
+        fixture.instances = fixture.instances.slice(1);
+        return { instances: fixture.instances };
+      };
+      await page("anthropic");
+      vi.mocked(apiMock).mockClear();
+      const remove = line("account:claude").querySelector<HTMLElement>('[data-provider-action="remove"] button')!;
+      await click(remove);
+      await click(remove);
+      expect(apiCalls("DELETE").map(([path]) => path)).toEqual(["/api/instances/claude"]);
+      await page("anthropic");
+      expect(line(`account:${id}`).querySelector('[data-provider-action="remove"]'), "now the only one").toBeNull();
+    });
+
+    it("OpenAI, several accounts all signed out: one Sign in each, Remove on each", async () => {
       fixture.instances = [
         instance("codex", "codex", "Codex", { ...signedOut, authentication: { method: "device-code" } }),
         instance("chatgpt", "codex", "ChatGPT plan", { ...signedOut, authentication: { method: "browser-pkce" } }),
@@ -986,7 +1039,7 @@ describe("A provider's accounts: sign in, sign out and remove in the row (#4415)
       const rows = [...accounts.querySelectorAll<HTMLElement>("[data-provider-account]")];
       expect(rows).toHaveLength(3);
       for (const row of rows) expect(row.querySelectorAll('[data-provider-action="signIn"]')).toHaveLength(1);
-      expect(rows.map((row) => Boolean(row.querySelector('[data-provider-action="remove"]')))).toEqual([false, false, true]);
+      expect(rows.map((row) => Boolean(row.querySelector('[data-provider-action="remove"]')))).toEqual([true, true, true]);
       noOldBlocks(accounts);
     });
 

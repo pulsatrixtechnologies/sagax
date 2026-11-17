@@ -35944,6 +35944,7 @@ ROUTES.push(createAdminActivityRoutes({
 // list (removeAccountEntry, #4435) go through.
 const addedAccountRemoval: AddedAccountRemovalDeps = {
   cfg,
+  saveConfig,
   getProviderConfigBusy: () => providerConfigBusy,
   setProviderConfigBusy: (busy) => { providerConfigBusy = busy; },
   providerInstancesChanging,

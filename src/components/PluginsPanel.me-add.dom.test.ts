@@ -292,14 +292,17 @@ describe("Connect Apps > Me: Recommended for you first, from the catalog", () =>
     await loadLocale(lang);
     await home();
     const sections = [...host.querySelectorAll("[data-plugins-section]")].map((section) => section.getAttribute("data-plugins-section"));
-    expect(sections[0]).toBe("recommended");
+    // the first pick is the one featured banner, the rest is the shelf (no carousel)
+    expect(sections.slice(0, 2)).toEqual(["featured", "recommended"]);
+    expect(host.querySelector('[data-plugins-section="featured"]')?.getAttribute("data-plugin-row")).toBe("featured:slack");
     // chat before tickets; what the person has, a key to paste and a data center to choose are left out
-    expect(shelf()).toEqual(["featured:slack", "featured:linear"]);
+    expect(shelf()).toEqual(["featured:linear"]);
   });
 
   it("Connect adds the app as the person's own server, then opens its sign-in", async () => {
     await home();
     // #4453: Install; a person's own server has no "one bot" (it serves all of their bots), so no menu to open
+    // (the featured banner's button is the labelled one; a card's is the square "+")
     expect(host.querySelector('[data-plugin-row="featured:slack"] [data-install-button]')?.textContent).toBe("Install");
     await act(async () => { host.querySelector<HTMLButtonElement>('[data-plugin-row="featured:slack"] [data-install-button]')!.click(); });
     await settle();

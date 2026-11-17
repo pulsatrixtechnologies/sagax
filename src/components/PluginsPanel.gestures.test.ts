@@ -318,16 +318,20 @@ describe("Plugins, driven like the owner does", () => {
     expect($("[data-plugins-discover]")).not.toBeNull();
   });
 
-  it("#4453: the title line holds the round search, + Add and \"...\"; the tabs line has the kinds and the switch alone; the head stays out of the scrolling list", async () => {
+  it("#4453: the title line keeps the title and \"...\"; ONE row holds the kinds, a separator, Yours | Discover, the search and Add; the head stays out of the scrolling list", async () => {
     await open();
     const head = $("[data-plugins-head]")!;
-    expect(head.querySelector("[data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
-    expect(head.querySelector("[data-plugins-add]")).not.toBeNull();
+    expect(head.querySelector("#plugins-title")).not.toBeNull();
     expect(head.querySelector("[data-plugins-more-button]")).not.toBeNull();
-    const tabs = $("[data-plugins-kind-row]")!;
-    expect([...tabs.children].map((child) => child.matches("[data-plugins-kinds]") ? "kinds" : child.matches("[data-plugins-views]") ? "views" : "other")).toEqual(["kinds", "views"]);
-    expect(tabs.querySelector("[data-plugins-search]")).toBeNull();
-    expect(tabs.querySelector("[data-plugins-add]")).toBeNull();
+    expect(head.querySelector("[data-plugins-search]")).toBeNull();
+    expect(head.querySelector("[data-plugins-add]")).toBeNull();
+    const row = $("[data-plugins-kind-row]")!;
+    expect([...row.children].map((child) => child.matches("[data-plugins-kinds]") ? "kinds" : child.matches("[data-plugins-separator]") ? "separator" : child.matches("[data-plugins-views]") ? "views" : child.matches("[data-plugins-actions]") ? "actions" : "other")).toEqual(["kinds", "separator", "views", "actions"]);
+    const actions = row.querySelector("[data-plugins-actions]")!;
+    expect(actions.querySelector("[data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
+    expect(actions.querySelector("[data-plugins-sort-button]")).not.toBeNull();
+    expect(actions.querySelector("[data-plugins-add]")).not.toBeNull();
+    expect($("[data-plugins-view-row]")).toBeNull();
     expect($("[data-plugins-list]")?.contains($("[data-plugins-title-row]"))).toBe(false);
   });
 
@@ -427,18 +431,15 @@ describe("Plugins, driven like the owner does", () => {
     expect(host.textContent).toContain("Add MCP server");
   });
 
-  it("#4453: each kind's count is what its Yours lists", async () => {
+  it("#4453: the pill tabs carry no counts; each kind's Yours lists its own rows", async () => {
     await open();
     await go("installed");
-    for (const name of ["plugins", "connectors", "skills"] as const) {
-      await kind(name);
-      const count = Number($(`[data-plugins-kind-tab="${name}"] [data-plugins-kind-count]`)?.getAttribute("data-plugins-kind-count") ?? 0);
-      const rows = host.querySelectorAll("[data-installed-entry], [data-plugin-skill]").length;
-      expect(rows, name).toBe(count);
-    }
+    expect($("[data-plugins-kind-count]")).toBeNull();
     // GitHub, Code Review, Frontend Design, Ops Flow are plugins; Twilio Docs and the engine accounts' rows connectors
-    expect($('[data-plugins-kind-tab="plugins"] [data-plugins-kind-count]')?.textContent).toBe("4");
-    expect(Number($('[data-plugins-kind-tab="connectors"] [data-plugins-kind-count]')?.textContent)).toBeGreaterThanOrEqual(3);
+    await kind("plugins");
+    expect(host.querySelectorAll("[data-installed-entry]")).toHaveLength(4);
+    await kind("connectors");
+    expect(host.querySelectorAll("[data-installed-entry]").length).toBeGreaterThanOrEqual(3);
   });
 
   it("an old link to My accounts or Providers opens Manage, with the Providers section; a link to the pages opens Pages", async () => {
@@ -467,19 +468,18 @@ describe("Plugins, driven like the owner does", () => {
     }
   });
 
-  it("keeps two lines in the head on Yours, with no scope anywhere, Sources included (#4453)", async () => {
+  it("keeps one row of controls on Yours, with no scope anywhere, Sources included (#4453)", async () => {
     await open();
     await go("installed");
     expect($("[data-plugins-scope-bar]")).toBeNull();
     expect($("[data-plugins-scope-slot]")).toBeNull();
-    // two lines: the title, search, Add and "..."; then the kinds with Yours | Discover alone
-    expect($("[data-plugins-head] [data-plugins-search]")).not.toBeNull();
-    expect($("[data-plugins-head] [data-plugins-add]")).not.toBeNull();
     expect($("[data-plugins-kind-row] [data-plugins-kinds]")).not.toBeNull();
     expect($("[data-plugins-kind-row] [data-plugins-views]")).not.toBeNull();
-    expect($("[data-plugins-view-row]")).toBeNull();
-    // the filter is Discover's alone
+    expect($("[data-plugins-kind-row] [data-plugins-search]")).not.toBeNull();
+    expect($("[data-plugins-kind-row] [data-plugins-add]")).not.toBeNull();
+    // the filter is Discover's alone; the sort is on both
     expect($("[data-plugins-filter]")).toBeNull();
+    expect($("[data-plugins-sort]")).not.toBeNull();
     await go("sources");
     expect($("[data-plugins-scope-bar]")).toBeNull();
     expect($("[data-plugins-scope-slot]")).toBeNull();

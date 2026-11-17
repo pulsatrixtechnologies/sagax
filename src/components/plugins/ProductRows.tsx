@@ -124,7 +124,9 @@ function worstState(products: readonly PersonProduct[]): PersonProduct {
 /** One product's row: the mark, the name, one grey line (its endpoints on
  * one line), the state, then its own trailer. The name opens its page. */
 function ProductRow({ product, ctx, nested = false }: { product: PersonProduct; ctx: ProductRowsContext; nested?: boolean }) {
-  const sub = product.endpoints && product.endpoints.length > 0 ? product.endpoints.join(", ") : product.description ?? productRowSub(product);
+  const what = product.endpoints && product.endpoints.length > 0 ? product.endpoints.join(", ") : product.description ?? productRowSub(product);
+  // how it got there, then what it does (a vendor's products sit under its own line)
+  const sub = nested ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
   return (
     <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
       <button type="button" onClick={() => ctx.onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"

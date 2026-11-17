@@ -95,7 +95,9 @@ describe("The filter button (#4453: the categories left the row of pills)", () =
     const onPick = vi.fn();
     flushSync(() => root.render(createElement(DiscoverFilter, { chips: filterChips(rows, "all"), filter: "all", onPick, label: (chip) => filterLabel(chip) })));
     const button = host.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
-    expect(button.textContent).toBe("Filter");
+    // icon only: its name is the aria-label
+    expect(button.textContent).toBe("");
+    expect(button.getAttribute("aria-label")).toBe("Filter");
     expect(host.querySelector('[role="menu"]')).toBeNull();
     click(button);
     const pills = [...host.querySelectorAll("[data-plugins-chip]")].map((node) => node.getAttribute("data-plugins-chip"));
@@ -114,7 +116,8 @@ describe("The filter button (#4453: the categories left the row of pills)", () =
   it("a chosen category is named on the button and checked in its menu", () => {
     flushSync(() => root.render(createElement(DiscoverFilter, { chips: filterChips(rows, "design"), filter: "design", onPick: noop, label: (chip) => filterLabel(chip) })));
     const button = host.querySelector<HTMLElement>("[data-plugins-filter-button]")!;
-    expect(button.textContent).toBe(filterLabel("design"));
+    expect(button.textContent).toBe("");
+    expect(button.getAttribute("aria-label")).toContain(filterLabel("design"));
     click(button);
     expect(host.querySelector('[data-plugins-chip="design"]')?.getAttribute("aria-checked")).toBe("true");
     expect(host.querySelector('[data-plugins-chip="all"]')?.getAttribute("aria-checked")).toBe("false");
@@ -152,13 +155,17 @@ describe("View all and the breadcrumb", () => {
     });
     const action = (item: { action: string | null }) => (item.action ? createElement("button", { type: "button" }, "Connect") : null);
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onType, renderAction: action }))));
-    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(6);
+    // the first pick is the one featured banner, the shelf holds the other five: six in all
+    expect(host.querySelector("[data-featured-banner]")).not.toBeNull();
+    expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(5);
+    expect(host.querySelector('[data-plugins-section="recommended"] [data-section-count]')?.getAttribute("data-section-count")).toBe("7");
     const viewAll = host.querySelector("[data-plugins-view-all=\"recommended\"]");
     expect(viewAll).not.toBeNull();
     click(viewAll);
     expect(onType).toHaveBeenCalledWith("recommended");
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, type: "recommended", renderAction: action }))));
     expect(host.querySelectorAll('[data-plugins-section="recommended"] [data-plugin-row]')).toHaveLength(8);
+    expect(host.querySelector("[data-featured-banner]")).toBeNull();
     // the type pill names it
     expect(host.querySelector('[data-plugins-type="recommended"]')?.textContent).toContain("Recommended for you");
   });

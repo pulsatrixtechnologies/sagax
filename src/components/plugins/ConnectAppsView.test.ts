@@ -18,7 +18,7 @@ import { buildPluginItems } from "@/lib/plugins-model";
 import { installedEntries, privateSkills } from "@/lib/installed-model";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { bringsLabel, InstalledView, type InstalledViewProps } from "./InstalledView";
-import { ConnectAppsView, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
+import { ConnectAppsView, SortControl, sortRows, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
 import { accountConnectorRows, connectedAccountRows, connectorGroups, noticeAction, type HarnessConnectorGroup, type RegistryGrokAccount } from "./HarnessConnectorGroups";
 import type { HarnessAnswer } from "../PluginsPanel.tsx-parts/types";
 import { DiscoverView } from "./DiscoverView";
@@ -69,9 +69,11 @@ describe("Plugins tabs", () => {
       // the title is never cut (French at phone width, #4153)
       const title = html.match(/<h2 [^>]*id="plugins-title"[^>]*>/)?.[0] ?? "";
       expect(title).not.toMatch(/\btruncate\b|\bline-clamp|\bwhitespace-nowrap\b/);
-      // line 1: the title, the search, Add, "..."; line 2: the kinds, then the switch alone
-      expect(html).toMatch(/id="plugins-title"[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-add[\s\S]*?data-plugins-more-button[\s\S]*?role="tablist"[\s\S]*?data-plugins-views/);
+      // the title line keeps the title and "..."; ONE row under it: the kinds (no counts), a separator,
+      // Yours | Discover, then the search, Add (the owner's layout, 2026-11-16)
+      expect(html).toMatch(/id="plugins-title"[\s\S]*?data-plugins-more-button[\s\S]*?role="tablist"[\s\S]*?data-plugins-separator[\s\S]*?data-plugins-views[\s\S]*?data-plugins-search-slot[\s\S]*?data-test-add/);
       expect(html).not.toContain("data-plugins-view-row");
+      expect(html).not.toContain("data-plugins-kind-count");
       expect(html).not.toMatch(/aria-label="Refresh/);
       expect(html).not.toContain("data-plugins-scope-slot");
       expect(html).toContain(tab === "installed" ? ">I<" : ">D<");
@@ -172,10 +174,10 @@ describe("Plugins tabs", () => {
 
   it("Installed: GitHub once, named for people, saying what it brings, then the private skills", () => {
     const html = renderToStaticMarkup(createElement(ManageView, props()));
-    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[13px\] font-medium leading-\[18px\] text-ink"[^>]*>([^<]+)</g)].map((match) => match[1]);
+    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[13px\] font-medium leading-\[18px\] text-ink[^"]*"[^>]*>([^<]+)</g)].map((match) => match[1]);
     expect(names).toEqual(["GitHub", "Twilio Docs"]);
     expect(html).not.toContain(">github-github<");
-    expect(html).toMatch(/GitHub<\/span><span[^>]*data-installed-brings[^>]*>Plugin · claude-plugins-official · 1 connector</);
+    expect(html).toMatch(/GitHub<\/span>(?:<span[^>]*data-row-category[^>]*>[^<]*<\/span>)?<\/span><span[^>]*data-installed-brings[^>]*>Added by you · Plugin · claude-plugins-official · 1 connector</);
     expect(html).toMatch(/data-plugins-installed[\s\S]*data-plugins-skills[\s\S]*Private skills[\s\S]*weekly-summary/);
   });
 
@@ -540,12 +542,12 @@ describe("Connect Apps (once Capabilities, then Plugins), the engine accounts (o
     expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "bots", "pages", "sources"]);
     expect(SCOPELESS_TABS).toEqual(["bots", "pages"]);
     expect(t("connectApps.title")).toBe("Connect Apps");
-    expect(t("connectApps.search.short")).toBe("Search across apps and skills");
+    expect(t("connectApps.search.short")).toBe("Search");
     expect(connectAppsTabLabel("pages")).toBe("Pages");
     setLocale("fr");
     try {
       expect(t("connectApps.title")).toBe("Connecter des apps");
-      expect(t("connectApps.search.short")).toBe("Rechercher dans les apps et skills");
+      expect(t("connectApps.search.short")).toBe("Chercher");
       expect(connectAppsTabLabel("pages")).toBe("Pages");
     } finally {
       setLocale("en");
@@ -629,10 +631,11 @@ describe("#4453: Yours and Discover of one kind", () => {
     expect(view("connectors")).not.toContain("weekly-summary");
     expect(view("connectors")).toMatch(/data-installed-entry="account:claude:Gmail"[\s\S]*?data-row-scope=""[^>]*>Engine account<[\s\S]*?data-row-switch="locked"/);
     // the group's count at its right
-    expect(view("connectors")).toMatch(/>Yours<[\s\S]*?data-plugins-installed-count[^>]*>2 connectors</);
-    // nothing of a kind: its own empty line and a way to Discover
+    expect(view("connectors")).toMatch(/>Yours<[\s\S]*?data-section-count="2"/);
+    // none of their own of a kind: the first block says so, with a way to Discover
     const empty = renderToStaticMarkup(createElement(InstalledView, props({ kind: "skills", skills: [] })));
-    expect(empty).toContain("No skills here yet.");
+    expect(empty).toContain("Add your first skill");
+    expect(empty).toContain("data-first-banner=\"skills\"");
     expect(empty).toContain("data-plugins-go-discover");
   });
 
@@ -693,7 +696,7 @@ describe("#4453 (2026-11-16): the organization console's own section, apart, at 
     const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "connectors", consoleTitle: "Perspicax · Example Org", personal: [own] })));
     expect(html).not.toContain("data-plugins-console-section");
     expect(html).not.toContain("Perspicax");
-    expect(html).not.toContain("Added by you");
+    expect(html).not.toMatch(/<h3[^>]*>Added by you</);
     expect(html).toMatch(/>Yours</);
   });
 
@@ -737,23 +740,23 @@ describe("#4453 (2026-11-16): the title line never wraps; the search gives way",
 
   it("is a field on a wide line and an icon button that opens it on a narrow one, in one row", async () => {
     const { host, root } = await mount();
-    await width(800);
-    expect(host.querySelector("[data-plugins-head] [data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
+    await width(900);
+    expect(host.querySelector("[data-plugins-kind-row] [data-plugins-search-slot] [data-plugins-search]")).not.toBeNull();
     expect(host.querySelector("[data-plugins-search-toggle]")).toBeNull();
-    expect(host.querySelector("[data-plugins-head]")?.className).not.toMatch(/\bflex-wrap\b/);
-    await width(420);
+    expect(host.querySelector("[data-plugins-kind-row]")?.className).not.toMatch(/\bflex-wrap\b/);
+    await width(500);
     expect(host.querySelector("[data-plugins-search]")).toBeNull();
     const toggle = host.querySelector<HTMLButtonElement>("[data-plugins-search-toggle]")!;
     expect(toggle).not.toBeNull();
-    // Add and "..." stay on the line
-    expect(host.querySelector("[data-plugins-head] [data-test-add]")).not.toBeNull();
+    // Add stays on the row, and "..." on the title line
+    expect(host.querySelector("[data-plugins-kind-row] [data-test-add]")).not.toBeNull();
     expect(host.querySelector("[data-plugins-head] [data-plugins-more-button]")).not.toBeNull();
     await act(async () => { toggle.click(); });
     expect(host.querySelector("[data-plugins-search-expanded] [data-plugins-search]")).not.toBeNull();
     await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-search-close]")!.click(); });
     expect(host.querySelector("[data-plugins-search]")).toBeNull();
     // back to a wide line: the field again, one search in the page
-    await width(800);
+    await width(900);
     expect(host.querySelectorAll("[data-plugins-search]")).toHaveLength(1);
     await act(async () => root.unmount());
     host.remove();
@@ -770,6 +773,130 @@ describe("#4453 (2026-11-16): the title line never wraps; the search gives way",
     expect(first.textContent).toBe("Refresh");
     await act(async () => { (first as HTMLButtonElement).click(); });
     expect(onRefresh).toHaveBeenCalledTimes(1);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+});
+
+describe("#4453 (2026-11-16, the owner's references): Discover's cards, banner and sections; Yours' rows", () => {
+  const catalog = buildPluginItems({
+    featured: [
+      { id: "linear", name: "Linear", description: "Issues and projects for the team", url: "https://mcp.linear.app/mcp", domain: "linear.app", auth: "none" },
+      { id: "slack", name: "Slack", description: "Channels", url: "https://mcp.slack.com/mcp", domain: "slack.com", auth: "oauth" },
+      { id: "stripe", name: "Stripe", description: "Payments", url: "https://mcp.stripe.com", domain: "stripe.com", auth: "oauth" },
+    ],
+  });
+  const discover = (over: Record<string, unknown> = {}) => renderToStaticMarkup(createElement(DiscoverView, {
+    kind: "connectors", items: catalog, filter: "all", onFilter: noop, type: "any", onType: noop, sourceLabel: (source: string) => source === "catalog" ? "Sagax catalog" : source,
+    onOpenItem: noop, renderAction: (item: { name: string }, variant?: string) => createElement("button", { "data-test-action": variant ?? "card" }, item.name), ...over,
+  }));
+
+  it("draws cards in two columns: icon tile, name with the reviewed mark, two lines, where it comes from, the action at the top right", () => {
+    const html = discover();
+    expect(html).toContain("@container grid grid-cols-2");
+    const card = html.slice(html.indexOf('data-discover-card=""'));
+    expect(card).toContain("data-card-verified");
+    expect(card).toMatch(/data-card-meta[\s\S]*?Sagax catalog/);
+    expect(card).toMatch(/data-card-action[\s\S]*?data-test-action="card"/);
+    // the item that needs no sign-in carries the small outlined chip, an account one does not
+    expect(html).toMatch(/Linear[\s\S]*?data-card-chip[^>]*>No sign-in</);
+    expect(html.match(/data-card-chip/g)).toHaveLength(1);
+  });
+
+  it("an installed item shows Added with a check, then where it comes from, and a green check at the corner", () => {
+    const installed = buildPluginItems({ servers: [{ name: "linear", enabled: true, url: "https://mcp.linear.app/mcp", source: "catalog" }] });
+    const html = renderToStaticMarkup(createElement(DiscoverView, {
+      kind: "connectors", items: installed.map((item) => ({ ...item, installed: true })), filter: "all", onFilter: noop, type: "any", onType: noop, sourceLabel: (source: string) => source,
+      onOpenItem: noop, renderAction: () => null, type_: undefined,
+    } as never));
+    expect(html).toMatch(/data-card-added[^>]*>[\s\S]*?Added</);
+    expect(html).toContain("data-card-installed");
+  });
+
+  it("has one featured banner, from the first recommended item, with its labelled button; the shelf does not repeat it", () => {
+    const html = discover();
+    expect(html).toContain('data-plugins-section="featured"');
+    const banner = html.slice(html.indexOf('data-plugins-section="featured"'), html.indexOf('data-plugins-section="recommended"'));
+    expect(banner).toMatch(/From Sagax catalog/);
+    expect(banner).toContain('data-test-action="banner"');
+    expect(banner).toContain("data-featured-art");
+    const banners = (html.match(/data-featured-banner/g) ?? []).length;
+    expect(banners).toBe(1);
+    const featuredKey = html.match(/data-featured-banner="" data-plugin-row="([^"]+)"/)?.[1];
+    const shelf = html.slice(html.indexOf('data-plugins-section="recommended"'));
+    expect(shelf).not.toContain(`data-plugin-row="${featuredKey}"`);
+  });
+
+  it("has no banner and no section when there is nothing to recommend", () => {
+    const html = discover({ items: catalog, owned: ["Linear", "Slack", "Stripe"] });
+    expect(html).not.toContain("data-featured-banner");
+    expect(html).not.toContain('data-plugins-section="featured"');
+  });
+
+  it("titles each section with its count in a small rounded badge and a Show all with an arrow", () => {
+    const many = buildPluginItems({
+      featured: Array.from({ length: 12 }, (_, index) => ({ id: `app${index}`, name: `App ${index}`, description: "", url: `https://mcp${index}.example.net/mcp`, domain: `app${index}.example.net`, auth: "oauth", category: "productivity" })),
+    });
+    const html = discover({ items: many });
+    expect(html).toMatch(/Productivity<\/h3><span[^>]*data-section-count="12"/);
+    expect(html).toMatch(/data-plugins-view-all="productivity"[^>]*>View all<svg/);
+  });
+
+  it("Yours: a row is a rule-separated list row, its category chip after the name, how it got there then what it does", () => {
+    const withCategory = buildPluginItems({
+      marketplaces: [{ name: "kit", plugins: [{ name: "reviewer", description: "Reviews a pull request", category: "development", installed: true, servers: [], skills: [] }] }],
+    });
+    const html = renderToStaticMarkup(createElement(InstalledView, props({ kind: "plugins", entries: installedEntries(withCategory), skills: [] })));
+    expect(html).toContain("divide-y");
+    expect(html).not.toMatch(/hover:bg-ink\/\[0\.05\]/);
+    expect(html).toMatch(/Reviewer<\/span><span[^>]*data-row-category[^>]*>Code<\/span>/);
+    expect(html).toContain("Added by you · Reviews a pull request");
+  });
+
+  it("a row the organization requires has no switch and says so; one it offers keeps the person's own", () => {
+    const data = capabilityFixture();
+    const required = { ...data, items: data.items.map((item) => item.form === "flow" ? { ...item, state: "imposed" as const } : item) };
+    const html = renderToStaticMarkup(createElement(InstalledView, props({ resolved: required, botName: "Scout", kind: "plugins", consoleTitle: "Console" })));
+    const imposed = html.match(/<li data-capability="flow"[\s\S]*?<\/li>/)?.[0] ?? "";
+    expect(imposed).toContain("Required by your organization");
+    expect(imposed).not.toContain("data-row-switch");
+  });
+
+  it("a person with none of their own sees the first block above the console's section, even when the console has some", () => {
+    const html = renderToStaticMarkup(createElement(InstalledView, props({
+      kind: "plugins", entries: [], skills: [], consoleTitle: "Console", consoleHasExtras: true, consoleCount: 2,
+      consoleExtras: createElement("div", { "data-test-extras": "" }, "EXTRAS"),
+    })));
+    expect(html.indexOf("data-first-banner")).toBeGreaterThan(-1);
+    expect(html.indexOf("data-first-banner")).toBeLessThan(html.indexOf("data-plugins-console-section"));
+    expect(html).toContain("Add your first plugin");
+    expect(html).toMatch(/Console<\/h3><span[^>]*data-section-count="2"/);
+  });
+});
+
+describe("#4453: the sort button", () => {
+  it("orders by name, or what is on first, and leaves the list's own order by default", () => {
+    const rows = [{ n: "Beta", on: false }, { n: "alpha", on: true }, { n: "Gamma", on: true }];
+    const by = (sort: "default" | "name" | "on") => sortRows(rows, sort, (row) => row.n, (row) => row.on).map((row) => row.n);
+    expect(by("default")).toEqual(["Beta", "alpha", "Gamma"]);
+    expect(by("name")).toEqual(["alpha", "Beta", "Gamma"]);
+    expect(by("on")).toEqual(["alpha", "Gamma", "Beta"]);
+  });
+
+  it("offers only the keys it was given, checks the chosen one and says it on the button", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const onSort = vi.fn();
+    await act(async () => { root.render(createElement(SortControl, { sort: "name", onSort, options: ["default", "name"] })); });
+    const button = host.querySelector<HTMLButtonElement>("[data-plugins-sort-button]")!;
+    expect(button.textContent).toBe("");
+    expect(button.getAttribute("aria-label")).toBe("Sort");
+    await act(async () => { button.click(); });
+    expect([...host.querySelectorAll("[data-plugins-sort-option]")].map((option) => option.getAttribute("data-plugins-sort-option"))).toEqual(["default", "name"]);
+    expect(host.querySelector('[data-plugins-sort-option="name"]')?.getAttribute("aria-checked")).toBe("true");
+    await act(async () => { host.querySelector<HTMLButtonElement>('[data-plugins-sort-option="default"]')!.click(); });
+    expect(onSort).toHaveBeenCalledWith("default");
     await act(async () => root.unmount());
     host.remove();
   });

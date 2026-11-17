@@ -10,7 +10,7 @@
 // organization's Flow ("imposed by the organization") and its Perspicax
 // Roles ("held" / "not held"). Every empty section is hidden.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Building2, ExternalLink, FileText, KeyRound, MoreHorizontal, Plus, RefreshCw, RotateCw, Settings2, Trash2, Users } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, ExternalLink, Plug, Puzzle, FileText, KeyRound, MoreHorizontal, Plus, RefreshCw, RotateCw, Settings2, Trash2, Users } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -19,6 +19,7 @@ import type { PluginItem } from "@/lib/plugins-model";
 import { botPluginKey, capabilityName, isBotSwitch, formWord, installationServerName, reasonText, scopeWord, stateWord, type BotCapabilities, type Capability } from "@/lib/capabilities";
 import { entryKind, fromOrganization, kindOf, ORGANIZATION_PREVIEW, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
+import { filterLabel, sortRows, type ConnectAppsSort } from "./ConnectAppsView";
 import { ItemTrailer, ITEM_ROW_ATTR } from "./ItemTrailer";
 import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
@@ -126,6 +127,8 @@ export interface InstalledViewProps {
    * their own switch); `consoleHasExtras` says there is something to list */
   consoleExtras?: ReactNode;
   consoleHasExtras?: boolean;
+  /** how many rows the console offers or requires of this kind (the badge next to its title) */
+  consoleCount?: number;
   /** #4453: this bot's own switch of a server everyone may use (the bot's
    * server list, the write "For which bots" makes) */
   onToggleBotServer?: (item: Capability, next: boolean) => void;
@@ -137,6 +140,8 @@ export interface InstalledViewProps {
   /** a bot the viewer may not change (another person's): its switches show
    * locked with this reason */
   readOnlyReason?: string;
+  /** the sort chosen in the control row: by name, or what is on first */
+  sort?: ConnectAppsSort;
 }
 
 export { ScopePill, RowSwitch } from "./ItemTrailer";
@@ -156,9 +161,44 @@ export function kindCountLabel(kind: ConnectAppsKind, count: number): string {
 
 const INSTALLED_PREVIEW = 6;
 
+/** A section's title with its count in a small rounded badge next to it. */
+export function SectionTitle({ title, count }: { title: string; count?: number }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <h3 className={PLUGINS.sectionTitle}>{title}</h3>
+      {count !== undefined && count > 0 && <span className="mt-1 rounded-full bg-ink/[0.08] px-2 text-[12px] leading-4 tabular-nums text-ink-secondary" data-section-count={count}>{count}</span>}
+    </div>
+  );
+}
+
+const FIRST_KEY = {
+  skills: "connectApps.first.skills",
+  connectors: "connectApps.first.connectors",
+  plugins: "connectApps.first.plugins",
+} as const satisfies Record<ConnectAppsKind, string>;
+const FIRST_ICON = { skills: BookOpen, connectors: Plug, plugins: Puzzle } as const;
+
+/** What a person with none of their own of a kind sees first: one line and a
+ * button to Discover, with a small mark at the right. */
+export function FirstBanner({ kind, onDiscover }: { kind: ConnectAppsKind; onDiscover?: () => void }) {
+  const Glyph = FIRST_ICON[kind];
+  return (
+    <section data-plugins-empty="" data-first-banner={kind} className="mb-6 flex items-center gap-4 rounded-2xl border-[0.5px] border-ink/[0.1] bg-gradient-to-br from-ink/[0.06] to-ink/[0.015] p-5">
+      <div className="min-w-0 flex-1">
+        <h3 className="text-[14px] font-medium leading-5 text-ink">{t(FIRST_KEY[kind])}</h3>
+        <p className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">{t("connectApps.first.line")}</p>
+        {onDiscover && (
+          <button type="button" data-plugins-go-discover="" onClick={onDiscover} className={cn(PLUGINS.fillPill, "mt-3 h-8")}>{t("connectApps.manage.tab.discover")}</button>
+        )}
+      </div>
+      <span aria-hidden="true" className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-ink/[0.06] text-ink-secondary max-sm:hidden"><Glyph size={24} /></span>
+    </section>
+  );
+}
+
 /** #4453: Yours of one kind is one column (the design's row: the state, the
  * scope pill, "..." and the switch need the width); the reference's row look */
-const YOURS_LIST = "flex flex-col gap-y-0.5 *:min-w-0 *:rounded-2xl *:px-3 *:transition-colors *:hover:bg-ink/[0.05] motion-reduce:*:transition-none";
+const YOURS_LIST = "flex flex-col divide-y divide-hairline-weak *:min-w-0 *:px-3";
 
 /** one entry of the "+ Add" menu */
 export interface AddAction {
@@ -185,8 +225,9 @@ export function AddMenu({ actions, filled = false }: { actions: AddAction[]; /**
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add
-        className={cn(filled ? PLUGINS.primaryPill : PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
+        className={cn(filled ? cn(PLUGINS.primaryPill, "gap-1.5 pl-3.5 pr-3") : PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
         <Plus size={14} /> {t("connectApps.add")}
+        {filled && <ChevronDown size={13} aria-hidden="true" className="-mr-0.5 opacity-70" />}
       </button>
       {open && (
         <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-10 z-20 min-w-52")}>
@@ -213,14 +254,14 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, kind, entryTrailer, skillTrailer, readOnlyReason }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default" }: InstalledViewProps) {
   const [all, setAll] = useState(false);
   const [allOrganization, setAllOrganization] = useState(false);
   // #4453: one kind at a time; without one, every kind in one list
   const has = (wanted: ConnectAppsKind) => kind === undefined || kind === wanted;
-  const shownEntries = kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind);
-  const shownSkills = has("skills") ? skills : [];
-  const shownPersonal = has("connectors") ? personal : [];
+  const shownEntries = sortRows(kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind), sort, (entry) => entry.name, (entry) => entry.status !== "off");
+  const shownSkills = has("skills") ? sortRows(skills, sort, (skill) => skill.name, (skill) => skill.status !== "off") : [];
+  const shownPersonal = has("connectors") ? (sort === "name" ? [...personal].sort((a, b) => a.key.localeCompare(b.key)) : personal) : [];
   const shownProducts = has("connectors") ? products : [];
   const shownOrganization = kind === undefined ? organization : organization.filter((item) => kindOf(item) === kind);
   // connected account rows first, then the notices, the ones to finish, the unverifiable
@@ -243,7 +284,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
     return <AccountInstalledRow row={line.row} onOpen={accounts?.onOpen?.(line.row)} scoped={kind !== undefined} />;
   };
   const shownProductRows = allOrganization ? shownProducts : shownProducts.slice(0, ORGANIZATION_PREVIEW);
-  const resolvedRows = resolved ? (kind === undefined ? resolved.items : resolved.items.filter((item) => kindOf(item) === kind)) : [];
+  const resolvedRows = resolved ? sortRows(kind === undefined ? resolved.items : resolved.items.filter((item) => kindOf(item) === kind), sort, capabilityName, (item) => item.enabled && item.state !== "off") : [];
   // the organization's rows of this bot sit in the console's section; a
   // product the vendor rows already list is not listed twice
   const productIds = new Set(shownProducts.length > 0 ? ["*"] : []);
@@ -306,6 +347,10 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </>;
       }} />
   );
+  // none of their own of this kind: the first block says so, with a way to Discover
+  const ownEmpty = kind !== undefined && !loading && (resolved === undefined
+    ? lines.filter((line) => line.kind !== "notice").length === 0 && shownSkills.length === 0
+    : resolved !== null && resolvedOwn.length === 0);
   const consoleShown = kind !== undefined && (shownProducts.length > 0 || resolvedOrganization.length > 0 || consoleHasExtras);
   const nothing = resolved === undefined && shownEntries.length === 0 && shownPersonal.length === 0 && shownProducts.length === 0 && accountRowCount === 0 && shownSkills.length === 0 && shownOrganization.length === 0 && !loading;
   return (
@@ -316,13 +361,11 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </div>
       )}
       {forms}
+      {kind !== undefined && ownEmpty && <FirstBanner kind={kind} onDiscover={onDiscover} />}
       {resolved !== undefined && kind === undefined && capabilityList(resolved)}
       {consoleShown && (
         <section data-plugins-organization-group="" data-plugins-console-section="" className="mb-6">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className={PLUGINS.sectionTitle}>{consoleTitle ?? t("connectApps.group.organization")}</h3>
-            {shownProducts.length > 0 && <span className="mr-1 text-[12px] leading-4 text-ink-secondary">{shownProducts.length}</span>}
-          </div>
+          <SectionTitle title={consoleTitle ?? t("connectApps.group.organization")} count={shownProducts.length + consoleCount || undefined} />
           {shownProducts.length > 0 && (
             <ul className={cn(YOURS_LIST, "mt-1")}>
               {shownProductRows.map((row) => <li key={row.key}>{row.node}</li>)}
@@ -341,13 +384,13 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         (resolvedOwn.length > 0 || !consoleShown) && (
           <>
             {consoleShown && (
-              <div className="flex items-center justify-between gap-3"><h3 className={PLUGINS.sectionTitle}>{t("connectApps.group.added")}</h3></div>
+              <SectionTitle title={t("connectApps.group.added")} />
             )}
             {capabilityList({ ...resolved, items: resolvedOwn }, { title: consoleShown ? "" : t("connectApps.group.botReceives", { name: botName }) })}
           </>
         )
       ))}
-      {nothing && (
+      {nothing && kind === undefined && (
         <EmptyLine action={onDiscover ? (
           <button type="button" data-plugins-go-discover onClick={onDiscover} className="text-[13px] font-medium text-accent-text hover:underline">{t("connectApps.manage.tab.discover")}</button>
         ) : undefined}>
@@ -357,10 +400,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
       {lines.length > 0 && (
         <section data-plugins-installed className={cn(resolved !== undefined && "mt-8")}>
           {kind ? (
-            <div className="flex items-center justify-between gap-3">
-              <h3 className={PLUGINS.sectionTitle}>{t(consoleShown ? "connectApps.group.added" : "connectApps.view.yours")}</h3>
-              <span className="mr-1 text-[12px] leading-4 text-ink-secondary" data-plugins-installed-count>{kindCountLabel(kind, lines.filter((line) => line.kind !== "notice").length)}</span>
-            </div>
+            <SectionTitle title={t(consoleShown ? "connectApps.group.added" : "connectApps.view.yours")} count={lines.filter((line) => line.kind !== "notice").length} />
           ) : <h3 className={PLUGINS.label}>{t("connectApps.manage.installed")}</h3>}
           <ul className={cn(kind ? YOURS_LIST : PLUGINS.grid, "mt-1")}>
             {shownLines.map((line) => (
@@ -394,8 +434,13 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
                   <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-3 text-left">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1">
-                      <span className={PLUGINS.rowName} title={skill.name}>{skill.name}</span>
-                      <span className={PLUGINS.rowSub} title={skillLine(skill, sourceLabel)}>{skillLine(skill, sourceLabel)}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className={cn(PLUGINS.rowName, "min-w-0")} title={skill.name}>{skill.name}</span>
+                        {skill.category && skill.category !== "other" && (
+                          <span className="shrink-0 rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary" data-row-category="">{filterLabel(skill.category)}</span>
+                        )}
+                      </span>
+                      <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={skillLine(skill, sourceLabel)}>{skillLine(skill, sourceLabel)}</span>
                     </span>
                     {skill.status === "off" && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
                   </button>
@@ -418,7 +463,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
 }
 /** A private skill's line: where it comes from, then what it does. */
 function skillLine(skill: { source: string; description?: string }, sourceLabel: (source: string) => string): string {
-  const from = skill.source === "local" ? t("connectApps.skill.createdLocally") : t("connectApps.skill.from", { source: sourceLabel(skill.source) });
+  const from = skill.source === "local" ? t("connectApps.origin.you") : t("connectApps.skill.from", { source: sourceLabel(skill.source) });
   return skill.description ? `${from} · ${skill.description}` : from;
 }
 /** One installed entry: logo, name, what it brings, its state, "...". */
@@ -430,8 +475,16 @@ export function InstalledRow({ entry, onOpen, actions, trailer }: { entry: Insta
         <PluginIcon item={icon} className="size-10 rounded-[10px]" />
         <span className="min-w-0 flex-1">
           {/* a card can cut the words: the whole name and line stay on hover (#2948) */}
-          <span className={PLUGINS.rowName} title={entry.name}>{entry.name}</span>
-          <span className={PLUGINS.rowSub} title={bringsLabel(entry.brings)} data-installed-brings>{bringsLabel(entry.brings)}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0")} title={entry.name}>{entry.name}</span>
+            {entry.primary.category && entry.primary.category !== "other" && (
+              <span className="shrink-0 rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary" data-row-category="">{filterLabel(entry.primary.category)}</span>
+            )}
+          </span>
+          {/* how it got there, then what it does, on one line */}
+          <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={bringsLabel(entry.brings)} data-installed-brings>
+            {[t("connectApps.origin.you"), entry.primary.description || bringsLabel(entry.brings)].join(" \u00b7 ")}
+          </span>
         </span>
         <PluginStatusLabel status={entry.status} className="text-[12px] font-normal" />
       </button>

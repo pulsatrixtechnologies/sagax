@@ -6,7 +6,7 @@
 // skill, a custom connector) takes the whole pane under its own bar. The
 // shared row parts (pills, section titles, PluginRow) live here too.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
+import { ArrowUpDown, BadgeCheck, Bot, Check, ChevronLeft, FileText, Library, ListFilter, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -140,29 +140,30 @@ export function connectAppsTabLabel(tab: ConnectAppsTab): string {
   return t(TAB_KEY[tab]);
 }
 
-/** An underlined tab (#4453): the reference's tab metrics (13px, 6px between
- * the label and its count, 10px by 5px), the chosen one in the primary ink
- * with a 2px line under it. */
+/** A kind tab (#4453, the owner's layout): plain text, the chosen one a
+ * filled rounded pill; the reference's tab metrics (13px, 10px side padding),
+ * 32px high like every element of the row. */
 export function kindTabClass(active: boolean): string {
   return cn(
-    "relative -mb-px inline-flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[13px] font-medium leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
-    "after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:rounded-full",
-    active ? "text-ink after:bg-ink" : "text-ink-secondary after:bg-transparent hover:text-ink",
+    "inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[13px] font-medium leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
+    active ? "bg-ink/[0.12] text-ink" : "text-ink-secondary hover:bg-ink/[0.05] hover:text-ink",
   );
 }
 
-/** Yours | Discover: the window's one two-position switch, a gray track with
- * a raised chosen segment (the tabs are lines, this is a switch). */
-export const SEGMENT_TRACK = "flex w-fit items-center gap-0.5 rounded-full bg-ink/[0.06] p-0.5";
+/** Yours | Discover: a rounded container holding the two, the chosen one a
+ * filled pill inside it. */
+export const SEGMENT_TRACK = "flex h-8 w-fit items-center gap-0.5 rounded-full bg-ink/[0.06] p-0.5";
 export function segmentTrackOption(active: boolean): string {
   return cn(
-    "flex h-6 min-w-0 items-center rounded-full px-3 text-[12px] leading-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
+    "flex h-7 min-w-0 items-center rounded-full px-3 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
     active ? "bg-ink/[0.14] font-medium text-ink" : "text-ink-secondary hover:text-ink",
   );
 }
 
-/** Below this width of the title line the search is an icon that opens. */
+/** Below this width of the control row the search is an icon that opens. */
 export const SEARCH_ICON_BELOW = 560;
+/** The narrowest the search field is allowed to be before it becomes an icon. */
+export const SEARCH_MIN = 120;
 
 export interface ConnectAppsViewProps {
   tab: ConnectAppsTab;
@@ -184,6 +185,8 @@ export interface ConnectAppsViewProps {
   botName?: string;
   /** the filter button, Discover only: the categories live in it */
   filterControl?: ReactNode;
+  /** the sort button, after the filter */
+  sortControl?: ReactNode;
   /** what the scope does here, over the list */
   scopeNote?: ReactNode;
   /** the one "+ Add" menu, beside the search */
@@ -242,11 +245,11 @@ const MORE_VIEWS: ReadonlyArray<{ id: Extract<ConnectAppsTab, "bots" | "pages" |
  * A page (a plugin, a skill, a custom connector) takes the whole pane under
  * its own bar. */
 export function ConnectAppsView(props: ConnectAppsViewProps) {
-  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, kindCounts, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl } = props;
+  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, kind = "connectors", onKind, home = "installed", scopeNote, manageActions, search, results, page, notices, refreshing, onRefresh, botName, filterControl, sortControl } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   const [stuck, setStuck] = useState(false);
   // the title line's width decides the search: a field, or an icon that opens it
-  const headRef = useRef<HTMLElement | null>(null);
+  const headRef = useRef<HTMLDivElement | null>(null);
   const [narrow, setNarrow] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   useEffect(() => {
@@ -254,7 +257,18 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
     if (!head || typeof ResizeObserver === "undefined") return;
     const watch = new ResizeObserver(([entry]) => {
       const width = entry?.contentRect.width ?? 0;
-      if (width > 0) setNarrow(width < SEARCH_ICON_BELOW);
+      if (width <= 0) return;
+      // the search shrinks first; under SEARCH_MIN it is an icon that opens. The room it has is the
+      // row's width less the kinds, the switch, the other buttons and the gaps (never its own state)
+      const px = (selector: string) => Array.from(head.querySelectorAll<HTMLElement>(selector));
+      const others = px("[data-plugins-actions] > :not([data-plugins-search-slot]):not([data-plugins-search-toggle])");
+      const fixed = px("[data-plugins-kinds], [data-plugins-views]").reduce((sum, node) => sum + node.offsetWidth, 0)
+        + others.reduce((sum, node) => sum + node.offsetWidth, 0);
+      // no layout to measure (a test renderer): the width alone decides
+      if (fixed === 0) return setNarrow(width < SEARCH_ICON_BELOW);
+      // three gaps of the row, the separator and its margins, a gap before each button and one before the search
+      const gaps = 12 * 3 + 9 + 12 * (others.length + 1);
+      setNarrow(width < SEARCH_ICON_BELOW || width - fixed - gaps < SEARCH_MIN);
     });
     watch.observe(head);
     return () => watch.disconnect();
@@ -284,52 +298,31 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           data-plugins-title-row=""
           data-plugins-stuck={stuck ? "" : undefined}
         >
-          {/* line 1 (#4453, 2026-11-16, two balanced lines): the title, then
-              the search, the filter (Discover only), Add, "..." and the
-              close button. Narrow: the search shrinks, then is an icon
-              button that opens over the line; it never wraps. */}
-          <header ref={headRef} className="relative flex min-h-8 items-center gap-2 pr-9" data-plugins-head="">
+          {/* the title line keeps the title, "..." and the close button */}
+          <header className="flex min-h-8 items-center gap-2 pr-9" data-plugins-head="">
             {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
             <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-fit flex-1 break-words")}>
               {botName ? t("connectApps.titleForBot", { name: botName }) : t("connectApps.title")}
             </h2>
-            {search && !narrow && <div className="min-w-[96px] max-w-[260px] flex-[0_1_260px]" data-plugins-search-slot="">{search}</div>}
-            {search && narrow && (
-              <button type="button" onClick={() => setSearchOpen(true)} className="ui-icon-button" aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
-                <Search size={16} aria-hidden="true" />
-              </button>
-            )}
-            {shown === "discover" && filterControl}
-            {manageActions}
             <MoreViewsMenu views={moreViews} onPick={onTab} onRefresh={onRefresh} refreshing={refreshing} />
-            {search && narrow && searchOpen && (
-              <div className="absolute inset-y-0 left-0 right-9 z-10 flex items-center gap-2 bg-inset" data-plugins-search-slot="" data-plugins-search-expanded="">
-                <div className="min-w-0 flex-1">{search}</div>
-                <button type="button" onClick={() => setSearchOpen(false)} className="ui-icon-button" aria-label={t("connectApps.search.close")} title={t("connectApps.search.close")} data-plugins-search-close="">
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </div>
-            )}
           </header>
-          {/* line 2: the three kinds as underlined tabs with their counts at
-              the left, Yours | Discover alone at the right. No scope here: it
-              is chosen on each item. */}
-          <div className="mt-3 flex items-end justify-between gap-6 border-b border-hairline-weak" data-plugins-kind-row="">
-            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex items-end gap-3" data-plugins-kinds="">
-              {CONNECT_APPS_KINDS.map((id) => {
-                const count = kindCounts?.[id];
-                return (
-                  <button key={id} type="button" role="tab" aria-selected={kind === id} data-plugins-kind-tab={id}
-                    onClick={() => onKind?.(id)} className={kindTabClass(kind === id)}>
-                    {connectAppsKindLabel(id)}
-                    {count !== undefined && count > 0 && (
-                      <span className="text-[12px] tabular-nums text-ink-tertiary" data-plugins-kind-count={count}>{count}</span>
-                    )}
-                  </button>
-                );
-              })}
+          {/* ONE row (#4453, 2026-11-16, the owner's layout): the kinds as pill
+              tabs (no counts), a separator, Yours | Discover as a segmented
+              control; then, right-aligned, the search, the filter (Discover,
+              icon only) and "+ Add". Every element is 32px high on one
+              baseline; narrow, the search shrinks, then is an icon button
+              that opens over the row; it never wraps. */}
+          <div ref={headRef} className="relative mt-3 flex h-8 items-center gap-3" data-plugins-kind-row="">
+            <div role="tablist" aria-label={t("connectApps.kind.aria")} className="flex shrink-0 items-center gap-1" data-plugins-kinds="">
+              {CONNECT_APPS_KINDS.map((id) => (
+                <button key={id} type="button" role="tab" aria-selected={kind === id} data-plugins-kind-tab={id}
+                  onClick={() => onKind?.(id)} className={kindTabClass(kind === id)}>
+                  {connectAppsKindLabel(id)}
+                </button>
+              ))}
             </div>
-            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={cn(SEGMENT_TRACK, "mb-1 shrink-0")} data-plugins-views="">
+            <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-ink/10" data-plugins-separator="" />
+            <div role="radiogroup" aria-label={t("connectApps.view.aria")} className={cn(SEGMENT_TRACK, "shrink-0")} data-plugins-views="">
               {(["installed", "discover"] as const).map((id) => (
                 <button key={id} type="button" role="radio" aria-checked={shown === id} data-plugins-view={id}
                   onClick={() => onTab(id)} className={segmentTrackOption(shown === id)}>
@@ -337,6 +330,25 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                 </button>
               ))}
             </div>
+            <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-3" data-plugins-actions="">
+              {search && !narrow && <div className="min-w-[120px] max-w-[260px] flex-1" data-plugins-search-slot="">{search}</div>}
+              {search && narrow && (
+                <button type="button" onClick={() => setSearchOpen(true)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.open")} title={t("connectApps.search.open")} data-plugins-search-toggle="">
+                  <Search size={15} aria-hidden="true" />
+                </button>
+              )}
+              {shown === "discover" && filterControl}
+              {sortControl}
+              {manageActions}
+            </div>
+            {search && narrow && searchOpen && (
+              <div className="absolute inset-0 z-10 flex items-center gap-2 bg-inset" data-plugins-search-slot="" data-plugins-search-expanded="">
+                <div className="min-w-0 flex-1">{search}</div>
+                <button type="button" onClick={() => setSearchOpen(false)} className={cn(PLUGINS.quietPill, "size-8 px-0")} aria-label={t("connectApps.search.close")} title={t("connectApps.search.close")} data-plugins-search-close="">
+                  <X size={15} aria-hidden="true" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <div
@@ -432,9 +444,10 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
   return (
     <div ref={ref} className="relative shrink-0" data-plugins-filter="">
       <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-filter-button="" onClick={() => setOpen((value) => !value)}
-        className={cn(PLUGINS.quietPill, "h-8 gap-1.5 px-3 text-[13px]", filter !== "all" && "text-ink")}>
-        <ListFilter size={13} aria-hidden="true" />
-        {filter === "all" ? t("connectApps.filter.button") : label(filter)}
+        aria-label={filter === "all" ? t("connectApps.filter.button") : `${t("connectApps.filter.button")}: ${label(filter)}`}
+        title={filter === "all" ? t("connectApps.filter.button") : label(filter)}
+        className={cn(PLUGINS.quietPill, "size-8 px-0", filter !== "all" && "bg-ink/[0.14] text-ink")}>
+        <ListFilter size={15} aria-hidden="true" />
       </button>
       {open && (
         <div role="menu" aria-label={t("connectApps.filtersAria")} className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
@@ -449,6 +462,45 @@ export function DiscoverFilter({ chips, filter, onPick, label }: { chips: readon
       )}
     </div>
   );
+}
+
+/** How a list is ordered: the lists' own order, by name, or what is on first. */
+export type ConnectAppsSort = "default" | "name" | "on";
+
+/** The sort icon button of the control row (two opposed arrows): only the
+ * keys that have data here (name everywhere; "on first" on Yours). */
+export function SortControl({ sort, onSort, options }: { sort: ConnectAppsSort; onSort: (sort: ConnectAppsSort) => void; options: readonly ConnectAppsSort[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  usePopoverDismiss(open, ref, () => setOpen(false));
+  const LABEL: Record<ConnectAppsSort, LocaleKey> = { default: "connectApps.sort.default", name: "connectApps.sort.name", on: "connectApps.sort.on" };
+  return (
+    <div ref={ref} className="relative shrink-0" data-plugins-sort="">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} data-plugins-sort-button="" onClick={() => setOpen((value) => !value)}
+        aria-label={t("connectApps.sort.button")} title={t("connectApps.sort.button")}
+        className={cn(PLUGINS.quietPill, "size-8 px-0", sort !== "default" && "bg-ink/[0.14] text-ink")}>
+        <ArrowUpDown size={15} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" aria-label={t("connectApps.sort.button")} className={cn(MENU_SURFACE, "absolute right-0 top-9 z-20 min-w-48")}>
+          {options.map((option) => (
+            <button key={option} type="button" role="menuitemradio" aria-checked={sort === option} data-plugins-sort-option={option}
+              onClick={() => { setOpen(false); onSort(option); }} className={sort === option ? MENU_ROW_ACTIVE : MENU_ROW}>
+              <span className="min-w-0 flex-1 truncate">{t(LABEL[option])}</span>
+              {sort === option && <Check size={14} className="shrink-0" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Rows in the chosen order; "default" leaves the list's own. Stable. */
+export function sortRows<T>(rows: readonly T[], sort: ConnectAppsSort, nameOf: (row: T) => string, onOf: (row: T) => boolean): T[] {
+  if (sort === "name") return [...rows].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  if (sort === "on") return [...rows].sort((a, b) => Number(onOf(b)) - Number(onOf(a)));
+  return [...rows];
 }
 
 /** The title bar's "..." (#4453): Bot templates, Published pages, Sources. */
@@ -479,6 +531,52 @@ function MoreViewsMenu({ views, onPick, onRefresh, refreshing }: { views: Readon
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The cards of Discover (#4453, the owner's layout): two columns of
+ * rounded tiles. */
+export const CARD_GRID = "@container grid grid-cols-2 gap-3 *:min-w-0 *:@max-[560px]:col-span-full";
+
+/** A Discover card: a square icon tile; the name (a reviewed mark when the
+ * item comes from the reviewed catalog) and, where it applies, a small
+ * outlined chip; two lines of description; a last grey line (Added with a
+ * check when it is installed, then where it comes from); at the top right the
+ * item's action (the square "+" Install menu) or a green check. */
+export function DiscoverCard({ item, onOpen, action, from, sub }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; /** where it comes from, in words */ from?: string; sub?: string }) {
+  const opens = item.installed;
+  const reviewed = item.source === "catalog";
+  const chip = !item.installed && item.action === "add" && (item.kind === "featured" || item.kind === "mcp" || item.kind === "app") ? t("connectApps.card.noSignIn") : null;
+  return (
+    <div data-plugin-row={item.key} data-discover-card="" className="flex items-start gap-3 rounded-2xl border-[0.5px] border-ink/[0.1] bg-ink/[0.015] p-3 transition-colors hover:bg-ink/[0.04] motion-reduce:transition-none">
+      <button type="button" disabled={!opens} onClick={() => onOpen(item)} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left disabled:cursor-default"
+        aria-label={opens ? t("connectApps.openAria", { name: item.name }) : undefined}>
+        <PluginIcon item={item} className="size-12 rounded-xl" />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0")}>{item.name}</span>
+            {reviewed && <BadgeCheck size={14} className="shrink-0 text-accent-text" aria-label={t("connectApps.card.verified")} data-card-verified="" />}
+            {chip && <span className="shrink-0 rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary" data-card-chip="">{chip}</span>}
+          </span>
+          <span className={PLUGINS.rowSub} title={item.description}>{sub ?? item.description}</span>
+          {(item.installed || from) && (
+            <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-tertiary" data-card-meta="">
+              {item.installed && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 text-success" data-card-added="">
+                  <Check size={11} aria-hidden="true" />{t("connectApps.card.added")}
+                </span>
+              )}
+              {from && <span className="min-w-0 truncate">{from}</span>}
+            </span>
+          )}
+        </span>
+      </button>
+      <div className="shrink-0" data-card-action="">
+        {item.installed && !action ? (
+          <span className="flex size-8 items-center justify-center rounded-lg bg-success/10 text-success" data-card-installed=""><Check size={15} aria-hidden="true" /></span>
+        ) : action}
+      </div>
     </div>
   );
 }

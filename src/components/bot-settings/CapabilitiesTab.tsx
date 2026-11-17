@@ -28,6 +28,7 @@ import {
   type Capability,
 } from "@/lib/capabilities";
 import { Switch } from "../SettingsPrimitives";
+import { fromOrganization } from "@/lib/capability-kinds";
 import { ItemTrailer, ITEM_ROW_ATTR, type ItemMenuActions } from "../plugins/ItemTrailer";
 
 const CHIP = "shrink-0 rounded-full px-2 py-0.5 text-[12px] leading-4";
@@ -125,7 +126,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
             {t("capabilities.panel.empty", { name: botName })}
           </div>
         ) : (
-          <ul className={menuActions ? "flex flex-col gap-0.5" : "flex flex-col overflow-hidden rounded-2xl border border-hairline-weak bg-elevated"}>
+          <ul className={menuActions ? "flex flex-col divide-y divide-hairline-weak" : "flex flex-col overflow-hidden rounded-2xl border border-hairline-weak bg-elevated"}>
             {(fold !== undefined && !all ? items.slice(0, fold) : items).map((item) => (
               <CapabilityRow
                 key={item.key}
@@ -230,21 +231,25 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   const about = builtinDescription(item) ?? item.description;
   if (plain) {
     const Glyph = item.form === "plugin" || item.form === "flow" ? Puzzle : item.form === "skill" ? BookOpen : Plug;
+    // required by the organization: it cannot be turned off, so no switch, and the line says so
+    const required = item.state === "imposed";
+    const origin = required ? t("connectApps.origin.required") : fromOrganization(item) ? t("connectApps.origin.org") : null;
+    const line = [origin, source].filter(Boolean).join(" \u00b7 ");
     return (
       <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} {...(item.product ? { "data-capability-product": item.product } : {})} data-capability-scope={item.scope} data-capability-state={item.state} {...{ [ITEM_ROW_ATTR]: "" }}
-        className="rounded-2xl px-3 transition-colors hover:bg-ink/[0.05] motion-reduce:transition-none">
+        className="px-3">
         <div className={cn("flex min-w-0 items-center gap-3 py-3", item.supersededBy && "flex-wrap")}>
           <button type="button" aria-expanded={expanded} onClick={onExpand} aria-label={t("capabilities.row.openAria", { name })}
             className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><Glyph size={18} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>
-              <span className="mt-px block truncate text-[12px] leading-4 text-ink-secondary" title={source}>{source}</span>
+              <span className="mt-px block truncate text-[12px] leading-4 text-ink-secondary" title={line} data-capability-origin={origin ? "" : undefined}>{line}</span>
             </span>
-            {tone && <span className={cn("shrink-0 text-[12px] leading-4", tone === "good" ? "text-success" : tone === "warn" ? "text-warning" : "text-ink-secondary")} data-capability-state-chip="" title={reason ?? undefined}>{stateWord(item.state)}</span>}
+            {tone && !required && <span className={cn("shrink-0 text-[12px] leading-4", tone === "good" ? "text-success" : tone === "warn" ? "text-warning" : "text-ink-secondary")} data-capability-state-chip="" title={reason ?? undefined}>{stateWord(item.state)}</span>}
           </button>
           {actions}
-          <ItemTrailer name={name} where={scopeWord(item.scope)} on={switchable || lockedReason ? item.enabled : undefined}
+          <ItemTrailer name={name} where={scopeWord(item.scope)} on={required ? undefined : switchable || lockedReason ? item.enabled : undefined}
             onToggle={switchable && !busy ? onToggle : undefined} busy={busy || locked && switchable} lockedReason={lockedReason} actions={menu} />
         </div>
         {item.supersededBy && <p data-capability-superseded="" className="pb-2.5 pl-[52px] text-[12px] leading-4 text-ink-secondary">{reason}</p>}

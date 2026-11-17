@@ -57,6 +57,7 @@ try {
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, colorScheme: scheme });
   const page = await context.newPage();
   page.on("pageerror", (error) => console.error("page error:", error.stack));
+  page.on("response", (res) => { if (res.status() >= 400 && !res.url().endsWith("/api/events")) console.log("api", res.status(), res.request().method(), new URL(res.url()).pathname); });
   const shot = async (name) => {
     await page.waitForTimeout(600);
     const file = join(outDir, `${name}-${tag}.png`);
@@ -79,9 +80,9 @@ try {
     });
     const head = await page.evaluate(() => {
       const h = document.querySelector("[data-plugins-head]"); const k = document.querySelector("[data-plugins-kind-row]");
-      const slot = document.querySelector("[data-plugins-head] [data-plugins-search-slot]");
+      const slot = document.querySelector("[data-plugins-kind-row] [data-plugins-search-slot]");
       if (!h) return null;
-      return { headH: Math.round(h.getBoundingClientRect().height), tabsLineH: Math.round(k?.getBoundingClientRect().height ?? 0), searchW: Math.round(slot?.getBoundingClientRect().width ?? 0), iconSearch: Boolean(document.querySelector("[data-plugins-search-toggle]")) };
+      return { headH: Math.round(h.getBoundingClientRect().height), tabsLineH: Math.round(k?.getBoundingClientRect().height ?? 0), searchW: Math.round(slot?.getBoundingClientRect().width ?? 0), iconSearch: Boolean(document.querySelector("[data-plugins-search-toggle]")), rowW: Math.round(k?.getBoundingClientRect().width ?? 0), kinds: Math.round(document.querySelector("[data-plugins-kinds]")?.getBoundingClientRect().width ?? 0), views: Math.round(document.querySelector("[data-plugins-views]")?.getBoundingClientRect().width ?? 0), actions: Math.round(document.querySelector("[data-plugins-actions]")?.getBoundingClientRect().width ?? 0), alert: document.querySelector("[role=alert]")?.textContent ?? null };
     });
     console.log("head", name, JSON.stringify(head));
     console.log("sizes", name, JSON.stringify(report.sizes), report.off.length ? `OFF ${JSON.stringify(report.off)}` : "");
@@ -142,8 +143,10 @@ try {
   await shot("08-discover-filter-open");
   await page.keyboard.press("Escape");
   await page.mouse.click(5, 5);
+  // the Install menu (For all my bots, For one bot...): a plugin, which a person may put on one bot
+  await kind("plugins");
   await view("discover");
-  await clickIf("[data-install-button]");
+  await clickIf('[data-install-button][aria-haspopup="menu"]');
   await shot("09-install-menu");
   await page.keyboard.press("Escape");
   await page.mouse.click(5, 5);
@@ -156,6 +159,17 @@ try {
   await page.click("[data-plugins-more-button]");
   await shot("11-more-menu");
   await page.keyboard.press("Escape");
+
+  // Plugins: Yours with the console's section, Yours with none of their own (the first banner), Discover
+  await kind("plugins");
+  await view("installed");
+  await shot("15-plugins-yours-organization-section");
+  await open("view=manage&role=member&products=many&empty=plugins");
+  await kind("plugins");
+  await view("installed");
+  await shot("16-plugins-yours-empty-banner");
+  await view("discover");
+  await shot("17-plugins-discover");
 
   // opened from a bot's page: the same window, the title carries the bot's name
   await open("view=manage&role=member&bot=1&products=many");

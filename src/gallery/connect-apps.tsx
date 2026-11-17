@@ -324,6 +324,25 @@ if (params.has("products")) {
   for (const product of served) MANAGE_API[`/api/me/perspicax/products/${product.id}`] = { product };
 }
 
+// #4453: what the organization console offers or requires of the person, per
+// kind (invented names): in the console's section at the top of each kind
+if (params.has("products") && !admin) {
+  const offered = (id: string, form: "plugin" | "skill" | "mcp", name: string, description: string, mode: "offered" | "imposed", on: boolean, version?: string) => ({
+    id, mount: id, form, name, description, mode, enabled: true, state: on ? "installed" : "off", on, canToggle: mode === "offered", ...(version ? { version } : {}),
+  });
+  MANAGE_API["/api/me/org-capabilities"] = { owner: "perspicax", items: [
+    offered("oc-1", "plugin", "Harbor Toolkit", "Templates and checks for the service desk", "offered", false, "1.2.0"),
+    offered("oc-2", "plugin", "Compliance Pack", "The organization's review rules", "imposed", true, "0.9.4"),
+    offered("oc-3", "skill", "Weekly summary", "Writes the week's recap", "offered", true),
+    offered("oc-4", "mcp", "Team search", "Searches the shared drive", "offered", false),
+  ] };
+}
+// ?empty=plugins: a person with no plugin of their own (the first-block banner)
+if (params.get("empty") === "plugins") {
+  const mine = MANAGE_API["/api/me/plugins"] as { plugins: unknown[]; marketplaces: Array<{ plugins: Array<{ installed: boolean }> }> };
+  MANAGE_API["/api/me/plugins"] = { ...mine, plugins: [], marketplaces: mine.marketplaces.map((market) => ({ ...market, plugins: market.plugins.map((plugin) => ({ ...plugin, installed: false })) })) };
+}
+
 // ?superseded=1: the real member panel, with an obsolete bot tenant copy.
 // All /api responses and the removal stay inside this gallery.
 const superseded = params.has("superseded");

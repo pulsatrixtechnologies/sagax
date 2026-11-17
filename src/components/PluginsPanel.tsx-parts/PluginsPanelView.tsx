@@ -30,7 +30,7 @@ import { productRows, type ProductRowsContext } from "../plugins/ProductRows";
 import { ItemTrailer, type ChooseBots, type ItemMenuActions } from "../plugins/ItemTrailer";
 import { InstallMenu } from "../plugins/InstallMenu";
 import { usePersonProducts } from "@/lib/person-products";
-import { ConnectAppsView, DiscoverFilter, connectAppsTabLabel, filterChips, filterLabel, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import { ConnectAppsView, DiscoverFilter, SortControl, connectAppsTabLabel, filterChips, filterLabel, type ConnectAppsSort, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
 import { BotCatalogPane } from "../lazy-bot-catalog";
@@ -82,6 +82,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   const products = usePersonProducts((scope === "me" || scope === "bot") && perspicaxOrg !== null);
   // what the console offers the person, of each kind (their own switch)
   const orgMine = useOrgCapabilitiesForMe(personalHere && perspicaxOrg !== null);
+  const [sort, setSort] = useState<ConnectAppsSort>("default");
   const marketError = s.marketError;
   const marketNeedsToken = s.marketNeedsToken;
 
@@ -106,7 +107,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   };
   // #4453: a row of Discover is "Install" with a small menu (For all my
   // bots, For one bot...); opened from a bot's page it installs on that bot.
-  const discoverAction = (item: PluginItem) => {
+  const discoverAction = (item: PluginItem, variant: "card" | "banner" = "card") => {
     const menuBots = editableBots.map((bot) => ({ id: bot.id, name: bot.name }));
     const listing = personalListing(item);
     const handled = item.key === WHOP_KEY || item.key === TAILSCALE_KEY || grokRowAction(item) !== undefined;
@@ -118,7 +119,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       const busy = scope === "workspace" ? installing === item.id : botBusy === `install:${item.id}`;
       if (scope === "bot") return <button type="button" data-bot-plugin-add={item.id} disabled={botBusy !== null} onClick={allBots} className={pluginActionClass()}>{busy ? <Loader2 size={13} className="mx-auto animate-spin" /> : label}</button>;
       return (
-        <InstallMenu name={item.name} label={label} busy={busy} disabled={installing !== null || botBusy !== null} onAll={allBots}
+        <InstallMenu iconOnly={variant === "card"} name={item.name} label={label} busy={busy} disabled={installing !== null || botBusy !== null} onAll={allBots}
           bots={scope === "me" && at > 0 ? menuBots : undefined}
           onBot={(botId) => { void installBotPlugin(botId, item.id.slice(at + 1), item.id.slice(0, at)).then(() => refreshAll(), (cause) => setPanelError(readableError(cause))); }} />
       );
@@ -127,7 +128,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       const oneBot = !listing && scope !== "bot" && menuBots.length > 0;
       const busy = installing === item.id || (listing !== null && personal.connecting === item.id);
       return (
-        <InstallMenu name={item.name} label={label} busy={busy} disabled={installing !== null || personal.connecting !== null}
+        <InstallMenu iconOnly={variant === "card"} name={item.name} label={label} busy={busy} disabled={installing !== null || personal.connecting !== null}
           onAll={(anchor) => {
             if (listing) { setPanelError(null); void personal.connect(listing).catch((cause: unknown) => setPanelError(readableError(cause))); return; }
             void installFeatured(item, undefined, anchor);
@@ -410,6 +411,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           kindCounts={kindCounts}
           botName={scope === "bot" ? scopeBot?.name : undefined}
           filterControl={filterControl}
+          sortControl={<SortControl sort={sort} onSort={setSort} options={tab === "discover" ? ["default", "name"] : ["default", "name", "on"]} />}
           scopeNote={scopeControl}
           manageActions={addActions.length > 0 ? <AddMenu actions={addActions} filled /> : undefined}
           search={searchField}
@@ -421,14 +423,16 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           onRefresh={() => { refreshAll(); void harness.load(true); if (personalHere) { void personal.refresh(); void products.refresh(); } }}
           installed={(
             <InstalledView
+              sort={sort}
               loading={mcp.servers === null}
               kind={kind}
               entries={entries}
               personal={personalHere ? personal.rows : undefined}
               // #4453: the console's section: one row per vendor, its products under it
-              products={(scope === "me" || scope === "bot") && perspicaxOrg !== null ? productRows(products.products, productCtx) : undefined}
+              products={(scope === "me" || scope === "bot") && perspicaxOrg !== null ? productRows(sort === "name" ? [...products.products].sort((a, b) => a.name.localeCompare(b.name)) : products.products, productCtx) : undefined}
               consoleTitle={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
               consoleHasExtras={scope === "me" && orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length > 0}
+              consoleCount={scope === "me" ? orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length : 0}
               consoleExtras={scope === "me" ? <OrgCapabilitiesForMe key={orgRevision ?? ""} bare state={orgMine} forms={declarationForms(kind)} /> : undefined}
               entryTrailer={entryTrailer}
               skillTrailer={skillTrailer}
@@ -502,6 +506,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           )}
           discover={(
             <DiscoverView
+              sort={sort}
               kind={kind}
               items={discoverItems(scopedItems, state.pluginsFocusApps ?? undefined)}
               loading={mcp.servers === null || (scope !== "workspace" && scopedPluginView === null)}

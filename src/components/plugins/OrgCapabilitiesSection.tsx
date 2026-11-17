@@ -13,7 +13,7 @@
 // No new page and no bot panel tab: this section lives where the
 // Organization scope is already chosen.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { BookOpen, ChevronRight, LoaderCircle, Pencil, Plug, Plus, Puzzle, Trash2 } from "lucide-react";
 
 import { useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
@@ -110,16 +110,21 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false }: { fo
   const shown = orgCapabilitiesOfForms({ items } as OrgCapabilitiesForMeState, forms);
   if (shown.length === 0) return null;
   const rows = (
-    <ul className={bare ? "flex flex-col gap-0.5" : "divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]"}>
+    <ul className={bare ? "flex flex-col divide-y divide-hairline-weak" : "divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]"}>
       {shown.map((item) => {
         const state = installWords(item.state, item.enabled);
         return (
-          <li key={item.id} data-org-capability={item.form} data-org-capability-mode={item.mode} data-item-row="" className={cn("flex items-center gap-3", bare ? "rounded-2xl px-3 py-3 hover:bg-ink/[0.05]" : "px-3 py-2")}>
+          <li key={item.id} data-org-capability={item.form} data-org-capability-mode={item.mode} data-item-row="" className={cn("flex items-center gap-3", bare ? "px-3 py-3" : "px-3 py-2")}>
+            {bare && (
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary" aria-hidden="true">
+                {item.form === "plugin" ? <Puzzle size={18} /> : item.form === "skill" ? <BookOpen size={18} /> : <Plug size={18} />}
+              </span>
+            )}
             <span className="min-w-0 flex-1">
               <span className="block break-words text-[13px] font-medium leading-[18px] text-ink">{item.name}</span>
-              <span className="block text-[12px] leading-4 text-ink-secondary">{[formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
+              <span className="block text-[12px] leading-4 text-ink-secondary" data-org-capability-origin="">{[bare ? t(item.mode === "imposed" ? "connectApps.origin.required" : "connectApps.origin.offered") : "", formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
             </span>
-            <span className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink-secondary" data-org-capability-mode-chip="">{modeWords(item.mode)}</span>
+            {!bare && <span className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink-secondary" data-org-capability-mode-chip="">{modeWords(item.mode)}</span>}
             {item.canToggle ? (
               busy === item.id
                 ? <LoaderCircle size={14} className="mx-3 animate-spin text-ink-secondary motion-reduce:animate-none" aria-hidden="true" />

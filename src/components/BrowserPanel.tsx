@@ -89,7 +89,9 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const recordingNow = useRef(false);
   const recordedAt = useRef("");
   const recordingViewer = useRef("");
-  const autoTeach = useRef(teach);
+  // One automatic start per time teaching is asked. A window already open
+  // keeps this LiveBrowser mounted, so the flag follows the prop (#4208).
+  const teachArmed = useRef(false);
   const startRecordingNow = useRef<() => void>(() => {});
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   // Whether the hold must outlast idle time, for a control created later.
@@ -196,7 +198,6 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       browserControl.current.keep(keepNow.current);
       setConnected(true);
       if (recordingNow.current) recordingViewer.current = expected;
-      if (autoTeach.current && allowedNow.current) { autoTeach.current = false; startRecordingNow.current(); }
     });
     // A ready event alone is not recovery: a flapping stream can open and
     // fail immediately. Reset the retry budget only after a live heartbeat.
@@ -321,9 +322,20 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       setRecording(true);
       // the demonstration is the person's: keep control until they stop
       browserControl.current?.takeNow();
-    } catch (cause) { setError(readableError(cause)); }
+    } catch (cause) {
+      teachArmed.current = false;
+      setError(readableError(cause));
+    }
   };
   startRecordingNow.current = () => { void startRecording(); };
+  // Start once the view is ready, including when Teach a task arrives after
+  // the window was already open (the teach prop flips, this view stays).
+  useEffect(() => {
+    if (!teach) { teachArmed.current = false; return; }
+    if (!connected || !allowed || taught || recordingNow.current || teachArmed.current || !viewer.current) return;
+    teachArmed.current = true;
+    startRecordingNow.current();
+  }, [teach, connected, allowed, taught]);
   const stopRecording = async () => {
     try {
       // the last keys typed belong to the recording

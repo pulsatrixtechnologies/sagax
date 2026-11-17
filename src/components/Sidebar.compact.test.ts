@@ -1,6 +1,7 @@
 // The compact sidebar (the reference design's "Activer ou désactiver la barre latérale
-// compacte"): the icons rail, its toggle in the rail's foot, Enter on the
-// edge, its arrow keys. The head keeps no collapse button (Sidebar.header).
+// compacte"): the icons rail, its expand button in the rail's foot, Enter on
+// the edge, its arrow keys. The head leads with "Collapse sidebar" (#4484),
+// the reference's button (sidebar panel icon, first in its top button row).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,22 +51,27 @@ afterEach(() => {
 });
 
 describe("compact sidebar", () => {
-  it("gives the rail a toggle back to the full sidebar, pressed, in its foot", () => {
+  it("gives the rail an Expand sidebar button back to the full sidebar, in its foot", () => {
     fixture.density = "icons";
     const html = render();
     const toggle = (html.match(/<button[^>]*data-sidebar-compact-toggle[^>]*>/g) ?? [])[0] ?? "";
-    expect(toggle).toContain('aria-pressed="true"');
-    expect(toggle).toContain('aria-label="Turn the compact sidebar on or off"');
-    expect(toggle).toContain('title="Show the full sidebar"');
+    expect(toggle).toContain('aria-expanded="false"');
+    expect(toggle).toContain('aria-label="Expand sidebar"');
+    expect(toggle).toContain('title="Expand sidebar"');
+    expect(html).not.toContain("data-sidebar-collapse");
     // in the foot, not the head
     expect(html.indexOf("data-sidebar-compact-toggle")).toBeGreaterThan(html.indexOf("data-sidebar-foot"));
     expect(html).toContain("data-sidebar-rail");
     expect(html).toContain('aria-description="Enter turns the compact sidebar on or off"');
   });
 
-  it.each(["comfortable", "compact"] as const)("has no rail toggle or rail keys at %s density", (density) => {
+  it.each(["comfortable", "compact"] as const)("leads the head with Collapse sidebar, first, with no rail toggle or rail keys at %s density", (density) => {
     fixture.density = density;
     const html = render();
+    const collapse = (html.match(/<button[^>]*data-sidebar-collapse[^>]*>/g) ?? [])[0] ?? "";
+    expect(collapse).toContain('aria-label="Collapse sidebar"');
+    expect(collapse).toContain('aria-expanded="true"');
+    expect(html.indexOf("data-sidebar-collapse")).toBeLessThan(html.indexOf("data-sidebar-search"));
     expect(html).not.toContain("data-sidebar-compact-toggle");
     expect(html).not.toContain("data-sidebar-rail");
   });
@@ -74,8 +80,12 @@ describe("compact sidebar", () => {
     fixture.density = "icons";
     setLocale("fr");
     const html = render();
-    expect(html).toContain('aria-label="Activer ou désactiver la barre latérale compacte"');
-    expect(html).toContain('title="Afficher la barre latérale complète"');
+    expect(html).toContain('aria-label="Agrandir la barre latérale"');
     expect(html).toContain('aria-description="Entrée active ou désactive la barre latérale compacte"');
+  });
+
+  it("names the head's collapse button in Québec French", () => {
+    setLocale("fr");
+    expect(render()).toContain('aria-label="Réduire la barre latérale"');
   });
 });

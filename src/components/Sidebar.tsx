@@ -87,7 +87,7 @@ import { useOrgPeople } from "@/lib/perspicax-org";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { BotRoleTag, PersonLabelTag } from "./LabelTag";
 import { nudgeLineText } from "@/lib/nudge-line";
-import { ChevronsRight, Layers, LogOut, UserRound } from "lucide-react";
+import { Layers, LogOut, PanelLeft, UserRound } from "lucide-react";
 import { backgroundThreads, personThreads } from "../../shared/background-threads";
 import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
@@ -199,9 +199,9 @@ export { parseItemDrag, currentArchivableBot, botConfirmCopy, roomDeleteCopy, si
 /** The head's round buttons (search, New): the header's 36px circle ("...",
  * gear, close), painted from the sidebar's own tokens (fill, ring, glyph), the
  * glyph at CIRCLE_ICON like every round control (#4163), with the same focus
- * ring as its neighbours. There is no collapse button: dragging
- * the sidebar's edge narrower than the snap width collapses it (see
- * `sidebarDragTarget`). */
+ * ring as its neighbours. The collapse button leads the row, as in the
+ * reference ("Collapse sidebar", the sidebar panel icon); dragging the edge
+ * narrower than the snap width collapses it too (see `sidebarDragTarget`). */
 export const SIDEBAR_HEAD_BUTTON = cn(
   SIDEBAR_CIRCLE_BUTTON,
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
@@ -2464,7 +2464,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   const { accountPlaces, archivedBots } = roster;
   // Search and New: in the head's row at full width, in the rail's foot
   // (#4093, the reference's rail keeps its controls at the bottom).
-  const headButtons = (
+  const railButtons = (
     <>
       <button
         type="button"
@@ -2488,6 +2488,26 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       >
         <Plus {...CIRCLE_ICON} aria-hidden="true" />
       </button>
+    </>
+  );
+  // The head also leads with the reference's collapse button; the rail keeps
+  // its own expand button in the foot, so its controls are Search and New only.
+  const headButtons = (
+    <>
+      {viewport !== "phone" && (
+        <button
+          type="button"
+          data-sidebar-collapse
+          aria-expanded="true"
+          onClick={() => setSidebarCollapsed(true)}
+          aria-label={t("sidebar.collapse")}
+          title={t("sidebar.collapse")}
+          className={SIDEBAR_HEAD_BUTTON}
+        >
+          <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
+        </button>
+      )}
+      {railButtons}
     </>
   );
 
@@ -2658,13 +2678,13 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           <button
             type="button"
             data-sidebar-compact-toggle
-            aria-pressed="true"
+            aria-expanded="false"
             onClick={() => setSidebarCollapsed(false)}
-            aria-label={t("sidebar.compact.toggle")}
-            title={t("sidebar.compact.turnOff")}
+            aria-label={t("sidebar.expand")}
+            title={t("sidebar.expand")}
             className="flex h-9 w-full items-center justify-center rounded-lg px-2 text-sidebar-ink-secondary outline-none hover:bg-sidebar-hover hover:text-sidebar-ink focus-visible:ring-1 focus-visible:ring-accent/60"
           >
-            <ChevronsRight size={20} aria-hidden="true" />
+            <PanelLeft size={20} aria-hidden="true" />
           </button>
         )}
         {density === "icons" && (
@@ -2676,7 +2696,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         {density === "icons" ? (
           <>
             {/* the wide foot's row, stacked: the avatar and the apps grid */}
-            <SidebarRailFoot places={accountPlaces} onOpenApps={() => dispatch({ type: "togglePlugins", open: true })} controls={headButtons} />
+            <SidebarRailFoot places={accountPlaces} onOpenApps={() => dispatch({ type: "togglePlugins", open: true })} controls={railButtons} />
           </>
         ) : (
           // The foot (reference design): the account pill, your avatar and

@@ -90,6 +90,10 @@ describe("Settings in server mode", () => {
     expect(card).toContain('aria-label="Copy email"');
     expect(html).not.toMatch(/>Change<\/button>/);
     expect(html).not.toContain("Switch server");
+    // the reference card (#4457): a small "Account" label above it, the organization on a Team row
+    expect(html).toMatch(/data-account-team[^>]*>.*Team.*Example/);
+    expect(html.indexOf(">Account<")).toBeLessThan(html.indexOf('data-settings-card="general.account"'));
+    expect(html.indexOf("data-account-team")).toBeLessThan(html.indexOf('data-settings-card="general.aboutMe"'));
   });
 
   it("reads Se déconnecter in French", () => {
@@ -98,6 +102,7 @@ describe("Settings in server mode", () => {
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com", profileManagedBy: "perspicax", profileManageUrl: "https://px.example.test/console/me" };
     const html = render();
     expect(html).toContain("Se déconnecter");
+    expect(html).toContain("Équipe");
     expect(html).toContain("Ajouter une étiquette");
     expect(html).toContain("Géré par ton organisation");
     expect(html).toContain("Modifier dans Perspicax");
@@ -108,7 +113,9 @@ describe("Settings in server mode", () => {
     fixture.serverMode = { active: true, name: "Example", origin: "https://bot.example.test" };
     fixture.viewer = { principalId: "pr_jean", name: "Jean Tremblay", email: "jean@example.com" };
     const html = render();
-    expect(html).toContain(">Connected to bot.example.test · Organization: Example</div>");
+    // the server's address here, the organization on the Team row (said once)
+    expect(html).toContain(">Connected to bot.example.test</div>");
+    expect(html).toMatch(/data-account-team[^>]*>.*Team.*Example/);
     expect(html).not.toContain("Managed by your organization");
     expect(html).toContain("Sign out</button>");
   });
@@ -135,7 +142,9 @@ describe("Settings in server mode", () => {
     expect(html.match(/data-settings-card="general\.(?:account|profile|serverMode)"/g)).toEqual(['data-settings-card="general.account"']);
     expect(html).toContain('aria-label="Your name"');
     expect(html).toContain("Add a label");
-    expect(html).toContain('aria-label="Switch server: This Mac"');
+    expect(html).toMatch(/<button type="button" aria-haspopup="menu" aria-expanded="false" class="ui-button">Add account<\/button>/);
+    expect(html).not.toContain("Switch server");
+    expect(html).not.toContain("data-account-team");
     expect(html).not.toContain("data-account-help");
     expect(html).not.toContain("Managed by your organization");
     expect(html).not.toContain("Edit in Perspicax");

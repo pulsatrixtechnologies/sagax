@@ -1,10 +1,14 @@
 // Settings > General > Account: the account row of the Account group
 // (2026-10-15 one card; 0.5.6 the reference design's layout).
 //
-//   [avatar]  Name                                         [Sign out]
+//   [avatar]  Name                           [Add account] [Sign out]
 //             label (pencil on hover)
 //             email [copy]
 //             Managed by your organization · Edit in Perspicax
+//   Team  <the organization signed in to; no row on a solo install>
+//
+// The reference's account card (#4457, the owner 2026-11-17): a 44px avatar,
+// 14px gap, the page's 14px side padding, the page's plain pill buttons (30px).
 //
 // On an organization server (Pulsatrix Perspicax) the name and email are
 // Perspicax's and read-only; the signed-in person changes their own photo
@@ -12,12 +16,12 @@
 // 2026-10-16); the server and the organization stay one
 // hover away, on "Managed by your organization". On a personal server the
 // operator edits name, email and photo here; the label stays; the action is
-// the desktop's server switcher instead of Sign out. Sign out is the
+// Add account (the desktop server list) beside Sign out. Sign out is the
 // desktop's server mode bridge (src/lib/launch.ts): it asks natively, signs
 // out and returns to the launch screen, unchanged. No help paragraph: the
 // native confirmation says what Sign out does.
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Cloud, Copy, Laptop, X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { openExternalLink } from "@/lib/app-links";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
@@ -67,11 +71,15 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
   // own photo here; it is written to Perspicax as them (OwnAvatarField).
   const ownPhotoPrincipal = managed && viewer && !viewer.operator ? viewer.principalId?.trim() || null : null;
   const workspace = useDesktopWorkspace();
-  const switcher = !lockedServer && workspace.available;
 
-  const action = lockedServer
-    ? <SignOutButton onFailed={setSignOutFailed} />
-    : switcher ? <ServerSwitchButton workspace={workspace} /> : null;
+  const action = lockedServer || workspace.available
+    ? (
+      <>
+        {workspace.available && <AddAccountButton workspace={workspace} />}
+        {lockedServer && <SignOutButton onFailed={setSignOutFailed} />}
+      </>
+    )
+    : null;
   const details = accountServerDetails({ origin: lockedServer?.origin, organization });
 
   return (
@@ -79,7 +87,6 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
       role="group"
       aria-label={t("settings.profile.title")}
       data-settings-card="general.account"
-      className="px-3.5 py-2.5"
     >
       {operator
         ? <OperatorIdentity action={action} />
@@ -114,14 +121,21 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
                   </>
                 )}
               </div>
-            ) : lockedServer && details ? (
-              <div className="mt-0.5 truncate text-[12px] leading-4 text-ink-secondary" data-server-connected="">{details}</div>
+            ) : lockedServer && lockedServer.origin ? (
+              // the organization's name is the Team row's: the server's address only
+              <div className="mt-0.5 truncate text-[12px] leading-4 text-ink-secondary" data-server-connected="">{t("settings.serverMode.connectedTo", { server: host(lockedServer.origin) })}</div>
             ) : null}
           </ReadOnlyIdentity>
         )}
-      <OwnAvatarStatusLine status={photoStatus} />
-      {signOutFailed && <p role="alert" className="mt-2 text-[12px] text-danger">{t("settings.serverMode.signOutFailed")}</p>}
-      {workspace.error && <p role="alert" className="mt-2 text-[12px] text-danger">{workspace.error}</p>}
+      {organization && (
+        <div data-account-team="" className="flex min-w-0 items-baseline gap-2 px-3.5 pb-[15px] text-[13px] leading-[18px]">
+          <span className="shrink-0 text-ink-secondary">{t("settings.account.team")}</span>
+          <span className="min-w-0 truncate text-ink">{organization}</span>
+        </div>
+      )}
+      <div className="px-3.5"><OwnAvatarStatusLine status={photoStatus} /></div>
+      {signOutFailed && <p role="alert" className="px-3.5 pb-3 text-[12px] text-danger">{t("settings.serverMode.signOutFailed")}</p>}
+      {workspace.error && <p role="alert" className="px-3.5 pb-3 text-[12px] text-danger">{workspace.error}</p>}
     </div>
   );
 }
@@ -166,11 +180,11 @@ function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action, children }: 
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 text-left" data-testid="account-identity">
+    <div className="flex items-center gap-3.5 px-3.5 py-5 text-left" data-testid="account-identity">
       {avatar ?? (avatarUrl ? (
-        <img src={avatarUrl} alt="" width={36} height={36} className="size-9 shrink-0 rounded-full object-cover" />
+        <img src={avatarUrl} alt="" width={44} height={44} className="size-11 shrink-0 rounded-full object-cover" />
       ) : (
-        <InitialsAvatar initials={profileInitials({ name, email })} size={36} />
+        <InitialsAvatar initials={profileInitials({ name, email })} size={44} />
       ))}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-medium leading-[18px] text-ink">{profileLabel({ name, email })}</div>
@@ -178,7 +192,7 @@ function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action, children }: 
         <EmailLine email={email} />
         {children}
       </div>
-      {action && <div className="shrink-0" data-account-action="">{action}</div>}
+      {action && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2" data-account-action="">{action}</div>}
     </div>
   );
 }
@@ -201,22 +215,18 @@ function SignOutButton({ onFailed }: { onFailed: (failed: boolean) => void }) {
   );
 }
 
-/** The desktop's own server list (native menu), on this computer's page. */
-function ServerSwitchButton({ workspace }: { workspace: ReturnType<typeof useDesktopWorkspace> }) {
-  const name = workspace.current?.name ?? t("settings.thisComputer.title");
-  const Icon = workspace.current?.local === false ? Cloud : Laptop;
+/** "Add account": the desktop's own server list (native menu), where another
+ * account or server is added or chosen. */
+function AddAccountButton({ workspace }: { workspace: ReturnType<typeof useDesktopWorkspace> }) {
   return (
     <button
       type="button"
-      aria-label={t("settings.thisComputer.switch", { name })}
       aria-haspopup="menu"
       aria-expanded={workspace.open}
       onClick={workspace.openMenu}
-      className="ui-button inline-flex max-w-[200px] items-center gap-1.5"
+      className="ui-button"
     >
-      <Icon size={13} aria-hidden="true" className="shrink-0" />
-      <span className="min-w-0 truncate">{name}</span>
-      <ChevronDown size={12} aria-hidden="true" className="shrink-0" />
+      {t("settings.account.addAccount")}
     </button>
   );
 }
@@ -297,7 +307,7 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
 
   const initials = (name.trim() || email.trim() || "?").slice(0, 1).toUpperCase();
   return (
-    <div className="flex items-center gap-3" data-testid="account-identity">
+    <div className="flex items-center gap-3.5 px-3.5 py-5" data-testid="account-identity">
       <div ref={avatarRootRef} className="relative shrink-0">
         <button
           ref={avatarButtonRef}
@@ -305,7 +315,7 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
           aria-label={t("settings.profile.changeAvatar")}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}
-          className="flex size-9 items-center justify-center overflow-hidden rounded-full bg-raised text-[13px] font-semibold text-ink"
+          className="flex size-11 items-center justify-center overflow-hidden rounded-full bg-raised text-[13px] font-semibold text-ink"
         >
           {avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : initials}
         </button>
@@ -325,7 +335,7 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
           {email.trim() && <OperatorCopyEmail email={email.trim()} />}
         </div>
       </div>
-      {action && <div className="shrink-0" data-account-action="">{action}</div>}
+      {action && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2" data-account-action="">{action}</div>}
     </div>
   );
 }

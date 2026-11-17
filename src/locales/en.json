@@ -9210,6 +9210,8 @@
   "settings.microphone.allowed": "Allowed",
   "settings.tours.title": "Guided tours",
   "settings.account.copyEmail": "Copy email",
+  "settings.account.addAccount": "Add account",
+  "settings.account.team": "Team",
   "settings.account.emailCopied": "Email copied",
   "composer.plus.aria": "Composer actions",
   "composer.plus.attach": "Attach files",

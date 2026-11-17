@@ -9179,6 +9179,8 @@
   "settings.microphone.allowed": "Autorisé",
   "settings.tours.title": "Visites guidées",
   "settings.account.copyEmail": "Copier le courriel",
+  "settings.account.addAccount": "Ajouter un compte",
+  "settings.account.team": "Équipe",
   "settings.account.emailCopied": "Courriel copié",
   "composer.plus.aria": "Actions de la barre de message",
   "composer.plus.attach": "Joindre des fichiers",

@@ -12,7 +12,7 @@ import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { withTourReset } from "@/lib/guided-tour";
 import { completionPatch } from "@/lib/onboarding";
-import { CompactRow, LinkRow, SettingsGroup } from "../SettingsPrimitives";
+import { CompactRow, DescribedRow, LinkRow, SettingsGroup } from "../SettingsPrimitives";
 import { OpenAtLoginRow } from "../OpenAtLoginOffer";
 import { isSoloDesktop, SendFeedbackRow } from "./AdvancedSettings";
 import { OrganizationBotRows } from "./OrganizationBotRules";
@@ -28,7 +28,7 @@ import { localeChoices } from "@/locales";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/language-preference";
 import { PillSelect } from "../SettingsPrimitives";
 import { aboutMeFirstLine } from "../AboutMeSettings";
-import { SettingsSubPageRow, useSettingsPage } from "../SettingsSubPage";
+import { useSettingsPage } from "../SettingsSubPage";
 import { NotificationQuickRows } from "../lazy-settings-sections";
 import { AccountCard, type LockedServer } from "./AccountCard";
 import { MicrophonePermissionRow, MicrophoneSettings } from "./MicrophoneSettings";
@@ -109,17 +109,20 @@ export function GeneralPage({ remoteActive = false, lockedServer = null }: { rem
   return (
     <>
       {scope.allowed("account") && (
-        <SettingsGroup groupId="account">
+        <SettingsGroup title={t("settings.section.account")} groupId="account">
           <AccountCard lockedServer={lockedServer} />
-          {/* #3432: each person's own About me (#3424), for a member too */}
-          <SettingsSubPageRow
-            bare
-            cardId="general.aboutMe"
-            title={t("settings.profile.aboutMe")}
-            summary={aboutMeFirstLine(state.config?.profile?.aboutMe)}
-            actionLabel={t("settings.aboutMe.edit")}
-            onOpen={() => scope.openSubPage("general.aboutMe")}
-          />
+          {/* #3432: each person's own About me (#3424), for a member too; the reference card has no such row, so it follows Team with the same plain pill button */}
+          <div data-settings-card="general.aboutMe" data-settings-subpage-row>
+            <DescribedRow
+              label={t("settings.profile.aboutMe")}
+              description={aboutMeFirstLine(state.config?.profile?.aboutMe)}
+              rowId="general.aboutMe"
+            >
+              <button type="button" onClick={() => scope.openSubPage("general.aboutMe")} className="ui-button">
+                {t("settings.aboutMe.edit")}
+              </button>
+            </DescribedRow>
+          </div>
         </SettingsGroup>
       )}
 

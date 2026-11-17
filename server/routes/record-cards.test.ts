@@ -132,17 +132,18 @@ describe("record card route", () => {
   it("an organization Refuse rule blocks the read with no call", async () => {
     const h = harness({ rule: { kind: "deny", rule: { id: "org-1", text: "Ne jamais lire Nimbus Desk" } } });
     const answer = await h.request(`${PATH}?confirm=1`);
+    // `confirm` is not a way past a Refuse rule
     expect(answer.body).toEqual({ state: "org_refused", rule: { id: "org-1", text: "Ne jamais lire Nimbus Desk" } });
     expect(h.calls).toEqual([]);
   });
 
-  it("an organization Ask first rule answers org_ask until the person's click confirms", async () => {
-    const h = harness({ rule: { kind: "ask", rule: { id: "org-2", text: "Demander avant de lire Nimbus Desk" } } });
-    expect((await h.request(PATH)).body).toEqual({ state: "org_ask", rule: { id: "org-2", text: "Demander avant de lire Nimbus Desk" } });
-    expect(h.calls).toEqual([]);
-    expect((await h.request(`${PATH}?confirm=1`)).body.card).toMatchObject({ id: "481516" });
+  it("reads at once, with no button, whatever the organization's Ask first rule: there is no org_ask answer and `confirm` means nothing", async () => {
+    // an Ask first rule never reaches the route as a decision (recordReadOrgRule drops it)
+    const h = harness({ rule: { kind: "none" } });
+    const first = await h.request(PATH);
+    expect(first.body.card).toMatchObject({ id: "481516" });
     expect(h.calls).toHaveLength(1);
-    expect(h.ruleCalls).toEqual(["p-ada", "p-ada"]);
+    expect((await h.request(`${PATH}?confirm=1`)).body.card).toMatchObject({ id: "481516" });
   });
 });
 
@@ -201,10 +202,10 @@ describe("the organization's rules on a person's read", () => {
     id: "r", ownerId: "p-admin", botId: null, when: "lire Nimbus Desk", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, ...extra,
   });
 
-  it("a Refuse or Ask first rule of the organization covers the read of that product", () => {
+  it("a Refuse rule of the organization covers the read of that product; an Ask first rule does not stop it", () => {
     expect(recordReadOrgRule([rule({ id: "o1", org: true, behavior: "deny", products: ["nimbus_desk"] })], REF, "Nimbus Desk")).toEqual({ kind: "deny", rule: { id: "o1", text: "lire Nimbus Desk" } });
-    expect(recordReadOrgRule([rule({ id: "o2", org: true, behavior: "ask", when: "Lire Nimbus Desk" })], REF, "Nimbus Desk")).toEqual({ kind: "ask", rule: { id: "o2", text: "Lire Nimbus Desk" } });
-    // Refuse wins over Ask first
+    expect(recordReadOrgRule([rule({ id: "o2", org: true, behavior: "ask", when: "Lire Nimbus Desk" })], REF, "Nimbus Desk")).toEqual({ kind: "none" });
+    // an Ask first rule never hides a Refuse
     expect(recordReadOrgRule([
       rule({ id: "o2", org: true, behavior: "ask", products: ["nimbus_desk"] }),
       rule({ id: "o1", org: true, behavior: "deny", products: ["nimbus_desk"] }),

@@ -5,7 +5,7 @@ import {
   optimisticImageAttachment, handoffAttachmentImagePreview, releaseAttachmentImagePreview,
   type AttachmentUploadSession, type FileAttachment, type ImageAttachment,
 } from "./composer-attachments.ts";
-import { appendDraftAttachments, changeDraftAttachmentPending, currentDraftAttachments, replaceDraftAttachment } from "./drafts.ts";
+import { appendDraftAttachments, changeDraftAttachmentPending, currentDraftAttachments, isNetworkOffline, replaceDraftAttachment } from "./drafts.ts";
 
 interface UploadTask {
   draftId: string;
@@ -14,13 +14,42 @@ interface UploadTask {
   controller: AbortController;
   running: boolean;
   completed: boolean;
+  /** A dropped connection: the same task resumes when the network returns. */
+  interrupted: boolean;
   session?: AttachmentUploadSession;
 }
 const tasks = new Map<string, UploadTask>();
+let listeningForOnline = false;
+
+function uploadInterrupted(error: unknown): boolean {
+  if (isNetworkOffline()) return true;
+  if (typeof error === "object" && error !== null && "name" in error && (error as { name?: string }).name === "AbortError") return false;
+  if (error instanceof TypeError) return true;
+  const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: number }).status) : NaN;
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function listenForUploadResume(): void {
+  if (listeningForOnline) return;
+  listeningForOnline = true;
+  const target = globalThis as unknown as Partial<Pick<EventTarget, "addEventListener">>;
+  target.addEventListener?.("online", () => { resumeInterruptedAttachmentUploads(); });
+}
+
+/** Continues an interrupted upload on the same task, file and upload id. */
+export function resumeInterruptedAttachmentUploads(): void {
+  if (isNetworkOffline()) return;
+  for (const task of tasks.values()) {
+    if (!task.interrupted || task.running || task.completed || !task.file) continue;
+    task.interrupted = false;
+    void run(task);
+  }
+}
 
 async function run(task: UploadTask): Promise<void> {
   const file = task.file;
   if (!file) return;
+  task.interrupted = false;
   task.attachment = { ...task.attachment, uploading: true, uploadError: undefined };
   const { attachment, draftId } = task;
   task.running = true;
@@ -52,6 +81,8 @@ async function run(task: UploadTask): Promise<void> {
     if (!task.session) tasks.delete(attachment.id);
   } catch (error) {
     if (!task.controller.signal.aborted && tasks.has(attachment.id)) {
+      task.interrupted = uploadInterrupted(error);
+      if (task.interrupted) listenForUploadResume();
       task.attachment = { ...task.attachment, uploading: false, uploadError: error instanceof Error ? error.message : "Upload failed" };
       replaceDraftAttachment(draftId, attachment.id, task.attachment);
     }
@@ -66,7 +97,7 @@ export async function startAttachmentUpload(draftId: string, file: File, image: 
   // so a multi-file pick is measured in order against one message budget.
   const attachment = image ? optimisticImageAttachment(file, currentDraftAttachments(draftId)) : optimisticFileAttachment(file);
   if (!attachment) return false;
-  const task: UploadTask = { draftId, file, attachment, controller: new AbortController(), running: false, completed: false };
+  const task: UploadTask = { draftId, file, attachment, controller: new AbortController(), running: false, completed: false, interrupted: false };
   tasks.set(attachment.id, task);
   appendDraftAttachments(draftId, [attachment]);
   await run(task);

@@ -3,6 +3,7 @@ import {
   attachmentUploadStateForTests,
   cancelAttachmentUpload,
   forgetAttachmentUploads,
+  resumeInterruptedAttachmentUploads,
   retryAttachmentUpload,
   startAttachmentUpload,
 } from "./attachment-uploads.ts";
@@ -49,6 +50,21 @@ describe("uploads tied to a draft", () => {
     expect(getDraftAttachments(store, draft)).toMatchObject([{ path: "/attachments/notes.txt" }]);
     expect(getDraftAttachments(store, other)).toEqual([]);
     expect(isDraftAttachmentPending(draft)).toBe(false);
+  });
+
+  it("resumes an interrupted upload on the same file and upload id when the network returns", async () => {
+    vi.stubGlobal("navigator", { onLine: false });
+    const fetcher = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
+    await startAttachmentUpload(draft, new File(["notes"], "notes.txt", { type: "text/plain" }), false);
+    const [failed] = getDraftAttachments(store, draft);
+    expect(failed).toMatchObject({ uploading: false, uploadError: "offline" });
+    const firstUrl = String(fetcher.mock.calls[0]![0]);
+    vi.stubGlobal("navigator", { onLine: true });
+    fetcher.mockResolvedValue(saved());
+    resumeInterruptedAttachmentUploads();
+    await expect.poll(() => getDraftAttachments(store, draft)).toMatchObject([{ path: "/attachments/notes.txt" }]);
+    expect(getDraftAttachments(store, draft)).toHaveLength(1);
+    expect(String(fetcher.mock.calls.at(-1)![0])).toBe(firstUrl);
   });
 
   it("retains one failed chip and retries the same File and upload id", async () => {

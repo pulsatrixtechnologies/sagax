@@ -6,9 +6,9 @@
 // electron/mac-apps.mjs). The setup page then reads them over IPC.
 
 import { messagesOnBotMac, type MessagesHost } from "./imessage.ts";
-import type { MacAppSetupAction } from "./mac-apps-setup.ts";
+import type { MacAppSetupAction, MessagesPermissionState } from "./mac-apps-setup.ts";
 
-export type MessagesPermissionState = "granted" | "denied" | "unknown" | "notAsked" | "unsupported";
+export type { MessagesPermissionState } from "./mac-apps-setup.ts";
 
 export type MessagesPermissionId = "fullDiskAccess" | "automation";
 

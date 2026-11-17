@@ -2,7 +2,6 @@
 // Messages keeps its own setup (shared/mac-messages-setup.ts); the others share
 // one setup page. The same status comes from the solo server (/api/mac-apps) or,
 // with an organization server, from the desktop app over IPC (window.ogb.macApps).
-import type { MessagesPermissionState } from "./mac-messages-setup.ts";
 
 export const MAC_APP_SETUP_IDS = ["messages", "mail", "calendar", "contacts", "reminders", "notes"] as const;
 export type MacAppSetupId = (typeof MAC_APP_SETUP_IDS)[number];
@@ -34,6 +33,9 @@ export function macAppPrivacyAnchor(pane: MacAppPermissionNeed): string {
 
 /** One thing bots can do with an app (electron/mac-apps.mjs MAC_APP_TOOLS):
  * the tool, its class, the permission it needs and whether it is granted. */
+/** A macOS permission as the desktop reads it (Messages and every This Mac app). */
+export type MessagesPermissionState = "granted" | "denied" | "unknown" | "notAsked" | "unsupported";
+
 export type MacAppSetupAction = {
   tool: string;
   kind: "read" | "write" | "delete" | "send";

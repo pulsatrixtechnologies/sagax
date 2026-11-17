@@ -5,6 +5,8 @@
 // can never be imported from a plain unit test. This one function has no
 // dependency on that module and can be driven directly with a fake response.
 
+import { streamRecordText, withoutRecordLinks } from "../../shared/record-cards.ts";
+
 /** Shape broadcast() needs from an SSE client: a writable response, and the
  * one flag that survives across frames — whether its socket already told us
  * it can't keep up. */
@@ -94,6 +96,10 @@ export function mergeRuntimeDeltaEvents(
  * stream before flushing one shared SSE frame to every client. */
 export const SSE_DELTA_COALESCE_MS = 16;
 
+/** #4507: the longest a streamed part that could still become a record link
+ * waits for its next chunk before it goes out as it is (address removed). */
+export const RECORD_LINK_HOLD_MS = 1_500;
+
 /** Holds consecutive content.delta runtime payloads and flushes one shared
  * serialized frame per stream. Used by broadcast so 20 SSE clients do not
  * each pay a stringify, and so a token burst becomes one write per client. */
@@ -105,6 +111,11 @@ export class SseRuntimeDeltaCoalescer {
   private lastStreamed = new Map<string, string>();
   private readonly flush: (payload: Record<string, unknown>) => void;
   private readonly coalesceMs: number;
+  /** #4507: per stream, the text held back while it could still become a
+   * record link (`[#481516](sagax://record/...)` split across chunks), so no
+   * client ever draws a record address a bot typed. Only a part that starts
+   * like one waits; ordinary text never does. */
+  private held = new Map<string, { text: string; template: Record<string, unknown>; threadId: string; timer: ReturnType<typeof setTimeout> }>();
 
   constructor(flush: (payload: Record<string, unknown>) => void, coalesceMs = SSE_DELTA_COALESCE_MS) {
     this.flush = flush;
@@ -119,9 +130,27 @@ export class SseRuntimeDeltaCoalescer {
     const key = runtimeDeltaStreamKey(event);
     if (!key) {
       this.flushAll();
-      if (typeof event.threadId === "string") this.lastStreamed.delete(event.threadId);
+      if (typeof event.threadId === "string") {
+        this.releaseHeld(event.threadId);
+        this.lastStreamed.delete(event.threadId);
+      }
       return false;
     }
+    const threadOf = String(event.threadId);
+    // another stream of this thread starts: what the last one held goes out
+    this.releaseHeld(threadOf, key);
+    const before = this.held.get(key);
+    if (before) clearTimeout(before.timer);
+    const split = streamRecordText(before?.text ?? "", String(event.delta));
+    if (split.held) {
+      const timer = setTimeout(() => this.releaseHeld(threadOf), RECORD_LINK_HOLD_MS);
+      timer.unref?.();
+      this.held.set(key, { text: split.held, template: payload, threadId: threadOf, timer });
+    } else {
+      this.held.delete(key);
+    }
+    if (!split.ready) return true;
+    payload = { ...payload, event: { ...event, delta: split.ready } };
     const existing = this.pending.get(key);
     if (existing) {
       const merged = mergeRuntimeDeltaEvents(existing.payload, payload);
@@ -149,6 +178,21 @@ export class SseRuntimeDeltaCoalescer {
       const key = this.pending.keys().next().value;
       if (key === undefined) break;
       this.release(key);
+    }
+  }
+
+  /** Send what this thread's streams held (every stream but `keep`), each
+   * after its own pending text, with any record address removed. */
+  private releaseHeld(threadId: string, keep?: string): void {
+    for (const [key, entry] of this.held) {
+      if (entry.threadId !== threadId || key === keep) continue;
+      this.held.delete(key);
+      clearTimeout(entry.timer);
+      this.release(key);
+      const text = withoutRecordLinks(entry.text);
+      if (!text) continue;
+      const event = entry.template.event as Record<string, unknown>;
+      this.flush({ ...entry.template, event: { ...event, delta: text } });
     }
   }
 

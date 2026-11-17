@@ -1149,16 +1149,26 @@ describe("PerspicaxMcp records on a tool result (#4507)", () => {
     expect(result.content).toEqual([...content, { type: "text", text: "Mention it as [#481516](sagax://record/nimbus_desk/ticket/481516)." }]);
   });
 
-  it("sends an outbound tool's words with each record link reduced to its label", async () => {
+  it("sends every console tool's arguments with each record link reduced to its label", async () => {
     const h = harness({ mcp: answering({ content }) });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
     const args = { to: "+15550100", body: "Votre billet [#481516](sagax://record/nimbus_desk/ticket/481516) est fermé." };
     await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "nimbus_messaging_send_message", arguments: args } } });
     const sent = h.mcpCalls.find((entry) => entry.body?.method === "tools/call" && entry.body.id === 9)!;
     expect(sent.body.params.arguments).toEqual({ to: "+15550100", body: "Votre billet #481516 est fermé." });
-    // a read keeps its arguments as they are
-    await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "nimbus_desk_query", arguments: { q: "[#1](sagax://record/nimbus_desk/ticket/1)" } } } });
-    expect(h.mcpCalls.find((entry) => entry.body?.id === 10)!.body.params.arguments).toEqual({ q: "[#1](sagax://record/nimbus_desk/ticket/1)" });
+    // every console tool: a write (a ticket note), a memory write, a query
+    const rows: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
+      ["nimbus_desk_write", { resource: "ticket_notes", set: { text: "Suivi de [#481516](sagax://record/nimbus_desk/ticket/481516)." } }, { resource: "ticket_notes", set: { text: "Suivi de #481516." } }],
+      ["memory_write", { text: "Le client attend [#481516](sagax://record/nimbus_desk/ticket/481516)" }, { text: "Le client attend #481516" }],
+      ["nimbus_desk_query", { q: "[#1](sagax://record/nimbus_desk/ticket/1)", limit: 5 }, { q: "#1", limit: 5 }],
+      ["nimbus_desk_query", { q: "plain words", limit: 5 }, { q: "plain words", limit: 5 }],
+    ];
+    let id = 10;
+    for (const [name, args, expected] of rows) {
+      id += 1;
+      await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } } });
+      expect(h.mcpCalls.find((entry) => entry.body?.id === id)!.body.params.arguments, name).toEqual(expected);
+    }
   });
 
   it("names the person a turn was started for, not whoever speaks into it later", async () => {

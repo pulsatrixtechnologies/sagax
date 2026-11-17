@@ -367,6 +367,55 @@ export function recordTextOf(message: { text?: string; recordText?: string }): s
   return withoutRecordLinks(linked) === message.text ? linked : message.text;
 }
 
+/** The most streamed text held back while it could still become a record
+ * link (`[label](sagax://record/...)`: an 80-character label, a short address). */
+export const RECORD_STREAM_HOLD_MAX = 256;
+const RECORD_LABEL_HOLD_MAX = 96;
+
+/** Whether `tail`, which starts with `[`, could still grow into a record link. */
+function couldBecomeRecordLink(tail: string): boolean {
+  let close = -1;
+  for (let at = 1; at < tail.length; at++) {
+    const char = tail[at];
+    if (char === "\\") { at++; continue; }
+    if (char === "\n") return false;
+    if (char === "]") { close = at; break; }
+  }
+  if (close < 0) return tail.length - 1 <= RECORD_LABEL_HOLD_MAX;
+  if (close - 1 > RECORD_LABEL_HOLD_MAX) return false;
+  const rest = tail.slice(close + 1);
+  if (!rest) return true;
+  if (rest[0] !== "(") return false;
+  const destination = rest.slice(1).replace(/^ +/, "");
+  if (/[)\s]/.test(destination)) return false;
+  const lower = destination.toLowerCase();
+  return lower.length < RECORD_LINK_PREFIX.length ? RECORD_LINK_PREFIX.startsWith(lower) : lower.startsWith(RECORD_LINK_PREFIX);
+}
+
+/**
+ * Streamed text (#4507): where the part that must wait starts, because it
+ * could still become a record link or a record address once the next chunk
+ * arrives (a `[` whose link is not finished, a `sagax:` not yet ended).
+ * Everything before goes out at once; text with no such opening is never
+ * held. Past RECORD_STREAM_HOLD_MAX nothing is held.
+ */
+export function recordLinkHoldStart(text: string): number {
+  const from = Math.max(0, text.length - RECORD_STREAM_HOLD_MAX);
+  for (let at = text.indexOf("[", from); at >= 0; at = text.indexOf("[", at + 1)) {
+    if (couldBecomeRecordLink(text.slice(at))) return at;
+  }
+  const bare = /<?sagax:[^\s"'<>)\]]*$/i.exec(text.slice(from));
+  return bare ? from + bare.index : text.length;
+}
+
+/** One chunk of a stream: what goes out now (no record address in it) and
+ * what waits for the next chunk. */
+export function streamRecordText(held: string, delta: string): { ready: string; held: string } {
+  const text = held + delta;
+  const cut = recordLinkHoldStart(text);
+  return { ready: withoutRecordLinks(text.slice(0, cut)), held: text.slice(cut) };
+}
+
 /** A record a conversation's tool results named. */
 export interface SeenRecord extends RecordRef {
   label?: string;

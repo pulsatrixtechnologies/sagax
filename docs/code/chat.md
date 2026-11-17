@@ -998,7 +998,17 @@ that draws record links reads `recordText` (`recordTextOf`, which falls back
 to `text` when the words changed since). Nothing that leaves the chat carries
 the address: a text (`smsReplyBody`), a mail draft (`normalizeDraftForSend`),
 speech (`speakable`), a push or reach-me line (`markdownToPlainText`), a
-message to another bot or room (`callCoreTool`), a page a bot publishes, and
-the arguments of an outbound console tool all reduce a link to its label
-(`withoutRecordLinks`). A message keeps the link only, never a record's
-content.
+message to another bot, a room or an agent conversation (every tool of the
+agents dispatcher, `callTool` in `server/drivers/agents-call.ts`), a page a
+bot publishes, every console tool's arguments (the Perspicax relay) and a
+tool the Claude CLI runs once allowed (the permission proxy's
+`updatedInput`) all reduce a link to its label (`withoutRecordLinks`).
+Streamed text holds back only a part that could still become a record link
+(from a `[` or a `sagax:`, 256 characters and 1.5 s at most, released at once
+when it cannot be one) and sends it without the address
+(`SseRuntimeDeltaCoalescer`, `streamRecordText`). Not covered: a tool an
+engine runs itself without asking (a connector mounted in the harness under
+Full access or the CLI's own rules, an ACP or Codex engine's own tools, whose
+permission answer cannot rewrite the input); there the relay line, "chat reply
+only", is the only protection. A message keeps the link only, never a
+record's content.

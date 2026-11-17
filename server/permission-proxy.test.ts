@@ -327,6 +327,16 @@ describe("permission proxy", () => {
     expect(resultJson(res).updatedInput.answers).toEqual({ "Which framework?": "React" });
   });
 
+  // #4507: a tool the engine runs itself (a mail or chat connector mounted
+  // in the harness) never carries the app's record address once allowed
+  it("hands an allowed tool its input with each record link reduced to its label", async () => {
+    answerWith = () => ({ behavior: "allow" });
+    const body = "Votre billet [#481516](sagax://record/nimbus_desk/ticket/481516) est fermé.";
+    rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "approve", arguments: { tool_name: "mcp__mail__send_email", input: { to: "ada@desk.example", body } } } });
+    const res = await waitFor(2);
+    expect(resultJson(res)).toEqual({ behavior: "allow", updatedInput: { to: "ada@desk.example", body: "Votre billet #481516 est fermé." } });
+  });
+
   it("still brokers an ordinary permission, with the CLI's own rules on allow", async () => {
     answerWith = () => ({ behavior: "allow", always: true });
     rpc({

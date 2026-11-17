@@ -26,6 +26,7 @@ import { parseAskQuestions, questionAnswersByQuestion, type AskQuestion } from "
 import { allowsTool, parseToolScope } from "../shared/tool-scope.ts";
 import { permissionRoute, preallowedFromEnv, searchedServersFromEnv } from "../shared/searched-tool-call.ts";
 import { reportBackgroundError } from "./background-error.ts";
+import { withoutRecordLinksIn } from "../shared/record-cards.ts";
 
 // #1276: the servers whose catalog is searched; a call_tool there is asked
 // about as the tool it runs (shared/searched-tool-call.ts).
@@ -249,7 +250,7 @@ async function handle(msg: any) {
     // another meta tool, runs nothing and is refused without a card.
     const route = isQuestion || typeof args.tool_name !== "string" ? null : permissionRoute(args.tool_name, args.input, SEARCHED, PREALLOWED, ARTIFACT_READS);
     if (route?.kind === "deny") return reply(JSON.stringify({ behavior: "deny", message: route.message }));
-    if (route?.kind === "allow") return reply(JSON.stringify({ behavior: "allow", updatedInput: args.input ?? {} } satisfies AllowPermissionResult));
+    if (route?.kind === "allow") return reply(JSON.stringify({ behavior: "allow", updatedInput: withoutRecordLinksIn(args.input ?? {}) } satisfies AllowPermissionResult));
     const runs = route?.kind === "ask" ? route : null;
     const answer: any = await askBroker(
       isQuestion
@@ -264,7 +265,8 @@ async function handle(msg: any) {
     }
     if (!isQuestion) {
       if (answer.behavior === "allow") {
-        const result: AllowPermissionResult = { behavior: "allow", updatedInput: args.input ?? {} };
+        // #4507: what the engine runs itself never carries a record address
+        const result: AllowPermissionResult = { behavior: "allow", updatedInput: withoutRecordLinksIn(args.input ?? {}) };
         if (answer.always && suggestions && !runs?.searched) result.updatedPermissions = suggestions;
         text = JSON.stringify(result);
       } else {

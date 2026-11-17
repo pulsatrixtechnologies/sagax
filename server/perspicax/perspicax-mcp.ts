@@ -34,7 +34,6 @@ import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import { productKeyStateOf, withToolNote, type ProductKeyState } from "./product-key-state.ts";
 import { parseRecordsMeta, withoutRecordLinksIn, type RecordsMetaGroup } from "../../shared/record-cards.ts";
-import { isOutboundTool } from "../../shared/outbound.ts";
 import { describedProducts, filterNamingAnswer, flowReachOf, listedToolNames, offFamilyTools, offProductOfCall, offProductOfFamilyCall, offProductOfDescribeAnswer, productOffText, sweepArgsWithoutOff, withoutOffTools, type BotProductsView } from "./bot-products-filter.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
@@ -1472,9 +1471,10 @@ export class PerspicaxMcp {
     const products = input.mapping || (frame?.method !== "tools/list" && frame?.method !== "tools/call") ? null : await this.botProductsView(input);
     const params = frame && isObject(frame.params) ? frame.params : null;
     const tool = params && typeof params.name === "string" ? params.name : "";
-    // #4507: a record link is the app's own: a send to someone outside it
-    // (a text, a mail, a call) carries the label alone
-    if (frame?.method === "tools/call" && params && isObject(params.arguments) && isOutboundTool(tool, params.arguments)) {
+    // #4507: a record link is the app's own address: no console tool needs
+    // it (a send, a ticket note, a memory write would keep it where people
+    // outside the app read it), so every call carries the label alone
+    if (frame?.method === "tools/call" && params && isObject(params.arguments)) {
       const args = withoutRecordLinksIn(params.arguments);
       if (JSON.stringify(args) !== JSON.stringify(params.arguments)) input = { ...input, frame: { ...frame, params: { ...params, arguments: args } } };
     }

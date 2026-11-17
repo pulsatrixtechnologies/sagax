@@ -12,7 +12,7 @@ import { normalizeDraftForSend } from "../shared/email-draft-send.ts";
 import { plainPreviewLine } from "../shared/plain-text.ts";
 import { recordTextOf } from "../shared/record-cards.ts";
 import { DATA_DIR } from "./config.ts";
-import { callCoreTool } from "./drivers/agents-tools/core.ts";
+import { callTool } from "./drivers/agents-call.ts";
 import type { ToolCallContext } from "./drivers/agents-call-types.ts";
 import { PublishedPages } from "./pages/published-pages.ts";
 import { smsReplyBody } from "./sms-conversation.ts";
@@ -53,14 +53,27 @@ describe("no record address leaves the chat", () => {
     expect(line).not.toMatch(NO_ADDRESS);
   });
 
-  it("a message to another bot or a room carries the label", async () => {
-    const api = vi.fn(async () => ({ threadId: "t2", state: "running", botName: "Dev", title: "Suivi" }));
-    const context = { botId: "orc", threadId: "t1", depth: 0, client: { api } } as unknown as ToolCallContext;
-    await callCoreTool("send_to_bot", { bot_id: "dev", title: "Suivi [#481516](sagax://record/nimbus_desk/ticket/481516)", message: LINKED }, context);
-    await callCoreTool("coordinate_bots", { bot_ids: ["dev"], message: LINKED }, context);
-    expect(api).toHaveBeenCalled();
-    for (const call of api.mock.calls as unknown as Array<[string, { body?: string }]>) {
-      expect(String(call[1]?.body ?? "")).not.toMatch(NO_ADDRESS);
+  it("a message to another bot, a room or an agent conversation carries the label (the tool dispatcher)", async () => {
+    const sent: string[] = [];
+    const answer = async (_path: string, init?: { body?: string }) => { sent.push(String(init?.body ?? "")); return { threadId: "t2", state: "running", botName: "Dev", title: "Suivi", text: "ok" }; };
+    const api = vi.fn(answer);
+    const apiResponse = vi.fn(async (path: string, init?: { body?: string }) => ({ ok: true, status: 200, body: await answer(path, init) }));
+    const context = { botId: "orc", threadId: "t1", depth: 0, client: { api, apiResponse } } as unknown as ToolCallContext;
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["send_to_bot", { bot_id: "dev", title: "Suivi [#481516](sagax://record/nimbus_desk/ticket/481516)", message: LINKED }],
+      ["coordinate_bots", { bot_ids: ["dev"], message: LINKED }],
+      ["post_to_room", { group_id: "g1", message: LINKED }],
+      ["ask_bot", { bot_id: "dev", message: LINKED }],
+      ["send_prompt", { agent_id: "dev", prompt: LINKED, mode: "async" }],
+    ];
+    for (const [name, args] of calls) {
+      const before = sent.length;
+      await callTool(name, args, context);
+      expect(sent.length, name).toBeGreaterThan(before);
+      for (const body of sent.slice(before)) {
+        expect(body, name).not.toMatch(NO_ADDRESS);
+        expect(body, name).toContain("#481516");
+      }
     }
   });
 
@@ -81,6 +94,10 @@ describe("no record address leaves the chat", () => {
     const relinked = store.patchMessage(bot.threadId, stored.id, { text: LINKED })!;
     expect(relinked.text).not.toMatch(NO_ADDRESS);
     expect(relinked.recordText).toBe(LINKED);
+    // words taken away (text: undefined) take the linked copy with them
+    const cleared = store.patchMessage(bot.threadId, stored.id, { text: undefined })!;
+    expect(cleared.text).toBeUndefined();
+    expect(cleared.recordText).toBeUndefined();
     // the person's own words are theirs, as typed
     const typed = store.appendMessage(bot.threadId, { role: "user", kind: "text", text: "sagax://record/nimbus_desk/ticket/1" });
     expect(typed.text).toBe("sagax://record/nimbus_desk/ticket/1");

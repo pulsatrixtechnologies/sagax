@@ -11,6 +11,7 @@
 //
 // Tool definitions and per-family handlers live under ./agents-tools/.
 import { readFileSync } from "node:fs";
+import { withoutRecordLinksIn } from "../../shared/record-cards.ts";
 import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { callCardTool, CARD_TOOL_NAMES } from "./agents-call-cards.ts";
 import { callPhoneTool, PHONE_TOOL_NAME } from "./agents-phone-tools.ts";
@@ -81,7 +82,12 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
 }
 
 
-export async function callTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
+export async function callTool(name: string, rawArgs: Json, context: ToolCallContext): Promise<ToolCallResult> {
+  // #4507: the one dispatcher of the app's own tools. A record link
+  // (`sagax://record/...`) is the chat's own address: whatever a tool hands
+  // on (a bot, a room, an agent conversation, a text, a call, a connector,
+  // a page, an engine), it carries the label alone.
+  const args = withoutRecordLinksIn(rawArgs);
   const { externalRuntime: EXTERNAL_RUNTIME } = context;
   const { apiResponse } = context.client;
 

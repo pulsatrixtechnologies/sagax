@@ -2440,7 +2440,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     // #3515: a bot's text patched in (its final words, a routine's report) is stored without run markers
     // #4507: new words drop the old linked copy; record links ride in recordText
     const merged = { ...t.messages[idx], ...patch, card: patch.card ?? t.messages[idx].card };
-    if (patch.text !== undefined && patch.recordText === undefined) delete merged.recordText;
+    if ("text" in patch && !("recordText" in patch)) delete merged.recordText;
     const next = splitRecordText(withoutRunMarkersIn(merged));
     // SQLite is the durable source of truth. Persist before changing memory so
     // a failed write cannot make this process believe a card was answered

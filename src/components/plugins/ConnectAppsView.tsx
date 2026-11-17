@@ -342,7 +342,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                 </button>
               ))}
             </div>
-            <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-3" data-plugins-actions="">
+            <div className="ml-auto flex min-w-fit flex-1 items-center justify-end gap-3" data-plugins-actions="">
               {field && !narrow && <div className="min-w-[150px] max-w-[300px] flex-1" data-plugins-search-slot="">{field}</div>}
               {narrow && controls}
               {search && narrow && (
@@ -575,8 +575,8 @@ export const CARD_GRID = "@container grid grid-cols-2 gap-3 *:min-w-0 *:@max-[56
  * outlined chip; two lines of description; a last grey line (Added with a
  * check when it is installed, then where it comes from); at the top right the
  * item's action (the square "+" Install menu) or a green check. */
-export function DiscoverCard({ item, onOpen, action, from, sub }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; /** where it comes from, in words */ from?: string; sub?: string }) {
-  const opens = item.installed;
+export function DiscoverCard({ item, onOpen, action, from, sub, openable = false }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; /** where it comes from, in words */ from?: string; sub?: string; /** the card opens its page though it is not installed (a bundle) */ openable?: boolean }) {
+  const opens = item.installed || openable;
   const reviewed = item.source === "catalog";
   const chip = !item.installed && item.action === "add" && (item.kind === "featured" || item.kind === "mcp" || item.kind === "app") ? t("connectApps.card.noSignIn") : null;
   return (

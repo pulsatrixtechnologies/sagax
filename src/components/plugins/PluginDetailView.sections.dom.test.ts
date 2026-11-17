@@ -163,7 +163,7 @@ describe("plugin detail sections (#4154)", () => {
 
 describe("the plugin page's tabs and its quiet Details block (#4453)", () => {
   const skills = [{ name: "code-review", description: "Reviews a pull request", onOpen: vi.fn() }];
-  const connectors = [{ key: "mcp:notes", name: "Notes", item: { kind: "mcp" as const, name: "Notes" }, state: { tone: "fix" as const, text: "Needs sign-in", onFix: vi.fn() }, onOpen: vi.fn() }];
+  const connectors = [{ key: "mcp:notes", name: "Notes", item: { kind: "mcp" as const, name: "Notes" }, state: { tone: "fix" as const, text: "Needs sign-in", onFix: vi.fn() }, word: "needsSignIn" as const, onOpen: vi.fn() }];
   const withParts = (parts: Partial<PluginDetailProps>) => {
     act(() => root?.unmount());
     host?.remove();
@@ -191,13 +191,17 @@ describe("the plugin page's tabs and its quiet Details block (#4453)", () => {
     expect(panel.querySelector("li")?.textContent).toContain("Reviews a pull request");
   });
 
-  it("Connectors: a line, then rows with the name, one state icon and the page behind it", () => {
+  it("Connectors: a line, then rows with the name, its state in words and the action that fixes it", () => {
     const page = withParts({ skills, connectors });
     act(() => { (page.querySelector('[data-plugin-detail-tab="connectors"]') as HTMLElement).click(); });
     const panel = page.querySelector("[data-plugin-detail-panel='connectors']")!;
     expect(panel.textContent).toContain("Tools and data sources this connects to.");
     expect(panel.querySelector("li")?.textContent).toContain("Notes");
-    expect(panel.querySelector("[data-row-state='fix']")).not.toBeNull();
+    expect(panel.querySelector("[data-detail-connector='needsSignIn']")?.textContent).toContain("Needs sign-in");
+    const fix = panel.querySelector("[data-detail-connector-fix]") as HTMLElement;
+    expect(fix.textContent).toBe("Sign in");
+    act(() => fix.click());
+    expect(connectors[0]!.onOpen).toHaveBeenCalled();
   });
 
   it("keeps everything the Details table held, in a quiet block at the bottom of Overview", () => {

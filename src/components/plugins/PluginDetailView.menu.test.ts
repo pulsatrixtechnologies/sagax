@@ -51,22 +51,23 @@ describe("plugin detail menu", () => {
       onUpdate, onTest, onEdit: noop, onUninstall, details: [],
     })));
     expect(host.querySelector('[role="menu"]')).toBeNull();
-    // Update lives in Details (no header pill, no menu entry), like the reference app
-    expect(host.querySelector('[data-plugins-detail-primary="update"]')).toBeNull();
-    expect(host.querySelector("[data-plugin-update-row]")).not.toBeNull();
-    expect(host.querySelector("[data-plugin-update-dot]")).toBeNull();
-    // Uninstall is the header's own pill, as in the reference app's Connect Apps
-    expect(host.querySelector('[role="menu"] [data-plugin-action="uninstall"]')).toBeNull();
-    click(host.querySelector('[data-plugin-action="uninstall"]'));
-    expect(onUninstall).toHaveBeenCalledTimes(1);
+    // Update is the header's main action (the Customize page's shape), with a dot on "..."; it is not said twice in Details
+    expect(host.querySelector('[data-plugin-action="update"]')?.textContent).toBe("Update");
+    expect(host.querySelector("[data-plugin-update-row]")).toBeNull();
+    expect(host.querySelector("[data-plugin-update-dot]")).not.toBeNull();
+    click(host.querySelector('[data-plugin-action="update"]'));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    // Uninstall is in the one "..." menu (never a second pill)
+    expect(host.querySelector('[data-plugin-action="uninstall"]')).toBeNull();
     click(host.querySelector("[data-plugin-actions]"));
     const actions = [...host.querySelectorAll('[role="menu"] [data-plugin-action]')].map((node) => node.getAttribute("data-plugin-action"));
-    expect(actions).toEqual(["test", "edit"]);
+    expect(actions).toEqual(["test", "edit", "uninstall"]);
     click(host.querySelector('[data-plugin-action="test"]'));
     expect(onTest).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[role="menu"]')).toBeNull();
-    click(host.querySelector('[data-plugin-action="update-details"]'));
-    expect(onUpdate).toHaveBeenCalledTimes(1);
+    click(host.querySelector("[data-plugin-actions]"));
+    click(host.querySelector('[role="menu"] [data-plugin-action="uninstall"]'));
+    expect(onUninstall).toHaveBeenCalledTimes(1);
   });
 
   it("has no menu when the plugin offers no action", () => {

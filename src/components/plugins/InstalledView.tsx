@@ -142,6 +142,8 @@ export interface InstalledViewProps {
   readOnlyReason?: string;
   /** the sort chosen in the control row: by name, or what is on first */
   sort?: ConnectAppsSort;
+  /** #4504: a failed update said under its own row: the notices of the rows with these update keys */
+  rowNotice?: (keys: ReadonlyArray<string | undefined>) => ReactNode;
   /** whether an item has an update waiting (kind and readable name): "Updates first" */
   hasUpdate?: (kind: "plugin" | "skill" | "connector", name: string, updateKey?: string) => boolean;
 }
@@ -262,7 +264,7 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default", hasUpdate }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onToggleBotSwitch, onToggleBotServer, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, accounts, personal = [], products = [], consoleTitle, consoleExtras, consoleHasExtras = false, consoleCount = 0, kind, entryTrailer, skillTrailer, readOnlyReason, sort = "default", hasUpdate, rowNotice }: InstalledViewProps) {
   const [all, setAll] = useState(false);
   const [allOrganization, setAllOrganization] = useState(false);
   // #4453: one kind at a time; without one, every kind in one list
@@ -286,7 +288,12 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
   const shownLines = all || kind !== undefined ? lines : lines.slice(0, INSTALLED_PREVIEW);
   const accountRowCount = accountLines.filter((line) => line.kind === "account").length;
   const renderLine = (line: InstalledLine) => {
-    if (line.kind === "entry") return <InstalledRow entry={line.entry} onOpen={() => onOpenEntry(line.entry)} actions={entryActions(line.entry)} trailer={entryTrailer?.(line.entry)} />;
+    if (line.kind === "entry") return (
+      <>
+        <InstalledRow entry={line.entry} onOpen={() => onOpenEntry(line.entry)} actions={entryActions(line.entry)} trailer={entryTrailer?.(line.entry)} />
+        {rowNotice?.(line.entry.members.map((member) => member.updateKey))}
+      </>
+    );
     if (line.kind === "custom") return line.node;
     if (line.kind === "notice") return <AccountNoticeRow group={line.group} refreshing={accounts?.refreshing} onRefresh={accounts?.onRefresh} onSetUp={accounts?.onSetUp} />;
     return <AccountInstalledRow row={line.row} onOpen={accounts?.onOpen?.(line.row)} scoped={kind !== undefined} />;
@@ -438,7 +445,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
           <ul className={cn(kind ? YOURS_LIST : PLUGINS.grid, "mt-1")}>
             {shownSkills.map((skill) => {
               return (
-                <li key={skill.key} {...{ [ITEM_ROW_ATTR]: "" }} className="group flex items-center gap-2">
+                <li key={skill.key} {...{ [ITEM_ROW_ATTR]: "" }} className="group flex flex-wrap items-center gap-2">
                   <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-3 text-left">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1">
@@ -451,6 +458,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
                     {skill.status === "off" && !skillTrailer && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
                   </button>
                   {skillTrailer?.(skill)}
+                  {rowNotice && <div className="basis-full">{rowNotice([skill.updateKey])}</div>}
                 </li>
               );
             })}

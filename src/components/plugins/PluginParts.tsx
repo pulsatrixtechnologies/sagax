@@ -149,15 +149,18 @@ export function PluginStatusLabel({ status, className }: { status: PluginStatus;
 }
 
 /** The top bar of a page opened in the Plugins window (#2104, Grok Bot's
- * Connect Apps): the back chevron on the left, the page's name centred, room
- * for the window's X on the right, a hairline under it. The pages it came
- * from stay on the back button's tooltip (progressive disclosure). */
-export function PluginPageHeader({ title, trail, onBack }: {
+ * Connect Apps): the back chevron on the left, room for the window's X on the
+ * right, a hairline under it. A page that draws its own name (`named`: a
+ * plugin, a bundle, a skill, a connector) shows no title here: the bar is a
+ * back link that names where the person came from ("< Skills"), so the name is
+ * read once, in the page's header. Any other page keeps its name centred. The
+ * pages above stay on the button's tooltip (progressive disclosure). */
+export function PluginPageHeader({ title, trail, onBack, named = false }: {
   title: string;
   /** the view it came from, then the pages above this one (absent: Connect apps) */
   trail?: readonly Crumb[];
   onBack: () => void;
-  /** kept for the callers: the name is always in the bar now */
+  /** the page draws its own name: the bar is only the back link, naming the view it came from */
   named?: boolean;
 }) {
   const crumbs = trail ?? [{ label: t("connectApps.title"), onSelect: onBack }];
@@ -169,13 +172,14 @@ export function PluginPageHeader({ title, trail, onBack }: {
         onClick={onBack}
         aria-label={from ? t("connectApps.backTo", { name: from }) : t("breadcrumb.back")}
         title={crumbs.map((crumb) => crumb.label).join(" / ")}
-        className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink hover:bg-hover"
+        className={cn("flex h-8 shrink-0 items-center gap-1 rounded-full text-ink hover:bg-hover", named && from ? "min-w-0 max-w-[60%] pl-1.5 pr-3 text-[13px] leading-5" : "w-8 justify-center")}
         data-breadcrumb-back=""
         data-plugins-back=""
       >
-        <ChevronLeft size={20} aria-hidden="true" />
+        <ChevronLeft size={20} aria-hidden="true" className="shrink-0" />
+        {named && from && <span className="truncate" data-plugins-back-label="">{from}</span>}
       </button>
-      <h3 className="pointer-events-none absolute inset-x-14 truncate text-center text-[14px] font-normal leading-5 text-ink" data-plugins-page-title>{title}</h3>
+      {!named && <h3 className="pointer-events-none absolute inset-x-14 truncate text-center text-[14px] font-normal leading-5 text-ink" data-plugins-page-title>{title}</h3>}
     </div>
   );
 }

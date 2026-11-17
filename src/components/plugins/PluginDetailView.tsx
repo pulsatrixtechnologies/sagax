@@ -1,13 +1,16 @@
 // Plugins > one plugin: its switch, its accounts, its tools (each with a
 // switch for an MCP server: off means no bot sees it) and where it comes
-// from. Test, Edit and Copy link sit in one "..." menu by the name; Update
-// waits in the Details card (Grok Bot has no Update pill in the header).
+// from. #4453 (the Customize page's shape): ONE name (the bar is a back link
+// naming where the person came from), the grey source line, the main action
+// at the right (Update when there is one, the switch of a connector, and one
+// "..." menu: Test, Edit, Copy link, Uninstall), underlined tabs (Overview,
+// Contents, Skills, Connectors; only those with content).
 // 2026-10-28: the page opens inside its Connect apps tab (a back row, no
 // second title): one header with the app's real mark and its name for
 // people, the technical id and source as small metadata, where it is
 // installed (everyone, this bot) and the main action beside it.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
@@ -15,9 +18,10 @@ import { t } from "@/lib/i18n";
 import type { PluginItem, PluginStatus } from "@/lib/plugins-model";
 import { Switch } from "../SettingsPrimitives";
 import { PillTabs } from "../PillTabs";
-import { StateIcon, type RowState } from "./StateIcon";
+import type { RowState } from "./StateIcon";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
+import { ConnectorRows, DetailHeader, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, type ConnectorWord, type TreeFile } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 import { MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
 
@@ -105,21 +109,31 @@ export interface PluginDetailProps {
    * Tools first): the per-bot scope, what it adds, the notes */
   more?: ReactNode;
   /** the skills it brings, for the Skills tab (only tabs that have content are drawn) */
-  skills?: Array<{ name: string; description: string; onOpen: () => void }>;
+  skills?: Array<{ name: string; description: string; onOpen?: () => void }>;
   /** the connectors it brings, for the Connectors tab */
-  connectors?: Array<{ key: string; name: string; item: Pick<PluginItem, "kind" | "name" | "logo" | "domain"> & { key?: string }; state: RowState | null; onOpen: () => void }>;
+  connectors?: Array<{ key: string; name: string; item: Pick<PluginItem, "kind" | "name" | "logo" | "domain"> & { key?: string }; state: RowState | null; word?: ConnectorWord; onOpen?: () => void }>;
+  /** the full text under "Description" in the Overview (never in a disclosure) */
+  description?: string;
+  /** every category the data has, as chips */
+  categories?: readonly string[];
+  /** a connector it brings reaches a service on the network; absent: not known, nothing said */
+  network?: boolean;
+  /** only when it is known the item is new */
+  isNew?: boolean;
+  /** the Contents tab: the server's read-only list of the item's files (`?path=` reads one), the quiet pill, files the list leaves out */
+  files?: { listUrl: string; pill?: ReactNode; extra?: readonly TreeFile[]; count?: number; onDownload?: () => void };
 }
 
-type DetailTab = "overview" | "skills" | "connectors";
+type DetailTab = "overview" | "contents" | "skills" | "connectors";
 
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors } = props;
+  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors, description, categories, network, isNew, files } = props;
   const name = displayName ?? item.name;
   // the technical name, when people read another one
   const technical = name !== item.name ? item.name : null;
   const [linkCopied, setLinkCopied] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const tabs: DetailTab[] = ["overview", ...(skills && skills.length > 0 ? ["skills" as const] : []), ...(connectors && connectors.length > 0 ? ["connectors" as const] : [])];
+  const tabs: DetailTab[] = ["overview", ...(files ? ["contents" as const] : []), ...(skills && skills.length > 0 ? ["skills" as const] : []), ...(connectors && connectors.length > 0 ? ["connectors" as const] : [])];
   const [tab, setTab] = useState<DetailTab>("overview");
   const toolList = tools?.list ?? null;
   const enabledCount = toolList?.filter((tool) => tool.enabled).length ?? 0;
@@ -138,84 +152,64 @@ export function PluginDetailView(props: PluginDetailProps) {
   return (
     <>
       <PluginPageHeader title={name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-4 pb-8 pt-[34px] sm:px-[34px]" data-plugins-detail={item.key}>
-        <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
-          <PluginIcon item={icon ?? item} className="size-14 rounded-[14px]" />
-          <div className="min-w-0 flex-[1_1_220px] pl-0.5">
-            <h2 className="truncate text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink" data-plugins-detail-name>{name}</h2>
-            {(technical || subtitle) && (
-              <div className="truncate text-[13px] leading-5 text-ink-secondary" data-plugins-detail-meta title={[technical, subtitle].filter(Boolean).join(" · ")}>
-                {technical && <span className="font-mono text-[13px]">{technical}</span>}
-                {technical && subtitle && <span aria-hidden="true"> · </span>}
-                {subtitle}
-              </div>
-            )}
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {primaryAction}
-            <PluginActionsMenu
-              name={name}
-              busy={busy}
-              actions={[
-                onTest && { id: "test", icon: testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />, label: t("mcp.test"), onSelect: onTest },
-                onEdit && { id: "edit", icon: <Pencil size={13} />, label: t("connectApps.detail.edit"), onSelect: onEdit },
-                Boolean(link) && { id: "copy-link", icon: <Link2 size={13} />, label: t("connectApps.detail.copyLink"), onSelect: () => { void copyText(link!).then((result) => setLinkCopied(result === "copied")); } },
-              ]}
-            />
-            {onUninstall && (
-              <button type="button" disabled={busy} onClick={onUninstall} data-plugin-action="uninstall" className={cn(PLUGINS.fillPill, "h-8 px-5")}>
-                {t("connectApps.detail.uninstall")}
-              </button>
-            )}
-          </div>
-          {linkCopied && <p role="status" data-plugin-link-copied className="basis-full text-right text-[12px] text-success">{t("connectApps.detail.linkCopied")}</p>}
-        </div>
-
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-8 pt-6 sm:px-[34px]" data-plugins-detail={item.key}>
+        <DetailHeader
+          icon={<PluginIcon item={icon ?? item} className="size-14 rounded-[14px]" />}
+          name={name}
+          isNew={isNew}
+          line={[technical, subtitle].filter(Boolean).join(" \u00b7 ")}
+          actions={(
+            <>
+              {primaryAction}
+              {onUpdate && (
+                <button type="button" disabled={busy || updating} onClick={onUpdate} data-plugin-action="update" className={cn(PLUGINS.fillPill, "h-8 px-5")}>
+                  {updating ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
+                  {t("connectApps.plugin.update")}
+                </button>
+              )}
+              {enabled && <Switch checked={enabled.value} disabled={busy} onClick={enabled.onToggle} aria-label={enabled.label} data-plugin-enabled="" />}
+              <PluginActionsMenu
+                name={name}
+                busy={busy}
+                updateAvailable={Boolean(onUpdate)}
+                actions={[
+                  onTest && { id: "test", icon: testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />, label: t("mcp.test"), onSelect: onTest },
+                  onEdit && { id: "edit", icon: <Pencil size={13} />, label: t("connectApps.detail.edit"), onSelect: onEdit },
+                  Boolean(link) && { id: "copy-link", icon: <Link2 size={13} />, label: t("connectApps.detail.copyLink"), onSelect: () => { void copyText(link!).then((result) => setLinkCopied(result === "copied")); } },
+                  onUninstall && { id: "uninstall", icon: <Trash2 size={13} />, label: t("connectApps.detail.uninstall"), onSelect: onUninstall, danger: true },
+                ]}
+              />
+            </>
+          )}
+        />
+        {linkCopied && <p role="status" data-plugin-link-copied className="-mt-3 text-right text-[12px] text-success">{t("connectApps.detail.linkCopied")}</p>}
 
         {tabs.length > 1 && (
           <PillTabs variant="line" tabs={tabs} tab={tab} onTab={setTab} ariaLabel={name} idPrefix="plugin-detail"
-            label={(id) => t(id === "overview" ? "connectApps.detail.tab.overview" : id === "skills" ? "connectApps.detail.tab.skills" : "connectApps.detail.tab.connectors")}
-            after={(id) => id === "skills" ? <span className="tabular-nums text-ink-tertiary">{skills?.length}</span> : id === "connectors" ? <span className="tabular-nums text-ink-tertiary">{connectors?.length}</span> : null}
+            label={(id) => t(id === "overview" ? "connectApps.detail.tab.overview" : id === "contents" ? "connectApps.detail.tab.contents" : id === "skills" ? "connectApps.detail.tab.skills" : "connectApps.detail.tab.connectors")}
+            after={(id) => id === "contents" && files?.count ? <span className="tabular-nums text-ink-tertiary">{files.count}</span> : id === "skills" ? <span className="tabular-nums text-ink-tertiary">{skills?.length}</span> : id === "connectors" ? <span className="tabular-nums text-ink-tertiary">{connectors?.length}</span> : null}
             tabAttributes={(id) => ({ "data-plugin-detail-tab": id })} />
         )}
 
-        {tab === "skills" && skills ? (
-          <div data-plugin-detail-panel="skills" role="tabpanel" className="space-y-3">
-            <p className={PLUGINS.rowSub}>{t("connectApps.detail.skillsLine")}</p>
-            <ul className="grid gap-2">
-              {skills.map((skill) => (
-                <li key={skill.name}>
-                  <button type="button" onClick={skill.onOpen} className="flex w-full min-w-0 items-center gap-3 rounded-2xl border-[0.5px] border-ink/[0.1] p-3 text-left hover:bg-ink/[0.04]">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-raised text-ink-secondary"><BookOpen size={18} aria-hidden="true" /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium leading-[18px] text-ink">/{skill.name}</span>
-                      {skill.description && <span className="block truncate text-[12px] leading-4 text-ink-secondary">{skill.description}</span>}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {tab === "contents" && files ? (
+          <FileExplorer listUrl={files.listUrl} extra={files.extra} pill={files.pill} onDownload={files.onDownload} />
+        ) : tab === "skills" && skills ? (
+          <SkillCards skills={skills} />
         ) : tab === "connectors" && connectors ? (
-          <div data-plugin-detail-panel="connectors" role="tabpanel" className="space-y-1">
-            <p className={cn(PLUGINS.rowSub, "mb-2")}>{t("connectApps.detail.connectorsLine")}</p>
-            <ul className="flex flex-col divide-y divide-hairline-weak">
-              {connectors.map((connector) => (
-                <li key={connector.key} className="flex items-center gap-3 py-3">
-                  <button type="button" onClick={connector.onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left">
-                    <PluginIcon item={connector.item} className="size-10 rounded-[10px]" />
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-[18px] text-ink">{connector.name}</span>
-                  </button>
-                  {connector.state && <StateIcon state={connector.state} />}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ConnectorRows connectors={connectors} />
         ) : (
           <>
         {notice}
 
         {children}
+
+        <OverviewColumns
+          description={description}
+          categories={categories}
+          reach={connectors && connectors.length > 0 ? (
+            <ReachPanel network={network === true} rows={connectors.map((connector) => ({ key: connector.key, name: connector.name, state: connector.state, icon: <PluginIcon item={connector.item} className="size-5 rounded-md" /> }))} />
+          ) : undefined}
+        />
 
         {showAccounts && accounts && (
           <PluginCard title={t("connectApps.detail.accounts")}>
@@ -337,32 +331,7 @@ export function PluginDetailView(props: PluginDetailProps) {
           </details>
         )}
 
-        <section data-plugin-details-block="" className="border-t-[0.5px] border-ink/10 pt-4">
-          <h3 className="mb-1 text-[12px] leading-4 text-ink-secondary">{t("connectApps.detail.details")}</h3>
-          <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[12px] leading-4" data-plugin-details>
-            {details.map((row) => (
-              <div key={row.label} className="contents">
-                <dt className="py-2 text-ink-tertiary">{row.label}</dt>
-                <dd className={cn("min-w-0 break-all py-2 text-right text-ink-secondary", row.mono && "font-mono text-[12px]")}>{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-          {onUpdate && (
-            <div className="flex min-h-[38px] items-center justify-between gap-3 border-t-[0.5px] border-ink/10 py-1.5" data-plugin-update-row>
-              <span className="text-[13px] text-ink-secondary">{t("connectApps.plugin.updateAvailable")}</span>
-              <button type="button" disabled={busy || updating} onClick={onUpdate} data-plugin-action="update-details" className={cn(PLUGINS.fillPill, "h-7 px-3.5 text-[13px]")}>
-                {updating ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
-                {t("connectApps.plugin.update")}
-              </button>
-            </div>
-          )}
-          {enabled && (
-            <label className="flex min-h-[38px] items-center justify-between gap-3 border-t-[0.5px] border-ink/10 py-1.5 text-[13px] text-ink-secondary" data-plugin-enabled>
-              {t("connectApps.detail.enabled")}
-              <Switch checked={enabled.value} disabled={busy} onClick={enabled.onToggle} aria-label={enabled.label} />
-            </label>
-          )}
-        </section>
+        <DetailsBlock rows={details} />
           </>
         )}
       </div>

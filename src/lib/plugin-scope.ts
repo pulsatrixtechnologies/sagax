@@ -31,7 +31,7 @@ export function botScopeMarketplaces(view: BotPluginsView): Array<{
   plugins: Array<{
     name: string; description?: string; version?: string; category?: string; homepage?: string; icon?: string; installed: boolean; servers: string[]; skills: string[];
     convertedFrom?: string; notConverted?: string[];
-    installedVersion?: string; updateAvailable?: boolean;
+    installedVersion?: string; updateAvailable?: boolean; updateKey?: string;
   }>;
 }> {
   return view.marketplaces.map((market) => ({
@@ -54,6 +54,7 @@ export function botScopeMarketplaces(view: BotPluginsView): Array<{
       installed: plugin.installed,
       ...(plugin.installed && plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
       ...(plugin.installed && plugin.updateAvailable ? { updateAvailable: true } : {}),
+      ...(plugin.installed && plugin.updateKey ? { updateKey: plugin.updateKey } : {}),
       servers: [],
       skills: [],
     })),

@@ -125,16 +125,20 @@ function safeRelativeFile(directory: string, relativePath: string): string | nul
   return absolute;
 }
 
-function listFolderFiles(directory: string | null): SkillFolderFile[] {
+/** A folder's files (symbolic links and big files left out). A skill's list leaves its SKILL.md to the editor and
+ * hidden names out; a plugin's (`whole`) keeps both, since its manifest and .mcp.json are hidden files, but never .git,
+ * node_modules or the folder Sagax keeps the pre-configuration texts in. */
+export function listFolderFiles(directory: string | null, whole = false): SkillFolderFile[] {
   if (!directory) return [];
   try {
     if (!lstatSync(directory).isDirectory()) return [];
   } catch {
     return [];
   }
+  const limit = whole ? SUPPORTING_MAX_FILES * 4 : SUPPORTING_MAX_FILES;
   const out: SkillFolderFile[] = [];
   const walk = (dir: string) => {
-    if (out.length >= SUPPORTING_MAX_FILES) return;
+    if (out.length >= limit) return;
     let names: string[];
     try {
       names = readdirSync(dir).sort();
@@ -142,7 +146,7 @@ function listFolderFiles(directory: string | null): SkillFolderFile[] {
       return;
     }
     for (const name of names) {
-      if (name.startsWith(".")) continue;
+      if (whole ? name === ".git" || name === "node_modules" : name.startsWith(".")) continue;
       const absolute = join(dir, name);
       let stat;
       try {
@@ -157,9 +161,10 @@ function listFolderFiles(directory: string | null): SkillFolderFile[] {
       }
       if (!stat.isFile() || stat.size > SUPPORTING_MAX_BYTES) continue;
       const relativePath = relative(directory, absolute).split(sep).join("/");
-      if (relativePath === "SKILL.md") continue;
+      if (!whole && relativePath === "SKILL.md") continue;
+      if (whole && relativePath.startsWith(".claude-plugin/sagax-originals/")) continue;
       out.push({ path: relativePath, bytes: stat.size, kind: fileKind(relativePath) });
-      if (out.length >= SUPPORTING_MAX_FILES) return;
+      if (out.length >= limit) return;
     }
   };
   walk(directory);

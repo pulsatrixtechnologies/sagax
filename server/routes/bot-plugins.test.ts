@@ -172,6 +172,52 @@ describe("personal plugins use the signed-in person's encrypted scope", () => {
   });
 });
 
+describe("what an installed plugin holds, read only", () => {
+  it("lists and reads a person's own plugin, never someone else's, never outside its folder", async () => {
+    const { call } = await boot();
+    await call("pr_alice", "POST", "/api/me/plugins/marketplaces", { source: "acme/tools" });
+    await call("pr_alice", "POST", "/api/me/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    const listed = await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files");
+    expect(listed.status).toBe(200);
+    const paths = (listed.body.files as Array<{ path: string; kind: string }>).map((file) => file.path);
+    expect(paths).toEqual(expect.arrayContaining([".claude-plugin/plugin.json", "agents/critic.md", "commands/review.md"]));
+    expect(paths.some((path) => path.includes("sagax-originals") || path.startsWith(".git/"))).toBe(false);
+    const read = await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files?path=commands%2Freview.md");
+    expect(read).toMatchObject({ status: 200, body: { kind: "text", text: "Review the diff" } });
+    // a path outside the folder is refused
+    expect((await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files?path=..%2F..%2Fconfig.json")).status).toBe(400);
+    expect((await call("pr_alice", "GET", "/api/me/plugins/reviewer%40acme-tools/files?path=nope.md")).status).toBe(404);
+    // Bob has no such plugin: his own scope is empty
+    expect((await call("pr_bob", "GET", "/api/me/plugins/reviewer%40acme-tools/files")).status).toBe(404);
+    // read only
+    expect((await call("pr_alice", "POST", "/api/me/plugins/reviewer%40acme-tools/files", {})).status).toBe(404);
+  });
+
+  it("reads a bot's plugin for who may use the bot, and hides a bot from who may not", async () => {
+    const { call } = await boot();
+    await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/marketplaces", { source: "acme/tools" });
+    await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    expect((await call("pr_bob", "GET", "/api/bots/alice-bot/plugins/reviewer%40acme-tools/files")).status).toBe(200);
+    expect((await call("pr_carol", "GET", "/api/bots/alice-bot/plugins/reviewer%40acme-tools/files")).status).toBe(404);
+  });
+});
+
+describe("what an installation's plugin holds, read only (managers)", () => {
+  it("lists and reads the installed plugin for a manager, refuses a path outside it and a plugin not installed", async () => {
+    const { call, shared } = await boot();
+    await call(ADMIN, "POST", "/api/marketplaces", { source: "acme/tools" });
+    expect((await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files")).status).toBe(404);
+    await shared.prepare("acme-tools", "reviewer", ADMIN, { principal: ADMIN, seesAll: true });
+    await shared.recordInstall("acme-tools", "reviewer", { servers: [], skills: [] });
+    const listed = await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files");
+    expect(listed.status).toBe(200);
+    expect((listed.body.files as Array<{ path: string }>).map((file) => file.path)).toEqual(expect.arrayContaining(["agents/critic.md", "commands/review.md"]));
+    expect(await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files?path=agents%2Fcritic.md")).toMatchObject({ status: 200, body: { kind: "text" } });
+    expect((await call(ADMIN, "GET", "/api/marketplaces/acme-tools/plugins/reviewer/files?path=..%2Fx")).status).toBe(400);
+    // (who reaches /api/marketplaces at all is the request gate's: admin only, never in CLIENT_ALLOW)
+  });
+});
+
 describe("one marketplace list, two install scopes", () => {
   it("lists the workspace's marketplaces on every bot and installs a whole plugin on one bot only", async () => {
     const { call } = await boot();

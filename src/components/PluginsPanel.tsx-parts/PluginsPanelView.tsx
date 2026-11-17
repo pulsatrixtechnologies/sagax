@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, ClipboardPaste, Compass, KeyRound, Link2, Loader2, Store, X } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardPaste, Compass, KeyRound, Link2, Loader2, Store, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { canEditConfig } from "@/lib/viewer";
 import { discoverItems, privateSkills, type InstalledEntry } from "@/lib/installed-model";
@@ -11,7 +11,7 @@ import { botSwitchPatch, installationServerName, organizationRows, visibleCapabi
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { loadBotPlugins, installPlugin as installBotPlugin, uninstallPlugin as uninstallBotPlugin } from "@/lib/my-connections";
 import { normalProductId } from "../../../shared/bot-products";
-import { declarationForms, entryKind, groupByVendor, kindCounts as countKinds, kindOf, whereLabel, type ConnectAppsKind } from "@/lib/capability-kinds";
+import { declarationForms, entryKind, groupByVendor, inLanguage, kindCounts as countKinds, kindOf, whereLabel, type ConnectAppsKind } from "@/lib/capability-kinds";
 import { botPluginState } from "@/lib/plugin-scope";
 import { api } from "@/state/store";
 import { openSettings } from "@/lib/settings-link";
@@ -26,7 +26,7 @@ import {
 import { DeveloperLink } from "../settings/DeveloperLink";
 import { MyGithubSummary } from "../settings/MyConnectionsSettings";
 import { usePersonalMcp } from "../plugins/PersonalServers";
-import { productRows, VendorArt, type ProductRowsContext } from "../plugins/ProductRows";
+import { productRows, VendorArt, vendorLine, vendorOnCount, type ProductRowsContext } from "../plugins/ProductRows";
 import { ItemTrailer, type ChooseBots, type ItemMenuActions } from "../plugins/ItemTrailer";
 import { InstallMenu } from "../plugins/InstallMenu";
 import { statusState } from "../plugins/StateIcon";
@@ -42,7 +42,7 @@ import { PLUGINS, pluginActionClass } from "../plugins/plugins-style";
 import { DiscoverView } from "../plugins/DiscoverView";
 import { AccountsView } from "../plugins/AccountsView";
 import { SourcesView } from "../plugins/SourcesView";
-import { OrgCapabilitiesForMe, orgCapabilitiesOfForms, useOrgCapabilitiesForMe } from "../plugins/OrgCapabilitiesSection";
+import { OrgCapabilitiesForMe, orgCapabilitiesOfForms, useOrgCapabilitiesForMe, vendorSkillsOf } from "../plugins/OrgCapabilitiesSection";
 import { accountConnectorRows, connectorGroups, type AccountConnectorRow } from "../plugins/HarnessConnectorGroups";
 import { PublishedPagesSettings } from "../PublishedPages";
 import { MarketplacesSection } from "../plugins/MarketplacesSection";
@@ -165,17 +165,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     );
   };
 
-  const notices = (
-    <>
-      {panelError && <div role="alert" className="mx-6 mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">{panelError}</div>}
-      {updates.failures.map((failure) => (
-        <UpdateNotice key={failure.key} failure={failure} onClose={() => updates.dismissFailure(failure.key)}
-          onRetry={() => { updates.dismissFailure(failure.key); void updates.update([failure.key]); }} />
-      ))}
-      {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
-      <SavedKeysResetNotice panel />
-    </>
-  );
 
   // The scope sits under the title on every tab (2026-10-28: it vanished on
   // Providers and the tabs jumped up). Providers lists the person's own
@@ -232,6 +221,14 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       a={a}
       products={products}
       updateInfo={(kind, name, key) => updateOf(updates.data, kind, name, key)}
+      itemUpdate={(kind, name, key) => {
+        const info = updateOf(updates.data, kind, name, key);
+        if (!info) return undefined;
+        const row = rowUpdate(kind, name, undefined, key);
+        return { from: info.installedVersion, to: info.availableVersion, notes: info.updateNotes, running: row?.running ?? false, onUpdate: row?.onUpdate };
+      }}
+      consoleName={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
+      vendorSkills={(vendorKey) => vendorSkillsOf(orgMine, vendorKey)}
       productCtx={productCtx}
       trail={trail}
       entries={entries}
@@ -395,6 +392,23 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     art: <VendorArt vendor={vendor} />,
     onGo: () => push({ page: "vendor", key: vendor.key }),
   })) : [];
+  // a bundle the person has not turned on is a card of Discover > Plugins too (the slide stays a slide)
+  const bundleCards = perspicaxOrg !== null ? groupByVendor(products.products)
+    .filter((vendor) => vendor.products.some((product) => product.group) && vendorOnCount(vendor, productCtx) === 0)
+    .map((vendor) => {
+      const line = inLanguage(vendor.description, activeLocale()) ?? vendor.products.map((product) => product.description).find(Boolean) ?? "";
+      const mark = vendor.icon ?? vendor.products.find((product) => product.icon)?.icon;
+      const item: PluginItem = {
+        key: `vendor:${vendor.key}`, kind: "plugin", id: vendor.key, name: vendor.name, description: line, category: "other",
+        installed: false, status: "available", action: "add", source: "console",
+        ...(mark?.url ? { logo: mark.url } : {}), ...(mark?.domain ? { domain: mark.domain } : {}),
+      };
+      return {
+        item, title: t("connectApps.featured.fromConsole", { console: t("connectApps.console.title", { org: perspicaxOrg.org.name }) }),
+        from: vendorLine(vendor.products.length, 0), onOpen: () => push({ page: "vendor", key: vendor.key }),
+        action: <button type="button" data-bundle-open={vendor.key} onClick={() => push({ page: "vendor", key: vendor.key })} aria-label={t("connectApps.featured.seeProducts")} title={t("connectApps.featured.seeProducts")} className={cn(PLUGINS.fillPill, "size-8 px-0")}><ChevronRight size={16} aria-hidden="true" /></button>,
+      };
+    }) : [];
   // the filter of Discover: the categories of the chosen kind, in a menu
   const filterControl = tab === "discover" ? (
     <DiscoverFilter
@@ -427,6 +441,27 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     viewChosen.current = true;
     if (tab === "installed" && kindCounts[kind] === 0) setTab("discover");
   });
+
+  // A failed update is said on the row that failed when that row is on screen
+  // (the kind's Yours list); else at the top of the window, as before.
+  const rowKeys = (kind === undefined ? entries : entries.filter((entry) => entryKind(entry) === kind)).flatMap((entry) => entry.members.map((member) => member.updateKey))
+    .concat(kind === "skills" || kind === undefined ? privateSkillRows.map((skill) => skill.updateKey) : []);
+  const failureHasRow = (key: string) => tab === "installed" && page.page === "main" && scope !== "bot" && rowKeys.includes(key);
+  const rowNotice = (keys: ReadonlyArray<string | undefined>) => updates.failures.filter((failure) => keys.includes(failure.key)).map((failure) => (
+    <UpdateNotice key={failure.key} inline failure={failure} onClose={() => updates.dismissFailure(failure.key)}
+      onRetry={() => { updates.dismissFailure(failure.key); void updates.update([failure.key]); }} />
+  ));
+  const notices = (
+    <>
+      {panelError && <div role="alert" className="mx-6 mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">{panelError}</div>}
+      {updates.failures.filter((failure) => !failureHasRow(failure.key)).map((failure) => (
+        <UpdateNotice key={failure.key} failure={failure} onClose={() => updates.dismissFailure(failure.key)}
+          onRetry={() => { updates.dismissFailure(failure.key); void updates.update([failure.key]); }} />
+      ))}
+      {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
+      <SavedKeysResetNotice panel />
+    </>
+  );
 
   return (
     <PluginsPanelFrame
@@ -464,6 +499,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           installed={(
             <InstalledView
               sort={sort}
+              rowNotice={rowNotice}
               hasUpdate={(kind, name, key) => Boolean(updateOf(updates.data, kind, name, key))}
               loading={mcp.servers === null}
               kind={kind}
@@ -548,6 +584,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
             <DiscoverView
               sort={sort}
               vendorSlides={vendorSlides}
+              bundleCards={bundleCards}
               kind={kind}
               items={discoverItems(scopedItems, state.pluginsFocusApps ?? undefined)}
               loading={mcp.servers === null || (scope !== "workspace" && scopedPluginView === null)}

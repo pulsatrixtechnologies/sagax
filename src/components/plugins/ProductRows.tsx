@@ -101,6 +101,11 @@ export interface ProductRowsContext {
 const reachedBots = (ctx: ProductRowsContext, ids: readonly string[]) =>
   ctx.bots.filter((bot) => ids.length > 0 && ids.every((id) => botProductEnabled(bot, id)));
 
+/** How many of a vendor's products are on, for the person's bots (or the one bot the window was opened from). */
+export function vendorOnCount(vendor: ProductVendor<PersonProduct>, ctx: ProductRowsContext): number {
+  return vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
+}
+
 /** A product's state as one icon: connected is a check, a key the person can
  * fix is a warning that opens what fixes it, an administrator's step is a
  * grey info. The sentence is the tooltip. */

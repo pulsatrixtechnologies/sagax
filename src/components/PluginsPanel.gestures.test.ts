@@ -569,7 +569,7 @@ describe("Plugins, driven like the owner does", () => {
     expect($("[data-plugins-back]")?.getAttribute("aria-label")).toBe("Back to Plugins");
     expect($("[data-plugins-detail-name]")?.textContent).toBe("GitHub");
     expect($("[data-plugins-detail-head] img")).not.toBeNull();
-    expect($("[data-plugins-detail-meta]")?.textContent).toMatch(/^github · anthropics\/claude-plugins-official/);
+    expect($("[data-plugins-detail-meta]")?.textContent).toMatch(/^github · from anthropics\/claude-plugins-official/);
     expect([...host.querySelectorAll("[data-install-state]")].map((node) => node.textContent)).toEqual(["Installed for everyone", "Not installed on Rocket"]);
     // back to the list
     await click($("[data-plugins-back]"));

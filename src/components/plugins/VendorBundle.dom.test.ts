@@ -121,13 +121,13 @@ describe("the vendor's page", () => {
 
   it("has a header, the line the console sends in the person's language (English fallback) and the Connectors & tools panel", async () => {
     const view = await render(page());
-    expect(view.querySelector("[data-vendor-name]")?.textContent).toBe("Harbor Suite");
-    expect(view.querySelector("[data-vendor-line]")?.textContent).toBe("2 connectors · 2 on");
-    expect(view.querySelector("[data-vendor-description]")?.textContent).toBe("Service desk, monitoring and quoting in one place.");
-    expect([...view.querySelectorAll("[data-vendor-reach] li")].map((item) => item.querySelector("span.truncate")?.textContent)).toEqual(["Service Desk", "Remote Monitoring"]);
+    expect(view.querySelector("[data-plugins-detail-name]")?.textContent).toBe("Harbor Suite");
+    expect(view.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("2 connectors · 2 on");
+    expect(view.querySelector("[data-detail-description] p")?.textContent).toBe("Service desk, monitoring and quoting in one place.");
+    expect([...view.querySelectorAll("[data-detail-reach] li")].map((item) => item.querySelector("span.truncate")?.textContent)).toEqual(["Service Desk", "Remote Monitoring"]);
     setLocale("fr");
     const french = await render(page());
-    expect(french.querySelector("[data-vendor-description]")?.textContent).toBe("Service desk, supervision et soumissions au même endroit.");
+    expect(french.querySelector("[data-detail-description] p")?.textContent).toBe("Service desk, supervision et soumissions au même endroit.");
     expect(inLanguage({ en: "Only English" }, "fr-CA")).toBe("Only English");
     expect(inLanguage({ fr: "Seulement" }, "en")).toBe("Seulement");
   });

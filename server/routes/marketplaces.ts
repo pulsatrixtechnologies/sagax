@@ -9,6 +9,7 @@
 //   POST   /api/marketplaces/:name/plugins/:plugin         install: MCP servers + skills
 //   POST   /api/marketplaces/:name/plugins/:plugin/update  update them in place
 //   DELETE /api/marketplaces/:name/plugins/:plugin         uninstall them
+//   GET    /api/marketplaces/:name/plugins/:plugin/files[?path=]   what the installed plugin holds, read only
 //
 // Same scope as /api/mcp/servers: admin (never in CLIENT_ALLOW), so on an
 // organization server the clone and the install happen on that server for
@@ -25,6 +26,7 @@ import { setCapabilityDeprecationHeaders } from "../capabilities/capability-rout
 import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { MarketplaceCredentialView } from "../../shared/github-credentials.ts";
+import { sendPluginFiles } from "../plugins/plugin-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface MarketplaceRouteDeps {
@@ -68,10 +70,11 @@ const NAME = "[A-Za-z0-9][A-Za-z0-9._-]{0,63}";
 const MARKET = new RegExp(`^/api/marketplaces/(${NAME})(?:/(refresh|visibility|credential))?$`);
 const CREDENTIAL = /^gt_[0-9a-f]{16}$/;
 const PLUGIN = new RegExp(`^/api/marketplaces/(${NAME})/plugins/(${NAME})$`);
+const FILES = new RegExp(`^/api/marketplaces/(${NAME})/plugins/(${NAME})/files$`);
 const UPDATE = new RegExp(`^/api/marketplaces/(${NAME})/plugins/(${NAME})/update$`);
 
 export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandler {
-  return async ({ req, res, path, method, auth, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
     if (path !== "/api/marketplaces" && !path.startsWith("/api/marketplaces/")) return PASS;
     res.setHeader("cache-control", "private, no-store");
     setCapabilityDeprecationHeaders(res, "/api/installation/capabilities");
@@ -125,6 +128,16 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
           : await deps.store.add({ source, ...(ref ? { ref } : {}) }, actor, { viewer, ...(visibility ? { visibility } : {}) });
         const marketplaces = await views();
         return json(res, 201, { marketplace: marketplaces.find((market) => market.name === added.name) ?? added, marketplaces });
+      }
+      const files = FILES.exec(path);
+      if (files) {
+        const [, marketplace, name] = files;
+        if (method !== "GET") return json(res, 405, { error: "GET" });
+        // a private marketplace that is not this viewer's does not exist to them, on a read too
+        if (typeof deps.store.canAccess === "function" && !deps.store.canAccess(marketplace!, viewer)) return json(res, 404, { error: "No marketplace with that name.", code: "not_found" });
+        if (!deps.store.installed().some((entry) => entry.key === `${name}@${marketplace}`)) return json(res, 404, { error: "That plugin is not installed.", code: "not_installed" });
+        sendPluginFiles(res, json, deps.store.pluginDir(marketplace!, name!), url.searchParams.get("path"));
+        return;
       }
       const update = UPDATE.exec(path);
       if (update) {

@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { detailIdentity } from "@/lib/installed-model";
+import { botPluginState } from "@/lib/plugin-scope";
 import { fetchBotTailscale } from "@/lib/bot-tailscale";
 import type { SkillsLibrarySkillWire } from "../../../shared/wire";
 import { TailscaleConnectView } from "../plugins/TailscaleConnectView";
@@ -23,7 +24,7 @@ import { CustomConnectorPage } from "../plugins/CustomConnectorPage";
 import { ProductDetailView } from "../plugins/ProductDetailView";
 import type { PersonProduct } from "@/lib/person-products";
 import { detailProps } from "./detailBuilders";
-import { skillReadOnlyReason } from "./helpers";
+import { pluginSourceLabel, skillReadOnlyReason } from "./helpers";
 import type { Page } from "./types";
 import type { PluginsPanelState } from "./usePluginsPanelState";
 import type { PluginsPanelActions } from "./usePluginsPanelActions";
@@ -41,7 +42,16 @@ export function PluginsPanelSubpage({
   products,
   updateInfo,
   productCtx,
+  itemUpdate,
+  consoleName,
+  vendorSkills,
 }: {
+  /** #4504: the update a skill has, with its Update (running while it runs), for its page */
+  itemUpdate?: (kind: UpdateKind, name: string, updateKey?: string) => { from?: string; to?: string; notes?: string; running: boolean; onUpdate?: () => void } | undefined;
+  /** the console's name ("Perspicax · <organization>") for a bundle's grey line */
+  consoleName?: string;
+  /** the skills the console offers that go with a vendor (its Skills tab); none: no tab */
+  vendorSkills?: (vendorKey: string) => ReadonlyArray<{ name: string; description: string }>;
   /** what the product rows need (the person's bots and the one write): the vendor's page draws the same rows */
   productCtx?: ProductRowsContext;
   /** #4504: the update an item has (its kind and readable name), for its page's versions and notes */
@@ -100,6 +110,8 @@ export function PluginsPanelSubpage({
         basePath={skillsRoute}
         skill={pageSkill}
         readOnlyReason={pageSkill ? skillReadOnly(pageSkill) : undefined}
+        sourceLabel={pageSkill ? (/^(local|local-import|upload:|learn:)/.test(pageSkill.source) ? t("connectApps.origin.you") : pluginSourceLabel(pageSkill.source)) : undefined}
+        update={pageSkill ? itemUpdate?.("skill", pageSkill.name, items.find((entry) => entry.kind === "skill" && entry.id === pageSkill.name)?.updateKey) : undefined}
         onBack={back}
         trail={trail}
         onSaved={async (name) => {
@@ -140,7 +152,7 @@ export function PluginsPanelSubpage({
   }
   if (page.page === "vendor" && productCtx) {
     const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
-    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} />;
+    if (vendor) return <VendorPage vendor={vendor} ctx={productCtx} onBack={back} trail={trail} consoleName={consoleName} skills={vendorSkills?.(vendor.key)} />;
   }
   if (page.page === "connector") {
     return <CustomConnectorPage mcp={mcp} onBack={back} trail={trail} />;
@@ -169,7 +181,11 @@ export function PluginsPanelSubpage({
       items, marketplaces: shownMarketplaces, installing, openItem,
       uninstallPlugin: (item) => void uninstallPlugin(item),
       updatePlugin: (item) => void updatePlugin(item),
-      scope, botCard: botCard(detailItem),
+      scope, scopeBotId: s.scopeBotId, botCard: botCard(detailItem),
+      contentsOf: (pluginId) => {
+        const known = botPluginState(scope === "me" ? s.personalView : scope === "bot" ? s.botView : null, pluginId);
+        return known ? { skills: known.contents?.skills ?? [], agents: known.contents?.agents ?? [], commands: known.contents?.commands ?? [], servers: known.installed?.declaredMcpServers ?? [] } : undefined;
+      },
     });
     const engines = engineInfo(detailItem);
     // the versions (from, to) and the notes when the source gives them
@@ -178,9 +194,11 @@ export function PluginsPanelSubpage({
       { label: t("connectApps.updates.versions"), value: [upd.installedVersion, upd.availableVersion].filter(Boolean).join(" \u2192 ") || t("connectApps.plugin.newerFiles") },
       ...(upd.updateNotes ? [{ label: t("connectApps.updates.notes"), value: upd.updateNotes }] : []),
     ] : [];
+    const run = itemUpdate?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     return (
       <PluginDetailView
         {...base}
+        {...(!base.onUpdate && run?.onUpdate ? { onUpdate: run.onUpdate, updating: run.running } : {})}
         details={[...base.details, ...(engines.row ? [engines.row] : []), ...updateRows]}
         notice={engines.notice}
         {...detailHead(detailItem)}

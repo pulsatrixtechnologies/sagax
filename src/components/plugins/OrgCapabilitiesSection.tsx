@@ -91,6 +91,15 @@ export function orgCapabilitiesOfForms(state: OrgCapabilitiesForMeState, forms?:
   return (forms ? state.items?.filter((item) => forms.includes(item.form)) : state.items) ?? [];
 }
 
+/** The skills the console offers that go with one vendor (its bundle's Skills
+ * tab): only a skill the console names the vendor of; none known, none listed
+ * (a name is never matched to a vendor by its words). `vendorKey` is the
+ * bundle's key, `vendor:<group id>`. */
+export function vendorSkillsOf(state: OrgCapabilitiesForMeState, vendorKey: string): Array<{ name: string; description: string }> {
+  const group = vendorKey.replace(/^vendor:/, "");
+  return orgCapabilitiesOfForms(state, ["skill"]).filter((item) => item.vendor === group).map((item) => ({ name: item.name, description: item.description }));
+}
+
 /** Me scope: the organization's capabilities for the person, with their
  * own switch on an offered one. `bare`: the rows alone, for the console's
  * section of Connect Apps, which has the title. */

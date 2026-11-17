@@ -86,6 +86,10 @@ export interface DetailContext {
   openItem: (item: PluginItem) => void;
   uninstallPlugin: (item: PluginItem) => void;
   scope: PluginScope;
+  /** the bot the window was opened from, to read a plugin's files at that bot's scope */
+  scopeBotId?: string | null;
+  /** what an install of a plugin holds (its skills, agents, commands by name), for the scope the page is in; a person's or a bot's install links no skill row of its own */
+  contentsOf?: (pluginId: string) => { skills: string[]; agents: string[]; commands: string[]; servers: string[] } | undefined;
   /** the plugin "For <bot>" (absent: no bot in reach) */
   botCard: ReactNode;
   updatePlugin: (item: PluginItem) => void;

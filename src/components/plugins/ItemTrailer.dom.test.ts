@@ -161,6 +161,34 @@ describe("the item's menu: the \"...\" and a right click are one menu", () => {
     expect(host.querySelector('[role="menu"]')).toBeNull();
   });
 
+  it("opens upward when it would run past the window's bottom, and downward when there is room", async () => {
+    const innerHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    const measure = (top: number) => vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const menu = this.getAttribute("role") === "menu";
+      const rect = menu ? { top, bottom: top + 200, height: 200, left: 0, right: 200, width: 200 } : { top: 0, bottom: 0, height: 0, left: 0, right: 0, width: 0 };
+      return { ...rect, x: rect.left, y: rect.top, toJSON: () => rect } as DOMRect;
+    });
+    try {
+      // a row near the bottom: the menu would end at 900 of 800, so it flips
+      const near = measure(700);
+      await render(row(createElement(ItemTrailer, { name: "Notes", where: { kind: "all" }, whereKind: "all", on: true, actions: { detail: noop, remove: noop } })));
+      await rightClick(host.querySelector("[data-test-name]")!);
+      expect(host.querySelector("[data-item-menu-flipped]")).not.toBeNull();
+      near.mockRestore();
+      await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+      // a row with room under it: the menu stays below
+      const roomy = measure(100);
+      await rightClick(host.querySelector("[data-test-name]")!);
+      expect(host.querySelector('[role="menu"]')).not.toBeNull();
+      expect(host.querySelector("[data-item-menu-flipped]")).toBeNull();
+      roomy.mockRestore();
+    } finally {
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: innerHeight });
+      vi.restoreAllMocks();
+    }
+  });
+
   it("a row with nothing to offer has no \"...\" and no menu on a right click", async () => {
     await render(row(createElement(ItemTrailer, { name: "Notes", where: "bot", on: true, lockedReason: "x" })));
     expect(host.querySelector("[data-entry-menu]")).toBeNull();

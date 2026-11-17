@@ -549,6 +549,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/overview$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/parallel\\/([\\w-]+)\\/stop$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/plugins(?:\\/(marketplaces|install)(?:\\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:\\/(update|credential))?)?|\\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})(\\/config)?)?$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/plugins\\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\\/files$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/primary$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/proactive-metrics$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/proactive\\/([\\w-]+)(\\/feedback)?$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},

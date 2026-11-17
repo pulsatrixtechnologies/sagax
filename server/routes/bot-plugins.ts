@@ -15,6 +15,9 @@
 //   PUT    /api/bots/:id/plugins/:key/config { values }   the plugin's declared
 //          fields (server/plugins/plugin-config.ts); a secret field answers 400 sensitive_field
 //   DELETE /api/bots/:id/plugins/:key
+//   GET    /api/bots/:id/plugins/:key/files          { files: [{ path, bytes, kind }] }, the folder's files
+//   GET    /api/bots/:id/plugins/:key/files?path=x   { path, kind, text, bytes } for text, the bytes for an image or PDF
+//          (read only; "Me" reads its own plugins only: /api/me/plugins/:key/files)
 //
 // Reads need use on the bot; every change needs its owner or manage (an
 // organization admin too). A refusal from the git host answers its real
@@ -25,6 +28,7 @@
 import type { BotPluginError, BotPlugins, MarketplacePolicy } from "../bots/bot-plugins.ts";
 import type { MarketplaceViewer, MarketplaceVisibility } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
+import { sendPluginFiles } from "../plugins/plugin-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotPluginRouteDeps<B extends { id: string }> {
@@ -51,6 +55,8 @@ export interface BotPluginRouteDeps<B extends { id: string }> {
   changed?: (bot: B, action: string, detail: Record<string, unknown>, auth: RequestAuth) => void;
 }
 
+/** GET .../plugins/:key/files[?path=]: what one installed plugin holds, read only (the bot's use is enough). */
+const FILES_ROUTE = /^\/api\/bots\/([\w-]+)\/plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
 const ROUTE = /^\/api\/bots\/([\w-]+)\/plugins(?:\/(marketplaces|install)(?:\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:\/(update|credential))?)?|\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})(\/config)?)?$/;
 const CREDENTIAL = /^gt_[0-9a-f]{16}$/;
 /** undefined: none sent; null: not a credential id. */
@@ -63,9 +69,28 @@ function isPluginError(error: unknown): error is BotPluginError {
   return error instanceof Error && typeof (error as { status?: unknown }).status === "number" && typeof (error as { code?: unknown }).code === "string";
 }
 
+/** GET .../plugins/:key/files: the folder of one installed plugin, read only. Answers (a promise) only when it is that route. */
+function filesMatch<B extends { id: string }>(
+  deps: BotPluginRouteDeps<B>,
+  { req, res, url, path, auth, json }: Pick<Parameters<RouteHandler>[0], "req" | "res" | "url" | "path" | "auth" | "json">,
+): Promise<void> | null {
+  const method = req.method;
+  const match = FILES_ROUTE.exec(decodeURIComponent(path));
+  if (!match || method !== "GET") return null;
+  const owner = deps.bot(match[1]!);
+  if (!owner || !deps.mayRead(auth, owner)) return Promise.resolve(json(res, 404, { error: "no such bot" }));
+  res.setHeader("cache-control", "private, no-store");
+  const folder = deps.plugins.installedPluginDir(owner.id, match[2]!);
+  if (!folder) return Promise.resolve(json(res, 404, { error: "No plugin with that name on this bot.", code: "not_found" }));
+  sendPluginFiles(res, json, folder, url.searchParams.get("path"));
+  return Promise.resolve();
+}
+
 export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginRouteDeps<B>): RouteHandler {
-  return async ({ req, res, path, method, auth, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
     if (!path.startsWith("/api/bots/") || !path.includes("/plugins")) return PASS;
+    const files = filesMatch(deps, { req, res, url, path, auth, json });
+    if (files) return files;
     const match = ROUTE.exec(decodeURIComponent(path));
     if (!match) return PASS;
     const [, botId, section, name, update, key, config] = match;

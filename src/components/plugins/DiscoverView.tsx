@@ -67,13 +67,15 @@ export interface DiscoverViewProps {
   /** where Recommended for you picks from, when it is wider than `items`
    * (Me: the catalog's apps too); absent: `items` */
   recommendFrom?: readonly PluginItem[];
+  /** a bundle the console offers that the person has not turned on (Plugins): a card, not only a slide */
+  bundleCards?: ReadonlyArray<{ item: PluginItem; from: string; title: string; onOpen: () => void; action: ReactNode }>;
   /** one slide per vendor the organization console offers the person (Connectors) */
   vendorSlides?: ReadonlyArray<{ key: string; consoleName: string; name: string; line: string; art: ReactNode; onGo: () => void }>;
   /** the sort chosen in the control row; "name" orders each section by name */
   sort?: ConnectAppsSort;
 }
 
-export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom, sort = "default", vendorSlides = [] }: DiscoverViewProps) {
+export function DiscoverView({ items: allItems, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, kind, accounts: allAccounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom: addCustom, owned = [], canConnect, recommendFrom: allRecommendFrom, sort = "default", vendorSlides = [], bundleCards = [] }: DiscoverViewProps) {
   // #4453: the kind tab says what is listed (the type filter's apps, MCP
   // servers or skills); the engine accounts and the custom connector are
   // connectors
@@ -112,6 +114,8 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
       ),
     })),
   ];
+  // a bundle not turned on: Plugins, on All (a category or a search narrows the list to catalog rows)
+  const bundles = (kind === undefined || kind === "plugins") && !single && !listsPicks ? bundleCards : [];
   const featuredKeys = new Set(featuredPicks.map((row) => row.item.key));
   const shelf = recommended.filter((row) => !featuredKeys.has(row.item.key));
   const sections = listsPicks ? [] : mainSections(items, "", filter, type, extraSources, focus, recommended.map((row) => row.item.key));
@@ -130,6 +134,16 @@ export function DiscoverView({ items: allItems, loading = false, catalogPending 
         </div>
       )}
       {slides.length > 0 && <FeaturedCarousel slides={slides} />}
+      {bundles.length > 0 && (
+        <section data-plugins-section="bundles" className="mt-[30px] first:mt-4">
+          <SectionHead title={bundles[0]!.title} count={bundles.length} />
+          <div className={CARD_GRID}>
+            {bundles.map((bundle) => (
+              <DiscoverCard key={bundle.item.key} item={bundle.item} from={bundle.from} openable onOpen={bundle.onOpen} action={bundle.action} />
+            ))}
+          </div>
+        </section>
+      )}
       {shelf.length > 0 && (
         <section data-plugins-section="recommended" className="mt-[30px] first:mt-4">
           <SectionHead title={sectionTitle({ id: "recommended" })} id="recommended" count={listsPicks ? shelf.length : picks.length - featuredPicks.length} onViewAll={!single && picks.length > recommended.length ? () => onType("recommended") : undefined} />

@@ -208,13 +208,14 @@ describe("Plugins panel views", () => {
       details: [{ label: "Source", value: "Added manually" }, { label: "Transport", value: "HTTP" }],
     }));
     expect(html).toContain('aria-label="Back to Connect Apps"');
-    // Turned on beside the name; Uninstall is the reference app's gray pill under the page,
-    // and with no Update, Test or Edit there is no "..." menu
-    expect(html).toMatch(/data-plugin-enabled[^>]*>Turned on<button[^>]*aria-label="Turn glitcho off"/);
-    expect(html).toMatch(/data-plugin-action="uninstall"[^>]*>Uninstall</);
-    expect(html).not.toContain('aria-label="More actions for glitcho"');
-    const withEdit = renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, onUninstall: noop, onEdit: noop, details: [] }));
+    // the switch sits at the header's right, by the one "..." menu (Uninstall is in it, never a second pill)
+    expect(html).toMatch(/aria-label="Turn glitcho off"[^>]*data-plugin-enabled|data-plugin-enabled[^>]*aria-label="Turn glitcho off"/);
+    expect(html).toContain('aria-label="More actions for glitcho"');
+    expect(html).not.toMatch(/data-plugin-action="uninstall"/);
+    const withEdit = renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, onEdit: noop, details: [] }));
     expect(withEdit).toContain('aria-label="More actions for glitcho"');
+    // with no Update, Test, Edit or Uninstall there is no menu
+    expect(renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, details: [] }))).not.toContain('aria-label="More actions for glitcho"');
     expect(html).toContain("Accounts");
     expect(html).toMatch(/qc1\.example\.net[\s\S]*?Connected/);
     expect(html).toContain("1 of 2 enabled");

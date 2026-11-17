@@ -3,17 +3,19 @@
 // stays, a Retry and a close. Not a red bar.
 import { TriangleAlert, X } from "lucide-react";
 
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { updateReasonKey, type UpdateFailure } from "@/lib/capability-updates";
 
-export function UpdateNotice({ failure, onRetry, onClose }: { failure: UpdateFailure; onRetry: () => void; onClose: () => void }) {
+export function UpdateNotice({ failure, onRetry, onClose, inline = false }: { failure: UpdateFailure; onRetry: () => void; onClose: () => void; /** under the row that failed, in the list's own width */ inline?: boolean }) {
   return (
     <div role="status" data-update-failure={failure.key}
-      className="mx-6 mt-2 flex items-start gap-2.5 rounded-xl border-[0.5px] border-ink/[0.1] bg-card px-3 py-2.5 text-[13px] leading-[18px] text-ink sm:mx-8">
+      data-update-failure-row={inline ? "" : undefined}
+      className={cn("flex items-start gap-2.5 rounded-xl border-[0.5px] border-ink/[0.1] bg-card px-3 py-2.5 text-[13px] leading-[18px] text-ink", inline ? "mb-2 mt-0.5" : "mx-6 mt-2 sm:mx-8")}>
       <TriangleAlert size={16} className="mt-px shrink-0 text-warning" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="font-medium" data-update-failure-name="">{failure.name}</span>
-        <span className="text-ink-secondary"> {t(updateReasonKey(failure.error))} {t("connectApps.updates.oldStays")}</span>
+        <span className="text-ink-secondary"><span aria-hidden="true"> {"\u00b7"}</span> {t(updateReasonKey(failure.error))} {t("connectApps.updates.oldStays")}</span>
       </span>
       <button type="button" data-update-retry="" onClick={onRetry} className="shrink-0 rounded-full px-2.5 py-0.5 text-[13px] text-ink hover:bg-ink/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
         {t("connectApps.updates.retry")}

@@ -25,6 +25,7 @@ import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromE
 import { applyCatalogGroups, catalogGroupsOn, routeGroupCall } from "./agents-catalog-budget.ts";
 import { catalogBridgeDefinitions, catalogBridgeOn, resolveCatalogUse, routeBridgeCall } from "./catalog-bridge.ts";
 import { mergeByAction } from "./agents-merged.ts";
+import { currentAgentToolName } from "../../shared/agent-tool-renames.ts";
 import { readMergedCall } from "../../shared/merged-agent-tools.ts";
 import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
 import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, isDirectoryTool, type CatalogTool } from "../mcp/mcp-directory.ts";
@@ -154,7 +155,8 @@ async function handle(msg: Json) {
       ok(id, { tools: LISTED_TOOLS });
       return;
     case "tools/call": {
-      let name = params.name as string;
+      // a renamed tool's old name runs the new one (shared/agent-tool-renames.ts)
+      let name = currentAgentToolName(params.name as string);
       let args = (params.arguments ?? {}) as Json;
       if (BRIDGE) {
         const routed = routeBridgeCall(AVAILABLE_TOOLS, name, args);
@@ -197,6 +199,7 @@ async function handle(msg: Json) {
         name = family.tool;
         args = family.arguments as Json;
       }
+      name = currentAgentToolName(name);
       if (!AVAILABLE_TOOLS.some((t) => t.name === name)) {
         const elsewhere = await perspicaxToolElsewhere(name, CONTEXT);
         if (elsewhere) return textResult(id, elsewhere, true);

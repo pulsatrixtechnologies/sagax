@@ -48,6 +48,7 @@
 
 import { describeApproval, parseArgs, parseToolId } from "./approval-describe.ts";
 import { isOutboundTool } from "./outbound.ts";
+import { currentRuleToolId } from "./agent-tool-renames.ts";
 
 export const CUSTOM_RULE_BEHAVIORS = ["allow", "ask", "deny"] as const;
 export type CustomRuleBehavior = (typeof CUSTOM_RULE_BEHAVIORS)[number];
@@ -478,12 +479,10 @@ export function compileRule(when: string, home?: string, resolve?: (absolute: st
   if (paths.length && !objects.includes("file")) objects.push("file");
   const rest = text;
   if (commands.length && !actions.includes("command")) actions.push("command");
-  const tools: string[] = [];
-  for (const match of rest.matchAll(/`([^`\s]{2,120})`/g)) tools.push(match[1]!.toLowerCase().replace(/^mcp__/, ""));
-  for (const match of fold(rest).matchAll(/\b(?:outil|tool)\s+([a-z0-9][a-z0-9_.-]{2,120})/g)) {
-    const name = match[1]!.replace(/^mcp__/, "");
-    if (!tools.includes(name)) tools.push(name);
-  }
+  // a tool in backticks or after "tool"/"outil"; a renamed Sagax tool is named by its current name (#4439)
+  const tools = [...new Set([...rest.matchAll(/`([^`\s]{2,120})`/g)].map((match) => match[1]!.toLowerCase())
+    .concat([...fold(rest).matchAll(/\b(?:outil|tool)\s+([a-z0-9][a-z0-9_.-]{2,120})/g)].map((match) => match[1]!))
+    .map((name) => currentRuleToolId(name.replace(/^mcp__/, ""))))];
   const named = namedProducts(list, products);
   const recognized = actions.length > 0 || tools.length > 0 || named.ids.length > 0 || commands.length > 0;
   const shellFamily = actions.includes("command") && commands.length === 0;
@@ -959,7 +958,7 @@ export function callFacts(call: CallInput): CallFacts {
   if (call.classKey?.startsWith("git:")) risks.add("irreversible");
   const products = productsOf(parsed.server, parsed.name);
   return {
-    tool: (parsed.server ? `${parsed.server}__${parsed.name}` : parsed.name).toLowerCase(),
+    tool: currentRuleToolId((parsed.server ? `${parsed.server}__${parsed.name}` : parsed.name).toLowerCase()),
     ...(parsed.server ? { server: parsed.server.toLowerCase() } : {}),
     actions: [...actions],
     objects: [...objects],

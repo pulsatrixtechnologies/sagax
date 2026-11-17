@@ -11,6 +11,7 @@
 //
 // Tool definitions and per-family handlers live under ./agents-tools/.
 import { readFileSync } from "node:fs";
+import { currentAgentToolName } from "../../shared/agent-tool-renames.ts";
 import { withoutRecordLinksIn } from "../../shared/record-cards.ts";
 import { appToolWordsLeave } from "../../shared/record-link-tools.ts";
 import { isOpenApiTool } from "../mcp/openapi-tools.ts";
@@ -83,7 +84,9 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
 }
 
 
-export async function callTool(name: string, rawArgs: Json, context: ToolCallContext): Promise<ToolCallResult> {
+export async function callTool(calledName: string, rawArgs: Json, context: ToolCallContext): Promise<ToolCallResult> {
+  // a renamed tool's old name runs the new one (shared/agent-tool-renames.ts)
+  const name = currentAgentToolName(calledName);
   // #4507: the one dispatcher of the app's own tools. A record link
   // (`sagax://record/...`) is the chat's own address: a tool whose words
   // leave the app carries its label alone; a file, a skill, an artifact, a

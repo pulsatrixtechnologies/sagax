@@ -152,15 +152,25 @@ describe("#4460 what the bot, its tool and the person are told", () => {
     for (const text of [own.cardTitle, own.ruleDescription("term"), own.restrictedRefusal, own.resultTarget]) expect(text).not.toMatch(shared);
   });
 
-  it("a solo install keeps its words", () => {
+  it("a solo install keeps its card words, for a card left from before #4439", () => {
     const solo = teamMemoryWording(false);
     expect(solo.cardTitle).toBe("Remember this for the team?");
     expect(solo.ruleDescription("term")).toBe("Remember term entries for the team");
-    expect(solo.prompt).toContain("before it enters shared prompts");
+  });
+
+  // #4439: the bot saves it itself, at once, and says so; nothing waits
+  it("tells the bot to save at once and say so, never to propose or wait for a confirmation", () => {
+    for (const wording of [teamMemoryWording(false), teamMemoryWording(true)]) {
+      for (const text of [wording.prompt, wording.toolDescription]) {
+        expect(text).not.toMatch(/propos|confirm|wait|card/i);
+      }
+      expect(wording.prompt).toContain("save_team_memory");
+      expect(wording.prompt).toMatch(/short line/);
+    }
   });
 
   it("the tool's description follows the server's mode", () => {
-    const describe = (env: Record<string, string>) => availableTools(catalogProfileFromEnv(env)).find((tool) => tool.name === "propose_team_memory")?.description ?? "";
+    const describe = (env: Record<string, string>) => availableTools(catalogProfileFromEnv(env)).find((tool) => tool.name === "save_team_memory")?.description ?? "";
     expect(describe({ SAGAX_ROOM_TURN: "1" })).toBe(teamMemoryWording(false).toolDescription);
     expect(describe({ SAGAX_ROOM_TURN: "1", SAGAX_OWN_TEAM_MEMORY: "1" })).toBe(teamMemoryWording(true).toolDescription);
   });

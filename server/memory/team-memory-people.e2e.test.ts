@@ -114,8 +114,9 @@ async function stop() {
   await waitForExit(child);
 }
 
-/** The bot's shell proposes a team-memory entry from this thread. */
-async function proposeTeamMemory(botId: string, threadId: string, name: string, detail: string): Promise<string> {
+/** The bot's shell saves a team-memory entry from this thread (#4439: at
+ * once, no card). */
+async function saveTeamMemory(botId: string, threadId: string, name: string, detail: string): Promise<string> {
   const minted = await fetch(`${BASE}/api/testing/internal-capability`, {
     method: "POST", headers: { "content-type": "application/json", "x-openmausbot-test-capability": CAPABILITY_KEY },
     body: JSON.stringify({ botId, threadId, kind: "agents" }),
@@ -126,9 +127,10 @@ async function proposeTeamMemory(botId: string, threadId: string, name: string, 
     method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({ fromBotId: botId, fromThreadId: threadId, kind: "term", name, detail }),
   });
-  const body = await proposed.json() as { status: string; requestId: string };
+  const body = await proposed.json() as { status: string; entryId: string };
   expect(proposed.status, JSON.stringify(body)).toBe(201);
-  return body.requestId;
+  expect(body.status).toBe("saved");
+  return body.entryId;
 }
 
 posixOnly("#4460 team memory stays with its person on an organization server", () => {
@@ -149,10 +151,6 @@ posixOnly("#4460 team memory stays with its person on an organization server", (
     const preview = await api("GET", `/api/bots/${botId}/system-prompt`, auth);
     expect(preview.status, preview.text).toBe(200);
     return (preview.body.sections as Array<{ id: string; text: string }>).find((section) => section.id === "team-memory")?.text ?? "";
-  };
-  const confirm = async (auth: Auth, threadId: string, requestId: string) => {
-    const answered = await api("POST", `/api/threads/${threadId}/respond`, auth, { requestId, behavior: "allow" });
-    expect(answered.status, answered.text).toBe(200);
   };
   /** The system prompt of the turn that received this text (every turn's
    * record is appended; another bot's turn never stands in for it). */
@@ -201,27 +199,30 @@ posixOnly("#4460 team memory stays with its person on an organization server", (
     if (home) removeTempDir(home);
   });
 
-  it("keeps what one person confirmed from the other person's ungrouped bot: prompt, turn, listing, approvals", async () => {
+  it("keeps what one person's bot saved from the other person's ungrouped bot: prompt, turn, listing, approvals", async () => {
     const aliceBot = await makeBot(alice, "Alice helper");
     const bobBot = await makeBot(bob, "Bob helper");
-    const requestId = await proposeTeamMemory(bobBot.id, bobBot.threadId, "Zephyr", "Zephyr is the name of Bob's scheduling bot");
-    // the other person never gets the card, an admin neither
-    expect(JSON.stringify((await api("GET", "/api/approvals", alice)).body)).not.toContain(requestId);
-    // the card tells its person the truth: their own memory, not a team's
-    const bobCard = JSON.stringify((await api("GET", "/api/approvals", bob)).body);
-    expect(bobCard).toContain(requestId);
-    expect(bobCard).toContain("Remember this in the bot owner's own memory?");
-    expect(bobCard).not.toContain("for the team");
-    await confirm(bob, bobBot.threadId, requestId);
+    const before = Date.now();
+    const entryId = await saveTeamMemory(bobBot.id, bobBot.threadId, "Zephyr", "Zephyr is the name of Bob's scheduling bot");
+    // #4439: no card for anyone, Bob included; nothing waits
+    for (const auth of [alice, bob]) expect(JSON.stringify((await api("GET", "/api/approvals", auth)).body)).not.toContain(entryId);
+    const bobThread = JSON.stringify((await api("GET", `/api/threads/${bobBot.threadId}/messages`, bob)).body);
+    expect(bobThread).not.toContain("Remember this");
+    // Bob's list says which bot saved it and when
+    const saved = (await api("GET", "/api/team-memory?section=", bob)).body.entries as Array<{ id: string; status: string; source: { botId: string; botName: string; at: number } }>;
+    const row = saved.find((entry) => entry.id === entryId);
+    expect(row, JSON.stringify(saved)).toMatchObject({ status: "accepted", source: { botId: bobBot.id, botName: "Bob helper" } });
+    expect(row!.source.at).toBeGreaterThanOrEqual(before);
 
     // Bob's own bot reads it, and the block says whose memory it is
     const bobPrompt = await promptOf(bob, bobBot.id);
     expect(bobPrompt).toContain("Zephyr");
     expect(bobPrompt).toContain("Your own memory, \"Bob\"'s");
     expect(bobPrompt).toContain("\"Office\"");
-    // and the instruction after it says the same, never "shared prompts"
+    // and the instruction after it says the same, never "shared prompts" nor a wait
     expect(bobPrompt).toContain("only that person's bots read it");
     expect(bobPrompt).not.toContain("shared prompts");
+    expect(bobPrompt).not.toMatch(/propose_team_memory|confirmation/);
     // Alice's bot does not, in its prompt nor in a real turn
     expect(await promptOf(alice, aliceBot.id)).not.toContain("Zephyr");
     const sent = await api("POST", `/api/bots/${aliceBot.id}/messages`, alice, { text: "Who is Zephyr?", threadId: aliceBot.threadId });
@@ -241,11 +242,10 @@ posixOnly("#4460 team memory stays with its person on an organization server", (
   it("keeps two sections of the same name apart", async () => {
     const aliceOps = await makeBot(alice, "Alice ops", "Ops");
     const bobOps = await makeBot(bob, "Bob ops", "Ops");
-    const requestId = await proposeTeamMemory(aliceOps.id, aliceOps.threadId, "Nimbus", "Nimbus is the board Alice dispatches from");
-    expect(JSON.stringify((await api("GET", "/api/approvals", bob)).body)).not.toContain(requestId);
-    // Bob cannot confirm it either
-    expect((await api("POST", `/api/threads/${aliceOps.threadId}/respond`, bob, { requestId, behavior: "allow" })).status).toBeOneOf([403, 404]);
-    await confirm(alice, aliceOps.threadId, requestId);
+    const entryId = await saveTeamMemory(aliceOps.id, aliceOps.threadId, "Nimbus", "Nimbus is the board Alice dispatches from");
+    expect(JSON.stringify((await api("GET", "/api/approvals", bob)).body)).not.toContain(entryId);
+    // Bob can neither change nor remove it
+    expect((await api("DELETE", `/api/team-memory/${entryId}?section=Ops`, bob)).status).toBeOneOf([403, 404]);
     expect(await promptOf(alice, aliceOps.id)).toContain("Nimbus");
     expect(await promptOf(bob, bobOps.id)).not.toContain("Nimbus");
     // a real turn reads the same memory as the preview

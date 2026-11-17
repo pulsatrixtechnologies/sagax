@@ -277,7 +277,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
       entries: [
         { id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot, the old name of the app.", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 50 * D }, updatedAt: now - 10 * D, ...(own ? { movedFrom: "General" } : {}) },
         { id: "tm2", kind: "place", name: "Lab", detail: "The shared lab on the second floor.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 70 * D }, updatedAt: now - 30 * D },
-        ...(decided.has("tm3") ? [] : [{ id: "tm3", kind: "decision", name: "Friday backups", detail: "Back up every Friday at 18:00.", aliases: [], status: "proposed", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 2 * D }, updatedAt: now - 2 * D }]),
+        ...(decided.has("tm3") ? [] : [{ id: "tm3", kind: "decision", name: "Friday backups", detail: "Back up every Friday at 18:00.", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 2 * D }, updatedAt: now - 2 * D }]),
         { id: "tm4", kind: "person", name: "Front desk", detail: "Answers ext 100 on weekdays.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 15 * D }, updatedAt: now - 15 * D },
       ],
     });

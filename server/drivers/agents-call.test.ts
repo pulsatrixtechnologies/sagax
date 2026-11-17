@@ -305,24 +305,36 @@ describe("memory_update", () => {
   });
 });
 
-describe("propose_team_memory", () => {
-  it.each(["person", "place", "decision", "term"])("sends the %s proposal with exact identity and never claims immediate publication", async (kind) => {
+// #4439: the bot saves team memory itself and says so; the old name still runs it
+describe("save_team_memory", () => {
+  it.each([
+    ["person", "save_team_memory"], ["place", "save_team_memory"], ["decision", "save_team_memory"], ["term", "save_team_memory"],
+    ["term", "propose_team_memory"],
+  ])("saves the %s entry with exact identity through %s and says it is saved, never that it waits", async (kind, tool) => {
     const calls: Array<{ path: string; body: any }> = [];
-    const result = await callTool("propose_team_memory", { kind, name: "  Fixture name  ", detail: "  Unreviewed detail  ", aliases: ["Alias"] }, context({
+    const result = await callTool(tool, { kind, name: "  Fixture name  ", detail: "  Saved detail  ", aliases: ["Alias"] }, context({
       client: {
         api: async (path, init) => {
           calls.push({ path, body: JSON.parse(String(init?.body)) });
-          return { status: "proposed", requestId: "proposal-fixture", summary: "Needs admin review" };
+          return { status: "saved", entryId: "entry-fixture", summary: "Term: Fixture name: Saved detail" };
         },
         apiResponse: async () => ({ ok: true, status: 200, body: {} }),
       },
     }));
     expect(result.isError).not.toBe(true);
-    expect(result.text).toMatch(/confirm|wait/i);
-    expect(result.text).not.toContain("Remembered for the team");
+    expect(result.text).toMatch(/^Saved/);
+    expect(result.text).not.toMatch(/confirm|wait|propos/i);
     expect(calls).toEqual([{ path: "/api/internal/team-memory", body: {
-      fromBotId: "bot-voice", fromThreadId: "thread-voice", kind, name: "Fixture name", detail: "Unreviewed detail", aliases: ["Alias"],
+      fromBotId: "bot-voice", fromThreadId: "thread-voice", kind, name: "Fixture name", detail: "Saved detail", aliases: ["Alias"],
     } }]);
+  });
+
+  it("reports a refusal as an error", async () => {
+    const result = await callTool("save_team_memory", { kind: "term", name: "X", detail: "Y" }, context({
+      client: { api: async () => ({ error: "nope" }), apiResponse: async () => ({ ok: true, status: 200, body: {} }) },
+    }));
+    expect(result).toMatchObject({ isError: true });
+    expect(result.text).toContain("nope");
   });
 });
 

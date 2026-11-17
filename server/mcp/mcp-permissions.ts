@@ -209,7 +209,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("agents:delete", "admin", "delete_agent"),
   p("rooms:create", "admin", "create_room"),
   p("rooms:manage", "admin", "manage_room"),
-  p("teammemory:propose", "admin", "propose_team_memory"),
+  // #4439: the bot saves team memory itself; the old tool name stays an alias
+  p("teammemory:propose", "admin", "save_team_memory", "sagax", ["propose_team_memory"]),
   p("mcp:add", "admin", "add_mcp_server"),
   p("credentials:request", "admin", "request_credential"),
   p("computers:use", "admin", "shared_computer"),

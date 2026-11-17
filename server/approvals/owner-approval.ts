@@ -39,6 +39,7 @@ import { parseGrokGatewayToolId } from "../../shared/grok-cloud-connectors.ts";
 import { connectorWriteKind } from "../../shared/engine-connectors.ts";
 import { screenAppTarget, type ScreenAppIdentity } from "../../shared/computer-app.ts";
 import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
+import { currentRuleToolId } from "../../shared/agent-tool-renames.ts";
 import { credentialReadPath, sensitiveReadPath, shellCredentialPaths } from "../safety/sensitive-path.ts";
 
 export const BOT_PERMISSION_MODES = ["approval", "auto", "bypass"] as const;
@@ -106,11 +107,13 @@ export interface RuleCall {
   ownSandbox?: boolean;
 }
 
-/** `mcp__srv__tool` and `srv__tool` are one tool; a built-in keeps its name. */
+/** `mcp__srv__tool` and `srv__tool` are one tool; a built-in keeps its name.
+ * A renamed Sagax tool reads as its current name, so a rule saved on the
+ * old name keeps covering it (shared/agent-tool-renames.ts). */
 export function normalizeRuleTool(tool: string): string {
   const trimmed = tool.trim();
   const parsed = parseToolId(trimmed);
-  return parsed.server ? `${parsed.server}__${parsed.name}`.toLowerCase() : trimmed;
+  return parsed.server ? currentRuleToolId(`${parsed.server}__${parsed.name}`.toLowerCase()) : trimmed;
 }
 
 /** Argument keys that name WHERE a call acts, in the order they are kept.

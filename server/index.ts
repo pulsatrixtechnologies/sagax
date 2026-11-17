@@ -24406,27 +24406,13 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     updateDoc: (botId, update, opts) => updateDoc(botId, update as never, opts),
     searchDocs: (botId, q, limit) => searchDocFiles(botId, q, limit),
     markWorkspaceUse,
-    proposeTeamMemory: (section, entry, meta) => {
+    // #4439: the bot saves it itself, into the memory its person may write
+    saveTeamMemory: (section, entry, meta) => {
       const owner = meta.botId ? effectiveBotOwner(store.bot(meta.botId) ?? {}) : undefined;
-      return teamMemory.propose(teamMemoryKeyFor(section, owner), entry, meta);
+      return teamMemory.save(teamMemoryKeyFor(section, owner), entry, meta);
     },
-    appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
-    // #2091: a team-memory rule the person kept accepts the entry at once
     teamMemoryPersonScoped,
-    settleTeamMemoryByRule: (botId, threadId, proposed, section) => {
-      const bot = store.bot(botId);
-      if (!bot) return undefined;
-      return settleProposalByRule(bot, threadId, proposed, () => {
-        const result = teamMemory.resolve(teamMemoryKeyFor(section, effectiveBotOwner(bot)), proposed.requestId, "accept");
-        if (result.claimed && result.state === "accepted") {
-          const row = store.messagesFor(threadId).find((message) => message.id === proposed.messageId);
-          if (row?.card) store.patchMessage(threadId, row.id, { card: { ...row.card, answered: "allow" } });
-        }
-        return { claimed: result.claimed && result.state === "accepted" };
-      });
-    },
-    notify
   }),
   createInternalEnvironmentsRoutes({
     bot: (id) => store.bot(id) ?? undefined,
@@ -29680,7 +29666,7 @@ function teamMemoryPromptFor(bot: { section?: string; sectionId?: string; ownerU
   const scope = teamMemoryForBot(bot);
   return teamMemory.systemPrompt(scope.key, scope.label, scope.person);
 }
-/** #4460: the propose_team_memory instruction, worded for this server's
+/** #4460: the save_team_memory instruction, worded for this server's
  * mode (team-memory-scope.ts teamMemoryWording). */
 function teamMemoryToolPrompt(): string {
   return teamMemoryWording(teamMemoryPersonScoped()).prompt;

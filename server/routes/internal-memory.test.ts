@@ -64,10 +64,8 @@ function deps(over: Partial<InternalMemoryDeps> = {}): InternalMemoryDeps {
     updateDoc: () => ({ ok: true as const, path: "docs/a.md" }),
     searchDocs: () => [{ path: "docs/a.md", line: 1, text: "hit" }],
     markWorkspaceUse: () => undefined,
-    proposeTeamMemory: () => ({ entry: { id: "e1", kind: "term", name: "VPN", detail: "corp", aliases: [] } }),
-    appendMessage: () => ({ id: "card-1" }),
+    saveTeamMemory: () => ({ entry: { id: "e1", kind: "term", name: "VPN", detail: "corp", aliases: [] } }),
     appendDecision: () => undefined,
-    notify: () => undefined,
     ...over,
   };
 }
@@ -405,17 +403,47 @@ describe("createInternalMemoryRoutes", () => {
     expect(sent[0]).toEqual({ status: 403, body: { error: "unknown sender" } });
   });
 
-  it("POST /api/internal/team-memory happy path", async () => {
+  // #4439 review: with no card left, the entry is written by the token's own
+  // bot and thread only; ids of another bot or thread are refused, nothing saved
+  it("POST /api/internal/team-memory refuses ids that are not the token's own bot and thread (403), saving nothing", async () => {
+    const other: InternalMemoryBot = { ...bot, id: "bot-2", name: "Other" };
+    const saveTeamMemory = vi.fn(() => ({ entry: { id: "e1", kind: "term", name: "VPN", detail: "corp", aliases: [] as string[] } }));
+    const route = createInternalMemoryRoutes(deps({
+      saveTeamMemory,
+      bot: (id) => (id === bot.id ? bot : id === other.id ? other : null),
+      // the other bot's thread is its own: only the token decides
+      ownsThread: (botId, threadId) => (botId === bot.id && threadId === "t-1") || (botId === other.id && threadId === "t-2"),
+    } as Partial<InternalMemoryDeps>));
+    for (const ids of [{ fromBotId: "bot-2", fromThreadId: "t-2" }, { fromBotId: "bot-2", fromThreadId: "t-1" }, { fromBotId: "bot-1", fromThreadId: "t-2" }]) {
+      const { sent, run } = call(route, { path: "/api/internal/team-memory", body: { ...ids, kind: "term", name: "VPN", detail: "corp" } });
+      await run();
+      expect(sent[0]?.status, JSON.stringify(ids)).toBe(403);
+    }
+    expect(saveTeamMemory).not.toHaveBeenCalled();
+  });
+
+  // #4439: the bot saves it itself, at once: no card, no notification, no wait
+  it("POST /api/internal/team-memory saves the entry at once, with the bot that saved it and when, and raises no card", async () => {
     const appendMessage = vi.fn(() => ({ id: "card-9" }));
     const notify = vi.fn();
-    const route = createInternalMemoryRoutes(deps({ appendMessage, notify }));
+    const appendDecision = vi.fn();
+    const saveTeamMemory = vi.fn((_section: string | undefined, entry: { kind: string; name: string; detail: string }, _meta: { botId: string; botName: string; threadId: string; at: number }) => ({ entry: { id: "e9", ...entry, aliases: [] as string[] } }));
+    // what raised the card and its notification before #4439, watched so neither comes back
+    const route = createInternalMemoryRoutes({ ...deps({ appendDecision, saveTeamMemory } as Partial<InternalMemoryDeps>), appendMessage, notify } as InternalMemoryDeps);
+    const before = Date.now();
     const { sent, run } = call(route, {
       path: "/api/internal/team-memory",
       body: { fromBotId: "bot-1", fromThreadId: "t-1", kind: "term", name: "VPN", detail: "corp network" },
     });
     await run();
     expect(sent[0]?.status).toBe(201);
-    expect(appendMessage).toHaveBeenCalledOnce();
-    expect(notify).toHaveBeenCalledOnce();
+    expect(sent[0]?.body).toMatchObject({ status: "saved", entryId: "e9" });
+    expect(saveTeamMemory).toHaveBeenCalledOnce();
+    const meta = saveTeamMemory.mock.calls[0]![2];
+    expect(meta).toMatchObject({ botId: "bot-1", botName: bot.name, threadId: "t-1" });
+    expect(meta.at).toBeGreaterThanOrEqual(before);
+    expect(appendMessage).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+    expect(appendDecision).toHaveBeenCalledWith(expect.objectContaining({ tool: "save_team_memory", decision: "auto-approved", requestId: "e9" }));
   });
 });

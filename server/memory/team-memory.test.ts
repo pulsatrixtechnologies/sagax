@@ -145,6 +145,72 @@ describe("propose", () => {
   });
 });
 
+// #4439: a bot saves an entry itself; nobody confirms it
+describe("save", () => {
+  it("keeps every kind at once, in the prompt, with the bot that saved it and when", () => {
+    for (const [kind, name] of [["place", "Launch plan"], ["term", "MCHQ"], ["person", "Ayush"], ["decision", "Ship Android first"]] as const) {
+      const saved = memory.save("", { kind, name, detail: `${name} detail` }, source);
+      expect(saved.entry).toMatchObject({ status: "accepted", source, updatedAt: source.at });
+      expect(saved.replaced).toBeUndefined();
+    }
+    expect(memory.list("").map((entry) => [entry.name, entry.status, entry.source.botName])).toEqual([
+      ["Launch plan", "accepted", "Scout"],
+      ["MCHQ", "accepted", "Scout"],
+      ["Ayush", "accepted", "Scout"],
+      ["Ship Android first", "accepted", "Scout"],
+    ]);
+    const prompt = new TeamMemory(join(dir, "team-memory.json")).systemPrompt("");
+    for (const name of ["Launch plan", "MCHQ", "Ayush", "Ship Android first"]) expect(prompt).toContain(name);
+  });
+
+  it("replaces the accepted entry of the same kind and name; another kind is another entry", () => {
+    const first = memory.save("", { kind: "person", name: "Alex", detail: "original" }, source);
+    const second = memory.save("", { kind: "person", name: "alex", detail: "replacement" }, { ...source, at: source.at + 1 });
+    expect(second.replaced).toMatchObject({ id: first.entry.id, detail: "original" });
+    expect(memory.list("")).toHaveLength(1);
+    expect(memory.systemPrompt("")).toContain("alex: replacement");
+    expect(memory.systemPrompt("")).not.toContain("original");
+    memory.save("", { kind: "place", name: "Alex", detail: "a room" }, source);
+    expect(memory.list("")).toHaveLength(2);
+  });
+
+  it("masks a secret and refuses junk, as a proposal did", () => {
+    // manifestly fake, shaped only to match the masking pattern
+    const key = "sk-ant-api03-" + "FAKEKEYNOTREAL".repeat(3);
+    expect(memory.save("", { kind: "place", name: "Billing API", detail: `the key is ${key}` }, source).entry.detail).not.toContain(key);
+    expect(() => memory.save("", { kind: "person", name: "", detail: "x" }, source)).toThrow(/name/);
+    expect(() => memory.save("", { kind: "rumor" as never, name: "x", detail: "x" }, source)).toThrow(/kind/);
+  });
+
+  it("leaves an older proposal waiting on its card; answering it later saves it", () => {
+    const waiting = memory.propose("", { kind: "term", name: "VPN", detail: "old card" }, source);
+    memory.save("", { kind: "term", name: "OKR", detail: "quarterly goals" }, source);
+    expect(memory.list("").find((entry) => entry.id === waiting.entry.id)?.status).toBe("proposed");
+    expect(memory.resolve("", waiting.entry.id, "accept")).toEqual({ claimed: true, state: "accepted" });
+    expect(memory.systemPrompt("")).toContain("VPN: old card");
+  });
+});
+
+// #4439 review: an old card answered after a bot saved a newer entry of the
+// same kind and name keeps the newer one; the old proposal is dropped and the
+// card closes
+describe("resolve after a newer save", () => {
+  it("keeps the newer saved entry and settles the old proposal", () => {
+    const waiting = memory.propose("", { kind: "term", name: "VPN", detail: "old card" }, source);
+    const newer = memory.save("", { kind: "term", name: "vpn", detail: "saved later" }, { ...source, at: source.at + 10 });
+    expect(memory.resolve("", waiting.entry.id, "accept")).toEqual({ claimed: true, state: "already_settled" });
+    expect(memory.list("").map((entry) => [entry.id, entry.status, entry.detail])).toEqual([[newer.entry.id, "accepted", "saved later"]]);
+  });
+
+  it("still replaces an accepted entry older than the proposal", () => {
+    const older = memory.save("", { kind: "term", name: "VPN", detail: "older" }, source);
+    const waiting = memory.propose("", { kind: "term", name: "VPN", detail: "old card" }, { ...source, at: source.at + 10 });
+    expect(memory.resolve("", waiting.entry.id, "accept")).toEqual({ claimed: true, state: "accepted" });
+    expect(memory.list("").map((entry) => entry.id)).toEqual([waiting.entry.id]);
+    expect(older.entry.id).not.toBe(waiting.entry.id);
+  });
+});
+
 describe("resolve, update, remove", () => {
   it("rejects edits that collide with another accepted fact", () => {
     const a = memory.propose("", { kind: "term", name: "Alex", detail: "term" }, source);
@@ -199,7 +265,8 @@ describe("systemPrompt", () => {
     expect(prompt).toContain("MCHQ: MissionControlHQ");
     expect(prompt).toContain("Launch plan: Notion, Marketing space");
     expect(prompt).not.toContain("Ship Android first");
-    expect(prompt).toContain("propose_team_memory");
+    // #4439: the bot saves itself; the block never says propose or confirm
+    expect(prompt).not.toMatch(/propos|confirm/i);
   });
 
   it("stays under its byte budget, newest first when it has to cut", () => {

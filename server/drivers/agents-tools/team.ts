@@ -322,8 +322,10 @@ export const DEF_PROPOSE_PROACTIVE = {
     },
   };
 
-export const DEF_PROPOSE_TEAM_MEMORY = {
-    name: "propose_team_memory",
+// #4439: the bot saves it itself (propose_team_memory: its old name, a hidden
+// alias in shared/agent-tool-renames.ts)
+export const DEF_SAVE_TEAM_MEMORY = {
+    name: "save_team_memory",
     description: teamMemoryWording(false).toolDescription,
     inputSchema: {
       type: "object",
@@ -340,8 +342,8 @@ export const DEF_PROPOSE_TEAM_MEMORY = {
 
 /** #4460: on a server several people use, the entry goes to the bot
  * owner's own memory (team-memory-scope.ts teamMemoryWording). */
-export function proposeTeamMemoryDef(personScoped: boolean): typeof DEF_PROPOSE_TEAM_MEMORY {
-  return personScoped ? { ...DEF_PROPOSE_TEAM_MEMORY, description: teamMemoryWording(true).toolDescription } : DEF_PROPOSE_TEAM_MEMORY;
+export function saveTeamMemoryDef(personScoped: boolean): typeof DEF_SAVE_TEAM_MEMORY {
+  return personScoped ? { ...DEF_SAVE_TEAM_MEMORY, description: teamMemoryWording(true).toolDescription } : DEF_SAVE_TEAM_MEMORY;
 }
 
 export const DEF_NUDGE_PERSON = {
@@ -358,7 +360,7 @@ export const DEF_NUDGE_PERSON = {
     },
   };
 
-export const TEAM_TOOL_NAMES: ReadonlySet<string> = new Set(['start_thread', 'create_bot', 'list_team_setup', 'propose_team_setup', 'propose_bot_deletion', 'import_plugin_team', 'archive_bot', 'create_room', 'manage_room', 'retry_thread', 'propose_profile', 'propose_model', 'propose_rule', 'propose_team_memory', 'nudge_person', 'propose_proactive'] as const);
+export const TEAM_TOOL_NAMES: ReadonlySet<string> = new Set(['start_thread', 'create_bot', 'list_team_setup', 'propose_team_setup', 'propose_bot_deletion', 'import_plugin_team', 'archive_bot', 'create_room', 'manage_room', 'retry_thread', 'propose_profile', 'propose_model', 'propose_rule', 'save_team_memory', 'nudge_person', 'propose_proactive'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callTeamTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -676,11 +678,11 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
     if (r.error) return { text: `Couldn't retry that thread: ${String(r.error)}`, isError: true };
     return { text: typeof r.message === "string" ? r.message : "The thread is running again. Its result stays in that thread; you are not woken for it; check it later with session_search or list_threads if you need to." };
   }
-  if (name === "propose_team_memory") {
+  if (name === "save_team_memory") {
     const kind = String(args.kind ?? "").trim();
     const entryName = String(args.name ?? "").trim();
     const detail = String(args.detail ?? "").trim();
-    if (!kind || !entryName || !detail) return { text: "propose_team_memory needs kind, name, and detail.", isError: true };
+    if (!kind || !entryName || !detail) return { text: "save_team_memory needs kind, name, and detail.", isError: true };
     const r = await api("/api/internal/team-memory", {
       method: "POST",
       body: JSON.stringify({
@@ -692,8 +694,9 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
         aliases: Array.isArray(args.aliases) ? args.aliases.filter((alias) => typeof alias === "string") : undefined,
       }),
     });
+    if (r.error) return { text: `Couldn't save ${entryName}: ${String(r.error)}`, isError: true };
     // #4460: SAGAX_OWN_TEAM_MEMORY, as the tool's description (agents-catalog.ts)
-    return confirmationResult(r, `remembering ${entryName} ${teamMemoryWording(process.env.SAGAX_OWN_TEAM_MEMORY === "1").resultTarget}`, "entry");
+    return { text: `Saved ${entryName} ${teamMemoryWording(process.env.SAGAX_OWN_TEAM_MEMORY === "1").resultTarget}${r.replaced ? ", replacing the older entry" : ""}. Tell the person in one short line.` };
   }
   return null;
 }

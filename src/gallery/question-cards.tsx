@@ -55,7 +55,9 @@ function chatAsk(id: string, question: string, options: string[], more: Partial<
 }
 
 // Answered here, settled elsewhere (409): the optimistic local answer, then
-// the server's real outcome merged on top the way the reducer does it.
+// the server's real outcome merged on top the way the reducer does it. Only a
+// team memory card an earlier version left waiting gets this (#4439: a bot
+// now saves team memory itself and raises no card).
 function settledElsewhere(id: string, outcome: string): Message {
   const settled = teamMemorySettled({ status: 409, body: { code: "team_memory_settled", outcome, settledBy: "Dana" } });
   return ask(id, [WEBHOOKS], { answered: "answer", answeredText: "Oui, mets-les en pause", ...settled?.card });
@@ -145,10 +147,10 @@ function Preview() {
         <Row id="ask-answered" label="AskUserQuestion, répondue">
           <QuestionCard threadId="t" bot={bot} message={ask("b", [WEBHOOKS], { answered: "answer", answeredText: "Oui, mets-les en pause" })} />
         </Row>
-        <Row id="ask-409-allow" label="Réglée ailleurs (409), acceptée par quelqu'un d'autre">
+        <Row id="ask-409-allow" label="Carte de mémoire d'équipe d'une version précédente, réglée ailleurs (409), acceptée par quelqu'un d'autre">
           <QuestionCard threadId="t" bot={bot} message={settledElsewhere("h409a", "allowed-once")} />
         </Row>
-        <Row id="ask-409-gone" label="Réglée ailleurs (409), entrée disparue">
+        <Row id="ask-409-gone" label="Carte de mémoire d'équipe d'une version précédente, réglée ailleurs (409), entrée disparue">
           <QuestionCard threadId="t" bot={bot} message={settledElsewhere("h409g", "unavailable")} />
         </Row>
         <section data-variant="chat-offline" className="flex flex-col items-start gap-2 p-4">

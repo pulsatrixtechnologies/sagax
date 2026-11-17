@@ -10,11 +10,9 @@ import { z } from "zod";
 import { applySuggestion, commentsForModel, parseThreadText, suggestable } from "../../shared/page-threads.ts";
 import type { MausColor } from "../../shared/wire.ts";
 import { sameAudience } from "../bots/bot-visibility.ts";
-import { deliverableNotification } from "../notify.ts";
 import { PAGE_LIMITS, type PageReplace } from "../../shared/published-pages.ts";
 import { PAGE_SOURCE_READ_BYTES, botMayRevisePage, pageOwnerFor, pageSourceDigest, pageSourceRange, type PageSourceChange, type PageSourceDigest, type PageSourceRead } from "../pages/published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { sectionContextKey } from "../rooms/section-context.ts";
 import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";
 import { TOOL_RESULT_MAX_CHARS } from "../tools/tool-results.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
@@ -157,18 +155,15 @@ export interface InternalMemoryDeps {
   updateDoc(botId: string, update: Record<string, unknown>, opts: { threadId: string }): { ok: true; journal?: unknown; [k: string]: unknown } | { ok: false; code?: string; error?: string; [k: string]: unknown };
   searchDocs(botId: string, q: string, limit: number): unknown[];
   markWorkspaceUse(botId: string, paths: readonly string[]): void;
-  proposeTeamMemory(
+  /** #4439: a bot's team memory entry, kept at once (TeamMemory.save). */
+  saveTeamMemory(
     section: string | undefined,
     entry: { kind: TeamMemoryKind; name: string; detail: string; aliases?: string[] },
     meta: { botId: string; botName: string; threadId: string; at: number },
-  ): { entry: { id: string; kind: string; name: string; detail: string; aliases: string[] } };
-  appendMessage(threadId: string, message: Record<string, unknown>): { id: string };
-  /** #2091: the Always allow the person kept for team-memory proposals of
-   * this kind settles the card at once (index.ts settleProposalByRule). */
+  ): { entry: { id: string; kind: string; name: string; detail: string; aliases: string[] }; replaced?: unknown };
   /** #4460: a server several people use: an entry goes to the bot owner's
-   * own memory, and the card says so (team-memory-scope.ts). */
+   * own memory, and the refusal says so (team-memory-scope.ts). */
   teamMemoryPersonScoped?(): boolean;
-  settleTeamMemoryByRule?(botId: string, threadId: string, proposed: { requestId: string; messageId: string }, section: string): { rule: { id: string } } | undefined;
   appendDecision(row: {
     threadId: string;
     requestId: string;
@@ -179,7 +174,6 @@ export interface InternalMemoryDeps {
     decision: string;
     source: string;
   }): void;
-  notify(notification: unknown): void;
 }
 
 export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRouteHandler {
@@ -512,10 +506,16 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
         detail: z.string(),
         aliases: z.array(z.string()).optional(),
       }).strict().safeParse(await readBody());
-      if (!parsed.success) return json(res, 400, { error: "invalid team memory proposal" });
+      if (!parsed.success) return json(res, 400, { error: "invalid team memory entry" });
       const body = parsed.data;
       const from = deps.bot(body.fromBotId);
       if (!from) return json(res, 403, { error: "unknown sender" });
+      // #4439: no card stands behind the entry any more, so it is written
+      // only by the token's own bot from the token's own conversation: ids
+      // of another bot or thread never reach that person's memory
+      if (from.id !== sender.id || body.fromThreadId !== capability.threadId) {
+        return json(res, 403, { error: "a bot saves team memory only from its own conversation" });
+      }
       const ownerThread = deps.ownsThread(from.id, body.fromThreadId);
       if (!ownerThread) return json(res, 403, { error: "source conversation does not belong to sender" });
       const ownerGroup = deps.groupByThread(body.fromThreadId);
@@ -526,9 +526,15 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       if (!(TEAM_MEMORY_KINDS as readonly string[]).includes(body.kind)) {
         return json(res, 400, { error: `kind must be one of ${TEAM_MEMORY_KINDS.join(", ")}` });
       }
-      let proposed: ReturnType<InternalMemoryDeps["proposeTeamMemory"]>;
+      let saved: ReturnType<InternalMemoryDeps["saveTeamMemory"]>;
       try {
-        proposed = deps.proposeTeamMemory(
+        // #4439: the bot saves it itself, at once, into the memory its
+        // person may write (index.ts teamMemoryKeyFor: the bot owner's own
+        // on a server several people use). No card, no wait; the person
+        // edits or removes it on the memory page, which names the bot and
+        // the time. An organization's Refuse or Ask first rule on the tool
+        // held the call before it reached this route.
+        saved = deps.saveTeamMemory(
           from.section,
           { kind: body.kind as TeamMemoryKind, name: body.name, detail: body.detail, aliases: body.aliases },
           { botId: from.id, botName: from.name, threadId: body.fromThreadId, at: Date.now() },
@@ -536,39 +542,13 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       } catch (error) {
         return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
       }
-      const summary = `${proposed.entry.kind[0]!.toUpperCase()}${proposed.entry.kind.slice(1)}: ${proposed.entry.name}${proposed.entry.aliases.length ? ` (also ${proposed.entry.aliases.join(", ")})` : ""} — ${proposed.entry.detail}`;
-      const section = sectionContextKey(from.section);
-      // the team's memory is the section's, not one person's sandbox: the
-      // isolation hold keeps this card at Full (full-access-gate.ts)
-      // full-access: isolation
-      const card = deps.appendMessage(body.fromThreadId, {
-        role: "bot",
-        kind: "options",
-        ...(ownerGroup ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
-        card: {
-          title: wording.cardTitle,
-          subtitle: summary,
-          options: ["Remember", "Skip"],
-          requestId: proposed.entry.id,
-          tool: "propose_team_memory",
-          teamMemoryRequest: { section, entryId: proposed.entry.id, kind: proposed.entry.kind },
-          // #2091: what Always allow keeps on this card
-          ownerRule: { tool: "sagax:team_memory", scope: { section, kind: proposed.entry.kind }, description: wording.ruleDescription(proposed.entry.kind) },
-        },
-      });
-      const byRule = deps.settleTeamMemoryByRule?.(from.id, body.fromThreadId, { requestId: proposed.entry.id, messageId: card.id }, section);
-      if (byRule) return json(res, 201, { status: "accepted", requestId: proposed.entry.id, messageId: card.id, summary, appliedBy: "rule" });
+      const { entry } = saved;
+      const summary = `${entry.kind[0]!.toUpperCase()}${entry.kind.slice(1)}: ${entry.name}${entry.aliases.length ? ` (also ${entry.aliases.join(", ")})` : ""}: ${entry.detail}`;
       deps.appendDecision({
-        threadId: body.fromThreadId, requestId: proposed.entry.id, botId: from.id, botName: from.name,
-        tool: "propose_team_memory", summary, decision: "card-shown", source: "team-memory",
+        threadId: body.fromThreadId, requestId: entry.id, botId: from.id, botName: from.name,
+        tool: "save_team_memory", summary, decision: "auto-approved", source: "team-memory",
       });
-      deps.notify(deliverableNotification("approval", { ...from, threadId: from.threadId ?? body.fromThreadId }, body.fromThreadId, summary, {
-        avatarUrl: from.avatarUrl,
-        title: wording.cardTitle,
-        requestId: proposed.entry.id,
-        ...(ownerGroup ? { group: { id: ownerGroup.id, name: ownerGroup.name } } : {}),
-      }));
-      return json(res, 201, { status: "proposed", requestId: proposed.entry.id, messageId: card.id, summary });
+      return json(res, 201, { status: "saved", entryId: entry.id, summary, ...(saved.replaced ? { replaced: true } : {}) });
     }
     return PASS;
   };

@@ -149,17 +149,48 @@ struct FormRowContent: View {
         var id: Int { row }
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // the "Optional" tag sits beside the question when both fit on a
-            // line, under it otherwise; a word is never cut to make room
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) { questionLabel(question); optionalTag(question) }
-                VStack(alignment: .leading, spacing: 2) { questionLabel(question); optionalTag(question) }
-            }
-            control(index, question)
+    /// How the row lays out (#4580): pills and fields sit at the right of the
+    /// question on its line when both fit, else on the next line, still at the
+    /// right; a text or a long text takes its own line, full width.
+    private var sideBySide: Bool {
+        switch question.kind ?? .text {
+        case .text, .longText: return false
+        default: return true
         }
-        .padding(.vertical, 10)
+    }
+
+    private var questionWithTag: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) { questionLabel(question); optionalTag(question) }
+            VStack(alignment: .leading, spacing: 2) { questionLabel(question); optionalTag(question) }
+        }
+    }
+
+    var body: some View {
+        Group {
+            if sideBySide {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 12) {
+                        // on one line, or the question goes above its answers
+                        HStack(alignment: .firstTextBaseline, spacing: 8) { questionLabel(question); optionalTag(question) }
+                            .fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                        control(index, question)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        questionWithTag
+                        control(index, question).frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    questionWithTag
+                    control(index, question)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(minHeight: 54)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .top) {
             if index > 0 { Rectangle().fill(colors.ink.opacity(0.06)).frame(height: 1) }
@@ -226,7 +257,7 @@ struct FormRowContent: View {
 
     private func questionLabel(_ question: AskQuestion) -> some View {
         Text(question.question)
-            .font(colors.font(13.5, .medium))
+            .font(colors.font(13.5))
             .foregroundStyle(colors.ink)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -252,7 +283,7 @@ struct FormRowContent: View {
         case .multi:
             pills(index, question, multi: true)
         case .duration:
-            FormPillsLayout(spacing: 8, lineSpacing: 0) {
+            FormPillsLayout(spacing: 8, lineSpacing: 0, trailing: true) {
                 numberField(index, \.hours, sub: 0, width: 64, label: String(localized: "Hours for \(question.question)"), keyboard: .numberPad, inlineDone: false)
                 Text("question.form.hours").font(colors.font(13)).foregroundStyle(ink2).frame(minHeight: 44)
                 numberField(index, \.minutes, sub: 1, width: 64, label: String(localized: "Minutes for \(question.question)"), keyboard: .numberPad, inlineDone: false)
@@ -339,7 +370,7 @@ struct FormRowContent: View {
         let answered = formatter.date(from: state.draft(index).value)
         let shown = answered.map { component == .date
             ? $0.formatted(date: .abbreviated, time: .omitted) : $0.formatted(date: .omitted, time: .shortened) }
-        return FormPillsLayout(spacing: 8, lineSpacing: 0) {
+        return FormPillsLayout(spacing: 8, lineSpacing: 0, trailing: true) {
             Button {
                 Haptics.selection()
                 pickerTarget = PickerTarget(row: index, component: component, format: format, initial: answered ?? Date())
@@ -381,7 +412,7 @@ struct FormRowContent: View {
     /// Drawn 34 pt tall, a 44 pt target; a long answer wraps inside the card.
     private func pills(_ index: Int, _ question: AskQuestion, multi: Bool) -> some View {
         let picked = state.draft(index).picked
-        return FormPillsLayout(spacing: 6, lineSpacing: 0) {
+        return FormPillsLayout(spacing: 6, lineSpacing: 0, trailing: true) {
             ForEach(Array(question.options.enumerated()), id: \.offset) { _, option in
                 let key = question.key(option)
                 let on = picked.contains(key)
@@ -473,9 +504,12 @@ extension String {
 struct FormPillsLayout: Layout {
     var spacing: CGFloat = 6
     var lineSpacing: CGFloat = 6
+    /// Each line ends at the right edge (a row's answers sit at the right, #4580).
+    var trailing = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let placed = place(width: proposal.width ?? .infinity, subviews: subviews)
+        if trailing, let width = proposal.width, width.isFinite { return CGSize(width: width, height: placed.height) }
         return CGSize(width: min(proposal.width ?? placed.width, placed.width), height: placed.height)
     }
 
@@ -504,6 +538,12 @@ struct FormPillsLayout: Layout {
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
             widest = max(widest, x - spacing)
+        }
+        if trailing, width.isFinite {
+            // a line's pills move right by what that line leaves free
+            var lineEnd: [CGFloat: CGFloat] = [:]
+            for (index, origin) in origins.enumerated() { lineEnd[origin.y] = max(lineEnd[origin.y] ?? 0, origin.x + sizes[index].width) }
+            for index in origins.indices { origins[index].x += max(0, width - (lineEnd[origins[index].y] ?? width)) }
         }
         return (origins, sizes, widest, y + rowHeight)
     }

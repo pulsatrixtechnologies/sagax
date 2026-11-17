@@ -103,6 +103,14 @@ final class FormCardTextSizeUITests: XCTestCase {
         let startDrawn = nonFlat(app)
         XCTAssertTrue(startDrawn, "\(context): the start of the card is not drawn", file: file, line: line)
         if !startDrawn { saveFailure(app, context + "-start") }
+        // the head never breaks a word: every long word of the title reads whole at the top of the card
+        let words = title.split { !$0.isLetter }.map(String.init).filter { $0.count >= 5 }
+        let top = screenText(app).lowercased()
+        let broken = words.filter { !top.contains($0.lowercased()) }
+        // (a long card is not at its head after a fixed run of swipes: then none of the words is on screen)
+        let atHead = broken.count < words.count
+        XCTAssertTrue(!atHead || broken.isEmpty, "\(context): the head breaks or loses \(broken) (screen reads: \(top.prefix(240)))", file: file, line: line)
+        if atHead && !broken.isEmpty { saveFailure(app, context + "-head") }
         print("FORMCARD \(context): end \(endDrawn), action button \(buttonSeen), last label in snapshot \(lastSeen), title in snapshot \(isShown(app, title))")
         for _ in 0..<8 { app.swipeUp(velocity: .fast) }
     }
@@ -189,6 +197,7 @@ final class FormCardTextSizeUITests: XCTestCase {
         for (n, item) in cases.enumerated() {
             let app = launch(item.0, fill: item.1, dark: dark, french: french)
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", item.3)).firstMatch.waitForExistence(timeout: 30), "cold launch \(n) (\(dark ? "dark" : "light"), \(french ? "fr" : "en")): the form never appeared")
+            snap(app, "cold-\(n)-\(dark ? "dark" : "light")-\(french ? "fr" : "en")")
             assertDrawn(app, title: item.2, last: item.3, "cold launch \(n) (\(dark ? "dark" : "light"), \(french ? "fr" : "en"))")
             app.terminate()
         }

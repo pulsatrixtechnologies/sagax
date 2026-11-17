@@ -289,6 +289,10 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
     }
   });
   const useRow = async (bot: { id: string }, row: Row, scenario: "read" | "send") => {
+    // a reply lands a moment before its turn ends; the model changes once the
+    // bot is idle, as for a person (checkedModelSelection: not while it works)
+    await expect.poll(async () => ((await api("GET", "/api/bots?messages=0")).body.bots as Array<{ id: string; busy?: boolean }>)
+      .find((candidate) => candidate.id === bot.id)?.busy ?? false, { timeout: 30_000 }).toBe(false);
     const picked = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: instanceOf(row, scenario), model: row.model } });
     expect(picked.status, JSON.stringify(picked.body)).toBe(200);
   };

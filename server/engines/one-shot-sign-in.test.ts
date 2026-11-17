@@ -19,7 +19,7 @@ function signInRefusal(_bot: { id: string }, _instance: unknown, ranOn: OneShotR
   });
 }
 
-function fixture(overrides: { account?: () => Promise<OneShotAccount>; renew?: boolean | (() => Promise<boolean>) } = {}) {
+function fixture(overrides: { account?: () => Promise<OneShotAccount>; renew?: boolean | (() => Promise<boolean>); stillRefused?: boolean } = {}) {
   // What #3533 had: a card in the chat and a notification. Nothing may reach it.
   const tell = vi.fn();
   const notify = vi.fn();
@@ -36,6 +36,7 @@ function fixture(overrides: { account?: () => Promise<OneShotAccount>; renew?: b
     log,
     redact: (text: string) => text.replace(/sk-[\w-]+/g, "[redacted]"),
     // #3533's own surfaces, kept here so a path that still used them shows red
+    stillRefused: overrides.stillRefused === undefined ? undefined : () => overrides.stillRefused === true,
     signInCard: (b: { id: string }, i: unknown, ranOn: OneShotRanOn | undefined, message: string) => signInRefusal(b, i, ranOn, message),
     refusalCard: (_b: unknown, _i: unknown, error: unknown) => (error as { card?: unknown }).card ?? null,
     tell: (...args: unknown[]) => { tell(...args); notify(...args); },
@@ -119,6 +120,17 @@ describe("one-shot sign-in (#3519, #3551)", () => {
     await expect(signIn.run(bot, instance, async () => "ok")).resolves.toBe("ok");
     await expect(signIn.run(bot, instance, refused)).rejects.toThrow(REFUSED);
     expect(renew).toHaveBeenCalledTimes(2);
+  });
+
+  it("a sign-in the card still marks expired does not start the model again", async () => {
+    const { signIn, renew } = fixture({ stillRefused: true });
+    const call = vi.fn(async () => { throw new Error(REFUSED); });
+    await expect(signIn.run(bot, instance, call)).rejects.toThrow(REFUSED);
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(renew).toHaveBeenCalledTimes(1);
+    await expect(signIn.run(bot, instance, call)).rejects.toThrow(REFUSED);
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(renew).toHaveBeenCalledTimes(1);
   });
 
   it("an account the turn's resolution refuses tells nobody and never calls the engine", async () => {

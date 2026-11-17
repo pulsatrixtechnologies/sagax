@@ -381,8 +381,8 @@ try {
   const raw = e instanceof Error ? e.message : String(e);
   const refused = s.chatgptTurn && s.loginMark() !== null && codexSignInRefused({ message: raw });
   const message = refused ? codexSignInExpired(raw) : codexUserError(raw, s.route);
-  const needsAuth = refused || /(?:\b401\b|unauthorized|missing bearer|authentication required)/i.test(raw);
   const verdict = classifyError(failure);
+  const needsAuth = refused || verdict.reason === "auth" || /(?:\b401\b|unauthorized|missing bearer|authentication required)/i.test(raw);
   // Three guards hold here: main's abandoned attempt never retries,
   // neither does a Company session already recovered once from canonical
   // history, and a Stop already asked for must not be undone by a relaunch.

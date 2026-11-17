@@ -110,6 +110,15 @@ describe("classifyError", () => {
     expect(classifyError({ exitCode: 3 })).toEqual({ transient: false, reason: "terminal_exit" });
   });
 
+  it("treats an OAuth session that could not be refreshed as terminal auth", () => {
+    const text = "Failed to authenticate: OAuth session expired and could not be refreshed";
+    expect(classifyError({ text })).toEqual({ transient: false, reason: "auth" });
+    expect(classifyError({ exitCode: 1, stderr: `claude exited 1 before result: ${text}` })).toEqual({
+      transient: false,
+      reason: "auth",
+    });
+  });
+
   it("never retries a signal kill or interrupt", () => {
     expect(classifyError({ exitCode: -1 })).toEqual({ transient: false, reason: "interrupted" });
     expect(classifyError(new Error("interrupted"))).toEqual({ transient: false, reason: "interrupted" });
@@ -147,6 +156,12 @@ describe("mayResendTurn", () => {
     expect(mayResendTurn({ ...failed, exitCode: 0 })).toBe(false);
     expect(mayResendTurn({ ...failed, transient: false })).toBe(false);
     expect(mayResendTurn({ ...failed, attempt: RETRY_MAX_ATTEMPTS - 1 })).toBe(false);
+  });
+
+  it("spends the one free pre-init resume, and never resends a refused sign-in", () => {
+    expect(mayResendTurn({ ...failed, endedBeforeTurn: true, transient: false, attempt: 1 })).toBe(false);
+    expect(mayResendTurn({ ...failed, endedBeforeTurn: true, auth: true })).toBe(false);
+    expect(mayResendTurn({ ...failed, endedBeforeTurn: true, answered: true, transient: false, auth: true })).toBe(false);
   });
 });
 

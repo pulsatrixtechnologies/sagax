@@ -1,6 +1,7 @@
 /** Isolated gallery for headless screenshots of the card pinned over the
  * composer with what the bot waits on (#3214). Not shipped in the app.
- * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|approval-only|org-approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered|fixes-before|fixes-after|timesheet|timesheet-closed|fix-closed|fix-answered&width=1440|390
+ * ?lang=<code>&skin=<id>&case=question|fix-before|fix-after|two|collapsed|approval|approval-only|org-approval|read|write|room-skill|routine-before|routine-after|room-keyed|room-keyed-other|room-answered|fixes-before|fixes-after|timesheet|timesheet-closed|fix-closed|fix-answered&width=1440|390&cardw=980|640|390 (the card's own width)
+ * form cases (#4585): form-time|form-long|form-kinds|form-checklist|form-time-answered
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -9,7 +10,8 @@ import { createRoot } from "react-dom/client";
 import { ComposerPendingStrip } from "../components/Composer.tsx-parts/ComposerPendingStrip";
 import { usePinnedWaiting } from "../components/Composer.tsx-parts/PinnedWaitingCard";
 import type { ServedWaitingItem } from "../../shared/waiting-items";
-import { answerWithNote } from "../../shared/options-card";
+import { answerWithNote, parseAskChoiceInput } from "../../shared/options-card";
+import { formatQuestionAnswers, type AskQuestion } from "../../shared/ask-question";
 import type { Pending } from "../components/PendingApproval";
 import { QuestionCard } from "../components/QuestionCard";
 import { ApprovalCard } from "../components/ApprovalCard";
@@ -26,7 +28,8 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 const lang = params.get("lang") ?? "fr";
 await loadLocale(lang);
 const which = params.get("case") ?? "question";
-const width = Number(params.get("width") ?? 1440);
+const cardw = Number(params.get("cardw") ?? 0);
+const width = cardw ? cardw + (cardw < 600 ? 24 : 48) : Number(params.get("width") ?? 1440);
 
 declare global {
   interface Window { __decisions: unknown[] }
@@ -194,6 +197,44 @@ const fixAnswered = (() => {
 })();
 const fixClosed = { ...fixesAfter[1]!, id: "fxc", card: { ...fixesAfter[1]!.card!, expired: true, options: [], answerNote: t("routine.problemCard.alreadyFixed") } } as Message;
 
+// #4585: the form cards, one row per question (the three-question form the
+// owner looked at, a long choice, a long text and a checklist)
+function form(id: string, at: number, input: Record<string, unknown>, more: Record<string, unknown> = {}): Message {
+  const parsed = parseAskChoiceInput(input);
+  if (!parsed.ok || !("value" in parsed) || !parsed.value.questions) throw new Error("gallery form refused");
+  return {
+    id, role: "bot", kind: "options", at, text: "", from: { botId: bot.id, name: bot.name, color: "violet" },
+    card: { title: String(input.title ?? ""), subtitle: String(input.question ?? ""), options: [], requestId: `req-${id}`, requestType: "question", noHold: true, questionRequest: { version: 1, questions: parsed.value.questions }, ...more },
+  } as unknown as Message;
+}
+const formTime = form("ft", 80, {
+  title: fr ? "Entrées de temps à confirmer" : "Time entries to confirm",
+  question: fr ? "Confirme chaque entrée tirée du calendrier d'aujourd'hui." : "Confirm each entry drafted from today's calendar.",
+  questions: [
+    { question: fr ? "Standup avec l'équipe, 9 h à 9 h 15" : "Standup with the team, 9:00 to 9:15", kind: "choice", options: fr ? ["Fait", "Pas fait", "Demain"] : ["Done", "Not done", "Tomorrow"] },
+    { question: fr ? "Revue de design avec Ada : combien de temps ?" : "Design review with Ada: how long?", kind: "duration" },
+    { question: fr ? "Appel du billet 481516 : facturable ?" : "Ticket 481516 call: billable?", kind: "yes_no" },
+  ],
+});
+const formLong = form("fl", 81, {
+  title: fr ? "Réservation de la salle" : "Room booking",
+  question: fr ? "Quelques détails pour réserver." : "A few details to book.",
+  questions: [
+    { question: fr ? "Quelle salle veux-tu réserver pour la rencontre ?" : "Which room do you want for the meeting?", kind: "choice", options: fr ? ["Nord", "Sud", "Ouest", "Salle du conseil", "Atelier du sous-sol", "Terrasse"] : ["North", "South", "West", "Board room", "Basement workshop", "Terrace"] },
+    { question: fr ? "Nom de la rencontre" : "Meeting name", kind: "text" },
+    { question: fr ? "Date" : "Date", kind: "date" },
+    { question: fr ? "Notes pour l'équipe" : "Notes for the team", kind: "long_text", optional: true },
+  ],
+});
+const formChecklist = form("fc", 82, {
+  title: fr ? "Publications de ce soir" : "Posts for tonight",
+  question: fr ? "Décoche ceux que tu ne veux pas publier." : "Untick the ones you do not want to post.",
+  items: (fr ? ["Notes de version 2.4", "Fil sur la rencontre", "Clip de la barre latérale"] : ["Release notes 2.4", "Thread about the meetup", "Sidebar clip"]).map((label) => ({ label, detail: `${label}.` })),
+  actions: fr ? ["Publier la sélection", "Sauter ce soir"] : ["Post selected", "Skip tonight"],
+});
+const formQuestions = formTime.card!.questionRequest!.questions as AskQuestion[];
+const formAnswered = { ...formTime, id: "fta", card: { ...formTime.card!, answered: "answer", answeredText: formatQuestionAnswers(formQuestions, [[formQuestions[0]!.options[0]!.label], ["90 min"], ["yes"]]) } } as Message;
+
 const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message; org?: boolean }> = {
   "approval-only": { approvals: [approval], questions: [] },
   "org-approval": { approvals: [orgApproval], questions: [], org: true },
@@ -210,6 +251,10 @@ const cases: Record<string, { approvals: Pending[]; questions: Message[]; collap
   "routine-after": { approvals: [], questions: routineAfter, inline: routineAfter[0] },
   "fix-before": { approvals: [], questions: [fixBefore], inline: fixBefore },
   "fix-after": { approvals: [], questions: [fixAfter], inline: fixAfter },
+  "form-time": { approvals: [], questions: [formTime], inline: formTime },
+  "form-long": { approvals: [], questions: [formLong], inline: formLong },
+  "form-checklist": { approvals: [], questions: [formChecklist], inline: formChecklist },
+  "form-time-answered": { approvals: [], questions: [], inline: formAnswered },
   question: { approvals: [], questions: [q1] },
   two: { approvals: [], questions: [q1, q2] },
   collapsed: { approvals: [], questions: [q1], collapsed: true },
@@ -238,17 +283,17 @@ function Gallery() {
   const narrow = width < 600;
   return (
     <div data-shot="chat" className="flex flex-col bg-canvas text-ink" style={{ width, minHeight: narrow ? 640 : 560 }}>
-      <div className={`mx-auto flex w-full flex-1 flex-col justify-end gap-3 ${narrow ? "px-3 pt-4" : "max-w-[760px] px-6 pt-6"}`}>
+      <div className={`mx-auto flex w-full flex-1 flex-col justify-end gap-3 ${narrow ? "px-3 pt-4" : cardw ? "px-6 pt-6" : "max-w-[760px] px-6 pt-6"}`}>
         <Bubble>{fr ? "Orla : j'ai préparé la migration, il reste une décision avant de lancer." : "Orla: the migration is ready, one decision is left before I start."}</Bubble>
         {chosen.org ? (
           <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><RelayProvenance message={orgMessage} bots={[bot]} self={bot} /><ApprovalCard bot={{ name: bot.name }} message={orgMessage} /></div>
         ) : which === "approval-only" ? (
           <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><ApprovalCard bot={{ name: bot.name }} message={approvalMessage} /></div>
-        ) : <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="thread-main" bot={chosen.room ? { id: quasar.id, name: quasar.name } : { id: bot.id, name: bot.name }} message={chosen.inline ?? q1} /></div>}
+        ) : <div className={cardw ? "" : CHAT_BUBBLE_WIDTH_CLASS.fit} style={cardw ? { width: cardw } : undefined}><QuestionCard threadId="thread-main" bot={chosen.room ? { id: quasar.id, name: quasar.name } : { id: bot.id, name: bot.name }} message={chosen.inline ?? q1} /></div>}
         {chosen.questions.length > 1 && !chosen.inline && <Bubble>{fr ? "Orla : et pour la suite de la semaine, trois projets attendent." : "Orla: and for the rest of the week, three projects wait."}</Bubble>}
         <div className="h-16" />
       </div>
-      <div data-composer-dock className={`mx-auto w-full ${narrow ? "px-3 pb-3" : "max-w-[760px] px-6 pb-6"}`}>
+      <div data-composer-dock className={`mx-auto w-full ${narrow ? "px-3 pb-3" : cardw ? "px-6 pb-6" : "max-w-[760px] px-6 pb-6"}`}>
         <ComposerPendingStrip bot={chosen.room ? undefined : bot} pinned={pinned} threadId="thread-main" storeBots={chosen.room ? [bot, quasar] : [bot]} approvalBotFor={(pending) => (chosen.room ? quasar : pending.message.card?.approvalOrigin?.admin ? undefined : bot)} onCancelTurn={() => window.__decisions.push({ type: "cancelTurn" })} />
         <div className="rounded-2xl border border-hairline bg-card px-4 py-3 text-[14px] text-ink-secondary">
           {pinned.current?.kind === "question" ? t("composer.placeholder.question") : t("composer.placeholder.approval")}

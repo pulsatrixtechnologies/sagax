@@ -84,13 +84,17 @@ function shownAnswer(question: AskQuestion, value: string): string {
   return value;
 }
 
+/** One row of the form, live or settled: the same height when its control is
+ * one line (a 38px field plus 8px above and below), the question centred on it. */
+const FORM_ROW = "flex min-h-[54px] min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 py-2";
+
 const CHOICE_ROW = (question: AskQuestion) => question.kind === "choice" || question.kind === "multi" || question.kind === "yes_no";
 
 /** A choice row's answers as pills: one tap picks (several for multi). */
 function ChoicePills({ question, picked, onPick }: { question: AskQuestion; picked: readonly string[]; onPick: (key: string) => void }) {
   const multi = question.kind === "multi";
   return (
-    <div role={multi ? "group" : "radiogroup"} aria-label={question.question} className="flex flex-wrap gap-1.5">
+    <div role={multi ? "group" : "radiogroup"} aria-label={question.question} className="flex flex-wrap justify-end gap-1.5">
       {question.options.map((option) => {
         const key = optionKey(option);
         const on = picked.includes(key);
@@ -149,16 +153,41 @@ function RowControl({ question, draft, onChange, fieldId, canSend, onSend }: { q
           onSend={onSend}
           fieldId={fieldId}
           showSend={false}
+          className="w-full"
         />
       );
   }
 }
 
+/** How a row lays out (#4585): every control sits at the right of its
+ * question on the same line, and a long text takes a line of its own. Where
+ * the question and its control do not fit side by side the row wraps (CSS
+ * only, so it follows the card's real width): the question on one line, the
+ * control on the next, still at the right and never clipped. */
+export type FormRowShape = "pills" | "fields" | "text" | "area";
+export function formRowShape(question: AskQuestion): FormRowShape {
+  switch (question.kind) {
+    case "choice": case "multi": case "yes_no": return "pills";
+    case "duration": case "time": case "date": case "number": return "fields";
+    case "long_text": return "area";
+    default: return "text";
+  }
+}
+
+const ROW_CONTROL: Record<FormRowShape, string> = {
+  pills: "ms-auto max-w-full min-w-0",
+  fields: "ms-auto max-w-full",
+  // a short text takes the width left, up to a sensible maximum
+  text: "ms-auto min-w-0 max-w-[24rem] flex-[1_1_16rem]",
+  // a long text: its own line, the area full width
+  area: "w-full basis-full",
+};
+
 /** A row's label: the question, and "Optional" when it may stay empty. */
 function RowLabel({ question, id }: { question: AskQuestion; id: string }) {
   return (
-    <div id={id} className="mb-1.5 flex min-w-0 items-baseline gap-2">
-      <span dir="auto" className="min-w-0 break-words text-[13.5px] font-medium leading-5 text-ink">{question.question}</span>
+    <div id={id} className={cn("flex min-w-0 items-baseline gap-2", formRowShape(question) === "area" ? "basis-full" : "flex-[1_1_12rem]")}>
+      <span dir="auto" className="min-w-0 break-words text-[13.5px] font-normal leading-5 text-ink">{question.question}</span>
       {question.optional && <span className="shrink-0 text-[11.5px] text-ink-tertiary">{t("question.form.optional")}</span>}
     </div>
   );
@@ -228,8 +257,8 @@ export function QuestionForm({
               const given = byQuestion[question.question]?.trim() ?? "";
               const value = given === LEFT_EMPTY ? "" : given;
               return (
-                <div key={`${index}-${question.question}`} data-form-row="" className={cn("flex min-w-0 items-baseline justify-between gap-3 py-1.5", index > 0 && "border-t border-ink/[0.06]")}>
-                  <span dir="auto" className="min-w-0 break-words text-[13px] leading-5 text-ink-secondary">{question.question}</span>
+                <div key={`${index}-${question.question}`} data-form-row="" data-form-shape={formRowShape(question)} className={cn("flex min-h-9 min-w-0 items-center justify-between gap-3 py-1.5", index > 0 && "border-t border-ink/[0.06]")}>
+                  <span dir="auto" className="min-w-0 break-words text-[13.5px] leading-5 text-ink">{question.question}</span>
                   <span data-form-answer="" dir="auto" className={cn("max-w-[55%] shrink-0 break-words text-end text-[13px] font-medium leading-5", value ? "text-ink" : "text-ink-tertiary")}>
                     {value ? shownAnswer(question, value) : t("question.form.notAnswered")}
                   </span>
@@ -299,9 +328,13 @@ export function QuestionForm({
       {contextLine && <div data-form-context=""><ExpandableText text={contextLine} className="-mt-1 mb-2 text-[13px] leading-snug text-ink-secondary" /></div>}
       <div className="flex flex-col">
         {questions.map((question, index) => (
-          <div key={`${index}-${question.question}`} data-form-row="" role="group" aria-labelledby={`${cardId}-row-${index}`} className={cn("py-2.5", index > 0 && "border-t border-ink/[0.06]")}>
+          <div key={`${index}-${question.question}`} data-form-row="" role="group" aria-labelledby={`${cardId}-row-${index}`} data-form-shape={formRowShape(question)} className={cn(FORM_ROW, index > 0 && "border-t border-ink/[0.06]")}>
             <RowLabel question={question} id={`${cardId}-row-${index}`} />
-            {readOnly ? null : <RowControl question={question} draft={draftOf(index)} onChange={(next) => update(index, next)} fieldId={`${cardId}-${index}`} canSend={owed === 0} onSend={submit} />}
+            {readOnly ? null : (
+              <div data-form-control="" className={ROW_CONTROL[formRowShape(question)]}>
+                <RowControl question={question} draft={draftOf(index)} onChange={(next) => update(index, next)} fieldId={`${cardId}-${index}`} canSend={owed === 0} onSend={submit} />
+              </div>
+            )}
           </div>
         ))}
       </div>

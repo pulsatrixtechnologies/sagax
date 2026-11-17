@@ -132,7 +132,7 @@ try {
   if (arg("--kinds")) {
     // lot S1 (#4572): the kinds a product declares beside the three existing kinds; hovered and pinned,
     // French dark and English light, 1280, 600 and 390; a record named in a card opened in place and back
-    const scenes = ["ticket", "company", "project", "invoice", "agreement", "invoicelong", "invoicenoref", "agreementnoend", "agreementnodecimals"];
+    const scenes = (arg("--scenes") ?? "ticket,company,project,invoice,agreement,invoicelong,invoicenoref,agreementnoend,agreementnodecimals").split(",");
     for (const width of [1280, 600, 390]) {
       const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
       await page.route("https://desk.example/mark.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARK }));

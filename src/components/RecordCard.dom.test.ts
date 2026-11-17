@@ -248,6 +248,28 @@ describe("RecordCard without a layout engine's help", () => {
   };
   afterEach(() => { restore.forEach((undo) => undo()); restore = []; });
 
+  it("pinned, ends on a row boundary too, and scrolls through every row only when the person asks", () => {
+    define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? 110 : 0; } });
+    define(Element.prototype, "getBoundingClientRect", {
+      value(this: HTMLElement) {
+        const key = this.dataset?.fitRow;
+        if (this.dataset?.recordPane === "left") return rect(0, 110);
+        if (!key) return rect(0, 0);
+        const keys = [...new Set([...document.querySelectorAll<HTMLElement>("[data-record-pane=left] [data-fit-row]")].map((node) => node.dataset.fitRow))];
+        const at = keys.indexOf(key);
+        return rect(at * 30, at * 30 + 28);
+      },
+    });
+    const card = show({ raw: ticketCard(NOW, "fr"), pinned: true });
+    const left = card.querySelector("[data-record-pane=left]")!;
+    expect(left.querySelectorAll("[data-fit-hidden]").length).toBeGreaterThan(0);
+    const more = left.querySelector<HTMLButtonElement>("button[data-fit-more]")!;
+    expect(more.textContent).toMatch(/de plus$/);
+    act(() => { more.click(); });
+    expect(left.querySelectorAll("[data-fit-hidden]")).toHaveLength(0);
+    expect(left.querySelector("[data-fit-more]")).toBeNull();
+  });
+
   it("drops the rows that do not fit, whole, and says how many and of what at the pane's foot", () => {
     // a pane 110px tall; rows 30px apart, 28px tall: the third row would end at 88 > 110 - 20
     define(HTMLElement.prototype, "clientHeight", { get() { return (this as HTMLElement).dataset.recordPane === "left" ? 110 : 0; } });
@@ -280,10 +302,10 @@ describe("RecordCard without a layout engine's help", () => {
     const dropped = keys.length - 2;
     expect(more.textContent).toMatch(new RegExp(`^${dropped} (champs|lignes) de plus$`));
     expect(hidden.length).toBeGreaterThan(dropped - 1);
-    // pinned: nothing dropped, the pane scrolls
+    // pinned: whole rows too, and the line is a button that opens the rest to scroll
     const pinned = show({ raw: ticketCard(NOW, "fr"), pinned: true, onClose: () => {} });
-    expect(pinned.querySelector("[data-fit-hidden]")).toBeNull();
-    expect(pinned.querySelector("[data-fit-more]")).toBeNull();
+    expect(pinned.querySelector("[data-fit-hidden]")).not.toBeNull();
+    expect(pinned.querySelector("button[data-fit-more]")).not.toBeNull();
   });
 
   it("keeps its notes behind one 'Notes (7)' row when it is not wider than tall, and opens them in place when pinned", () => {

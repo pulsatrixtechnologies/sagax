@@ -158,6 +158,9 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ above: false, below: false });
   const [left, setLeft] = useState<{ count: number; kind: MoreKind } | null>(null);
+  // pinned, the pane also ends on a row boundary; its "N more" line is the one way to scroll through the rest
+  const [expanded, setExpanded] = useState(false);
+  const tab = useContext(TabContext);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -167,10 +170,10 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
       setEdges((current) => (current.above === above && current.below === below ? current : { above, below }));
     };
     const measureRows = () => {
-      // a pinned card shows every row; a pane that does not fit leaves the rows
-      // alone (the rows of another pane, inside it, are that pane's to hide)
-      if (pinned) for (const node of el.querySelectorAll("[data-fit-hidden]")) node.removeAttribute("data-fit-hidden");
-      if (pinned || !fit) {
+      // an expanded pinned card shows every row and scrolls; a pane that does not fit leaves the
+      // rows alone (the rows of another pane, inside it, are that pane's to hide)
+      if (pinned && expanded) for (const node of el.querySelectorAll("[data-fit-hidden]")) node.removeAttribute("data-fit-hidden");
+      if ((pinned && expanded) || !fit) {
         setLeft((current) => (current === null ? current : null));
         return;
       }
@@ -213,7 +216,7 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
       mutations?.disconnect();
       el.removeEventListener("scroll", measureScroll);
     };
-  }, [fit, pinned, moreRoom]);
+  }, [fit, pinned, moreRoom, expanded]);
   const label = left ? t(`recordCard.more.${left.kind}${left.count === 1 ? "One" : "Many"}` as Parameters<typeof t>[0], { count: left.count }) : "";
   return (
     <div
@@ -225,7 +228,9 @@ function Pane({ pinned, fit = false, className, moreClass, moreRoom = MORE_ROOM,
       className={cn("relative min-h-0 min-w-0 [&_[data-fit-hidden]]:hidden", pinned ? "record-scroll overflow-y-auto" : "overflow-hidden", className)}
     >
       {children}
-      {left && <p data-fit-more className={cn("shrink-0 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>}
+      {left && (pinned ? (
+        <button type="button" tabIndex={tab} data-fit-more className={cn("block w-full shrink-0 text-start text-[12px] leading-4 text-popover-ink-secondary hover:text-popover-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus", moreClass)} onClick={() => setExpanded(true)}>{label}</button>
+      ) : <p data-fit-more className={cn("shrink-0 text-[12px] leading-4 text-popover-ink-secondary", moreClass)}>{label}</p>)}
     </div>
   );
 }

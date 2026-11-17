@@ -180,7 +180,7 @@ import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
 import { AskKeyIndex, closedAskCard, openCardsNote, raiseTextKeyedAsk, type OpenCardFacts } from "./widgets/ask-choice-keys.ts";
 import { CARD_CHECK_CALLER, CARD_CHECK_CONVERSATION_ROWS, OpenCardsRecheck, type WaitingKeyedCard } from "./widgets/open-cards-recheck.ts";
-import { serverCardKind } from "../shared/fix-card-keys.ts";
+import { serverCardKind, serverCardRoutineId } from "../shared/fix-card-keys.ts";
 import { backfillPeerOutcomes, PeerOutcomeLedger, settlePeerOutcome, type PeerOutcomeDeps } from "./turns/peer-outcome-relay.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
@@ -790,7 +790,7 @@ import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-c
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
 import { lastingProblem, RoutineProblemCards, routineProblemKey, ROUTINE_PROBLEM_KIND } from "./routines/routine-problem-card.ts";
-import { answerRoutineFix, type RoutineFixAnswer } from "./routines/routine-problem-answer.ts";
+import { answerRoutineFix, cardWithCheckNote, RoutineCheckFollowUps, type RoutineFixAnswer } from "./routines/routine-problem-answer.ts";
 import { RoutineCheapPathCards, firstToolStep } from "./routines/routine-cheap-path.ts";
 import { cardSignalEnding, createTellPerson, settleCardSignals, settleKeyed, SignalLedger, signalKeys, signalLedgerDirStorage, withItemLevel } from "./proactive/signal-ledger.ts";
 import { answeredCardText, answerHistory, answerLearningNote, answersOnKind, instructionsWithAlwaysLine, learnFromAnsweredCard, type AnswerScope } from "./proactive/answer-learning.ts";
@@ -17086,7 +17086,7 @@ function routineFixNeed(routine: Routine): RoutineNeedsPerson | null {
  * Pause the routine and Open the routine, each as the person who answered,
  * with the same rights as Run now and the routine's switch. Null: the
  * answer is words of the person's own, which the bot reads. */
-function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where: { opens?: boolean } = {}): RoutineFixAnswer | null {
+function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where: { opens?: boolean; threadId?: string; messageId?: string } = {}): RoutineFixAnswer | null {
   if (!routines) return null;
   const done = answerRoutineFix<Routine>(key, answer, {
     opens: where.opens === true,
@@ -17096,11 +17096,12 @@ function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where:
     runNow: (routine) => {
       if (routineNeedsRun(auth, routine.botId)) return { ok: false, error: NEEDS_RUN.error };
       if (!mayRunRoutineNow(auth, routine)) return { ok: false, error: "Only the bot's owner, the person this routine runs as or an admin can run it now." };
-      if (routineInFlightRun(routine.id)) return { ok: false, running: true };
+      const going = routineInFlightRun(routine.id);
+      if (going) return { ok: false, running: true, runId: going.id };
       const run = routines!.runNow(routine.id, undefined, "person");
       if (!run) return { ok: false, error: "no such routine" };
       auditRoutineRunNow(auth, routine, run);
-      return { ok: true };
+      return { ok: true, runId: run.id };
     },
     pause: (routine) => {
       const patched = patchRoutineAs(auth, { headers: {} } as IncomingMessage, routine.id, { enabled: false });
@@ -17111,8 +17112,32 @@ function serverCardAnswer(auth: RequestAuth, key: string, answer: string, where:
   // the routine's need moved (a run started, it was turned off): its frame
   // and its fix card follow at the watch's next pass
   if (done) routineNeedsWatch.touch();
+  // #4579: the card then says what that run did
+  const routineId = serverCardRoutineId(key);
+  if (done?.checkRunId && routineId && where.threadId && where.messageId) {
+    routineCheckFollowUps.remember(done.checkRunId, { routineId, threadId: where.threadId, messageId: where.messageId });
+  }
   return done;
 }
+
+/** #4579: Run a check's answered card says what its run did, once it ends
+ * (routines/routine-problem-answer.ts). The line replaces the card's note,
+ * and the one after its words for an app that reads only those. */
+const routineCheckFollowUps = new RoutineCheckFollowUps({
+  words: (routineId) => {
+    const routine = routines?.routineById(routineId);
+    return serverApprovalWords(languageOfPerson(routine ? routine.runAs?.principalId ?? effectiveRunAs({ botId: routine.botId }) : undefined));
+  },
+  stillWrong: (routineId) => {
+    const routine = routines?.routineById(routineId);
+    return Boolean(routine && lastingProblem(routineFixNeed(routine)));
+  },
+  tell: (card, note) => {
+    const row = store.messagesFor(card.threadId).find((message) => message.id === card.messageId);
+    if (!row?.card) return;
+    store.patchMessage(card.threadId, row.id, { card: cardWithCheckNote(row.card, note) });
+  },
+});
 
 const routineProblemCards = new RoutineProblemCards<Routine>({
   need: (routine) => routineFixNeed(routine),
@@ -21149,6 +21174,7 @@ routines = new RoutineManager({
   interruptGoal: interruptRoutineGroupGoal,
   onRunChanged: (run) => {
     syncRoutineRunToSource(run);
+    routineCheckFollowUps.runChanged(run);
     if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
     if (run.proactive) proactiveMetrics.noteRun(run);
     void botEventSubscriptions.publish(run);

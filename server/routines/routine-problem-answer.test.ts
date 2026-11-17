@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ENGLISH_WORDS } from "../../shared/approval-describe.ts";
 import type { RoutineNeedsPerson } from "../../shared/routines.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
-import { answerRoutineFix, routineFixChoice, type RoutineFixAnswerDeps } from "./routine-problem-answer.ts";
+import { answerRoutineFix, cardWithCheckNote, RoutineCheckFollowUps, routineFixChoice, type RoutineFixAnswerDeps } from "./routine-problem-answer.ts";
 import { plainProblemText, routineProblemCardInput } from "./routine-problem-card.ts";
 
 const FRENCH = serverApprovalWords("fr", {});
@@ -105,5 +105,50 @@ describe("the fix card never shows a raw code (#4438)", () => {
     expect(plainProblemText("Flow failed 2 times and never succeeded after: Tool not found: Flow", ENGLISH_WORDS)).toEqual({ text: "Flow failed 2 times and never succeeded after: Tool not found: Flow" });
     const input = routineProblemCardInput({ id: "r1", name: "Sweep" }, need, { summary: "Down", count: 3 }, ENGLISH_WORDS);
     expect(input.technical).toBeUndefined();
+  });
+});
+
+describe("Run a check: the card says what that run did (#4579)", () => {
+  it("names the run it started, or the one already going, so its end can be told", () => {
+    const d = deps({ runNow: vi.fn(() => ({ ok: true as const, runId: "run-9" })) });
+    expect(answerRoutineFix("routine-problem:r1", "Run a check", d)).toEqual({ note: ENGLISH_WORDS.t("routine.problemCard.checkStarted"), checkRunId: "run-9" });
+    const busy = deps({ runNow: vi.fn(() => ({ ok: false as const, running: true as const, runId: "run-8" })) });
+    expect(answerRoutineFix("routine-problem:r1", "Run a check", busy)).toEqual({ note: ENGLISH_WORDS.t("routine.problemCard.checkRunning"), checkRunId: "run-8" });
+  });
+
+  it("when that run ends, the card's line says clean, the same problem again, or stopped; once", () => {
+    const notes: Array<[string, string, string]> = [];
+    let wrong = false;
+    const followUps = new RoutineCheckFollowUps({
+      words: () => ENGLISH_WORDS,
+      stillWrong: () => wrong,
+      tell: (card, note) => { notes.push([card.threadId, card.messageId, note]); },
+    });
+    followUps.remember("run-1", { routineId: "r1", threadId: "t1", messageId: "m1" });
+    followUps.remember("run-2", { routineId: "r1", threadId: "t1", messageId: "m2" });
+    followUps.remember("run-3", { routineId: "r1", threadId: "t1", messageId: "m3" });
+    // still going: nothing said yet
+    followUps.runChanged({ id: "run-1", routineId: "r1", status: "running" });
+    expect(notes).toEqual([]);
+    followUps.runChanged({ id: "run-1", routineId: "r1", status: "completed" });
+    wrong = true;
+    followUps.runChanged({ id: "run-2", routineId: "r1", status: "failed" });
+    followUps.runChanged({ id: "run-3", routineId: "r1", status: "cancelled" });
+    // a run nobody asked to follow, or told again: nothing
+    followUps.runChanged({ id: "run-1", routineId: "r1", status: "completed" });
+    followUps.runChanged({ id: "run-4", routineId: "r1", status: "failed" });
+    expect(notes).toEqual([
+      ["t1", "m1", ENGLISH_WORDS.t("routine.problemCard.checkClean")],
+      ["t1", "m2", ENGLISH_WORDS.t("routine.problemCard.checkStill")],
+      ["t1", "m3", ENGLISH_WORDS.t("routine.problemCard.checkStopped")],
+    ]);
+    expect(new Set(notes.map(([, , note]) => note)).size).toBe(3);
+  });
+
+  it("the new line replaces the card's note, and the one after its words for an app that reads only those", () => {
+    const started = ENGLISH_WORDS.t("routine.problemCard.checkStarted");
+    const clean = ENGLISH_WORDS.t("routine.problemCard.checkClean");
+    expect(cardWithCheckNote({ answeredText: "Run a check", answerNote: started }, clean)).toEqual({ answeredText: "Run a check", answerNote: clean });
+    expect(cardWithCheckNote({ answeredText: `Run a check\n\n${started}`, answerNote: started }, clean)).toEqual({ answeredText: `Run a check\n\n${clean}`, answerNote: clean });
   });
 });

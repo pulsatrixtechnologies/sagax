@@ -26,7 +26,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         ...state,
         activeView: "routines",
         ...closedRightPanels,
-        routinesFocus: { section: action.section, view: action.view, botId: action.botId, routineId: action.routineId, runStatus: action.runStatus, runId: action.runId, editRoutineId: action.editRoutineId, nonce: state.routinesFocus.nonce + 1 },
+        routinesFocus: { section: action.section, view: action.view, botId: action.botId, routineId: action.routineId, runStatus: action.runStatus, period: action.period, runId: action.runId, editRoutineId: action.editRoutineId, nonce: state.routinesFocus.nonce + 1 },
         settingsOpen: false,
         personPanelId: null,
         computerOpen: false,

@@ -20,7 +20,6 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
 }));
 
 const { RoutinesPage } = await import("./RoutineCalendarPage");
-const { RoutineList } = await import("./routines/RoutineList");
 const { ConfirmProvider } = await import("@/components/ConfirmProvider");
 const { BotEditorStore, initialState } = await import("@/state/store");
 const { reducer } = await import("@/state/store/reducer");
@@ -88,90 +87,132 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("Automations list grouped", () => {
-  it("draws the routines table by default, with no group", async () => {
+const setGroupBy = (value: string) => localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: value }));
+const visibleHeaders = () => [...container.querySelectorAll('[role="columnheader"]')].map((header) => header.textContent!.trim()).filter(Boolean);
+const closeMenu = () => act(() => { document.querySelector("[role=menu][data-routine-folder-menu]")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+const menuActions = (kind: string) => [...document.querySelectorAll(`[data-routine-folder-menu="${kind}"] [role=menuitem]`)].map((item) => item.getAttribute("data-routine-action") ?? item.getAttribute("data-routine-folder-action") ?? (item.hasAttribute("data-routine-new-folder") ? "new-folder" : item.hasAttribute("data-group-new-routine") ? "new-routine" : ""));
+
+describe("Routines table: the three groupings", () => {
+  it("No grouping is one table with the Bot and Folder columns and no group band", async () => {
     await mount();
     expect(container.querySelector("[data-routines-table] [role=table]")).not.toBeNull();
     expect(container.querySelector("[data-routine-groups]")).toBeNull();
+    expect(container.querySelector("[data-group-toggle]")).toBeNull();
     expect(rowIds()).toHaveLength(4);
+    expect(visibleHeaders()).toEqual(["Routine", "Bot", "Folder", "Schedule", "Last 7 runs", "Next run", "Actions"]);
   });
 
-  it("groups by bot in the sidebar's order, each with its count and its folders inside", async () => {
-    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "bot" }));
+  it("Group by Bot: one block and one header band per bot, its rows under it, the Bot column hidden and a Folder column", async () => {
+    setGroupBy("bot");
     await mount();
-    const sections = [...container.querySelectorAll("[data-routine-group-bot]")].map((section) => section.getAttribute("data-routine-group-bot"));
-    // Scout is pinned, so it comes first, as in the sidebar.
-    expect(sections).toEqual(["scout", "atlas"]);
-    expect(botSection("atlas").querySelector("[data-routine-group-count]")?.getAttribute("data-routine-group-count")).toBe("2");
+    expect([...container.querySelectorAll("[data-group-toggle]")]).toHaveLength(2);
+    // Scout is pinned, so its block comes first, as in the sidebar.
+    expect([...container.querySelectorAll("[data-routine-group-bot]")].map((block) => block.getAttribute("data-routine-group-bot"))).toEqual(["scout", "atlas"]);
+    expect(botSection("atlas").querySelector("[data-group-count]")?.getAttribute("data-group-count")).toBe("2");
     expect(botSection("atlas").textContent).toContain("Atlas");
-    // Atlas: its loose routine first, then the Clients folder holding the other.
-    expect(rowIds(botSection("atlas"))).toEqual(["a1", "a2"]);
-    const clients = botSection("atlas").querySelector('[data-routine-folder-section="Clients"]')!;
-    expect(clients.querySelector("[data-routine-folder-icon]")).not.toBeNull();
-    expect(clients.querySelector('[data-routine-folder-count="1"]')).not.toBeNull();
-    expect(rowIds(clients)).toEqual(["a2"]);
-    // Scout's folders in their saved order, the empty one included.
-    const scoutFolders = [...botSection("scout").querySelectorAll("[data-routine-folder-header]")].map((header) => header.getAttribute("data-routine-folder-header"));
-    expect(scoutFolders).toEqual(["Reports", "Empty"]);
-    // Every row keeps its schedule line and switch.
-    expect(container.querySelectorAll("[data-routine-when]").length).toBe(4);
-    expect(container.querySelectorAll("[data-routine-row] [role=switch]").length).toBe(4);
+    // routines only under their own bot; inside a block, by folder then name
+    expect(rowIds(botSection("atlas"))).toEqual(["a2", "a1"]);
+    expect(rowIds(botSection("scout"))).toEqual(["s2", "s1"]);
+    expect(container.querySelectorAll("[data-routine-bot]")).toHaveLength(0);
+    expect(visibleHeaders()).toEqual(["Routine", "Folder", "Schedule", "Last 7 runs", "Next run", "Actions"]);
+    expect(botSection("atlas").querySelector('[data-routine-id="a2"] [data-routine-folder]')?.textContent).toBe("Clients");
+    // no folder heading rows, no indented tree: rows are direct children of their block
+    expect(container.querySelector("[data-routine-folder-header]")).toBeNull();
+    for (const row of botSection("atlas").querySelectorAll("[data-routine-row]")) expect(row.parentElement).toBe(botSection("atlas"));
   });
 
-  it("remembers a folded bot section for the person", async () => {
-    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "bot" }));
+  it("Group by Folder: one block per folder and a last block for no folder, the Bot column shown and no Folder column", async () => {
+    setGroupBy("folder");
     await mount();
-    const toggle = botSection("atlas").querySelector<HTMLButtonElement>("[data-routine-group-header] button[aria-expanded]")!;
+    const blocks = [...container.querySelectorAll("[data-routine-group-folder]")];
+    expect(blocks.map((block) => block.getAttribute("data-routine-group-folder"))).toEqual(["Reports", "Clients", ""]);
+    expect(blocks.map((block) => block.querySelector("[data-group-toggle]")?.textContent)).toEqual([expect.stringContaining("Reports"), expect.stringContaining("Clients"), expect.stringContaining("No folder")]);
+    expect(rowIds(blocks[0] as Element)).toEqual(["s2"]);
+    expect(rowIds(blocks[2] as Element)).toEqual(["s1", "a1"]);
+    expect(container.querySelectorAll("[data-routine-bot]").length).toBe(4);
+    expect(container.querySelectorAll("[data-routine-folder]")).toHaveLength(0);
+    expect(visibleHeaders()).toEqual(["Routine", "Bot", "Schedule", "Last 7 runs", "Next run", "Actions"]);
+  });
+
+  it("changes the grouping from the one control on the Routines heading row, not the filter popover", async () => {
+    await mount();
+    const control = container.querySelector("[data-routines-group-by]")!;
+    expect(control.closest("[data-routines-table]")).not.toBeNull();
+    expect(container.querySelector("[data-automations-filters]")!.contains(control)).toBe(false);
+    await act(async () => { [...control.querySelectorAll("button")].find((button) => button.textContent === "Bot")!.click(); });
+    expect(container.querySelector("[data-routine-groups]")?.getAttribute("data-routine-groups")).toBe("bot");
+    expect(JSON.parse(localStorage.getItem(ROUTINE_GROUP_BY_KEY)!)).toEqual({ local: "bot" });
+  });
+
+  it("opens every block, folds one on a click on its band and remembers it for the person", async () => {
+    setGroupBy("bot");
+    await mount();
+    const toggle = botSection("atlas").querySelector<HTMLButtonElement>("[data-group-toggle]")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(rowIds(botSection("atlas"))).toHaveLength(2);
     act(() => toggle.click());
     expect(rowIds(botSection("atlas"))).toEqual([]);
-    expect(rowIds(botSection("scout"))).toEqual(["s1", "s2"]);
+    expect(rowIds(botSection("scout"))).toHaveLength(2);
     await remount();
-    expect(botSection("atlas").querySelector("[data-routine-group-header] button[aria-expanded]")?.getAttribute("aria-expanded")).toBe("false");
+    expect(botSection("atlas").querySelector("[data-group-toggle]")?.getAttribute("aria-expanded")).toBe("false");
     expect(rowIds(botSection("atlas"))).toEqual([]);
   });
 
-  it("Group by None is today's flat list", async () => {
-    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "none" }));
+  it("keeps folder management: the bot band's menu, a routine's Move to folder in every view, the folder band's menu", async () => {
+    setGroupBy("bot");
     await mount();
-    expect(container.querySelector("[data-routine-groups]")).toBeNull();
-    expect(container.querySelector("[data-routine-group-bot]")).toBeNull();
-    // The same rows, in the same order, as the list drawn on its own.
-    const flat = document.createElement("div");
-    const flatRoot = createRoot(flat);
-    act(() => flatRoot.render(createElement(RoutineList, { routines, runs: [], bots: [atlas, scout], onOpen: () => {} })));
-    expect(rowIds()).toEqual(rowIds(flat));
-    act(() => flatRoot.unmount());
+    act(() => botSection("atlas").querySelector<HTMLButtonElement>("[data-group-menu]")!.click());
+    expect(menuActions("section")).toEqual(["new-routine", "new-folder"]);
+    closeMenu();
+    act(() => botSection("atlas").querySelector<HTMLButtonElement>('[data-routine-id="a1"] [data-routine-row-menu]')!.click());
+    expect(menuActions("row")).toContain("move-Clients");
+    closeMenu();
+    act(() => botSection("atlas").querySelector<HTMLButtonElement>('[data-routine-id="a2"] [data-routine-row-menu]')!.click());
+    expect(menuActions("row")).toContain("move-out");
+    closeMenu();
+    // no grouping: the page's own row menu has it too
+    setGroupBy("none");
+    await remount();
+    act(() => container.querySelector<HTMLButtonElement>('[data-routine-id="a1"] [data-routine-row-menu]')!.click());
+    expect(menuActions("row")).toContain("move-Clients");
+    closeMenu();
+    // by folder: the folder band's menu renames, pauses and deletes the folder
+    setGroupBy("folder");
+    await remount();
+    act(() => container.querySelector<HTMLButtonElement>('[data-routine-group-folder="Clients"] [data-group-menu]')!.click());
+    expect(menuActions("section")).toEqual(["rename", "pause", "delete"]);
+    // the block with no folder has no menu
+    expect(container.querySelector('[data-routine-group-folder=""] [data-group-menu]')).toBeNull();
   });
 
-  it("groups by folder across bots, each row naming its bot", async () => {
-    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "folder" }));
-    await mount();
-    const folders = [...container.querySelectorAll("[data-routine-group-folder]")].map((section) => section.getAttribute("data-routine-group-folder"));
-    expect(folders).toEqual(["", "Reports", "Clients"]);
-    expect(container.querySelector('[data-routine-group-folder="Clients"] [data-routine-bot]')?.textContent).toContain("Atlas");
-  });
-
-  it("a row still drags into a folder of its bot", async () => {
+  it("files a routine into a folder from its row menu", async () => {
+    setGroupBy("bot");
     fixture.api.mockImplementation(async (path: unknown) => String(path).includes("/api/routines/folders")
       ? { folders: ["Clients"], routines: [{ ...routines[0], folder: "Clients" }] }
       : { calls: [] });
-    localStorage.setItem(ROUTINE_GROUP_BY_KEY, JSON.stringify({ local: "bot" }));
     await mount();
-    const row = botSection("atlas").querySelector('[data-routine-id="a1"]')!;
-    const target = botSection("atlas").querySelector('[data-routine-folder-section="Clients"]')!;
-    const pointer = (on: Element, type: string, x: number, y: number) => {
-      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
-      Object.defineProperty(event, "pointerType", { value: "mouse" });
-      act(() => { on.dispatchEvent(event); });
-    };
-    pointer(row, "pointerdown", 10, 10);
-    pointer(target, "pointermove", 60, 60);
-    pointer(target, "pointerup", 60, 60);
+    act(() => botSection("atlas").querySelector<HTMLButtonElement>('[data-routine-id="a1"] [data-routine-row-menu]')!.click());
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-routine-action="move-Clients"]')!.click(); });
     await flush();
     const call = fixture.api.mock.calls.find((args) => String(args[0]).includes("/api/routines/folders")) as unknown as [string, RequestInit];
     expect(JSON.parse(String(call[1].body))).toEqual({ action: "move", botId: "atlas", routineIds: ["a1"], folder: "Clients" });
-    expect(rowIds(botSection("atlas").querySelector('[data-routine-folder-section="Clients"]')!)).toEqual(expect.arrayContaining(["a1", "a2"]));
+  });
+
+  it("renames a folder in every bot that has it from the folder band's menu", async () => {
+    setGroupBy("folder");
+    fixture.api.mockImplementation(async (path: unknown) => String(path).includes("/api/routines/folders") ? { folders: ["Customers"], routines: [] } : { calls: [] });
+    await mount();
+    act(() => container.querySelector<HTMLButtonElement>('[data-routine-group-folder="Clients"] [data-group-menu]')!.click());
+    act(() => document.querySelector<HTMLButtonElement>('[data-routine-folder-action="rename"]')!.click());
+    const input = container.querySelector<HTMLInputElement>('[data-routine-group-folder="Clients"] input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Customers");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await flush();
+    const call = fixture.api.mock.calls.find((args) => String(args[0]).includes("/api/routines/folders")) as unknown as [string, RequestInit];
+    expect(JSON.parse(String(call[1].body))).toEqual({ action: "rename", botId: "atlas", from: "Clients", to: "Customers" });
   });
 });
 
@@ -181,10 +222,10 @@ describe("Automations header", () => {
     await mount();
     const header = container.querySelector("[data-automations-header]")!;
     expect(header.querySelector("[data-page-title] svg")).not.toBeNull();
-    expect(header.querySelector("h1")?.textContent).toBe("Automations");
+    expect(header.querySelector("h1")?.textContent).toBe("Routines");
     expect(header.querySelector("[data-page-count]")?.textContent).toBe("4 routines");
     expect(header.querySelector("[data-page-subtitle]")?.textContent).toBeTruthy();
-    const create = header.querySelector("[data-page-actions] summary, [data-page-actions] button:last-child");
+    const create = container.querySelector("[data-routines-table] [data-automations-create]");
     expect(create?.className).toContain("border-hairline/50");
     expect(create?.className).not.toContain("bg-accent");
     // the tabs sit in the toolbar row under the title (2026-11-17)

@@ -14,6 +14,7 @@ export function selectRoutinesPage(state: AppState) {
     config: state.config,
     routinesFocus: state.routinesFocus,
     routinesLoadState: state.routinesLoadState,
+    routineFolders: state.routineFolders,
     webhooks: state.webhooks,
   };
 }

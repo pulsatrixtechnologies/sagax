@@ -94,11 +94,10 @@ import {
 import { useSidebarViewport } from "@/lib/sidebar-preferences";
 import { AttachmentChips, BotPicker, formatWithAiRequest } from "./RoutineCalendarPage.tsx-parts/editorWidgets";
 import { EventEditorBody } from "./RoutineCalendarPage.tsx-parts/EventEditorBody";
-import { PausedList } from "./RoutineCalendarPage.tsx-parts/PausedList";
 import { useRoutinesPage } from "./RoutineCalendarPage.tsx-parts/useRoutinesPage";
 import { RoutinesPageView } from "./RoutineCalendarPage.tsx-parts/RoutinesPageView";
 
-export { formatWithAiRequest, routineEditorAt, PausedList };
+export { formatWithAiRequest, routineEditorAt };
 
 function routineConfigSignature(routine: Routine | undefined): string {
   if (!routine) return "";
@@ -1037,7 +1036,7 @@ export function RoutineEditor({
 
 export const RoutinesPage = memo(function RoutinesPage(props: { onBack: () => void; onOpenRoom: (id: string) => void; embedded?: boolean; fill?: boolean }) {
   const m = useRoutinesPage(props);
-  return RoutinesPageView(m, { CalendarGrid, QuickComposer, EventEditor, EventDetails, PausedList, RoutineWakeBar });
+  return RoutinesPageView(m, { CalendarGrid, QuickComposer, EventEditor, EventDetails, RoutineWakeBar });
 });
 
 /** Desktop only: the one lever the app has against a sleeping computer.

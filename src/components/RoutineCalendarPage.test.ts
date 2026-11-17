@@ -87,21 +87,21 @@ afterAll(() => vi.unstubAllGlobals());
 
 describe("routine failure indicators", () => {
   it("counts unread failures on the Run logs tab and offers mark-all only while some are unread", () => {
-    const buttons = page();
     expect(markupOf()).toMatch(/data-page-tab="logs"[^>]*>Run logs<span[^>]*>2<\/span>/);
-    expect(buttons.has("Mark all as read")).toBe(true);
+    fixture.state = { ...fixture.state!, routinesFocus: { section: "logs", nonce: 6 } };
+    expect(markupOf()).toContain("data-logs-mark-all");
 
     fixture.state = { ...initialState, bots: [bot], routineRuns: [
       { ...failed, seenAt: 1 }, { ...missed, seenAt: 1 }, completed,
     ] };
     const read = markupOf();
     expect(read).not.toMatch(/data-page-tab="logs"[^>]*>Run logs<span/);
-    expect(read).not.toContain('aria-label="Mark all as read"');
+    expect(read).not.toContain("data-logs-mark-all");
   });
 
-  it("clears every failure indicator in one action from the header", () => {
-    page().get("Mark all as read")!.onClick!();
-    expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith({ type: "markAllRoutineRunsSeen" });
+  it("clears every failure indicator in one action from the Run logs", () => {
+    const view = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx"), "utf8");
+    expect(view).toContain('onMarkAllSeen={() => dispatch({ type: "markAllRoutineRunsSeen" })}');
   });
 
   it("offers View failed runs on the Overview, which opens the logs on the shared problems set", () => {
@@ -112,7 +112,8 @@ describe("routine failure indicators", () => {
     const html = markupOf();
     expect(html).toContain("data-routines-failed-runs");
     const view = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx"), "utf8");
-    expect(view).toContain('dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })');
+    // and the logs open on the period the cards show
+    expect(view).toContain('dispatch({ type: "showRoutines", section: "logs", runStatus: "problems", period })');
   });
 
   it("lands the focused problems filter on the logs instead of every status", () => {
@@ -253,15 +254,19 @@ describe("the Automations header (Owner, 2026-10-27: one row, secondary controls
     expect(html).toContain("data-routine-filter-reset");
   });
 
-  it("puts Paused routines in the menu with its count, and keeps the running indicator", () => {
+  it("keeps the running indicator, lists a paused routine as a row with a Paused chip and has no usage banner", () => {
     const paused = { id: "p1", name: "Paused digest", prompt: "", target: "bot", botId: bot.id, runOn: "maus", enabled: false,
       schedule: { type: "daily", time: "06:00", weekdays: [1] }, durationMinutes: 30, createdAt: 1, updatedAt: 1 } as unknown as import("@/lib/routines").Routine;
     fixture.state = { ...fixture.state!, routines: [paused], routineRuns: [failed, { ...completed, id: "busy", status: "running" }] };
-    const buttons = page();
-    expect(buttons.has("View paused routines")).toBe(true);
     const html = header();
     expect(html).toContain("data-automations-running");
     expect(html).toContain('title="1 active"');
+    const body = markupOf();
+    expect(body).toContain("Paused digest");
+    expect(body).toContain("data-routine-state");
+    // the old usage banner, its orange card and its blue button are gone; the menu has no paused entry
+    expect(body).not.toContain("data-limit-warning");
+    expect(body).not.toContain("View paused routines");
   });
 
   it("labels every icon-only control and clears the Windows caption buttons", () => {

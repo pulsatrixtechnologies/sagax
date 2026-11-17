@@ -68,7 +68,6 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   const [quick, setQuick] = useState<EventSeed | null>(null);
   const [editor, setEditor] = useState<EventSeed | null>(null);
   const [selected, setSelected] = useState<CalendarEventItem | null>(null);
-  const [pausedOpen, setPausedOpen] = useState(false);
   const [botsOpen, setBotsOpen] = useRightRailOpen();
   const [webhookCreateRequest, setWebhookCreateRequest] = useState(0);
   const [error, setError] = useState("");
@@ -167,7 +166,6 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
       : null;
   // The pills count within the scope; the sidebar's own count stays the
   // person's (the store).
-  const paused = scopedRoutines.filter((routine) => !routine.enabled && (routine.schedule.type !== "once" || routine.schedule.at > Date.now()));
   const running = scopedRuns.filter((run) => ["queued", "running", "waiting"].includes(run.status)).length;
   const unseenFailures = scopedRuns.filter((run) => isRoutineProblemRun(run) && !run.seenAt).length;
   const filteredRoutines = useMemo(() => scopedRoutines.filter((routine) => botFilter === "all" || routine.botId === botFilter), [scopedRoutines, botFilter]);
@@ -196,7 +194,7 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   const viewerId = state.config?.viewer?.principalId ?? null;
   const [groupBy, setGroupByState] = useState<RoutineGroupBy>(() => routineGroupBy(viewerId));
   const setGroupBy = (next: RoutineGroupBy) => { setGroupByState(next); saveRoutineGroupBy(viewerId, next); };
-  const createInGroup = (botId: string, folder?: string) => { setSelected(null); setPausedOpen(false); setQuick(null); setEditor({ kind: "routine", at: nextHour(), durationMinutes: 30, botIds: [botId], ...(folder ? { folder } : {}) }); };
+  const createInGroup = (botId: string, folder?: string) => { setSelected(null); setQuick(null); setEditor({ kind: "routine", at: nextHour(), durationMinutes: 30, botIds: [botId], ...(folder ? { folder } : {}) }); };
   const closeRowMenu = (focus = true) => {
     const trigger = rowMenu?.trigger;
     setRowMenu(null);
@@ -234,7 +232,6 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
     const routine = editId ? scopedRoutines.find((candidate) => candidate.id === editId) ?? state.routines.find((candidate) => candidate.id === editId) : undefined;
     if (!routine) return;
     setSelected(null);
-    setPausedOpen(false);
     setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine });
   }, [state.routinesFocus, state.routines.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   const macInset = capabilities.windowChrome === "mac-inset";
@@ -253,7 +250,6 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   const handleWebhookCreateHandled = useCallback(() => setWebhookCreateRequest(0), []);
   const openCreate = useCallback((seed?: Partial<EventSeed>) => {
     setSelected(null);
-    setPausedOpen(false);
     // 2026-11-01 (no modals): quick create hangs off what opened it, the slot
     // that was clicked or the New button, never the middle of the window.
     const button = newMenuRef.current?.querySelector("summary")?.getBoundingClientRect();
@@ -268,7 +264,7 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
       // A panel (the editor asking about unsaved changes) or the quick create
       // popover already handled this Escape.
       if (event.defaultPrevented) return;
-      if (event.key === "Escape") { for (const menu of [newMenuRef.current, navMenuRef.current, filtersMenuRef.current]) menu?.removeAttribute("open"); setEditor(null); setSelected(null); setPausedOpen(false); return; }
+      if (event.key === "Escape") { for (const menu of [newMenuRef.current, navMenuRef.current, filtersMenuRef.current]) menu?.removeAttribute("open"); setEditor(null); setSelected(null); return; }
       if (section !== "calendar" || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key.toLowerCase() === "c") { event.preventDefault(); openCreate(); }
       if (event.key.toLowerCase() === "t") goToday();
@@ -375,7 +371,6 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
     scoped.setPrefs({ scope: "mine" });
     setRoutineFilter(undefined);
   };
-  const closeNavMenu = () => navMenuRef.current?.removeAttribute("open");
   // The calendar's handlers keep their identity, so the memoized grid, its
   // cards and the side panel skip a render that changes none of their data.
   // 2026-11-05 (#2098): a run on the grid opens in the chat, at its message;
@@ -403,16 +398,16 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
     section, setSection, scheduleView, setScheduleView, scoped, viewDays, setViewDays,
     anchor, setAnchor, botFilter, setBotFilter, setBotFilterState, routineFilter, setRoutineFilter,
     statusFilter, setStatusFilter, calls, setCalls, quick, setQuick, editor, setEditor,
-    selected, setSelected, pausedOpen, setPausedOpen, botsOpen, setBotsOpen,
+    selected, setSelected, botsOpen, setBotsOpen,
     webhookCreateRequest, setWebhookCreateRequest, error, setError, visibleBots,
     rangeStart, rangeEnd, engineLimits, markers, scopedRoutines, scopedRuns, botChoices,
-    loadCalls, items, calendarShown, liveSelected, paused, running, unseenFailures,
+    loadCalls, items, calendarShown, liveSelected, running, unseenFailures,
     filteredRoutines, upcoming, inFlightRuns, filteredRuns, routineOwnerOf, clearLogs,
     rowMenu, setRowMenu, renamingId, setRenamingId, viewerId, groupBy, setGroupBy,
     createInGroup, closeRowMenu, duplicateRoutine, renameRoutine, openRoutine, showUpcoming,
     openRun, macInset, windowDragStyle, windowNoDragStyle, setView, goToday,
     handleWebhookCreateHandled, openCreate, upsertCall, moveEvent, dropOnReset, resizeEvent,
-    overviewShown, scopeShown, calendarGrid, hideStatus, scopeFilters, activeFilters, clearFilters, closeNavMenu,
+    overviewShown, scopeShown, calendarGrid, hideStatus, scopeFilters, activeFilters, clearFilters,
     openGridItem, moveGridItem, resizeGridItem, dropGridReset, selectSidebarDate,
     openSidebarRoutine, collapseSidebar, pendingSlot,
   };

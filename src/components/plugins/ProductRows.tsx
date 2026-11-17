@@ -19,7 +19,7 @@ import { PLUGINS } from "./plugins-style";
 /** The mark of a product: the vendor's site when Perspicax names one, else
  * the connector tile. */
 export function productIcon(product: Pick<PersonProduct, "id" | "name" | "icon">) {
-  return { key: `perspicax-product:${product.id}`, kind: "mcp" as const, name: product.name, ...(product.icon ? { domain: product.icon.domain } : {}) };
+  return { key: `perspicax-product:${product.id}`, kind: "mcp" as const, name: product.name, ...(product.icon?.domain ? { domain: product.icon.domain } : {}), ...(product.icon?.url ? { logo: product.icon.url } : {}) };
 }
 
 /** The "..." actions of a product, the same in its row and on its page:

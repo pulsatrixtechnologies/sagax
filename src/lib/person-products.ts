@@ -2,7 +2,7 @@
 // GET/PUT/POST/DELETE /api/me/perspicax/products (server/routes/person-products.ts)
 // and the words of their states, key sources and kinds. Perspicax decides
 // the state, the form and the actions; this file only words them.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { t, activeLocale } from "@/lib/i18n";
 import { api, ApiError } from "@/state/store";
@@ -29,29 +29,111 @@ export function productsUnavailable(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
 }
 
+// One store of the person's products for the whole app: the Connect apps
+// page, a product's page and the chips of record links in the chat all read
+// it, so a product connected on one surface shows on the others at once.
+/** How long a read of the list is kept for a surface that only needs it. */
+export const PERSON_PRODUCTS_TTL_MS = 30_000;
+
+let shared: PersonProduct[] = [];
+let sharedAt = 0;
+let sharedRead: Promise<PersonProduct[]> | null = null;
+const sharedListeners = new Set<() => void>();
+
+function publishProducts(list: PersonProduct[]): void {
+  shared = list;
+  sharedAt = Date.now();
+  for (const listener of sharedListeners) listener();
+}
+
+/** One read of the list at a time: a surface that asks while another read is
+ * running waits for that one. Fails like `loadPersonProducts`. */
+function readProducts(): Promise<PersonProduct[]> {
+  if (sharedRead) return sharedRead;
+  const read = loadPersonProducts().then(
+    (list) => {
+      sharedRead = null;
+      publishProducts(list);
+      return list;
+    },
+    (failure: unknown) => {
+      sharedRead = null;
+      throw failure;
+    },
+  );
+  sharedRead = read;
+  return read;
+}
+
+/** The list for a surface that only needs it: kept for the TTL, read once for
+ * everyone who asks. A server without the route (solo, not linked, an older
+ * Perspicax) answers nothing. */
+export function loadSharedPersonProducts(): Promise<PersonProduct[]> {
+  if (!sharedRead && sharedAt && Date.now() - sharedAt < PERSON_PRODUCTS_TTL_MS) return Promise.resolve(shared);
+  return readProducts().catch((): PersonProduct[] => {
+    publishProducts([]);
+    return [];
+  });
+}
+
+/** Set the list (a gallery, a test). */
+export function seedPersonProducts(list: PersonProduct[]): void {
+  sharedRead = null;
+  publishProducts(list);
+}
+
+/** Forget the list (tests; a sign-out). */
+export function resetPersonProducts(): void {
+  sharedRead = null;
+  sharedAt = 0;
+  shared = [];
+  for (const listener of sharedListeners) listener();
+}
+
+function useSharedProducts(): PersonProduct[] {
+  return useSyncExternalStore(
+    (listener) => {
+      sharedListeners.add(listener);
+      return () => { sharedListeners.delete(listener); };
+    },
+    () => shared,
+    () => shared,
+  );
+}
+
+/** The list for a surface that only reads it (a record chip): the shared one,
+ * read once on mount when it is missing or older than the TTL. */
+export function useSharedPersonProducts(): PersonProduct[] {
+  const list = useSharedProducts();
+  useEffect(() => { void loadSharedPersonProducts(); }, []);
+  return list;
+}
+
 /** The person's products while `active` (the Me scope on an organization
- * server). `products` stays empty when the server has none to show. */
+ * server). `products` stays empty when the server has none to show. The list
+ * is the app's shared one: what this hook reads, replaces or refreshes is
+ * what every other reader sees. */
 export function usePersonProducts(active: boolean, initial?: PersonProduct[]) {
-  const [products, setProducts] = useState<PersonProduct[]>(initial ?? []);
+  const list = useSharedProducts();
   const [error, setError] = useState<string | null>(null);
   const refresh = useCallback(async () => {
     try {
-      setProducts(await loadPersonProducts());
+      await readProducts();
       setError(null);
     } catch (failure) {
-      setProducts([]);
+      publishProducts([]);
       setError(productsUnavailable(failure) ? null : failure instanceof Error ? failure.message : String(failure));
     }
   }, []);
   useEffect(() => {
-    if (active && !initial) void refresh();
-    if (!active) setProducts([]);
+    if (active && initial) publishProducts(initial);
+    else if (active) void refresh();
   }, [active, initial, refresh]);
   /** a product the page or the card changed: the row follows at once */
   const replace = useCallback((product: PersonProduct) => {
-    setProducts((current) => current.map((entry) => entry.id === product.id ? product : entry));
+    publishProducts(shared.map((entry) => entry.id === product.id ? product : entry));
   }, []);
-  return { products: active ? products : [], error: active ? error : null, refresh, replace };
+  return { products: active ? list : [], error: active ? error : null, refresh, replace };
 }
 
 const STATE_KEY: Record<ProductState, LocaleKey> = {

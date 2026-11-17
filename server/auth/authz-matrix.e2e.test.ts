@@ -679,6 +679,25 @@ posixOnly("authorization matrix: person and person, member and admin (2026-10-27
     expect(refused(await reads(admin)), "admin outside the room").toBe(true);
   }, 120_000);
 
+  it("a bot's picture is seen by whoever sees the bot: shared, A sees it; private, A and an admin get not found", async () => {
+    const statusOf = async (path: string, auth: Auth) => (await api("GET", path, auth)).status;
+    const pictureOn = async (botId: string) => {
+      const image = await upload(b.auth, null, "image/png", PNG);
+      expect(image.answer.status, image.answer.text).toBe(201);
+      const avatarUrl = `/api/attachments/${image.path!.split("/").at(-1)}`;
+      const set = await api("PATCH", `/api/bots/${botId}/profile`, b.auth, { avatarUrl, avatarCrop: "square" });
+      expect(set.status, set.text).toBe(200);
+      return avatarUrl;
+    };
+    const privatePicture = await pictureOn(b.things.bot!);
+    const sharedPicture = await pictureOn(shared.bot!);
+    expect(await statusOf(privatePicture, b.auth)).toBe(200);
+    expect([403, 404]).toContain(await statusOf(privatePicture, a.auth));
+    expect([403, 404]).toContain(await statusOf(privatePicture, admin));
+    expect(await statusOf(sharedPicture, a.auth)).toBe(200);
+    expect([403, 404]).toContain(await statusOf(sharedPicture, admin));
+  }, 60_000);
+
   it("own: A does everything on her own things without an admin", async () => {
     const failures: string[] = [];
     // reads, then writes, then deletions; whole things (a bot, a room, a

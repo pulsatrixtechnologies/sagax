@@ -267,7 +267,7 @@ function CompanyChip({ name, companyRef, onOpen }: { name: string; companyRef: R
 
 function PriorityChip({ priority }: { priority: NonNullable<Card["priority"]> }) {
   return (
-    <Chip className={LEVEL_CLASS[priority.level]} title={priority.label}>
+    <Chip className={cn(LEVEL_CLASS[priority.level], "min-w-8")} title={priority.label}>
       {(priority.level === "urgent" || priority.level === "high") && <TriangleAlert size={12} aria-hidden="true" className={cn("shrink-0", LEVEL_GLYPH[priority.level])} />}
       <span className="max-w-[11rem] min-w-0 truncate">{priority.label}</span>
     </Chip>
@@ -405,7 +405,7 @@ function Head({ card, label, kindName, product, onClose, onBack, pinned, skeleto
       <span className="min-w-0 shrink-0 text-[12px] leading-5 text-popover-ink-secondary">{kind}</span>
       {!hidden && <span dir="ltr" className="shrink-0 font-mono text-[13px] leading-5 [unicode-bidi:isolate]" title={shown}>{shown}</span>}
       <span className="ms-auto flex min-w-0 items-center gap-1">
-        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[14rem] truncate">{card.state.label}</span></Chip>}
+        {card?.state && <Chip className={cn(TONE_CLASS[card.state.tone], "shrink-0")} title={card.state.label}><span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[card.state.tone])} /><span className="max-w-[9rem] truncate">{card.state.label}</span></Chip>}
         {card?.priority && <PriorityChip priority={card.priority} />}
         {skeleton && <Bar className="h-5 w-16 rounded-full" />}
         {pinned && onClose && (

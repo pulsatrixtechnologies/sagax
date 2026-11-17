@@ -122,7 +122,6 @@ describe("the rows' and cards' three dots menus", () => {
     "src/components/RoutineCalendarPage.tsx",
     "src/components/RoutineToggleLine.tsx",
     "src/components/approvals/ApprovalsPage.tsx",
-    "src/components/plugins/DiscoverView.tsx",
     "src/components/settings/OwnAvatarField.tsx",
     "src/components/settings/AccountCard.tsx",
     "src/components/TeamMapPage.tsx",

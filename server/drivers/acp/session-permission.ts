@@ -108,11 +108,22 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
             if (allow) return send({ jsonrpc: "2.0", id: msg.id, result: { outcome: { outcome: "selected", optionId: allow } } });
           }
           const kind = String(toolCall.kind ?? "");
+          // An MCP tool's ask carries the agent's own `<server>__<tool>`
+          // title (Grok: "agents__list_bots"), never a command or a file
+          // change; the summary below may come from the model's arguments.
+          const mcpTitle = typeof toolCall.title === "string" ? toolCall.title.trim() : "";
+          // #4527 lot C: the agents server's call_tool is asked about as the
+          // tool it runs, so every rule and grant reads that tool: a Refuse
+          // or Ask first rule on it applies, and "Always allow this session"
+          // covers that one tool, as it did when the tool was listed
+          const searchedAgents = isQuestion || !agentsSearchedFromEnv(current.turn?.integrations?.agents?.env) ? null : agentsSearchedCall(mcpTitle, toolCall.rawInput);
           // an earlier "Always allow this session" on this exact operation.
           // On the person's own computer the key carries that scope, so a
           // grant made in the sandbox never answers a call on the computer
-          // (or the reverse); it stays this thread's only.
-          const exactOperation = isQuestion ? null : sessionOperationKey(toolCall);
+          // (or the reverse); it stays this thread's only. A call_tool's
+          // operation is the tool it runs, whatever its arguments, as the
+          // engine's own allow_always on that tool listed would have been.
+          const exactOperation = isQuestion ? null : searchedAgents ? `searched-tool:${searchedAgents.mcpTool}` : sessionOperationKey(toolCall);
           const operationKey = exactOperation && current.controlsHost ? `local-computer:${exactOperation}` : exactOperation;
           if (operationKey && sessionAllows.get(threadId)?.has(operationKey)) {
             const allow = optionFor("allow");
@@ -122,10 +133,6 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
           }
           const tool = kind === "execute" ? "shell" : kind === "edit" ? "edit" : kind || "tool";
           const isShellCommand = !isQuestion && kind === "execute" && !/^mcp(?:__|[.:])/i.test(String(toolCall.title ?? ""));
-          // An MCP tool's ask carries the agent's own `<server>__<tool>`
-          // title (Grok: "agents__list_bots"), never a command or a file
-          // change; the summary below may come from the model's arguments.
-          const mcpTitle = typeof toolCall.title === "string" ? toolCall.title.trim() : "";
           // An engine's own connector (Grok's use_tool to the xAI account's
           // cloud connectors): its arguments for the card, and whether it
           // acts outside the app, fail closed (connector-ask.ts).
@@ -134,9 +141,6 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
           // (`cursor__user-Outlook-send_5fmail___12`); its use_tool target
           // then names the call, so a rule ("Always allow") and the outbound
           // reading key on the very tool, never on the bare kind "other".
-          // #4527 lot C: the agents server's call_tool is asked about as the
-          // tool it runs, so a Refuse or Ask first rule on it applies
-          const searchedAgents = isQuestion || !agentsSearchedFromEnv(current.turn?.integrations?.agents?.env) ? null : agentsSearchedCall(mcpTitle, toolCall.rawInput);
           const mcpTool = searchedAgents ? searchedAgents.mcpTool
             : !isQuestion && !["execute", "edit", "delete", "move"].includes(kind) && /^(?:mcp__)?[a-z][\w-]{0,63}__[a-z][a-z0-9_]{0,63}$/i.test(mcpTitle)
             ? mcpTitle
@@ -191,8 +195,10 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
                 : forSession
                   // on the person's computer the engine's allow_always could
                   // cover more than this exact call: allow once, and the
-                  // driver keeps the exact operation instead
-                  ? (current.controlsHost ? null : optionAlways) ?? optionFor("allow")
+                  // driver keeps the exact operation instead. #4527: the
+                  // same for a call_tool, whose allow_always would cover
+                  // every left out tool: the driver keeps its target
+                  ? (current.controlsHost || searchedAgents ? null : optionAlways) ?? optionFor("allow")
                   // an outward call is allowed once, never Grok's allow_always
                   : connector.outward && want === "allow"
                     ? options.find((o) => o.kind === "allow_once" && typeof o.optionId === "string")?.optionId ?? null
@@ -200,7 +206,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
             // the agent keeps its own allow_always; when it offered none (or on
             // the person's computer), the driver keeps the exact operation
             // for the session instead
-            if (forSession && (current.controlsHost || !optionAlways) && optionId && operationKey) {
+            if (forSession && (current.controlsHost || searchedAgents || !optionAlways) && optionId && operationKey) {
               const remembered = sessionAllows.get(threadId) ?? new Set<string>();
               remembered.add(operationKey);
               sessionAllows.set(threadId, remembered);

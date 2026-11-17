@@ -14,9 +14,8 @@
 //   (10 by default): during the back-off a hover shows the kept card or the
 //   busy state without calling;
 // - `refresh` reads again with `fresh=1`;
-// - `confirm` is the person's click on "Lire la fiche" (an organization's
-//   Ask first rule): it reads with `confirm=1` and the app remembers that
-//   confirmation for the record until it reloads.
+// - a card is read at once, whatever the organization's rules (#4566): only a
+//   Refuse rule refuses (its state, `org_refused`); there is no button.
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { activeLocale } from "@/lib/i18n";
@@ -45,7 +44,6 @@ const entries = new Map<string, RecordCardEntry>();
 const inFlight = new Map<string, Promise<RecordCardAnswer>>();
 const listeners = new Map<string, Set<() => void>>();
 const backoff = new Map<string, number>();
-const confirmed = new Set<string>();
 
 /** The language of a card: `fr` or `en`, as the route reads it. */
 export function recordCardLanguage(): "fr" | "en" {
@@ -55,8 +53,8 @@ export function recordCardLanguage(): "fr" | "en" {
 const cacheKey = (ref: RecordRef, lang: string) => `${recordKey(ref)}\u0000${lang}`;
 
 /** The request path of a record's card. */
-export function recordCardPath(ref: RecordRef, options: { lang?: string; fresh?: boolean; confirm?: boolean } = {}): string {
-  const query = [`lang=${options.lang ?? recordCardLanguage()}`, ...(options.fresh ? ["fresh=1"] : []), ...(options.confirm ? ["confirm=1"] : [])];
+export function recordCardPath(ref: RecordRef, options: { lang?: string; fresh?: boolean } = {}): string {
+  const query = [`lang=${options.lang ?? recordCardLanguage()}`, ...(options.fresh ? ["fresh=1"] : [])];
   return `/api/me/records/${encodeURIComponent(ref.product)}/${encodeURIComponent(ref.kind)}/${encodeURIComponent(ref.id)}?${query.join("&")}`;
 }
 
@@ -135,8 +133,6 @@ export function peekRecordCard(ref: RecordRef, lang = recordCardLanguage()): Rec
 export interface ReadOptions {
   /** skip the cache (`fresh=1`) */
   fresh?: boolean;
-  /** the person's own click on "Lire la fiche" */
-  confirm?: boolean;
 }
 
 /**
@@ -147,8 +143,7 @@ export function readRecordCard(ref: RecordRef, options: ReadOptions = {}): Promi
   const lang = recordCardLanguage();
   const key = cacheKey(ref, lang);
   const known = entries.get(key);
-  if (options.confirm) confirmed.add(recordKey(ref));
-  if (!options.fresh && !options.confirm && fresh(known)) return Promise.resolve(known!.answer!);
+  if (!options.fresh && fresh(known)) return Promise.resolve(known!.answer!);
   const inFlightRead = inFlight.get(key);
   if (inFlightRead) return inFlightRead;
   const left = recordBackoffLeft(ref.product);
@@ -160,7 +155,7 @@ export function readRecordCard(ref: RecordRef, options: ReadOptions = {}): Promi
     return Promise.resolve(answer);
   }
   publish(key, { answer: known?.answer, at: known?.at ?? 0, loading: true });
-  const path = recordCardPath(ref, { lang, fresh: options.fresh, confirm: options.confirm || confirmed.has(recordKey(ref)) });
+  const path = recordCardPath(ref, { lang, fresh: options.fresh });
   const startedIn = epoch;
   const read = slot(() => api<unknown>(path)).then(parseRecordCardAnswer, missFromError).then((answer) => {
     // a reset since this read began: its answer goes to whoever awaits it, not into the new cache
@@ -188,12 +183,6 @@ export function refreshRecordCard(ref: RecordRef): Promise<RecordCardAnswer> {
   return readRecordCard(ref, { fresh: true });
 }
 
-/** "Lire la fiche": the person's click answers the organization's Ask first
- * rule for this record, until the app reloads. */
-export function confirmRecordCard(ref: RecordRef): Promise<RecordCardAnswer> {
-  return readRecordCard(ref, { confirm: true });
-}
-
 /** Forget everything (tests; a sign-out). */
 export function resetRecordCards(): void {
   epoch += 1;
@@ -203,7 +192,6 @@ export function resetRecordCards(): void {
   // reads already running finish and count themselves out
   for (const queued of waiting.splice(0)) queued.drop();
   backoff.clear();
-  confirmed.clear();
   for (const set of listeners.values()) for (const listener of set) listener();
 }
 
@@ -227,7 +215,6 @@ export interface UseRecordCard {
   /** when the card was read (ms), 0 before the first answer */
   at: number;
   refresh: () => void;
-  confirm: () => void;
 }
 
 /**
@@ -264,7 +251,6 @@ export function useRecordCard(ref: RecordRef, { enabled = true }: { enabled?: bo
     loading: entry.loading || !answer,
     at: entry.at,
     refresh: useCallback(() => void refreshRecordCard(stable), [stable]),
-    confirm: useCallback(() => void confirmRecordCard(stable), [stable]),
   };
 }
 

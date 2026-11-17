@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { answer, ticketCard, TICKET_REF } from "./record-card-fixtures";
 import {
-  confirmRecordCard, peekRecordCard, prefetchRecordCard, readRecordCard, recordBackoffLeft, recordCardPath, refreshRecordCard, resetRecordCards,
+  peekRecordCard, prefetchRecordCard, readRecordCard, recordBackoffLeft, recordCardPath, refreshRecordCard, resetRecordCards,
   RECORD_BUSY_BACKOFF_MS, RECORD_CARD_TTL_MS, RECORD_READS_AT_ONCE, useRecordCard,
 } from "./record-cards";
 
@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe("record card client", () => {
   it("asks the route with the person's language", async () => {
-    expect(recordCardPath(TICKET_REF, { lang: "fr", fresh: true, confirm: true })).toBe("/api/me/records/nimbus_desk/ticket/481516?lang=fr&fresh=1&confirm=1");
+    expect(recordCardPath(TICKET_REF, { lang: "fr", fresh: true })).toBe("/api/me/records/nimbus_desk/ticket/481516?lang=fr&fresh=1");
     await readRecordCard(TICKET_REF);
     expect(calls).toEqual(["/api/me/records/nimbus_desk/ticket/481516?lang=fr"]);
   });
@@ -81,14 +81,10 @@ describe("record card client", () => {
     expect(peekRecordCard(TICKET_REF).answer).toHaveProperty("card");
   });
 
-  it("remembers a confirmation for the record until reload", async () => {
-    reply = () => json({ state: "org_ask", rule: { id: "r", text: "ask" } });
-    expect(await readRecordCard(TICKET_REF)).toMatchObject({ state: "org_ask" });
-    reply = () => json(answer(ticketCard(Date.now(), "fr")));
-    await confirmRecordCard(TICKET_REF);
-    expect(calls[1]).toContain("confirm=1");
+  it("reads at once and never sends a confirmation: there is nothing to confirm", async () => {
+    await readRecordCard(TICKET_REF);
     await refreshRecordCard(TICKET_REF);
-    expect(calls[2]).toContain("confirm=1");
+    expect(calls.every((call) => !call.includes("confirm"))).toBe(true);
   });
 
   it("turns a failure into a state", async () => {

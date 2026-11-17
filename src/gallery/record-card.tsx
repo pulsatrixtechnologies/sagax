@@ -4,7 +4,11 @@
  * ?lang=fr|en &skin=<id> &scene=<name>
  *   overview   every kind, then every state (default)
  *   ticket | company | project | guid | pinned   one card
- *   loading | noaccess | unknown | notconnected | signin | busy | down | orgask | orgrefused   one state
+ *   invoice | agreement   a kind the product declares (#4572), drawn by the same renderer
+ *   invoicelong | invoicenoref | agreementnoend | agreementnodecimals   their stress variants (&pinned=1 pins)
+ *   busy       a chip in a busy chat (bubbles and a table above and below): the card must sit above it
+ *   chat2      live chips of an invoice and an agreement: a record named in a card opens in place, Back returns
+ *   loading | noaccess | unknown | notconnected | signin | busy | down | orgrefused   one state
  *   neighbour  the link hover card (the conforming neighbour) beside a ticket card
  *   chat       live chips in a paragraph, a list and a table: hover, click (pin), Escape
  * The time is held still (scene `now`), so a capture is the same every run. */
@@ -14,7 +18,7 @@ import { ChatMarkdown } from "../components/ChatMarkdown";
 import { LinkPreviewCard } from "../components/LinkHoverCard";
 import { RecordCard } from "../components/RecordCard";
 import { loadLocale } from "../lib/i18n";
-import { NIMBUS_MARK, companyCard, guidCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, COMPANY_REF, GUID_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
+import { NIMBUS_MARK, NIMBUS_PRODUCT, agreementCard, companyCard, guidCard, invoiceCard, nimbusProduct, nimbusProductRaw, projectCard, ticketCard, answer, AGREEMENT_REF, COMPANY_REF, GUID_REF, INVOICE_REF, PROJECT_REF, TICKET_REF, type Lang } from "../lib/record-card-fixtures";
 import { seedPersonProducts } from "../lib/person-products";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { parseRecordCardAnswer, type RecordCardAnswer, type RecordCardMiss, type RecordRef } from "../../shared/record-cards";
@@ -31,8 +35,8 @@ const NOW = Date.parse("2026-11-17T14:34:00-05:00");
 
 const product = { name: "Nimbus Desk", iconUrl: NIMBUS_MARK };
 const kindNames: Record<string, string> = lang === "fr"
-  ? { ticket: "Billet", company: "Entreprise", project: "Projet" }
-  : { ticket: "Ticket", company: "Company", project: "Project" };
+  ? { ticket: "Billet", company: "Entreprise", project: "Projet", invoice: "Facture", agreement: "Entente" }
+  : { ticket: "Ticket", company: "Company", project: "Project", invoice: "Invoice", agreement: "Agreement" };
 const noop = () => {};
 
 function read(raw: RecordCardAnswer | RecordCardMiss) {
@@ -40,19 +44,19 @@ function read(raw: RecordCardAnswer | RecordCardMiss) {
   return {
     card: "card" in parsed ? parsed.card : null,
     miss: "card" in parsed ? null : parsed,
-    loading: false, at: NOW - 120_000, refresh: noop, confirm: noop,
+    loading: false, at: NOW - 120_000, refresh: noop,
   };
 }
 
 function Card({ record, label, answerOf, pinned, miss, loading }: { record: RecordRef; label: string; answerOf?: Record<string, unknown>; pinned?: boolean; miss?: RecordCardMiss; loading?: boolean }) {
   const value = miss ?? (answerOf ? parseRecordCardAnswer(answer(answerOf)) : null);
-  const base = value ? read(value) : { card: null, miss: null, loading: true, at: 0, refresh: noop, confirm: noop };
+  const base = value ? read(value) : { card: null, miss: null, loading: true, at: 0, refresh: noop };
   return (
     <div data-gallery-card={record.kind} className="w-fit">
       <RecordCard
         record={record} label={label} kindName={kindNames[record.kind]} product={product}
         read={loading ? { ...base, loading: true, card: null, miss: null } : base}
-        pinned={pinned} onClose={noop} onAsk={noop} onConnect={noop} onSignIn={noop} onOpenRecord={noop} now={NOW}
+        pinned={pinned} onClose={noop} onAsk={noop} onConnect={noop} onSignIn={noop} onOpenRecord={noop} canOpenRecord={(ref) => ref.product === NIMBUS_PRODUCT} now={NOW}
       />
     </div>
   );
@@ -63,6 +67,8 @@ const company = <Card record={COMPANY_REF} label="Acme Fabrication" answerOf={co
 const project = <Card record={PROJECT_REF} label={lang === "fr" ? "Migration du serveur" : "Server migration"} answerOf={projectCard(NOW, lang)} />;
 const guid = <Card record={GUID_REF} label={GUID_REF.id} answerOf={guidCard(NOW, lang)} />;
 const asPinned = params.get("pinned") === "1";
+const invoice = <Card record={INVOICE_REF} label="INV-1042" answerOf={invoiceCard(NOW, lang)} pinned={asPinned} />;
+const agreement = <Card record={AGREEMENT_REF} label="Managed services" answerOf={agreementCard(NOW, lang)} pinned={asPinned} />;
 const pinned = <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={ticketCard(NOW, lang)} pinned />;
 // the stress variants of the UX gate: a two-line title, many fields, no notes, long names
 const variant = (change: (card: Record<string, unknown>) => void) => { const card = ticketCard(NOW, lang); change(card); return card; };
@@ -75,7 +81,34 @@ const longNames = variant((card) => {
   card.priority = { label: lang === "fr" ? "Priorité 1 - Critique, intervention immédiate" : "Priority 1 - Critical, immediate response", level: "urgent" };
   card.state = { label: lang === "fr" ? "En attente de la pièce du fournisseur" : "Waiting for the supplier's part", tone: "waiting" };
 });
+// the same stress variants for the kinds a product declares: 14 fields and a long comment, no end date,
+// a money value with no decimals, a reference the person cannot open
+const invoiceWith = (change: (card: Record<string, unknown>) => void) => { const card = invoiceCard(NOW, lang); change(card); return card; };
+const agreementWith = (change: (card: Record<string, unknown>) => void) => { const card = agreementCard(NOW, lang); change(card); return card; };
+const invoiceLong = invoiceWith((card) => {
+  const fields = card.fields as Array<Record<string, unknown>>;
+  for (let index = 0; index < 5; index += 1) fields.push({ label: `${lang === "fr" ? "Champ" : "Field"} ${index + 1}`, value: `${lang === "fr" ? "Valeur" : "Value"} ${index + 1}` });
+  card.description = { text: lang === "fr"
+    ? "Merci de votre confiance. Cette facture couvre les services gérés de septembre et d'octobre, le remplacement de deux postes de travail et la migration du courriel. Le paiement est attendu dans les trente jours suivant la date de facturation. Les écarts doivent nous être signalés avant l'échéance afin d'éviter des frais de retard. Pour toute question sur une ligne, écrivez-nous en indiquant le numéro de facture."
+    : "Thank you for your business. This invoice covers the managed services of September and October, the replacement of two workstations and the mail migration. Payment is expected within thirty days of the invoice date. Any discrepancy must be reported before the due date to avoid late fees. For any question on a line, write to us quoting the invoice number.", more: false };
+});
+const invoiceNoRef = invoiceWith((card) => {
+  const fields = card.fields as Array<{ ref?: { product: string; kind: string; id: string }; type: string }>;
+  for (const field of fields) if (field.type === "ref" && field.ref?.kind === "agreement") field.ref = { product: "ledger_other", kind: "agreement", id: "412" };
+});
+const agreementNoEnd = agreementWith((card) => {
+  const fields = (card.fields as Array<{ label: string }>).filter((field) => field.label !== (lang === "fr" ? "Fin" : "End"));
+  fields.splice(1, 0, { label: lang === "fr" ? "Sans date de fin" : "No end date", value: lang === "fr" ? "Oui" : "Yes" } as never);
+  card.fields = fields;
+});
+const agreementNoDecimals = agreementWith((card) => {
+  for (const field of card.fields as Array<{ type?: string; value: string }>) if (field.type === "money") field.value = lang === "fr" ? "1 050 $" : "$1,050";
+});
 const variants: Record<string, ReactElement> = {
+  invoicelong: <Card record={INVOICE_REF} label="INV-1042" answerOf={invoiceLong} pinned={asPinned} />,
+  invoicenoref: <Card record={INVOICE_REF} label="INV-1042" answerOf={invoiceNoRef} pinned={asPinned} />,
+  agreementnoend: <Card record={AGREEMENT_REF} label="Managed services" answerOf={agreementNoEnd} pinned={asPinned} />,
+  agreementnodecimals: <Card record={AGREEMENT_REF} label="Managed services" answerOf={agreementNoDecimals} pinned={asPinned} />,
   longtitle: <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={longTitle} pinned={asPinned} />,
   fields12: <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={manyFields} pinned={asPinned} />,
   nonotes: <Card record={TICKET_REF} label={`#${TICKET_REF.id}`} answerOf={noNotes} pinned={asPinned} />,
@@ -92,7 +125,6 @@ const states: Record<string, ReactElement> = {
   signin: miss("sign_in"),
   busy: miss("busy", { retryAfter: 10 }),
   down: miss("down"),
-  orgask: miss("org_ask", { rule: { id: "rule-1", text: "Reading tickets asks first" } }),
   orgrefused: miss("org_refused", { rule: { id: "rule-2", text: "Reading tickets is refused" } }),
 };
 
@@ -116,6 +148,10 @@ const CHAT = lang === "fr"
 | Ticket | [#${TICKET_REF.id}](sagax://record/nimbus_desk/ticket/${TICKET_REF.id}) |
 | Company | [Acme Fabrication](sagax://record/nimbus_desk/company/${COMPANY_REF.id}) |`;
 
+const CHAT2 = lang === "fr"
+  ? `Il reste une facture impayée : [INV-1042](sagax://record/nimbus_desk/invoice/${INVOICE_REF.id}), échue le 5 novembre. Elle est liée à l'entente [Managed services](sagax://record/nimbus_desk/agreement/${AGREEMENT_REF.id}).`
+  : `One invoice is still unpaid: [INV-1042](sagax://record/nimbus_desk/invoice/${INVOICE_REF.id}), due on November 5. It belongs to the agreement [Managed services](sagax://record/nimbus_desk/agreement/${AGREEMENT_REF.id}).`;
+
 // a stand-in console: the product list and the cards, as the routes answer
 seedPersonProducts([nimbusProduct()]);
 const realFetch = window.fetch.bind(window);
@@ -127,7 +163,7 @@ window.fetch = async (input, init) => {
   if (match) {
     const mode = params.get("answer");
     if (mode) return json({ state: mode, ...(mode === "busy" ? { retryAfter: 10 } : {}) });
-    const make = { ticket: ticketCard, company: companyCard, project: projectCard }[match[1]!];
+    const make = { ticket: ticketCard, company: companyCard, project: projectCard, invoice: invoiceCard, agreement: agreementCard }[match[1]!];
     return json(make ? answer(make(Date.now(), lang)) : { state: "unknown" });
   }
   return realFetch(input, init);
@@ -151,6 +187,32 @@ function Page() {
       </Frame>
     );
   }
+  if (scene === "busy") {
+    const bubble = (text: string, mine?: boolean) => (
+      <div className={`w-fit max-w-[min(42rem,78%)] rounded-2xl bg-card px-4 py-2.5 text-[15px] leading-relaxed text-ink ${mine ? "ms-auto" : ""}`}>{text}</div>
+    );
+    const filler = lang === "fr" ? "Voici ce que j'ai trouvé dans les billets ouverts de la semaine, classés par client." : "Here is what I found in this week's open tickets, grouped by customer.";
+    return (
+      <Frame>
+        <div className="flex max-w-[44rem] flex-col gap-3 text-[15px] leading-6" data-gallery-chat>
+          {bubble(filler, true)}{bubble(filler)}{bubble(filler, true)}{bubble(filler)}
+          <div className="rounded-xl border border-hairline p-3">
+            <ChatMarkdown text={CHAT} botId="bot-gallery" draftId="bot:bot-gallery:thread-gallery" message={{ threadId: "thread-gallery", messageId: "m-3" }} />
+          </div>
+          {bubble(filler, true)}{bubble(filler)}{bubble(filler, true)}{bubble(filler)}
+        </div>
+      </Frame>
+    );
+  }
+  if (scene === "chat2") {
+    return (
+      <Frame>
+        <div className="max-w-[44rem] pt-[22rem] text-[15px] leading-6" data-gallery-chat>
+          <ChatMarkdown text={CHAT2} botId="bot-gallery" draftId="bot:bot-gallery:thread-gallery" message={{ threadId: "thread-gallery", messageId: "m-2" }} />
+        </div>
+      </Frame>
+    );
+  }
   if (scene === "neighbour") {
     return (
       <Frame>
@@ -161,15 +223,17 @@ function Page() {
       </Frame>
     );
   }
-  const single: Record<string, ReactElement> = { ticket, company, project, guid, pinned, ...variants, ...states };
+  const single: Record<string, ReactElement> = { ticket, company, project, invoice, agreement, guid, pinned, ...variants, ...states };
   if (single[scene]) return <Frame>{single[scene]}</Frame>;
   return (
     <Frame>
       <Label>{lang === "fr" ? "Billet" : "Ticket"}</Label>{ticket}
       <Label>{lang === "fr" ? "Entreprise (volet de gauche seulement)" : "Company (left pane only)"}</Label>{company}
       <Label>{lang === "fr" ? "Projet" : "Project"}</Label>{project}
+      <Label>{lang === "fr" ? "Facture (un type que le produit déclare)" : "Invoice (a kind the product declares)"}</Label>{invoice}
+      <Label>{lang === "fr" ? "Entente" : "Agreement"}</Label>{agreement}
       <Label>{lang === "fr" ? "Chargement" : "Loading"}</Label>{states.loading}
-      {(["noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgask", "orgrefused"] as const).map((name) => (
+      {(["noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgrefused"] as const).map((name) => (
         <div key={name}><Label>{name}</Label>{states[name]}</div>
       ))}
     </Frame>

@@ -7,7 +7,7 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { answer, companyCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
+import { agreementCard, answer, companyCard, invoiceCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
 import { resetPersonProducts, seedPersonProducts } from "@/lib/person-products";
 import { resetRecordCards } from "@/lib/record-cards";
 import * as drafts from "@/lib/drafts";
@@ -238,6 +238,151 @@ describe("the card", () => {
     await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
     await advance(50);
     expect(card()!.textContent).toContain("Imprimante de l'accueil");
+  });
+
+  it("draws the chip of any kind the product declares with the product's mark, and reads its card at once, no button", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = String(input);
+      if (url.includes("/api/me/records/")) reads.push(url);
+      return json(answer(invoiceCard(Date.now(), "fr")));
+    }));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    const [chip] = chips();
+    expect(chip!.dataset.recordLink).toBe("invoice");
+    expect(chip!.getAttribute("aria-label")).toBe("Facture INV-1042, Nimbus Desk, appuie sur Entrée pour les détails");
+    expect(chip!.querySelector("img, div")).not.toBeNull();
+    await act(async () => { chip!.click(); });
+    await advance(50);
+    expect(reads).toHaveLength(1);
+    expect(reads[0]).not.toContain("confirm");
+    expect(card()!.textContent).toContain("Facture");
+    expect([...card()!.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Lire la fiche");
+  });
+
+  it("opens an invoice's agreement in the same card, then its company, and Back returns one step at a time", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = String(input);
+      if (url.includes("/api/me/records/")) reads.push(url);
+      if (url.includes("/agreement/")) return json(answer(agreementCard(Date.now(), "fr")));
+      if (url.includes("/company/")) return json(answer(companyCard(Date.now(), "fr")));
+      return json(answer(invoiceCard(Date.now(), "fr")));
+    }));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    await act(async () => { chips()[0]!.click(); });
+    await advance(50);
+    const refs = [...card()!.querySelectorAll<HTMLElement>("[data-record-ref-link]")];
+    await act(async () => { refs.find((node) => node.textContent === "Managed services")!.click(); });
+    await advance(50);
+    expect(document.querySelectorAll("[data-record-card]")).toHaveLength(1);
+    expect(card()!.textContent).toContain("Entente");
+    await act(async () => { card()!.querySelector<HTMLElement>("[data-record-company-link]")!.click(); });
+    await advance(50);
+    expect(card()!.textContent).toContain("Entreprise");
+    await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+    await advance(50);
+    expect(card()!.textContent).toContain("Entente");
+    await act(async () => { card()!.querySelector<HTMLElement>("[aria-label=Retour]")!.click(); });
+    await advance(50);
+    expect(card()!.textContent).toContain("Facture");
+    expect(card()!.querySelector("[aria-label=Retour]")).toBeNull();
+  });
+
+  describe("the way back through records", () => {
+    // every card names the next agreement; the agreement 412 names the invoice 5150 again
+    const chain = (extra?: (card: Record<string, unknown>, id: string) => void) => vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = String(input);
+      if (!url.includes("/api/me/records/")) return json({});
+      reads.push(url);
+      const id = decodeURIComponent(url.split("?")[0]!.split("/").at(-1)!);
+      const card = invoiceCard(Date.now(), "fr");
+      card.id = id;
+      card.number = `INV-${id}`;
+      card.title = `Invoice ${id}`;
+      const n = Number(id);
+      const fields = card.fields as Array<Record<string, unknown>>;
+      const agreement = fields.find((field) => field.type === "ref" && (field.ref as { kind: string }).kind === "agreement")!;
+      agreement.value = `Next ${n + 1}`;
+      agreement.ref = { product: "nimbus_desk", kind: "invoice", id: String(n + 1) };
+      extra?.(card, id);
+      return json(answer(card));
+    }));
+    const root = "[INV-5150](sagax://record/nimbus_desk/invoice/5150)";
+    const next = () => [...card()!.querySelectorAll<HTMLElement>("[data-record-ref-link]")].find((node) => node.textContent!.startsWith("Next"))!;
+    const back = () => card()!.querySelector<HTMLElement>("[aria-label=Retour]");
+
+    it("keeps at most eight steps to go back through", async () => {
+      chain();
+      await render(root);
+      await act(async () => { chips()[0]!.click(); });
+      await advance(50);
+      for (let step = 0; step < 11; step += 1) { await act(async () => { next().click(); }); await advance(50); }
+      let backs = 0;
+      while (back()) { await act(async () => { back()!.click(); }); await advance(50); backs += 1; if (backs > 20) break; }
+      expect(backs).toBe(8);
+      expect(card()!.textContent).toContain("INV-5150");
+    });
+
+    it("goes back to a record already on the way instead of pushing it again", async () => {
+      chain((card, id) => { if (id === "5151") (card.fields as Array<Record<string, unknown>>).find((field) => field.type === "ref" && String(field.value).startsWith("Next"))!.ref = { product: "nimbus_desk", kind: "invoice", id: "5150" }; });
+      await render(root);
+      await act(async () => { chips()[0]!.click(); });
+      await advance(50);
+      await act(async () => { next().click(); });
+      await advance(50);
+      expect(card()!.textContent).toContain("INV-5151");
+      await act(async () => { next().click(); });
+      await advance(50);
+      // the root again: no arrow left, the way is not a loop
+      expect(card()!.textContent).toContain("INV-5150");
+      expect(back()).toBeNull();
+    });
+  });
+
+  it("leaves a ref to a kind the product does not declare as plain words", async () => {
+    const raw = invoiceCard(Date.now(), "fr");
+    for (const field of raw.fields as Array<{ ref?: { kind: string } }>) if (field.ref?.kind === "agreement") field.ref.kind = "widget";
+    vi.stubGlobal("fetch", vi.fn(async () => json(answer(raw))));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    await act(async () => { chips()[0]!.click(); });
+    await advance(50);
+    const refs = [...card()!.querySelectorAll("[data-record-ref-link]")].map((node) => node.textContent);
+    expect(refs).not.toContain("Managed services");
+    expect(card()!.textContent).toContain("Managed services");
+  });
+
+  it("reads nothing when the pointer only crosses a ref, and once when it rests on it", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = String(input);
+      if (url.includes("/api/me/records/")) reads.push(url);
+      return json(answer(url.includes("/agreement/") ? agreementCard(Date.now(), "fr") : invoiceCard(Date.now(), "fr")));
+    }));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    await act(async () => { chips()[0]!.click(); });
+    await advance(400);
+    expect(reads).toHaveLength(1);
+    expect(card()!.textContent).toContain("Facture");
+    const chip = [...card()!.querySelectorAll<HTMLElement>("[data-record-ref-link]")].find((node) => node.textContent === "Managed services")!;
+    fire(chip, "pointerover");
+    await advance(200);
+    fire(chip, "pointerout");
+    await advance(500);
+    expect(reads).toHaveLength(1);
+    fire(chip, "pointerover");
+    await advance(310);
+    await advance(300);
+    expect(reads).toHaveLength(2);
+    expect(reads[1]).toContain("/agreement/412");
+  });
+
+  it("leaves a ref to a product the person does not hold as plain words", async () => {
+    const raw = invoiceCard(Date.now(), "fr");
+    for (const field of raw.fields as Array<{ ref?: { product: string } }>) if (field.ref) field.ref.product = "ledger_other";
+    vi.stubGlobal("fetch", vi.fn(async () => json(answer(raw))));
+    await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
+    await act(async () => { chips()[0]!.click(); });
+    await advance(50);
+    expect(card()!.querySelectorAll("[data-record-ref-link]")).toHaveLength(0);
+    expect(card()!.textContent).toContain("Managed services");
   });
 
   it("moves focus to the first action when a card pinned while loading arrives, not onto Close", async () => {

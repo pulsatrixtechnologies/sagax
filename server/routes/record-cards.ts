@@ -1,7 +1,7 @@
 // Record cards (#4507): the card of one record a bot's message links to,
 // read as the signed-in person:
 //
-//   GET /api/me/records/:product/:kind/:id[?lang=fr|en][&fresh=1][&confirm=1]
+//   GET /api/me/records/:product/:kind/:id[?lang=fr|en][&fresh=1]
 //     -> 200 { card } | 200 { state, code?, retryAfter?, productState?, rule? }
 //
 // The read is the session's own person's, with their own sign-in token
@@ -10,9 +10,10 @@
 // administrator: hovering a record is the person reading their own product.
 // Only the organization's own rules apply, as for a bot's read of that
 // product (shared/custom-rules.ts, rules marked `org`): a Refuse rule blocks
-// the read (`org_refused`); an Ask first rule answers `org_ask` until the
-// person's own click asks again with `confirm=1`. Personal rules and a bot's
-// rules are about bots and are not read here.
+// the read (`org_refused`). An Ask first rule does not stop it: hovering or
+// pinning a record reads it at once, with no button and no extra click
+// (the owner's decision, #4566). Personal rules and a bot's rules are about
+// bots and are not read here.
 //
 // The language is the request's (`lang`), else the person's app language.
 // Every answer is `private, no-store`; nothing of a card is written anywhere.
@@ -26,16 +27,16 @@ import { PASS, type RouteHandler } from "./table.ts";
 export const RECORD_CARD_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})$/;
 
 /** The organization's decision on a person's read of one record. */
-export type RecordReadRule = { kind: "none" } | { kind: "deny" | "ask"; rule: { id: string; text: string } };
+export type RecordReadRule = { kind: "none" } | { kind: "deny"; rule: { id: string; text: string } };
 
 /**
- * The organization's Refuse and Ask first rules for a person's read of one
- * record: the facts of the read a bot makes of that product (its query tool,
+ * The organization's Refuse rules for a person's read of one record (an Ask
+ * first rule never reaches this read, so it can not hide a Refuse): the facts of the read a bot makes of that product (its query tool,
  * read only), with the product named by its id and its name. Only enabled
  * organization rules count.
  */
 export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, productName?: string, home?: string): RecordReadRule {
-  const org = rules.filter((rule) => rule.org === true && rule.enabled && rule.behavior !== "allow");
+  const org = rules.filter((rule) => rule.org === true && rule.enabled && rule.behavior === "deny");
   if (!org.length) return { kind: "none" };
   const tool = `${ref.product}_query`;
   const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify({ kind: ref.kind, id: ref.id }), hints: { readOnly: true } }, home);
@@ -45,7 +46,7 @@ export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, 
     startedBy: "person",
     ...(home ? { home } : {}),
   });
-  return decision.kind === "deny" || decision.kind === "ask" ? { kind: decision.kind, rule: { id: decision.rule.id, text: decision.rule.when } } : { kind: "none" };
+  return decision.kind === "deny" ? { kind: "deny", rule: { id: decision.rule.id, text: decision.rule.when } } : { kind: "none" };
 }
 
 export interface RecordCardsRouteDeps {
@@ -90,7 +91,6 @@ export function createRecordCardsRoutes(deps: RecordCardsRouteDeps): RouteHandle
     if (!token) return send(200, { state: "sign_in" });
     const rule = await deps.orgRule(person.principalId, token, ref);
     if (rule.kind === "deny") return send(200, { state: "org_refused", rule: rule.rule });
-    if (rule.kind === "ask" && url.searchParams.get("confirm") !== "1") return send(200, { state: "org_ask", rule: rule.rule });
     const lang = recordCardLanguage(url.searchParams.get("lang"), deps.language(auth));
     const read = await deps.client.get(person.principalId, token, ref, lang, url.searchParams.get("fresh") === "1");
     if (read.ok) return send(200, { card: read.card });

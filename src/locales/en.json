@@ -15299,7 +15299,6 @@
   "recordCard.copied": "Copied",
   "recordCard.refresh": "Refresh",
   "recordCard.upToDate": "Up to date at {time}",
-  "recordCard.readRecord": "Read the record",
   "recordCard.retry": "Retry",
   "recordCard.connect": "Connect",
   "recordCard.signIn": "Sign in again",
@@ -15310,7 +15309,6 @@
   "recordCard.state.down": "{product} is not answering right now.",
   "recordCard.state.busy": "{product} is busy. Trying again shortly.",
   "recordCard.state.orgRefused": "Your organization blocks this read.",
-  "recordCard.state.orgAsk": "Your organization asks you to confirm before reading.",
   "recordCard.state.unavailable": "Record cards are not available here.",
   "recordCard.back": "Back",
   "recordCard.notes.title": "Notes ({count})",
@@ -15384,5 +15382,12 @@
   "settings.sub.about.summary": "License, source and app tour",
   "settings.sub.advanced.summary": "Advanced mode, diagnostics, logs, experimental features",
   "settings.permissions.beforeActing": "Before acting",
-  "settings.consoleLink": "More on Perspicax"
+  "settings.consoleLink": "More on Perspicax",
+  "recordCard.more.lineOne": "1 more line",
+  "recordCard.more.lineMany": "{count} more lines",
+  "recordCard.chip": "Label",
+  "recordCard.lines.forbidden": "Your access does not include the lines.",
+  "recordCard.lines.unavailable": "The lines could not be read right now.",
+  "recordCard.lines.otherOne": "1 other line",
+  "recordCard.lines.other": "{count} other lines"
 }

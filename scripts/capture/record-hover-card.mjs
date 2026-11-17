@@ -28,13 +28,19 @@ async function freePort() {
   }
   throw new Error("no free port between 5176 and 5206");
 }
-const port = Number(arg("--port") ?? await freePort());
+// --attach N: use a gallery server already running on port N (a cold dev server may drop its first loads)
+const attach = arg("--attach");
+const port = Number(attach ?? arg("--port") ?? await freePort());
 const only = arg("--only");
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const langs = ["fr", "en"];
-const widths = [1280, 600, 544, 390];
+const widths = arg("--busy") || arg("--kinds") ? [] : [1280, 600, 544, 390];
 const variantScenes = ["longtitle", "fields12", "nonotes", "longnames"];
-const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgask", "orgrefused", "neighbour"];
+const cardScenes = ["overview", "ticket", "company", "project", "guid", "pinned", "loading", "noaccess", "unknown", "notconnected", "signin", "busy", "down", "orgrefused", "neighbour"];
+// the card over a busy chat (#4572): hovered and pinned, in the app's own
+// skins (dark: pulsatrix, graphite; light: daylight, linen), 1280 and 390 only
+const busySkins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }, { id: "graphite", label: "graphite" }, { id: "linen", label: "linen" }];
+const busyLang = (skin) => (skin === "pulsatrix" ? "fr" : "en");
 const chatScenes = [{ name: "chat-hover", action: "hover" }, { name: "chat-pinned", action: "click" }, { name: "chat-nested", action: "nested" }];
 
 async function waitForServer(url, ms = 120_000) {
@@ -46,12 +52,26 @@ async function waitForServer(url, ms = 120_000) {
   throw new Error(`gallery did not start at ${url}`);
 }
 
-const vite = spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+/** Open a gallery page and wait for its selector; the dev server may re-optimise and drop a load, so try again. */
+async function openGallery(page, url, selector) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await page.goto(url);
+      await page.waitForSelector(selector, { timeout: 20_000 });
+      return;
+    } catch (error) {
+      if (attempt >= 4) throw error;
+      await page.waitForTimeout(1_500);
+    }
+  }
+}
+
+const vite = attach ? null : spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, NODE_ENV: "development" }, detached: true,
 });
 let log = "";
-vite.stdout?.on("data", (chunk) => { log += chunk; });
-vite.stderr?.on("data", (chunk) => { log += chunk; });
+vite?.stdout?.on("data", (chunk) => { log += chunk; });
+vite?.stderr?.on("data", (chunk) => { log += chunk; });
 
 let browser;
 try {
@@ -125,9 +145,73 @@ try {
     }
     await page.close();
   }
+  if (arg("--kinds")) {
+    // lot S1 (#4572): the kinds a product declares beside the three existing kinds; hovered and pinned,
+    // French dark and English light, 1280, 600 and 390; a record named in a card opened in place and back
+    const scenes = (arg("--scenes") ?? "ticket,company,project,invoice,agreement,invoicelong,invoicenoref,agreementnoend,agreementnodecimals").split(",");
+    for (const width of [1280, 600, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
+      await page.route("https://desk.example/mark.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARK }));
+      page.on("pageerror", (error) => console.error("page error:", String(error).slice(0, 400)));
+      page.on("console", (message) => { if (message.type() === "error") console.error("console:", message.text().slice(0, 300)); });
+      for (const { id, lang, label } of [{ id: "pulsatrix", lang: "fr", label: "fr-dark" }, { id: "daylight", lang: "en", label: "en-light" }]) {
+        for (const scene of scenes) {
+          for (const pin of [false, true]) {
+            await openGallery(page, `${base}?${new URLSearchParams({ skin: id, lang, scene, ...(pin ? { pinned: "1" } : {}) })}`, "[data-gallery-card]");
+            await page.waitForTimeout(250);
+            await page.screenshot({ path: join(outDir, `${scene}-${pin ? "pinned" : "hover"}-${label}-${width}.png`), fullPage: true });
+          }
+        }
+        for (const step of ["open", "agreement", "company", "back"]) {
+          await openGallery(page, `${base}?${new URLSearchParams({ skin: id, lang, scene: "chat2" })}`, "[data-gallery-chat]");
+          const chip = page.locator('[data-record-link="invoice"]').first();
+          await chip.scrollIntoViewIfNeeded();
+          await chip.click();
+          await page.waitForSelector("[data-record-card] [data-record-card-body]", { timeout: 10_000 });
+          await page.waitForTimeout(500);
+          if (step !== "open") {
+            // pinned, a pane ends on a row boundary: its "N more" line opens the rest
+            await page.locator("button[data-fit-more]").first().click({ timeout: 1_500 }).catch(() => {});
+            await page.locator("[data-record-ref-link]", { hasText: "Managed services" }).first().click();
+            await page.waitForTimeout(600);
+          }
+          if (step === "company" || step === "back") {
+            await page.locator("[data-record-company-link]").first().click();
+            await page.waitForTimeout(600);
+          }
+          if (step === "back") {
+            await page.locator("[aria-label=Retour], [aria-label=Back]").first().click();
+            await page.waitForTimeout(600);
+          }
+          await page.screenshot({ path: join(outDir, `ref-${step}-${label}-${width}.png`) });
+        }
+      }
+      await page.close();
+    }
+  }
+  if (arg("--busy")) {
+    for (const width of [1280, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: 2 });
+      await page.route("https://desk.example/mark.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARK }));
+      for (const { id, label } of busySkins) {
+        const lang = busyLang(id);
+        for (const action of ["hover", "pinned"]) {
+          await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene: "busy" })}`);
+          await page.waitForSelector("[data-gallery-chat]", { timeout: 120_000 });
+          const chip = page.locator('[data-record-link="ticket"]').first();
+          await chip.scrollIntoViewIfNeeded();
+          if (action === "hover") await chip.hover(); else await chip.click();
+          await page.waitForSelector("[data-record-card] [data-record-card-body]", { timeout: 10_000 });
+          await page.waitForTimeout(700);
+          await page.screenshot({ path: join(outDir, `busy-${action}-${lang}-${label}-${width}.png`) });
+        }
+      }
+      await page.close();
+    }
+  }
   console.log(`captures in ${outDir}`);
 } finally {
   await browser?.close();
-  try { process.kill(-vite.pid); } catch { /* already gone */ }
+  try { if (vite) process.kill(-vite.pid); } catch { /* already gone */ }
   if (process.exitCode) console.error(log.slice(-2000));
 }

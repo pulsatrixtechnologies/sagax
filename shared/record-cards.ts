@@ -9,7 +9,7 @@
 // (shared/person-products.ts), `kind` one of that product's record kinds
 // (its `records`), `id` the record's id. Each segment is percent-encoded;
 // once decoded, product and kind read `[a-z][a-z0-9_]{1,40}` and the id
-// `[A-Za-z0-9._:-]{1,96}` (never only dots). Anything else is not a record
+// `[A-Za-z0-9._:-]{1,128}` (never only dots). Anything else is not a record
 // link and stays text.
 //
 // The card is the organization console's (GET
@@ -34,7 +34,7 @@ export function mentionsRecordScheme(text: string): boolean {
   return text.includes("://") && RECORD_SCHEME.test(text);
 }
 const NAME = /^[a-z][a-z0-9_]{1,40}$/;
-const ID = /^[A-Za-z0-9._:-]{1,96}$/;
+const ID = /^[A-Za-z0-9._:-]{1,128}$/;
 /** The longest href read as a record link (three encoded segments). */
 const RECORD_LINK_MAX = 512;
 
@@ -497,12 +497,53 @@ export const RECORD_NOTES_STATES = ["ok", "none", "forbidden", "unavailable"] as
 export type RecordNotesState = typeof RECORD_NOTES_STATES[number];
 export const RECORD_DATE_KEYS = ["opened", "updated", "due", "closed"] as const;
 export type RecordDateKey = typeof RECORD_DATE_KEYS[number];
+/** How a field of a card is drawn (#4572). A field without a type, or with a
+ * type this app does not know, is text: its `value` is always ready to show. */
+export const RECORD_FIELD_TYPES = ["text", "date", "ago", "money", "duration", "percent", "person", "ref", "state"] as const;
+export type RecordFieldType = typeof RECORD_FIELD_TYPES[number];
+export const RECORD_LINES_STATES = ["ok", "none", "forbidden", "unavailable"] as const;
+export type RecordLinesState = typeof RECORD_LINES_STATES[number];
 
 /** The card caps (the console's own, enforced again). */
 export const RECORD_CARD_CAPS = {
   title: 200, description: 600, note: 400, fieldValue: 120, name: 80, label: 80,
-  people: 4, fields: 8, notes: 3,
+  people: 4, fields: 10, notes: 3, chips: 2, lines: 6, lineLabel: 160, lineDetail: 80, lineValue: 80, heading: 80,
 } as const;
+
+/** One key field. `value` is the product's own ready text; the typed parts
+ * beside it say how to draw it, never what it is worth: a money `amount` is
+ * the product's number, never computed here. */
+export interface RecordField {
+  label: string;
+  value: string;
+  type?: RecordFieldType;
+  /** money: the product's number as a decimal string */
+  amount?: string;
+  /** money: the product's currency code */
+  currency?: string;
+  /** date, ago: an instant (ISO 8601 with its offset) or, with `day`, a calendar day */
+  at?: string;
+  /** date: `at` is a calendar day (`2026-11-05`): no time, never shifted by a zone */
+  day?: boolean;
+  /** percent: 0 to 100, for the bar */
+  share?: number;
+  /** ref, person: the record this names, opened in place */
+  ref?: RecordRef;
+  /** person, ref: a second, quieter text */
+  detail?: string;
+  /** person: the icon (`owner`, `contact`) */
+  role?: string;
+  /** state */
+  tone?: RecordTone;
+}
+
+/** A line of the right pane's list (an invoice's products, an agreement's additions). */
+export interface RecordLine {
+  label: string;
+  detail?: string;
+  value?: string;
+  ref?: RecordRef;
+}
 
 export interface RecordCard {
   product: { id: string; name: string; icon?: { url: string } };
@@ -513,14 +554,20 @@ export interface RecordCard {
   title: string;
   state?: { label: string; tone: RecordTone };
   priority?: { label: string; level: RecordLevel };
+  /** more header chips after the state and the priority (two at most) */
+  chips?: Array<{ label: string; tone: RecordTone }>;
   company?: { name: string; ref?: RecordRef };
-  people?: Array<{ role: string; label: string; name: string; detail?: string }>;
+  people?: Array<{ role: string; label: string; name: string; detail?: string; ref?: RecordRef }>;
   /** ISO 8601 with the organization's offset; format in `tz` */
   dates?: Partial<Record<RecordDateKey, string>>;
-  fields?: Array<{ label: string; value: string }>;
+  fields?: RecordField[];
   description?: { text: string; more: boolean };
+  /** the right pane's list, between the description and the activity */
+  lines?: { state: RecordLinesState; title?: string; items: RecordLine[]; total?: number; more: boolean };
   notes: {
     state: RecordNotesState;
+    /** the activity's name as the console words it ("Timeline") */
+    title?: string;
     items: Array<{ author?: string; at?: string; internal?: boolean; text: string; more: boolean }>;
     total?: number;
     /** there are notes beyond `items` */
@@ -535,10 +582,10 @@ export interface RecordCard {
 }
 
 /** What GET /api/me/records/:product/:kind/:id answers when there is no
- * card: the page says why in one sentence. `org_ask`: one "read the card"
- * click asks again with `confirm=1`. */
+ * card: the page says why in one sentence. The card reads at once whatever
+ * the organization's Ask first rule (#4566); only a Refuse rule refuses. */
 export const RECORD_CARD_STATES = [
-  "sign_in", "no_access", "unknown", "not_connected", "busy", "down", "unavailable", "org_refused", "org_ask",
+  "sign_in", "no_access", "unknown", "not_connected", "busy", "down", "unavailable", "org_refused",
 ] as const;
 export type RecordCardState = typeof RECORD_CARD_STATES[number];
 
@@ -550,7 +597,7 @@ export interface RecordCardMiss {
   retryAfter?: number;
   /** the product's state, for `not_connected` (shared/person-products.ts ProductState) */
   productState?: string;
-  /** the organization rule, for `org_refused` and `org_ask` */
+  /** the organization rule, for `org_refused` */
   rule?: { id: string; text: string };
 }
 
@@ -574,6 +621,63 @@ function httpsUrl(value: unknown): string | undefined {
     return url.protocol === "https:" && !url.username && !url.password ? url.toString() : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function tone(value: unknown): RecordTone {
+  return (RECORD_TONES as readonly unknown[]).includes(value) ? value as RecordTone : "open";
+}
+
+/** A `ref` as sent ({ product, kind, id }), or undefined when it is not a valid one:
+ * a record named without a product the person holds is plain words. */
+function typedRef(raw: unknown): RecordRef | undefined {
+  const ref = record(raw);
+  return ref && validRecordRef(ref) ? { product: ref.product as string, kind: ref.kind as string, id: ref.id as string } : undefined;
+}
+
+const DECIMAL = /^-?\d{1,24}(?:\.\d{1,12})?$/;
+const BARE_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The typed parts of a field. An unknown type reads as text; a type whose own
+ * part does not validate is text too (the row stays, drawn flat from `value`).
+ * Only the parts of the field's own type are kept. */
+function typedPart(field: Record<string, unknown>): Partial<RecordField> {
+  const type = field.type;
+  if (typeof type !== "string" || !(RECORD_FIELD_TYPES as readonly string[]).includes(type) || type === "text") return {};
+  switch (type as RecordFieldType) {
+    case "money": {
+      const amount = plain(field.amount, 40);
+      if (!amount || !DECIMAL.test(amount)) return {};
+      const currency = plain(field.currency, 3);
+      return { type: "money", amount, ...(currency && /^[A-Z]{3}$/.test(currency) ? { currency } : {}) };
+    }
+    case "date":
+    case "ago": {
+      const at = isoDate(field.at);
+      if (!at) return {};
+      // a calendar day is only a date, and only when sent as a bare day
+      return type === "date" && field.day === true && BARE_DAY.test(at) ? { type: "date", at, day: true } : { type: type as "date" | "ago", at };
+    }
+    case "percent": {
+      const share = field.share;
+      return typeof share === "number" && Number.isFinite(share) && share >= 0 && share <= 100 ? { type: "percent", share } : {};
+    }
+    case "person": {
+      const detail = capped(field.detail, RECORD_CARD_CAPS.fieldValue);
+      const role = plain(field.role, 40);
+      const ref = typedRef(field.ref);
+      return { type: "person", ...(detail ? { detail: detail.text } : {}), ...(role && /^[a-z][a-z0-9_]{0,39}$/.test(role) ? { role } : {}), ...(ref ? { ref } : {}) };
+    }
+    case "ref": {
+      const ref = typedRef(field.ref);
+      if (!ref) return {};
+      const detail = capped(field.detail, RECORD_CARD_CAPS.fieldValue);
+      return { type: "ref", ref, ...(detail ? { detail: detail.text } : {}) };
+    }
+    case "state":
+      return { type: "state", tone: tone(field.tone) };
+    default:
+      return { type: type as RecordFieldType };
   }
 }
 
@@ -606,8 +710,7 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
   const state = record(card.state);
   const stateLabel = plain(state?.label, 400);
   if (stateLabel) {
-    const tone = (RECORD_TONES as readonly unknown[]).includes(state!.tone) ? state!.tone as RecordTone : "open";
-    out.state = { label: cutText(stateLabel, RECORD_CARD_CAPS.label).text, tone };
+    out.state = { label: cutText(stateLabel, RECORD_CARD_CAPS.label).text, tone: tone(state!.tone) };
   }
   const priority = record(card.priority);
   const priorityLabel = plain(priority?.label, 400);
@@ -618,8 +721,7 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
   const company = record(card.company);
   const companyName = capped(company?.name, RECORD_CARD_CAPS.name);
   if (companyName) {
-    const ref = record(company!.ref);
-    const companyRef = ref && validRecordRef(ref) ? { product: ref.product as string, kind: ref.kind as string, id: ref.id as string } : undefined;
+    const companyRef = typedRef(company!.ref);
     out.company = { name: companyName.text, ...(companyRef ? { ref: companyRef } : {}) };
   }
   if (Array.isArray(card.people)) {
@@ -631,7 +733,8 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
       if (!person || !name || !role || !/^[a-z][a-z0-9_]{0,39}$/.test(role)) continue;
       const label = plain(person.label, 400);
       const detail = capped(person.detail, RECORD_CARD_CAPS.fieldValue);
-      people.push({ role, label: label ? cutText(label, RECORD_CARD_CAPS.label).text : "", name: name.text, ...(detail ? { detail: detail.text } : {}) });
+      const personRef = typedRef(person.ref);
+      people.push({ role, label: label ? cutText(label, RECORD_CARD_CAPS.label).text : "", name: name.text, ...(detail ? { detail: detail.text } : {}), ...(personRef ? { ref: personRef } : {}) });
       if (people.length >= RECORD_CARD_CAPS.people) break;
     }
     if (people.length) out.people = people;
@@ -645,14 +748,25 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
     }
     if (Object.keys(kept).length) out.dates = kept;
   }
+  if (Array.isArray(card.chips)) {
+    const chips: NonNullable<RecordCard["chips"]> = [];
+    for (const entry of card.chips) {
+      const chip = record(entry);
+      const chipLabel = plain(chip?.label, 400);
+      if (!chip || !chipLabel) continue;
+      chips.push({ label: cutText(chipLabel, RECORD_CARD_CAPS.label).text, tone: tone(chip.tone) });
+      if (chips.length >= RECORD_CARD_CAPS.chips) break;
+    }
+    if (chips.length) out.chips = chips;
+  }
   if (Array.isArray(card.fields)) {
-    const fields: NonNullable<RecordCard["fields"]> = [];
+    const fields: RecordField[] = [];
     for (const entry of card.fields) {
       const field = record(entry);
       const label = plain(field?.label, 400);
       const value = capped(field?.value, RECORD_CARD_CAPS.fieldValue);
-      if (!label || !value) continue;
-      fields.push({ label: cutText(label, RECORD_CARD_CAPS.label).text, value: value.text });
+      if (!field || !label || !value) continue;
+      fields.push({ label: cutText(label, RECORD_CARD_CAPS.label).text, value: value.text, ...typedPart(field) });
       if (fields.length >= RECORD_CARD_CAPS.fields) break;
     }
     if (fields.length) out.fields = fields;
@@ -660,6 +774,35 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
   const description = record(card.description);
   const descriptionText = capped(description?.text, RECORD_CARD_CAPS.description);
   if (descriptionText) out.description = { text: descriptionText.text, more: descriptionText.cut || description!.more === true };
+  const lines = record(card.lines);
+  if (lines) {
+    const state = (RECORD_LINES_STATES as readonly unknown[]).includes(lines.state) ? lines.state as RecordLinesState : "unavailable";
+    const items: RecordLine[] = [];
+    let dropped = false;
+    if (state === "ok" && Array.isArray(lines.items)) {
+      for (const entry of lines.items) {
+        const line = record(entry);
+        const lineLabel = capped(line?.label, RECORD_CARD_CAPS.lineLabel);
+        if (!line || !lineLabel) continue;
+        if (items.length >= RECORD_CARD_CAPS.lines) {
+          dropped = true;
+          break;
+        }
+        const detail = capped(line.detail, RECORD_CARD_CAPS.lineDetail);
+        const value = capped(line.value, RECORD_CARD_CAPS.lineValue);
+        const ref = typedRef(line.ref);
+        items.push({ label: lineLabel.text, ...(detail ? { detail: detail.text } : {}), ...(value ? { value: value.text } : {}), ...(ref ? { ref } : {}) });
+      }
+    }
+    const linesTitle = capped(lines.title, RECORD_CARD_CAPS.heading);
+    const total = typeof lines.total === "number" && Number.isInteger(lines.total) && lines.total >= 0 ? lines.total : undefined;
+    out.lines = {
+      state, items,
+      ...(linesTitle ? { title: linesTitle.text } : {}),
+      ...(total !== undefined ? { total } : {}),
+      more: lines.more === true || dropped || (total !== undefined && total > items.length),
+    };
+  }
   const notes = record(card.notes);
   if (notes) {
     const state = (RECORD_NOTES_STATES as readonly unknown[]).includes(notes.state) ? notes.state as RecordNotesState : "unavailable";
@@ -686,8 +829,10 @@ export function parseRecordCard(raw: unknown): RecordCard | null {
       }
     }
     const total = typeof notes.total === "number" && Number.isInteger(notes.total) && notes.total >= 0 ? notes.total : undefined;
+    const notesTitle = capped(notes.title, RECORD_CARD_CAPS.heading);
     out.notes = {
       state, items,
+      ...(notesTitle ? { title: notesTitle.text } : {}),
       ...(total !== undefined ? { total } : {}),
       more: notes.more === true || dropped || (total !== undefined && total > items.length),
     };

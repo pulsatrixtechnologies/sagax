@@ -1370,7 +1370,9 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
   let models: Map<string, ModelSelection>;
   let hiddenOwned: Map<string, { owner: string; botId: string }>;
   let opened: Array<{ botId: string; principalId: string; fresh: boolean }>;
+  let forgotten: string[];
   beforeEach(() => {
+    forgotten = [];
     surfaces = new Map([["sb", "pr_bob"]]);
     made = 0;
     models = new Map();
@@ -1384,11 +1386,14 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
       surfaces.set(`sb_${person.principalId}`, person.principalId);
       return { ok: true, id: `sb_${person.principalId}`, name: input.name, created: true, approvalMode: "full" };
     };
-    deps.surfaceBot = (botId) => (surfaces.has(botId) ? { ownerPrincipalId: surfaces.get(botId)! } : null);
+    deps.surfaceBot = (botId) => surfaces.has(botId);
+    // the server's rule: an outside agent's conversation is its person's; a
+    // surface bot's is answered, and another person is refused by the app's routes
     deps.hiddenConversationOf = (threadId, principalId) => {
       const found = hiddenOwned.get(threadId);
-      return found && found.owner === principalId ? { botId: found.botId } : null;
+      return found && (found.owner === principalId || surfaces.has(found.botId)) ? { botId: found.botId } : null;
     };
+    deps.forgetThread = (threadId) => { forgotten.push(threadId); };
     deps.threadModel = (_botId, threadId) => models.get(threadId) ?? null;
     deps.agentConversation = (botId, person, fresh) => {
       opened.push({ botId, principalId: person.principalId, fresh });
@@ -1401,6 +1406,8 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     deps.hiddenConversationOf = undefined;
     deps.threadModel = undefined;
     deps.agentConversation = undefined;
+    deps.threadQueued = undefined;
+    deps.forgetThread = undefined;
   });
   /** A Sagax that takes sends and model switches, and answers each send done. */
   const serveSends = () => {
@@ -1455,15 +1462,65 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     expect((await call("POST", "bots/b1/messages", token("bob", "employee", "console"), { text: "x", hidden: "yes" })).body.code).toBe("bad_request");
   });
 
-  it("a send to a surface bot is always hidden, and another person's surface bot is unknown, an admin's view included", async () => {
+  it("a send to a surface bot is always hidden; another person's reaches the app's one refusal, an admin's view included", async () => {
     serveSends();
     const own = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "hi" });
     expect(own.status).toBe(200);
     expect(own.body.threadId).toBe("ac_1");
-    performed = [];
+    expect(recorded.at(-1)?.after).toMatchObject({ surface: true });
+    // the app's routes answer another person's session 404 (surfaceTargetRefused): passed through
+    const served = respond;
+    respond = (request) => (performed.at(-1)!.person.principalId !== "pr_bob" ? { status: 404, body: { error: "no such bot" } } : served(request));
     const other = await call("POST", "bots/sb/messages", token("ann", "admin", "console"), { text: "peek", hidden: true });
     expect(other.status).toBe(404);
-    expect(performed).toEqual([]);
+    expect(performed.filter((p) => p.person.principalId === "pr_ann").map((p) => p.request.path)).toEqual(["/api/bots/sb/messages"]);
+  });
+
+  it("two sends at once in one conversation on two models: queued, the second switches once the first is done", async () => {
+    let state: ThreadStatus = "idle";
+    status = () => state;
+    let doneAfter = 0;
+    deps.sleep = async (ms) => {
+      clock += ms;
+      if (state === "working" && --doneAfter <= 0) state = "idle";
+    };
+    respond = (request) => {
+      if (request.method === "PATCH") {
+        models.set("th_q", (request.body as { modelSelection: ModelSelection }).modelSelection);
+        return { status: 200, body: { task: {} } };
+      }
+      if (request.path.endsWith("/messages")) {
+        state = "working";
+        doneAfter = 3;
+        return { status: 200, body: { threadId: "th_q", message: { id: `m_${performed.length}` } } };
+      }
+      return { status: 200, body: { messages: [] } };
+    };
+    try {
+      const first = { instanceId: "claude", model: "small" };
+      const second = { instanceId: "codex", model: "large" };
+      const [a, b] = await Promise.all([
+        call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "one", threadId: "th_q", modelSelection: first }),
+        call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "two", threadId: "th_q", modelSelection: second }),
+      ]);
+      expect([a.status, b.status], JSON.stringify(b.body)).toEqual([200, 200]);
+      // the first switch and send, then the second switch only once the first turn was done
+      const said = (p: { request: MemberRequest }) => {
+        const body = p.request.body as { modelSelection?: ModelSelection; text?: string };
+        return `${p.request.method} ${body.modelSelection?.model ?? body.text}`;
+      };
+      expect(performed.filter((p) => p.request.method !== "GET").map(said)).toEqual(["PATCH small", "POST one", "PATCH large", "POST two"]);
+      // and the second switch waited for the first turn to be done
+      expect(state).toBe("working");
+      // a card waiting in the conversation: said, nothing switched
+      state = "waiting";
+      performed = [];
+      const carded = await call("POST", "bots/sb/messages", token("bob", "employee", "console"), { text: "three", threadId: "th_q", modelSelection: first });
+      expect(carded.body.code).toBe("card_waiting");
+      expect(performed.some((p) => p.request.method === "PATCH" || p.request.path.endsWith("/messages"))).toBe(false);
+    } finally {
+      deps.sleep = async (ms) => { clock += ms; };
+    }
   });
 
   it("a model per send: each conversation switched to its own before the send, never twice, and two at once never mix", async () => {
@@ -1503,10 +1560,11 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     }
   });
 
-  it("deletes the person's own hidden conversation, stopping its turn first; any other is unknown", async () => {
+  it("deletes a hidden conversation, stopping its turn first; another person's reaches the app's one refusal", async () => {
     let state: ThreadStatus = "working";
     status = () => state;
     respond = (request) => {
+      if (performed.at(-1)!.person.principalId !== "pr_bob") return { status: 404, body: { error: "no such bot" } };
       if (request.path.endsWith("/interrupt")) state = "idle";
       return { status: 200, body: {} };
     };
@@ -1514,27 +1572,30 @@ describe("lot S1: the surface bot, hidden turns, a model per send, deleting a hi
     expect(deleted.status).toBe(200);
     expect(deleted.body).toEqual({ deleted: true, threadId: "th_bob" });
     expect(performed.map((p) => `${p.request.method} ${p.request.path}`)).toEqual(["POST /api/bots/sb/interrupt", "DELETE /api/bots/sb/tasks/th_bob"]);
-    expect(recorded.at(-1)).toMatchObject({ action: "client.thread_delete", after: { botId: "sb" } });
+    expect(recorded.at(-1)).toMatchObject({ action: "client.thread_delete", after: { botId: "sb", surface: true } });
+    expect(forgotten).toEqual(["th_bob"]);
     performed = [];
-    // another person's (an admin's view included), a visible one, an unknown one
+    state = "idle";
     expect((await call("DELETE", "threads/th_bob", token("ann", "admin"))).status).toBe(404);
+    // a visible conversation is not this route's
     expect((await call("DELETE", "threads/t1", token("bob"))).status).toBe(404);
-    expect(performed).toEqual([]);
+    expect(performed.filter((p) => p.person.principalId === "pr_bob")).toEqual([]);
     // once gone, it reads as gone
     hiddenOwned.delete("th_bob");
     expect((await call("DELETE", "threads/th_bob", token("bob"))).status).toBe(404);
   });
 
-  it("stops a turn as the person, never on another person's surface bot", async () => {
-    respond = () => ({ status: 200, body: { ok: true } });
+  it("stops a turn as the person; another person's reaches the app's one refusal", async () => {
+    respond = () => (performed.at(-1)!.person.principalId !== "pr_bob" ? { status: 404, body: { error: "no such bot" } } : { status: 200, body: { ok: true } });
     deps.botOfThread = (threadId) => (threadId === "th_bob" ? "sb" : threadId === "t1" ? "b1" : null);
     try {
       const stopped = await call("POST", "threads/th_bob/stop", token("bob"), {});
       expect(stopped.status).toBe(200);
       expect(stopped.body).toMatchObject({ stopped: true, threadId: "th_bob" });
       expect(performed[0]!.request).toEqual({ method: "POST", path: "/api/bots/sb/interrupt", body: { threadId: "th_bob" } });
-      performed = [];
+      expect(recorded.at(-1)).toMatchObject({ action: "client.stop", after: { surface: true } });
       expect((await call("POST", "threads/th_bob/stop", token("ann", "admin"), {})).status).toBe(404);
+      performed = [];
       expect((await call("POST", "threads/nowhere/stop", token("bob"), {})).status).toBe(404);
       expect(performed).toEqual([]);
     } finally {

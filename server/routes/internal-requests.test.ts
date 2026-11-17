@@ -199,6 +199,32 @@ describe("createInternalRequestsRoutes", () => {
     expect(input.explicitConfirm).toBeUndefined();
   });
 
+  it("lot S1: a surface bot never holds a routine: it proposes one for a bot of its person, by the same card", async () => {
+    const submitRoutine = vi.fn(async (_input: Record<string, unknown>) => ({
+      requestId: "req-r", messageId: "msg-r", state: "pending" as const, summary: "Create", detail: "Create",
+    }));
+    const orion = { ...BOT, id: "bot-2", name: "Orion", chiefOfStaff: false };
+    const route = createInternalRequestsRoutes(baseDeps({
+      submitRoutine,
+      bot: (id) => (id === BOT.id ? { ...BOT, chiefOfStaff: false } : id === orion.id ? orion : undefined),
+      // the surface bot reaches no bot (peers), yet may name its person's for a routine
+      canReachPeer: () => false,
+      surfaceRoutineHolders: () => [{ id: orion.id, name: orion.name }],
+    }));
+    const routine = { name: "Morning brief", instructions: "Summarize.", schedule: { type: "daily", time: "08:00" } };
+    // on itself (no target, or its own id): refused, with the bots to choose from
+    for (const target of [{}, { forBotId: BOT.id }]) {
+      const { sent } = await call(route, { path: "/api/internal/routine-requests", method: "POST", body: { fromBotId: BOT.id, fromThreadId: "t-1", action: "create", routine, ...target } });
+      expect(sent[0]?.status).toBe(409);
+      expect(sent[0]?.body).toMatchObject({ code: "routine_needs_bot", error: expect.stringContaining("Orion (for_bot_id bot-2)") });
+    }
+    expect(submitRoutine).not.toHaveBeenCalled();
+    // for the bot the person named: the existing card, with the same approvals
+    const { sent } = await call(route, { path: "/api/internal/routine-requests", method: "POST", body: { fromBotId: BOT.id, fromThreadId: "t-1", action: "create", routine, forBotId: orion.id } });
+    expect(sent[0]?.status).toBe(201);
+    expect(submitRoutine.mock.calls[0]![0]).toMatchObject({ proposal: { forBot: { botId: orion.id, name: "Orion" } } });
+  });
+
   it("POST /profile-requests refuses an unknown sender (403)", async () => {
     const route = createInternalRequestsRoutes(baseDeps({
       bot: () => undefined,

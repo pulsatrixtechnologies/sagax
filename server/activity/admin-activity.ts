@@ -580,6 +580,8 @@ export function readOrgAuditPage(dataDir: string, input: {
   categories?: readonly string[];
   /** Only rows whose target has this id (a bot, a person, a routine). */
   target?: string;
+  /** Lot S1: rows this reader never shows (a person's surface bot). */
+  hidden?: (row: AdminActionRow) => boolean;
 }): { rows: IdentifiedAdminAction[]; next: string | null } {
   let months: string[] = [];
   try {
@@ -616,6 +618,7 @@ export function readOrgAuditPage(dataDir: string, input: {
       const value: unknown = reader.at(lines, index);
       if (!isRow(value) || !categories.has(value.category)) continue;
       if (input.target && value.target?.id !== input.target) continue;
+      if (input.hidden?.(value)) continue;
       const at = Date.parse(value.at);
       if (!(at >= from && at <= to)) continue;
       if (rows.length === input.limit) return { rows, next: rows.at(-1)!.id };

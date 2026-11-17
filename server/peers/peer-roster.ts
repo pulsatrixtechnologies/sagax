@@ -4,6 +4,7 @@
 // caps, one sanitizer, and one reachability rule to audit rather than two
 // that drift.
 
+import { isSurfaceBot } from "../temporary-agents.ts";
 import type { BotActivity } from "../../shared/wire.ts";
 import { sameAudience } from "../bots/bot-visibility.ts";
 import { managesTeam } from "../rooms/section-link.ts";
@@ -210,16 +211,13 @@ export function archivedAgent(bot: Pick<RosterMember, "temporary">): boolean {
   return Boolean(bot.temporary?.archived);
 }
 
-/** Lot S1: a person's surface bot (server/temporary-agents.ts isSurfaceBot)
- * is driven by their host product only: no bot lists it or reaches it. */
-export function surfaceAgent(bot: Pick<RosterMember, "temporary">): boolean {
-  return bot.temporary?.surface === true;
-}
 
 /** The one reach rule: another visible bot of the same person (canAccessBot),
  * narrowed by the sender's explicit peers and the audience (peerAllowed). */
 export function canReachPeer(from: RosterMember, target: RosterMember): boolean {
-  return from.id !== target.id && !target.hidden && !archivedAgent(target) && !surfaceAgent(target) && canAccessBot(from, target) && peerAllowed(from, target) && peerInScope(from, target);
+  // lot S1: a surface bot is driven by its host product only: no bot
+  // reaches it, and it reaches no bot (its host invites bots itself)
+  return from.id !== target.id && !target.hidden && !archivedAgent(target) && !isSurfaceBot(target) && !isSurfaceBot(from) && canAccessBot(from, target) && peerAllowed(from, target) && peerInScope(from, target);
 }
 
 /** The peers a bot can both see and reach right now. The roster, list_bots

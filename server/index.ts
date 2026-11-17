@@ -396,6 +396,8 @@ import {
   type UsageRow,
   type UsageTrigger
 } from "./usage/usage-ledger.ts";
+import { foldSurfaceUsage } from "./usage/surface-usage.ts";
+import { surfaceTargetRefused as surfaceAccessRefused } from "./bots/surface-bot-access.ts";
 import { newPlanUsageAlerts,
   orgPlanAccounts,
   planAccountsFromInstances,
@@ -9825,11 +9827,8 @@ function routineCreateRefused(auth: RequestAuth, botId: unknown): typeof COLLABO
   return level === "owner" || level === "manage" ? null : COLLABORATORS_CANNOT_CREATE;
 }
 function hiddenRoutineTarget(body: unknown, visible: VisibleSet): string | null {
-  if (!body || typeof body !== "object") return null;
+  if (visible.everything || !body || typeof body !== "object") return null;
   const { botId, groupId } = body as { botId?: unknown; groupId?: unknown };
-  // lot S1: a surface bot never has a routine, whoever asks
-  if (typeof botId === "string" && isSurfaceBot(store.bot(botId))) return "no such bot";
-  if (visible.everything) return null;
   if (typeof botId === "string" && store.bot(botId) && !visible.bot(botId)) return "no such bot";
   if (typeof groupId === "string" && store.group(groupId) && !visible.group(groupId)) return "no such channel";
   return null;
@@ -17358,12 +17357,11 @@ function notificationIsInterBotChatter(notification: Notification): boolean {
 /** Whether a notification belongs to an outside agent's conversation with a
  * bot and is not one the person must act on (shared/agent-conversation.ts). */
 function notificationInAgentConversation(notification: Notification): boolean {
-  if (!notification.threadId) return false;
+  if (!notification.threadId || agentConversationNotifies(notification.kind)) return false;
   const bot = store.botByThread(notification.threadId);
-  // lot S1: a surface bot's work is shown by the host product only, never notified
-  if (isSurfaceBot(bot)) return true;
-  if (agentConversationNotifies(notification.kind)) return false;
-  return Boolean(bot && isAgentConversation(store.taskByThread(bot.id, notification.threadId)));
+  // lot S1: every conversation of a surface bot is an outside agent's: only
+  // what someone must act on (an approval, a question) is notified
+  return Boolean(bot && (isSurfaceBot(bot) || isAgentConversation(store.taskByThread(bot.id, notification.threadId))));
 }
 
 /** The person's latest message in a thread (a call turn carries voiceCall). */
@@ -21931,7 +21929,8 @@ const routineRequests = new RoutineRequestService({
     const proposer = store.bot(proposerBotId);
     const targetBot = store.bot(target.botId);
     if (!targetBot) return `@${target.name} no longer exists, so this routine request cannot be confirmed for it`;
-    if (!proposer || (!canReachPeer(proposer, targetBot) && !(proposer.chiefOfStaff && primaryBotSameOwner(proposer, targetBot)))) {
+    if (!proposer || (!canReachPeer(proposer, targetBot) && !(proposer.chiefOfStaff && primaryBotSameOwner(proposer, targetBot))
+      && !surfaceRoutineHolders(proposer)?.some((bot) => bot.id === targetBot.id))) {
       return `@${target.name} belongs to another person or is unavailable, so this routine request cannot be confirmed for it`;
     }
     return null;
@@ -24713,6 +24712,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     timeZone: () => routineTimeZone(),
     canReachPeer: (from, target) => canReachPeer(from as unknown as BotRecord, target as unknown as BotRecord),
     primaryBotSameOwner,
+    surfaceRoutineHolders: (from) => surfaceRoutineHolders(from as unknown as BotRecord),
     peerAccessHelp: PEER_ACCESS_HELP,
     proposalPersistence,
     safetyPrincipal,
@@ -25806,6 +25806,8 @@ ROUTES.push(createBrowserSiteRoutes({
 // The usage ledger (JSON and CSV). Admin scope stays in server/auth/request-auth.ts.
 ROUTES.push(createUsageRoutes({
   dataDir: DATA_DIR,
+  // lot S1: another person's surface bot as one total per person
+  ledgerFor: (rows, auth) => foldSurfaceUsage(rows, sessionPrincipal(auth) ?? null),
   prices: operatorPrices,
   budget: () => spendState(cfg, DATA_DIR),
   currency: () => cfg.billing?.currency ?? "USD",
@@ -32368,7 +32370,7 @@ const orgOverviewDeps = {
     principalId: person.principalId,
     state: publicPresence(presence.view(person.principalId), presenceHiddenFor(person.principalId)).state
   })),
-  usageRows: (range: { from: Date; to: Date }) => readUsage(DATA_DIR, range),
+  usageRows: (range: { from: Date; to: Date }) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
   routineRuns: (from: number) => (routines?.listRuns(from) ?? []).map((run) => {
     const bot = store.bot(run.botId);
     return {
@@ -32419,7 +32421,7 @@ const orgPeopleDeps: PeopleDeps = {
       return false;
     }
   },
-  usageRows: (range) => readUsage(DATA_DIR, range),
+  usageRows: (range) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
   shared: (principalId) => {
     const teams = new Set((principals.byId(principalId)?.teams ?? []).map((team) => team.id));
     return store.bots.flatMap((bot): Array<{ botId: string; botName: string; level: string; via: "user" | "team" | "section" }> => {
@@ -32898,7 +32900,7 @@ const orgRoutinesDeps: RoutinesDeps = {
   runAs: (routine) => effectiveRunAs(routine) ?? null,
   person: adminPerson,
   scheduleLabel: (routine) => routineScheduleLabel(routine.schedule),
-  usageRows: (range) => readUsage(DATA_DIR, range),
+  usageRows: (range) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
   inFlight: routineRunInFlight,
   // #2939: an admin's Run now is a person's run (no duplicate check).
   runNow: (routineId) => routines?.runNow(routineId, undefined, "person") ?? null,
@@ -32913,7 +32915,7 @@ const orgRoutinesDeps: RoutinesDeps = {
   },
   orgApprovals: (viewer) => pendingApprovalsFor(viewer, "org"),
   // lot S1: a surface bot's decisions are its person's, never in the admin history
-  decisions: (range) => readDecisionRange(DATA_DIR, range).filter((row) => !isSurfaceBot(row.botId ? store.bot(row.botId) : store.botByThread(row.threadId))),
+  decisions: (range) => readDecisionRange(DATA_DIR, range).filter((row) => !surfaceRecord(row)),
   decisionPerson: (actor) => {
     if (!actor) return null;
     if (actor.kind === "loopback") return { principalId: "", sub: null, name: "This computer" };
@@ -33415,7 +33417,7 @@ const orgAdmin = createOrgAdminRoutes({
     return principals.list().filter((person) => (person.teams ?? []).some((team) => wanted.has(team.id))).map((person) => person.id);
   },
   bots: orgAdminBots,
-  usageRows: (range) => readUsage(DATA_DIR, range),
+  usageRows: (range) => foldSurfaceUsage(readUsage(DATA_DIR, range), null),
   approvalsFor: (viewer) => pendingApprovalsFor(viewer),
   answer: answerCardFromConsole,
   orgAlwaysAllow: () => {
@@ -33425,7 +33427,7 @@ const orgAdmin = createOrgAdminRoutes({
       return true;
     }
   },
-  audit: (input) => readOrgAuditPage(DATA_DIR, input),
+  audit: (input) => readOrgAuditPage(DATA_DIR, { ...input, hidden: surfaceRecord }),
   auditCategories: ADMIN_ACTIVITY_CATEGORIES,
   version: releaseVersion,
   engines: orgAdminEngines,
@@ -33612,31 +33614,50 @@ function ensureSurfaceBot(person: MemberPerson, name: string): Promise<SurfaceBo
   surfaceBotCreations.set(owner, work);
   return work.finally(() => surfaceBotCreations.delete(owner));
 }
+/** Lot S1: when `from` is a surface bot, the bots of its person that may
+ * hold a routine it proposes (theirs, live, shown in their app); else null. */
+function surfaceRoutineHolders(from: BotRecord): Array<{ id: string; name: string }> | null {
+  if (!isSurfaceBot(from)) return null;
+  const owner = from.temporary!.ownerPrincipalId;
+  return store.bots.filter((bot) => !bot.hidden && !bot.temporary && recordedBotOwner(bot) === owner)
+    .map((bot) => ({ id: bot.id, name: bot.name }));
+}
+/** Lot S1: a log row about a person's surface bot (marked `surface` when
+ * the member API wrote it, or naming the bot or one of its conversations):
+ * an administrator's logs and decision history never show one. */
+function surfaceRecord(row: { botId?: string; threadId?: string; target?: { kind?: string; id?: string }; after?: Record<string, unknown> }): boolean {
+  if (row.after?.surface === true) return true;
+  const botIds = [row.botId, row.target?.kind === "bot" ? row.target.id : undefined, typeof row.after?.botId === "string" ? row.after.botId : undefined];
+  if (botIds.some((id) => typeof id === "string" && isSurfaceBot(store.bot(id)))) return true;
+  const threadIds = [row.threadId, row.target?.kind === "thread" ? row.target.id : undefined, typeof row.after?.threadId === "string" ? row.after.threadId : undefined];
+  return threadIds.some((id) => typeof id === "string" && id !== "" && isSurfaceBot(store.botByThread(id)));
+}
 /** Lot S1: a bot an admin route may name: never a surface bot. */
 function adminBotOf(botId: string): BotRecord | undefined {
   const bot = store.bot(botId);
   return bot && !isSurfaceBot(bot) ? bot : undefined;
 }
-/** Lot S1: a request that names a surface bot, or one of its conversations,
- * from a session that is not its person: answered as an unknown bot (an
- * organization admin's session included). The desktop and service loopback
- * keep the paths a turn's own tools use. */
+/** Lot S1: the one rule that keeps a surface bot its person's (server/bots/surface-bot-access.ts). */
 function surfaceTargetRefused(auth: RequestAuth, path: string): boolean {
-  if (auth.kind !== "session") return false;
-  const named = /^\/api\/(bots|threads)\/([\w-]{1,160})(?:\/|$)/.exec(path);
-  if (!named) return false;
-  const bot = named[1] === "bots" ? store.bot(named[2]!) : store.botByThread(named[2]!);
-  if (!bot || !isSurfaceBot(bot)) return false;
-  return (auth.session.principalId?.trim().toLowerCase() ?? "") !== bot.temporary!.ownerPrincipalId;
+  return surfaceAccessRefused({
+    session: auth.kind === "session" ? { principalId: auth.session.principalId ?? "", orgAdmin: IDENTITY.kind === "perspicax" && orgAdminCaller(auth) } : null,
+    path,
+    surfaceOf: (kind, id) => {
+      const bot = kind === "bots" ? store.bot(id) : store.botByThread(id);
+      return bot && isSurfaceBot(bot) ? { ownerPrincipalId: bot.temporary!.ownerPrincipalId } : null;
+    },
+    openAdminCard: (threadId) => store.messagesFor(threadId).some((row) => row.card?.adminApproval === true && !row.card.answered && !row.card.dismissed && !row.card.expired),
+  });
 }
 /** Lot S1: the bot of a hidden conversation this person owns (an outside
- * agent's conversation, or any conversation of their surface bot), never a
+ * agent's conversation of theirs, or any conversation of a surface bot), never a
  * confidential one; else null. */
 function hiddenConversationOf(threadId: string, principalId: string): { botId: string } | null {
   const bot = store.botByThread(threadId);
   if (!bot || store.isConfidentialThread(threadId)) return null;
+  // another person's surface bot is refused once, by surfaceTargetRefused
+  if (isSurfaceBot(bot)) return { botId: bot.id };
   const person = principalId.trim().toLowerCase();
-  if (isSurfaceBot(bot)) return bot.temporary!.ownerPrincipalId === person ? { botId: bot.id } : null;
   const task = store.taskByThread(bot.id, threadId);
   return task && isAgentConversation(task) && task.ownerPrincipalId === person ? { botId: bot.id } : null;
 }
@@ -34708,10 +34729,10 @@ const orgMember = createOrgMemberRoutes({
   markAiClientLine,
   // lot S1: the person's surface bot and their hidden conversations
   ensureSurfaceBot: (person, input) => ensureSurfaceBot(person, input.name),
-  surfaceBot: (botId) => {
-    const bot = store.bot(botId);
-    return bot && isSurfaceBot(bot) ? { ownerPrincipalId: bot.temporary!.ownerPrincipalId } : null;
-  },
+  surfaceBot: (botId) => isSurfaceBot(store.bot(botId)),
+  threadQueued: (threadId) => chatFollowups("bot").some((row) => row.threadId === threadId && (row.status === "pending" || row.status === "dispatching" || row.status === "interrupted")),
+  // what the decision log kept of a deleted hidden conversation goes down to its metadata
+  forgetThread: (threadId) => { void scrubThreadDecisions(DATA_DIR, threadId).catch(reportBackgroundError); },
   hiddenConversationOf,
   threadModel: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   expireDueApprovals: expireDueApprovalsInThread,
@@ -36134,6 +36155,7 @@ ROUTES.push(createKeysTestRoutes({ cfg: () => cfg }));
 ROUTES.push(createDecisionsRoutes({ dataDir: DATA_DIR }));
 ROUTES.push(createAdminActivityRoutes({
   dataDir: DATA_DIR,
+  hidden: surfaceRecord,
   adminPersonName: (principalId) => adminPerson(principalId).name,
   adminActivityRecording
 }));

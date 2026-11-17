@@ -49,7 +49,7 @@ Code: `server/org/org-member-routes.ts`, wired in `server/index.ts`
 | `clients.routinesWrite` | on (always) | enable, disable, rename, and edit schedule or instructions of routines they own |
 | `clients.approvalsAnswer` | off (the bot's owner holds it for their own bots) | allow or deny a card |
 | `clients.peopleNudge` | off | nudge a person |
-| `clients.agentsCreate` | off | create a bot with `agents/create_agent`; archive, restore or delete one for good with `agents/delete_agent` |
+| `clients.agentsCreate` | on (always) | create a bot with `agents/create_agent`; archive, restore or delete one for good with `agents/delete_agent` |
 
 Keys have two segments (`group.name`): Perspicax refuses a catalogue with
 any other shape, so the plan's `clients.bots.read` is written
@@ -145,6 +145,13 @@ any other shape, so the plan's `clients.bots.read` is written
   conversation already runs on it. Each conversation keeps its own model, so
   two sends on two conversations never mix. With no conversation named, the
   person's chat with the bot (or a new conversation) is used.
+- The sends of one conversation go one at a time, in arrival order. A send
+  that changes the conversation's model first waits for the turns before it
+  (running or queued) to finish on their own model, at most 10 minutes:
+  two models never cross in one conversation. A card waiting in it answers
+  `409 card_waiting` (answer the card, then send again); still busy after
+  10 minutes answers `409 conversation_busy`. Nothing is switched or sent
+  then.
 
 ```json
 {
@@ -169,28 +176,52 @@ answer in their name through one service bot of theirs, the **surface bot**:
 - `POST surface-bot` `{"name": "..."}` (optional, 1 to 80 characters, one
   line, default `Assistant`, used only the first time) answers `201
   {bot: {id, name, approvalMode}, created: true}` the first time, then `200`
-  with the same bot and `created: false`. One per person and server. A
-  member makes it without `clients.agentsCreate`.
+  with the same bot and `created: false`. One per person and server. The
+  route's key is `clients.botsMessage`.
 - It is made by the app's own creation as the person (their bot, in their
   environment, with their engines and the ones the organization gives
   them), as a temporary agent (`server/temporary-agents.ts`) marked
-  `surface`: pinned (it never expires), outside the temporary agents' quota.
-  Its level is Full access when the organization lets their bots have it,
-  else the level a new bot of theirs gets. The organization's Deny and Ask
-  first rules judge every tool call of its turns as for any bot: an Ask
-  first card arrives on the stream (`approval`) and is answered with
-  `POST approvals/{id}`.
-- It is the person's alone. It is in no list and no admin route: not `GET
-  /api/bots`, the event stream, `GET bots`, the catalogue, the agent API
-  (`list_agents`, `find_agents`, `send_prompt`), any bot's peers, the
-  organization admin's bots, files, approvals and decision history, the
-  person's Today, search or notifications; it never has a routine. Any app
-  route naming it or one of its conversations from another session (an
-  organization admin's included) answers `404`. Its usage stays in the
-  usage surfaces, as every turn's.
+  `surface`: pinned (it never expires), outside the temporary agents' quota,
+  its parallel conversations at the bot ceiling. Its level is Full access
+  when the organization lets their bots have it, else the level a new bot of
+  theirs gets. The organization's Deny and Ask first rules judge every tool
+  call of its turns as for any bot: an Ask first card arrives on the stream
+  (`approval`) and is answered with `POST approvals/{id}`.
 - Every send to it lands in a hidden conversation; `newThread: true` opens
   one per host chat, then `threadId` continues it.
-- Deleting the person (their data erased) deletes it with their other bots.
+- It is the person's alone, by one rule (`server/bots/surface-bot-access.ts`):
+  any app route naming it or one of its conversations from another session,
+  an organization admin's included, answers `404`; the member API reaches it
+  through those same routes as the person. One exception: a server command
+  card the existing rule gives to an organization admin is answered by an
+  admin where it shows (the app's Today included), and nothing else of the
+  conversation. The admin is notified of it as for any bot, and its owner
+  sees on Today that it waits on an admin.
+- It is in no list: not `GET /api/bots`, the event stream, `GET bots`, the
+  catalogue, the agent API (`list_agents`, `find_agents`, `send_prompt`),
+  the organization admin's bots and files, admin approvals (but the server
+  command card above), the decision history of the console, Today (but the
+  waiting line above), a team manager's list, or search.
+- It reaches no other bot and no bot reaches it (peers, both ways); it joins
+  no room (`POST /api/groups` and adding members answer `403`). The bots a
+  host chat invites are the host product's to orchestrate.
+- It never holds a routine or an automation: the routine store and the
+  triggers treat it as no bot. Asked for a routine in a chat, it proposes one
+  for one of the person's bots (`for_bot_id`, the bot they named, or it asks
+  which) through the same card and approvals as anywhere; a proposal on
+  itself answers `409 routine_needs_bot` with the person's bots listed.
+- Notifications: as any outside agent's conversation, only what someone must
+  act on (an approval, a question) is notified.
+- Usage: the person reads every row in their own usage (`/api/me/usage...`).
+  Anyone else (the ledger, its CSV, traces, stats, the console's usage) reads
+  one row per person, day, engine and model, labelled `Chat`, with no
+  conversation or bot id (`server/usage/surface-usage.ts`). No cap.
+- Logs: the rows the member API writes about it (`client.surface_bot`,
+  `client.message`, `client.stop`, `client.thread_delete`, each marked
+  `surface`) and the decisions of its turns stay out of an administrator's
+  logs (`GET audit`, `/api/admin-activity`, the console's decision history).
+- Erasing the person erases it with their other bots, its conversations, its
+  usage rows, and the content its decisions kept (down to their metadata).
 
 ### `POST threads/{id}/stop`, `DELETE threads/{id}`
 
@@ -201,7 +232,7 @@ app's own stop, as them): `{stopped: true, threadId, status}`.
 any of their surface bot's) with its messages, after stopping a running
 turn: `{deleted: true, threadId}`. Another person's conversation, a visible
 one and a confidential one are `404`. A deleted conversation reads `404`
-after.
+after, and what the decision log kept of it goes down to its metadata.
 
 ### `GET threads/{id}`
 

@@ -8,7 +8,7 @@
 // directory, fire-and-forget. Bookkeeping must never fail the turn it is
 // booking. Rows carry who asked and what it cost, never message text.
 import { readFileSync } from "node:fs";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ACCESS_VIAS, type AccessVia } from "../engines/engine-credentials.ts";
 import type { CostSource } from "../models/model-prices.ts";
@@ -90,6 +90,9 @@ export interface UsageRow {
   /** #4100: what the usage served when it is not the engine's own turn:
    * the hearing of a listening session. Absent on every other row. */
   purpose?: "listening";
+  /** Lot S1: a turn of a person's surface bot (server/temporary-agents.ts):
+   * read in full by that person only (server/usage/surface-usage.ts). */
+  surface?: true;
 }
 
 export type UsageGroupBy = "bot" | "model" | "user" | "day" | "engine" | "routine";
@@ -189,6 +192,48 @@ export function appendUsage(dataDir: string, row: Omit<UsageRow, "at"> & { at?: 
 async function write(dataDir: string, record: UsageRow): Promise<void> {
   await mkdir(join(dataDir, DIR), { recursive: true, mode: 0o700 });
   await appendFile(usageFileFor(dataDir, new Date(record.at)), JSON.stringify(record) + "\n", { mode: 0o600 });
+}
+
+/** Lot S1: remove every row of these bots from the ledger (a person erased
+ * with their surface bot). In the write queue, so no append is lost. The
+ * number of rows removed. */
+export function eraseUsageOfBots(dataDir: string, botIds: ReadonlySet<string>): Promise<number> {
+  if (!botIds.size) return Promise.resolve(0);
+  const previous = writeQueues.get(dataDir) ?? Promise.resolve();
+  const work = previous.then(async () => {
+    let removed = 0;
+    let files: string[];
+    try {
+      files = (await readdir(join(dataDir, DIR))).filter((name) => name.endsWith(".jsonl"));
+    } catch {
+      return 0;
+    }
+    for (const name of files) {
+      const file = join(dataDir, DIR, name);
+      const lines = (await readFile(file, "utf8")).split("\n");
+      const kept = lines.filter((line) => {
+        if (!line) return false;
+        try {
+          const value = JSON.parse(line) as { botId?: unknown };
+          if (typeof value.botId === "string" && botIds.has(value.botId)) {
+            removed += 1;
+            return false;
+          }
+        } catch {
+          /* a torn line stays as it was */
+        }
+        return true;
+      });
+      if (kept.length !== lines.filter(Boolean).length) await writeFile(file, kept.length ? `${kept.join("\n")}\n` : "", { mode: 0o600 });
+    }
+    return removed;
+  });
+  const queued = work.then(() => undefined, () => undefined);
+  writeQueues.set(dataDir, queued);
+  void queued.finally(() => {
+    if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
+  });
+  return work;
 }
 
 /** Test/shutdown seam: wait until everything queued for this directory is on disk. */

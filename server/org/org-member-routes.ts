@@ -111,6 +111,9 @@ export const SURFACE_BOT_NAME_MAX = 80;
 export const SURFACE_BOT_NAME_DEFAULT = "Assistant";
 /** Lot S1: how long a delete waits for a stopped turn to settle. */
 export const MEMBER_STOP_SETTLE_MS = 5_000;
+/** Lot S1: how long a send that changes its conversation's model waits for
+ * the turns before it (running or queued) to finish on their own model. */
+export const MEMBER_MODEL_WAIT_MS = 10 * 60_000;
 
 /** The acting person, once the assertion verified. */
 export interface MemberPerson {
@@ -203,8 +206,14 @@ export interface OrgMemberRouteDeps {
    * refusal. */
   ensureSurfaceBot?(person: MemberPerson, input: { name: string }): Promise<
     { ok: true; id: string; name: string; created: boolean; approvalMode: string | null } | { ok: false; reply: MemberReply }>;
-  /** Lot S1: a surface bot and its person, else null. */
-  surfaceBot?(botId: string): { ownerPrincipalId: string | null } | null;
+  /** Lot S1: whether this bot is a surface bot (every send to it is hidden;
+   * another person's is refused once, by the app's own routes). */
+  surfaceBot?(botId: string): boolean;
+  /** Lot S1: sends queued in this conversation and not started yet. */
+  threadQueued?(threadId: string): boolean;
+  /** Lot S1: a hidden conversation was deleted: what the logs kept of it
+   * goes down to its metadata. */
+  forgetThread?(threadId: string): void;
   /** Lot S1: the bot of a hidden conversation this person owns (an outside
    * agent's conversation, or any conversation of their surface bot), never a
    * confidential one; else null. */
@@ -1622,6 +1631,22 @@ type MemberRouteTools = ReturnType<typeof memberRouteTools>;
 
 function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, allRoutes: () => MemberRoute[]): MemberRoute[] {
   const { readThread, isRead, watchTurn, ownRoutineRows } = tools;
+  // read at each call, like the rest of deps
+  const now = () => (deps.now ?? Date.now)();
+  const sleep = (ms: number) => (deps.sleep ? deps.sleep(ms) : new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  // Lot S1: the sends of one conversation, one at a time, in arrival order.
+  const sending = new Map<string, Promise<unknown>>();
+  const inOrder = <T>(threadId: string | undefined, work: () => Promise<T>): Promise<T> => {
+    if (!threadId) return work();
+    const before = sending.get(threadId) ?? Promise.resolve();
+    const mine = before.then(work, work);
+    const settled = mine.then(() => undefined, () => undefined);
+    sending.set(threadId, settled);
+    void settled.then(() => {
+      if (sending.get(threadId) === settled) sending.delete(threadId);
+    });
+    return mine;
+  };
   return [
     {
       method: "GET", path: "capabilities",
@@ -1693,10 +1718,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         const model = input.modelSelection === undefined ? null : memberModelSelection(input.modelSelection);
         if (typeof model === "string") return fail(400, "bad_request", model);
         const botId = params.id!;
-        // Lot S1: a surface bot is its person's alone (another person's,
-        // an admin's included, is an unknown bot)
-        const surface = deps.surfaceBot?.(botId) ?? null;
-        if (surface && surface.ownerPrincipalId !== person.principalId.trim().toLowerCase()) return fail(404, "not_found", "No such bot.");
+        const surface = deps.surfaceBot?.(botId) === true;
         let threadId = input.threadId as string | undefined;
         if (threadId && deps.confidential?.(threadId)) return fail(404, "not_found", "No such conversation.");
         // 2026-10-29: an AI client is another agent talking to the bot, not
@@ -1707,7 +1729,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         // Lot S1: the console asks for a hidden conversation with
         // `hidden: true` (a host product's chat), and a surface bot only
         // ever works in hidden ones.
-        const hidden = person.actor !== "console" || input.hidden === true || surface !== null;
+        const hidden = person.actor !== "console" || input.hidden === true || surface;
         if (!threadId && hidden && deps.agentConversation) {
           threadId = deps.agentConversation(botId, person, input.newThread === true) ?? undefined;
           if (!threadId) return fail(502, "not_started", "A conversation with this bot could not be opened.");
@@ -1722,28 +1744,43 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
           threadId = str(objectOf(objectOf(created.body)?.task)?.threadId) ?? undefined;
           if (!threadId) return fail(502, "server_error", "The new conversation has no id.");
         }
-        // Lot S1: the conversation's model, set the way the app's model
-        // picker sets it (same checks as update_agent_model), only when it
-        // changes, so the engine keeps its session otherwise.
-        if (model && threadId && !sameMemberModel(model, deps.threadModel?.(botId, threadId) ?? null)) {
-          const switched = await deps.perform(person, { method: "PATCH", path: `/api/bots/${encodeURIComponent(botId)}/tasks/${encodeURIComponent(threadId)}`, body: { modelSelection: model } });
-          if (!okStatus(switched)) return passThrough(switched, "This model cannot be used for this conversation.");
-        }
-        const sent = await deps.perform(person, {
-          method: "POST",
-          path: `/api/bots/${encodeURIComponent(botId)}/messages`,
-          // #3220: an AI client's prompt keeps its own turn and reply (queued
-          // behind a running turn, never steered into it or merged with
-          // another queued prompt); the console is the person typing.
-          body: { text, ...(threadId ? { threadId } : {}), ...(input.sendId ? { sendId: input.sendId } : {}), ...(hidden ? { busyMode: "after", aiClient: true } : {}) },
+        // Lot S1: one send at a time per conversation, in order. A send that
+        // changes the conversation's model (set the way the app's model
+        // picker sets it, same checks as update_agent_model; left alone when
+        // unchanged, so the engine keeps its session) first waits for the
+        // turns before it, running or queued, to finish on their own model:
+        // two models never cross in one conversation.
+        const posted = await inOrder(threadId, async (): Promise<{ refused: Answer } | { sent: MemberReply }> => {
+          if (model && threadId && !sameMemberModel(model, deps.threadModel?.(botId, threadId) ?? null)) {
+            const until = now() + MEMBER_MODEL_WAIT_MS;
+            for (;;) {
+              const state = deps.threadStatus(threadId);
+              if (state === "waiting") return { refused: fail(409, "card_waiting", "A card waits in this conversation: answer it, then send this again.") };
+              if (state !== "working" && !deps.threadQueued?.(threadId)) break;
+              if (now() >= until) return { refused: fail(409, "conversation_busy", "This conversation is still working on another model. Send this again once it is done.") };
+              await sleep(MEMBER_WAIT_POLL_MS);
+            }
+            const switched = await deps.perform(person, { method: "PATCH", path: `/api/bots/${encodeURIComponent(botId)}/tasks/${encodeURIComponent(threadId)}`, body: { modelSelection: model } });
+            if (!okStatus(switched)) return { refused: passThrough(switched, "This model cannot be used for this conversation.") };
+          }
+          return { sent: await deps.perform(person, {
+            method: "POST",
+            path: `/api/bots/${encodeURIComponent(botId)}/messages`,
+            // #3220: an AI client's prompt keeps its own turn and reply (queued
+            // behind a running turn, never steered into it or merged with
+            // another queued prompt); the console is the person typing.
+            body: { text, ...(threadId ? { threadId } : {}), ...(input.sendId ? { sendId: input.sendId } : {}), ...(hidden ? { busyMode: "after", aiClient: true } : {}) },
+          }) };
         });
+        if ("refused" in posted) return posted.refused;
+        const sent = posted.sent;
         if (!okStatus(sent)) return passThrough(sent, "The message could not be sent.");
         const receipt = objectOf(sent.body) ?? {};
         const finalThread = str(receipt.threadId) ?? threadId ?? null;
         const messageId = str(objectOf(receipt.message)?.id);
         const queueId = messageId ? null : str(receipt.queueId);
         if (hidden && finalThread && messageId) deps.markAiClientLine?.(finalThread, messageId);
-        deps.record(person, { action: "client.message", target: { kind: "bot", id: botId }, after: { threadId: finalThread, waited: wait > 0, ...(input.newThread ? { newThread: true } : {}), ...(hidden && !input.threadId ? { hidden: true } : {}), ...(model ? { model: model.model } : {}) } });
+        deps.record(person, { action: "client.message", target: { kind: "bot", id: botId }, after: { threadId: finalThread, waited: wait > 0, ...(input.newThread ? { newThread: true } : {}), ...(hidden && !input.threadId ? { hidden: true } : {}), ...(model ? { model: model.model } : {}), ...(surface ? { surface: true } : {}) } });
         if (!finalThread) return answer({ botId, threadId: null, messageId, status: "working", pending: true, reply: null, approvals: [], cursor: null, summary: null });
         if (input.stream === true) {
           return {
@@ -2154,7 +2191,8 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         if (!name || name.length > SURFACE_BOT_NAME_MAX || /[\r\n]/.test(name)) return fail(400, "bad_request", `name is one line of 1 to ${SURFACE_BOT_NAME_MAX} characters.`);
         const made = await deps.ensureSurfaceBot(person, { name });
         if (!made.ok) return passThrough(made.reply, "The surface bot could not be made.");
-        if (made.created) deps.record(person, { action: "client.surface_bot", target: { kind: "bot", id: made.id, name: made.name } });
+        // the person's own log keeps it; an administrator's never shows a surface row
+        if (made.created) deps.record(person, { action: "client.surface_bot", target: { kind: "bot", id: made.id, name: made.name }, after: { surface: true } });
         return answer({ bot: { id: made.id, name: made.name, approvalMode: made.approvalMode }, created: made.created }, made.created ? 201 : 200);
       },
     },
@@ -2166,11 +2204,9 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         const threadId = params.id!;
         const botId = deps.botOfThread?.(threadId) ?? null;
         if (!botId || deps.confidential?.(threadId)) return fail(404, "not_found", "No such conversation.");
-        const surface = deps.surfaceBot?.(botId) ?? null;
-        if (surface && surface.ownerPrincipalId !== person.principalId.trim().toLowerCase()) return fail(404, "not_found", "No such conversation.");
         const reply = await deps.perform(person, { method: "POST", path: `/api/bots/${encodeURIComponent(botId)}/interrupt`, body: { threadId } });
         if (!okStatus(reply)) return passThrough(reply, "This conversation's turn could not be stopped.");
-        deps.record(person, { action: "client.stop", target: { kind: "thread", id: threadId } });
+        deps.record(person, { action: "client.stop", target: { kind: "thread", id: threadId }, ...(deps.surfaceBot?.(botId) ? { after: { surface: true } } : {}) });
         return answer({ stopped: true, threadId, status: deps.threadStatus(threadId) ?? "idle" });
       },
     },
@@ -2193,7 +2229,8 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         }
         const removed = await deps.perform(person, { method: "DELETE", path });
         if (!okStatus(removed)) return passThrough(removed, "This conversation could not be deleted.");
-        deps.record(person, { action: "client.thread_delete", target: { kind: "thread", id: threadId }, after: { botId: owned.botId } });
+        deps.forgetThread?.(threadId);
+        deps.record(person, { action: "client.thread_delete", target: { kind: "thread", id: threadId }, after: { botId: owned.botId, ...(deps.surfaceBot?.(owned.botId) ? { surface: true } : {}) } });
         return answer({ deleted: true, threadId });
       },
     },

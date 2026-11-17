@@ -162,6 +162,9 @@ export interface InternalRequestsDeps {
   timeZone(): string;
   canReachPeer(from: InternalRequestsBot, target: InternalRequestsBot): boolean;
   primaryBotSameOwner(from: InternalRequestsBot, target: InternalRequestsBot): boolean;
+  /** Lot S1: when `from` is a surface bot (it never holds a routine), the
+   * person's bots that may hold the routines it proposes; else null. */
+  surfaceRoutineHolders?(from: InternalRequestsBot): Array<{ id: string; name: string }> | null;
   peerAccessHelp: string;
   proposalPersistence(botId: string, threadId: string, opensCard: boolean): Persistence;
   safetyPrincipal(threadId: string): { principalId?: string; triage: boolean };
@@ -457,6 +460,16 @@ export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ct
     // routine later. Omitted (or the sender's own id) keeps the
     // own-routine path unchanged.
     let forBot: { botId: string; name: string } | undefined;
+    // Lot S1: a surface bot proposes a routine for one of its person's bots,
+    // by the same card and approvals; it never holds one itself
+    const holders = deps.surfaceRoutineHolders?.(from) ?? null;
+    const named = typeof body.forBotId === "string" ? body.forBotId.trim() : "";
+    if (holders && (!named || named === from.id)) {
+      const listed = holders.map((bot) => `${bot.name} (for_bot_id ${bot.id})`).join("; ");
+      return json(res, 409, { code: "routine_needs_bot", error: holders.length
+        ? `This chat keeps no routine of its own: pass for_bot_id with the bot the person named, one of ${listed}. If they did not say which, ask them first.`
+        : "This chat keeps no routine of its own, and the person has no bot to hold one yet: tell them to create a bot first." });
+    }
     if (body.forBotId !== undefined) {
       const parsedForBotId = z.string().max(128).safeParse(body.forBotId);
       const forBotId = parsedForBotId.success ? parsedForBotId.data.trim() : "";
@@ -469,7 +482,7 @@ export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ct
           return json(res, 404, { error: "no bot with that id — call list_bots and copy the exact id from the result" });
         }
         // 2026-10-20: a Primary Bot reaches every bot of its person
-        if (!deps.canReachPeer(from, target) && !(from.chiefOfStaff && deps.primaryBotSameOwner(from, target))) {
+        if (!deps.canReachPeer(from, target) && !(from.chiefOfStaff && deps.primaryBotSameOwner(from, target)) && !holders?.some((bot) => bot.id === target.id)) {
           return json(res, 403, { error: `that bot belongs to another person or is unavailable. ${deps.peerAccessHelp}` });
         }
         forBot = { botId: target.id, name: target.name };

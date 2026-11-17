@@ -53,11 +53,11 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer) {
   const teams = host.managedTeamIds(viewer.principalId);
   const out: InboxApproval[] = [];
   for (const { bot, threadId, message, card, question } of host.pendingInboxCards()) {
-    // lot S1: a surface bot's cards are answered in its host product, never
-    // on Today nor in a manager's or admin's list; only a server command an
-    // organization admin must decide still reaches that admin (the turn
-    // would wait on nobody otherwise), as the card in the conversation
-    if (isSurfaceBot(bot) && !(card.adminApproval && host.IDENTITY.kind === "perspicax" && orgAdmin && !question)) continue;
+    // lot S1: a surface bot's cards are answered in its host product. A
+    // server command card the existing rule gives to an organization admin
+    // still reaches every admin, decidable as is, and its owner, as waiting
+    // on an admin; a team manager's list never shows it
+    if (isSurfaceBot(bot) && !(card.adminApproval && host.IDENTITY.kind === "perspicax" && !question && (orgAdmin || host.cardAnswererId(bot, threadId, card) === viewer.principalId))) continue;
     const confidential = host.store.isConfidentialThread(threadId);
     // the person who answers this card (a destination's answerer included),
     // as approvalAnswerRefusal and the console read it

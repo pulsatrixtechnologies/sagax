@@ -23,8 +23,9 @@
 // home) drives through the member API to answer as Sagax in their name. It
 // is the person's, pinned (it never expires), outside the quota, and it
 // leaves every list on top of the temporary agent's: the agent API, the
-// catalogue, peers, admin routes, the person's Today, search, routines and
-// notifications (isSurfaceBot).
+// catalogue, peers (both ways), rooms, admin routes, the person's Today and
+// search; it never holds a routine or an automation (isSurfaceBot, the one
+// test, imported wherever it applies).
 
 export const TEMP_AGENT_IDLE_HOURS_DEFAULT = 24;
 export const TEMP_AGENT_IDLE_HOURS_MAX = 720;
@@ -61,7 +62,7 @@ export interface TemporaryAgent {
 
 /** Whether a bot is a person's surface bot (lot S1): out of every list and
  * admin route, reached only by its owner through the member API. */
-export function isSurfaceBot(bot: { temporary?: Pick<TemporaryAgent, "surface"> } | null | undefined): boolean {
+export function isSurfaceBot(bot: { temporary?: { surface?: unknown } | null } | null | undefined): boolean {
   return bot?.temporary?.surface === true;
 }
 

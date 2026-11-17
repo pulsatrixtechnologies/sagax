@@ -16,8 +16,11 @@
 //       search, routines, Today
 //   S4  deleting a hidden conversation: it reads as gone; another person's
 //       is unknown
+//   S5  usage and logs: the person reads every row of it; an administrator
+//       one total per person, no conversation or bot id, no log row of it
+//   S6  erasing the person erases the bot, its conversations and its usage
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -290,9 +293,13 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
       expect(searched.status, searched.text).toBe(200);
       expect(searched.body.hits).toEqual([]);
     }
-    // routines: never one on it
+    // routines: never one on it, its owner asking included (the routine store's own check)
     const routine = await api("POST", "/api/routines", bob, { name: "Nightly", botId: surface, prompt: "x", enabled: false, schedule: { type: "interval", everyMinutes: 60 } });
-    expect(routine.status, routine.text).toBe(404);
+    expect(routine.status, routine.text).toBeGreaterThanOrEqual(400);
+    expect(((await api("GET", "/api/routines", alice)).body.routines as Array<any>).some((row) => row.botId === surface)).toBe(false);
+    // rooms: never in one, its owner placing it included
+    const room = await api("POST", "/api/groups", bob, { name: "Desk room", memberIds: [orion, surface] });
+    expect(room.status, room.text).toBe(403);
     // Today: nothing of it
     const today = await api("GET", "/api/approvals", bob);
     expect(today.status).toBe(200);
@@ -311,5 +318,56 @@ posixOnly("lot S1: a person's surface bot and its hidden conversations", () => {
     expect((await member("DELETE", `threads/${chats[1]}`, BOB)).status).toBe(404);
     // the other chat stays
     expect((await member("GET", `threads/${chats[0]}`, BOB)).status).toBe(200);
+  }, 60_000);
+
+  it("S5: usage and logs: the person reads it all, an administrator one total per person and no row of it", async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    const range = `from=${day}&to=${day}`;
+    // the person: every row, in their own usage
+    const own = await api("GET", `/api/me/usage/traces?${range}`, bob);
+    expect(own.status, own.text).toBe(200);
+    expect(own.text).toContain(chats[0]);
+    // an administrator: no conversation, no bot id, no list of sends
+    const ids = [surface, ...chats];
+    for (const path of [`/api/usage/traces?${range}`, `/api/usage?${range}&groupBy=bot`, `/api/usage.csv?${range}`, `/api/usage/stats?${range}`]) {
+      const read = await api("GET", path, alice);
+      expect(read.status, `${path} ${read.text.slice(0, 300)}`).toBe(200);
+      for (const id of ids) expect(read.text, path).not.toContain(id);
+    }
+    const console = await admin("GET", `usage?${range}`);
+    expect(console.status, console.text).toBe(200);
+    for (const id of ids) expect(console.text).not.toContain(id);
+    // one total per person: the folded row is there, its spend counted
+    const byBot = await api("GET", `/api/usage?${range}&groupBy=bot`, alice);
+    expect((byBot.body.groups as Array<any>).filter((group) => group.label === "Chat")).toHaveLength(1);
+    // the administrator's logs: no creation, send, stop or delete of it
+    for (const read of [await admin("GET", "audit?category=client&limit=500"), await api("GET", `/api/admin-activity?${range}&limit=5000`, alice)]) {
+      expect(read.status, read.text.slice(0, 300)).toBe(200);
+      for (const id of ids) expect(read.text).not.toContain(id);
+      expect(read.text).not.toContain("client.surface_bot");
+    }
+  }, 60_000);
+
+  it("S6: erasing the person erases the surface bot, its conversations and its usage", async () => {
+    const bobId = ids.bob!;
+    const LOGOUT = "http://schemas.openid.net/event/backchannel-logout";
+    const PURGED = "https://schemas.openid.net/secevent/risc/event-type/account-purged";
+    const token = idp.logoutToken({ sub: BOB.sub, claims: (c) => ({ ...c, events: { [LOGOUT]: {}, [PURGED]: { subject: { format: "iss_sub", iss: idp.issuer, sub: BOB.sub } } } }) });
+    const purged = await fetch(`${BASE}/api/auth/oidc/backchannel-logout`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: `logout_token=${encodeURIComponent(token)}` });
+    expect(purged.status, await purged.clone().text()).toBe(200);
+    expect(await purged.json()).toMatchObject({ purged: true });
+    await waitFor(() => !storedBots().some((bot) => bot.id === surface));
+    // its conversations
+    const registry = readFileSync(join(home, ".sagax", "bots.json"), "utf8");
+    for (const thread of chats) {
+      expect(registry).not.toContain(thread);
+      expect(existsSync(join(home, ".sagax", `messages-${thread}.json`))).toBe(false);
+    }
+    // its usage, for everyone
+    const day = new Date().toISOString().slice(0, 10);
+    const ledger = readFileSync(join(home, ".sagax", "usage", `${day.slice(0, 7)}.jsonl`), "utf8");
+    expect(ledger).not.toContain(surface);
+    for (const thread of chats) expect(ledger).not.toContain(thread);
+    expect(bobId).toBeTruthy();
   }, 60_000);
 });

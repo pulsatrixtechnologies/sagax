@@ -19,6 +19,8 @@ export interface AdminActivityRouteDeps {
   adminPersonName: (principalId: string) => string;
   /** Whether this server records admin activity at all. */
   adminActivityRecording: () => boolean;
+  /** Lot S1: a row this log never shows (a person's surface bot). */
+  hidden?: (row: { botId?: string; threadId?: string; target?: { kind?: string; id?: string }; after?: Record<string, unknown> }) => boolean;
 }
 
 export function createAdminActivityRoutes(deps: AdminActivityRouteDeps): RouteHandler {
@@ -31,7 +33,8 @@ export function createAdminActivityRoutes(deps: AdminActivityRouteDeps): RouteHa
     if (!range) return json(res, 400, { error: "from and to must be dates (YYYY-MM-DD), from no later than to, at most a year apart" });
     const what = parseActivityWhat(url.searchParams.get("what"));
     if (!what) return json(res, 400, { error: "what must be all, approvals, decisions, config, people, session, webhook, mcp, engine, bot, budget, visibility, rights, section, org or approval" });
-    const entries = activityEntries(readDecisionRange(deps.dataDir, range), readAdminActivityRange(deps.dataDir, range), {
+    const shown = <T extends object>(rows: T[]): T[] => (deps.hidden ? rows.filter((row) => !deps.hidden!(row as never)) : rows);
+    const entries = activityEntries(shown(readDecisionRange(deps.dataDir, range)), shown(readAdminActivityRange(deps.dataDir, range)), {
       what,
       who: (url.searchParams.get("who") ?? "").slice(0, 200),
     }, (principalId) => deps.adminPersonName(principalId));

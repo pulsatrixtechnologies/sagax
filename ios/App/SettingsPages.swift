@@ -609,7 +609,7 @@ struct SettingsSearchField: View {
     @Binding var text: String
     var identifier: String
     var height: CGFloat = 44
-    var textSize: CGFloat = CGFloat(PhonePanelMetrics.rowSize)
+    var textSize: CGFloat = CGFloat(PhoneSheetMetrics.rowSize)
 
     var body: some View {
         HStack(spacing: 10) {

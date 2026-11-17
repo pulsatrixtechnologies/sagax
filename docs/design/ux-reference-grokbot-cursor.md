@@ -566,6 +566,40 @@ Permissions, Coffre, Utilisation et facturation, Mises à jour. Sagax a plus de 
   choisir une région) se fait dans la fenêtre même : en place dans la rangée, ou en
   sous-page avec retour, jamais une deuxième fenêtre par-dessus.
 
+**iPhone (#4510, Réglages : taille corrigée, remplace les mesures de rangée et de texte de #4103 ci-dessous).**
+Le propriétaire trouvait les menus des Réglages « genre 10 % trop gros ». Mesuré : la
+refonte #4103 avait repris tels quels les chiffres du panneau du bot (photos d'un
+téléphone de 430 pt, #4101) ; les références du harnais de parité (402 x 874 pt,
+`measure-settings.md`, écrans 12, 14, 15, 16, 21) en donnent d'autres, plus petits :
+la géométrie de Sagax était 14 % plus grande et le texte 18 % plus grand (le 10 % de
+l'oeil du propriétaire est la moyenne perçue). Les Réglages et leurs pages lisent
+maintenant les chiffres du 402 pt (`PhoneSheetMetrics`, un seul endroit : rangée,
+titre de groupe, note, titre de page, interrupteur ; le panneau du bot garde les siens).
+Avant, après (points ; mesures de Sagax sur iPhone 17 Pro, 402 pt, relevées dans les
+captures du harnais ; entre parenthèses la référence du 402 pt) :
+
+- Texte de rangée et valeur : 16 devient 13,5 (13,5) ; sous-titre, titre de groupe et
+  note : 13 devient 11 (11) ; titre de page : 16 moyen devient 13,5 moyen (13,5 moyen).
+- Rangée d'une ligne : 52,5 devient 44,8 (44,5) ; la personne : 89,2 devient 66,0
+  (65,5) ; titre et une note : 72 devient 64 (61) ; deux notes : 15,5 de marge devient
+  14,5 (74 à 75 de haut).
+- Marges : cartes 17 devient 15 (15,2) ; texte 20 devient 17,5 (17,5) ; chevron 24
+  devient 21 (21,2) ; entre deux cartes 31,3 devient 27,3 (27) ; titre de groupe :
+  55,4 devient 48,6 (48,6) ; première carte à 102 devient 90 du haut de la feuille (90,2).
+- Pastille ronde de la personne : 42 devient 38,5 (38,5) ; à côté du nom 12 devient 10 ;
+  glyphe de tête de rangée 19 devient 17 (17) ; interrupteur 66 x 30 devient 60,3 x
+  26,3 (60,3 x 26,3).
+- Connecter des apps : nom 16 devient 13,5, ligne 14 devient 11, titre de section 16
+  devient 11 gris, tuile 42 devient 38,5, rangée 68 devient 69 de pas (69), pastille
+  Ajouter 35 de haut devient 32,7 (32,7) et mots 13 devient 11 moyen ; recherche : mots
+  17 devient 13,5.
+- Zones tactiles : une rangée reste de 44,5 (au moins 44) ; la pastille d'une rangée est
+  dessinée à 32,7 mais se touche sur 44 ; la recherche et la roue restent à 44 ; le
+  texte suit le Dynamic Type à partir de la base corrigée.
+- Pas corrigé faute de mesure de référence : la demi-feuille d'un plugin (nom 20, texte
+  16, pastille 48 : voir #4103) et les pages ouvertes depuis les Réglages qui ont leurs
+  propres champs.
+
 **iPhone (#4103, mesuré sur les photos du propriétaire, téléphone de 430 pt).** Les
 feuilles reprennent la carte, la rangée, le titre de groupe, la note et l'interrupteur
 du panneau du bot (#4101) : une seule carte groupée, un seul style de rangée, un seul

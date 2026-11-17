@@ -1,9 +1,11 @@
 // The phone's sheets as the reference app draws them (#4103): the settings
 // sheet and its Account page, the Connect apps sheet and a plugin's half
 // sheet. The grouped cards, rows, hairlines, group titles and switches are
-// the bot panel's (`PhonePanelMetrics`, #4101): one card, one row style for
-// the whole phone app. What is only the sheets' lives here, measured on a
-// 430 pt wide phone.
+// the bot panel's look (`PhonePanelMetrics`, #4101), but the Settings sheet
+// and its pages follow the measures of the 402 pt references
+// (docs/superpowers/specs/assets/ios-visual-parity/measure-settings.md, #4510):
+// the first pass (#4103) took the bot panel's 430 pt measures whole, which
+// drew every Settings row 14 % taller and its type 18 % larger.
 import Foundation
 
 public enum PhoneSheetMetrics {
@@ -12,23 +14,40 @@ public enum PhoneSheetMetrics {
     // The round close or back control is the app's large glass button
     // (44 pt), inset `PhonePanelMetrics.margin` from the sheet's edges.
     /// The first card's top, from the sheet's top edge.
-    public static let firstCard: Double = 102
+    public static let firstCard: Double = 90
     /// Space between two cards, and from a card to the next group title's
     /// line box (the title then sits `PhonePanelMetrics.titleToCard` above
     /// its card).
-    public static let cardGap: Double = 31
-    public static let titledGap: Double = 32.4
+    public static let cardGap: Double = 27
+    /// Previous card's bottom to the next card's top when a group title sits
+    /// between: 30.2 to the title's cap top, the 11 pt title, 10.7 to the card.
+    public static let labelledGap: Double = 48.6
     /// The person's row: 89 pt, a 42 pt round avatar 20 pt into the card,
     /// the name and its lines 12 pt after it.
-    public static let personRow: Double = 89
-    public static let avatar: Double = 42
-    public static let avatarGap: Double = 12
+    public static let personRow: Double = 65.5
+    public static let avatar: Double = 38.5
+    public static let avatarGap: Double = 10
     /// A one-line row (Usage, Time Zone, Sign Out) is `PhonePanelMetrics.row`;
     /// a two-line row keeps 15.5 pt above its title and under its second
     /// line, 3 pt between them (70 pt with one line of 13 pt text).
-    public static let twoLinePadding: Double = 15.5
+    public static let twoLinePadding: Double = 14.5
     public static let lineGap: Double = 3
-    public static let subtitleSize: Double = 13
+    public static let subtitleSize: Double = 11
+    /// Row words and values 13.5 pt, a group title and a footnote 11 pt, a
+    /// one-line row 44.5 pt (the 44 pt touch target holds).
+    public static let rowSize: Double = 13.5
+    public static let groupTitleSize: Double = 11
+    public static let row: Double = 44.5
+    /// The card's side margin, the text inset, the chevron's trailing gap.
+    public static let margin: Double = 15
+    public static let textInset: Double = 17.5
+    public static let chevronTrailing: Double = 21
+    /// The switch (60.3 x 26.3) and a leading glyph (the plus, the bin) with
+    /// its words 26.5 pt in.
+    public static let switchWidth: Double = 60.3
+    public static let switchHeight: Double = 26.3
+    public static let glyphSize: Double = 17
+    public static let glyphColumn: Double = 26.5
     /// A trailing value stops 15 pt before its chevron.
     public static let valueGap: Double = 15
     // The page title beside or between the controls is the panel's title
@@ -37,38 +56,38 @@ public enum PhoneSheetMetrics {
     // MARK: Connect apps
 
     /// The list's side margin: chips, section titles, rows.
-    public static let appsMargin: Double = 24
+    public static let appsMargin: Double = 21
     /// The title starts 13 pt after the close control; the count pill sits
     /// at the trailing margin, as tall as the control, its words 19 pt.
-    public static let appsTitleGap: Double = 13
-    public static let countSize: Double = 19
-    public static let countPadding: Double = 17
+    public static let appsTitleGap: Double = 16.7
+    public static let countSize: Double = 13.5
+    public static let countPadding: Double = 14.5
     /// The filter chips are the Library's (`PhonePanelMetrics.chipHeight`
     /// and the rest), their top 60 pt under the control's centre (38 pt
     /// under a 44 pt control).
     public static let chipsTop: Double = 38
     /// A section's title (16 pt) and its chevron, 14 pt above the first row.
-    public static let sectionSize: Double = 16
+    public static let sectionSize: Double = 11
     public static let sectionTop: Double = 22
     /// A row: a 42 pt icon (the tile's corners, 30% of its side), the name 15 pt after it, a
     /// muted line of two lines at most, the pill at the trailing margin;
     /// 13 pt of air above and under.
-    public static let icon: Double = 42
-    public static let iconGap: Double = 15
-    public static let nameSize: Double = 16
-    public static let lineSize: Double = 14
+    public static let icon: Double = 38.5
+    public static let iconGap: Double = 14
+    public static let nameSize: Double = 13.5
+    public static let lineSize: Double = 11
     public static let lineLimit = 2
-    public static let rowPadding: Double = 13
+    public static let rowPadding: Double = 15.25
     /// The row's pill button: 35 pt high, 16 pt in, 13 pt medium words.
-    public static let pillHeight: Double = 35
-    public static let pillPadding: Double = 16
-    public static let pillTextSize: Double = 13
+    public static let pillHeight: Double = 32.7
+    public static let pillPadding: Double = 12.3
+    public static let pillTextSize: Double = 11
     /// The floating search: 50 pt, 31 pt from the sides, 12 pt above the
     /// home indicator's area; its words 17 pt.
-    public static let searchHeight: Double = 50
-    public static let searchMargin: Double = 31
+    public static let searchHeight: Double = 44
+    public static let searchMargin: Double = 17.3
     public static let searchBottom: Double = 12
-    public static let searchTextSize: Double = 17
+    public static let searchTextSize: Double = 13.5
 
     // MARK: A plugin's half sheet
 

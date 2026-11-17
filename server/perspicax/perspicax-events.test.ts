@@ -29,6 +29,7 @@ import {
   PERSPICAX_EVENTS_PATH,
   createPerspicaxEventsRoute,
   parsePerspicaxEvent,
+  healthChangeOf,
   productChangeEvent,
   type PerspicaxEventsRouteDeps,
   type ProductHealthChange,
@@ -96,6 +97,12 @@ const resourceChanged = (uri = "perspicax://cw/boards/12/open", extra: Record<st
   ...extra,
 });
 
+const hostPresence = (to: string, extra: Record<string, unknown> = {}) => ({
+  ...productHealth("failing"), kind: "host_presence", key: "host:pc_1",
+  subject: { type: "host", host: "pc_1", hostname: "Studio computer" },
+  to, reason: "Offline since 14:00. Last report: power lost. Turn the computer on.", ...extra,
+});
+
 describe("perspicax in the typed trigger catalog", () => {
   it("is its own relayed source, filtered by the watched resource, and its runs keep the bot's tools", () => {
     expect(TRIGGER_SOURCE_TYPES).toContain("perspicax");
@@ -128,6 +135,23 @@ describe("parsePerspicaxEvent", () => {
     expect(parsePerspicaxEvent(productHealth("failing"))).toMatchObject({ kind: "product_health", key: "product:cw_psa", subject: { type: "product", api: "cw_psa" }, to: "failing" });
     expect(parsePerspicaxEvent(voiceLine("not_live"))).toMatchObject({ kind: "voice_line", key: "voice-line", subject: { number: "+15145550100" }, from: null });
     expect(parsePerspicaxEvent(resourceChanged())).toMatchObject({ kind: "resource_changed", subject: { uri: "perspicax://cw/boards/12/open" } });
+  });
+
+  it("accepts host presence with its own key and retires online or removed computers", () => {
+    for (const state of ["lost", "shut_down", "online", "gone"]) {
+      const event = parsePerspicaxEvent(hostPresence(state))!;
+      expect(event.subject).toEqual({ type: "host", host: "pc_1", hostname: "Studio computer" });
+      expect(healthChangeOf(event, "pr_ana")).toMatchObject({ principalId: "pr_ana", key: "host:pc_1", hostname: "Studio computer", failing: state === "lost" || state === "shut_down" });
+      expect(productChangeEvent(event)).toBeNull();
+    }
+    expect(parsePerspicaxEvent(hostPresence("lost", { key: "host:other" }))).toBeNull();
+    expect(parsePerspicaxEvent(hostPresence("unknown"))).toBeNull();
+  });
+
+  it("refuses host presence with an empty or blank hostname", () => {
+    for (const hostname of ["", "   "]) {
+      expect(parsePerspicaxEvent(hostPresence("lost", { subject: { type: "host", host: "pc_1", hostname } }))).toBeNull();
+    }
   });
 
   it("refuses a key that is not the one its subject names, another contract, or no event id", () => {
@@ -185,6 +209,22 @@ describe("the product fix card", () => {
     });
     return { fix, asked, open, places };
   }
+
+  it("raises one host card with the complete reason and retires it on recovery or revocation", () => {
+    const { fix, asked, open } = cards();
+    const event = parsePerspicaxEvent(hostPresence("lost"))!;
+    const change = healthChangeOf(event, "pr_ana")!;
+    expect(fix.apply(change)).toBe("raised");
+    const card = asked.at(-1)!.input as ProductFixCardAsk & { question: string; title: string };
+    expect(card.title).toBe("Studio computer needs a fix");
+    expect(card.question).toContain(event.reason);
+    expect(fix.apply(change)).toBe("none");
+    expect(open.size).toBe(1);
+    for (const [n, state] of ["online", "gone"].entries()) {
+      expect(fix.apply({ ...change, eventId: `recovered-${n}`, at: `2026-11-14T00:0${n}:00Z`, state, failing: false })).toBe(n === 0 ? "retired" : "none");
+    }
+    expect(open.size).toBe(0);
+  });
 
   it("raises the card while the product fails, replaces it in place, and retires it when it works again", () => {
     const { fix, asked, open, places } = cards();

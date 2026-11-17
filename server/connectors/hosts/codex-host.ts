@@ -33,6 +33,7 @@ import { createConnectorHostPool, type ConnectorHostPoolOptions, type PoolWork, 
 import { CODEX_APPS_SERVER, chatgptAppsDescribe, chatgptAppsResult, chatgptAppsRuleTool, chatgptAppsToolId, codexAccountAuth, type CodexAppsListing } from "../providers/chatgpt-apps.ts";
 import type { ConnectorAccount } from "../types.ts";
 import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult } from "./types.ts";
+import { connectorCallDeadline, ConnectorCallTimeout } from "./call-deadline.ts";
 
 /** The person's own Codex CLI on one sign-in: its command and environment
  * (CODEX_HOME in that sign-in's folder). */
@@ -64,7 +65,6 @@ export interface CodexConnectorHost extends ConnectorHost {
   listApps(launch: CodexConnectorLaunch): Promise<CodexAppsListing | undefined>;
 }
 
-const CALL_TIMEOUT_MS = 90_000;
 const LIST_TIMEOUT_MS = 30_000;
 /** Pages of mcpServerStatus/list read at most (one answered on the measured account). */
 const LIST_PAGES_MAX = 20;
@@ -118,7 +118,6 @@ function answerServerRequest(method: string, params: unknown): { result: unknown
 
 export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexConnectorHost {
   const gate = deps.gate ?? (<T>(label: string, run: () => Promise<T>) => engineStartGate.run("probe", label, run));
-  const timeoutMs = deps.timeoutMs ?? CALL_TIMEOUT_MS;
   const listTimeoutMs = deps.listTimeoutMs ?? LIST_TIMEOUT_MS;
   const now = deps.now ?? Date.now;
   const running = new Set<ReturnType<typeof spawnCli>>();
@@ -259,7 +258,7 @@ export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexCon
   });
 
   /** A warm app-server, opened (initialize) once at its start. */
-  async function openServer(launch: CodexConnectorLaunch): Promise<AppServer> {
+  async function openServer(launch: CodexConnectorLaunch, timeoutMs: number): Promise<AppServer> {
     const server = startAppServer(launch);
     try {
       await bounded(server, timeoutMs, async () => {
@@ -278,19 +277,18 @@ export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexCon
     const launch = deps.launch(request.principalId, request.account);
     if (!launch) return signIn(name);
     const tool = chatgptAppsToolId(request.connector, request.tool) ?? request.tool;
-    // one time limit for the start and the call together, not one each
-    let deadline: number | undefined;
+    // The queue consumes the same budget as startup and the upstream call.
+    const deadline = connectorCallDeadline(request.tool, deps.timeoutMs);
     try {
-      return await pool.use(
+      return await deadline.run(() => pool.use(
         { principalId: request.principalId, accountKey: request.account.key },
         `${launch.cli} app-server (connector call)`,
         () => {
-          deadline = Date.now() + timeoutMs;
-          return openServer(launch);
+          return openServer(launch, deadline.remaining());
         },
         async (server, warm): Promise<PoolWork<ConnectorHostResult>> => {
           const mark = (result: ConnectorHostResult): ConnectorHostResult => (warm ? { ...result, warm: true } : result);
-          return bounded(server, deadline === undefined ? timeoutMs : Math.max(1, deadline - Date.now()), async () => {
+          return bounded(server, deadline.remaining(), async () => {
             // the sign-in is read on every call: a warm server never answers for a sign-in that changed
             const read = await server.request("account/read", { refreshToken: false }) as { account?: unknown } | undefined;
             const auth = codexAccountAuth(read?.account === undefined ? undefined : read.account);
@@ -310,10 +308,11 @@ export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexCon
             }
           });
         },
-      );
+      ));
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
-      if (why === "timeout") return { text: `${name} did not answer in time, so its result is unknown.`, isError: true };
+      if (error instanceof ConnectorCallTimeout) return { text: `${name}: ${why}`, isError: true };
+      if (why === "timeout") return { text: `${name} timed out before answering, so its result is unknown.`, isError: true };
       if (error instanceof RpcError) return { text: `Codex did not run ${tool} of ${name}: ${why}`, isError: true };
       return { text: `Codex could not start for ${name}: ${why}`, isError: true };
     }

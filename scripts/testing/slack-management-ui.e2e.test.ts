@@ -9,6 +9,7 @@ import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.t
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
+import { clickAccessible } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const binary = resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env });
@@ -39,20 +40,21 @@ describe("Slack management in agent settings", () => {
     const ui = (verb: string, ...args: string[]) => runControlOmb(["ui", verb, "--ui", fixture.ui, ...args]) as Promise<Record<string, any>>;
     const evaluate = async (js: string) => (await ui("eval", "--js", js)).result;
     const snapshot = async () => (await ui("snapshot")).snapshot as string;
-    const click = (name: string) => ui("click", "--name", name);
-    const link = () => evaluate("document.querySelector('[data-bot-settings-section=slack] a')?.getAttribute('href') ?? null");
-    const row = () => evaluate("Boolean(document.querySelector('[data-bot-settings-section=slack]'))");
+    const click = async (name: string) => {
+      try { return await ui("click", "--name", name); }
+      catch (cause) { throw new Error(`Click ${name}`, { cause }); }
+    };
+    const link = () => evaluate("document.querySelector('[data-bot-profile-row=slack] a')?.getAttribute('href') ?? null");
+    const row = () => evaluate("Boolean(document.querySelector('[data-bot-profile-row=slack]'))");
+    let currentName = "Pepper";
     const openProfile = async () => {
-      const state = await ui("snapshot", "--interactive");
-      const profile = Object.entries(state.refs as Record<string, { role: string; name: string }>)
-        .find(([, entry]) => entry.role === "button" && /Open .+ profile/.test(entry.name));
-      expect(profile).toBeDefined();
-      await ui("click", "--ref", `@${profile![0]}`);
-      await expect.poll(snapshot, { timeout: 10_000 }).toContain("Identity");
+      await evaluate(`[...document.querySelectorAll('button[aria-label]')].find(button => button.getAttribute('aria-label') === ${JSON.stringify(`Actions for ${currentName}`)}).click(); true`);
+      await click("Edit bot");
+      await expect.poll(() => evaluate("Boolean(document.querySelector('[data-bot-profile-page]'))")).toBe(true);
     };
     // Availability is read when settings open, so each mode reopens them.
     const reopen = async (mode: string) => {
-      await click("Close settings");
+      await evaluate("document.querySelector('[data-bot-profile-topbar] [data-window-close]').click(); true");
       await evaluate(`window.slackFixture.mode = ${JSON.stringify(mode)}; true`);
       const before = await evaluate("window.slackFixture.requests.length") as number;
       await openProfile();
@@ -87,15 +89,15 @@ describe("Slack management in agent settings", () => {
     })()`);
     await reopen("ready");
     await expect.poll(row, { timeout: 10_000 }).toBe(true);
-    await click("Slack");
+    await evaluate("document.querySelector('[data-bot-profile-action=slack]').click(); true");
     await expect.poll(link, { timeout: 10_000 }).toMatch(/^https:\/\/admin\.example\.test\/slack\?workspace=acme&bot=/);
     expect(await snapshot()).toContain("Give this agent its own Slack app, with its own name and picture, so your team can message it directly.");
     expect(await snapshot()).toContain("Manage in Admin");
-    expect(await evaluate("document.querySelector('[data-bot-settings-section=slack] a')?.getAttribute('rel')")).toBe("noopener noreferrer");
-    expect(await evaluate("document.querySelector('[data-bot-settings-section=slack] a')?.getAttribute('target')")).toBe("_blank");
+    expect(await evaluate("document.querySelector('[data-bot-profile-row=slack] a')?.getAttribute('rel')")).toBe("noopener noreferrer");
+    expect(await evaluate("document.querySelector('[data-bot-profile-row=slack] a')?.getAttribute('target')")).toBe("_blank");
     // One link and the row's own toggle: no switches, no confirmations.
-    expect(await evaluate("document.querySelectorAll('[data-bot-settings-section=slack] a').length")).toBe(1);
-    expect(await evaluate("document.querySelectorAll('[data-bot-settings-section=slack] button, [data-bot-settings-section=slack] input').length")).toBe(1);
+    expect(await evaluate("document.querySelectorAll('[data-bot-profile-row=slack] a').length")).toBe(1);
+    expect(await evaluate("document.querySelectorAll('[data-bot-profile-row=slack] button, [data-bot-profile-row=slack] input').length")).toBe(1);
 
     // Anything but an available answer removes the row, even though Slack was the open section.
     for (const mode of ["unavailable", "denied", "error"]) {
@@ -109,7 +111,7 @@ describe("Slack management in agent settings", () => {
     await reopen("pending");
     await expect.poll(() => evaluate("window.slackFixture.pending.length"), { timeout: 10_000 }).toBe(1);
     expect(await row()).toBe(false);
-    await click("Close settings");
+    await evaluate("document.querySelector('[data-bot-profile-topbar] [data-window-close]').click(); true");
     await runControlOmb(["new-bot", "--name", "Slack Juniper", "--url", fixture.url]);
     const saved = await fetch(`${fixture.url}/api/bots?messages=0`).then((response) => response.json()) as { bots: Array<{ id: string; name: string }> };
     const second = saved.bots.find((bot) => bot.name === "Slack Juniper")!;
@@ -120,17 +122,21 @@ describe("Slack management in agent settings", () => {
     const sidebarRow = Object.entries(sidebar.refs as Record<string, { role: string; name: string }>)
       .find(([, entry]) => entry.role === "button" && entry.name.includes("Slack Juniper") && !entry.name.startsWith("Open "));
     expect(sidebarRow).toBeDefined();
-    await ui("click", "--ref", `@${sidebarRow![0]}`);
+    await clickAccessible({ click, evaluate }, sidebarRow![1].name);
     await evaluate("window.slackFixture.mode = 'ready'; true");
+    currentName = "Slack Juniper";
     await openProfile();
     await expect.poll(row, { timeout: 10_000 }).toBe(true);
-    await click("Slack");
+    await evaluate("document.querySelector('[data-bot-profile-action=slack]').click(); true");
     const expected = `https://admin.example.test/slack?workspace=acme&bot=${second.id}`;
     await expect.poll(link, { timeout: 10_000 }).toBe(expected);
     await evaluate("window.slackFixture.pending.forEach(resolve => resolve()); true");
     expect(await link()).toBe(expected);
     await ui("screenshot", "--out", `${fixture.logPath}.slack-settings.png`);
     console.info(JSON.stringify({ logPath: fixture.logPath, screenshotPath: `${fixture.logPath}.slack-settings.png`, managementUrl: expected }));
+    const renderer = await ui("console");
+    expect(renderer.ok).toBe(true);
+    expect((renderer.messages as Array<{ type: string }>).filter(message => message.type === "error")).toEqual([]);
     await waitForExit(child, { signal: "SIGINT", graceMs: 30_000 });
     expect(child.exitCode).toBe(0);
     expect(existsSync(fixture.dataDir)).toBe(false);

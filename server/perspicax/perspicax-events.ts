@@ -24,6 +24,8 @@
 //     replaces its words in place; the good state or `gone` (the product is
 //     no longer the person's, the line no longer watched) retires it, silently
 //     (nothing left to do). See server/perspicax/product-fix-cards.ts;
+//   - `host_presence` (key `host:<host id>`): the same fix card for an
+//     offline computer; `online` or `gone` retires it.
 //   - `resource_changed` (key `watch:<uri>`): every ENABLED typed trigger of
 //     source `perspicax` the person owns goes through
 //     `WebhookManager.ingest(id, event, eventId)`, so filters (the watched
@@ -55,7 +57,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
-import { PRODUCT_KEY_PREFIX, VOICE_LINE_KEY } from "../../shared/fix-card-keys.ts";
+import { HOST_KEY_PREFIX, PRODUCT_KEY_PREFIX, VOICE_LINE_KEY } from "../../shared/fix-card-keys.ts";
 import type { SignalLevel } from "../../shared/signal-levels.ts";
 import type { NormalizedTriggerEvent } from "../../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
@@ -77,7 +79,7 @@ const REASON_MAX = 1_000;
 /** The key of a product's fix card: `product:<api id>`; of the person's
  * phone line fix card (one line per person): `voice-line`
  * (shared/fix-card-keys.ts, the one list of the server's card keys). */
-export { PRODUCT_KEY_PREFIX, VOICE_LINE_KEY };
+export { HOST_KEY_PREFIX, PRODUCT_KEY_PREFIX, VOICE_LINE_KEY };
 export const productFixKey = (api: string): string => `${PRODUCT_KEY_PREFIX}${api}`;
 /** The key of a watched resource's change: `watch:<uri>`. */
 export const WATCH_KEY_PREFIX = "watch:";
@@ -89,16 +91,17 @@ const URI = /^perspicax:\/\/\S{1,188}$/i;
 
 const productSubject = z.object({ type: z.literal("product"), api: z.string().regex(API_ID) }).passthrough();
 const voiceSubject = z.object({ type: z.literal("voice_line"), line: oneLine(128).optional(), number: oneLine(32).optional() }).passthrough();
+const hostSubject = z.object({ type: z.literal("host"), host: z.string().regex(API_ID), hostname: oneLine(256).refine((value) => value.trim().length > 0) }).passthrough();
 const resourceSubject = z.object({ type: z.literal("resource"), uri: z.string().regex(URI) }).passthrough();
 
 const eventSchema = z.object({
   contract: z.literal(PERSPICAX_EVENTS_CONTRACT),
   eventId: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/),
-  kind: z.enum(["product_health", "voice_line", "resource_changed"]),
+  kind: z.enum(["product_health", "voice_line", "host_presence", "resource_changed"]),
   person: z.string().min(1).max(256),
   key: oneLine(256).refine((value) => value.trim().length > 0),
   level: z.enum(["fyi", "card", "urgent"]),
-  subject: z.union([productSubject, voiceSubject, resourceSubject]),
+  subject: z.union([productSubject, voiceSubject, hostSubject, resourceSubject]),
   from: oneLine(64).nullable().optional(),
   to: oneLine(64),
   reason: z.string().max(REASON_MAX).optional().default(""),
@@ -107,13 +110,14 @@ const eventSchema = z.object({
 
 export interface PerspicaxEvent {
   eventId: string;
-  kind: "product_health" | "voice_line" | "resource_changed";
+  kind: "product_health" | "voice_line" | "host_presence" | "resource_changed";
   person: string;
   key: string;
   level: SignalLevel;
   subject:
     | { type: "product"; api: string }
     | { type: "voice_line"; line?: string; number?: string }
+    | { type: "host"; host: string; hostname: string }
     | { type: "resource"; uri: string };
   from: string | null;
   to: string;
@@ -135,6 +139,9 @@ export function parsePerspicaxEvent(value: unknown): PerspicaxEvent | null {
   } else if (body.kind === "voice_line") {
     if (subject.type !== "voice_line" || body.key !== VOICE_LINE_KEY) return null;
     clean = { type: "voice_line", ...(subject.line ? { line: subject.line } : {}), ...(subject.number ? { number: subject.number } : {}) };
+  } else if (body.kind === "host_presence") {
+    if (subject.type !== "host" || body.key !== `${HOST_KEY_PREFIX}${subject.host}` || !["online", "shut_down", "lost", "gone"].includes(body.to)) return null;
+    clean = { type: "host", host: subject.host, hostname: subject.hostname };
   } else {
     if (subject.type !== "resource" || body.key !== `${WATCH_KEY_PREFIX}${subject.uri}`) return null;
     clean = { type: "resource", uri: subject.uri };
@@ -155,8 +162,8 @@ export function parsePerspicaxEvent(value: unknown): PerspicaxEvent | null {
 }
 
 /** The good state of a health event's key. */
-export function healthGood(kind: "product_health" | "voice_line"): string {
-  return kind === "product_health" ? "healthy" : "live";
+export function healthGood(kind: "product_health" | "voice_line" | "host_presence"): string {
+  return kind === "host_presence" ? "online" : kind === "product_health" ? "healthy" : "live";
 }
 
 /** The state that retires a key: the product is no longer the person's to
@@ -164,7 +171,7 @@ export function healthGood(kind: "product_health" | "voice_line"): string {
 export const HEALTH_GONE = "gone";
 
 /** True when the state needs a fix: neither the good state nor `gone`. */
-export function healthFailing(kind: "product_health" | "voice_line", state: string): boolean {
+export function healthFailing(kind: "product_health" | "voice_line" | "host_presence", state: string): boolean {
   return state !== healthGood(kind) && state !== HEALTH_GONE;
 }
 
@@ -176,9 +183,11 @@ export interface ProductHealthChange {
    * the one with the newest time, and the same event is applied once. */
   eventId: string;
   at: string;
-  kind: "product_health" | "voice_line";
+  kind: "product_health" | "voice_line" | "host_presence";
   /** The product's api id (product_health). */
   api?: string;
+  host?: string;
+  hostname?: string;
   /** The line's number, as the organization server sent it (voice_line). */
   number?: string;
   failing: boolean;
@@ -197,6 +206,7 @@ export function healthChangeOf(event: PerspicaxEvent, principalId: string): Prod
     at: event.at,
     kind: event.kind,
     ...(subject.type === "product" ? { api: subject.api } : {}),
+    ...(subject.type === "host" ? { host: subject.host, hostname: subject.hostname } : {}),
     ...(subject.type === "voice_line" && subject.number ? { number: subject.number } : {}),
     failing: healthFailing(event.kind, event.to),
     state: event.to,

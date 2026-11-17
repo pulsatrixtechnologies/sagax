@@ -33,6 +33,7 @@ import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 import { claudeAiCallIsApproved, claudeAiCallResult, claudeAiPinnedPrompt, claudeAiServerStatus, claudeAiToolId } from "../providers/claude-ai.ts";
 import type { ConnectorAccount, ConnectorEntry } from "../types.ts";
 import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult, ConnectorHostUsage } from "./types.ts";
+import { connectorCallDeadline } from "./call-deadline.ts";
 
 /** The person's own Claude CLI on one sign-in: its command and environment
  * (CLAUDE_CONFIG_DIR in that sign-in's folder). */
@@ -56,7 +57,6 @@ export interface ClaudeConnectorHostDeps {
 }
 
 export const CLAUDE_CONNECTOR_MODEL = "haiku";
-const CALL_TIMEOUT_MS = 90_000;
 /** The permission prompt tool's server, as the turn mounts it. */
 const PROMPT_SERVER = "ogb";
 const PROMPT_TOOL = `mcp__${PROMPT_SERVER}__approve`;
@@ -174,7 +174,6 @@ export function claudePinnedUsage(stdout: string, fallbackModel: string): Connec
 
 export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): ConnectorHost {
   const gate = deps.gate ?? (<T>(label: string, run: () => Promise<T>) => engineStartGate.run("probe", label, run));
-  const timeoutMs = deps.timeoutMs ?? CALL_TIMEOUT_MS;
   const running = new Set<PinnedClaudeChild>();
 
   async function call(request: ConnectorHostCall): Promise<ConnectorHostResult> {
@@ -224,17 +223,18 @@ export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): Connec
       writeFileSync(settings, JSON.stringify(claudeConnectorHostSettings(toolId)), { mode: 0o600 });
       const args = claudeConnectorHostArgs({ mcpConfig, settings }, deps.model);
       const env = claudeConnectorHostEnv(launch.env);
-      const stdout = await gate(`${launch.cli} -p (connector call)`, () => runPinnedClaudeCall({
+      const deadline = connectorCallDeadline(request.tool, deps.timeoutMs);
+      const stdout = await deadline.run(() => gate(`${launch.cli} -p (connector call)`, () => runPinnedClaudeCall({
         cli: launch.cli,
         args,
         env,
         cwd: staging,
         prompt: claudeAiPinnedPrompt(toolId, input),
-        timeoutMs,
+        timeoutMs: deadline.remaining(),
         label: name,
         ...(deps.spawn ? { spawn: deps.spawn } : {}),
         onChild: (child, alive) => { if (alive) running.add(child); else running.delete(child); },
-      }));
+      })));
       const read = claudeAiCallResult(stdout.out, toolId);
       // #3357: the pinned round's own usage, for the calling thread
       const usage = claudePinnedUsage(stdout.out, deps.model ?? CLAUDE_CONNECTOR_MODEL);
@@ -256,7 +256,7 @@ export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): Connec
         // ran without passing the check: never reported as the approved call
         return { ...(usage ? { usage } : {}), text: `Claude ran ${toolId} without the check of the approved call, so its result is not used.`, isError: true };
       }
-      if (stdout.error && stdout.error.endsWith("timed out")) return { text: `${name} did not answer in time, so its result is unknown.`, isError: true };
+      if (stdout.error && stdout.error.endsWith("timed out")) return { text: `${name} timed out before answering, so its result is unknown.`, isError: true };
       const status = claudeAiServerStatus(read.reading.servers, name);
       const said = read.reading.finalText.trim();
       if ((status && /needs.?auth/i.test(status)) || connectorReauthFailure(toolId, said) || /not logged in|please run \/login|invalid api key/i.test(said)) return signIn(name);

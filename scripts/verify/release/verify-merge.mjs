@@ -66,6 +66,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { pruneTestTemps } from "../../testing/test-temp.mjs";
 import { catalogPlan, existingGuardTests } from "./guard-tests.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -373,6 +374,7 @@ function main() {
   // Before any git call or child process: a pre-push hook exports GIT_DIR and
   // friends; leaving them set lets a test commit into the branch being pushed.
   sanitizeGitEnv(process.env);
+  pruneTestTemps();
   const options = parseArgs(process.argv.slice(2));
   const { changed, tests, related: relatedAll, cut, dependentNotes, electronTests, ios } = plan(options);
   const guards = existingGuardTests(ROOT);

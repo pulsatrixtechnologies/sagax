@@ -524,7 +524,7 @@ final class Session: ObservableObject {
         }
         if (arguments.contains("-store-preview") || arguments.contains("-computer-switcher-preview")),
            let url = Bundle.main.url(
-               forResource: arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-phone-line-preview") ? "PhoneLinePreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
+               forResource: arguments.contains("-form-cards-preview") ? "FormCardsPreview" : arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-phone-line-preview") ? "PhoneLinePreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
                withExtension: "json"
            ),
            let data = try? Data(contentsOf: url),
@@ -694,6 +694,41 @@ final class Session: ObservableObject {
                 state.activeLeafIds[thread] = preview.rows.last?.id
                 state.bots[index].busy = false
                 waitingLists["preview-scout"] = preview.waiting
+            }
+            // #4490 captures: the form cards chat up to one of its rows
+            if let at = arguments.firstIndex(of: "-form-cards-until"), arguments.indices.contains(at + 1),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }),
+               let rows = state.messages[state.bots[index].threadId],
+               let end = rows.firstIndex(where: { $0.id == arguments[at + 1] }) {
+                // `-form-cards-alone`: just that card under the first message
+                state.messages[state.bots[index].threadId] = arguments.contains("-form-cards-alone")
+                    ? [rows[0], rows[end]] : Array(rows[...end])
+                state.bots[index].activeLeafId = rows[end].id
+                state.activeLeafIds[state.bots[index].threadId] = rows[end].id
+            }
+            // #4490 checks: a bot message arrives while a person is typing in a form
+            if let at = arguments.firstIndex(of: "-form-cards-incoming"), arguments.indices.contains(at + 1),
+               let seconds = Double(arguments[at + 1]),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }) {
+                let thread = state.bots[index].threadId
+                let json = #"{"role":"bot","kind":"text","text":"A new message while you fill the form in.","id":"f-incoming","at":1787030000000,"parentId":"f-user"}"#
+                // the message comes `seconds` after a field takes the keyboard
+                // (a slow run cannot deliver it before the person types)
+                func deliver(waited: Double) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        guard let self else { return }
+                        guard FormCardStore.shared.isEditing || waited > 300 else { return deliver(waited: waited + 0.5) }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                            guard let self, var message = try? JSONDecoder().decode(Message.self, from: Data(json.utf8)) else { return }
+                            // a child of the last row, or the card would leave the active branch
+                            message.parentId = self.state.messages[thread]?.last?.id
+                            self.state.messages[thread, default: []].append(message)
+                            self.state.bots[index].activeLeafId = message.id
+                            self.state.activeLeafIds[thread] = message.id
+                        }
+                    }
+                }
+                deliver(waited: 0)
             }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).

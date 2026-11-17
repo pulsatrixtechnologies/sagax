@@ -21,6 +21,8 @@ struct QuestionCardView: View {
     @Environment(\.themePalette) var themePalette
     let chat: Chat
     let message: Message
+    /// #4490: a pending form is drawn as pieces by the transcript; this row is its head.
+    var splitHead = false
     @EnvironmentObject private var session: Session
 
     /// Per question: the option keys ticked (id ?? label), and the free-text reply.
@@ -78,7 +80,10 @@ struct QuestionCardView: View {
 
     var body: some View {
         if let card, !questions.isEmpty {
-            if settled {
+            if isFormCard(questions) {
+                // #4490: a form or a checklist, a row per question
+                if splitHead { FormSplitHead(chat: chat, message: message) } else { FormCardView(chat: chat, message: message) }
+            } else if settled {
                 settledCard(card)
             } else if let current {
                 pendingCard(card, current)

@@ -444,38 +444,58 @@ From those answers:
 An "always" answer is the person's, never the routine's text:
 
 - It lives in the same signal ledger as the answers: one entry of kind
-  `card-always` per person, routine and card kind (key `always:<routine>:<kind>`,
-  the answer in `answer`, the kind in `label`, when it was chosen in
-  `answeredAt`). A new click on the same kind replaces it. It is never
-  written into the routine's instructions, which stay the author's text (a
-  person's, or a plugin's that keeps its routine up to date).
-- A run's prompt reads it with the answers (`answerLearningNote`), by card
-  kind, never by one card's question: "kind `ticket`: always `Approve`",
-  with the rule to act on that answer for an item of that kind without
-  raising its card, and to say what it did in the run's result. The choice
-  never widens what the routine may do.
-- The offer is not made again for a kind that has one, and never on a card
-  that offers its own "always" choice: an option label holding the word
-  "always" or "toujours" ("Always allow", "Toujours permettre")
-  (`cardOffersAlways`). The labels are the one thing every card carries,
-  whatever raised it, so one check covers a bot's card and a server's.
-- The routine's page lists them in its Settings tab, under "Always answers"
-  (card kind, when it was chosen, the answer, Remove). Nothing shows when
-  there is none. `GET /api/routines/:id/always-choices` lists them and
-  `DELETE /api/routines/:id/always-choices/:kind` removes one, for the
+  `card-always` per person, routine, card kind and options (key
+  `always:<routine>:<id>`, the id a hash of the kind and the card's options
+  without the learned "always" option; the answer in `answer`, the kind in
+  `label`, the card's question and options in `card`, when it was chosen in
+  `answeredAt`). A new click on the same kind and options replaces it. It is
+  never written into the routine's instructions, which stay the author's
+  text (a person's, or a plugin's that keeps its routine up to date).
+- It covers one kind with the same options only: a plugin that keys
+  `ticket-1012` "Place with whom? Bob / Ann" and `ticket-1013` "Close? Close /
+  Keep" has two questions of the kind `ticket`; "always Bob" never covers the
+  close card, which is raised as usual and can get its own offer.
+- A run's prompt reads it with the answers (`answerLearningNote`): the kind
+  and the options the card offered (`kind "ticket", a card offering "Bob" /
+  "Ann": always "Bob"`), never one card's question, except for a card keyed
+  by its words (`ask-<hash>`, the key the bot never saw), named by its
+  question. The run acts on that answer for a card of that kind offering
+  those options without raising it, says what it did in the run's result,
+  and raises a card of the same kind with other options as usual. The
+  choice never widens what the routine may do.
+- The offer is made only when the repeated answer is one of the card's
+  options, not again for a kind and options that have a choice, and never on
+  a card that offers its own "always" choice: an option label holding
+  "always" in one of the app's languages ("Always allow", "Toujours
+  permettre", "Immer erlauben", "Permitir siempre", "Sempre permitir",
+  "Завжди дозволяти", "हमेशा अनुमति दें", "常に許可", "始终允许", "一律允許"), never
+  "Not always" nor "Always-on" (`cardOffersAlways`). An ask_choice card
+  carries no other sign of it, whatever raised it.
+- The routine's page lists them in its Settings tab, under "Always answers",
+  before More (the card's question, the options it offered, when it was
+  chosen, the answer, Remove), never a key. Nothing shows when there is
+  none. `GET /api/routines/:id/always-choices` lists them and
+  `DELETE /api/routines/:id/always-choices/:id` removes one for good, for the
   routine's person only (another person, an admin included, gets 404).
-- Once at start, the lines an older version wrote into instructions
-  (`Always for "<question>" (key <kind>): <answer>. ...` and its French
-  words) move to the ledger and leave the instructions with the blank line
-  before them; every other line stays as it was. Instructions made only of
-  such lines keep them (a routine needs words), the choice is kept anyway.
+- Once at start, the lines an older version wrote into instructions, in
+  their full words only (`Always for "<question>" (key <kind>): <answer>.
+  The person chose this on a card: do it without asking.` and its French
+  words), move to the ledger (their options unknown: the run reads their
+  question) and leave the instructions with the blank line before them;
+  every other line stays as it was, a line the author wrote in their own
+  words included. Instructions made only of such lines keep the neutral
+  words "Follow the person's standing choices for this routine's cards."
+  Two lines of one kind: the later, newest one wins. Each line moved is
+  marked in the ledger (kind `card-always-moved`), so a removed choice never
+  comes back from a line a failed write left.
 
-Never an automatic answer: every card stays the person's to answer, except
-a kind the person chose "always" for, which the run follows.
+A card is the person's to answer: a run never answers one for them, except a
+card of a kind and options the person chose "always" for, which it follows.
 
 Tests: `server/proactive/answer-learning.test.ts` (prompt section, the
-card's order and offer, the click that keeps the choice, a card with its
-own "always", the move of the old lines, a restart) and
+card's order and offer, the click that keeps the choice, other options of one
+kind, a card keyed by its words, a card with its own "always", the move of
+the old lines, Remove for good, a restart) and
 `server/routes/routine-always-choices.test.ts` (list, remove, another
 person).
 

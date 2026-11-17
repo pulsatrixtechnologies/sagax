@@ -39,8 +39,8 @@ if (params.get("advanced") === "1") {
 }
 
 let alwaysChoices = [
-  { kind: "ticket", answer: "Approuver", at: Date.now() - 2 * 86_400_000 },
-  { kind: "inbox-review", answer: "Archiver sans réponse", at: Date.now() - 6 * 86_400_000 },
+  { id: "0123456789abcdef", answer: "Approuver", question: "Approuver cette entrée de temps ?", options: ["Approuver", "Refuser", "Corriger"], at: Date.now() - 2 * 86_400_000 },
+  { id: "fedcba9876543210", answer: "Archiver sans réponse", question: "Que faire de ce courriel de l'infolettre ?", options: [], at: Date.now() - 6 * 86_400_000 },
 ];
 const realFetch = window.fetch.bind(window);
 (window as unknown as { __routinePatches: unknown[] }).__routinePatches = [];
@@ -59,8 +59,8 @@ window.fetch = async (input, init) => {
   if (/\/api\/routines\/routine-1\/always-choices/.test(url)) {
     const choices = params.get("always") === "1" ? alwaysChoices : [];
     if (method === "DELETE") {
-      const kind = decodeURIComponent(url.split("/always-choices/")[1] ?? "");
-      alwaysChoices = alwaysChoices.filter((choice) => choice.kind !== kind);
+      const id = url.split("/always-choices/")[1] ?? "";
+      alwaysChoices = alwaysChoices.filter((choice) => choice.id !== id);
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
     }
     return new Response(JSON.stringify({ choices }), { status: 200, headers: { "content-type": "application/json" } });

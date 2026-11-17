@@ -16868,7 +16868,8 @@ function learnFromKeyedCard(threadId: string, messageId: string, key: string, me
   }
   const scope = keyedCardScope(threadId, message);
   if (!scope) return;
-  learnFromAnsweredCard(signalLedger, scope, { askKey: key, threadId, messageId, answer, ...(card.answerLearning ? { learning: card.answerLearning } : {}) });
+  const question = card.questionRequest?.questions?.[0]?.question || card.subtitle || card.title || "";
+  learnFromAnsweredCard(signalLedger, scope, { askKey: key, threadId, messageId, answer, question, options: card.options ?? [], ...(card.answerLearning ? { learning: card.answerLearning } : {}) });
 }
 
 /** #4250 (S7): a routine run's keyed cards learn from the person's answers
@@ -16882,7 +16883,7 @@ function routineAnswerLearning(threadId: string): Parameters<typeof createAgentC
   return {
     routineId: routine.id,
     answers: (key) => answersOnKind(signalLedger, scope, key),
-    always: (kind) => alwaysChoiceOn(signalLedger, scope, kind),
+    always: (kind, options) => alwaysChoiceOn(signalLedger, scope, kind, options),
     language: personLanguageCode(languageOfPerson(scope.person || undefined)),
   };
 }
@@ -30320,7 +30321,7 @@ ROUTES.push(createRoutineAlwaysChoicesRoutes({
     return routine ? routineAnswerScope(routine) : undefined;
   },
   list: (scope) => alwaysChoices(signalLedger, scope),
-  forget: (scope, kind) => forgetAlwaysChoice(signalLedger, scope, kind),
+  forget: (scope, id) => forgetAlwaysChoice(signalLedger, scope, id),
 }));
 ROUTES.push(createRoutineAwayRoutes<Routine>({
   organization: () => IDENTITY.kind === "perspicax",

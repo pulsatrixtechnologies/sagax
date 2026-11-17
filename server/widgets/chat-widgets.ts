@@ -213,9 +213,9 @@ export function createAgentCard(args: {
     routineId: string;
     /** The person's answers on the kind of `key` in this routine, or null. */
     answers(key: string): KindAnswers | null;
-    /** #4558: the person's "always" choice on this card kind in this
-     * routine (kept in their signal ledger), or null. */
-    always(kind: string): AlwaysChoice | null;
+    /** #4558: the person's "always" choice on this card kind and these
+     * options in this routine (kept in their signal ledger), or null. */
+    always(kind: string, options: readonly string[]): AlwaysChoice | null;
     language: LearningLanguage;
   };
   /** #2048: availability and remembered default for choose_page_target. */
@@ -463,7 +463,7 @@ function learnCard(
   value: { subtitle: string; options: string[]; details?: (string | undefined)[] },
 ): { answerLearning?: CardAnswerLearning } {
   const answers = learning.answers(askKey);
-  const always = alwaysOffer(answers, { options: value.options, chosen: learning.always(cardKindOf(askKey)), language: learning.language });
+  const always = alwaysOffer(answers, { options: value.options, chosen: learning.always(cardKindOf(askKey), value.options), language: learning.language });
   const next = learnedOptions(value.options, value.details, answers?.usual, always, OPTIONS_CARD_LIMITS.maxOptions);
   value.options = next.options;
   if (next.details) value.details = next.details;

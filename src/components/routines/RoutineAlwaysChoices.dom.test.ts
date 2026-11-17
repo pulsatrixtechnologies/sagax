@@ -6,7 +6,7 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ calls: [] as string[], choices: [] as Array<{ kind: string; answer: string; at: number }> }));
+const fixture = vi.hoisted(() => ({ calls: [] as string[], choices: [] as Array<{ id: string; answer: string; question: string; options: string[]; at: number }> }));
 vi.mock("@/state/store", async (load) => {
   const original = await load<typeof import("@/state/store")>();
   return { ...original, api: vi.fn(async (path: string, init?: { method?: string }) => {
@@ -29,19 +29,25 @@ async function settle(): Promise<void> {
 
 describe("the routine page's \"always\" answers (#4558)", () => {
   it("lists each card kind with its answer and removes one", async () => {
-    fixture.choices = [{ kind: "ticket", answer: "Approuver", at: Date.UTC(2026, 10, 17, 15) }, { kind: "inbox-review", answer: "Archiver", at: Date.UTC(2026, 10, 16, 15) }];
+    fixture.choices = [
+      { id: "0123456789abcdef", answer: "Approuver", question: "Approuver cette entrée de temps ?", options: ["Approuver", "Refuser"], at: Date.UTC(2026, 10, 17, 15) },
+      { id: "fedcba9876543210", answer: "Archiver", question: "Archiver ce courriel ?", options: [], at: Date.UTC(2026, 10, 16, 15) },
+    ];
     await act(async () => { root.render(createElement(RoutineAlwaysChoices, { routineId: "r1" })); });
     await settle();
     expect(fixture.calls).toEqual(["GET /api/routines/r1/always-choices"]);
     expect(host.querySelector("h3")?.textContent).toBe("Réponses « toujours »");
     const rows = [...host.querySelectorAll("[data-routine-always-choice]")];
-    expect(rows.map((row) => row.getAttribute("data-routine-always-choice"))).toEqual(["ticket", "inbox-review"]);
-    expect(rows[0]!.textContent).toContain("Approuver");
+    expect(rows.map((row) => row.getAttribute("data-routine-always-choice"))).toEqual(["0123456789abcdef", "fedcba9876543210"]);
+    // the question and the options in words, never a key
+    expect(rows[0]!.textContent).toContain("Approuver cette entrée de temps ?");
+    expect(rows[0]!.textContent).toContain("Approuver · Refuser");
     expect(rows[0]!.textContent).toContain("Choisie le");
+    expect(host.textContent).not.toMatch(/ticket|0123456789abcdef/);
     await act(async () => { (rows[0]!.querySelector("[data-routine-always-remove]") as HTMLButtonElement).click(); });
     await settle();
-    expect(fixture.calls).toContain("DELETE /api/routines/r1/always-choices/ticket");
-    expect([...host.querySelectorAll("[data-routine-always-choice]")].map((row) => row.getAttribute("data-routine-always-choice"))).toEqual(["inbox-review"]);
+    expect(fixture.calls).toContain("DELETE /api/routines/r1/always-choices/0123456789abcdef");
+    expect([...host.querySelectorAll("[data-routine-always-choice]")].map((row) => row.getAttribute("data-routine-always-choice"))).toEqual(["fedcba9876543210"]);
   });
 
   it("shows nothing when the person has no \"always\" answer", async () => {

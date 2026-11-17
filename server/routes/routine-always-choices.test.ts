@@ -38,21 +38,22 @@ async function serve(auth: RequestAuth, choices: Map<string, AlwaysChoice>) {
 
 describe("/api/routines/:id/always-choices (#4558)", () => {
   it("lists the person's choices and removes one", async () => {
-    const choices = new Map<string, AlwaysChoice>([["ticket:review", { kind: "ticket:review", answer: "Approve", at: 5 }]]);
+    const choice: AlwaysChoice = { id: "0123456789abcdef", kind: "ticket", answer: "Approve", question: "Approve?", options: ["Approve", "Refuse"], at: 5 };
+    const choices = new Map<string, AlwaysChoice>([[choice.id, choice]]);
     const call = await serve(session("PR_owner"), choices);
-    expect(await call("GET", "/api/routines/r1/always-choices")).toEqual({ status: 200, body: { choices: [{ kind: "ticket:review", answer: "Approve", at: 5 }] } });
-    expect(await call("DELETE", `/api/routines/r1/always-choices/${encodeURIComponent("ticket:review")}`)).toEqual({ status: 200, body: { ok: true } });
+    expect(await call("GET", "/api/routines/r1/always-choices")).toEqual({ status: 200, body: { choices: [choice] } });
+    expect(await call("DELETE", "/api/routines/r1/always-choices/0123456789abcdef")).toEqual({ status: 200, body: { ok: true } });
     expect(choices.size).toBe(0);
-    expect((await call("DELETE", "/api/routines/r1/always-choices/ticket")).status).toBe(404);
+    expect((await call("DELETE", "/api/routines/r1/always-choices/0123456789abcdef")).status).toBe(404);
     expect((await call("GET", "/api/routines/r2/always-choices")).status).toBe(404);
   });
 
   it("never shows nor removes another person's choices, an admin's view included", async () => {
-    const choices = new Map<string, AlwaysChoice>([["ticket", { kind: "ticket", answer: "Approve", at: 5 }]]);
+    const choices = new Map<string, AlwaysChoice>([["0123456789abcdef", { id: "0123456789abcdef", kind: "ticket", answer: "Approve", question: "Approve?", options: [], at: 5 }]]);
     for (const auth of [session("pr_other"), session("pr_admin", ["client", "admin"])]) {
       const call = await serve(auth, choices);
       expect((await call("GET", "/api/routines/r1/always-choices")).status).toBe(404);
-      expect((await call("DELETE", "/api/routines/r1/always-choices/ticket")).status).toBe(404);
+      expect((await call("DELETE", "/api/routines/r1/always-choices/0123456789abcdef")).status).toBe(404);
     }
     expect(choices.size).toBe(1);
   });

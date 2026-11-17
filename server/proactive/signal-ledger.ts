@@ -55,6 +55,14 @@ export interface SignalEntry {
   label?: string;
   /** Where the item lives (a card's conversation and request). */
   ref?: { threadId: string; requestId?: string };
+  /** #4558: the card an entry is about, in the person's words: its
+   * question and options (a person's "always" answer names them). */
+  card?: SignalCardWords;
+}
+
+export interface SignalCardWords {
+  question: string;
+  options: string[];
 }
 
 export interface SignalNote {
@@ -64,6 +72,21 @@ export interface SignalNote {
   bot?: string;
   label?: string;
   ref?: { threadId: string; requestId?: string };
+  card?: SignalCardWords;
+}
+
+const CARD_QUESTION_MAX = 300;
+const CARD_OPTION_MAX = 120;
+const CARD_OPTIONS_MAX = 12;
+
+function cardWords(value: unknown): SignalCardWords | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as { question?: unknown; options?: unknown };
+  if (typeof raw.question !== "string" || !Array.isArray(raw.options)) return undefined;
+  return {
+    question: raw.question.slice(0, CARD_QUESTION_MAX),
+    options: raw.options.filter((option): option is string => typeof option === "string").slice(0, CARD_OPTIONS_MAX).map((option) => option.slice(0, CARD_OPTION_MAX)),
+  };
 }
 
 export interface SignalLedgerStorage {
@@ -157,6 +180,8 @@ export class SignalLedger {
       known.count += 1;
       if (note.label) known.label = note.label.slice(0, 160);
       if (note.ref) known.ref = note.ref;
+      const card = cardWords(note.card);
+      if (card) known.card = card;
       this.changed(person, known.kind);
       return { entry: known, fresh: false };
     }
@@ -165,6 +190,7 @@ export class SignalLedger {
       firstAt: at, lastAt: at, count: 1, channels: [], state: "open",
       ...(note.label ? { label: note.label.slice(0, 160) } : {}),
       ...(note.ref ? { ref: note.ref } : {}),
+      ...(cardWords(note.card) ? { card: cardWords(note.card)! } : {}),
     };
     book.set(id(bot, note.key), entry);
     this.changed(person, entry.kind);
@@ -319,6 +345,7 @@ function readEntry(value: unknown): SignalEntry | null {
     ...(Number.isFinite(raw.reminded) ? { reminded: raw.reminded as number } : {}),
     ...(typeof raw.label === "string" ? { label: raw.label } : {}),
     ...(ref ? { ref } : {}),
+    ...(cardWords(raw.card) ? { card: cardWords(raw.card)! } : {}),
   };
 }
 

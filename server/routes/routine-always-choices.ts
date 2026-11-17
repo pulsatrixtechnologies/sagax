@@ -3,9 +3,11 @@
 // in the routine's instructions.
 //
 //   GET    /api/routines/:id/always-choices
-//          { choices: [{ kind, answer, at }] }, newest first.
-//   DELETE /api/routines/:id/always-choices/:kind
-//          The person removes one ({ ok: true }); 404 when there is none.
+//          { choices: [{ id, kind, answer, question, options, at }] },
+//          newest first.
+//   DELETE /api/routines/:id/always-choices/:choiceId
+//          The person removes one for good ({ ok: true }); 404 when there
+//          is none.
 //
 // Only the person the choices belong to (the routine's person) reads or
 // removes them; anyone else gets 404, as for a routine they cannot see.
@@ -17,11 +19,11 @@ export interface RoutineAlwaysChoicesRouteDeps {
   /** The routine's answer scope (its person, bot and id), or undefined. */
   scopeOf(routineId: string): AnswerScope | undefined;
   list(scope: AnswerScope): AlwaysChoice[];
-  forget(scope: AnswerScope, kind: string): boolean;
+  forget(scope: AnswerScope, choiceId: string): boolean;
 }
 
 const LIST = /^\/api\/routines\/([\w-]{1,128})\/always-choices$/;
-const ONE = /^\/api\/routines\/([\w-]{1,128})\/always-choices\/([^/]{1,600})$/;
+const ONE = /^\/api\/routines\/([\w-]{1,128})\/always-choices\/([0-9a-f]{16})$/;
 
 /** The scope when this caller is the routine's person: the signed-in
  * person, or the local server's own (loopback). Never another person's
@@ -31,10 +33,6 @@ function scopeFor(deps: RoutineAlwaysChoicesRouteDeps, auth: RequestAuth, routin
   if (!scope || auth.kind !== "session") return scope;
   const viewer = auth.session.principalId?.trim().toLowerCase();
   return viewer && scope.person.trim().toLowerCase() === viewer ? scope : undefined;
-}
-
-function decoded(part: string): string | null {
-  try { return decodeURIComponent(part); } catch { return null; }
 }
 
 export function createRoutineAlwaysChoicesRoutes(deps: RoutineAlwaysChoicesRouteDeps): RouteHandler {
@@ -49,8 +47,7 @@ export function createRoutineAlwaysChoicesRoutes(deps: RoutineAlwaysChoicesRoute
     if (one && method === "DELETE") {
       const scope = scopeFor(deps, auth, one[1]!);
       if (!scope) return json(res, 404, { error: "Routine not found" });
-      const kind = decoded(one[2]!);
-      if (!kind || !deps.forget(scope, kind)) return json(res, 404, { error: "No such choice" });
+      if (!deps.forget(scope, one[2]!)) return json(res, 404, { error: "No such choice" });
       return json(res, 200, { ok: true });
     }
     return PASS;

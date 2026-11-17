@@ -63,6 +63,9 @@ final class FormCardTallRowUITests: XCTestCase {
 
     func testALongOlderMessageRenders() {
         let app = launch(until: "f-long-text")
+        defer { add(XCTAttachment(screenshot: app.screenshot())) }
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Here is a very long note'")).firstMatch.waitForExistence(timeout: 25))
+        sleep(2)
+        XCTAssertGreaterThan(FormCardTallRowUITests.distinctColours(app), 3, "the chat is blank: one flat colour where the message should be")
     }
 }

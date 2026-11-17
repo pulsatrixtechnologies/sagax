@@ -270,7 +270,7 @@ struct MacMessagesSetupView: View {
                 .disabled(busy)
                 .accessibilityIdentifier("mac-messages-enable")
             }
-            Text(String(localized: "Sends still follow your approval rules and each bot's allowed recipients. Turn this off anytime."))
+            Text(String(localized: "What changes something follows each bot's Before it acts setting and your rules."))
                 .font(.caption)
                 .foregroundStyle(Theme.textSecondary)
         }

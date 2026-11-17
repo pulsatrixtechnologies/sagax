@@ -46,7 +46,7 @@ describe("chat rows guard", () => {
   });
 
   it("gives every card of a chat the approval card's width: no cap of its own", () => {
-    expect(code("./AskCard.tsx")).toMatch(/className="w-full rounded-3xl bg-composer/);
+    expect(code("./AskCard.tsx")).toMatch(/ASK_CARD_SURFACE = "w-full rounded-3xl bg-composer/);
     expect(code("./ProactiveChoiceCard.tsx")).not.toContain("max-w-[600px]");
     expect(code("./QuestionSheet.tsx")).not.toMatch(/max-w-\[min\(80%/);
   });

@@ -1685,7 +1685,7 @@
   "Your Mac asks you to confirm each permission. Open System Settings, grant access to Sagax, then return here.": "connectApps.mac.messages.stepsHelp",
   "Sending goes through the Messages app on this Mac. Turn on Messages under Sagax in Privacy and Security, Automation.": "connectApps.mac.messages.automationBody",
   "Off until you turn it on. Your bots get read_messages and send_message only on this Mac after that.": "connectApps.mac.messages.enableHelp",
-  "Sends still follow your approval rules and each bot's allowed recipients. Turn this off anytime.": "connectApps.mac.messages.enableNote",
+  "What changes something follows each bot's Before it acts setting and your rules.": "connectApps.mac.messages.enableNote",
   "On for your bots on this Mac": "connectApps.mac.messages.rowOn",
   "Off until you turn it on": "connectApps.mac.messages.rowOff",
   "Messages stays on your own Mac app. An organization server never opens your chat.db.": "connectApps.mac.messages.unavailableOrg",

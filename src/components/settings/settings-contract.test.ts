@@ -50,9 +50,7 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
     "ServerModeSettings.tsx",
   ],
   roundedBorder: [
-    "settings/AccountCard.tsx",
     "settings/OrgSharing.tsx",
-    "settings/OwnAvatarField.tsx",
     "settings/ProviderKeys.tsx",
     "ConnectedWorkspacesSettings.tsx",
     "LiveCallSettings.tsx",

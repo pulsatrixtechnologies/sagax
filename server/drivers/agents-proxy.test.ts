@@ -783,6 +783,7 @@ describe("agents-proxy MCP surface", () => {
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -930,7 +931,7 @@ describe("agents-proxy MCP surface", () => {
       // #3377: connectors only lists; call_connector acts and stays unannotated.
       "connectors",
       "workspace_read", "workspace_search",
-      "session_search", "session_read",
+      "session_search", "session_read", "listening_read",
       "list_cloud_agents", "get_cloud_agent", "find_cloud_agent_by_pr", "cloud_agent_transcript", "list_cloud_agent_artifacts",
       "list_routines", "skills_list",
     ];

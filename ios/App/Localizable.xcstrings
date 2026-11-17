@@ -73622,18 +73622,18 @@
         }
       }
     },
-    "Sends still follow your approval rules and each bot's allowed recipients. Turn this off anytime.": {
+    "What changes something follows each bot's Before it acts setting and your rules.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sends still follow your approval rules and each bot's allowed recipients. Turn this off anytime."
+            "value": "What changes something follows each bot's Before it acts setting and your rules."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les envois suivent encore tes règles d'approbation et les destinataires permis de chaque bot. Tu peux désactiver ça en tout temps."
+            "value": "Ce qui change quelque chose suit le réglage Avant d'agir de chaque bot et tes règles."
           }
         }
       }

@@ -18,7 +18,7 @@ import { TEACH_TEXT_MAX, type TeachReplay, type TeachStep } from "../../shared/t
 import { readableError } from "@/lib/plain-error";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
-import { DetailPanel } from "./DetailPanel";
+import { DetailPanel, DetailPanelContent } from "./DetailPanel";
 import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 const input = "min-w-0 flex-1 rounded-md bg-inset px-2 py-1 text-[12px] outline-none focus:ring-1 focus:ring-accent";
@@ -211,12 +211,9 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
           onClose();
         }}
       >
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-hairline/40 pl-4 pr-2">
-          <h2 className="min-w-0 flex-1 truncate text-[16px] font-medium text-ink">{t("teach.title")}</h2>
-          <button type="button" data-teach-steps-close="" onClick={close} aria-label={t("teach.close")} title={t("teach.close")} className={iconButton}><X size={16} /></button>
-        </div>
-        {fields}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">{footer}</div>
+        <DetailPanelContent title={t("teach.title")} closeLabel={t("teach.close")} onClose={close} footer={footer}>
+          {fields}
+        </DetailPanelContent>
       </section>
     );
   }

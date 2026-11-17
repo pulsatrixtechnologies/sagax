@@ -4,8 +4,9 @@
 // request against, each with the method guard written beside it. Sagax routes
 // are code, not a registry, so this is the list of what the running server can
 // answer. scripts/tool-policy/tool-policy-coverage.test.ts holds every one to a
-// policy entry in server/tools/tool-policy.ts. server/auth/request-auth.ts, server/auth/client-allow.ts and
-// server/auth/admin-routes.ts are left out: their path rules are the auth gate, not routes.
+// policy entry in server/tools/tool-policy.ts. server/auth/request-auth.ts, server/auth/client-allow.ts,
+// server/auth/admin-routes.ts and server/bots/surface-bot-access.ts (#4592: which session may name a
+// person's surface bot, read by the request gate) are left out: their path rules are the auth gate, not routes.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -21,7 +22,7 @@ function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) return name === "testing" || name === "node_modules" ? [] : sources(full);
-    return /\.(ts|mts)$/.test(name) && name !== "request-auth.ts" && name !== "client-allow.ts" && name !== "admin-routes.ts" && !/\.test\.|\.e2e\./.test(name) && !name.endsWith(".d.ts") ? [full] : [];
+    return /\.(ts|mts)$/.test(name) && name !== "request-auth.ts" && name !== "client-allow.ts" && name !== "admin-routes.ts" && name !== "surface-bot-access.ts" && !/\.test\.|\.e2e\./.test(name) && !name.endsWith(".d.ts") ? [full] : [];
   });
 }
 

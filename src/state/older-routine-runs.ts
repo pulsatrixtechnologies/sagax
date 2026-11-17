@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import type { RoutineRun } from "@/lib/routines";
 import { api } from "./store/api";
@@ -17,6 +17,39 @@ export function useRoutineRunsFrom(start: number): void {
       .catch(() => {});
     return () => { live = false; };
   }, [start, since, dispatch]);
+}
+
+/** A trend needs each routine's last few runs, not every run of the weeks they span: this asks the range
+ * `start` to the app's window for just the newest `perRoutine` of each routine (an older server ignores that and
+ * answers the whole range, which still draws the same bars). The answer carries no range, so the app's window
+ * (`routineRunsSince`) stays where it is: a view that needs every run of a range still loads it.
+ * Asked once per `start` (the caller rounds it to the day); a failure is not retried until `start` changes.
+ * Returns "loading" until the answer lands. */
+export function useRoutineTrendRuns(start: number, perRoutine: number): "loading" | "ready" | "failed" {
+  const { state, dispatch } = useStore();
+  const since = state.routineRunsSince;
+  const done = useRef<{ key: string; result: "ready" | "failed" } | null>(null);
+  const key = `${start}:${since}`;
+  const settled = since !== null && done.current?.key === key ? done.current.result : null;
+  useEffect(() => {
+    if (since === null || done.current?.key === key) return;
+    let live = true;
+    api(`/api/routines?from=${start}&to=${since}&perRoutine=${perRoutine}`)
+      .then(({ runs }) => {
+        if (!live) return;
+        done.current = { key, result: "ready" };
+        // Dispatched even when empty: it is what redraws the caller with "ready".
+        dispatch({ type: "routineRunsLoaded", runs: Array.isArray(runs) ? runs : [] });
+      })
+      .catch(() => { if (live) { done.current = { key, result: "failed" }; dispatch({ type: "routineRunsLoaded", runs: [] }); } });
+    return () => { live = false; };
+  }, [key, start, since, perRoutine, dispatch]);
+  return settled ?? "loading";
+}
+
+/** Whether the runs from `start` are all held: the app's window reaches back that far. */
+export function useRoutineRunsCover(start: number): boolean {
+  return useStoreSelector((state) => state.routineRunsSince === null || start >= state.routineRunsSince);
 }
 
 /** The run that worked in this conversation; one older than the app's window is loaded when the thread is a run's. */

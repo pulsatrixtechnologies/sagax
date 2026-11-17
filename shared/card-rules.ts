@@ -50,9 +50,10 @@ const PICK_WORDS = [
 // sentence or after "or", "then", "please" ("the file type "pdf"" is no ask)
 const QUOTED_ANSWER = /(?:^|[.!?:;(\n]\s*|\b(?:or|ou|then|puis|please|just|simply|sinon)\s+)(?:reply|answer|respond|type|click|press|tap|hit|choose|r[\u00e9e]pond\w*|tape[sz]?|clique[sz]?|appuie[sz]?|choisis\w*)\b[^.\n?!"\u201c\u00ab]{0,20}["\u201c\u00ab]\s?([^"\u201d\u00bb\n]{1,40}?)\s?["\u201d\u00bb]/giu;
 // "Post selected sends them.": an action of two words or more named at a
-// sentence start, the sentence short ("Sales sends the weekly report on
-// Friday" is a fact; "Blog posts:" is a heading)
-const NAMED_ACTION = /(?:^|[.!?]\s+|\n\s*)(["“«]?)(\p{Lu}[\p{L}'’-]*(?:\s+[\p{L}'’-]+){0,3}?)["”»]?\s+(?:sends?|skips?|posts?|publishes|cancels?|discards?|envoie|publie|annule|ignore)\b(?=(?!\s*:)[^.!?\n]{0,20}(?:[.!?\n]|$))/gu;
+// sentence start, the verb ending the sentence or followed only by its
+// object pronoun ("Sales sends the weekly report on Friday", "Release notes
+// sends at 9" are facts; "Blog posts:" is a heading)
+const NAMED_ACTION = /(?:^|[.!?]\s+|\n\s*)(["“«]?)(\p{Lu}[\p{L}'’-]*(?:\s+[\p{L}'’-]+){0,3}?)["”»]?\s+(?:sends?|skips?|posts?|publishes|cancels?|discards?|envoie|publie|annule|ignore)\b(?=\s*(?:them|it|nothing|everything|all|those|these|les|rien|tout)?\s*(?:[.!?\n]|$))/gu;
 // "For each line say done, not done or move: a, b, c": one question asked of
 // several items is several questions
 const FOR_EACH = /\b(?:for each|for every|per (?:line|item|entry)|pour chaque|pour chacune?|chacune? (?:des|de ces))\b/iu;
@@ -105,13 +106,20 @@ function namedAnswersMissing(text: string, controls: ReadonlySet<string>): strin
   return [...missingStrong, ...(missingNamed.length >= 2 ? missingNamed : [])];
 }
 
+// what asks the person for an answer per item ("say", "tell me", "dis-moi")
+const ASKS_PER_ITEM = /\b(?:say|tell me|choose|pick|answer|reply|confirm|mark|dis|dites|choisis\w*|r[ée]ponds?|indique\w*|confirme\w*|pr[ée]cise\w*)\b/iu;
+// a word that makes a short clause a question without a question mark
+const ASKING_WORD = /\b(?:how|which|what|when|who|whether|or|combien|quel\w*|quand|qui|ou)\b/iu;
+
 /** How many items a "for each ... say" sentence covers: its listed lines,
- * or the comma list after its colon; 0 without "for each". */
+ * or the comma list after its colon; 0 without "for each", or when nothing
+ * is asked per item ("I ran the check for each server"). */
 function forEachItems(text: string): number {
   const body = plain(text);
   const at = body.search(FOR_EACH);
   if (at < 0) return 0;
   const sentence = body.slice(at).split(/[.!?](?:\s|$)/)[0] ?? "";
+  if (!ASKS_PER_ITEM.test(sentence)) return 0;
   const colon = sentence.indexOf(":");
   const inline = colon >= 0 ? sentence.slice(colon + 1).split(/\s*(?:,|;|\bet\b|\band\b)\s*/).filter((item) => item.trim()).length : 0;
   return Math.max(inline, listLines(body.slice(at)).length);
@@ -139,6 +147,11 @@ export function cardRuleBreak(card: CardShape): CardRuleBreak | null {
     const listed = lines.filter((line) => !ownChoice(line));
     const asked = listed.filter((line) => /\?["'”»)]?$/.test(line)).length;
     if (asked >= 2) return { rule: "several-questions", reason: `the text lists ${asked} questions, one per line` };
+    // questions in prose split by semicolons, with no question mark
+    // ("standup done or move; review how long; receipt which code")
+    const clauses = plain(text).replace(QUOTED_TEXT, " ").split(/\s*;\s*/).filter((clause) => clause.trim() && clause.trim().split(/\s+/).length <= 10);
+    const asking = clauses.filter((clause) => ASKING_WORD.test(clause)).length;
+    if (clauses.length >= 3 && asking >= 3) return { rule: "several-questions", reason: `the text asks ${asking} things, one per clause` };
     // "for each ... say": one question over several items
     const each = forEachItems(text);
     if (each >= 3) return { rule: "several-questions", reason: `the text asks the same question of ${each} items, one answer each` };

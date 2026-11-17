@@ -14,7 +14,7 @@ function harness(outcome: "answered" | "unavailable", generation: string) {
     askMessageByRequest: new Map(),
     directTurnGenerationByThread: new Map(),
     groupSpeakers: new Map(),
-    activeInternalGenerationByThread: new Map([["thread-r", generation]]),
+    activeInternalGenerationByThread: new Map(generation ? [["thread-r", generation]] : []),
     registry: { get: () => ({ adapter: { respondToRequest } }) },
   };
   const host = new Proxy(known, { get: (target, key: string) => (key in target ? target[key] : () => undefined) });
@@ -59,5 +59,20 @@ describe("an engine's badly made question (#4490 review)", () => {
     await settle();
     expect(h.respondToRequest).toHaveBeenCalledTimes(1);
     expect(h.cards()).toHaveLength(1);
+  });
+});
+
+describe("a thread with no current turn number (#4490 second review)", () => {
+  it("gives each new question its own one refusal, keyed on the request", async () => {
+    const h = harness("answered", "");
+    h.ask("r-5");
+    await settle();
+    h.ask("r-6");
+    await settle();
+    expect(h.respondToRequest).toHaveBeenCalledTimes(2);
+    // the same request raised again is not refused twice
+    h.ask("r-6");
+    await settle();
+    expect(h.respondToRequest).toHaveBeenCalledTimes(2);
   });
 });

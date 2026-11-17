@@ -191,3 +191,14 @@ describe("a duration of zero is no answer (#4490 review)", () => {
     expect(submit().disabled).toBe(false);
   });
 });
+
+describe("a row in words has no send of its own (#4490 second review)", () => {
+  it("shows no arrow in a text or long text row: the form's Submit sends", () => {
+    mount([{ question: "Ticket?", kind: "text", options: [] }, { question: "Notes", kind: "long_text", options: [] }]);
+    setValue(formRow(0).querySelector<HTMLTextAreaElement>("textarea")!, "4512");
+    setValue(formRow(1).querySelector<HTMLTextAreaElement>("textarea")!, "All done");
+    expect(formRow(0).querySelector("button")).toBeNull();
+    expect(formRow(1).querySelector("button")).toBeNull();
+    expect(submit().disabled).toBe(false);
+  });
+});

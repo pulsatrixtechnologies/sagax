@@ -80,9 +80,14 @@ export const PROBED_GOOD: readonly { question: string; options: readonly string[
   { question: "Marketing posts on Monday. Sales sends the weekly report on Friday. Keep this schedule?", options: ["Keep", "Change"] },
   { question: "Ada's ticket says: \"Is the server down? Why is mail so slow? When will it be fixed?\" Reply with the outage notice?", options: ["Send notice", "Hold"] },
   { question: "The deploy failed twice. What now?\n- Retry the deploy?\n- Roll back?", options: ["Retry the deploy", "Roll back"] },
+  { question: "I ran the check for each server: web, db, cache. All green. Deploy now?", options: ["Deploy", "Wait"] },
+  { question: "Pour chaque client : A, B et C, la facture est prête. On envoie ?", options: ["Envoyer", "Attendre"] },
+  { question: "Release notes sends at 9. Weekly digest posts at noon. Keep the schedule?", options: ["Keep", "Change"] },
 ];
 
 /** #4490 review: inputs probed against the heuristics that must be refused. */
 export const PROBED_BAD: readonly { question: string; options: readonly string[]; rule: string }[] = [
   { question: "For each line say done, not done or move: standup, review, lunch, receipt, summary, call.", options: ["Done", "Not done", "Move"], rule: "several-questions" },
+  { question: "Standup done or move; review how long; receipt which code; summary billable or not", options: ["OK", "Later"], rule: "several-questions" },
+  { question: "Pour chaque billet, dis-moi : fait, pas fait ou à déplacer : standup, revue, reçu.", options: ["Fait", "Pas fait", "Déplacer"], rule: "several-questions" },
 ];

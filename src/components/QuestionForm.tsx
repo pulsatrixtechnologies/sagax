@@ -148,6 +148,7 @@ function RowControl({ question, draft, onChange, fieldId, canSend, onSend }: { q
           onChange={(value) => onChange({ value })}
           onSend={onSend}
           fieldId={fieldId}
+          showSend={false}
         />
       );
   }

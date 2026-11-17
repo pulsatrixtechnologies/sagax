@@ -150,7 +150,10 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       const sendBackTo = rawMismatch && asker && event.requestId && !guestDriven && !event.harnessAsk
         ? (event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId))
         : undefined;
-      const turnKey = `${event.threadId}:${host.activeInternalGenerationByThread?.get?.(event.threadId) ?? ""}`;
+      // the turn's number; with none, the request itself, so each new
+      // question still gets its one refusal
+      const generation = host.activeInternalGenerationByThread?.get?.(event.threadId);
+      const turnKey = generation ? `${event.threadId}:${generation}` : `${event.threadId}:request:${event.requestId}`;
       const mismatch = badCard && !(sendBackTo && cardRefusalTurns.refuse(turnKey)) ? undefined : rawMismatch;
       if (!permission && asker && event.requestId && !guestDriven && !event.harnessAsk && !badCard) {
         const single = questions?.length === 1 ? questions[0] : undefined;

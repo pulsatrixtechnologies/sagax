@@ -255,6 +255,7 @@ export function SheetField({
   onSend,
   className,
   fieldId,
+  showSend = true,
 }: {
   value: string;
   placeholder: string;
@@ -267,6 +268,8 @@ export function SheetField({
   className?: string;
   /** marks the field so the "Other" row can hand it the focus */
   fieldId?: string;
+  /** #4490: false in a form row: the form's one Submit sends, Enter too */
+  showSend?: boolean;
 }) {
   return (
     <div className={cn("relative", className)}>
@@ -284,9 +287,9 @@ export function SheetField({
           event.preventDefault();
           if (canSend) onSend();
         }}
-        className={cn(SHEET_FIELD, "block max-h-40 min-h-9 w-full resize-none pe-10 [field-sizing:content]")}
+        className={cn(SHEET_FIELD, "block max-h-40 min-h-9 w-full resize-none [field-sizing:content]", showSend && "pe-10")}
       />
-      {value.trim() && (
+      {showSend && value.trim() && (
         <button
           type="button"
           onClick={onSend}

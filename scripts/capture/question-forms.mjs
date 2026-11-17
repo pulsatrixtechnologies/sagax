@@ -64,6 +64,14 @@ try {
       await form.locator("[data-form-row]").nth(1).locator("input").nth(0).fill("1");
       await form.locator("[data-form-row]").nth(1).locator("input").nth(1).fill("30");
       await form.locator("[data-form-row]").nth(5).locator("[data-form-choice]").first().click();
+      // a row in words, typed in: no send arrow of its own, the form's Submit sends
+      await form.locator("[data-form-row]").nth(2).locator("textarea").fill("4512");
+      const kinds = page.locator("[data-gallery-sample='control-kinds']");
+      await kinds.locator("[data-form-row]").nth(7).locator("textarea").fill(lang === "fr" ? "Revue du trimestre" : "Quarterly review");
+      await kinds.locator("[data-form-row]").nth(8).locator("textarea").fill(lang === "fr" ? "Apporter le portable." : "Bring the laptop.");
+      const kindsFilled = join(outDir, `control-kinds-typed-${theme}-${lang}.png`);
+      await kinds.screenshot({ path: kindsFilled });
+      console.log(kindsFilled);
       const filled = join(outDir, `time-form-filling-${theme}-${lang}.png`);
       await form.screenshot({ path: filled });
       console.log(filled);

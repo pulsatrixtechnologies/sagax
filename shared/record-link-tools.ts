@@ -39,7 +39,7 @@ export const WORDS_KEEP_TOOLS: ReadonlySet<string> = new Set([
   "await_turn", "check_widget", "claim_list", "cloud_agent_transcript", "connectors", "event_subscriptions",
   "find_agents", "find_cloud_agent_by_pr", "get_agent", "get_cloud_agent", "identity", "list_agent_models", "list_agents",
   "list_artifacts", "list_bots", "list_cloud_agent_artifacts", "list_cloud_agents", "list_room_targets", "list_rooms",
-  "list_routines", "list_shared_computers", "list_team_setup", "list_terminal_resources", "list_threads",
+  "list_routines", "listening_read", "list_shared_computers", "list_team_setup", "list_terminal_resources", "list_threads",
   "memory_recall", "memory_search", "read_latest_page", "read_latest_page_with_threads", "read_transcript",
   "read_transcript_attachment", "read_transcript_cold", "read_transcript_page", "recall_topic", "resource_usage",
   "sagax_help", "send_status", "session_read", "session_search", "skills_find", "skills_list", "tool_result_read",

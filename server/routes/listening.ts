@@ -36,7 +36,7 @@ export interface ListeningRouteDeps {
 }
 
 const START = /^\/api\/bots\/([\w-]+)\/listening$/;
-const SESSION = /^\/api\/listening\/([^/]+)(?:\/(lines|stop))?$/;
+const SESSION = /^\/api\/listening\/(ls_[a-f0-9]{20})(?:\/(lines|stop))?$/;
 const THREAD_ID = /^[\w-]{1,200}$/;
 const NOT_FOUND = { error: "no such listening session" } as const;
 

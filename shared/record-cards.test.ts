@@ -163,6 +163,16 @@ describe("nothing outside the chat carries a record address", () => {
     });
   });
 
+  it("hands back the same arguments, uncopied, when no record address is in them", () => {
+    const args = { to: ["+15550100"], body: "Bonjour", nested: [{ text: "https://desk.example/a" }], n: 3 };
+    expect(withoutRecordLinksIn(args)).toBe(args);
+    const mixed = { keep: { text: "Bonjour" }, change: "Voir [#1](sagax://record/nimbus_desk/ticket/1)" };
+    const out = withoutRecordLinksIn(mixed);
+    expect(out).not.toBe(mixed);
+    expect(out.keep).toBe(mixed.keep);
+    expect(out.change).toBe("Voir #1");
+  });
+
   it("stores a bot's words as plain text with the links beside them, for a client that draws them", () => {
     const stored = splitRecordText({ role: "bot", kind: "text", text: linked });
     expect(stored.text).toBe(withoutRecordLinks(linked));

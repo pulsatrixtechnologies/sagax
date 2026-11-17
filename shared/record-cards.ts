@@ -27,6 +27,12 @@
 // tool results hold that id for exactly one kind (`linkSeenRecords`).
 
 export const RECORD_LINK_PREFIX = "sagax://record/";
+/** Whether a text names the record scheme at all, in any case: a search,
+ * never a lowercased copy of the text. */
+const RECORD_SCHEME = /sagax:\/\/record\//i;
+export function mentionsRecordScheme(text: string): boolean {
+  return text.includes("://") && RECORD_SCHEME.test(text);
+}
 const NAME = /^[a-z][a-z0-9_]{1,40}$/;
 const ID = /^[A-Za-z0-9._:-]{1,96}$/;
 /** The longest href read as a record link (three encoded segments). */
@@ -309,7 +315,7 @@ const LINK_PARTS = /^\[((?:\\.|[^\]\\])*)\]\(\s*([^)\s]*)[\s\S]*\)$/;
 /** A record link whose product, kind or id is not known for the person
  * (`known` false, or a link that does not parse) becomes its text. */
 export function unlinkUnknownRecords(text: string, known: (ref: RecordRef) => boolean): string {
-  if (!text.toLowerCase().includes(RECORD_LINK_PREFIX)) return text;
+  if (!mentionsRecordScheme(text)) return text;
   return segments(text).map((segment) => {
     if (segment.kind !== "link") return segment.text;
     const parts = LINK_PARTS.exec(segment.text);
@@ -331,7 +337,7 @@ const BARE_RECORD = /<?sagax:\/\/record\/[^\s"'<>)\]]*>?/gi;
  * unknown.
  */
 export function withoutRecordLinks(text: string): string {
-  if (!text.toLowerCase().includes(RECORD_LINK_PREFIX)) return text;
+  if (!mentionsRecordScheme(text)) return text;
   return unlinkUnknownRecords(text, () => false).replace(BARE_RECORD, "");
 }
 
@@ -340,10 +346,23 @@ export function withoutRecordLinks(text: string): string {
 export function withoutRecordLinksIn<T>(value: T, depth = 0): T {
   if (typeof value === "string") return withoutRecordLinks(value) as T;
   if (depth > 12 || !value || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map((item) => withoutRecordLinksIn(item, depth + 1)) as T;
+  // the same object back when nothing changed: no copy of a large tree
+  let changed = false;
+  if (Array.isArray(value)) {
+    const mapped = value.map((item) => {
+      const next = withoutRecordLinksIn(item, depth + 1);
+      if (next !== item) changed = true;
+      return next;
+    });
+    return (changed ? mapped : value) as T;
+  }
   const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) out[key] = withoutRecordLinksIn(item, depth + 1);
-  return out as T;
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    const next = withoutRecordLinksIn(item, depth + 1);
+    if (next !== item) changed = true;
+    out[key] = next;
+  }
+  return (changed ? out : value) as T;
 }
 
 /**
@@ -353,7 +372,7 @@ export function withoutRecordLinksIn<T>(value: T, depth = 0): T {
  * A message without a record link is returned as it is.
  */
 export function splitRecordText<T extends { role?: string; text?: unknown; recordText?: unknown }>(message: T): T {
-  if (message.role !== "bot" || typeof message.text !== "string" || !message.text.toLowerCase().includes(RECORD_LINK_PREFIX)) return message;
+  if (message.role !== "bot" || typeof message.text !== "string" || !mentionsRecordScheme(message.text)) return message;
   const plainText = withoutRecordLinks(message.text);
   if (plainText === message.text) return message;
   return { ...message, text: plainText, recordText: message.text };

@@ -12,6 +12,7 @@
 // Tool definitions and per-family handlers live under ./agents-tools/.
 import { readFileSync } from "node:fs";
 import { withoutRecordLinksIn } from "../../shared/record-cards.ts";
+import { isOutboundTool } from "../../shared/outbound.ts";
 import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { callCardTool, CARD_TOOL_NAMES } from "./agents-call-cards.ts";
 import { callPhoneTool, PHONE_TOOL_NAME } from "./agents-phone-tools.ts";
@@ -82,12 +83,19 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
 }
 
 
+/** #4507: the app's tools that hand words to someone else. */
+const LEAVING_TOOLS: ReadonlySet<string> = new Set([
+  "send_to_bot", "coordinate_bots", "post_to_room", "ask_bot", "delegate_bot", "route_message", "send_prompt",
+  "run_with_engine", "message_user", "message_person", "propose_page",
+]);
+
 export async function callTool(name: string, rawArgs: Json, context: ToolCallContext): Promise<ToolCallResult> {
   // #4507: the one dispatcher of the app's own tools. A record link
-  // (`sagax://record/...`) is the chat's own address: whatever a tool hands
-  // on (a bot, a room, an agent conversation, a text, a call, a connector,
-  // a page, an engine), it carries the label alone.
-  const args = withoutRecordLinksIn(rawArgs);
+  // (`sagax://record/...`) is the chat's own address: words that leave for
+  // someone else (a bot, a room, an agent conversation, a person, a send, a
+  // published page) carry its label alone. A file, a skill, an artifact, a
+  // memory note or code keeps its words exactly.
+  const args = LEAVING_TOOLS.has(name) || isOutboundTool(name, rawArgs) ? withoutRecordLinksIn(rawArgs) : rawArgs;
   const { externalRuntime: EXTERNAL_RUNTIME } = context;
   const { apiResponse } = context.client;
 

@@ -327,14 +327,36 @@ describe("permission proxy", () => {
     expect(resultJson(res).updatedInput.answers).toEqual({ "Which framework?": "React" });
   });
 
-  // #4507: a tool the engine runs itself (a mail or chat connector mounted
-  // in the harness) never carries the app's record address once allowed
-  it("hands an allowed tool its input with each record link reduced to its label", async () => {
+  // #4507: a send or a connector tool the engine runs itself never carries
+  // the app's record address once allowed, and the card shows what runs;
+  // the CLI's own file, notebook and shell tools keep their input exactly
+  it("hands a send or a connector tool its input with each record link reduced to its label, as the card showed it", async () => {
     answerWith = () => ({ behavior: "allow" });
     const body = "Votre billet [#481516](sagax://record/nimbus_desk/ticket/481516) est fermé.";
+    const stripped = "Votre billet #481516 est fermé.";
     rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "approve", arguments: { tool_name: "mcp__mail__send_email", input: { to: "ada@desk.example", body } } } });
-    const res = await waitFor(2);
-    expect(resultJson(res)).toEqual({ behavior: "allow", updatedInput: { to: "ada@desk.example", body: "Votre billet #481516 est fermé." } });
+    expect(resultJson(await waitFor(2))).toEqual({ behavior: "allow", updatedInput: { to: "ada@desk.example", body: stripped } });
+    expect(asks[0].input).toEqual({ to: "ada@desk.example", body: stripped });
+    rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "approve", arguments: { tool_name: "mcp__notes__create_page", input: { title: "Suivi", content: body } } } });
+    expect(resultJson(await waitFor(3)).updatedInput).toEqual({ title: "Suivi", content: stripped });
+    expect(asks[1].input).toEqual({ title: "Suivi", content: stripped });
+  });
+
+  it("gives the CLI's own Edit, Write, MultiEdit, NotebookEdit and Bash their input byte for byte", async () => {
+    answerWith = () => ({ behavior: "allow" });
+    const inputs: Array<[string, Record<string, unknown>]> = [
+      ["Edit", { file_path: "/w/shared/record-cards.test.ts", old_string: "[#1](sagax://record/nimbus_desk/ticket/1)", new_string: "x" }],
+      ["Write", { file_path: "/w/prefix.ts", content: 'const PREFIX = "sagax://record/";\n' }],
+      ["MultiEdit", { file_path: "/w/a.ts", edits: [{ old_string: "sagax://record/a/b/c", new_string: "y" }] }],
+      ["NotebookEdit", { notebook_path: "/w/n.ipynb", new_source: "print('sagax://record/a/b/c')" }],
+      ["Bash", { command: "grep -rn 'sagax://record/' shared" }],
+    ];
+    let id = 10;
+    for (const [tool, input] of inputs) {
+      id += 1;
+      rpc({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "approve", arguments: { tool_name: tool, input } } });
+      expect(resultJson(await waitFor(id)).updatedInput, tool).toEqual(input);
+    }
   });
 
   it("still brokers an ordinary permission, with the CLI's own rules on allow", async () => {

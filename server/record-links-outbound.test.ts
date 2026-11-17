@@ -77,6 +77,26 @@ describe("no record address leaves the chat", () => {
     }
   });
 
+  it("leaves the words of a file, a skill, an artifact or a memory note exactly as written (the tool dispatcher)", async () => {
+    const sent: string[] = [];
+    const answer = async (_path: string, init?: { body?: string }) => { sent.push(String(init?.body ?? "")); return { ok: true, artifact: { id: "a1" }, staged: true }; };
+    const api = vi.fn(answer);
+    const apiResponse = vi.fn(async (path: string, init?: { body?: string }) => ({ ok: true, status: 200, body: await answer(path, init) }));
+    const context = { botId: "orc", threadId: "t1", depth: 0, client: { api, apiResponse } } as unknown as ToolCallContext;
+    const code = 'const PREFIX = "sagax://record/"; // [#1](sagax://record/nimbus_desk/ticket/1)';
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["save_artifact", { title: "Code", html: `<pre>${code}</pre>` }],
+      ["skill_manage", { action: "create", skill_md: `---\nname: links\n---\n${code}\n`, source: "conversation" }],
+      ["memory_update", { action: "append", text: code }],
+    ];
+    for (const [name, args] of calls) {
+      const before = sent.length;
+      await callTool(name, args, context);
+      expect(sent.length, name).toBeGreaterThan(before);
+      expect(sent.slice(before).join(""), name).toContain(JSON.stringify(code).slice(1, -1));
+    }
+  });
+
   it("the stored words every export, copy and other client read are plain; the links ride beside them", () => {
     rmSync(DATA_DIR, { recursive: true, force: true });
     const store = new Store(() => ({ instanceId: "claude", model: "claude-sonnet-5" }));

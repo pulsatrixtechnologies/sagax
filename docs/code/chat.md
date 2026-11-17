@@ -998,11 +998,14 @@ that draws record links reads `recordText` (`recordTextOf`, which falls back
 to `text` when the words changed since). Nothing that leaves the chat carries
 the address: a text (`smsReplyBody`), a mail draft (`normalizeDraftForSend`),
 speech (`speakable`), a push or reach-me line (`markdownToPlainText`), a
-message to another bot, a room or an agent conversation (every tool of the
-agents dispatcher, `callTool` in `server/drivers/agents-call.ts`), a page a
-bot publishes, every console tool's arguments (the Perspicax relay) and a
-tool the Claude CLI runs once allowed (the permission proxy's
-`updatedInput`) all reduce a link to its label (`withoutRecordLinks`).
+message to another bot, a room, an agent conversation or a person, a send
+and a published page (the agents dispatcher, `callTool` in
+`server/drivers/agents-call.ts`, for those tools only), every console tool's
+arguments (the Perspicax relay), and a send or a mounted connector's tool the
+Claude CLI runs once allowed (the permission proxy, whose card shows the
+input that runs) all reduce a link to its label (`withoutRecordLinks`). A
+file, a skill, an artifact, a memory note, code and the CLI's own Edit,
+Write, MultiEdit, NotebookEdit and Bash keep their words byte for byte.
 Streamed text holds back only a part that could still become a record link
 (from a `[` or a `sagax:`, 256 characters and 1.5 s at most, released at once
 when it cannot be one) and sends it without the address

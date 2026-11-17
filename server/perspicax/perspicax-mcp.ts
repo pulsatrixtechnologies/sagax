@@ -1476,7 +1476,7 @@ export class PerspicaxMcp {
     // outside the app read it), so every call carries the label alone
     if (frame?.method === "tools/call" && params && isObject(params.arguments)) {
       const args = withoutRecordLinksIn(params.arguments);
-      if (JSON.stringify(args) !== JSON.stringify(params.arguments)) input = { ...input, frame: { ...frame, params: { ...params, arguments: args } } };
+      if (args !== params.arguments) input = { ...input, frame: { ...frame, params: { ...params, arguments: args } } };
     }
     if (products && frame?.method === "tools/call" && frame.id !== undefined) {
       const off = offProductOfCall(products, tool, params?.arguments) ?? await offProductOfFamilyCall(products, tool, params?.arguments, this.familyMapping(input), this.flowMapping(input));

@@ -35,6 +35,23 @@ describe("per-key model lists", () => {
     expect(await catalogs.forKey("key-c", async () => null)).toBe(WRITTEN);
   });
 
+  it("keeps a bounded number of keys, dropping the one used least recently", async () => {
+    const catalogs = createKeyModelCatalogs({ fallback: () => WRITTEN, maxKeys: 2 });
+    let reads = 0;
+    const read = (id: string) => async () => { reads++; return list(id); };
+    await catalogs.forKey("key-a", read("a"));
+    await catalogs.forKey("key-b", read("b"));
+    await catalogs.forKey("key-a", read("a"));
+    expect(reads).toBe(2);
+    // a third key pushes out key-b, the one used least recently
+    await catalogs.forKey("key-c", read("c"));
+    expect(reads).toBe(3);
+    await catalogs.forKey("key-a", read("a"));
+    expect(reads).toBe(3);
+    await catalogs.forKey("key-b", read("b"));
+    expect(reads).toBe(4);
+  });
+
   it("names a key by a one-way fingerprint", () => {
     expect(keyFingerprint("key-a")).toMatch(/^[0-9a-f]{32}$/);
     expect(keyFingerprint("key-a")).not.toContain("key-a");

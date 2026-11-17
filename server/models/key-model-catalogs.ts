@@ -9,6 +9,10 @@ import type { ModelCatalog } from "../contracts.ts";
 /** How long a key's list serves before the next view reads it again. */
 export const KEY_MODEL_CATALOG_TTL_MS = 10 * 60_000;
 
+/** How many keys keep a list. Past it, the key used least recently drops
+ * out (a replaced or removed key is never read again). */
+export const KEY_MODEL_CATALOG_MAX_KEYS = 64;
+
 interface Entry {
   catalog: ModelCatalog | null;
   /** When the last read ended; absent before the first. */
@@ -30,8 +34,10 @@ export function createKeyModelCatalogs(options: {
   fallback: () => ModelCatalog;
   ttlMs?: number;
   now?: () => number;
+  maxKeys?: number;
 }): KeyModelCatalogs {
   const ttl = options.ttlMs ?? KEY_MODEL_CATALOG_TTL_MS;
+  const maxKeys = Math.max(1, options.maxKeys ?? KEY_MODEL_CATALOG_MAX_KEYS);
   const now = options.now ?? Date.now;
   const entries = new Map<string, Entry>();
   const refresh = (id: string, entry: Entry, read: () => Promise<ModelCatalog | null>): Promise<ModelCatalog | null> => {
@@ -45,7 +51,6 @@ export function createKeyModelCatalogs(options: {
         if (next) entry.catalog = next;
         entry.at = now();
         entry.pending = undefined;
-        entries.set(id, entry);
         return entry.catalog;
       });
     return entry.pending;
@@ -54,7 +59,15 @@ export function createKeyModelCatalogs(options: {
     async forKey(key, read) {
       const id = keyFingerprint(key);
       const entry: Entry = entries.get(id) ?? { catalog: null };
-      if (!entries.has(id)) entries.set(id, entry);
+      // Most recent last: a Map keeps insertion order, so the first key is
+      // the one used least recently.
+      entries.delete(id);
+      entries.set(id, entry);
+      while (entries.size > maxKeys) {
+        const oldest = entries.keys().next().value;
+        if (oldest === undefined) break;
+        entries.delete(oldest);
+      }
       if (entry.at !== undefined && now() - entry.at < ttl) return entry.catalog ?? options.fallback();
       if (entry.catalog) {
         void refresh(id, entry, read);

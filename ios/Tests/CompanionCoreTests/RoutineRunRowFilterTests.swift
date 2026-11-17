@@ -27,6 +27,9 @@ final class RoutineRunRowFilterTests: XCTestCase {
             try row(#""status":"completed","summary":"Meeting moved to 3 pm.","wakeTopic":"calendar""#),
             try row(#""status":"completed","summary":"All quiet.","wakeTopic":"heartbeat""#),
             try row(#""status":"completed","summary":"Rien à remonter.","wakeTopic":"watch""#),
+            try row(#""status":"completed","summary":"Rien à remonter.","wakeTopic":"watch","forPerson":true"#),
+            try row(#""status":"completed","summary":"Nothing to do on your side.","wakeTopic":"suggestion","forPerson":true"#),
+            try row(#""status":"completed","summary":"Rien à faire de ton côté.""#),
             try row(#""status":"completed","summary":"The suggestion you accepted.","wakeTopic":"suggestion""#),
             // #4201: a count that is not the streak's summary on a run taken for the person's
             try row(#""status":"completed","problems":"x","startedBy":"person","repeat":{"firstRunId":"a","count":2,"since":1,"lastAt":2}"#),
@@ -73,6 +76,9 @@ final class RoutineRunRowFilterTests: XCTestCase {
     func testWhatIsForThePersonStays() throws {
         let kept = [
             try row(#""status":"completed","summary":"Three meetings today.""#),
+            try row(#""status":"completed","summary":"No new tickets. Nothing to do.","forPerson":true"#),
+            try row(#""status":"completed","summary":"Iris a fermé le billet, rien n'est bloqué, tu n'as rien à faire.","wakeTopic":"watch","forPerson":true"#),
+            try row(#""status":"completed","summary":"Rien à remonter.","startedBy":"person""#),
             // an empty text is no problem and no wake, as on the desktop
             try row(#""status":"completed","summary":"Three meetings today.","problems":"""#),
             try row(#""status":"completed","summary":"Three meetings today.","wakeTopic":"""#),

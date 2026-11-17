@@ -251,10 +251,13 @@ data class Message(
     val turnTerminal: Boolean? = null,
     /**
      * "api" for a user line that arrived through the computer's HTTP API,
-     * "call" for a request the person spoke on a Live call. Last on purpose:
-     * tests build messages positionally.
+     * "call" for a request the person spoke on a Live call. Last positional
+     * field on purpose: tests build messages positionally. `attention` stays
+     * after it, with a default, so those calls keep their meaning.
      */
     val via: String? = null,
+    /** Items only the person can do. Present: a routine row stays (#3990). */
+    val attention: JsonElement? = null,
 ) {
     @Serializable(with = MessageKindSerializer::class)
     enum class Kind { TEXT, OPTIONS, ACTIVITY, SCREEN, DIGEST, COMPACTION, ROUTINE_RUN, UNKNOWN }

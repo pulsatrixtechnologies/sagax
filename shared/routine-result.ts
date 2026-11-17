@@ -155,6 +155,44 @@ export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
 export const ROUTINE_SAME_PROBLEM_MARKER = "SAME_PROBLEM";
 export const ROUTINE_STATUS_MARKER = "RUN_STATUS:";
 
+/** #3990: phrases a whole message uses when nothing happened. A finding
+ * that only contains one stays a report: routineSaysNothing matches the
+ * full string, a short lead-in aside. */
+const ROUTINE_NOTHING_PHRASES = [
+  "nothing (?:new |else |more )?to (?:report|do(?: on your side)?|flag|signal|bring up)",
+  "no (?:action|follow[- ]up|change)s? (?:is |are )?(?:needed|required)",
+  "nothing (?:found|changed|happened|new)",
+  "nothing (?:for you|needs you)",
+  "you have nothing to do",
+  "nothing[\\s_-]to[\\s_-]report",
+  "rien (?:de nouveau |d[\\u2019']autre |de plus )?à (?:signaler|faire(?: de (?:ton|votre) c(?:ô|o)t[eé])?|rapporter|remonter)",
+  "rien de (?:nouveau|neuf)",
+  "aucune? (?:action|suivi|changement)s? (?:n[\\u2019']est )?(?:requis|requise|nécessaire)",
+  "rien (?:pour toi|pour vous)",
+  "tu n[\\u2019']as rien à faire",
+  "vous n[\\u2019']avez rien à faire",
+  "rien n[\\u2019']est bloqué",
+].join("|");
+
+/** The whole message is one of those phrases (a second nothing phrase may
+ * follow, joined by a comma). Never a no-op clause after a real finding. */
+const ROUTINE_SAYS_NOTHING = new RegExp(
+  `^(?:(?:ok(?:ay)?|done|all (?:good|clear|set|quiet))[\\s,.;:\\u2014\\u2013-]+)?(?:${ROUTINE_NOTHING_PHRASES})(?:[\\s,;]+(?:et |and )?(?:${ROUTINE_NOTHING_PHRASES}))?[\\s.!\\u2026]*$`,
+  "i",
+);
+
+/** #3990: the whole message says nothing happened ("Rien à remonter.",
+ * "Nothing to do on your side.", "Rien à faire de ton côté."). The
+ * nothing-to-report line is the signal the bot is asked to write; this is
+ * the safety net when it forgets the line. A question, an empty text, or a
+ * report that merely mentions the words is not one. iOS RoutineRunRows and
+ * Android RoutineRunRows keep the same phrases. */
+export function routineSaysNothing(text: string | undefined): boolean {
+  const trimmed = (text ?? "").trim().replace(/^[*_]+|[*_]+$/g, "").trim();
+  if (!trimmed || trimmed.includes("?")) return false;
+  return ROUTINE_SAYS_NOTHING.test(trimmed);
+}
+
 /** The quiet marker on a line of its own, in the shapes models write it in
  * (any case, "NOTHING_TO_REPORT", "nothing to report", "nothing-to-report"). */
 export const QUIET_MARKER_LINE = /^[\s`*_[(<"']*nothing[\s_-]to[\s_-]report[\s`*_\])>"'.!]*$/i;

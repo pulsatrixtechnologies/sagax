@@ -2682,9 +2682,9 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
             onClick={() => setSidebarCollapsed(false)}
             aria-label={t("sidebar.expand")}
             title={t("sidebar.expand")}
-            className="flex h-9 w-full items-center justify-center rounded-lg px-2 text-sidebar-ink-secondary outline-none hover:bg-sidebar-hover hover:text-sidebar-ink focus-visible:ring-1 focus-visible:ring-accent/60"
+            className={cn(SIDEBAR_HEAD_BUTTON, "mx-auto my-1")}
           >
-            <PanelLeft size={20} aria-hidden="true" />
+            <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
           </button>
         )}
         {density === "icons" && (

@@ -60,6 +60,11 @@ export function toolDisplayName(name: string | undefined, product?: string): str
   }
 }
 
+/** An MCP id cut at its `__`: the number suffix a gateway adds dropped. */
+function toolIdParts(raw: string): string[] {
+  return raw.replace(/___?\d+$/, "").split("__").map((part) => part.trim()).filter(Boolean);
+}
+
 function toolDisplayNameUnsafe(name: string, product?: string): string {
   const raw = name.trim();
   const declared = product?.trim() || undefined;
@@ -71,7 +76,7 @@ function toolDisplayNameUnsafe(name: string, product?: string): string {
     return shown ? `${own} · ${shown}` : own;
   }
   // the tool's own part of an MCP id: no server, no number suffix, no escape
-  const parts = raw.replace(/___?\d+$/, "").split("__").map((part) => part.trim()).filter(Boolean);
+  const parts = toolIdParts(raw);
   const own = [...parts].reverse().find((part) => !/^_*\d+$/.test(part));
   const shown = capitalize(words(decodeEscapes(own ?? ""))) || raw;
   return declared ? `${shown} · ${declared}` : shown;
@@ -81,14 +86,20 @@ function toolDisplayNameUnsafe(name: string, product?: string): string {
  * times`) read as its name in words. */
 const TOOL_ID_IN_TEXT = /(?<![\w-])(?:[A-Za-z0-9][\w.-]*?__[\w.-]*[A-Za-z0-9]|(?:user|team|org|workspace)-[\w.-]+___\d+)(?![\w-])/g;
 
-/** An engine's answer to a call of a name it does not have. */
-const MISSING_TOOL_BEFORE = /(?:tool not found|unknown tool):\s*$/i;
+/** The engine's own answer to a call of a name it does not have (Grok
+ * "Tool not found: <id>", the gate "Unknown tool: <id>"), at its place: the
+ * start of a line or right after a problem line's colon. A tool's own
+ * sentence that says the same words is left as words. */
+const ENGINE_MISSING_TOOL = /(?:^|\n|: )(?:Tool not found|Unknown tool): $/;
 
-/** The connection part of an MCP id (`mcp__perspicax__flow` reads
- * `perspicax`), or undefined for a name without one. */
-function toolConnection(id: string): string | undefined {
-  const parts = id.trim().replace(/^mcp__/, "").split("__").filter(Boolean);
-  return parts.length > 1 ? parts[0] : undefined;
+/** Who a missing MCP id was called on, in words: its connection
+ * (`my_cw_psa__flow` reads `my cw psa`), or the connector a gateway serves
+ * under its own server (`server__cw_psa__query` reads `cw psa`). */
+function missingToolPlace(id: string): string | undefined {
+  if (gatewayToolId(id)) return undefined;
+  const parts = toolIdParts(id.trim().replace(/^mcp__/, ""));
+  if (parts.length < 2) return undefined;
+  return words(parts.length > 2 ? parts.slice(1, -1).join("_") : parts[0]) || undefined;
 }
 
 export function humanizeToolIds(text: string | undefined): string {
@@ -96,8 +107,8 @@ export function humanizeToolIds(text: string | undefined): string {
   return text.replace(TOOL_ID_IN_TEXT, (id: string, offset: number) => {
     // #4432: in "Tool not found: <id>" the name the bot called is the whole
     // fact. Its own part alone ("Tool not found: Flow") read as a call to a
-    // tool named `Flow`; the connection it was called on stays, in words.
-    const connection = MISSING_TOOL_BEFORE.test(text.slice(Math.max(0, offset - 40), offset)) && !gatewayToolId(id) ? toolConnection(id) : undefined;
-    return connection ? toolDisplayName(id, connection) : toolDisplayName(id);
+    // tool named `Flow`; the place it was called on stays, in words.
+    const place = ENGINE_MISSING_TOOL.test(text.slice(Math.max(0, offset - 40), offset)) ? missingToolPlace(id) : undefined;
+    return toolDisplayName(id, place);
   });
 }

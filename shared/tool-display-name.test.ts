@@ -32,7 +32,11 @@ describe("humanizeToolIds", () => {
     const line = humanizeToolIds("mcp__perspicax__flow failed 2 times and never succeeded after: Tool not found: perspicax__flow");
     expect(line).toBe("Flow failed 2 times and never succeeded after: Tool not found: Flow · perspicax");
     expect(humanizeToolIds("Unknown tool: mcp__sagax-environment__read_file")).toBe("Unknown tool: Read file · sagax-environment");
-    expect(humanizeToolIds("tool not found: some_server__cw_psa__query")).toBe("tool not found: Query · some_server");
+    // the connection in words; a gateway id names its connector, not the server
+    expect(humanizeToolIds("Tool not found: my_cw_psa__flow")).toBe("Tool not found: Flow · my cw psa");
+    expect(humanizeToolIds("Tool not found: some_server__cw_psa__query")).toBe("Tool not found: Query · cw psa");
+    // only the engine's own answer, at its place: a tool's sentence is left as words
+    expect(humanizeToolIds("the crm said tool not found: crm__api_search")).toBe("the crm said tool not found: Api search");
     expect(line).not.toContain("__");
   });
 

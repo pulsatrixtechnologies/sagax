@@ -45,17 +45,17 @@ const TOOL_ID_TOOL = /^[A-Za-z0-9][\w.:-]{0,199}$/;
  * (the chat engines' deferred pair included): never counted as a use. */
 const FINDING_TOOLS: ReadonlySet<string> = new Set([...META_TOOLS, "tool_search", "tool_call"]);
 
-/** #4527: the one id of an MCP tool, `<server>/<tool>`, whatever name the
- * engine gave the call: `mcp__<server>__<tool>` (Claude Code, Pi's gateway,
- * Grok's use_tool), `<server>__<tool>` (Codex, the ACP engines),
- * `agents.x`, `agents:x`, `agents/x`, `agents_x` (the chat engines). An
- * engine whose title leaves the server out (Codex titles a call by the
- * tool alone) writes the id on the step itself (`tool` of item.started,
- * shared/runtime-events.ts), read with toolIdParts. A renamed Sagax tool reads as its current name. Null for a
+/** #4527: the one id of an MCP tool, `<server>/<tool>`, from a step's
+ * title: `mcp__<server>__<tool>` (Claude Code, Pi's gateway, Grok's
+ * use_tool), `<server>__<tool>` (the ACP engines), `agents.x`, `agents:x`,
+ * `agents/x`, and `agents_x` (the chat engines and Muse Code). Codex titles
+ * a call by the tool alone, and the chat engines and Pi's own extension
+ * name a connector's tool `<server>_<tool>`: those engines write the id on
+ * the step itself (`tool` of item.started, shared/runtime-events.ts), read
+ * by stepToolId. A renamed Sagax tool reads as its current name. Null for a
  * built-in tool (`Bash`, `edit`), a name that names no server, and the
  * tools that only find or reach another (search_tools, call_tool, use_tool,
- * tool_search...): a call through those is counted as the tool it runs,
- * which the engines already title it with. */
+ * tool_search...): a call through those is counted as the tool it runs. */
 export function toolIdOf(name: unknown): string | null {
   if (typeof name !== "string") return null;
   const raw = name.trim();
@@ -108,7 +108,7 @@ export function stepToolId(step: { title?: unknown; tool?: unknown }): string | 
   return toolIdOf(`mcp__${parts.server}__${parts.tool}`);
 }
 
-export const BRIDGE_REFUSED_TEXT ="use_tool needs one catalog tool name from find_tool, and its arguments as an object.";
+export const BRIDGE_REFUSED_TEXT = "use_tool needs one catalog tool name from find_tool, and its arguments as an object.";
 
 export type BridgeCall =
   | { kind: "find" }

@@ -1,3 +1,4 @@
+import { stepToolId } from "../../shared/searched-tool-call.ts";
 import { describe, expect, it } from "vitest";
 import {
   MuseCodeDriver, museApprovalMode, museCatalog, museChoice, museModelLabel, museQuestions, museServeArgs,
@@ -55,6 +56,9 @@ describe("Muse Code driver", () => {
   it("shows a shell call as its command and reports its exit", () => {
     const item = { itemId: "i1", kind: "toolCall", status: "completed", tool: "bash", args: JSON.stringify({ command: "echo hi\nls" }), visibleOutput: "hi", exitCode: 0 };
     expect(museToolStart(item)).toMatchObject({ title: "bash", summary: "echo hi ls" });
+    // #4527: a Sagax tool on Muse Code counts under its one id; a shell call is no tool
+    expect(stepToolId(museToolStart(item))).toBeNull();
+    expect(stepToolId(museToolStart({ itemId: "i3", kind: "toolCall", status: "inProgress", tool: "agents_ask_bot", args: "{}" }))).toBe("agents/ask_bot");
     expect(museToolOutput(item)).toEqual({ ok: true, output: "hi" });
     expect(museToolOutput({ ...item, exitCode: 1 })).toMatchObject({ ok: false });
     expect(museToolOutput({ ...item, status: "failed", failureReason: "denied by policy", visibleOutput: undefined }))

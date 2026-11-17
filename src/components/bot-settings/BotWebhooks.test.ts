@@ -1,6 +1,6 @@
 // Persona > Access > Webhooks (2026-10-29): this bot's webhooks, listed
 // only; a routine's webhook opens its routine, a webhook of its own opens
-// Automations > Webhooks. No second place to manage them.
+// Routines > Webhooks. No second place to manage them.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,7 +43,7 @@ describe("BotWebhooks", () => {
     expect(html).toContain("Open the routine");
     expect(html).toContain('data-bot-webhook="w2"');
     expect(html).toContain('data-open-webhook-home="automations"');
-    expect(html).toContain("Open in Automations");
+    expect(html).toContain("Open in Routines");
     expect(html).not.toContain("Not mine");
     expect(html).toContain("4 deliveries");
   });
@@ -81,7 +81,7 @@ describe("BotWebhooks on the profile page (plain surface)", () => {
     expect(html).toContain('data-bot-webhook="w1"');
     expect(html).toContain('data-bot-webhook="w2"');
     expect(html).toContain("Open the routine");
-    expect(html).toContain("Open in Automations");
+    expect(html).toContain("Open in Routines");
     expect(html).toContain("4 deliveries");
     expect(html).toMatch(/data-open-webhook-home="routine"[^>]*class="[^"]*ui-button/);
     const bare = withoutPopovers(html);

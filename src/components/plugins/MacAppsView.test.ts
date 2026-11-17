@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/i18n", () => ({ t: (key: string) => key }));
 
 import { MacAppsInstalledSection } from "./MacAppsView";
-import { CARD_GRID } from "./plugins-style";
+import { CARD_GRID, PLUGINS } from "./plugins-style";
 
 describe("MacAppsInstalledSection", () => {
   it("renders its rows as the shared cards in the shared CARD_GRID", async () => {

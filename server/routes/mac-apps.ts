@@ -3,13 +3,13 @@
 //   GET  /api/mac-apps                    status of every app
 //   PUT  /api/mac-apps                    { app, enabled }
 //   POST /api/mac-apps/test               { app } : names and a count, never content
-//   POST /api/mac-apps/permissions/open   { pane: "automation" | "fullDiskAccess" }
+//   POST /api/mac-apps/permissions/open   { pane: automation | fullDiskAccess | calendars | reminders | contacts }
 //   POST /api/mac-apps/permissions/ask    { app } : the macOS Automation prompt
 //
 // Outside the solo Mac this answers 404 mac_apps_not_on_this_mac: with an
 // organization server the desktop app answers the same over IPC.
 import { messagesOnBotMac, type MessagesHost } from "../../shared/imessage.ts";
-import { MESSAGES_PRIVACY_PANES } from "../../shared/mac-messages-setup.ts";
+import { isMacAppPermissionNeed, macAppPrivacyAnchor } from "../../shared/mac-apps-setup.ts";
 import { macAppsStatusLive, requestMacAppAutomation, testMacApp, writeMacAppSettings, MAC_APP_IDS, type MacAppId } from "../../electron/mac-apps.mjs";
 import { readMessagesSettings, writeMessagesSettings } from "../imessage/imessage-settings.ts";
 import { probeFullDiskAccess } from "../imessage/imessage-permissions.ts";
@@ -77,9 +77,9 @@ export function createMacAppsRoutes(deps: MacAppsRoutesDeps): RouteHandler {
     }
     if (method === "POST" && path === "/api/mac-apps/permissions/open") {
       const pane = (body as { pane?: unknown } | null)?.pane;
-      if (pane !== "automation" && pane !== "fullDiskAccess") return json(res, 400, { error: 'send { pane: "automation" or "fullDiskAccess" }', code: "invalid_pane" });
+      if (!isMacAppPermissionNeed(pane)) return json(res, 400, { error: 'send { pane: "automation", "fullDiskAccess", "calendars", "reminders" or "contacts" }', code: "invalid_pane" });
       if (!deps.openPrivacyPane) return json(res, 501, { error: "Open System Settings from the Sagax Mac app.", code: "mac_apps_helper_unavailable" });
-      const opened = await deps.openPrivacyPane(MESSAGES_PRIVACY_PANES[pane]);
+      const opened = await deps.openPrivacyPane(macAppPrivacyAnchor(pane));
       return json(res, 200, { opened: Boolean(opened), pane });
     }
     return json(res, 405, { error: "GET, PUT or POST" });

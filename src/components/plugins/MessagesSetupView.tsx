@@ -17,9 +17,12 @@ import {
   type MessagesSetupStatus,
   type MessagesSetupTestResult,
 } from "@/lib/mac-messages-setup";
+import { attachMessagesActions, openMacAppPermissionPane } from "@/lib/mac-apps-setup";
 import { messagesStepState } from "../../../shared/mac-messages-setup.ts";
+import { macAppDetailActions, type MacAppPermissionNeed } from "../../../shared/mac-apps-setup.ts";
 import { SwitchRow } from "../SettingsPrimitives";
 import { PluginPageHeader } from "./PluginParts";
+import { MacAppActionList, MacAppGrantAdds, macAppPermissionCopy } from "./MacAppSetupView";
 import type { Crumb } from "../Breadcrumb";
 
 type Props = {
@@ -59,9 +62,11 @@ export function MessagesSetupView({ onBack, trail }: Props) {
 
   // Refresh after an action or on focus: a failure keeps the page and only
   // replaces a blank one by the readable error (never an unhandled reject).
+  const withActions = useCallback(async (next: MessagesSetupStatus) => attachMessagesActions(next), []);
+
   const refresh = useCallback(async () => {
     try {
-      const next = await loadMessagesSetup();
+      const next = await withActions(await loadMessagesSetup());
       setStatus(next);
       return next;
     } catch (cause) {
@@ -71,19 +76,19 @@ export function MessagesSetupView({ onBack, trail }: Props) {
       });
       return null;
     }
-  }, []);
+  }, [withActions]);
 
   const load = useCallback(async () => {
     setBusy("load");
     setError(null);
     try {
-      setStatus(await loadMessagesSetup());
+      setStatus(await withActions(await loadMessagesSetup()));
     } catch (cause) {
       setError(readableError(cause));
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [withActions]);
 
   useEffect(() => {
     void load();
@@ -112,13 +117,26 @@ export function MessagesSetupView({ onBack, trail }: Props) {
     }
   };
 
+  const openMacPane = async (pane: MacAppPermissionNeed) => {
+    setBusy("open");
+    setError(null);
+    try {
+      await openMacAppPermissionPane(pane);
+      await refresh();
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // "Ask for access": macOS shows its prompt naming Sagax; the status that
   // comes back holds the answer (granted, or denied for System Settings).
   const askAccess = async () => {
     setBusy("ask");
     setError(null);
     try {
-      setStatus(await askMessagesAutomation());
+      setStatus(await withActions(await askMessagesAutomation()));
     } catch (cause) {
       setError(readableError(cause));
     } finally {
@@ -154,7 +172,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
     setStatus({ ...status, useMessages: next });
     try {
       const saved = await setMessagesEnabled(next);
-      setStatus(saved);
+      setStatus(await withActions(saved.actions?.length ? saved : { ...saved, actions: status.actions }));
     } catch (cause) {
       setStatus({ ...status, useMessages: previous });
       setError(readableError(cause));
@@ -165,12 +183,12 @@ export function MessagesSetupView({ onBack, trail }: Props) {
 
   const permissions = status?.permissions ?? { fullDiskAccess: "unknown", automation: "unknown" };
   const useMessages = status?.useMessages === true;
-  const fdaState = messagesStepState({ step: "fullDiskAccess", permissions, useMessages, tested, testOk });
-  const autoState = messagesStepState({ step: "automation", permissions, useMessages, tested, testOk });
+  const detail = macAppDetailActions(status?.actions);
+  const permissionNeeds: readonly MacAppPermissionNeed[] = detail ? detail.byNeed : ["fullDiskAccess", "automation"];
   const testState = messagesStepState({ step: "test", permissions, useMessages, tested, testOk });
   const enableState = messagesStepState({ step: "enable", permissions, useMessages, tested, testOk });
 
-  const stepTone = (state: typeof fdaState): "ok" | "warn" | "muted" | "todo" => {
+  const stepTone = (state: "done" | "todo" | "blocked" | "waiting"): "ok" | "warn" | "muted" | "todo" => {
     if (state === "done") return "ok";
     if (state === "blocked") return "warn";
     if (state === "waiting") return "muted";
@@ -213,16 +231,20 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                   <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.intro")}</p>
                 </div>
               </div>
-              <ul className="mt-4 space-y-3">
-                <li className="rounded-xl bg-inset px-3 py-2.5">
-                  <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.readTitle")}</p>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.readBody")}</p>
-                </li>
-                <li className="rounded-xl bg-inset px-3 py-2.5">
-                  <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.sendTitle")}</p>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.sendBody")}</p>
-                </li>
-              </ul>
+              {detail ? (
+                <MacAppActionList actions={detail.offered} />
+              ) : (
+                <ul className="mt-4 space-y-3">
+                  <li className="rounded-xl bg-inset px-3 py-2.5">
+                    <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.readTitle")}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.readBody")}</p>
+                  </li>
+                  <li className="rounded-xl bg-inset px-3 py-2.5">
+                    <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.sendTitle")}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.sendBody")}</p>
+                  </li>
+                </ul>
+              )}
             </section>
 
             <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-messages-setup-steps="">
@@ -233,73 +255,82 @@ export function MessagesSetupView({ onBack, trail }: Props) {
               <p className="mb-3 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.stepsHelp")}</p>
 
               <ol className="space-y-3">
-                <li className="flex gap-3" data-messages-step="fullDiskAccess" data-messages-step-state={fdaState}>
-                  <StatusDot tone={stepTone(fdaState)} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.fdaTitle")}</p>
-                      <span className={cn("text-[11.5px]", permissionTone(permissions.fullDiskAccess) === "ok" ? "text-success" : permissionTone(permissions.fullDiskAccess) === "warn" ? "text-danger" : "text-ink-secondary")}>
-                        {permissionLabel(permissions.fullDiskAccess)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.fdaBody")}</p>
-                    {permissions.fullDiskAccess !== "granted" && (
-                      <button
-                        type="button"
-                        data-messages-open-fda
-                        disabled={busy !== null}
-                        onClick={() => void openPane("fullDiskAccess")}
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
-                      >
-                        {busy === "open" && <Loader2 size={13} className="animate-spin" />}
-                        {t("connectApps.mac.messages.openSettings")}
-                      </button>
-                    )}
-                  </div>
-                </li>
-
-                <li className="flex gap-3" data-messages-step="automation" data-messages-step-state={autoState}>
-                  <StatusDot tone={stepTone(autoState)} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.automationTitle")}</p>
-                      <span className={cn("text-[11.5px]", permissionTone(permissions.automation) === "ok" ? "text-success" : permissionTone(permissions.automation) === "warn" ? "text-danger" : "text-ink-secondary")}>
-                        {permissionLabel(permissions.automation)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.automationBody")}</p>
-                    {automationAction(permissions.automation) === "ask" && (
-                      <>
-                        <button
-                          type="button"
-                          data-messages-ask-automation
-                          disabled={busy !== null}
-                          onClick={() => void askAccess()}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-panel hover:opacity-90 disabled:opacity-50"
-                        >
-                          {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
-                          {t("connectApps.mac.askAccess")}
-                        </button>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
-                      </>
-                    )}
-                    {automationAction(permissions.automation) === "openSettings" && (
-                      <>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-messages-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
-                        <button
-                          type="button"
-                          data-messages-open-automation
-                          disabled={busy !== null}
-                          onClick={() => void openPane("automation")}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
-                        >
-                          {busy === "open" && <Loader2 size={13} className="animate-spin" />}
-                          {t("connectApps.mac.messages.openSettings")}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
+                {permissionNeeds.map((need) => {
+                  const state = need === "fullDiskAccess" ? permissions.fullDiskAccess : need === "automation" ? permissions.automation : "unknown";
+                  const stepState = need === "fullDiskAccess" || need === "automation"
+                    ? messagesStepState({ step: need, permissions, useMessages, tested, testOk })
+                    : state === "granted" ? "done" as const : state === "denied" ? "blocked" as const : "todo" as const;
+                  const words = macAppPermissionCopy(need, "Messages", "messages");
+                  return (
+                    <li key={need} className="flex gap-3" data-messages-step={need} data-messages-step-state={stepState}>
+                      <StatusDot tone={stepTone(stepState)} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[13px] font-medium text-ink">{words.title}</p>
+                          <span className={cn("text-[11.5px]", permissionTone(state) === "ok" ? "text-success" : permissionTone(state) === "warn" ? "text-danger" : "text-ink-secondary")}>
+                            {permissionLabel(state)}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{words.body}</p>
+                        {need === "fullDiskAccess" && state !== "granted" && (
+                          <button
+                            type="button"
+                            data-messages-open-fda
+                            disabled={busy !== null}
+                            onClick={() => void openPane("fullDiskAccess")}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+                          >
+                            {busy === "open" && <Loader2 size={13} className="animate-spin" />}
+                            {t("connectApps.mac.messages.openSettings")}
+                          </button>
+                        )}
+                        {need === "automation" && automationAction(state) === "ask" && (
+                          <>
+                            <button
+                              type="button"
+                              data-messages-ask-automation
+                              disabled={busy !== null}
+                              onClick={() => void askAccess()}
+                              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-panel hover:opacity-90 disabled:opacity-50"
+                            >
+                              {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
+                              {t("connectApps.mac.askAccess")}
+                            </button>
+                            <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
+                          </>
+                        )}
+                        {need === "automation" && automationAction(state) === "openSettings" && (
+                          <>
+                            <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-messages-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
+                            <button
+                              type="button"
+                              data-messages-open-automation
+                              disabled={busy !== null}
+                              onClick={() => void openPane("automation")}
+                              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+                            >
+                              {busy === "open" && <Loader2 size={13} className="animate-spin" />}
+                              {t("connectApps.mac.messages.openSettings")}
+                            </button>
+                          </>
+                        )}
+                        {need !== "fullDiskAccess" && need !== "automation" && state !== "granted" && state !== "unsupported" && (
+                          <button
+                            type="button"
+                            data-mac-app-open-permission={need}
+                            disabled={busy !== null}
+                            onClick={() => void openMacPane(need)}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+                          >
+                            {busy === "open" && <Loader2 size={13} className="animate-spin" />}
+                            {t("connectApps.mac.messages.openSettings")}
+                          </button>
+                        )}
+                        {detail && <MacAppGrantAdds actions={detail.waiting[need] ?? []} />}
+                      </div>
+                    </li>
+                  );
+                })}
 
                 <li className="flex gap-3" data-messages-step="test" data-messages-step-state={testState}>
                   <StatusDot tone={stepTone(testState)} />

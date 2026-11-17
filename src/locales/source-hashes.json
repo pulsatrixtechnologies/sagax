@@ -16071,7 +16071,7 @@
       "connectApps.mac.messages.testRun": "e031e0df30c9898faa84c644202443880eaa393fe5de8309c2090170f9badf65",
       "connectApps.mac.messages.enable": "a302793f47e11c2b849567297fde6adf7e6a352a2d049cbc7957dcc13e72e735",
       "connectApps.mac.messages.enableHelp": "5c881e932f3e380d2b2064c4c0dcc9aa5118d7c3973336ae3de1c1c6714aa1e2",
-      "connectApps.mac.messages.enableNote": "9054262034e2ed334530c9cd22af7bc234957bdc727548afb08207d43b7b4bf1",
+      "connectApps.mac.messages.enableNote": "a08b7f8a9416267549f3c0f0f62ad8b09cb56b6f6bd231a4b4f00c1d5c3dd7ea",
       "connectApps.mac.messages.perm.granted": "62026a42b2390a87bf21a984cabce8067c2bddf5031a519a11397f38a0ee828c",
       "connectApps.mac.messages.perm.denied": "0fdb0112d64a1d81d0955e34f9bc26aab91e63572ed844aa8ea286725240b5e4",
       "connectApps.mac.messages.perm.notAsked": "d97bfdbad77001c0996ffcbeda7d74be0263ad7f68ce38bc24c31cead9e93480",
@@ -17466,7 +17466,7 @@
       "connectApps.mac.app.testResultMany": "3d865873007fb6254f939aab4ef591e43392c89dc620f0a3a04c7fa1defe9a6c",
       "connectApps.mac.app.enable": "d89b39b62e3dc647c603ca43f671d59e0a2ddcfcdd508682d80edf4d52e24b3d",
       "connectApps.mac.app.enableHelp": "658400fd4c9f5e3ff5ee9e123a05ad49146decf1e9c11019516ec71cbf7a653f",
-      "connectApps.mac.app.enableNote": "c46bf1c50320c52d738aa653362faebd71bc79dc51de9b9c58d19c08039d34a3",
+      "connectApps.mac.app.enableNote": "a08b7f8a9416267549f3c0f0f62ad8b09cb56b6f6bd231a4b4f00c1d5c3dd7ea",
       "connectApps.mac.mail.rowTitle": "07ed6ccf6bf6393d18684d1d4f774639d44c7d2d2895fd30491ccc50614ed4ea",
       "connectApps.mac.mail.intro": "b344b0f6ac8e15e0ad6abddcc86da49591af44a54e81db35bb3680e8cd7814ae",
       "connectApps.mac.mail.readTitle": "f22addb21742fdfab1a008d9f9cd856a0f66066703ac7fa182f1ca9026ea45a0",
@@ -18940,7 +18940,14 @@
       "recordCard.more.fieldMany": "259aa67d8e88f5b7ea0d5694e42bce22548dc0cf266eac93de8c831dad28133c",
       "recordCard.more.rowOne": "590a3cf1170756a7aa788eb169cb07577d928e011a6557464ba39e47e36742c8",
       "recordCard.more.rowMany": "b677128f06a869114acf0d50b1f3388f3abafd3875a26c10b7f9f062f08d7a4a",
-      "recordCard.priority": "d60dbba079223254d4c49c230a515bc107a997e69f811365da2387f8557b9cec"
+      "recordCard.priority": "d60dbba079223254d4c49c230a515bc107a997e69f811365da2387f8557b9cec",
+      "connectApps.mac.grantAdds": "9d1f99bfe62c84119916073eaba6540bc45fbfe54919e5341777e86114503f31",
+      "connectApps.mac.perm.calendarsTitle": "e0b2b00cf315a0e403657e9a6d4f87345a5bb5d16057339a8740d8cf115875e4",
+      "connectApps.mac.perm.calendarsBody": "46b40f63202385c2d66e31a0d2dc9da22d3d20cbe4578d2e812fcedc591bd679",
+      "connectApps.mac.perm.remindersTitle": "7971dd7526694c6ae3f2db570e44bfaa79cf30a63067a47f161b6e62c5426ef8",
+      "connectApps.mac.perm.remindersBody": "c61bc896b8ec1fb8e661b50cba5f05ebda38989fed38bf5bd96513ac7c2d0c61",
+      "connectApps.mac.perm.contactsTitle": "b450645debe2cf0a590edd7f78d36eccd465027d389652dc30d6350542587c04",
+      "connectApps.mac.perm.contactsBody": "403ebc29b4925b998600886c1b61374aa8a38c4383b6e60f748791bddfd7c775"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

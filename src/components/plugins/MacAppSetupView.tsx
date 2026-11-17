@@ -8,6 +8,7 @@ import { Check, Loader2, RotateCw, Shield, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { en, type LocaleKey } from "@/locales";
 import { readableError } from "@/lib/plain-error";
 import { automationAction, permissionTone } from "@/lib/mac-messages-setup";
 import {
@@ -20,6 +21,11 @@ import {
   type MacAppsSetupStatus,
   type MacAppTestResult,
 } from "@/lib/mac-apps-setup";
+import {
+  macAppDetailActions,
+  type MacAppPermissionNeed,
+  type MacAppSetupAction,
+} from "../../../shared/mac-apps-setup.ts";
 import { SwitchRow } from "../SettingsPrimitives";
 import { PluginPageHeader } from "./PluginParts";
 import { MAC_APP_LOOK, macAppName } from "./MacAppsView";
@@ -68,6 +74,65 @@ const COPY = {
 
 export function macAppTitle(app: SetupApp): string {
   return t("connectApps.mac.app.title", { app: macAppName(app) });
+}
+
+/** One plain line per tool. A tool this build has no words for is skipped,
+ * never shown as its id. */
+export function macAppActionText(tool: string): string | null {
+  const key = `connectApps.mac.action.${tool}`;
+  if (!Object.hasOwn(en, key)) return null;
+  const line = t(key as LocaleKey);
+  return line || null;
+}
+
+export function macAppPermissionCopy(need: MacAppPermissionNeed, appName: string, voice: "app" | "messages"): { title: string; body: string } {
+  if (need === "fullDiskAccess") return { title: t("connectApps.mac.messages.fdaTitle"), body: t("connectApps.mac.messages.fdaBody") };
+  if (need === "automation") {
+    if (voice === "messages") return { title: t("connectApps.mac.messages.automationTitle"), body: t("connectApps.mac.messages.automationBody") };
+    return { title: t("connectApps.mac.app.automationTitle", { app: appName }), body: t("connectApps.mac.app.automationBody", { app: appName }) };
+  }
+  if (need === "calendars") return { title: t("connectApps.mac.perm.calendarsTitle"), body: t("connectApps.mac.perm.calendarsBody") };
+  if (need === "reminders") return { title: t("connectApps.mac.perm.remindersTitle"), body: t("connectApps.mac.perm.remindersBody") };
+  return { title: t("connectApps.mac.perm.contactsTitle"), body: t("connectApps.mac.perm.contactsBody") };
+}
+
+function actionLines(actions: MacAppSetupAction[]): Array<{ tool: string; text: string }> {
+  return actions.flatMap((action) => {
+    const text = macAppActionText(action.tool);
+    return text ? [{ tool: action.tool, text }] : [];
+  });
+}
+
+/** Granted actions, in place of the two paragraphs. */
+export function MacAppActionList({ actions }: { actions: MacAppSetupAction[] }) {
+  const lines = actionLines(actions);
+  if (lines.length === 0) return null;
+  return (
+    <ul className="mt-4 space-y-1.5" data-mac-app-actions="">
+      {lines.map((line) => (
+        <li key={line.tool} className="text-[13px] leading-snug text-ink">{line.text}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** Actions still behind a permission. Rendered only under that step. */
+export function MacAppGrantAdds({ actions }: { actions: MacAppSetupAction[] }) {
+  const lines = actions.flatMap((action) => {
+    const text = macAppActionText(action.tool);
+    return text ? [{ tool: action.tool, text }] : [];
+  });
+  if (lines.length === 0) return null;
+  return (
+    <div className="mt-2" data-mac-app-grant-adds="">
+      <p className="text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.grantAdds")}</p>
+      <ul className="mt-1 space-y-1">
+        {lines.map((line) => (
+          <li key={line.tool} className="text-[12.5px] leading-snug text-ink">{line.text}</li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function StatusDot({ tone }: { tone: "ok" | "warn" | "todo" }) {
@@ -129,8 +194,9 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
   }, [initial, load]);
 
   const row = status?.apps.find((candidate) => candidate.id === app);
-  const automation = row?.permissions.automation ?? "unknown";
   const enabled = row?.enabled === true;
+  const detail = macAppDetailActions(row?.actions);
+  const permissionNeeds: readonly MacAppPermissionNeed[] = detail ? detail.byNeed : ["automation"];
   const copy = COPY[app];
   const look = MAC_APP_LOOK[app];
   const Icon = look.icon;
@@ -180,7 +246,6 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
     setStatus(await askMacAppAutomation(app));
   });
 
-  const autoTone = automation === "granted" ? "ok" : automation === "denied" ? "warn" : "todo";
   const testTone = test ? "ok" : testFailed ? "warn" : "todo";
   const button = "mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50";
 
@@ -223,18 +288,22 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                   <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{t(copy.intro)}</p>
                 </div>
               </div>
-              <ul className="mt-4 space-y-3">
-                <li className="rounded-xl bg-inset px-3 py-2.5">
-                  <p className="text-[13px] font-medium text-ink">{t(copy.readTitle)}</p>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t(copy.readBody)}</p>
-                </li>
-                {copy.writeTitle && copy.writeBody && (
+              {detail ? (
+                <MacAppActionList actions={detail.offered} />
+              ) : (
+                <ul className="mt-4 space-y-3">
                   <li className="rounded-xl bg-inset px-3 py-2.5">
-                    <p className="text-[13px] font-medium text-ink">{t(copy.writeTitle)}</p>
-                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t(copy.writeBody)}</p>
+                    <p className="text-[13px] font-medium text-ink">{t(copy.readTitle)}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t(copy.readBody)}</p>
                   </li>
-                )}
-              </ul>
+                  {copy.writeTitle && copy.writeBody && (
+                    <li className="rounded-xl bg-inset px-3 py-2.5">
+                      <p className="text-[13px] font-medium text-ink">{t(copy.writeTitle)}</p>
+                      <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t(copy.writeBody)}</p>
+                    </li>
+                  )}
+                </ul>
+              )}
             </section>
 
             <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-mac-app-steps="">
@@ -245,36 +314,50 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
               <p className="mb-3 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.stepsHelp")}</p>
 
               <ol className="space-y-3">
-                <li className="flex gap-3" data-mac-app-step="automation" data-mac-app-step-state={autoTone}>
-                  <StatusDot tone={autoTone} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.app.automationTitle", { app: name })}</p>
-                      <span className={cn("text-[11.5px]", permissionTone(automation) === "ok" ? "text-success" : permissionTone(automation) === "warn" ? "text-danger" : "text-ink-secondary")}>
-                        {permissionLabel(automation)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.app.automationBody", { app: name })}</p>
-                    {automationAction(automation) === "ask" && (
-                      <>
-                        <button type="button" data-mac-app-ask-automation disabled={busy !== null} onClick={() => void askAccess()} className={button}>
-                          {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
-                          {t("connectApps.mac.askAccess")}
-                        </button>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
-                      </>
-                    )}
-                    {automationAction(automation) === "openSettings" && (
-                      <>
-                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-mac-app-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
-                        <button type="button" data-mac-app-open-automation disabled={busy !== null} onClick={() => void run("open", () => openMacAppPermissionPane("automation"))} className={button}>
-                          {busy === "open" && <Loader2 size={13} className="animate-spin" />}
-                          {t("connectApps.mac.messages.openSettings")}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
+                {permissionNeeds.map((need) => {
+                  const state = row?.permissions[need] ?? "unknown";
+                  const tone = state === "granted" ? "ok" : state === "denied" ? "warn" : "todo";
+                  const words = macAppPermissionCopy(need, name, "app");
+                  return (
+                    <li key={need} className="flex gap-3" data-mac-app-step={need} data-mac-app-step-state={tone}>
+                      <StatusDot tone={tone} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[13px] font-medium text-ink">{words.title}</p>
+                          <span className={cn("text-[11.5px]", permissionTone(state) === "ok" ? "text-success" : permissionTone(state) === "warn" ? "text-danger" : "text-ink-secondary")}>
+                            {permissionLabel(state)}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{words.body}</p>
+                        {need === "automation" && automationAction(state) === "ask" && (
+                          <>
+                            <button type="button" data-mac-app-ask-automation disabled={busy !== null} onClick={() => void askAccess()} className={button}>
+                              {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
+                              {t("connectApps.mac.askAccess")}
+                            </button>
+                            <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
+                          </>
+                        )}
+                        {need === "automation" && automationAction(state) === "openSettings" && (
+                          <>
+                            <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-mac-app-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
+                            <button type="button" data-mac-app-open-automation disabled={busy !== null} onClick={() => void run("open", () => openMacAppPermissionPane("automation"))} className={button}>
+                              {busy === "open" && <Loader2 size={13} className="animate-spin" />}
+                              {t("connectApps.mac.messages.openSettings")}
+                            </button>
+                          </>
+                        )}
+                        {need !== "automation" && state !== "granted" && state !== "unsupported" && (
+                          <button type="button" data-mac-app-open-permission={need} disabled={busy !== null} onClick={() => void run("open", () => openMacAppPermissionPane(need))} className={button}>
+                            {busy === "open" && <Loader2 size={13} className="animate-spin" />}
+                            {t("connectApps.mac.messages.openSettings")}
+                          </button>
+                        )}
+                        {detail && <MacAppGrantAdds actions={detail.waiting[need] ?? []} />}
+                      </div>
+                    </li>
+                  );
+                })}
 
                 <li className="flex gap-3" data-mac-app-step="test" data-mac-app-step-state={testTone}>
                   <StatusDot tone={testTone} />

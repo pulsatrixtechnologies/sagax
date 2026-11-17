@@ -317,7 +317,7 @@ const __BUILD_DATE__: string;
         set(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId, enabled: boolean): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         test(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppTestResult>;
         askAutomation(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
-        openSettings(pane: "automation" | "fullDiskAccess"): Promise<boolean>;
+        openSettings(pane: "automation" | "fullDiskAccess" | "calendars" | "reminders" | "contacts"): Promise<boolean>;
       };
       localControl: {
         status(): Promise<LinuxLocalControlStatus>;

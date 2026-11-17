@@ -81,6 +81,45 @@ describe("Apple app setup page", () => {
     done();
   });
 
+  it("lists what this Mac offers and parks the rest under the missing permission", async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(createElement(MacAppSetupView, {
+        app: "mail",
+        onBack: () => {},
+        trail: [],
+        initial: {
+          available: true,
+          onThisMac: true,
+          apps: [{
+            id: "mail",
+            enabled: false,
+            permissions: { automation: "granted" },
+            actions: [
+              { tool: "mac_mail_search", kind: "read", needs: "automation", granted: true },
+              { tool: "mac_contacts_read", kind: "read", needs: "contacts", granted: false },
+            ],
+          }],
+        },
+      }));
+    });
+    expect(host.querySelector("[data-mac-app-actions]")?.textContent).toContain("connectApps.mac.action.mac_mail_search");
+    expect(host.querySelector("[data-mac-app-actions]")?.textContent).not.toContain("mac_contacts_read");
+    const contacts = host.querySelector('[data-mac-app-step="contacts"]');
+    expect(contacts?.textContent).toContain("connectApps.mac.grantAdds");
+    expect(contacts?.textContent).toContain("connectApps.mac.perm.contactsTitle");
+    expect(contacts?.textContent).toContain("connectApps.mac.action.mac_contacts_read");
+    expect(host.querySelector('[data-mac-app-step="automation"] [data-mac-app-grant-adds]')).toBeNull();
+    expect(host.textContent).not.toContain("connectApps.mac.mail.readTitle");
+    await act(async () => { contacts!.querySelector<HTMLElement>("[data-mac-app-open-permission]")!.click(); });
+    expect(openMacAppPermissionPane).toHaveBeenCalledWith("contacts");
+    act(() => root.unmount());
+    host.remove();
+  });
+
   it("shows why the test failed", async () => {
     vi.mocked(testMacApp).mockRejectedValueOnce(new Error("Calendar returned an error"));
     const { host, done } = await mount();

@@ -129,37 +129,23 @@ describe("vendor rows (#4453, 2026-11-16: one row per vendor, its products under
   const filed = (id: string, name: string, vendor?: { id: string; name: string }) => px({ id, name, ...(vendor ? { group: vendor } : {}) } as never);
   const suite = { id: "harbor", name: "Harbor Suite" };
 
-  it("files the products of one vendor under one row; a product with no vendor stands alone", async () => {
-    const products = [filed("desk", "Service Desk", suite), filed("rmm", "Remote Monitoring", suite), filed("wiki", "Team Wiki")];
-    const rows = productRows(products.map((product) => ({ ...product, ...(product.id === "wiki" ? {} : { group: suite }) })), ctx());
-    expect(rows.map((row) => row.key)).toEqual(["vendor:harbor", "product:wiki"]);
-    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
-    // the vendor row reads its count; its products are folded
-    expect(view.querySelector("[data-vendor] .truncate")?.textContent).toContain("Harbor Suite");
-    expect(view.textContent).toContain("2 products");
-    expect(view.querySelector("[data-vendor-products]")).toBeNull();
-    // the single product has no chevron level
-    expect(view.querySelector("[data-person-product='wiki']")).not.toBeNull();
-    expect(view.querySelectorAll("[data-vendor-toggle]")).toHaveLength(1);
-  });
+  const bundles = { mode: "plugins" as const, onOpenVendor: () => {} };
 
-  it("unfolds into its products, each with its own switch, and its endpoints on one line", async () => {
-    const desk = { ...filed("desk", "Service Desk", suite), endpoints: ["Tickets", "Time entries", "Projects"] };
-    const view = await render(createElement("div", null, productRows([desk, filed("rmm", "Remote Monitoring", suite)], ctx())[0]!.node));
-    await act(async () => { view.querySelector<HTMLButtonElement>("[data-vendor-toggle]")!.click(); });
-    const inner = view.querySelectorAll("[data-vendor-products] [data-person-product]");
-    expect([...inner].map((row) => row.getAttribute("data-person-product"))).toEqual(["desk", "rmm"]);
-    expect(inner[0]!.textContent).toContain("Tickets, Time entries, Projects");
-    for (const row of inner) expect(row.querySelector("[data-row-switch]")).not.toBeNull();
-    // a second press folds it again
-    await act(async () => { view.querySelector<HTMLButtonElement>("[data-vendor-toggle]")!.click(); });
-    expect(view.querySelector("[data-vendor-products]")).toBeNull();
+  it("files the products of one vendor under one bundle row (Plugins); the flat rows list every product once", async () => {
+    const products = [filed("desk", "Service Desk", suite), filed("rmm", "Remote Monitoring", suite), filed("wiki", "Team Wiki")];
+    const rows = productRows(products.map((product) => ({ ...product, ...(product.id === "wiki" ? {} : { group: suite }) })), ctx(), bundles);
+    expect(rows.map((row) => row.key)).toEqual(["vendor:harbor"]);
+    const view = await render(createElement("div", null, rows.map((row) => createElement("div", { key: row.key }, row.node))));
+    expect(view.querySelector("[data-vendor-bundle]")?.textContent).toContain("Harbor Suite");
+    expect(view.textContent).toContain("2 connectors");
+    expect(view.querySelector("[data-vendor-toggle]")).toBeNull();
+    expect(productRows(products, ctx()).map((row) => row.key)).toEqual(["product:desk", "product:rmm", "product:wiki"]);
   });
 
   it("the vendor's switch turns every product on or off for all the person's bots", async () => {
     const setProducts = vi.fn();
-    const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk", suite), filed("rmm", "Remote Monitoring", suite)], ctx(() => {}, { setProducts }))[0]!.node));
-    const row = view.querySelector("[data-vendor] > div")!;
+    const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk", suite), filed("rmm", "Remote Monitoring", suite)], ctx(() => {}, { setProducts }), bundles)[0]!.node));
+    const row = view.querySelector("[data-vendor-bundle]")!;
     const toggle = row.querySelector<HTMLButtonElement>("[data-row-switch]")!;
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     // the default scope is not printed on every row; it is the menu's first line
@@ -169,8 +155,8 @@ describe("vendor rows (#4453, 2026-11-16: one row per vendor, its products under
   });
 
   it("says where it is on: a bot that switched one product off shortens the label, and the switch reads off", async () => {
-    const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk", suite)], ctx(() => {}, { bots: [{ id: "bot-a", name: "Rocket", products: { desk: false } }, { id: "bot-b", name: "Orbit" }] }))[0]!.node));
-    const row = view.querySelector("[data-vendor] > div")!;
+    const view = await render(createElement("div", null, productRows([filed("desk", "Service Desk", suite)], ctx(() => {}, { bots: [{ id: "bot-a", name: "Rocket", products: { desk: false } }, { id: "bot-b", name: "Orbit" }] }), bundles)[0]!.node));
+    const row = view.querySelector("[data-vendor-bundle]")!;
     expect(row.querySelector("[data-row-scope]")?.textContent).toBe("1 bot");
     expect(row.querySelector("[data-row-switch]")?.getAttribute("aria-checked")).toBe("false");
   });
@@ -360,15 +346,16 @@ describe("product key card", () => {
 
 describe("marks of products and vendors (#4453, 2026-11-16: not one grey icon for all)", () => {
   const suite = { id: "harbor", name: "Harbor Suite" };
-  const marks = async (products: PersonProduct[]) => {
-    const view = await render(createElement("div", null, productRows(products, ctx()).map((row) => createElement("div", { key: row.key }, row.node))));
+  const marks = async (products: PersonProduct[], bundles = false) => {
+    const view = await render(createElement("div", null, productRows(products, ctx(), bundles ? { mode: "plugins", onOpenVendor: () => {} } : undefined).map((row) => createElement("div", { key: row.key }, row.node))));
     return view;
   };
 
-  it("a product with no icon of its own gets the one neutral tile with its initial, never a coloured letter or the grey connector glyph", async () => {
+  it("a product with no icon of its own gets the one neutral tile with a generic glyph, never a letter or a coloured tile", async () => {
     const view = await marks([px({ id: "a", name: "Service Desk" }), px({ id: "b", name: "Knowledge Base" })]);
-    const tiles = [...view.querySelectorAll<HTMLElement>("[data-letter-tile]")];
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["S", "K"]);
+    const tiles = [...view.querySelectorAll<HTMLElement>("[data-neutral-tile]")];
+    expect(tiles.map((tile) => tile.textContent)).toEqual(["", ""]);
+    expect(tiles.map((tile) => tile.querySelectorAll("svg").length)).toEqual([1, 1]);
     expect(view.querySelector("svg.lucide-server-cog")).toBeNull();
     for (const tile of tiles) {
       expect(tile.className).toContain("bg-raised");
@@ -381,27 +368,27 @@ describe("marks of products and vendors (#4453, 2026-11-16: not one grey icon fo
   it("an item has no tint of its own: eight names, one look", async () => {
     const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"];
     const view = await marks(names.map((name, index) => px({ id: `p${index}`, name })));
-    const looks = new Set([...view.querySelectorAll<HTMLElement>("[data-letter-tile]")].map((tile) => `${tile.className}|${tile.getAttribute("style")}`));
+    const looks = new Set([...view.querySelectorAll<HTMLElement>("[data-neutral-tile]")].map((tile) => `${tile.className}|${tile.getAttribute("style")}`));
     expect(looks.size).toBe(1);
   });
 
   it("a product that carries its own icon shows it, not a tile", async () => {
     const view = await marks([px({ id: "a", name: "Service Desk", icon: { domain: "desk.example.com" } })]);
-    expect(view.querySelector("[data-letter-tile]")).toBeNull();
+    expect(view.querySelector("[data-neutral-tile]")).toBeNull();
     expect(view.querySelector("img")?.getAttribute("src")).toContain("desk.example.com");
     // an image address the console serves is used as is: crisp at any size
     const served = await marks([px({ id: "b", name: "Quoting", icon: { url: "https://cdn.example.test/quoting.svg" } })]);
     expect(served.querySelector("[data-remote-image]")?.getAttribute("src")).toBe("https://cdn.example.test/quoting.svg");
-    expect(served.querySelector("[data-letter-tile]")).toBeNull();
+    expect(served.querySelector("[data-neutral-tile]")).toBeNull();
   });
 
-  it("a vendor takes the icon of one of its products when one has it, else its own initial", async () => {
-    const withIcon = await marks([{ ...px({ id: "a", name: "Service Desk", icon: { domain: "desk.example.com" } }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }]);
-    expect(withIcon.querySelector("[data-vendor] > div img")?.getAttribute("src")).toContain("desk.example.com");
+  it("a vendor takes the icon of one of its products when one has it, else the neutral vendor tile", async () => {
+    const withIcon = await marks([{ ...px({ id: "a", name: "Service Desk", icon: { domain: "desk.example.com" } }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }], true);
+    expect(withIcon.querySelector("[data-vendor-bundle] img")?.getAttribute("src")).toContain("desk.example.com");
     // the vendor's own icon, when the console serves one, wins
-    const served = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }, { ...px({ id: "b", name: "Monitoring" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }]);
-    expect(served.querySelector("[data-vendor] > div [data-remote-image]")?.getAttribute("src")).toBe("https://cdn.example.test/harbor.svg");
-    const without = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }]);
-    expect(without.querySelector("[data-vendor] > div [data-letter-tile]")?.textContent).toBe("H");
+    const served = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }, { ...px({ id: "b", name: "Monitoring" }), group: { ...suite, icon: { url: "https://cdn.example.test/harbor.svg" } } }], true);
+    expect(served.querySelector("[data-vendor-bundle] [data-remote-image]")?.getAttribute("src")).toBe("https://cdn.example.test/harbor.svg");
+    const without = await marks([{ ...px({ id: "a", name: "Service Desk" }), group: suite }, { ...px({ id: "b", name: "Monitoring" }), group: suite }], true);
+    expect(without.querySelector("[data-vendor-bundle] [data-neutral-tile]")?.getAttribute("data-neutral-tile")).toBe("vendor");
   });
 });

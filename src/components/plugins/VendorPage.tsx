@@ -14,7 +14,7 @@ import type { Crumb } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
 import { ProductMark, ProductRow, productRowState, productTrailer, vendorLine, vendorOnCount, type ProductRowsContext } from "./ProductRows";
 import { PluginPageHeader } from "./PluginParts";
-import { DetailHeader, DetailsBlock, OverviewColumns, ReachPanel, SkillCards, sourceLine } from "./DetailParts";
+import { DetailHeader, OverviewColumns, ReachPanel, SkillCards, sourceLine } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
 
@@ -45,7 +45,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-vendor-page={vendor.key}>
         <DetailHeader
           attrs={{ "data-vendor-head": "" }}
-          icon={<ProductMark name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-14 rounded-[14px]" />}
+          icon={<ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-14 rounded-[14px]" />}
           name={vendor.name}
           line={sourceLine([consoleName && t("connectApps.detail.lineFrom", { source: consoleName }), vendorLine(vendor.products.length, on)])}
           actions={productTrailer(ctx, vendor.name, ids, {}, productRowState(worst))}
@@ -65,12 +65,6 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
                 }))} />
               )}
             />
-            <DetailsBlock rows={[
-              ...(consoleName ? [{ label: t("connectApps.detail.source"), value: consoleName }] : []),
-              { label: t("connectApps.plugin.connectors"), value: String(vendor.products.length) },
-              { label: t("connectApps.detail.on"), value: String(on) },
-              ...(skills.length > 0 ? [{ label: t("connectApps.detail.tab.skills"), value: String(skills.length) }] : []),
-            ]} />
           </div>
         ) : tab === "skills" ? (
           <SkillCards skills={skills} />

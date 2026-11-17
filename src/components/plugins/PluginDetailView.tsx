@@ -9,8 +9,8 @@
 // second title): one header with the app's real mark and its name for
 // people, the technical id and source as small metadata, where it is
 // installed (everyone, this bot) and the main action beside it.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, Pencil, Plus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
@@ -21,9 +21,9 @@ import { PillTabs } from "../PillTabs";
 import type { RowState } from "./StateIcon";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
-import { ConnectorRows, DetailHeader, DetailLabel, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, type ConnectorWord, type TreeFile } from "./DetailParts";
+import { ItemTrailer } from "./ItemTrailer";
+import { ConnectorRows, DetailHeader, DetailLabel, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, UpdateNote, VersionPill, type ConnectorWord, type TreeFile } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
-import { MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
 
 export interface DetailTool {
   name: string;
@@ -121,13 +121,15 @@ export interface PluginDetailProps {
   /** only when it is known the item is new */
   isNew?: boolean;
   /** the Contents tab: the server's read-only list of the item's files (`?path=` reads one), the quiet pill, files the list leaves out */
-  files?: { listUrl: string; pill?: ReactNode; extra?: readonly TreeFile[]; count?: number; onDownload?: () => void };
+  files?: { listUrl: string; /** the version the pill names (the install's) */ version?: string; extra?: readonly TreeFile[]; count?: number; onDownload?: () => void };
+  /** the update waiting: its versions and notes, said once in the Overview (the header holds the button); the Contents pill reads the same */
+  update?: { from?: string; to?: string; notes?: string };
 }
 
 type DetailTab = "overview" | "contents" | "skills" | "connectors";
 
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors, description, categories, network, isNew, files } = props;
+  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more, skills, connectors, description, categories, network, isNew, files, update } = props;
   const name = displayName ?? item.name;
   // the technical name, when people read another one
   const technical = name !== item.name ? item.name : null;
@@ -167,16 +169,19 @@ export function PluginDetailView(props: PluginDetailProps) {
                   {t("connectApps.plugin.update")}
                 </button>
               )}
-              {enabled && <Switch checked={enabled.value} disabled={busy} onClick={enabled.onToggle} aria-label={enabled.label} data-plugin-enabled="" />}
-              <PluginActionsMenu
+              <ItemTrailer
                 name={name}
+                columns={false}
                 busy={busy}
-                actions={[
-                  onTest && { id: "test", icon: testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />, label: t("mcp.test"), onSelect: onTest },
-                  onEdit && { id: "edit", icon: <Pencil size={13} />, label: t("connectApps.detail.edit"), onSelect: onEdit },
-                  Boolean(link) && { id: "copy-link", icon: <Link2 size={13} />, label: t("connectApps.detail.copyLink"), onSelect: () => { void copyText(link!).then((result) => setLinkCopied(result === "copied")); } },
-                  onUninstall && { id: "uninstall", icon: <Trash2 size={13} />, label: t("connectApps.detail.uninstall"), onSelect: onUninstall, danger: true },
-                ]}
+                {...(enabled ? { on: enabled.value, onToggle: () => enabled.onToggle() } : {})}
+                actions={{
+                  links: [
+                    ...(onTest ? [{ id: "test", icon: testing ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />, label: t("mcp.test"), run: onTest }] : []),
+                    ...(onEdit ? [{ id: "edit", icon: <Pencil size={14} />, label: t("connectApps.detail.edit"), run: onEdit }] : []),
+                    ...(link ? [{ id: "copy-link", icon: <Link2 size={14} />, label: t("connectApps.detail.copyLink"), run: () => { void copyText(link).then((result) => setLinkCopied(result === "copied")); } }] : []),
+                  ],
+                  ...(onUninstall ? { remove: onUninstall } : {}),
+                }}
               />
             </>
           )}
@@ -191,7 +196,7 @@ export function PluginDetailView(props: PluginDetailProps) {
         )}
 
         {tab === "contents" && files ? (
-          <FileExplorer listUrl={files.listUrl} extra={files.extra} pill={files.pill} onDownload={files.onDownload} />
+          <FileExplorer listUrl={files.listUrl} extra={files.extra} pill={<VersionPill name={name} version={files.version} current={!(onUpdate || update)} />} onDownload={files.onDownload} />
         ) : tab === "skills" && skills ? (
           <SkillCards skills={skills} />
         ) : tab === "connectors" && connectors ? (
@@ -205,6 +210,7 @@ export function PluginDetailView(props: PluginDetailProps) {
         <OverviewColumns
           description={description}
           categories={categories}
+          beneath={update ? <UpdateNote from={update.from} to={update.to} notes={update.notes} /> : undefined}
           reach={connectors && connectors.length > 0 ? (
             <ReachPanel network={network === true} rows={connectors.map((connector) => ({ key: connector.key, name: connector.name, state: connector.state, icon: <PluginIcon item={connector.item} className="size-5 rounded-md" /> }))} />
           ) : undefined}
@@ -336,82 +342,6 @@ export function PluginDetailView(props: PluginDetailProps) {
 export function toolLabel(name: string): string {
   const words = name.replace(/[_\-.]+/g, " ").trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : name;
-}
-
-interface PluginAction {
-  id: string;
-  icon: ReactNode;
-  label: string;
-  onSelect: () => void;
-  danger?: boolean;
-}
-
-/** The detail page's "..." menu: Update, Test, Edit, Uninstall (each only
- * when the plugin offers it). A dot on the button says an update waits. */
-export function PluginActionsMenu({ name, busy, actions, updateAvailable }: {
-  name: string;
-  busy: boolean;
-  actions: Array<PluginAction | undefined | false>;
-  updateAvailable?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const shown = actions.filter((action): action is PluginAction => Boolean(action));
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      setOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", onKey, true);
-    };
-  }, [open]);
-  if (shown.length === 0) return null;
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        data-plugin-actions
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t("connectApps.detail.moreActions", { name })}
-        title={t("connectApps.detail.moreActions", { name })}
-        onClick={() => setOpen((value) => !value)}
-        className="ui-icon-button relative"
-      >
-        <MoreHorizontal size={17} />
-        {updateAvailable && <span data-plugin-update-dot className="absolute right-1 top-1 size-2 rounded-full bg-accent" aria-hidden="true" />}
-      </button>
-      {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-9 z-10 min-w-[220px]")}>
-          {shown.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              role="menuitem"
-              data-plugin-action={action.id}
-              disabled={busy}
-              onClick={() => {
-                setOpen(false);
-                action.onSelect();
-              }}
-              className={menuRow(action.danger ? "danger" : "idle")}
-            >
-              <MenuGlyph danger={action.danger}>{action.icon}</MenuGlyph>{action.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 /** "+ Add another account" under the accounts. */

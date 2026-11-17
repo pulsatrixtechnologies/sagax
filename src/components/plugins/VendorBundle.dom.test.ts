@@ -87,18 +87,21 @@ describe("each product is its own row of Connectors, marked as part of its bundl
     expect(view.querySelector("[data-person-product='wiki'] [data-vendor-chip]")).toBeNull();
   });
 
-  it("the chip opens the bundle, by a click or the keyboard, and not the product's own page", async () => {
+  it("the chip is its own button (a keyboard stop of its own, never a control inside a control) and opens the bundle, not the product's page", async () => {
     const onOpenVendor = vi.fn();
     const opened = vi.fn();
     const view = await render(createElement("div", null, productRows(products, ctx({ onOpen: opened }), { mode: "connectors", onOpenVendor })[0]!.node));
     const chip = view.querySelector<HTMLElement>("[data-vendor-chip]")!;
-    expect(chip.tabIndex).toBe(0);
+    expect(chip.tagName).toBe("BUTTON");
+    expect(chip.parentElement?.closest("button")).toBeNull();
+    expect(view.querySelectorAll("[data-person-product='desk'] button").length).toBeGreaterThanOrEqual(2);
     expect(chip.getAttribute("aria-label")).toBe("Part of Harbor Suite: open it");
     await click(chip);
-    await act(async () => { chip.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
-    expect(onOpenVendor).toHaveBeenCalledTimes(2);
     expect(onOpenVendor).toHaveBeenCalledWith("vendor:harbor");
     expect(opened).not.toHaveBeenCalled();
+    // the row's own button opens the product
+    await click(view.querySelector("[data-person-product='desk'] button"));
+    expect(opened).toHaveBeenCalledTimes(1);
   });
 
   it("a product with no icon of its own takes its vendor's", async () => {
@@ -111,7 +114,7 @@ describe("each product is its own row of Connectors, marked as part of its bundl
     const image = view.querySelector("[data-person-product='desk'] [data-remote-image]")!;
     await act(async () => { image.dispatchEvent(new Event("error")); });
     expect(view.querySelector("[data-person-product='desk'] [data-remote-image]")).toBeNull();
-    expect(view.querySelector("[data-person-product='desk'] [data-letter-tile]")?.textContent).toBe("S");
+    expect(view.querySelector("[data-person-product='desk'] [data-neutral-tile]")?.getAttribute("data-neutral-tile")).toBe("connector");
   });
 });
 

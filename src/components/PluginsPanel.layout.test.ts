@@ -194,13 +194,13 @@ describe("Plugins panel views", () => {
     }));
     expect(html).toContain('aria-label="Back to Connect Apps"');
     // the switch sits at the header's right, by the one "..." menu (Uninstall is in it, never a second pill)
-    expect(html).toMatch(/aria-label="Turn glitcho off"[^>]*data-plugin-enabled|data-plugin-enabled[^>]*aria-label="Turn glitcho off"/);
-    expect(html).toContain('aria-label="More actions for glitcho"');
+    expect(html).toContain('data-row-switch=""');
+    expect(html).toContain("data-entry-menu");
     expect(html).not.toMatch(/data-plugin-action="uninstall"/);
     const withEdit = renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, onEdit: noop, details: [] }));
-    expect(withEdit).toContain('aria-label="More actions for glitcho"');
+    expect(withEdit).toContain("data-entry-menu");
     // with no Update, Test, Edit or Uninstall there is no menu
-    expect(renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, details: [] }))).not.toContain('aria-label="More actions for glitcho"');
+    expect(renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, details: [] }))).not.toContain("data-entry-menu");
     expect(html).toContain("Accounts");
     expect(html).toMatch(/qc1\.example\.net[\s\S]*?Connected/);
     expect(html).toContain("1 of 2 enabled");

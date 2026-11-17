@@ -19,7 +19,7 @@ import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import type { Crumb } from "../Breadcrumb";
 import { PluginPageHeader } from "./PluginParts";
 import { PillTabs } from "../PillTabs";
-import { DetailHeader, DetailsBlock, FileExplorer, sourceLine, VersionPill } from "./DetailParts";
+import { DetailHeader, DetailsBlock, FileExplorer, sourceLine, UpdateNote, VersionPill } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 import { cn } from "@/lib/cn";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
@@ -169,10 +169,6 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
   const detailRows = skill ? [
     { label: t("connectApps.detail.source"), value: sourceLabel ?? t("connectApps.skill.private") },
     ...(skill.version ? [{ label: t("connectApps.detail.version"), value: skill.version }] : []),
-    ...(update ? [
-      { label: t("connectApps.updates.versions"), value: [update.from, update.to].filter(Boolean).join(" \u2192 ") || t("connectApps.plugin.newerFiles") },
-      ...(update.notes ? [{ label: t("connectApps.updates.notes"), value: update.notes }] : []),
-    ] : []),
   ] : [];
   return (
     <>
@@ -193,7 +189,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
               )}
               <span data-skill-enabled="" className="flex items-center gap-2">
                 {busy === "toggle" && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
-                <Switch checked={enabled} disabled={busy !== null || !loaded || readOnly} onClick={() => void toggle()} aria-label={t(enabled ? "connectApps.skill.turnOff" : "connectApps.skill.turnOn")} title={t(enabled ? "connectApps.skill.on" : "connectApps.skill.off")} />
+                <Switch checked={enabled} disabled={busy !== null || !loaded} onClick={() => void toggle()} aria-label={t(enabled ? "connectApps.skill.turnOff" : "connectApps.skill.turnOn")} title={t(enabled ? "connectApps.skill.on" : "connectApps.skill.off")} />
               </span>
               <PublishMenu disabled={!loaded} fileName={`${name.trim() || skill.name}.md`} text={skillMd} />
               {!readOnly && (
@@ -268,7 +264,8 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
           </p>
           {error && <p role="alert" className="rounded-[12px] bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">{error}</p>}
         </form>
-        {skill && <DetailsBlock rows={detailRows} update={update?.onUpdate ? { onUpdate: update.onUpdate, updating: update.running } : undefined} busy={busy !== null} />}
+        {skill && update && <UpdateNote from={update.from} to={update.to} notes={update.notes} />}
+        {skill && <DetailsBlock rows={detailRows} busy={busy !== null} />}
           </>
         )}
       </div>

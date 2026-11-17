@@ -11,7 +11,7 @@
 // #4453: Discover of one kind (Skills, Connectors or Plugins); "From Sagax"
 // left the home, it repeated Yours.
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Loader2, Pause, Play } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -260,13 +260,24 @@ export function FeaturedCarousel({ slides }: { slides: readonly FeaturedSlide[] 
   const [paused, setPaused] = useState(false);
   const count = slides.length;
   const current = slides[Math.min(index, Math.max(count - 1, 0))];
-  const reduced = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // the system's reduced-motion setting, read live: a change while the window is open stops (or lets) the cycling at once
+  const [reduced, setReduced] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const change = () => setReduced(query.matches);
+    change();
+    query.addEventListener?.("change", change);
+    return () => query.removeEventListener?.("change", change);
+  }, []);
+  // a pause the person chose, kept until they resume (hover and focus pause it only while they last)
+  const [stopped, setStopped] = useState(false);
   useEffect(() => { if (index >= count) setIndex(0); }, [count, index]);
   useEffect(() => {
-    if (count < 2 || paused || reduced) return;
+    if (count < 2 || paused || stopped || reduced) return;
     const timer = window.setTimeout(() => setIndex((value) => (value + 1) % count), SLIDE_MS);
     return () => window.clearTimeout(timer);
-  }, [count, index, paused, reduced]);
+  }, [count, index, paused, stopped, reduced]);
   if (!current) return null;
   const go = (next: number) => setIndex((next + count) % count);
   return (
@@ -286,11 +297,20 @@ export function FeaturedCarousel({ slides }: { slides: readonly FeaturedSlide[] 
       </div>
       {count > 1 && (
         <div className="absolute inset-x-5 bottom-2.5 flex items-center justify-between" data-featured-controls="">
-          <div className="flex items-center gap-1.5" role="group" aria-label={t("connectApps.featured.dots")}>
+          <div className="flex items-center" role="group" aria-label={t("connectApps.featured.dots")}>
+            {/* a 24 px hit area around each 8 px dot */}
             {slides.map((slide, position) => (
               <button key={slide.key} type="button" data-featured-dot={position} aria-label={t("connectApps.featured.goTo", { name: slide.name })} aria-current={position === index ? "true" : undefined}
-                onClick={() => go(position)} className={cn("size-2 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none", position === index ? "bg-ink" : "bg-ink/25 hover:bg-ink/50")} />
+                onClick={() => go(position)} className="group/dot flex size-6 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+                <span className={cn("size-2 rounded-full transition-colors motion-reduce:transition-none", position === index ? "bg-ink" : "bg-ink/25 group-hover/dot:bg-ink/50")} />
+              </button>
             ))}
+            {!reduced && (
+              <button type="button" data-featured-pause="" aria-pressed={stopped} aria-label={t(stopped ? "connectApps.featured.resume" : "connectApps.featured.pause")} title={t(stopped ? "connectApps.featured.resume" : "connectApps.featured.pause")}
+                onClick={() => setStopped((value) => !value)} className="ml-1 inline-flex size-6 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+                {stopped ? <Play size={12} aria-hidden="true" /> : <Pause size={12} aria-hidden="true" />}
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <button type="button" data-featured-prev="" aria-label={t("connectApps.featured.prev")} title={t("connectApps.featured.prev")} onClick={() => go(index - 1)} className="inline-flex size-6 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><ChevronLeft size={14} aria-hidden="true" /></button>

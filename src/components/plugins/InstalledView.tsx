@@ -290,7 +290,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
   const renderLine = (line: InstalledLine) => {
     if (line.kind === "entry") return (
       <>
-        <InstalledRow entry={line.entry} onOpen={() => onOpenEntry(line.entry)} actions={entryActions(line.entry)} trailer={entryTrailer?.(line.entry)} />
+        <InstalledRow entry={line.entry} onOpen={() => onOpenEntry(line.entry)} actions={entryActions(line.entry)} trailer={entryTrailer?.(line.entry)} hideOrigin={kind !== undefined && consoleShown} />
         {rowNotice?.(line.entry.members.map((member) => member.updateKey))}
       </>
     );
@@ -480,7 +480,7 @@ function skillLine(skill: { source: string; description?: string }, sourceLabel:
   return skill.description ? `${from} · ${skill.description}` : from;
 }
 /** One installed entry: logo, name, what it brings, its state, "...". */
-export function InstalledRow({ entry, onOpen, actions, trailer }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions; trailer?: ReactNode }) {
+export function InstalledRow({ entry, onOpen, actions, trailer, hideOrigin = false }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions; trailer?: ReactNode; /** the section title already says it (Added by you): the line starts with what it does */ hideOrigin?: boolean }) {
   const icon = entryIcon(entry);
   return (
     <div className="group flex items-center gap-2 py-3" data-installed-entry={entry.key} {...{ [ITEM_ROW_ATTR]: "" }}>
@@ -494,7 +494,7 @@ export function InstalledRow({ entry, onOpen, actions, trailer }: { entry: Insta
           </span>
           {/* how it got there, then what it does, on one line */}
           <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={bringsLabel(entry.brings)} data-installed-brings>
-            {[t("connectApps.origin.you"), entry.primary.description || bringsLabel(entry.brings)].join(" \u00b7 ")}
+            {[...(hideOrigin ? [] : [t("connectApps.origin.you")]), entry.primary.description || bringsLabel(entry.brings)].join(" \u00b7 ")}
           </span>
         </span>
         {!trailer && <PluginStatusLabel status={entry.status} className="text-[12px] font-normal" />}

@@ -48648,7 +48648,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nouvelle compétence"
+            "value": "Nouveau skill"
           }
         },
         "pt-BR": {
@@ -53556,7 +53556,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rien d'installé pour l'instant. Trouve des apps, des plugins et des compétences dans Découvrir."
+            "value": "Rien d'installé pour l'instant. Trouve des apps, des plugins et des skills dans Découvrir."
           }
         }
       }
@@ -62321,7 +62321,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les plugins installés ici vont à %@ seulement, avec leurs agents, commandes et compétences. Les hooks et les serveurs MCP du plugin sont laissés de côté."
+            "value": "Les plugins installés ici vont à %@ seulement, avec leurs agents, commandes et skills. Les hooks et les serveurs MCP du plugin sont laissés de côté."
           }
         },
         "pt-BR": {
@@ -72427,7 +72427,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rechercher plugins, compétences, serveurs MCP, bots, modèles, pages et sources"
+            "value": "Rechercher plugins, skills, serveurs MCP, bots, modèles, pages et sources"
           }
         }
       }

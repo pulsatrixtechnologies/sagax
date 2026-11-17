@@ -42,6 +42,20 @@ describe("joining an update to a row", () => {
     expect(updateOf(data, "plugin", "Review")?.key).toBe("plugin:me:me:review@a");
   });
 
+  it("joins an organization row by its declaration id, never by its name; an unknown source gets no mark", () => {
+    const data = answer([
+      item({ key: "plugin:organization:organization:pack@oc-1", name: "Compliance Pack", scope: "organization", organization: "required", organizationId: "oc-1", canUpdate: false }),
+      item({ key: "plugin:me:me:pack@market", name: "Compliance Pack" }),
+      item({ key: "skill:me:me:notes", kind: "skill", name: "notes", updateUnknown: true }),
+    ]);
+    expect(updateOf(data, "plugin", "Compliance Pack", undefined, "oc-1")?.key).toBe("plugin:organization:organization:pack@oc-1");
+    expect(updateOf(data, "plugin", "Compliance Pack", undefined, "oc-2")).toBeUndefined();
+    // by name only the person's own item matches, never the organization's
+    expect(updateOf(data, "plugin", "Compliance Pack")?.key).toBe("plugin:me:me:pack@market");
+    expect(updateOf(data, "skill", "notes")).toBeUndefined();
+    expect(updateOf(data, "skill", "notes", "skill:me:me:notes")).toBeUndefined();
+  });
+
   it("names a row's kind in the updates' kinds", () => {
     expect([updateKindOf("plugin"), updateKindOf("skill"), updateKindOf("mcp"), updateKindOf("featured"), updateKindOf("app")]).toEqual(["plugin", "skill", "connector", "connector", "connector"]);
   });
@@ -118,6 +132,22 @@ describe("the page's use of the update routes", () => {
     await act(async () => { await state.update(["plugin:me:me:code-review@market"]); });
     expect(state.failures).toHaveLength(1);
     expect(state.failures[0]?.name).toBe("Code Review");
+  });
+
+  it("an update whose source could not be checked is said calmly (could not check), never as a failure", async () => {
+    api.mockResolvedValueOnce(answer()).mockResolvedValueOnce({ results: [{ key: "plugin:me:me:code-review@market", kind: "plugin", name: "Code Review", status: "unknown" }], count: 1 }).mockResolvedValueOnce(answer());
+    await act(async () => { root.render(createElement(Probe)); });
+    await act(async () => { await state.update(["plugin:me:me:code-review@market"]); });
+    expect(state.failures).toEqual([{ key: "plugin:me:me:code-review@market", name: "Code Review", error: "", unknown: true }]);
+    const { UpdateNotice } = await import("../components/plugins/UpdateNotice");
+    const host = document.createElement("div");
+    document.body.append(host);
+    const noticeRoot = createRoot(host);
+    await act(async () => { noticeRoot.render(createElement(UpdateNotice, { failure: state.failures[0]!, onRetry: vi.fn(), onClose: vi.fn() })); });
+    expect(host.textContent).toContain("Code Review");
+    expect(host.textContent).toContain("could not be checked");
+    await act(async () => noticeRoot.unmount());
+    host.remove();
   });
 
   it("shows nothing and does not fail on a server that does not know the route", async () => {

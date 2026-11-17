@@ -70,7 +70,7 @@ const NAME = "[A-Za-z0-9][A-Za-z0-9._-]{0,63}";
 const MARKET = new RegExp(`^/api/marketplaces/(${NAME})(?:/(refresh|visibility|credential))?$`);
 const CREDENTIAL = /^gt_[0-9a-f]{16}$/;
 const PLUGIN = new RegExp(`^/api/marketplaces/(${NAME})/plugins/(${NAME})$`);
-const FILES = new RegExp(`^/api/marketplaces/(${NAME})/plugins/(${NAME})/files$`);
+const FILES = /^\/api\/marketplaces\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})\/plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
 const UPDATE = new RegExp(`^/api/marketplaces/(${NAME})/plugins/(${NAME})/update$`);
 
 export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandler {
@@ -130,9 +130,8 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
         return json(res, 201, { marketplace: marketplaces.find((market) => market.name === added.name) ?? added, marketplaces });
       }
       const files = FILES.exec(path);
-      if (files) {
+      if (files && method === "GET") {
         const [, marketplace, name] = files;
-        if (method !== "GET") return json(res, 405, { error: "GET" });
         // a private marketplace that is not this viewer's does not exist to them, on a read too
         if (typeof deps.store.canAccess === "function" && !deps.store.canAccess(marketplace!, viewer)) return json(res, 404, { error: "No marketplace with that name.", code: "not_found" });
         if (!deps.store.installed().some((entry) => entry.key === `${name}@${marketplace}`)) return json(res, 404, { error: "That plugin is not installed.", code: "not_installed" });

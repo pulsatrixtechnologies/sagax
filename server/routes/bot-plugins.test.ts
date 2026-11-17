@@ -3,7 +3,7 @@
 // (/api/bots/:id/plugins, the bot's owner or a person who manages it).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -47,6 +47,15 @@ function marketplaceRepo(): string {
   write(repo, "plugins/reviewer/certs/server.pem", "not a real key");
   write(repo, "plugins/reviewer/certs/signing.key", "not a real key");
   write(repo, "plugins/reviewer/secrets.json", "{}");
+  // what the list leaves out, the read refuses too
+  write(repo, "plugins/reviewer/node_modules/pkg/index.js", "module.exports = 1;");
+  write(repo, "plugins/reviewer/.git/config", "[core]");
+  // too big to read here, and a binary that is never sent
+  write(repo, "plugins/reviewer/docs/big.md", "x".repeat(600 * 1024));
+  writeFileSync(join(repo, "plugins/reviewer/docs/logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]));
+  // a link out of the folder
+  writeFileSync(join(tmpdir(), "sagax-outside-secret.txt"), "outside");
+  symlinkSync(tmpdir(), join(repo, "plugins/reviewer/escape"));
   return repo;
 }
 
@@ -129,7 +138,7 @@ async function boot() {
     });
     return { status: response.status, body: await response.json() as Record<string, any> };
   };
-  return { call, plugins, shared };
+  return { call, plugins, shared, personal };
 }
 
 describe("org-wide sharing is admins only, on the bot route too", () => {
@@ -225,17 +234,23 @@ describe("what an installation's plugin holds, read only (managers)", () => {
 });
 
 const SECRETS = [".env", ".env.local", "certs/server.pem", "certs/signing.key", "secrets.json"];
+/** listed nowhere, so read nowhere */
+const UNLISTED = ["node_modules/pkg/index.js", ".git/config", ".claude-plugin/sagax-originals/commands/review.md", "escape/sagax-outside-secret.txt"];
 const leaks = (files: Array<{ path: string }>) => files.map((file) => file.path).filter((path) => SECRETS.includes(path) || /\.(?:pem|key)$|(?:^|\/)\.env/.test(path));
 
 describe("no files route lists or reads what can hold a secret", () => {
   it("leaves .env*, *.pem, *.key and credential names out of the person's, the bot's and the installation's lists, and refuses to read them", async () => {
-    const { call, shared } = await boot();
+    const { call, shared, plugins, personal } = await boot();
     await call(ADMIN, "POST", "/api/marketplaces", { source: "acme/tools", visibility: "org" });
     await shared.prepare("acme-tools", "reviewer", ADMIN, { principal: ADMIN, seesAll: true });
     await shared.recordInstall("acme-tools", "reviewer", { servers: [], skills: [] });
     await call("pr_alice", "POST", "/api/me/plugins/marketplaces", { source: "acme/tools" });
     await call("pr_alice", "POST", "/api/me/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
     await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    // the folder Sagax keeps the texts from before a configuration in (made by the app, in every install)
+    for (const dir of [shared.pluginDir("acme-tools", "reviewer"), plugins.installedPluginDir("alice-bot", "reviewer@acme-tools"), personal.installedPluginDir("pr_alice", "reviewer@acme-tools")]) {
+      write(dir!, ".claude-plugin/sagax-originals/commands/review.md", "the text before configuration");
+    }
     const bases = [
       ["pr_alice", "/api/me/plugins/reviewer%40acme-tools/files"],
       ["pr_alice", "/api/bots/alice-bot/plugins/reviewer%40acme-tools/files"],
@@ -248,7 +263,12 @@ describe("no files route lists or reads what can hold a secret", () => {
       const paths = (listed.body.files as Array<{ path: string }>).map((file) => file.path);
       expect(paths, base).toContain("agents/critic.md");
       expect(leaks(listed.body.files), base).toEqual([]);
-      for (const secret of SECRETS) expect((await call(who, "GET", `${base}?path=${encodeURIComponent(secret)}`)).status, `${base} ${secret}`).toBe(404);
+      for (const hidden of [...SECRETS, ...UNLISTED]) expect((await call(who, "GET", `${base}?path=${encodeURIComponent(hidden)}`)).status, `${base} ${hidden}`).toBe(404);
+      expect(paths.some((path) => UNLISTED.includes(path) || path.startsWith("escape"))).toBe(false);
+      // a size cap, and no binary dump: listed, never sent
+      expect((await call(who, "GET", `${base}?path=docs%2Fbig.md`)).status, base).toBe(413);
+      expect(paths, base).toContain("docs/logo.png");
+      expect((await call(who, "GET", `${base}?path=docs%2Flogo.png`)).status, base).toBe(415);
     }
   });
 });

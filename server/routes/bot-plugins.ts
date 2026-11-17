@@ -61,6 +61,8 @@ export interface BotPluginRouteDeps<B extends { id: string }> {
 const FILES_ROUTE = /^\/api\/bots\/([\w-]+)\/plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
 /** GET /api/me/installation-plugins/:key/files[?path=]: what a plugin the installation installed holds, for a person who may use it. */
 const INSTALLATION_FILES = /^\/api\/me\/installation-plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
+/** GET /api/me/plugins/:key/files[?path=]: what the person's own install of a plugin holds. */
+const ME_FILES = /^\/api\/me\/plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
 const ROUTE = /^\/api\/bots\/([\w-]+)\/plugins(?:\/(marketplaces|install)(?:\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:\/(update|credential))?)?|\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})(\/config)?)?$/;
 const CREDENTIAL = /^gt_[0-9a-f]{16}$/;
 /** undefined: none sent; null: not a credential id. */
@@ -214,7 +216,17 @@ export function createPersonalPluginRoutes(deps: Omit<BotPluginRouteDeps<{ id: s
 }): RouteHandler {
   return async (context) => {
     const installed = INSTALLATION_FILES.exec(decodeURIComponent(context.path));
+    const own = ME_FILES.exec(decodeURIComponent(context.path));
     const method = context.req.method;
+    if (own && method === "GET") {
+      const person = deps.person(context.auth);
+      if (!person) return context.json(context.res, 403, { error: "Sign in to manage your own capabilities.", code: "person_required" });
+      const folder = deps.plugins.installedPluginDir(person, own[1]!);
+      if (!folder) return context.json(context.res, 404, { error: "No plugin with that name.", code: "not_found" });
+      context.res.setHeader("cache-control", "private, no-store");
+      sendPluginFiles(context.res, context.json, folder, context.url.searchParams.get("path"));
+      return;
+    }
     if (installed && method === "GET") {
       const person = deps.person(context.auth);
       if (!person) return context.json(context.res, 403, { error: "Sign in to manage your own capabilities.", code: "person_required" });

@@ -18,7 +18,7 @@ import {
   refusedKeys,
 } from "../McpServersPanel";
 import { AddAccountButton, SignInButton, type DetailAccount, type DetailTool } from "../plugins/PluginDetailView";
-import { sourceLine, VersionPill, type ConnectorWord } from "../plugins/DetailParts";
+import { sourceLine, type ConnectorWord } from "../plugins/DetailParts";
 import { filterLabel } from "../plugins/ConnectAppsView";
 import { grokConnectorDetail } from "./GrokConnectors";
 import { pluginSourceLabel, safeHost } from "./helpers";
@@ -299,15 +299,9 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
       : scope === "workspace" ? `/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(plugin)}/files` : null;
   const files = filesUrl && item.installed ? {
     listUrl: filesUrl,
-    pill: <VersionPill name={item.name} version={installedVersion} current={!item.updateAvailable} />,
+    version: installedVersion,
   } : undefined;
-  const versionDetails = [
-    ...(installedVersion ? [{ label: t("connectApps.detail.version"), value: installedVersion }] : []),
-    ...(item.updateAvailable ? [{
-      label: t("connectApps.plugin.available"),
-      value: item.installedVersion && item.version ? item.version : t("connectApps.plugin.newerFiles"),
-    }] : []),
-  ];
+  const versionDetails = installedVersion ? [{ label: t("connectApps.detail.version"), value: installedVersion }] : [];
   // The technical id and the repository: secondary, in Details (the header
   // shows the name people read).
   const sourceDetails = [

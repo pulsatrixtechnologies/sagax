@@ -563,6 +563,8 @@ describe("Plugins, driven like the owner does", () => {
     await go("installed");
     await kind("plugins");
     const row = () => [...host.querySelectorAll<HTMLElement>("[data-installed-entry] button[aria-label]")].find((button) => button.textContent?.includes("GitHub"))!;
+    const openerKey = row().closest("[data-installed-entry]")!.getAttribute("data-installed-entry");
+    row().focus();
     await click(row());
     expect($("[data-plugins-subpage]")).not.toBeNull();
     expect(selected()).toBe("installed");
@@ -571,10 +573,12 @@ describe("Plugins, driven like the owner does", () => {
     expect($("[data-plugins-detail-head] img")).not.toBeNull();
     expect($("[data-plugins-detail-meta]")?.textContent).toMatch(/^from anthropics\/claude-plugins-official/);
     expect([...host.querySelectorAll("[data-install-state]")].map((node) => node.textContent)).toEqual(["Installed for everyone", "Not installed on Rocket"]);
-    // back to the list
+    // back to the list: the focus returns to the row that opened the page
     await click($("[data-plugins-back]"));
     expect($("[data-plugins-subpage]")).toBeNull();
     expect($('[data-plugins-manage="installed"]')).not.toBeNull();
+    await act(async () => { await new Promise((done) => setTimeout(done, 80)); });
+    expect(document.activeElement?.closest("[data-installed-entry]")?.getAttribute("data-installed-entry")).toBe(openerKey);
     // opened from a bot's page: its main action beside the name
     try {
       await openFromBot();

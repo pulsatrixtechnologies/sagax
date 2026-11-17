@@ -117,7 +117,7 @@ try {
     if (scene("connector")) {
     await open("&role=member");
     await kind("connectors");
-    await page.locator('[data-person-product="prod-psa"] > button').first().click({ position: { x: 24, y: 20 } });
+    await page.locator('[data-person-product="prod-psa"] button[aria-label]').first().click({ position: { x: 24, y: 20 } });
     await page.waitForSelector("[data-person-product-page]");
     await shot("80-connector-product-overview");
     await page.click('[data-product-tab="tools"]');

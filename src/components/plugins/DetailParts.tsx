@@ -7,7 +7,7 @@
 // categories, "Connectors & tools" at the right), the Skills cards, the
 // Connectors rows, the quiet Details block, and Contents: a file tree and the
 // selected file read from what the server already lists and reads.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Download, FileText, Folder, FolderOpen, Info, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -106,13 +106,15 @@ export function ReachPanel({ network, rows }: {
 
 /** The Overview: the description and the categories on the left, the panel at
  * the right, one column under the width a panel needs. */
-export function OverviewColumns({ description, categories = [], reach, children }: {
+export function OverviewColumns({ description, categories = [], reach, children, beneath }: {
   description?: string;
   categories?: readonly string[];
   reach?: ReactNode;
   children?: ReactNode;
+  /** under the categories (the update waiting) */
+  beneath?: ReactNode;
 }) {
-  const left = Boolean(description) || categories.length > 0 || Boolean(children);
+  const left = Boolean(description) || categories.length > 0 || Boolean(children) || Boolean(beneath);
   if (!left && !reach) return null;
   return (
     <div className={cn("grid gap-x-8 gap-y-6", reach && left && "md:grid-cols-[minmax(0,1fr)_minmax(220px,300px)]")} data-detail-overview="">
@@ -125,11 +127,29 @@ export function OverviewColumns({ description, categories = [], reach, children 
             </section>
           )}
           <CategoryChips categories={categories} />
+          {beneath}
           {children}
         </div>
       )}
       {reach}
     </div>
+  );
+}
+
+/** The update waiting, said in the Overview (the header holds its one button): the versions and what changes. */
+export function UpdateNote({ from, to, notes }: { from?: string; to?: string; notes?: string }) {
+  const versions = [from, to].filter(Boolean).join(" \u2192 ") || t("connectApps.plugin.newerFiles");
+  return (
+    <section data-detail-update="">
+      <DetailLabel>{t("connectApps.updates.versions")}</DetailLabel>
+      <p className="text-[13px] leading-5 text-ink">{versions}</p>
+      {notes && (
+        <>
+          <p className="mt-3 text-[12px] leading-4 text-ink-tertiary">{t("connectApps.updates.notes")}</p>
+          <p className="mt-0.5 whitespace-pre-line break-words text-[13px] leading-5 text-ink-secondary" data-detail-update-notes="">{notes}</p>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -290,16 +310,49 @@ const LANGUAGE: Record<string, string> = { sh: "bash", yml: "yaml", md: "markdow
 const languageOf = (path: string) => LANGUAGE[path.split(".").pop()?.toLowerCase() ?? ""] ?? "text";
 /** A markdown file's text without its front matter (the `---` block a SKILL.md or agent starts with), for the rendered view; Source shows all of it. */
 export const withoutFrontMatter = (text: string): string => text.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, "").replace(/^\s+/, "");
+/** What a README may load when it is read here: an https image (the app's image policy); any other image (http, a relative or a local
+ * path) is shown as its link or its words, never fetched or read. */
+export function markdownForReading(text: string): string {
+  return text.replace(/!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?([^)]*)\)/g, (whole, alt: string, url: string) => {
+    if (/^https:\/\//i.test(url)) return whole;
+    if (/^http:\/\//i.test(url)) return `[${alt || url}](${url})`;
+    return alt || "";
+  });
+}
 const isMarkdown = (path: string) => /\.(md|markdown)$/i.test(path);
 
-function TreeRows({ nodes, depth, open, onToggle, selected, onSelect }: { nodes: TreeNode[]; depth: number; open: ReadonlySet<string>; onToggle: (path: string) => void; selected: string | null; onSelect: (path: string) => void }) {
+/** The tree keys: Up and Down move through the visible rows, Right opens a folder (then goes in), Left folds it (then goes out), Home and End,
+ * Enter and Space choose; one row is in the tab order (roving). */
+function TreeRows({ nodes, depth, open, onToggle, selected, onSelect, focused, onFocus, parentPath }: {
+  nodes: TreeNode[]; depth: number; open: ReadonlySet<string>; onToggle: (path: string) => void; selected: string | null; onSelect: (path: string) => void;
+  focused: string | null; onFocus: (path: string) => void; parentPath?: string;
+}) {
   return (
     <ul role={depth === 0 ? "tree" : "group"} aria-label={depth === 0 ? t("connectApps.files.aria") : undefined}>
       {nodes.map((node) => {
         const expanded = open.has(node.path);
+        const move = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+          const tree = event.currentTarget.closest('[role="tree"]');
+          const rows = tree ? Array.from(tree.querySelectorAll<HTMLButtonElement>("[data-file-row]")) : [];
+          const at = rows.indexOf(event.currentTarget);
+          const go = (target: HTMLButtonElement | undefined) => { if (target) { event.preventDefault(); onFocus(target.getAttribute("data-file-row")!); target.focus(); } };
+          if (event.key === "ArrowDown") go(rows[at + 1]);
+          else if (event.key === "ArrowUp") go(rows[at - 1]);
+          else if (event.key === "Home") go(rows[0]);
+          else if (event.key === "End") go(rows[rows.length - 1]);
+          else if (event.key === "ArrowRight" && node.dir) { event.preventDefault(); if (!expanded) onToggle(node.path); else go(rows[at + 1]); }
+          else if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            if (node.dir && expanded) onToggle(node.path);
+            else if (parentPath) go(rows.find((row) => row.getAttribute("data-file-row") === parentPath));
+          }
+        };
         return (
           <li key={node.path} role="treeitem" aria-expanded={node.dir ? expanded : undefined} aria-selected={!node.dir ? selected === node.path : undefined}>
             <button type="button" data-file-row={node.path} data-file-dir={node.dir ? "" : undefined}
+              tabIndex={(focused ?? selected ?? "") === node.path ? 0 : -1}
+              onFocus={() => onFocus(node.path)}
+              onKeyDown={move}
               onClick={() => (node.dir ? onToggle(node.path) : onSelect(node.path))}
               style={{ paddingLeft: 8 + depth * 14 }}
               className={cn("flex h-7 w-full min-w-0 items-center gap-1.5 rounded-lg pr-2 text-left text-[13px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none",
@@ -308,7 +361,7 @@ function TreeRows({ nodes, depth, open, onToggle, selected, onSelect }: { nodes:
               {node.dir ? (expanded ? <FolderOpen size={14} aria-hidden="true" className="shrink-0" /> : <Folder size={14} aria-hidden="true" className="shrink-0" />) : <FileText size={14} aria-hidden="true" className="shrink-0" />}
               <span className="min-w-0 flex-1 truncate" title={node.name}>{node.name}</span>
             </button>
-            {node.dir && expanded && <TreeRows nodes={node.children} depth={depth + 1} open={open} onToggle={onToggle} selected={selected} onSelect={onSelect} />}
+            {node.dir && expanded && <TreeRows nodes={node.children} depth={depth + 1} open={open} onToggle={onToggle} selected={selected} onSelect={onSelect} focused={focused} onFocus={onFocus} parentPath={node.path} />}
           </li>
         );
       })}
@@ -335,6 +388,7 @@ export function FileExplorer({ listUrl, extra = [], pill, onDownload }: {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [text, setText] = useState<{ path: string; value: string } | { path: string; error: string } | null>(null);
   const [source, setSource] = useState(false);
+  const [focusedRow, setFocusedRow] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     setFiles(null);
@@ -388,7 +442,7 @@ export function FileExplorer({ listUrl, extra = [], pill, onDownload }: {
       ) : (
         <div className="grid min-h-[320px] overflow-hidden rounded-[14px] border-[0.5px] border-ink/[0.1] md:grid-cols-[minmax(180px,250px)_minmax(0,1fr)]" data-file-explorer="">
           <div className="max-h-[440px] overflow-y-auto border-b-[0.5px] border-ink/[0.1] p-1.5 md:max-h-[520px] md:border-b-0 md:border-r-[0.5px]">
-            <TreeRows nodes={tree} depth={0} open={open} onToggle={toggle} selected={selected} onSelect={setSelected} />
+            <TreeRows nodes={tree} depth={0} open={open} onToggle={toggle} selected={selected} onSelect={setSelected} focused={focusedRow} onFocus={setFocusedRow} />
           </div>
           <div className="min-w-0 max-h-[520px] overflow-y-auto" data-file-viewer={selected ?? ""}>
             {selected ? (
@@ -413,7 +467,7 @@ export function FileExplorer({ listUrl, extra = [], pill, onDownload }: {
                   ) : "error" in loaded ? (
                     <p role="alert" className="text-[13px] text-danger">{loaded.error}</p>
                   ) : isMarkdown(selected) && !source ? (
-                    <div className="min-w-0 break-words text-[13px] leading-[21px] text-ink" data-file-rendered=""><ChatMarkdown text={withoutFrontMatter(loaded.value)} inert /></div>
+                    <div className="min-w-0 break-words text-[13px] leading-[21px] text-ink" data-file-rendered=""><ChatMarkdown text={markdownForReading(withoutFrontMatter(loaded.value))} inert /></div>
                   ) : (
                     <div data-file-source=""><CodeBlock code={loaded.value} lang={languageOf(selected)} /></div>
                   )}

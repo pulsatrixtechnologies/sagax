@@ -4,8 +4,8 @@
 // right, the "..." on hover). The rows join Installed through its `personal`
 // slot; a row opens the product's page. No row at all when the server has
 // none to show.
-import { useState, type ReactNode } from "react";
-import { ChevronRight, Copy, ExternalLink } from "lucide-react";
+import { type ReactNode } from "react";
+import { Copy, ExternalLink } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { copyText } from "@/lib/copy-text";
@@ -16,7 +16,7 @@ import { groupByVendor, whereLabel, type ProductVendor } from "@/lib/capability-
 import { botProductEnabled } from "../../../shared/bot-products";
 import { ITEM_ROW_ATTR, ItemTrailer, type ItemMenuActions } from "./ItemTrailer";
 import type { RowState } from "./StateIcon";
-import { LetterTile, PluginIcon, PluginStatusLabel, RemoteImage } from "./PluginParts";
+import { NeutralTile, PluginIcon, PluginStatusLabel, RemoteImage, type NeutralKind } from "./PluginParts";
 import { PLUGINS } from "./plugins-style";
 
 /** The "..." actions of a product, the same in its row and on its page:
@@ -59,10 +59,10 @@ export function ProductStateLabel({ product, wrap = false }: { product: Pick<Per
 /** A product's (or a vendor's) mark: the icon the console serves (an image
  * address, crisp at any size), else its site's mark, else ONE neutral tile.
  * Never a coloured letter. */
-export function ProductMark({ name, icon, className }: { name: string; icon?: { domain?: string; url?: string }; className: string }) {
-  if (icon?.url) return <RemoteImage src={icon.url} name={name} className={cn("rounded-[10px]", className)} />;
+export function ProductMark({ name, icon, className, kind = "connector" }: { name: string; icon?: { domain?: string; url?: string }; className: string; kind?: NeutralKind }) {
+  if (icon?.url) return <RemoteImage src={icon.url} kind={kind} className={cn("rounded-[10px]", className)} />;
   if (icon?.domain) return <PluginIcon item={{ key: `perspicax-product:${name}`, kind: "app", name, domain: icon.domain }} className={cn("shrink-0 rounded-[10px]", className)} />;
-  return <LetterTile name={name} className={className} />;
+  return <NeutralTile kind={kind} className={className} />;
 }
 
 /** A vendor's artwork at the banner's size: the largest image the console
@@ -71,10 +71,10 @@ export function ProductMark({ name, icon, className }: { name: string; icon?: { 
 export function VendorArt({ vendor }: { vendor: ProductVendor<PersonProduct> }) {
   const first = vendor.products.find((product) => product.logo || product.icon);
   const url = vendor.logo ?? vendor.icon?.url ?? first?.logo ?? first?.icon?.url;
-  if (url) return <RemoteImage src={url} name={vendor.name} className="size-20" />;
+  if (url) return <RemoteImage src={url} kind="vendor" className="size-20" />;
   const domain = vendor.icon?.domain ?? first?.icon?.domain;
   if (domain) return <PluginIcon item={{ key: `perspicax-vendor:${vendor.key}`, kind: "app", name: vendor.name, domain }} faviconSize={256} className="size-20 rounded-2xl" />;
-  return <LetterTile name={vendor.name} className="size-20 rounded-2xl text-[28px]" />;
+  return <NeutralTile kind="vendor" className="size-20 rounded-2xl" />;
 }
 
 /** The bots a product row reads and writes: the person's own, with each
@@ -158,62 +158,27 @@ export function ProductRow({ product, ctx, nested = false, partOf }: { product: 
   const sub = nested ? what : [t("connectApps.origin.org"), what].filter(Boolean).join(" \u00b7 ");
   return (
     <div className={cn("group flex items-center gap-3 py-3", nested && "pl-[52px]")} data-installed-entry={`product:${product.id}`} data-person-product={product.id} {...{ [ITEM_ROW_ATTR]: "" }}>
-      <button type="button" onClick={() => ctx.onOpen(product)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
-        aria-label={t("connectApps.openAria", { name: product.name })}>
-        <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={nested ? "size-8" : "size-10"} />
+      {/* the row is a container: ONE button over its whole area opens the page, and the "in <vendor>" chip is its own button above it (never a control inside a control) */}
+      <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl">
+        <button type="button" onClick={() => ctx.onOpen(product)} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+          aria-label={t("connectApps.openAria", { name: product.name })} />
+        <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={cn("pointer-events-none", nested ? "size-8" : "size-10")} />
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
-        <span className="min-w-0 flex-1" data-person-product-line>
+        <span className="pointer-events-none min-w-0 flex-1" data-person-product-line>
           <span className="flex min-w-0 items-center gap-1.5">
             <span className={cn(PLUGINS.rowName, "min-w-0")}>{product.name}</span>
             {partOf && (
-              <span role="link" tabIndex={0} data-vendor-chip="" aria-label={t("connectApps.vendor.inAria", { name: partOf.name })}
-                onClick={(event) => { event.stopPropagation(); partOf.onOpen(); }}
-                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); partOf.onOpen(); } }}
-                className="shrink-0 cursor-pointer rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+              <button type="button" data-vendor-chip="" aria-label={t("connectApps.vendor.inAria", { name: partOf.name })}
+                onClick={() => partOf.onOpen()}
+                className="pointer-events-auto relative z-10 shrink-0 cursor-pointer rounded-full border-[0.5px] border-ink/20 px-1.5 text-[11px] leading-4 text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
                 {t("connectApps.vendor.in", { name: partOf.name })}
-              </span>
+              </button>
             )}
           </span>
           {sub && <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={sub}>{sub}</span>}
         </span>
-      </button>
-      {productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) }, productRowState(product, () => ctx.onOpen(product)))}
-    </div>
-  );
-}
-
-/** A vendor: one row that unfolds into its products (each with its own
- * switch). Its switch turns all of them on or off. */
-function VendorRow({ vendor, ctx }: { vendor: ProductVendor<PersonProduct>; ctx: ProductRowsContext }) {
-  const [open, setOpen] = useState(false);
-  const ids = vendor.products.map((product) => product.id);
-  const worst = worstState(vendor.products);
-  const on = vendor.products.filter((product) => reachedBots(ctx, [product.id]).length > 0 || (ctx.forBot && botProductEnabled(ctx.forBot, product.id))).length;
-  const sub = [vendor.products.length === 1 ? t("connectApps.vendor.productOne") : t("connectApps.vendor.productMany", { count: vendor.products.length }), (on === 1 ? t("connectApps.vendor.onOne") : t("connectApps.vendor.onMany", { count: on }))].join(" \u00b7 ");
-  return (
-    <div data-vendor={vendor.key} data-vendor-open={open ? "" : undefined}>
-      <div className="group flex items-center gap-3 py-3" {...{ [ITEM_ROW_ATTR]: "" }}>
-        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} data-vendor-toggle=""
-          aria-label={t(open ? "connectApps.vendor.fold" : "connectApps.vendor.unfold", { name: vendor.name })}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
-          <ProductMark name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-10" />
-          <span className="flex min-w-0 flex-1 items-center gap-x-3">
-            <span className="min-w-0 max-w-full flex-1">
-              <span className={cn(PLUGINS.rowName, "flex items-center gap-1")}>
-                <span className="truncate">{vendor.name}</span>
-                <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform duration-100 motion-reduce:transition-none", open && "rotate-90")} />
-              </span>
-              <span className={PLUGINS.rowSub}>{sub}</span>
-            </span>
-          </span>
-        </button>
-        {productTrailer(ctx, vendor.name, ids, {}, productRowState(worst, () => setOpen(true)))}
       </div>
-      {open && (
-        <div className="mb-1" data-vendor-products="">
-          {vendor.products.map((product) => <ProductRow key={product.id} product={product} ctx={ctx} nested />)}
-        </div>
-      )}
+      {productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) }, productRowState(product, () => ctx.onOpen(product)))}
     </div>
   );
 }
@@ -229,7 +194,7 @@ export function VendorBundleRow({ vendor, ctx, onOpen }: { vendor: ProductVendor
     <div className="group flex items-center gap-3 py-3" data-vendor-bundle={vendor.key} {...{ [ITEM_ROW_ATTR]: "" }}>
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         aria-label={t("connectApps.openAria", { name: vendor.name })}>
-        <ProductMark name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-10" />
+        <ProductMark kind="vendor" name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-10" />
         <span className="min-w-0 flex-1">
           <span className={PLUGINS.rowName}>{vendor.name}</span>
           <span className={PLUGINS.rowSub}>{vendorLine(vendor.products.length, on)}</span>
@@ -264,10 +229,6 @@ export function productRows(products: readonly PersonProduct[], ctx: ProductRows
       node: <VendorBundleRow vendor={vendor} ctx={ctx} onOpen={() => bundles.onOpenVendor(vendor.key)} />,
     }));
   }
-  return groupByVendor(products).map((vendor) => ({
-    key: vendor.key,
-    node: vendor.products.length === 1 && !vendor.products[0]!.group
-      ? <ProductRow product={vendor.products[0]!} ctx={ctx} />
-      : <VendorRow vendor={vendor} ctx={ctx} />,
-  }));
+  // no bundles asked for: every product is its own row
+  return products.map((product) => ({ key: `product:${product.id}`, node: <ProductRow product={product} ctx={ctx} /> }));
 }

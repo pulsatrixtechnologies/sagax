@@ -24,8 +24,12 @@ export interface CapabilityUpdateItem {
   updateAvailable: boolean;
   updateNotes?: string;
   organization?: "required" | "offered";
+  /** an organization item: its declaration id; its key ends with it (the join for rows that have no updateKey) */
+  organizationId?: string;
   pinned?: string;
   canUpdate: boolean;
+  /** the source was never reached: no update mark for it, never counted */
+  updateUnknown?: true;
 }
 
 export interface CapabilityUpdates {
@@ -39,7 +43,7 @@ export interface CapabilityUpdateResult {
   key: string;
   kind: UpdateKind;
   name: string;
-  status: "updated" | "current" | "failed";
+  status: "updated" | "current" | "failed" | "unknown";
   from?: string;
   to?: string;
   updateNotes?: string;
@@ -65,18 +69,21 @@ const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
  * (`updateKey`, carried by the item), so two items with the same name are never
  * confused; an item the server gave no key (older lists) is joined by its kind
  * and readable name. Only an item with an update waiting. */
-export function updateOf(data: CapabilityUpdates | null | undefined, kind: UpdateKind, name: string, updateKey?: string): CapabilityUpdateItem | undefined {
+export function updateOf(data: CapabilityUpdates | null | undefined, kind: UpdateKind, name: string, updateKey?: string, organizationId?: string): CapabilityUpdateItem | undefined {
   if (!data) return undefined;
-  if (updateKey) return data.items.find((item) => item.updateAvailable && item.key === updateKey);
+  if (updateKey) return data.items.find((item) => item.updateAvailable && !item.updateUnknown && item.key === updateKey);
+  // an organization row has no updateKey: its declaration id is the join, never its name
+  if (organizationId) return data.items.find((item) => item.updateAvailable && !item.updateUnknown && item.organizationId === organizationId);
   const wanted = norm(name);
-  return data.items.find((item) => item.kind === kind && item.updateAvailable && norm(item.name) === wanted);
+  return data.items.find((item) => item.kind === kind && item.updateAvailable && !item.updateUnknown && !item.organizationId && norm(item.name) === wanted);
 }
 
 /** The locale key of a failed update's reason: the server's sentence is read
  * for what it says and never printed (the person reads their own language). */
 export type UpdateReasonKey =
   | "connectApps.updates.reason.unreachable" | "connectApps.updates.reason.organization"
-  | "connectApps.updates.reason.signin" | "connectApps.updates.reason.missing" | "connectApps.updates.reason.unknown";
+  | "connectApps.updates.reason.signin" | "connectApps.updates.reason.missing" | "connectApps.updates.reason.unknown"
+  | "connectApps.updates.reason.uncheckable";
 export function updateReasonKey(error: string | undefined): UpdateReasonKey {
   const text = (error ?? "").toLowerCase();
   if (/organi[sz]ation|console|pinned|manages/.test(text)) return "connectApps.updates.reason.organization";
@@ -91,6 +98,8 @@ export interface UpdateFailure {
   key: string;
   name: string;
   error: string;
+  /** not a failure: its source could not be checked just now (nothing changed, nothing was lost) */
+  unknown?: true;
 }
 
 /** The count, the items, and the two calls, kept current by the live channel. */
@@ -123,7 +132,8 @@ export function useCapabilityUpdates(active = true) {
     try {
       const answer = await runCapabilityUpdates(body);
       if (!alive.current) return answer;
-      const failed = answer.results.filter((result) => result.status === "failed").map((result) => ({ key: result.key, name: result.name, error: result.error ?? "" }));
+      const failed = answer.results.filter((result) => result.status === "failed" || result.status === "unknown")
+        .map((result): UpdateFailure => ({ key: result.key, name: result.name, error: result.error ?? "", ...(result.status === "unknown" ? { unknown: true as const } : {}) }));
       setFailures((current) => [...current.filter((entry) => !answer.results.some((result) => result.key === entry.key)), ...failed]);
       return answer;
     } catch (cause) {

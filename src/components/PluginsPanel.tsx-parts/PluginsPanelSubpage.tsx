@@ -188,18 +188,16 @@ export function PluginsPanelSubpage({
       },
     });
     const engines = engineInfo(detailItem);
-    // the versions (from, to) and the notes when the source gives them
+    // the versions (from, to) and the notes when the source gives them: said once, in the Overview
     const upd = updateInfo?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
-    const updateRows = upd ? [
-      { label: t("connectApps.updates.versions"), value: [upd.installedVersion, upd.availableVersion].filter(Boolean).join(" \u2192 ") || t("connectApps.plugin.newerFiles") },
-      ...(upd.updateNotes ? [{ label: t("connectApps.updates.notes"), value: upd.updateNotes }] : []),
-    ] : [];
+    const updateWaiting = upd ? { from: upd.installedVersion, to: upd.availableVersion, notes: upd.updateNotes } : detailItem.updateAvailable ? { from: detailItem.installedVersion, to: detailItem.version } : undefined;
     const run = itemUpdate?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     return (
       <PluginDetailView
         {...base}
         {...(!base.onUpdate && run?.onUpdate ? { onUpdate: run.onUpdate, updating: run.running } : {})}
-        details={[...base.details, ...(engines.row ? [engines.row] : []), ...updateRows]}
+        details={[...base.details, ...(engines.row ? [engines.row] : [])]}
+        update={updateWaiting}
         notice={engines.notice}
         {...detailHead(detailItem)}
         displayName={identity.name}

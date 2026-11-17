@@ -250,14 +250,30 @@ describe("a skill's page (#4504)", () => {
     expect(view.querySelector("[data-skill-savebar]")).toBeNull();
   });
 
-  it("an update waiting: Update in the header, its versions and notes in Details", async () => {
+  it("read only means its files cannot be edited here, never that it cannot be switched (a plugin's or the organization's skill)", async () => {
+    const onSaved = vi.fn();
+    const view = await page({ readOnlyReason: "The plugin kit brought this skill.", onSaved });
+    const toggle = view.querySelector("[data-skill-enabled] [role='switch']") as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    await click(toggle);
+    expect(api).toHaveBeenCalledWith("/api/me/skills-library/weekly-summary", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ enabled: false }) }));
+    // the text is read only, the save bar and the delete are not there
+    expect(view.querySelector("[data-skill-savebar]")).toBeNull();
+    expect(view.querySelector("[data-skill-delete]")).toBeNull();
+    expect((view.querySelector('[data-skill-field="name"]') as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("an update waiting: Update in the header, its versions and notes once in the Overview", async () => {
     const onUpdate = vi.fn();
     const view = await page({ update: { from: "a1b2c3d", to: "e4f5a6b", notes: "Adds a Friday section", running: false, onUpdate } });
     await click(view.querySelector('[data-plugin-action="update"]'));
     expect(onUpdate).toHaveBeenCalledTimes(1);
-    const details = view.querySelector("[data-plugin-details-block]")!.textContent!;
-    expect(details).toContain("a1b2c3d → e4f5a6b");
-    expect(details).toContain("Adds a Friday section");
+    const note = view.querySelector("[data-detail-update]")!.textContent!;
+    expect(note).toContain("a1b2c3d \u2192 e4f5a6b");
+    expect(note).toContain("Adds a Friday section");
+    // said once: not again in Details
+    expect(view.querySelector("[data-plugin-details-block]")!.textContent).not.toContain("e4f5a6b");
   });
 });
 
@@ -299,9 +315,96 @@ describe("the plugin page is tight and has no orphan disclosure (coordinator's r
     expect(view.querySelector('[data-plugin-action="update"]')).not.toBeNull();
     expect(view.querySelector("[data-plugin-update-dot]")).toBeNull();
   });
-  it("a connector with no mark of its own is the one neutral tile, never the same generic glyph", async () => {
+  it("a connector with no mark of its own is the one neutral tile, a quiet glyph, never a letter", async () => {
     const { PluginIcon } = await import("./PluginParts");
     const view = await render(createElement("div", null, createElement(PluginIcon, { item: { kind: "mcp", name: "review-notes" } }), createElement(PluginIcon, { item: { kind: "mcp", name: "ticket-search" } })));
-    expect([...view.querySelectorAll("[data-letter-tile]")].map((tile) => tile.textContent)).toEqual(["R", "T"]);
+    expect([...view.querySelectorAll("[data-neutral-tile]")].map((tile) => `${tile.getAttribute("data-neutral-tile")}:${tile.textContent}`)).toEqual(["connector:", "connector:"]);
+  });
+});
+
+describe("the cycling featured set (keyboard, pause, motion)", () => {
+  const slides = [
+    { key: "a", source: "From x", name: "Alpha", line: "one", art: null, action: null },
+    { key: "b", source: "From x", name: "Beta", line: "two", art: null, action: null },
+  ];
+  let listeners: Array<() => void> = [];
+  let reduce = false;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    listeners = [];
+    reduce = false;
+    window.matchMedia = ((query: string) => ({
+      get matches() { return reduce && query.includes("reduce"); }, media: query,
+      addEventListener: (_: string, fn: () => void) => { listeners.push(fn); }, removeEventListener: (_: string, fn: () => void) => { listeners = listeners.filter((entry) => entry !== fn); },
+    })) as never;
+  });
+  afterEach(() => { vi.useRealTimers(); });
+  const current = () => host.querySelector("[data-featured-slide]")?.getAttribute("data-featured-slide");
+
+  it("cycles by itself, a pause the person chooses stops it until they resume, and the dots have a 24 px hit area", async () => {
+    const { FeaturedCarousel } = await import("./DiscoverView");
+    await render(createElement(FeaturedCarousel, { slides }));
+    expect(host.querySelector("[data-featured-dot]")?.className).toContain("size-6");
+    await act(async () => { vi.advanceTimersByTime(6100); });
+    expect(current()).toBe("b");
+    await click(host.querySelector("[data-featured-pause]"));
+    expect(host.querySelector("[data-featured-pause]")?.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => { vi.advanceTimersByTime(20_000); });
+    expect(current()).toBe("b");
+    await click(host.querySelector("[data-featured-pause]"));
+    await act(async () => { vi.advanceTimersByTime(6100); });
+    expect(current()).toBe("a");
+  });
+
+  it("reads the reduced-motion setting live: it stops moving, and the pause control is not needed, the moment the setting changes", async () => {
+    const { FeaturedCarousel } = await import("./DiscoverView");
+    await render(createElement(FeaturedCarousel, { slides }));
+    expect(host.querySelector("[data-featured-pause]")).not.toBeNull();
+    reduce = true;
+    await act(async () => { listeners.forEach((fn) => fn()); });
+    expect(host.querySelector("[data-featured-pause]")).toBeNull();
+    const before = current();
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(current()).toBe(before);
+  });
+});
+
+describe("the file tree's keys and what a README may load", () => {
+  it("Up and Down move through the rows, Right opens a folder then goes in, Left folds it or goes out, Home and End, one row in the tab order", async () => {
+    api.mockImplementation(async (url: string) => (url.includes("path=") ? { kind: "text", text: "x" } : { files: [{ path: "README.md", kind: "text" }, { path: "docs/a.md", kind: "text" }, { path: "docs/b.md", kind: "text" }] }));
+    const view = await render(createElement(parts.FileExplorer, { listUrl: "/x/files" }));
+    const rows = () => [...view.querySelectorAll<HTMLElement>("[data-file-row]")].map((row) => row.getAttribute("data-file-row"));
+    const key = async (target: Element, name: string) => { await act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true })); }); };
+    expect(rows()).toEqual(["docs", "README.md"]);
+    expect(view.querySelectorAll('[data-file-row][tabindex="0"]')).toHaveLength(1);
+    const docs = view.querySelector<HTMLElement>('[data-file-row="docs"]')!;
+    docs.focus();
+    await key(docs, "ArrowRight");
+    expect(rows()).toEqual(["docs", "docs/a.md", "docs/b.md", "README.md"]);
+    await key(docs, "ArrowRight");
+    expect(document.activeElement?.getAttribute("data-file-row")).toBe("docs/a.md");
+    await key(document.activeElement!, "ArrowDown");
+    expect(document.activeElement?.getAttribute("data-file-row")).toBe("docs/b.md");
+    await key(document.activeElement!, "ArrowLeft");
+    expect(document.activeElement?.getAttribute("data-file-row")).toBe("docs");
+    await key(document.activeElement!, "ArrowLeft");
+    expect(rows()).toEqual(["docs", "README.md"]);
+    await key(document.activeElement!, "End");
+    expect(document.activeElement?.getAttribute("data-file-row")).toBe("README.md");
+    await key(document.activeElement!, "Home");
+    expect(document.activeElement?.getAttribute("data-file-row")).toBe("docs");
+    expect(view.querySelectorAll('[data-file-row][tabindex="0"]')).toHaveLength(1);
+  });
+
+  it("a README loads an https image only; an http image is a link, a relative or local one is its words", () => {
+    const text = "![logo](https://cdn.example.test/a.png) ![tracker](http://t.example.test/p.gif) ![local](./img/a.png) ![](/etc/hosts)\n\nplain [link](https://x.example.test)";
+    const out = parts.markdownForReading(text);
+    expect(out).toContain("![logo](https://cdn.example.test/a.png)");
+    expect(out).toContain("[tracker](http://t.example.test/p.gif)");
+    expect(out).not.toContain("![tracker]");
+    expect(out).not.toContain("./img/a.png");
+    expect(out).not.toContain("/etc/hosts");
+    expect(out).toContain("local");
+    expect(out).toContain("plain [link](https://x.example.test)");
   });
 });

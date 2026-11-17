@@ -10,6 +10,7 @@ import { useId } from "react";
 import { Check, Info, TriangleAlert } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { TipBubble, TipHost } from "../TipBubble";
 import type { PluginStatus } from "@/lib/plugins-model";
 import { t } from "@/lib/i18n";
 
@@ -34,7 +35,7 @@ export function StateIcon({ state }: { state: RowState }) {
   const face = cn("inline-flex size-7 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong", INK[state.tone]);
   const icon = <Glyph size={state.tone === "ok" ? 15 : 16} strokeWidth={state.tone === "ok" ? 2.5 : 2} aria-hidden="true" />;
   return (
-    <span className="group/state relative inline-flex shrink-0" data-row-state={state.tone}>
+    <TipHost className="shrink-0" data-row-state={state.tone}>
       {state.tone === "fix" && state.onFix ? (
         <button type="button" aria-label={state.text} aria-describedby={tipId} data-row-state-fix="" onClick={(event) => { event.stopPropagation(); state.onFix?.(); }} className={cn(face, "hover:bg-warning/10")}>
           {icon}
@@ -42,11 +43,8 @@ export function StateIcon({ state }: { state: RowState }) {
       ) : (
         <span role="img" tabIndex={0} aria-label={state.text} aria-describedby={tipId} className={face}>{icon}</span>
       )}
-      <span id={tipId} role="tooltip" data-row-state-tooltip=""
-        className="pointer-events-none absolute right-0 bottom-[calc(100%+4px)] z-30 w-max max-w-[300px] rounded-md bg-[#1c1c1e] px-2 py-1.5 text-[12px] leading-4 text-white opacity-0 shadow-md ring-1 ring-white/15 group-hover/state:opacity-100 group-focus-within/state:opacity-100">
-        {state.text}
-      </span>
-    </span>
+      <TipBubble id={tipId} wide data-row-state-tooltip="">{state.text}</TipBubble>
+    </TipHost>
   );
 }
 

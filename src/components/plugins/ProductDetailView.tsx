@@ -22,7 +22,7 @@ import type { Crumb } from "../Breadcrumb";
 import { PillTabs } from "../PillTabs";
 import { GlyphTile, PluginCard, PluginPageHeader } from "./PluginParts";
 import { DetailHeader, OverviewColumns, sourceLine } from "./DetailParts";
-import { PluginActionsMenu } from "./PluginDetailView";
+import { ItemTrailer } from "./ItemTrailer";
 import { ProductKeyForm } from "./ProductKeyForm";
 import { ProductMark, productMenuActions, ProductStateLabel } from "./ProductRows";
 import { PLUGINS } from "./plugins-style";
@@ -115,11 +115,8 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
           actions={(
             <>
               <ProductStateLabel product={product} />
-              <PluginActionsMenu
-                name={product.name}
-                busy={busy !== null}
-                actions={productMenuActions(product, 13, setCopied).map(({ run, ...action }) => ({ ...action, onSelect: run }))}
-              />
+              <ItemTrailer name={product.name} columns={false} busy={busy !== null}
+                actions={{ links: productMenuActions(product, 14, setCopied).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })) }} />
             </>
           )}
         />

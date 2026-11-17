@@ -232,6 +232,28 @@ export function usePluginsPanelState() {
   const back = useCallback(() => setStack((current) => current.length > 1 ? current.slice(0, -1) : current), []);
   useEffect(() => { void BotCatalogPane.preload().catch(() => undefined); }, []);
 
+  // Closing a page returns focus to the row that opened it (the list is drawn again, so the row is found by what names it)
+  const lastRow = useRef<string | null>(null);
+  const openers = useRef<string[]>([]);
+  const lastDepth = useRef(0);
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      const dialog = dialogRef.current;
+      if (!target || !dialog?.contains(target)) return;
+      const row = target.closest<HTMLElement>("[data-installed-entry], [data-plugin-row], [data-plugin-skill], [data-vendor-bundle], [data-person-product], [data-bundle-open]");
+      if (!row) return;
+      for (const name of ["data-installed-entry", "data-plugin-row", "data-plugin-skill", "data-vendor-bundle", "data-person-product", "data-bundle-open"]) {
+        const value = row.getAttribute(name);
+        if (value !== null) { lastRow.current = `[${name}="${CSS.escape(value)}"]`; return; }
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+    // the dialog ref is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /** Bring a row of the tab just opened into view, its first control
    * focused, once it is drawn (a list may still be reading). */
   const revealLater = (selector: string) => {
@@ -249,6 +271,20 @@ export function usePluginsPanelState() {
     };
     window.setTimeout(look, 0);
   };
+
+  useEffect(() => {
+    const depth = stack.length - 1;
+    const before = lastDepth.current;
+    lastDepth.current = depth;
+    if (depth > before) { openers.current[depth] = lastRow.current ?? ""; return; }
+    if (depth < before) {
+      const selector = openers.current[before];
+      openers.current.length = depth + 1;
+      if (selector) revealLater(selector);
+    }
+    // revealLater only reads the dialog
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stack.length]);
 
   // Focus and keys (centred modal, decided exception like Settings): Escape
   // steps back one page (the Bots tab's own steps first), then closes;

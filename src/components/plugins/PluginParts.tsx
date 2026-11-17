@@ -1,7 +1,7 @@
 // Small pieces the three Plugins views share: the icon, the status word and
 // the page header with its back arrow.
 import { useState, type ReactNode } from "react";
-import { BookOpen, Check, ChevronLeft, Puzzle, type LucideIcon } from "lucide-react";
+import { BookOpen, Boxes, Check, ChevronLeft, Plug, Puzzle, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -48,23 +48,26 @@ export function ServiceIcon({ card, className = "size-11", glyph, faviconSize = 
       />
     );
   }
-  return glyph ? <GlyphTile glyph={glyph} className={className} /> : <LetterTile name={card.label} className={className} />;
+  return glyph ? <GlyphTile glyph={glyph} className={className} /> : <NeutralTile className={className} />;
 }
 
 /** An image the console serves by its https address: crisp at any size, and
  * the one neutral tile when it cannot load. */
-export function RemoteImage({ src, name, className }: { src: string; name: string; className?: string }) {
+export function RemoteImage({ src, kind = "connector", className }: { src: string; kind?: NeutralKind; className?: string }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <LetterTile name={name} className={className} />;
+  if (failed) return <NeutralTile kind={kind} className={className} />;
   return <img src={src} alt="" loading="lazy" data-remote-image="" onError={() => setFailed(true)} className={cn("shrink-0 object-contain", className)} />;
 }
 
-/** An item with no mark at all: ONE neutral tile, the app's quiet surface with
- * a grey letter, identical for every item (never a coloured letter). */
-export function LetterTile({ name, className = "size-10" }: { name: string; className?: string }) {
+/** An item with no mark at all (#4503: no letter tiles): ONE neutral tile, the app's quiet surface with a
+ * grey generic glyph, identical for every item of a kind. */
+export type NeutralKind = "connector" | "skill" | "plugin" | "vendor";
+const NEUTRAL_GLYPH: Record<NeutralKind, LucideIcon> = { connector: Plug, skill: BookOpen, plugin: Puzzle, vendor: Boxes };
+export function NeutralTile({ kind = "connector", className = "size-10" }: { kind?: NeutralKind; className?: string }) {
+  const Glyph = NEUTRAL_GLYPH[kind];
   return (
-    <div data-letter-tile="" aria-hidden="true" className={cn("flex shrink-0 items-center justify-center rounded-[10px] bg-raised text-[14px] font-semibold text-ink-secondary", className)}>
-      {(name.trim().slice(0, 1) || "?").toUpperCase()}
+    <div data-neutral-tile={kind} aria-hidden="true" className={cn("flex shrink-0 items-center justify-center rounded-[10px] bg-raised text-ink-secondary", className)}>
+      <Glyph size={18} strokeWidth={1.75} aria-hidden="true" />
     </div>
   );
 }
@@ -102,7 +105,7 @@ export function PluginIcon({ item, className = "size-10", faviconSize }: { favic
   }
   if (item.kind === "mcp" && !item.domain && !item.logo) {
     // a shipped glyph when the app has one for it, else the one neutral tile (never the same generic glyph on every server)
-    return glyph ? <GlyphTile glyph={glyph} className={className} /> : <LetterTile name={item.name} className={className} />;
+    return glyph ? <GlyphTile glyph={glyph} className={className} /> : <NeutralTile className={className} />;
   }
   return <ServiceIcon key={item.logo ?? item.domain ?? ""} card={{ logo: item.logo ?? null, domain: item.domain ?? null, label: item.name }} glyph={glyph} faviconSize={faviconSize} className={cn("shrink-0", className)} />;
 }

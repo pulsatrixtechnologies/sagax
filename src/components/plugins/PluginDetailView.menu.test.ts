@@ -58,16 +58,16 @@ describe("plugin detail menu", () => {
     expect(host.querySelector("[data-plugin-update-dot]")).toBeNull();
     click(host.querySelector('[data-plugin-action="update"]'));
     expect(onUpdate).toHaveBeenCalledTimes(1);
-    // Uninstall is in the one "..." menu (never a second pill)
+    // Uninstall is in the one "..." menu (the same menu as a row's, never a second pill)
     expect(host.querySelector('[data-plugin-action="uninstall"]')).toBeNull();
-    click(host.querySelector("[data-plugin-actions]"));
-    const actions = [...host.querySelectorAll('[role="menu"] [data-plugin-action]')].map((node) => node.getAttribute("data-plugin-action"));
-    expect(actions).toEqual(["test", "edit", "uninstall"]);
-    click(host.querySelector('[data-plugin-action="test"]'));
+    click(host.querySelector("[data-entry-menu]"));
+    const actions = [...host.querySelectorAll('[role="menu"] [data-entry-action]')].map((node) => node.getAttribute("data-entry-action"));
+    expect(actions).toEqual(["test", "edit", "remove"]);
+    click(host.querySelector('[data-entry-action="test"]'));
     expect(onTest).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[role="menu"]')).toBeNull();
-    click(host.querySelector("[data-plugin-actions]"));
-    click(host.querySelector('[role="menu"] [data-plugin-action="uninstall"]'));
+    click(host.querySelector("[data-entry-menu]"));
+    click(host.querySelector('[role="menu"] [data-entry-action="remove"]'));
     expect(onUninstall).toHaveBeenCalledTimes(1);
   });
 
@@ -75,7 +75,7 @@ describe("plugin detail menu", () => {
     flushSync(() => root.render(createElement(PluginDetailView, {
       item: items[0]!, subtitle: "", busy: false, onBack: noop, details: [],
     })));
-    expect(host.querySelector("[data-plugin-actions]")).toBeNull();
+    expect(host.querySelector("[data-entry-menu]")).toBeNull();
   });
 });
 

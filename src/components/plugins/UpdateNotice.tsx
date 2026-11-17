@@ -15,7 +15,7 @@ export function UpdateNotice({ failure, onRetry, onClose, inline = false }: { fa
       <TriangleAlert size={16} className="mt-px shrink-0 text-warning" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="font-medium" data-update-failure-name="">{failure.name}</span>
-        <span className="text-ink-secondary"><span aria-hidden="true"> {"\u00b7"}</span> {t(updateReasonKey(failure.error))} {t("connectApps.updates.oldStays")}</span>
+        <span className="text-ink-secondary"><span aria-hidden="true"> {"\u00b7"}</span> {t(failure.unknown ? "connectApps.updates.reason.uncheckable" : updateReasonKey(failure.error))} {t("connectApps.updates.oldStays")}</span>
       </span>
       <button type="button" data-update-retry="" onClick={onRetry} className="shrink-0 rounded-full px-2.5 py-0.5 text-[13px] text-ink hover:bg-ink/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
         {t("connectApps.updates.retry")}

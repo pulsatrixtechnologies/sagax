@@ -220,6 +220,8 @@ export function parityPlan(files) {
  * definition, a shared schema, a profile) reach them only through
  * agents-catalog.ts, so a lot that grew a description never ran them. */
 export const CATALOG_TESTS = [
+  // pins what the widget tools' descriptions tell the bot (red since #3281)
+  "server/drivers/agents-call-cards.test.ts",
   "server/drivers/agents-catalog-budget.test.ts",
   "server/drivers/agents-catalog-deferred.test.ts",
   "server/drivers/agents-catalog-wire.test.ts",

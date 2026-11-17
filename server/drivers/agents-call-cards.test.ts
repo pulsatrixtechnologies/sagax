@@ -41,8 +41,11 @@ describe("the widget tools in the catalog", () => {
       },
       required: ["widget"],
     });
-    expect(show.description).toMatch(/^Show an interactive widget in this chat\. Reach for it yourself/);
-    expect(show.description).toMatch(/Never ask for passwords here\. Not available in rooms\.$/);
+    // what matters, not the exact sentences (#4518): used unasked, no
+    // password asked there, never in a room
+    expect(show.description).toMatch(/^Show an interactive widget in this chat\. Use it yourself, unasked,/);
+    expect(show.description).toMatch(/\bNo passwords\./);
+    expect(show.description).toMatch(/Not available in rooms\.$/);
     const update = tools.get("update_widget")!;
     expect(update.inputSchema).toEqual({
       type: "object",

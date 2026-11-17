@@ -266,18 +266,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/drivers/agents-call-cards.test.ts",
-      "test": "the widget tools in the catalog > carry schemas a model can fill, and no read-only annotation: they post into the chat",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/org/org-member-api.e2e.test.ts",
       "test": "Perspicax AI clients: the Sagax member API > M6: a streamed send stops at a card; the AI client answers it as the person; the watch ends with the summary",
       "platforms": [

@@ -16,7 +16,7 @@ agents-proxy: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(drivers/(
 # through agents-catalog.ts, so three of them stayed red on main unseen. A
 # lot that touches any file the catalog imports (CATALOG_ROOTS and their
 # imports, CATALOG_TESTS, in scripts/verify/release/guard-tests.mjs) runs
-# them. About 20 s.
+# them, and the widget tool texts agents-call-cards.test.ts pins. About 25 s.
 agents-catalog: G="$(node scripts/verify/release/guard-tests.mjs --catalog --touched)"; case "$G" in skip:*) echo "fast-gate: $G" ;; *) ./node_modules/.bin/vitest run --reporter=dot $G ;; esac
 
 # index-reach (#3477): the reach rule lives in server/peers/ and is enforced by

@@ -26,6 +26,8 @@ import { parseAskQuestions, questionAnswersByQuestion, type AskQuestion } from "
 import { allowsTool, parseToolScope } from "../shared/tool-scope.ts";
 import { permissionRoute, preallowedFromEnv, searchedServersFromEnv } from "../shared/searched-tool-call.ts";
 import { reportBackgroundError } from "./background-error.ts";
+import { withoutRecordLinksIn } from "../shared/record-cards.ts";
+import { harnessToolWordsLeave } from "../shared/record-link-tools.ts";
 
 // #1276: the servers whose catalog is searched; a call_tool there is asked
 // about as the tool it runs (shared/searched-tool-call.ts).
@@ -170,6 +172,15 @@ async function answerNativeQuestions(input: unknown): Promise<string> {
   return JSON.stringify({ behavior: "allow", updatedInput: { ...asRecord(input), answers } });
 }
 
+/** #4507: the input a tool runs with: a record link keeps only its label
+ * when the tool's words leave the app (shared/record-link-tools.ts, the one
+ * rule the agents dispatcher reads too); the CLI's own file, notebook and
+ * shell tools, Sagax's own files and a connector's file content keep their
+ * input byte for byte. */
+function recordSafeInput(tool: unknown, input: unknown): unknown {
+  return typeof tool === "string" && harnessToolWordsLeave(tool, input) ? withoutRecordLinksIn(input) : input;
+}
+
 const TOOLS = [
   {
     name: "approve",
@@ -247,14 +258,17 @@ async function handle(msg: any) {
     // suggested rule would allow every call_tool of the server: never handed back.
     // #1374: the agents bridge's use_tool likewise; one naming no tool, or
     // another meta tool, runs nothing and is refused without a card.
-    const route = isQuestion || typeof args.tool_name !== "string" ? null : permissionRoute(args.tool_name, args.input, SEARCHED, PREALLOWED, ARTIFACT_READS);
+    // #4507: a send or a connector's tool carries a record link's label,
+    // never the app's own address; the card shows exactly what will run
+    const input = isQuestion ? (args.input ?? {}) : recordSafeInput(args.tool_name, args.input ?? {});
+    const route = isQuestion || typeof args.tool_name !== "string" ? null : permissionRoute(args.tool_name, input, SEARCHED, PREALLOWED, ARTIFACT_READS);
     if (route?.kind === "deny") return reply(JSON.stringify({ behavior: "deny", message: route.message }));
-    if (route?.kind === "allow") return reply(JSON.stringify({ behavior: "allow", updatedInput: args.input ?? {} } satisfies AllowPermissionResult));
+    if (route?.kind === "allow") return reply(JSON.stringify({ behavior: "allow", updatedInput: input } satisfies AllowPermissionResult));
     const runs = route?.kind === "ask" ? route : null;
     const answer: any = await askBroker(
       isQuestion
         ? { t: "ask", id: askId, kind: "question", tool: "ask_user", input: { question: args.question, choices: args.choices, ...(picksSeveral ? { questions: picksSeveral } : {}) } }
-        : { t: "ask", id: askId, tool: runs?.searched ? runs.tool : args.tool_name, input: runs?.searched ? runs.input : args.input },
+        : { t: "ask", id: askId, tool: runs?.searched ? runs.tool : args.tool_name, input: runs?.searched ? runs.input : input },
     );
     let text = answer.message || "No answer was given — use your best judgment.";
     // The card answers in its Q:/A: form; hand back just the picks, the way
@@ -264,7 +278,7 @@ async function handle(msg: any) {
     }
     if (!isQuestion) {
       if (answer.behavior === "allow") {
-        const result: AllowPermissionResult = { behavior: "allow", updatedInput: args.input ?? {} };
+        const result: AllowPermissionResult = { behavior: "allow", updatedInput: input };
         if (answer.always && suggestions && !runs?.searched) result.updatedPermissions = suggestions;
         text = JSON.stringify(result);
       } else {

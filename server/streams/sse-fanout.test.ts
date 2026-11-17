@@ -144,6 +144,48 @@ describe("encodeSseDataFrame and runtime delta coalesce", () => {
   });
 });
 
+describe("record addresses in streamed text (#4507)", () => {
+  const delta = (text: string, eventId: string) => ({
+    kind: "runtime",
+    event: { type: "content.delta", threadId: "t1", turnId: "turn", itemId: "item", streamKind: "assistant_text", delta: text, eventId, provider: "claude", providerInstanceId: "p" },
+  });
+  const textOf = (flushed: Array<Record<string, unknown>>) => flushed.map((payload) => (payload.event as { delta: string }).delta).join("");
+
+  it("never sends a record address, even when a link is split across three chunks", () => {
+    vi.useFakeTimers();
+    const flushed: Array<Record<string, unknown>> = [];
+    const coalescer = new SseRuntimeDeltaCoalescer((payload) => flushed.push(payload), 16);
+    coalescer.offer(delta("Le billet [#4815", "a"));
+    coalescer.offer(delta("16](sagax://rec", "b"));
+    coalescer.offer(delta("ord/nimbus_desk/ticket/481516) est fermé.", "c"));
+    vi.advanceTimersByTime(20);
+    coalescer.offer({ kind: "runtime", event: { type: "turn.completed", threadId: "t1", ok: true } });
+    const sent = flushed.map((payload) => (payload.event as { delta?: string }).delta ?? "");
+    for (const chunk of sent) expect(chunk).not.toMatch(/sagax:/i);
+    expect(textOf(flushed.filter((payload) => (payload.event as { type: string }).type === "content.delta"))).toBe("Le billet #481516 est fermé.");
+    vi.useRealTimers();
+  });
+
+  it("does not hold ordinary text, a bracket that cannot start a record link, or a web link", () => {
+    vi.useFakeTimers();
+    const flushed: Array<Record<string, unknown>> = [];
+    const coalescer = new SseRuntimeDeltaCoalescer((payload) => flushed.push(payload), 16);
+    coalescer.offer(delta("Bonjour", "a"));
+    expect(textOf(flushed)).toBe("Bonjour");
+    coalescer.offer(delta(", voir [la doc](https://desk.example/a) et [x] ici", "b"));
+    vi.advanceTimersByTime(16);
+    expect(textOf(flushed)).toBe("Bonjour, voir [la doc](https://desk.example/a) et [x] ici");
+    // a bracket that could still open a record link waits, a few bytes only, and goes out once it cannot
+    coalescer.offer(delta(" puis [not", "c"));
+    vi.advanceTimersByTime(16);
+    expect(textOf(flushed)).toBe("Bonjour, voir [la doc](https://desk.example/a) et [x] ici puis ");
+    coalescer.offer(delta("e](https://desk.example/n).", "d"));
+    vi.advanceTimersByTime(16);
+    expect(textOf(flushed)).toBe("Bonjour, voir [la doc](https://desk.example/a) et [x] ici puis [note](https://desk.example/n).");
+    vi.useRealTimers();
+  });
+});
+
 describe("deliverSseFrame", () => {
   it("sends normally while write() returns true", () => {
     const client = fakeClient();

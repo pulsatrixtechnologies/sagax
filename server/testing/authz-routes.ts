@@ -47,6 +47,8 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   // ids that only ride along in routes keyed by the caller (a learned fact #3424, a page's data and store keys, a product of the caller)
   "learned/": "callerOwnId",
   "products/": "callerOwnId",
+  // #4507: a record's product, kind and id (the handler reads as the caller only)
+  "records/": "callerOwnId",
   "{callerOwnId}/": "callerOwnId",
   "store/": "callerOwnId",
   "data-approvals/": "callerOwnId",

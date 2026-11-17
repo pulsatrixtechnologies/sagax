@@ -216,6 +216,8 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
       return;
     }
     spoken.text = host.citeAppFigures(host.dashFreeReply(cleanReplyStyle(spoken.text), event.threadId, bot), host.appPiecesByThread.get(event.threadId) ?? []);
+    // #4507: record links checked, a plain number the conversation read linked
+    spoken.text = host.recordLinksInReply(spoken.text, event.threadId, bot, speaker?.botId);
     // "👍" written after reacting 👍 says the same thing twice: the
     // reaction stands alone and no bubble is written.
     const reactor = bot?.id ?? speaker?.botId;

@@ -975,3 +975,48 @@ links stay as they are; tool calls and reasoning never go through it. The
 setting is the person's own (`sagax.voiceDashes.v1`, Settings > Models and
 voice > Voice), on by default for French. A solo server cannot read the
 browser's choice, so it follows the server language there.
+
+## Record links in a bot's reply (2026-11-16, #4507)
+
+After the dashes, `pushAssistantText` passes the final text through
+`recordLinksInReply` (`server/index.ts`, `server/perspicax/record-links.ts`):
+a record link (`sagax://record/<product>/<kind>/<id>`) that does not parse
+becomes its text (one whose product or kind the person's list does not hold
+stays: its card says why); a plain number is linked only when the records
+the turn's own person read in that conversation (the person the turn was
+started for, `PerspicaxMcp.turnPersonOf`, never a later speaker) hold that
+exact id for exactly one product and kind (`linkSeenRecords` in
+`shared/record-cards.ts`), never by a pattern. Only text outside code, math,
+links (with or without a title), images and addresses changes; an id of
+fewer than five digits only after `#` or the kind's name; `481516-1` is not
+an id; the link text keeps what the bot wrote; a second pass changes nothing.
+
+Storage and delivery: the store (`server/store.ts`, `splitRecordText`) keeps
+a bot message's `text` free of any record address and the linked words in
+`recordText`. Every client and every surface reads `text`; only a client
+that draws record links reads `recordText` (`recordTextOf`, which falls back
+to `text` when the words changed since). Nothing that leaves the chat carries
+the address: a text (`smsReplyBody`), a mail draft (`normalizeDraftForSend`),
+speech (`speakable`), a push or reach-me line (`markdownToPlainText`), a
+message to another bot, a room, an agent or a person, a call, a connector
+call, an outside API request, a prompt to an outside engine or vendor and a
+published page all reduce a link to its label (`withoutRecordLinks`). One
+rule decides which tools strip (`shared/record-link-tools.ts`), read by the
+agents dispatcher (`callTool` in `server/drivers/agents-call.ts`) and the
+Claude CLI permission proxy (whose card shows the input that runs); every
+catalog tool of every profile is in its leave list or its keep list
+(`server/drivers/record-link-tools.test.ts` fails on a tool in neither), and
+an unlisted tool is stripped at run time. Files, skills, artifacts, memory,
+widgets' HTML, code, a connector's file content (a path with its content, or
+a files list) and the CLI's own Edit, Write, MultiEdit, NotebookEdit and Bash
+keep their words byte for byte. The Perspicax relay strips every console
+call.
+Streamed text holds back only a part that could still become a record link
+(from a `[` or a `sagax:`, 256 characters and 1.5 s at most, released at once
+when it cannot be one) and sends it without the address
+(`SseRuntimeDeltaCoalescer`, `streamRecordText`). Not covered: a tool an
+engine runs itself without asking (a connector mounted in the harness under
+Full access or the CLI's own rules, an ACP or Codex engine's own tools, whose
+permission answer cannot rewrite the input); there the relay line, "chat reply
+only", is the only protection. A message keeps the link only, never a
+record's content.

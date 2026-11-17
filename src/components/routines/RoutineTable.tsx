@@ -32,11 +32,11 @@ const HEAD_CELL = "text-[12px] leading-4 text-ink-secondary";
 // One bar per run, like an uptime strip: the SAME size for every result (owner, 2026-11-17: "same height, colour
 // alone"), its colour the result's. The three colours are the skin's own, a stronger step of them where a skin keeps
 // two too close for a colour-blind eye (--trend-* in styles.css, measured in src/lib/trend-colors.test.ts). A blocked or
-// missed run, and one that waits on the person, are the OUTLINE of the same bar, so neither reads as a paler failure
-// or problem. The meaning is also in the tooltip and the accessible label, never in the colour alone.
+// missed run is a full bar in the failure colour and one that waits on the person a full bar in the problem colour:
+// never an outline or another shape. The exact meaning is in the tooltip and the accessible label.
 const BAR_TONE: Record<TrendKind, string> = {
-  success: "bg-trend-success", problems: "bg-trend-problems", failed: "bg-trend-failed", blocked: "bg-transparent ring-1 ring-inset ring-trend-failed",
-  running: "bg-accent animate-pulse motion-reduce:animate-none", waiting: "bg-transparent ring-1 ring-inset ring-trend-problems", empty: "bg-ink/10",
+  success: "bg-trend-success", problems: "bg-trend-problems", failed: "bg-trend-failed", blocked: "bg-trend-failed",
+  running: "bg-accent animate-pulse motion-reduce:animate-none", waiting: "bg-trend-problems", empty: "bg-ink/10",
 };
 const BAR = "block h-4 w-1 shrink-0 rounded-[1px]";
 

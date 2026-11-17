@@ -149,15 +149,14 @@ describe("RoutinesOverview", () => {
     expect(host.textContent).toContain("No routine matches.");
   });
 
-  it("draws a blocked or missed run as the outline of the same bar, not a paler failure", async () => {
+  it("draws a blocked, missed or waiting run as a full bar of the same size, colour only", async () => {
     const blocked = [run("a", "r1", "blocked", 5), run("b", "r1", "failed", 4), run("c", "r1", "missed", 3), run("d", "r1", "waiting", 2), run("e", "r1", "completed", 1)];
     await mount(routines, blocked);
     const bar = (kind: string) => host.querySelector<HTMLElement>(`[data-routine-id="r1"] [data-trend-mark="${kind}"]`)!;
     expect(bar("failed").className).toContain("bg-trend-failed");
-    expect(bar("blocked").className).toContain("ring-trend-failed");
-    expect(bar("blocked").className).toContain("bg-transparent");
-    expect(bar("blocked").className).not.toMatch(/bg-trend-failed|bg-danger/);
-    expect(bar("waiting").className).toContain("ring-trend-problems");
+    expect(bar("blocked").className).toContain("bg-trend-failed");
+    expect(bar("waiting").className).toContain("bg-trend-problems");
+    for (const kind of ["blocked", "waiting"]) expect(bar(kind).className).not.toMatch(/ring-|bg-transparent/);
     for (const kind of ["failed", "blocked", "waiting", "success"]) expect(bar(kind).className).toContain("h-4");
     // the meaning stays in words: the label and the sentence
     expect(bar("blocked").getAttribute("aria-label")).toMatch(/Blocked|Missed/);

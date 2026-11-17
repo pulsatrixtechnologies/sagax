@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vitest";
-import { ensureDirs } from "../../config.ts";
+import { DATA_DIR, ensureDirs } from "../../config.ts";
 import type { ProviderInstance } from "../../contracts.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { recordEvents } from "../../testing/events.ts";
@@ -11,6 +11,7 @@ import { GeminiAgentDriver } from "./gemini.ts";
 import { acpNativeIncomingLogMessage } from "./core.ts";
 import { allowsRegisteredTool, GrokAgentDriver, grokInheritedProfile, grokToolScopeProfile } from "./grok.ts";
 import { clearDesktopInjectHosts, upsertDesktopInjectHost } from "../local-inject.ts";
+import { grokIsolatedHomePath } from "./grok-mcp-isolation.ts";
 
 const cli = join(dirname(fileURLToPath(import.meta.url)), "../../testing/fake-acp-cli.ts");
 const directories: string[] = [];
@@ -253,7 +254,12 @@ it("runs an offered Grok model on an organization turn despite a launch campaign
   }
   expect(f.recorder.events.filter(event => event.type === "runtime.notice")).toEqual([]);
   expect(f.recorder.events.filter(event => event.type === "runtime.error")).toEqual([]);
-  expect(JSON.parse(readFileSync(join(home, ".grok", "campaigns_state.json"), "utf8")).dismissed_ids).toEqual(["grok-4.7-launch"]);
+  // #2747: a bot turn's CLI runs in the isolated home of $HOME/.grok (the
+  // campaign reaches it through its link); the dismissal is written where
+  // that CLI reads it, never into the person's own home
+  const engineHome = grokIsolatedHomePath(join(home, ".grok"), join(DATA_DIR, "engines", "grok-isolated"));
+  expect(JSON.parse(readFileSync(join(engineHome, "campaigns_state.json"), "utf8")).dismissed_ids).toEqual(["grok-4.7-launch"]);
+  expect(existsSync(join(home, ".grok", "campaigns_state.json"))).toBe(false);
 });
 
 it("runs a local model on Grok through the [model.x] block it declares, accepted without a notice", async () => {

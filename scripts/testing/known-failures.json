@@ -1240,18 +1240,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/drivers/acp/tool-scope.test.ts",
-      "test": "runs an offered Grok model on an organization turn despite a launch campaign, with no notice",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "src/components/skin-fx/skin-fx.test.ts",
       "test": "the Appearance gallery's layout > sets the preview band full width above the tabs, one grid under them, stacked in a narrow pane",
       "platforms": [

@@ -113,6 +113,9 @@ enum BubbleColor {
         MainActor.assumeIsolated {
             let prefs = SidebarPrefsModel.shared
             guard prefs.botReplyBubbles else { return .clear }
+            // the iPad desktop layout draws from its own colour set, with the
+            // accent off and on, as the computer app does
+            if let desktop, prefs.botBubble { return desktop.bubbleBotAccent }
             let palette = Theme.palette
             guard let tinted = BotBubble.paint(enabled: prefs.botBubble, accent: palette.accent, base: palette.bubbleAssistant, ink: palette.bubbleAssistantText) else {
                 return theirs(desktop: desktop)

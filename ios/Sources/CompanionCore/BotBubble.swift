@@ -24,6 +24,12 @@ public enum BotBubble {
     /// page's text on it (kept as is: the tint is too light to change its contrast).
     public static func paint(enabled: Bool, accent: SkinColor, base: SkinColor, ink: SkinColor) -> Paint? {
         guard enabled else { return nil }
-        return Paint(fill: SkinColor(accent.hex, alpha: tint).over(base), ink: ink)
+        return Paint(fill: tinted(accent: accent, base: base), ink: ink)
+    }
+
+    /// `color-mix(in srgb, accent 14%, base)`: the one mix, for the phone's
+    /// palette and for the iPad desktop layout's own colour set.
+    public static func tinted(accent: SkinColor, base: SkinColor) -> SkinColor {
+        SkinColor(accent.hex, alpha: tint).over(base)
     }
 }

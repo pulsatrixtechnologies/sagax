@@ -46,4 +46,17 @@ final class BotBubbleTests: XCTestCase {
         XCTAssertTrue(SidebarPrefKey.synced.contains("sagax.botReplyBubbles.v1"))
         XCTAssertTrue(SidebarPrefKey.synced.contains(BotBubble.key))
     }
+
+    /// The phone mixes over its palette's grey, the iPad desktop layout over
+    /// its own colour set's grey: one mix, two bases, never the other's grey.
+    func testTheMixIsTheSameOverThePhoneGreyAndTheDesktopGrey() throws {
+        let phoneGrey = try XCTUnwrap(SkinColor(css: "#202020"))
+        let desktopGrey = try XCTUnwrap(SkinColor(css: "#252525"))
+        let phone = BotBubble.tinted(accent: accent, base: phoneGrey)
+        let desktop = BotBubble.tinted(accent: accent, base: desktopGrey)
+        XCTAssertNotEqual(phone, desktop)
+        XCTAssertEqual(BotBubble.paint(enabled: true, accent: accent, base: phoneGrey, ink: SkinColor(0xFFFFFF))?.fill, phone)
+        XCTAssertEqual(BotBubble.paint(enabled: true, accent: accent, base: desktopGrey, ink: SkinColor(0xFFFFFF))?.fill, desktop)
+        XCTAssertEqual(desktop.red * 255, 0.14 * 0x31 + 0.86 * 0x25, accuracy: 1)
+    }
 }

@@ -119,13 +119,15 @@ describe("a bot manages its person's skills, plugins and connectors (#4504)", ()
     const h = harness({ answer: { count: 1, checkedAt: 1, checking: false, items: [
       { key: "plugin:me:me:review@acme", kind: "plugin", name: "Review", scope: "me", installedVersion: "1.0.0", availableVersion: "1.1.0", updateAvailable: true, canUpdate: true },
       { key: "skill:bot:b1:steps", kind: "skill", name: "steps", scope: "bot", bot: { id: "b1", name: "Nimbus" }, updateAvailable: false, canUpdate: true },
-      { key: "plugin:organization:organization:d1", kind: "plugin", name: "Policy", scope: "organization", organization: "required", updateAvailable: false, canUpdate: false },
+      { key: "plugin:organization:organization:d1", kind: "plugin", name: "Policy", scope: "organization", organization: "required", organizationId: "d1", updateAvailable: false, canUpdate: false },
+      { key: "connector:me:me:nimbus", kind: "connector", name: "nimbus", scope: "me", installedVersion: "1.2.3", updateAvailable: false, updateUnknown: true, canUpdate: true },
     ] } });
     const read = await h.call({ action: "get", key: "capabilities.updates" });
     expect(JSON.parse(String(read.body.text)).value).toEqual({ count: 1, items: [
       { key: "plugin:me:me:review@acme", kind: "plugin", name: "Review", scope: "me", installed: "1.0.0", update: "1.1.0" },
       { key: "skill:bot:b1:steps", kind: "skill", name: "steps", scope: "bot", bot: "Nimbus" },
-      { key: "plugin:organization:organization:d1", kind: "plugin", name: "Policy", scope: "organization", organization: "required" },
+      { key: "plugin:organization:organization:d1", kind: "plugin", name: "Policy", scope: "organization", organization: "required", id: "d1" },
+      { key: "connector:me:me:nimbus", kind: "connector", name: "nimbus", scope: "me", installed: "1.2.3", unknown: true },
     ] });
   });
 
@@ -151,11 +153,13 @@ describe("a bot manages its person's skills, plugins and connectors (#4504)", ()
   it("the organization's own item: an offered one turns off, an imposed one answers the route's refusal", async () => {
     const h = harness({ mode: "full" });
     done((await h.call({ action: "set", key: "capabilities.organization", value: { key: "skill:organization:organization:d2", enabled: false } })).body.text);
+    done((await h.call({ action: "set", key: "capabilities.organization", value: { key: "connector:organization:organization:d3", enabled: false } })).body.text);
     const imposed = await h.call({ action: "set", key: "capabilities.organization", value: { id: "d1", enabled: false } });
     expect(imposed.status).toBe(409);
     expect(String(imposed.body.error ?? imposed.body.text)).toContain("The organization imposes this capability: it stays on.");
     expect(h.planned.map(({ method, path, body }) => [method, path, body])).toEqual([
       ["PUT", "/api/me/org-capabilities/d2", { enabled: false }],
+      ["PUT", "/api/me/org-capabilities/d3", { enabled: false }],
       ["PUT", "/api/me/org-capabilities/d1", { enabled: false }],
     ]);
   });

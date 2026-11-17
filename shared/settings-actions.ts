@@ -1144,7 +1144,9 @@ add({
         ...(item.bot && typeof item.bot === "object" ? { bot: (item.bot as { name?: unknown }).name } : {}),
         ...(item.installedVersion ? { installed: item.installedVersion } : {}),
         ...(item.updateAvailable ? { update: item.availableVersion ?? true } : {}),
+        ...(item.updateUnknown ? { unknown: true } : {}),
         ...(item.organization ? { organization: item.organization } : {}),
+        ...(item.organizationId ? { id: item.organizationId } : {}),
       })),
     };
   } }),

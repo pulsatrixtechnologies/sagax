@@ -26857,7 +26857,7 @@ function skillUpdateRecordsOf(person: string, manager: boolean): InstalledSkillR
   }
   if (manager) records.push(...installationSkillRecords());
   for (const view of orgUpdateDeclarations(person)) {
-    if (view.form === "skill") records.push({ ...orgUpdatePlace(view), name: view.name, importedAt: "" });
+    if (view.form === "skill") records.push({ ...orgUpdatePlace(view), id: view.id, name: view.name, importedAt: "" });
   }
   return records;
 }
@@ -26883,7 +26883,7 @@ function connectorUpdateRecordsOf(person: string, manager: boolean): InstalledCo
   }
   if (manager) records.push(...installationConnectorRecords());
   for (const view of orgUpdateDeclarations(person)) {
-    if (view.form === "mcp") records.push({ ...orgUpdatePlace(view), name: view.mount || view.name });
+    if (view.form === "mcp") records.push({ ...orgUpdatePlace(view), id: view.id, name: view.mount || view.name });
   }
   return records;
 }

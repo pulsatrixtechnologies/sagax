@@ -25,7 +25,7 @@ import {
 /** Where an installed item lives: the person's own place (me), one of
  * their bots, this installation (its managers), or the organization. */
 type Place = { scope: "me" | "bot" | "installation" | "organization"; target: string; bot?: { id: string; name: string } };
-type Organization = { organization?: "required" | "offered"; pinned?: string };
+type Organization = { organization?: "required" | "offered"; pinned?: string; /** the declaration id of an organization item */ id?: string };
 
 function base(kind: UpdateItem["kind"], place: Place, id: string, name: string, org: Organization): Omit<UpdateItem, "updateAvailable"> {
   return {
@@ -35,6 +35,7 @@ function base(kind: UpdateItem["kind"], place: Place, id: string, name: string, 
     scope: place.scope,
     ...(place.bot ? { bot: place.bot } : {}),
     ...(org.organization ? { organization: org.organization } : {}),
+    ...(org.organization && org.id ? { organizationId: org.id } : {}),
     ...(org.pinned ? { pinned: org.pinned } : {}),
     canUpdate: !org.organization,
   };
@@ -183,13 +184,17 @@ function listed(item: UpdateItem): ListedUpdateFields {
 export function skillUpdateProvider(deps: SkillProviderDeps): UpdateProvider & { fields(record: InstalledSkillRecord): ListedUpdateFields } {
   const commits = new Map<string, FolderCommit[]>();
   const now = deps.now ?? Date.now;
-  let blockedUntil = 0;
+  /** Per credential (the person whose access reads; "" without one): GitHub's
+   * budget is each token's own, and the unauthenticated one is shared. */
+  const blockedUntil = new Map<string, number>();
+  /** Where the next round starts: the first source the last one did not reach. */
+  let cursor = 0;
   const known = (record: InstalledSkillRecord) => record.github && !record.organization ? commits.get(readKey(record.github, record.owner)) : undefined;
   const item = (record: InstalledSkillRecord): UpdateItem => {
     const read = known(record);
     const update = read && record.github ? skillFolderUpdate({ commit: record.github.commit, importedAt: record.importedAt }, read) : null;
     return {
-      ...base("skill", record, record.name, record.name, record),
+      ...base("skill", record, record.id ?? record.name, record.name, record),
       ...(record.github ? { installedVersion: record.github.commit.slice(0, 7) } : {}),
       ...(record.github && !record.organization && !read ? { updateUnknown: true as const } : {}),
       updateAvailable: Boolean(update),
@@ -205,36 +210,42 @@ export function skillUpdateProvider(deps: SkillProviderDeps): UpdateProvider & {
       return deps.records(person).map(item);
     },
     async check() {
-      // GitHub refused for its rate limit: nothing until its reset
-      if (now() < blockedUntil) return false;
       const seen = new Map<string, InstalledSkillRecord>();
       for (const record of deps.allRecords()) {
         if (!record.github || record.organization) continue;
         const key = readKey(record.github, record.owner);
         if (!seen.has(key)) seen.set(key, record);
       }
+      const sources = [...seen];
+      const start = sources.length ? cursor % sources.length : 0;
+      const order = [...sources.slice(start), ...sources.slice(0, start)];
       let changed = false;
-      for (const [key, record] of seen) {
+      let firstSkipped: number | undefined;
+      for (const [index, [key, record]] of order.entries()) {
+        const credential = record.owner ?? "";
+        // that credential's rate limit: nothing on it until its reset
+        if (now() < (blockedUntil.get(credential) ?? 0)) {
+          firstSkipped ??= (start + index) % sources.length;
+          continue;
+        }
         const answer = await latestFolderCommits(record.github!, deps.fetcherFor(record.owner), 8_000, now);
         // unreachable: what was known stays
         if (!answer) continue;
         if ("limitedUntil" in answer) {
-          blockedUntil = answer.limitedUntil;
-          break;
+          blockedUntil.set(credential, answer.limitedUntil);
+          continue;
         }
         const before = commits.get(key)?.[0]?.sha;
         if (!commits.has(key) || before !== answer.commits[0]?.sha) changed = true;
         commits.set(key, answer.commits);
-        // keep the rest of the hour for the person's own imports
-        if (answer.remaining !== undefined && answer.remaining <= GITHUB_RESERVE) {
-          blockedUntil = answer.resetAt ?? now() + 60 * 60_000;
-          break;
-        }
+        // keep the rest of that credential's hour for the person's own imports
+        if (answer.remaining !== undefined && answer.remaining <= GITHUB_RESERVE) blockedUntil.set(credential, answer.resetAt ?? now() + 60 * 60_000);
       }
+      cursor = firstSkipped ?? 0;
       return changed;
     },
     async update(person, item) {
-      const record = deps.records(person).find((candidate) => updateKey("skill", candidate.scope, candidate.target, candidate.name) === item.key);
+      const record = deps.records(person).find((candidate) => updateKey("skill", candidate.scope, candidate.target, candidate.id ?? candidate.name) === item.key);
       if (!record?.github) throw new Error("This skill was not imported from GitHub, so it has no source to update from.");
       const done = await deps.reimport(person, record);
       return done?.commit ? { to: done.commit.slice(0, 7) } : {};
@@ -272,7 +283,7 @@ export function connectorUpdateProvider(deps: ConnectorProviderDeps): UpdateProv
   const item = (record: InstalledConnectorRecord): UpdateItem => {
     const state = known(record);
     return {
-      ...base("connector", record, record.name, record.name, record),
+      ...base("connector", record, record.id ?? record.name, record.name, record),
       ...(state ? { installedVersion: state.pin.version } : {}),
       ...(state?.unknown ? { updateUnknown: true as const } : {}),
       updateAvailable: Boolean(state?.newest),
@@ -301,7 +312,7 @@ export function connectorUpdateProvider(deps: ConnectorProviderDeps): UpdateProv
       return changed;
     },
     async update(person, item) {
-      const record = deps.records(person).find((candidate) => updateKey("connector", candidate.scope, candidate.target, candidate.name) === item.key);
+      const record = deps.records(person).find((candidate) => updateKey("connector", candidate.scope, candidate.target, candidate.id ?? candidate.name) === item.key);
       const state = record ? known(record) : null;
       if (!record || !state?.newest) throw new Error("This connector has no newer version to install.");
       await deps.setArgs(person, record, withPinnedVersion(record.args ?? [], state.pin, state.newest));

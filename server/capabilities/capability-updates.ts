@@ -32,6 +32,9 @@ export interface UpdateItem {
   /** The source was never reached: no update mark, and an update answers unknown. */
   updateUnknown?: true;
   organization?: "required" | "offered";
+  /** The organization's declaration id, for the person's own switch of it
+   * (PUT /api/me/org-capabilities/:id). */
+  organizationId?: string;
   pinned?: string;
   canUpdate: boolean;
 }
@@ -252,7 +255,10 @@ export async function latestFolderCommits(
     const resetAt = resetHeader && /^\d+$/.test(resetHeader) ? Number(resetHeader) * 1000 : undefined;
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
-      if (response.status === 429 || (response.status === 403 && remaining === 0)) return { limitedUntil: resetAt ?? now() + 60 * 60_000 };
+      const retryHeader = response.headers?.get?.("retry-after");
+      const retryAfter = retryHeader && /^\d+$/.test(retryHeader) ? now() + Number(retryHeader) * 1000 : undefined;
+      // a secondary limit says retry-after, even with requests left
+      if (response.status === 429 || (response.status === 403 && (remaining === 0 || retryAfter !== undefined))) return { limitedUntil: retryAfter ?? resetAt ?? now() + 60 * 60_000 };
       return null;
     }
     const body = await response.json() as unknown;
@@ -365,7 +371,8 @@ export class CapabilityUpdates {
         const now = signature(view);
         const before = this.told.get(person.id);
         this.told.set(person.id, now);
-        if (before !== undefined && before !== now) this.options.notify(person.id, view);
+        // never told before (right after a start): an update to show is news
+        if (before === undefined ? view.count > 0 : before !== now) this.options.notify(person.id, view);
       } catch (error) {
         this.log(`[capability-updates] the live frame could not be built: ${reason(error)}`);
       }
@@ -434,10 +441,12 @@ export class CapabilityUpdates {
         results.push({ key, kind: kindOfKey(key), name: key.split(":").slice(3).join(":") || key, status: "failed", error: "Not one of your installed items: get the list again." });
         continue;
       }
-      let running = this.inflight.get(key);
+      // a key in a person's own place does not name the person: theirs is in the in-flight key
+      const flight = `${person.id}\u0000${key}`;
+      let running = this.inflight.get(flight);
       if (!running) {
-        running = this.updateOne(person, item).finally(() => this.inflight.delete(key));
-        this.inflight.set(key, running);
+        running = this.updateOne(person, item).finally(() => this.inflight.delete(flight));
+        this.inflight.set(flight, running);
       }
       results.push(await running);
     }

@@ -334,7 +334,7 @@ describe("review of #4504", () => {
     const fetcher = (async (url: string) => {
       asked.push(String(url));
       if (answer === "limited") return new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) } });
-      return new Response(JSON.stringify([]), { status: 200, headers: { "x-ratelimit-remaining": answer === "low" ? "5" : "50", "x-ratelimit-reset": String(reset) } });
+      return new Response(JSON.stringify([]), { status: 200, headers: { "x-ratelimit-remaining": answer === "low" ? "5" : "50", "x-ratelimit-reset": String(Math.floor(now / 1000) + 3600) } });
     }) as unknown as typeof fetch;
     const records: InstalledSkillRecord[] = ["one", "two", "three"].map((path) => ({ scope: "me", target: "me", name: path, importedAt: "2026-11-01T00:00:00Z", github: { owner: "acme", repo: "skills", ref: "main", path, commit: "a".repeat(40) } }));
     const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, fetcherFor: () => fetcher, reimport: async () => undefined, now: () => now });
@@ -349,6 +349,7 @@ describe("review of #4504", () => {
     // past the reset: one request, then the reserve stops the round
     expect(asked).toHaveLength(2);
     answer = "ok";
+    now += 2 * 60 * 60_000;
     await provider.check();
     expect(asked).toHaveLength(5);
   });
@@ -390,5 +391,84 @@ describe("review of #4504", () => {
     expect(sent.sort()).toEqual([["pr_ada", 1], ["pr_owner", 1]]);
     await updates.check();
     expect(sent).toHaveLength(2);
+  });
+});
+
+describe("second review of #4504", () => {
+  it("two people updating their own item of the same name each get their own update", async () => {
+    const releases: Array<() => void> = [];
+    const done: string[] = [];
+    const update = vi.fn((person: UpdatePerson) => new Promise<void>((resolve) => { releases.push(() => { done.push(person.id); resolve(); }); }));
+    const own = (version: string) => [item({ key: "plugin:me:me:a@m", kind: "plugin", updateAvailable: true, availableVersion: version })];
+    const updates = new CapabilityUpdates({ providers: [fakeProvider("plugin", { pr_ada: own("2.0.0"), pr_bob: own("3.0.0") }, update)] });
+    const ada = updates.apply(ADA, { keys: ["plugin:me:me:a@m"] });
+    const bob = updates.apply(BOB, { keys: ["plugin:me:me:a@m"] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    for (const release of releases) release();
+    const [a, b] = await Promise.all([ada, bob]);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(done.sort()).toEqual(["pr_ada", "pr_bob"]);
+    expect(a.results[0]!.to).toBe("2.0.0");
+    expect(b.results[0]!.to).toBe("3.0.0");
+  });
+
+  it("an organization skill or connector is keyed by its declaration id, which the item carries", async () => {
+    const skills = skillUpdateProvider({ records: () => [{ scope: "organization", target: "organization", id: "d9", name: "house-rules", importedAt: "", organization: "offered" }], allRecords: () => [], fetcherFor: () => fetch, reimport: async () => undefined });
+    const connectors = connectorUpdateProvider({ records: () => [{ scope: "organization", target: "organization", id: "d8", name: "audit-log", organization: "offered" }], allRecords: () => [], setArgs: () => undefined });
+    expect((await skills.items(ADA))[0]).toMatchObject({ key: "skill:organization:organization:d9", name: "house-rules", organizationId: "d9" });
+    expect((await connectors.items(ADA))[0]).toMatchObject({ key: "connector:organization:organization:d8", name: "audit-log", organizationId: "d8" });
+  });
+
+  it("GitHub's rate limit is per credential, honours retry-after, and the next round resumes where the last stopped", async () => {
+    let now = Date.parse("2026-11-16T12:00:00Z");
+    const asked: string[] = [];
+    const answers: Record<string, () => Response> = {};
+    const fetcherFor = (owner: string | undefined) => (async (url: string) => {
+      const path = new URL(String(url)).searchParams.get("path")!;
+      asked.push(`${owner}:${path}`);
+      return (answers[`${owner}:${path}`] ?? (() => new Response("[]", { status: 200, headers: { "x-ratelimit-remaining": "50" } })))();
+    }) as unknown as typeof fetch;
+    const github = (path: string) => ({ owner: "acme", repo: "skills", ref: "main", path, commit: "a".repeat(40) });
+    const records: InstalledSkillRecord[] = [
+      { scope: "me", target: "me", name: "a1", importedAt: "2026-11-01T00:00:00Z", github: github("a1"), owner: "pr_ada" },
+      { scope: "me", target: "me", name: "b1", importedAt: "2026-11-01T00:00:00Z", github: github("b1"), owner: "pr_bob" },
+    ];
+    // a secondary limit with requests left: retry-after pauses that credential only
+    answers["pr_ada:a1"] = () => new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "40", "retry-after": "120" } });
+    const provider = skillUpdateProvider({ records: () => records, allRecords: () => records, fetcherFor, reimport: async () => undefined, now: () => now });
+    await provider.check();
+    expect(asked).toEqual(["pr_ada:a1", "pr_bob:b1"]);
+    await provider.check();
+    expect(asked).toEqual(["pr_ada:a1", "pr_bob:b1", "pr_bob:b1"]);
+    now += 121_000;
+    delete answers["pr_ada:a1"];
+    await provider.check();
+    expect(asked.slice(3)).toEqual(["pr_ada:a1", "pr_bob:b1"]);
+
+    // a short budget: the next round starts with the sources the last did not reach
+    const order: string[] = [];
+    let low = true;
+    const shared = (async (url: string) => {
+      order.push(new URL(String(url)).searchParams.get("path")!);
+      return new Response("[]", { status: 200, headers: { "x-ratelimit-remaining": low ? "5" : "50" } });
+    }) as unknown as typeof fetch;
+    const three: InstalledSkillRecord[] = ["s1", "s2", "s3"].map((path) => ({ scope: "me", target: "me", name: path, importedAt: "2026-11-01T00:00:00Z", github: github(path) }));
+    const cursor = skillUpdateProvider({ records: () => three, allRecords: () => three, fetcherFor: () => shared, reimport: async () => undefined, now: () => now });
+    await cursor.check();
+    low = false;
+    now += 2 * 60 * 60_000;
+    await cursor.check();
+    expect(order).toEqual(["s1", "s2", "s3", "s1"]);
+  });
+
+  it("right after a start, the first change for a person who never read their list sends the frame", async () => {
+    const sent: Array<[string, number]> = [];
+    const updates = new CapabilityUpdates({
+      providers: [{ kind: "plugin", items: () => [item({ key: "plugin:me:me:a@m", kind: "plugin", updateAvailable: true })], check: async () => true, update: async () => undefined }],
+      people: () => [{ id: "pr_owner", manager: false }],
+      notify: (person, view) => { sent.push([person, view.count]); },
+    });
+    await updates.check();
+    expect(sent).toEqual([["pr_owner", 1]]);
   });
 });

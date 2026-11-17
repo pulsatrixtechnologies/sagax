@@ -1606,7 +1606,6 @@ struct ConnectAppsProviders: View {
                 HarnessConnectorsSection(model: harness)
                     .task { await harness.load(session.settingsClient) }
             }
-
         }
     }
 }

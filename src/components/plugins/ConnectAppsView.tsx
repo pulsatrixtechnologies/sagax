@@ -246,7 +246,10 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
     if (!head) return;
     const overlay = head.querySelector<HTMLElement>("[data-plugins-search-expanded]");
     for (const child of Array.from(head.children)) {
-      if (child !== overlay && overlay) child.setAttribute("inert", ""); else child.removeAttribute("inert");
+      // the covered row neither takes focus nor paints (no border of it shows past the field)
+      const covered = child !== overlay && overlay !== null;
+      if (covered) child.setAttribute("inert", ""); else child.removeAttribute("inert");
+      (child as HTMLElement).style.visibility = covered ? "hidden" : "";
     }
     if (overlay && !wasOpen.current) overlay.querySelector<HTMLElement>("input")?.focus();
     else if (!overlay && wasOpen.current) searchToggle.current?.focus();

@@ -824,6 +824,9 @@ describe("the control row is ONE line at every width (the owner: it should not b
     // nothing under the overlay can be reached with Tab
     for (const covered of ["[data-plugins-kinds]", "[data-plugins-views]", "[data-plugins-actions]"]) expect(host.querySelector(covered)!.hasAttribute("inert")).toBe(true);
     expect(host.querySelector("[data-plugins-search-expanded]")!.hasAttribute("inert")).toBe(false);
+    // and none of it paints under the field
+    for (const covered of ["[data-plugins-kinds]", "[data-plugins-views]", "[data-plugins-actions]"]) expect(host.querySelector<HTMLElement>(covered)!.style.visibility).toBe("hidden");
+    expect(host.querySelector<HTMLElement>("[data-plugins-search-expanded]")!.style.visibility).toBe("");
     // Escape on the empty field folds the search; the window's own Escape never hears the first one
     const heard = vi.fn();
     document.addEventListener("keydown", heard);
@@ -833,6 +836,7 @@ describe("the control row is ONE line at every width (the owner: it should not b
     expect(document.activeElement).toBe(toggle());
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
     expect(host.querySelector("[data-plugins-actions]")!.hasAttribute("inert")).toBe(false);
+    expect(host.querySelector<HTMLElement>("[data-plugins-actions]")!.style.visibility).toBe("");
     // the second Escape is the window's
     await act(async () => { toggle().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
     expect(heard).toHaveBeenCalledTimes(1);

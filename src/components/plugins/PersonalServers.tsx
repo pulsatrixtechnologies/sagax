@@ -9,6 +9,7 @@ import { useState, type ReactNode } from "react";
 import { LogIn, LogOut, Pencil, Server } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import {
@@ -16,10 +17,10 @@ import {
   type MyConnections, type PersonalServer,
 } from "@/lib/my-connections";
 import { PersonalImportForm, PersonalServerForm, stateLabel, useMyConnections } from "../settings/MyConnectionsSettings";
-import { ITEM_ROW_ATTR, ItemTrailer } from "./ItemTrailer";
+import { CardTrail, ITEM_ROW_ATTR, ItemTrailer } from "./ItemTrailer";
 import { statusState } from "./StateIcon";
 import type { EntryActions } from "./InstalledView";
-import { PLUGINS } from "./plugins-style";
+import { CARD_BOX, CARD_ICON, PLUGINS } from "./plugins-style";
 
 type Form = { kind: "add" } | { kind: "import" } | { kind: "edit"; name: string } | null;
 
@@ -85,10 +86,10 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
     return {
       key: server.name,
       node: (
-        <div className="group flex items-center gap-2 py-3" data-installed-entry={`personal:${server.name}`} data-personal-server={server.name} {...{ [ITEM_ROW_ATTR]: "" }}>
-          <button type="button" onClick={() => setForm({ kind: "edit", name: server.name })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
+        <div className={cn("group", CARD_BOX)} data-installed-entry={`personal:${server.name}`} data-personal-server={server.name} {...{ [ITEM_ROW_ATTR]: "" }}>
+          <button type="button" onClick={() => setForm({ kind: "edit", name: server.name })} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left"
             aria-label={t("connectApps.openAria", { name: server.name })}>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><Server size={18} aria-hidden="true" /></span>
+            <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}><Server size={20} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
               <span className={PLUGINS.rowName}>{server.name}</span>
               <span className={PLUGINS.rowSub}>
@@ -100,12 +101,14 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
             </span>
             
           </button>
+          <CardTrail>
           {server.enabled && waitsForSignIn(server) && (
             <button type="button" className="ui-button shrink-0" data-personal-sign-in={server.name} disabled={busy !== null} onClick={() => void signIn(server.name)}>{t("myConnections.servers.signIn")}</button>
           )}
           <ItemTrailer state={server.enabled && waitsForSignIn(server) ? null : statusState(status, () => setForm({ kind: "edit", name: server.name }))} name={server.name} where={server.enabled ? { kind: "all" } : { kind: "none" }} whereKind={server.enabled ? "all" : "none"} on={server.enabled} busy={busy !== null}
             onToggle={(next) => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, next))}
             actions={{ allBots: () => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, true)), offEverywhere: () => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, false)), links: actions.links, remove: actions.remove }} />
+          </CardTrail>
         </div>
       ),
     };

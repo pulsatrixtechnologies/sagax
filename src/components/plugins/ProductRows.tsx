@@ -166,7 +166,7 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
         <span className="pointer-events-none min-w-0 flex-1" data-person-product-line>
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className={cn(PLUGINS.rowName, "min-w-0")}>{product.name}</span>
+            <span className={cn(PLUGINS.rowName, "min-w-0 !line-clamp-2 !whitespace-normal break-words")}>{product.name}</span>
             {partOf && (
               <button type="button" data-vendor-chip="" aria-label={t("connectApps.vendor.inAria", { name: partOf.name })}
                 onClick={() => partOf.onOpen()}

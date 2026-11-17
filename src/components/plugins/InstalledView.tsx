@@ -478,7 +478,7 @@ export function InstalledRow({ entry, onOpen, actions, trailer, hideOrigin = fal
         <span className="min-w-0 flex-1">
           {/* a card can cut the words: the whole name and line stay on hover (#2948) */}
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className={cn(PLUGINS.rowName, "min-w-0")} title={entry.name}>{entry.name}</span>
+            <span className={cn(PLUGINS.rowName, "min-w-0 !line-clamp-2 !whitespace-normal break-words")} title={entry.name}>{entry.name}</span>
             <CategoryChip category={entry.primary.category} />
           </span>
           {/* how it got there, then what it does, on one line */}

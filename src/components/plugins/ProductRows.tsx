@@ -165,8 +165,8 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
         <ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className={cn("pointer-events-none", nested ? "size-8" : CARD_ICON)} />
         {/* the name keeps its whole width; the state goes under it when both do not fit */}
         <span className="pointer-events-none min-w-0 flex-1" data-person-product-line>
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className={cn(PLUGINS.rowName, "min-w-0 !line-clamp-2 !whitespace-normal break-words")}>{product.name}</span>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0 max-w-full !whitespace-normal break-words")}>{product.name}</span>
             {partOf && (
               <button type="button" data-vendor-chip="" aria-label={t("connectApps.vendor.inAria", { name: partOf.name })}
                 onClick={() => partOf.onOpen()}
@@ -175,7 +175,7 @@ export function ProductRow({ product, ctx, nested = false, partOf, hideOrigin = 
               </button>
             )}
           </span>
-          {sub && <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={sub}>{sub}</span>}
+          {sub && <span className={PLUGINS.rowSub} title={sub}>{sub}</span>}
         </span>
       </div>
       <CardTrail>{productTrailer(ctx, product.name, [product.id], { links: productMenuActions(product, 14).map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run })), detail: () => ctx.onOpen(product) }, productRowState(product, () => ctx.onOpen(product)))}</CardTrail>

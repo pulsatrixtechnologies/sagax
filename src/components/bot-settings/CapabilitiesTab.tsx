@@ -244,8 +244,8 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
             className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
             <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}><Glyph size={20} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>
-              <span className="mt-px block truncate text-[12px] leading-4 text-ink-secondary" title={line} data-capability-origin={origin ? "" : undefined}>{line}</span>
+              <span className="block break-words text-[13px] font-medium leading-[18px] text-ink" title={name}>{name}</span>
+              <span className="mt-px line-clamp-2 break-normal text-[12px] leading-4 text-ink-secondary" title={line} data-capability-origin={origin ? "" : undefined}>{line}</span>
             </span>
           </button>
           <CardTrail>{actions}

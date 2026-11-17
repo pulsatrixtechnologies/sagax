@@ -438,11 +438,11 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
                   <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left">
                     <span className={cn("flex shrink-0 items-center justify-center bg-card text-ink-secondary", CARD_ICON)}><FileText size={20} aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span className={cn(PLUGINS.rowName, "min-w-0")} title={skill.name}>{skill.name}</span>
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span className={cn(PLUGINS.rowName, "min-w-0 max-w-full !whitespace-normal break-words")} title={skill.name}>{skill.name}</span>
                         <CategoryChip category={skill.category} />
                       </span>
-                      <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={skillLine(skill, sourceLabel)}>{skillLine(skill, sourceLabel)}</span>
+                      <span className={PLUGINS.rowSub} title={skillLine(skill, sourceLabel)}>{skillLine(skill, sourceLabel)}</span>
                     </span>
                     {skill.status === "off" && !skillTrailer && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
                   </button>
@@ -477,12 +477,12 @@ export function InstalledRow({ entry, onOpen, actions, trailer, hideOrigin = fal
         <PluginIcon item={icon} className={CARD_ICON} />
         <span className="min-w-0 flex-1">
           {/* a card can cut the words: the whole name and line stay on hover (#2948) */}
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className={cn(PLUGINS.rowName, "min-w-0 !line-clamp-2 !whitespace-normal break-words")} title={entry.name}>{entry.name}</span>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className={cn(PLUGINS.rowName, "min-w-0 max-w-full !whitespace-normal break-words")} title={entry.name}>{entry.name}</span>
             <CategoryChip category={entry.primary.category} />
           </span>
           {/* how it got there, then what it does, on one line */}
-          <span className={cn(PLUGINS.rowSub, "!line-clamp-1")} title={bringsLabel(entry.brings)} data-installed-brings>
+          <span className={PLUGINS.rowSub} title={bringsLabel(entry.brings)} data-installed-brings>
             {[...(hideOrigin ? [] : [t("connectApps.origin.you")]), entry.primary.description || bringsLabel(entry.brings)].join(" \u00b7 ")}
           </span>
         </span>

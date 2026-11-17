@@ -25,7 +25,7 @@ function tree(input: unknown): WidgetRoot {
 const row = (root: WidgetRoot): Message => ({ id: "w1", role: "bot", kind: "widget", at: 1, text: "fallback", widget: { v: 1, root } });
 
 const fetchMock = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>();
-const store = { state: {}, dispatch: vi.fn(), flushBotPatches: vi.fn(async () => null) } as unknown as ReturnType<typeof useStore>;
+const store = { state: { bots: [] }, dispatch: vi.fn(), flushBotPatches: vi.fn(async () => null) } as unknown as ReturnType<typeof useStore>;
 
 let host: HTMLDivElement;
 let root: Root;

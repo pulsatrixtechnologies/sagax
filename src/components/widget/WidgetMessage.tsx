@@ -186,7 +186,7 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
       if (entry.tone) {
         // taken: fold now, from what was pressed and sent, without waiting on the patch frame (if the frame came first, it rules)
         setSettledHere({ ref, label: entry.label, tone: entry.tone, at: Date.now(), sendId, ...(sending ? { values: sending } : {}) });
-        // #4489: the press is the person's message (the choice, once). Draw
+        // (issue 4489): the press is the person's message (the choice, once). Draw
         // that row as the card folds, and show the bot is working. A queued
         // press has not started a turn, so the working line stays off.
         const thread = threadId ?? getState().bots.find((candidate) => candidate.id === botId)?.threadId;

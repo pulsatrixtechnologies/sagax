@@ -1755,6 +1755,13 @@ export type Action =
        * (409): the card already shows the server's real outcome, so the
        * caller must not roll it back. */
       onError?: (message: string, settled?: boolean) => void;
+      /** #4489: the card's receipt at the click (Allowed once, Declined),
+       * rolled back if the answer does not reach the server. */
+      settle?: Partial<OptionCardData>;
+      /** #4489: a live turn waits on this answer, so the working line comes
+       * on at the click. Never for a server's own card (a routine fix
+       * card's Open the routine, Run a check, Pause), which starts no turn. */
+      resumes?: boolean;
     }
   | { type: "newTask"; botId: string; projectId?: string; cwd?: string; confidential?: boolean; /** "New topic" in the single stream */ stream?: boolean; onCreated?: () => void; onError?: (message: string) => void }
   /** One way only (src/lib/confidential-thread.ts): the server refuses any
@@ -1793,6 +1800,9 @@ export type Action =
   | { type: "playMascotMotion"; botId: string; kind: Exclude<MausMotion, "none"> }
   /** #4489: a button choice was taken. The working line comes on now. */
   | { type: "choiceContinuing"; botId: string; threadId?: string }
+  /** #4489: a decideRequest with `settle` / `resumes` did not reach the
+   * server: `settle` puts the card back, and the turn waits again. */
+  | { type: "decideFailed"; threadId: string; requestId: string; settle?: Partial<OptionCardData>; resumes?: boolean }
   | { type: "botPatched"; bot: BotAnnouncement }
   | { type: "messageAdded"; threadId: string; message: Message }
   | { type: "messagePatched"; threadId: string; message: Message }

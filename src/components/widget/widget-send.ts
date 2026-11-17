@@ -42,7 +42,7 @@ export async function sendWidgetAction(press: WidgetPress): Promise<WidgetSendRe
         widgetAction: { messageId: press.messageId, ref: press.ref, rev: press.rev, ...(press.values ? { values: press.values } : {}) },
       }),
     });
-    // #4489: the press is already the person's message. Hand that row back
+    // (issue 4489): the press is already the person's message. Hand that row back
     // so the thread can show it as the card folds, not on a later frame.
     return { ok: true, ...(body?.message ? { message: body.message } : {}), ...(body?.queued ? { queued: true } : {}) };
   } catch (error) {

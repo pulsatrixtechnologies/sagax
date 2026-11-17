@@ -2,7 +2,8 @@
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
 import {clearThreadReturnIfHome, currentTaskBot, mergeTaskStamps, openedUnreadDivider, optimisticUserMessage, panelFollowsSelection, patchCard, patchGroupCard, readOnScreen, reconcileModelVariantSessions, reconcileSnapshotQueues, taskPatchFields, bumpThreadUpdatedAt, updateBot, visibleMessages, withMascotMotion, type Bot} from "./model";
-import { choiceContinuing } from "./choice-continuing";
+import { choiceContinuing, choiceWaitingAgain, threadOwnerId } from "./choice-continuing";
+import { serverCardKind } from "../../../shared/fix-card-keys";
 import {fallbackSelection} from "@/lib/selection-fallback";
 import {threadOpensUnread, threadReadCursor} from "@/lib/unread-divider";
 import {sameModelSelection} from "../../../shared/thread-model";
@@ -67,18 +68,20 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
       }
       const bot = state.bots.find((candidate) => candidate.id === action.botId);
       const card = bot?.messages.find((message) => message.id === action.messageId)?.card;
-      let next = choiceContinuing(
-        patchCard(state, action.botId, action.messageId, {
-          answered: action.answer,
-          // talking past the first-run quiz hides it; live asks, a bot's
-          // question drawn in the chat (#4475) and a proactive proposal stay,
-          // with the pick marked
-          ...(isFirstRunQuizCard(card) ? { dismissed: true } : {}),
-          ...(card?.proactiveProposal ? { answeredText: action.answer } : {}),
-        }),
-        action.botId,
-        action.threadId,
-      );
+      const patched = patchCard(state, action.botId, action.messageId, {
+        answered: action.answer,
+        // talking past the first-run quiz hides it; live asks, a bot's
+        // question drawn in the chat (#4475) and a proactive proposal stay,
+        // with the pick marked
+        ...(isFirstRunQuizCard(card) ? { dismissed: true } : {}),
+        ...(card?.proactiveProposal ? { answeredText: action.answer } : {}),
+      });
+      // A card the server raised itself (a routine fix card) and a proactive
+      // proposal start no turn of their own: no working line for them.
+      const startsNoTurn = Boolean(serverCardKind(card?.askKey) || card?.proactiveProposal);
+      let next = startsNoTurn
+        ? withMascotMotion(patched, action.botId, "working")
+        : choiceContinuing(patched, action.botId, action.threadId);
       if (!action.sendId) return next;
       const owner = next.bots.find((candidate) => candidate.id === action.botId);
       const threadId = action.threadId ?? owner?.threadId;
@@ -95,7 +98,22 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
     case "dismissCard":
       if (action.groupId) return patchGroupCard(state, action.groupId, action.messageId, { dismissed: true });
       return patchCard(state, action.botId, action.messageId, { dismissed: true });
-    case "decideRequest":
+    case "decideRequest": {
+      // the server's request.resolved patch settles the card; #4489: the
+      // receipt and the working line show at the click when asked for
+      const settled = action.settle
+        ? reduce(state, { type: "cardSettled", threadId: action.threadId, requestId: action.requestId, patch: action.settle })
+        : state;
+      const owner = action.resumes ? threadOwnerId(settled, action.threadId) : undefined;
+      return owner ? choiceContinuing(settled, owner, action.threadId) : settled;
+    }
+    case "decideFailed": {
+      const reopened = action.settle
+        ? reduce(state, { type: "cardSettled", threadId: action.threadId, requestId: action.requestId, patch: action.settle })
+        : state;
+      const owner = action.resumes ? threadOwnerId(reopened, action.threadId) : undefined;
+      return owner ? choiceWaitingAgain(reopened, owner, action.threadId) : reopened;
+    }
     case "skipCard":
       return state; // the server's request.resolved patch settles the card
     case "botAdded":

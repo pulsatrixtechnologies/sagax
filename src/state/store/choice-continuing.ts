@@ -39,3 +39,8 @@ export function choiceContinuing(state: AppState, botId: string, threadId?: stri
 export function choiceWaitingAgain(state: AppState, botId: string, threadId?: string): AppState {
   return updateBot(state, botId, (bot) => withActivity(bot, threadId, "waiting-on-you"));
 }
+
+/** The bot that owns a thread (its main thread or one of its tasks). */
+export function threadOwnerId(state: AppState, threadId: string): string | undefined {
+  return state.bots.find((bot) => bot.threadId === threadId || bot.tasks?.some((task) => task.threadId === threadId))?.id;
+}

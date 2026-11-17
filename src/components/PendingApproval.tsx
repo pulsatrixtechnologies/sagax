@@ -478,10 +478,10 @@ export function PendingApprovalActions({
     onDecided?.(behavior);
     const where = pending.threadId ?? threadId;
     const requestId = pending.message.card?.approvalOrigin?.requestId ?? pending.requestId;
-    // #4489: the existing receipt (Allowed once, Routine confirmed, Declined)
-    // stays in the thread at the click. The pin drops it. A refused answer
-    // opens the card again.
-    dispatch({ type: "cardSettled", threadId: where, requestId, patch: { answered: behavior } });
+    // #4489: one dispatch. The existing receipt (Allowed once, Routine
+    // confirmed, Declined) stays in the thread at the click and the pin
+    // drops it; the waiting turn shows working again (a durable request
+    // waits on no turn). A refused answer opens the card again.
     dispatch({
       type: "decideRequest",
       threadId: where,
@@ -496,10 +496,9 @@ export function PendingApprovalActions({
       rememberCommand: rememberCommand || undefined,
       rule,
       ...(ruleScope ? { ruleScope } : {}),
-      onError: (_message, settledElsewhere) => {
-        if (!settledElsewhere) dispatch({ type: "cardSettled", threadId: where, requestId, patch: { answered: undefined } });
-        onDecideFailed?.();
-      },
+      settle: { answered: behavior },
+      ...(durableRequest ? {} : { resumes: true }),
+      ...(onDecideFailed ? { onError: () => onDecideFailed() } : {}),
     });
   };
 

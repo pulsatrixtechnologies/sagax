@@ -33,7 +33,7 @@ const fetchMock = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>
 const openExternal = vi.fn(async (_url: string) => {});
 /** The store's save of a bot's pending settings, which a press waits for. */
 const flushBotPatches = vi.fn<(botId: string) => Promise<null>>();
-const store = { state: {}, dispatch: vi.fn(), flushBotPatches } as unknown as ReturnType<typeof useStore>;
+const store = { state: { bots: [] }, dispatch: vi.fn(), flushBotPatches } as unknown as ReturnType<typeof useStore>;
 const inStore = (message: Message) => createElement(BotEditorStore, { value: store, children: createElement(WidgetMessage, { botId: "scout", threadId: "t1", message }) });
 
 let host: HTMLDivElement;

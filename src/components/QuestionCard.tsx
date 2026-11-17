@@ -353,6 +353,9 @@ export function QuestionCard({
       requestId,
       behavior: "answer",
       message: answer,
+      // #4489: the bot's own card resumes its turn: working at the click. A
+      // card the server raised itself (a routine fix card) starts no turn.
+      ...(serverCardKind(card.askKey) ? {} : { resumes: true }),
       // The answer never reached the bot, so the card must go back to
       // being answerable rather than sitting there looking settled.
       // Settled elsewhere (409): the store already wrote the server's real

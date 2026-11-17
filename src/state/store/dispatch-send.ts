@@ -242,6 +242,10 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
               // A settings flush failure deliberately stops the response;
               // otherwise it could resume work under a stale approval level.
               showError(error);
+              if (action.settle || action.resumes) {
+                const reopen = action.settle ? Object.fromEntries(Object.keys(action.settle).map((key) => [key, undefined])) : undefined;
+                rawDispatch({ type: "decideFailed", threadId: action.threadId, requestId: action.requestId, ...(reopen ? { settle: reopen } : {}), ...(action.resumes ? { resumes: true } : {}) });
+              }
               action.onError?.(readableError(error));
             });
           break;

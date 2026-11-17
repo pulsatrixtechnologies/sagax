@@ -5,6 +5,7 @@
 // tool's widget, which tools a bot uses) reads the tool that call runs, as if
 // the model had called it by its own name.
 
+import { currentAgentToolName } from "./agent-tool-renames.ts";
 import { ARTIFACT_READ_ACTIONS, isArtifactFamilyTool } from "./claude-chat-blocks.ts";
 import { isMergedAgentTool, readMergedCall } from "./merged-agent-tools.ts";
 
@@ -32,6 +33,80 @@ const META_TOOLS: ReadonlySet<string> = new Set([BRIDGE_FIND_TOOL, BRIDGE_USE_TO
 const AGENT_TOOL = /^[a-z][a-z0-9_]{0,63}$/;
 /** `mcp__agents__x` (Claude), `agents__x` (ACP, Codex), `agents.x`, `agents:x`, `agents/x`. */
 const AGENTS_SPELLING = /^((?:mcp(?:__|[.:]))?agents(?:__|[.:/]))([a-z][a-z0-9_]{0,63})$/;
+
+/** #4527: a chat-completions engine's name for an agents tool
+ * (`chatToolName("agents", x)` in server/drivers/chat-mcp-tools.ts). */
+const CHAT_AGENTS_SPELLING = /^agents_([a-z][a-z0-9_]{0,63})$/;
+/** A server's name in a tool id: the mount names of shared/tool-scope.ts and
+ * the engines' own connector servers (`claude_ai_Gmail`). */
+const TOOL_ID_SERVER = /^[A-Za-z0-9][\w-]{0,63}$/;
+const TOOL_ID_TOOL = /^[A-Za-z0-9][\w.:-]{0,199}$/;
+/** Tools that only find or reach another tool, on any server or engine
+ * (the chat engines' deferred pair included): never counted as a use. */
+const FINDING_TOOLS: ReadonlySet<string> = new Set([...META_TOOLS, "tool_search", "tool_call"]);
+
+/** #4527: the one id of an MCP tool, `<server>/<tool>`, from a step's
+ * title: `mcp__<server>__<tool>` (Claude Code, Pi's gateway, Grok's
+ * use_tool), `<server>__<tool>` (the ACP engines), `agents.x`, `agents:x`,
+ * `agents/x`, and `agents_x` (the chat engines and Muse Code). Codex titles
+ * a call by the tool alone, and the chat engines and Pi's own extension
+ * name a connector's tool `<server>_<tool>`: those engines write the id on
+ * the step itself (`tool` of item.started, shared/runtime-events.ts), read
+ * by stepToolId. A renamed Sagax tool reads as its current name. Null for a
+ * built-in tool (`Bash`, `edit`), a name that names no server, and the
+ * tools that only find or reach another (search_tools, call_tool, use_tool,
+ * tool_search...): a call through those is counted as the tool it runs. */
+export function toolIdOf(name: unknown): string | null {
+  if (typeof name !== "string") return null;
+  const raw = name.trim();
+  const agents = AGENTS_SPELLING.exec(raw)?.[2] ?? CHAT_AGENTS_SPELLING.exec(raw)?.[1];
+  let server: string;
+  let tool: string;
+  if (agents) {
+    server = BRIDGE_SERVER;
+    tool = currentAgentToolName(agents);
+  } else {
+    const rest = raw.startsWith("mcp__") ? raw.slice("mcp__".length) : raw;
+    const split = rest.indexOf("__");
+    // an id read back (`crm/list`) goes through toolIdParts: a title with a
+    // slash is a command line (`bin/test`) far more often than a tool
+    if (split <= 0) return null;
+    server = rest.slice(0, split);
+    tool = rest.slice(split + 2);
+    if (server === BRIDGE_SERVER) tool = currentAgentToolName(tool);
+  }
+  if (!TOOL_ID_SERVER.test(server) || !TOOL_ID_TOOL.test(tool) || FINDING_TOOLS.has(tool)) return null;
+  return `${server}/${tool}`;
+}
+
+/** A tool id's server and tool, or null for anything else. */
+export function toolIdParts(id: unknown): { server: string; tool: string } | null {
+  if (typeof id !== "string") return null;
+  const slash = id.indexOf("/");
+  if (slash <= 0) return null;
+  const server = id.slice(0, slash);
+  const tool = id.slice(slash + 1);
+  return TOOL_ID_SERVER.test(server) && TOOL_ID_TOOL.test(tool) ? { server, tool } : null;
+}
+
+/** The id of one MCP call an engine reports as server, tool and arguments
+ * (Codex): a family tool or the bridge's use_tool of the agents server
+ * reads as the tool it runs; a finding tool is null. */
+export function mcpCallToolId(server: unknown, tool: unknown, input: unknown): string | null {
+  if (typeof server !== "string" || typeof tool !== "string") return null;
+  const name = `mcp__${server}__${tool}`;
+  const bridged = unwrapAgentsBridge(name, input);
+  return bridged.find || bridged.refused ? null : toolIdOf(bridged.name);
+}
+
+/** The id of the tool a step ran (an item.started of a tool): the id the
+ * engine wrote on it, else the one its title spells; null for a built-in
+ * tool or a finding tool. */
+export function stepToolId(step: { title?: unknown; tool?: unknown }): string | null {
+  const parts = toolIdParts(step.tool);
+  if (!parts) return toolIdOf(step.title);
+  return toolIdOf(`mcp__${parts.server}__${parts.tool}`);
+}
 
 export const BRIDGE_REFUSED_TEXT = "use_tool needs one catalog tool name from find_tool, and its arguments as an object.";
 

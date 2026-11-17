@@ -468,7 +468,7 @@ export function compactToolsFromEnv(env: Record<string, string | undefined>): { 
 const DEFERRED_WHEN_COORDINATING: ReadonlySet<string> = new Set(["start_thread"]);
 
 /** #2037: SAGAX_DEFER_KNOWN_USE, set by the Claude driver when native tool
- * search is on and the bot's agents use is known (KNOWN_USE_CALLS). Only
+ * search is on and the bot's agents use is known (server/tools/tool-keep.ts). Only
  * `core: "used"` widens deferral; absent or "default" keeps DEFERRED_AGENT_TOOL_NAMES. */
 export function knownUseFromEnv(env: Record<string, string | undefined>): { core: "used"; pinned: ReadonlySet<string> } | undefined {
   const raw = env.SAGAX_DEFER_KNOWN_USE;

@@ -11,7 +11,6 @@
 import { unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { EVENTS_DIR, NATIVE_DIR } from "../config.ts";
-import { forgetToolUses } from "../activity/tool-use-counts.ts";
 
 export interface ThreadLogRetentionCandidate {
   threadId: string;
@@ -57,8 +56,6 @@ export const RETENTION_SWEEP_BATCH = 50;
 
 function removeThreadEventLogs(threadId: string): boolean {
   let removedAny = false;
-  // the compact prompt's tool use counted from the log goes with it
-  forgetToolUses(threadId);
   for (const dir of [EVENTS_DIR, NATIVE_DIR]) {
     const path = join(dir, `${threadId}.ndjson`);
     try {

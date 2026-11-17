@@ -8,6 +8,7 @@ import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
 import { CALL_TOOL, directoryCallTarget } from "../../mcp/mcp-directory.ts";
+import { mcpCallToolId } from "../../../shared/searched-tool-call.ts";
 import { pushRenewalStep } from "../../context/context-renewal.ts";
 import { codexNativeIncomingLogMessage } from "./native-log.ts";
 import type { CodexSession } from "./session-types.ts";
@@ -112,6 +113,8 @@ s.handleNotification = (msg: any) => {
               : item.type === "webSearch"
                 ? "web_search"
                 : null;
+      // #4527: Codex titles a call by the tool alone; the step carries its id
+      const toolId = item.type === "mcpToolCall" ? mcpCallToolId(item.server, runs ?? item.tool, runs ? item.arguments?.arguments : item.arguments) : null;
       if (title) {
         if (typeof item.id === "string") {
           pushRenewalStep(s.renewalSteps, {
@@ -128,6 +131,7 @@ s.handleNotification = (msg: any) => {
           itemType: "tool",
           itemId: item.id,
           title,
+          ...(toolId ? { tool: toolId } : {}),
           summary: item.type === "commandExecution" ? commandSummary({ command: item.command }) : undefined,
           input: toolDetailPreview(item.type === "commandExecution" ? { command: item.command, cwd: item.cwd } : item.type === "mcpToolCall" ? (runs ? item.arguments?.arguments ?? {} : item.arguments) : item.type === "fileChange" ? item.changes : item.query, item.type === "fileChange" ? inputPreviewMax("fileChange") : undefined),
           ...filesField(item.type === "fileChange"

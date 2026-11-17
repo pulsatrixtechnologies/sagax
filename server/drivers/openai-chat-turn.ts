@@ -606,7 +606,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
               || await approval.ask(shown.title, shownPreview ?? "This tool has no arguments.", shown.grant, shown.mcpTool);
             abort.signal.throwIfAborted();
             emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id,
-              title: shown.title, ...(shownPreview ? { input: shownPreview } : {}),
+              title: shown.title, ...(shown.toolId ? { tool: shown.toolId } : {}), ...(shownPreview ? { input: shownPreview } : {}),
             });
             started = true;
             if (allowed) {

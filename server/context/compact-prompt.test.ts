@@ -7,22 +7,20 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   COMPACT_VOLATILE_LAST,
   COMPACT_VOLATILE_SECTIONS,
-  KNOWN_USE_CALLS,
   compactBotLast,
   adoptLegacyAutoMemory,
   claudeProjectKey,
   compactMemoryDir,
-  compactPins,
   compactVolatileOrder,
   legacyClaudeAutoMemoryDir,
   parseLocalPromptMode,
-  toolUsage,
   usesCompactPrompt,
   usesStablePrompt,
 } from "./compact-prompt.ts";
 import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv } from "../drivers/agents-catalog.ts";
 import { parseGateSearch, searchedCatalog } from "../mcp/mcp-gate-search.ts";
-import { searchedToolCall } from "../../shared/searched-tool-call.ts";
+import { searchedToolCall, stepToolId } from "../../shared/searched-tool-call.ts";
+import { compactPinsOf, emptyToolKeep, EVIDENCE_SESSIONS, foldToolSession, toolKeepVerdict } from "../tools/tool-keep.ts";
 import { workspaceCwdPrompt, workspaceLocationsPrompt } from "../workspace/workspace.ts";
 
 const dirs: string[] = [];
@@ -56,28 +54,24 @@ describe("usesCompactPrompt (#1276)", () => {
 
 describe("compact pins", () => {
   it("counts real tools only, never the directory tools", () => {
-    const usage = toolUsage([
-      { name: "mcp__px__get_ticket" },
-      { name: "mcp__px__get_ticket" },
-      { name: "mcp__px__search_tools" },
-      { name: "mcp__px__call_tool" },
-      { name: "Bash" },
-    ]);
-    expect([...usage.get("px")!]).toEqual([["get_ticket", 2]]);
+    const ids = ["mcp__px__get_ticket", "mcp__px__get_ticket", "mcp__px__search_tools", "mcp__px__call_tool", "Bash"].map((title) => stepToolId({ title }));
+    expect(ids).toEqual(["px/get_ticket", "px/get_ticket", null, null, null]);
   });
 
   it("gives the same bytes for the same use, whatever the order of the calls", () => {
-    const a = compactPins(toolUsage([{ name: "mcp__px__b" }, { name: "mcp__px__a" }, { name: "mcp__px__a" }]), ["px"]);
-    const b = compactPins(toolUsage([{ name: "mcp__px__a" }, { name: "mcp__px__a" }, { name: "mcp__px__b" }]), ["px"]);
-    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-    expect(a.pinned.px).toEqual(["a", "b"]);
+    const fold = (used: string[]) => foldToolSession(foldToolSession(emptyToolKeep(), { prompts: 1, used }), { prompts: 1, used });
+    const a = fold(["px/b", "px/a"]);
+    const b = fold(["px/a", "px/b"]);
+    expect(JSON.stringify(compactPinsOf(toolKeepVerdict(a), a))).toBe(JSON.stringify(compactPinsOf(toolKeepVerdict(b), b)));
+    expect(compactPinsOf(toolKeepVerdict(a), a).pinned.px).toEqual(["a", "b"]);
   });
 
-  it("keeps a bot with little Sagax tool use on the default list", () => {
-    const few = Array.from({ length: KNOWN_USE_CALLS - 1 }, () => ({ name: "mcp__agents__ask_bot" }));
-    expect(compactPins(toolUsage(few), []).agents.core).toBe("default");
-    const enough = [...few, { name: "mcp__agents__ask_bot" }];
-    expect(compactPins(toolUsage(enough), []).agents.core).toBe("used");
+  it("keeps a bot with too few sessions of its own on the default list", () => {
+    let state = emptyToolKeep();
+    for (let session = 1; session < EVIDENCE_SESSIONS; session++) state = foldToolSession(state, { prompts: 30, used: ["agents/ask_bot"] });
+    expect(compactPinsOf(toolKeepVerdict(state), state).agents.core).toBe("default");
+    state = foldToolSession(state, { prompts: 1, used: ["agents/ask_bot"] });
+    expect(compactPinsOf(toolKeepVerdict(state), state).agents.core).toBe("used");
   });
 
   it("keeps one memory folder per bot and person, the same in every conversation", () => {

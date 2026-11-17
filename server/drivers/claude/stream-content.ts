@@ -105,7 +105,7 @@ case "system":
     // steered continuation's own init re-reports the same session,
     // which is no new rebuild. A session started because the last
     // one filled up says so instead.
-    if (retry.renewed) emit({ ...base(threadId, currentTurnId()), type: "runtime.notice", message: contextRenewedNotice("Claude Code") });
+    if (retry.renewed) emit({ ...base(threadId, currentTurnId()), type: "runtime.notice", message: contextRenewedNotice("Claude Code"), contextRenewed: true });
     else if (retry.rebuilt) emit({ ...base(threadId, currentTurnId()), type: "runtime.notice", message: rebuiltSessionNotice("Claude Code") });
     retry.rebuilt = false;
     retry.renewed = false;

@@ -2,6 +2,7 @@
 import { newId } from "../contracts.ts";
 import { MAX_QUESTION_TEXT, parseAskQuestions, parseChoices, questionAnswersByQuestion } from "../../shared/ask-question.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
+import { mcpCallToolId } from "../../shared/searched-tool-call.ts";
 import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
 import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
 import { filesField, writtenFilesFromToolInput } from "../threads/thread-files.ts";
@@ -29,6 +30,23 @@ interface PiEvent {
   method?: string;
   options?: unknown[];
   title?: string;
+}
+
+/** #4527: a tool of pi-mcp-extension, named `<server>_<tool>` lower-cased
+ * (pi-mcp-extension.ts sanitizeToolName), as the id of the tool it runs:
+ * the server is the longest mounted one the name starts with; a searched
+ * server's call_tool is the tool it names. Null for pi's own tools. */
+export function piExtensionToolId(name: string | undefined, args: unknown, servers: readonly string[], searched: ReadonlySet<string>): string | null {
+  if (!name) return null;
+  const prefix = (server: string) => `${server.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "")}_`;
+  const server = [...servers].sort((a, b) => b.length - a.length).find((candidate) => name.startsWith(prefix(candidate)) && name.length > prefix(candidate).length);
+  if (!server) return null;
+  const tool = name.slice(prefix(server).length);
+  const input = args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : {};
+  if (tool === "call_tool" && searched.has(server)) {
+    return typeof input.name === "string" ? mcpCallToolId(server, input.name.trim(), input.arguments) : null;
+  }
+  return mcpCallToolId(server, tool, input);
 }
 
 export function handlePiEvent(ctx: PiSendCtx, evt: PiEvent): void {
@@ -70,12 +88,16 @@ export function handlePiEvent(ctx: PiSendCtx, evt: PiEvent): void {
       const args = gateway?.kind === "tool" ? gateway.args : evt.args;
       if (typeof evt.toolCallId === "string" && toolName) toolNames.set(evt.toolCallId, toolName);
       if (typeof evt.toolCallId === "string") toolArgs.set(evt.toolCallId, args);
+      // #4527: the id of the tool this call runs, as on every other engine
+      const toolId = gateway?.kind === "tool" ? mcpCallToolId(gateway.server, gateway.tool, gateway.args)
+        : piExtensionToolId(typeof evt.toolName === "string" ? evt.toolName : undefined, evt.args, mcpServerNames, searchedServers);
       emit({
         ...base(threadId, turnId),
         type: "item.started",
         itemType: "tool",
         itemId: evt.toolCallId,
         title: String(toolName ?? "tool").slice(0, 80),
+        ...(toolId ? { tool: toolId } : {}),
         summary: commandSummary(args),
         input: toolDetailPreview(args),
         ...filesField(writtenFilesFromToolInput(toolName, args)),

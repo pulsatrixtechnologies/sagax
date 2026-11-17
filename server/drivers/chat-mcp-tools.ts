@@ -21,6 +21,7 @@ import { fitToolList } from "../mcp/mcp-tool-schema.ts";
 import type { ToolSchemaProfile } from "../tool-schema-profile.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { openApiWriteToolNames } from "../mcp/openapi-tools.ts";
+import { mcpCallToolId } from "../../shared/searched-tool-call.ts";
 
 export interface ChatToolDefinition {
   type: "function";
@@ -37,7 +38,9 @@ export interface ChatToolResult { text: string; ok: boolean; images?: ChatImageP
 /** `mcpTool`: `<server>__<tool>` by the mount's own name and the tool's
  * upstream name (never the model's words), for the server's approval
  * routing (member-environment.ts, member-tool-scope.ts). */
-export interface ChatToolCallView { title: string; input: Record<string, unknown>; ask: boolean; grant?: string; mcpTool?: string }
+/** `toolId`: the id of the tool the call runs, `<server>/<tool>`
+ * (shared/searched-tool-call.ts), for its use count (#4527). */
+export interface ChatToolCallView { title: string; input: Record<string, unknown>; ask: boolean; grant?: string; mcpTool?: string; toolId?: string }
 /** The transport cannot safely continue this turn. A dispatched operation may
  * already have taken effect, so callers must not retry it through a new round. */
 export class ChatToolSessionError extends Error {}
@@ -652,7 +655,15 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     if (!object(args) || (!directory && !tool.schema(args))) throw new Error("Tool arguments do not match the advertised input schema; use its required fields and types");
     if (tool.searched && excluded(target(tool, args))) throw new Error("Tool selection excludes this tool");
   };
+  /** #4527: the shown call with the id of the tool it runs (`toolId`). */
   const viewTool = (name: string, args: Record<string, unknown>): ChatToolCallView => {
+    const shown = viewToolShown(name, args);
+    const tool = registered.get(name);
+    const runs = tool ? target(tool, args) : undefined;
+    const toolId = tool && runs !== undefined ? mcpCallToolId(tool.server, runs, shown.input) : null;
+    return toolId ? { ...shown, toolId } : shown;
+  };
+  const viewToolShown = (name: string, args: Record<string, unknown>): ChatToolCallView => {
     const tool = registered.get(name);
     const runs = tool ? target(tool, args) : name;
     // Sagax's own Data tools go to Sagax's approval path like any other

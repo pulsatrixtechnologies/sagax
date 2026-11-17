@@ -2316,6 +2316,12 @@ export class RoutineManager {
     return this.routines.map(routine => this.routineWithHealth(routine, byRoutine.get(routine.id) ?? []));
   }
 
+  /** #4527: whether a bot owns any routine, without building every
+   * routine's health (server/tools/tool-keep.ts, on every turn). */
+  hasRoutineForBot(botId: string): boolean {
+    return this.routines.some((routine) => routine.botId === botId);
+  }
+
   /** #3599: one routine's runs in stored order, a settled run read as
    * stored. The fields a routine's health and its last outcomes read (its
    * id, routine, status, error, problems and times) are the same before and

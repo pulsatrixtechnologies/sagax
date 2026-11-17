@@ -8,6 +8,7 @@ import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { compactBotLast } from "../context/compact-prompt.ts";
 import { memoryExcerptBytes } from "../workspace/workspace.ts";
+import { namedByToolScope, ruleTextsFor } from "../tools/tool-keep.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -147,11 +148,6 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // #2037: Claude with localPrompt full still needs the bot's agents use
     // so native tool search can defer everything outside the core and pins.
     const needsAgentsUse = wantsCompact || state.instance.driverKind === "claudeAgent";
-    const compactForBot = needsAgentsUse
-      ? compactPromptFor(state.liveBot ?? state.bot, typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot))
-      : undefined;
-    state.compactPrompt = wantsCompact ? compactForBot : undefined;
-    state.agentsKnownUse = !state.compactPrompt && compactForBot?.agents.core === "used" ? compactForBot.agents : undefined;
     const promptApprovalLevel = approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId);
     // Cold / automation turns (routines, webhooks, proactive): tighter
     // per-section budgets, lazy skill index, short rich-output (V1/R3).
@@ -160,7 +156,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // server is never given a path of it (server/server-path-prompt.ts)
     const serverFiles = !withholdHostToolsFor(state.instance);
     const environmentFolder = serverFiles ? null : sandboxFolderFor?.(state.bot.id) ?? null;
-    const recentLines = state.onCall ? [] : recentWorkFor(state.bot, state.threadId, { userName: botUserName(state.bot) }).filter((line: any) => !state.streamPart?.threadIds.has(line.threadId)).slice(0, state.compactPrompt ? LOCAL_RECENT_WORK_LINES : undefined);
+    const recentLines = state.onCall ? [] : recentWorkFor(state.bot, state.threadId, { userName: botUserName(state.bot) }).filter((line: any) => !state.streamPart?.threadIds.has(line.threadId)).slice(0, wantsCompact ? LOCAL_RECENT_WORK_LINES : undefined);
     // #4407: the other threads whose words ride this session from now on, so
     // one of them made confidential later forgets this session too
     store.noteCarriedThreads(state.bot.id, state.threadId, [...(state.streamPart?.threadIds ?? []), ...recentLines.map((line: any) => line.threadId)]);
@@ -267,7 +263,25 @@ export function createPromptStartTurn(host: StartTurnHost) {
       : undefined);
     const ordered = state.stablePrompt ? compactVolatileOrder(state.builtPrompt) : state.builtPrompt;
     // #1276: on a local model a new bot shares the cache of the others
-    state.prompt = state.compactPrompt && state.instance.driverKind === "piAgent" ? compactBotLast(ordered) : ordered;
+    state.prompt = wantsCompact && state.instance.driverKind === "piAgent" ? compactBotLast(ordered) : ordered;
+    // #4527: every engine's turn is counted in its conversation's session
+    // (server/tools/tool-keep.ts) for the person it acts for; the verdict is
+    // the session's, frozen. A tool the prompt, the tool selection or a rule
+    // names is never left out.
+    state.toolKeepPerson = typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot);
+    const compactForBot = compactPromptFor(state.liveBot ?? state.bot, state.toolKeepPerson, {
+      threadId: state.threadId,
+      compaction: state.record?.id ?? null,
+      routine: state.opts?.automationSource !== undefined,
+      prompt: !state.warmOnly,
+      context: {
+        voiceCall: Boolean(state.onCall),
+        named: namedByToolScope(state.toolScope),
+        namedText: [`${state.prompt.stable}${state.prompt.volatile}`, ...ruleTextsFor(state.bot.id, state.toolKeepPerson)],
+      },
+    });
+    state.compactPrompt = wantsCompact ? compactForBot : undefined;
+    state.agentsKnownUse = !state.compactPrompt && needsAgentsUse && compactForBot.agents.core === "used" ? compactForBot.agents : undefined;
     turnPromptBytes.set(state.threadId, { stable: Buffer.byteLength(state.prompt.stable), volatile: Buffer.byteLength(state.prompt.volatile) });
     const catalogBytes = toolDefinitionBytes(state.integrations.agents?.env);
     const buckets = measureContextBuckets({
@@ -297,7 +311,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       userName: botUserName(state.bot),
       // #4215: the same excerpt the memory section above showed this turn
       memoryExcerptBytes: memoryExcerptBytes({ managedWrites: Boolean(state.integrations.agents), fileTools: state.worksInWorkspace }),
-      ...(state.onCall ? { budget: CALL_RECALL_BUDGET } : state.compactPrompt ? { budget: LOCAL_RECALL_BUDGET } : {})
+      ...(state.onCall ? { budget: CALL_RECALL_BUDGET } : wantsCompact ? { budget: LOCAL_RECALL_BUDGET } : {})
     });
     if (!state.warmOnly) turnTrace(state.threadId, "recall");
     if (!state.warmOnly && process.env.SAGAX_TURN_TRACE === "1") {

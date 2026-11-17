@@ -15,12 +15,13 @@
 //
 // Compact tool list, Claude Code only (local or cloud), same switch:
 // - lists the agents tools Claude Code would load up front, or, once the
-//   bot's own use is known, the heart of a chat turn plus the tools it uses;
+//   bot's own use is known (server/tools/tool-keep.ts: two sessions of its
+//   own evidence), the heart of a chat turn plus the tools it uses and kept;
 //   every other agents tool is found with search_tools and run with
 //   call_tool (agents-proxy.ts);
 // - gates every MCP server the bot owns with the gate's own search
 //   (mcp-gate-search.ts): a big catalog lists whole only the tools this bot
-//   used, the rest are searched;
+//   used and kept, the rest are searched;
 // - keeps Claude Code's auto memory in one folder per bot and person.
 //   Notes already written in Claude Code's own project folder are copied
 //   in once (adoptLegacyAutoMemory). localPrompt full on the bot, or
@@ -35,7 +36,6 @@ import { createHash } from "node:crypto";
 import { constants, copyFileSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import type { CompactPromptInput } from "../contracts.ts";
 import { isPiLocalModel } from "../models/pi-local-model.ts";
 
 export type LocalPromptMode = "compact" | "full";
@@ -106,67 +106,6 @@ export function usesCompactPrompt(input: {
 /** A stored setting, or undefined. */
 export function parseLocalPromptMode(value: unknown): LocalPromptMode | undefined {
   return value === "compact" || value === "full" ? value : undefined;
-}
-
-/** One tool call the bot made, as its activity row names it. */
-export interface ToolUse {
-  /** `mcp__<server>__<tool>`, a Claude Code built-in, or another engine's name */
-  name: string;
-  /** how many calls this stands for (server/activity/tool-use-counts.ts); one when absent */
-  count?: number;
-}
-
-/** How often the bot called each MCP tool, by server then tool. */
-export function toolUsage(uses: Iterable<ToolUse>): Map<string, Map<string, number>> {
-  const byServer = new Map<string, Map<string, number>>();
-  for (const use of uses) {
-    const name = use.name;
-    if (!name.startsWith("mcp__")) continue;
-    const rest = name.slice("mcp__".length);
-    const split = rest.indexOf("__");
-    if (split <= 0) continue;
-    const server = rest.slice(0, split);
-    const tool = rest.slice(split + 2);
-    if (!tool || tool === "search_tools" || tool === "describe_tool" || tool === "call_tool") continue;
-    const tools = byServer.get(server) ?? new Map<string, number>();
-    tools.set(tool, (tools.get(tool) ?? 0) + (use.count ?? 1));
-    byServer.set(server, tools);
-  }
-  return byServer;
-}
-
-/** A bot whose agents use is known: this many recorded agents calls. Below
- * it, the agents catalog lists what Claude Code would load up front. */
-export const KNOWN_USE_CALLS = 20;
-/** A tool used at least this often is listed whole. */
-export const PIN_MIN_USES = 1;
-/** At most this many tools of one server are listed whole. */
-export const PINNED_PER_SERVER_MAX = 12;
-
-function topTools(tools: Map<string, number> | undefined, max = PINNED_PER_SERVER_MAX): string[] {
-  if (!tools) return [];
-  return [...tools]
-    .filter(([, count]) => count >= PIN_MIN_USES)
-    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-    .slice(0, max)
-    .map(([name]) => name)
-    // the list rides the prompt: sorted, so the same use gives the same bytes
-    .sort();
-}
-
-/** What a compact turn lists whole, from the bot's own recorded calls. */
-export function compactPins(usage: Map<string, Map<string, number>>, servers: readonly string[]): Pick<CompactPromptInput, "agents" | "pinned"> {
-  const agents = usage.get("agents");
-  const agentsCalls = agents ? [...agents.values()].reduce((sum, count) => sum + count, 0) : 0;
-  const pinned: Record<string, string[]> = {};
-  for (const server of [...servers].sort()) {
-    const tools = topTools(usage.get(server));
-    if (tools.length) pinned[server] = tools;
-  }
-  return {
-    agents: { core: agentsCalls >= KNOWN_USE_CALLS ? "used" : "default", pinned: topTools(agents) },
-    pinned,
-  };
 }
 
 /** Claude Code's auto memory folder for one bot and one person: the same in

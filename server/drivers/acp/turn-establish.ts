@@ -203,7 +203,7 @@ const emitSessionStarted = () => {
     ...(rebuiltFromReplay ? { rebuilt: true } : {}),
   });
   if (renewedFromChat) {
-    emit({ ...base(threadId, turnId), type: "runtime.notice", message: contextRenewedNotice(support.displayName) });
+    emit({ ...base(threadId, turnId), type: "runtime.notice", message: contextRenewedNotice(support.displayName), contextRenewed: true });
   }
 };
 

@@ -135,6 +135,11 @@ export type RuntimeEvent = RuntimeEventBase &
          * edit), as the tool named them. Recorded on the activity message so
          * the conversation's Files tab can list them once the call succeeds. */
         files?: string[];
+        /** #4527: the MCP tool this call runs, `<server>/<tool>`, written by
+         * an engine whose title leaves the server out (Codex, the chat
+         * engines), so its use is counted under the same id as on every
+         * other engine (shared/searched-tool-call.ts stepToolId). */
+        tool?: string;
         /** A call a sub-agent made: the item id of the call that started
          * that sub-agent (Claude's Agent tool), so its steps nest under it. */
         parentItemId?: string;
@@ -301,7 +306,14 @@ export type RuntimeEvent = RuntimeEventBase &
       limit?: "engine" }
     /** Something the person should know that did not fail the turn — for
      * example, a saved model the engine no longer offers was replaced. */
-    | { type: "runtime.notice"; message: string }
+    | {
+        type: "runtime.notice";
+        message: string;
+        /** #4527: the engine went on in a fresh session within the turn
+         * (server/context/context-renewal.ts): the conversation's next turn
+         * starts a new session of the bot's tool keep. */
+        contextRenewed?: true;
+      }
   );
 
 export type RuntimeEventListener = (event: RuntimeEvent) => void;

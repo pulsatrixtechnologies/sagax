@@ -3,7 +3,7 @@
 // key. Run now (Stop while a run is in flight), Pause or Resume, Rename,
 // Open, Duplicate, then Delete in red, last. Moving a routine between
 // folders is drag and drop (RoutineFolders), not this menu.
-import { CirclePlay, Copy, PanelRightOpen, Pause, Pencil, Play, Square, Trash2 } from "lucide-react";
+import { CirclePlay, Copy, FolderInput, PanelRightOpen, Pause, Pencil, Play, Square, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -33,11 +33,13 @@ export interface RoutineRowActions {
   onOpen: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
+  /** Move to folder: one entry per folder of its bot, and one to take it out (2026-11-17, the grouped table). */
+  moveTo?: Array<{ key: string; label: string; onSelect: () => void }>;
 }
 
 /** The menu's actions for one routine, wired to the store (the same calls
  * as the routine's page). Each closes the menu first. */
-export function routineRowActions({ routine, bot, state, dispatch, close, onOpen, onDuplicate, onRename }: {
+export function routineRowActions({ routine, bot, state, dispatch, close, onOpen, onDuplicate, onRename, moveTo }: {
   routine: Routine;
   bot: Bot | undefined;
   state: Pick<AppState, "config" | "routineRuns">;
@@ -46,6 +48,7 @@ export function routineRowActions({ routine, bot, state, dispatch, close, onOpen
   onOpen: () => void;
   onDuplicate?: () => void;
   onRename?: () => void;
+  moveTo?: Array<{ key: string; label: string; onSelect: () => void }>;
 }): RoutineRowActions {
   const editable = routine.canEdit !== false;
   const live = routineLiveRun(state.routineRuns, routine.id);
@@ -56,6 +59,7 @@ export function routineRowActions({ routine, bot, state, dispatch, close, onOpen
     ...(editable && onRename ? { onRename: () => { close(false); onRename(); } } : {}),
     onOpen: () => { close(false); onOpen(); },
     ...(onDuplicate ? { onDuplicate: () => { close(false); onDuplicate(); } } : {}),
+    ...(editable && moveTo?.length ? { moveTo: moveTo.map((item) => ({ ...item, onSelect: () => { close(false); item.onSelect(); } })) } : {}),
     ...(editable ? { onDelete: () => { close(false); dispatch({ type: "deleteRoutine", routineId: routine.id }); } } : {}),
   };
 }
@@ -70,6 +74,7 @@ export function RoutineRowMenuItems({ routine, actions }: { routine: Routine; ac
       : { key: "resume", label: t("botPanel.routines.resume"), icon: <CirclePlay size={14} />, onSelect: actions.onToggle, group: 0 }] : []),
     ...(actions.onRename ? [{ key: "rename", label: t("routineFolders.rename"), icon: <Pencil size={14} />, onSelect: actions.onRename, group: 1 }] : []),
     { key: "open", label: t("routines.menu.open"), icon: <PanelRightOpen size={14} />, onSelect: actions.onOpen, group: 1 },
+    ...(actions.moveTo ?? []).map((item) => ({ key: item.key, label: item.label, icon: <FolderInput size={14} />, onSelect: item.onSelect, group: 1 })),
     ...(actions.onDuplicate ? [{ key: "duplicate", label: t("routineDetail.duplicate"), icon: <Copy size={14} />, onSelect: actions.onDuplicate, group: 1 }] : []),
     ...(actions.onDelete ? [{ key: "delete", label: t("common.delete"), icon: <Trash2 size={14} />, onSelect: actions.onDelete, group: 2, danger: true }] : []),
   ];

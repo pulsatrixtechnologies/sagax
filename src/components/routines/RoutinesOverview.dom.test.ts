@@ -27,8 +27,9 @@ const mount = async (routines: Routine[], runs: RoutineRun[]) => {
     root.render(createElement(RoutinesOverview, {
       routines, runs, bots: bots as never, now: NOW, filtersMenu: createElement("span", { "data-filters": "" }), newMenu: createElement("span", { "data-new": "" }),
       onOpen: (r: Routine) => { calls.push(`open:${r.id}`); },
+      onOpenRun: (r: RoutineRun) => { calls.push(`run:${r.id}`); },
       onRowMenu: (r: Routine) => { calls.push(`menu:${r.id}`); },
-      onFailedRuns: () => { calls.push("failed"); },
+      onFailedRuns: (period: string) => { calls.push(`failed:${period}`); },
     }));
   });
 };
@@ -55,7 +56,7 @@ describe("RoutinesOverview", () => {
     expect(text('[data-testid="routines-outcome"]')).toContain("3 succeeded");
     expect(text('[data-testid="routines-outcome"]')).toContain("of 4 runs");
     act(() => host.querySelector<HTMLButtonElement>("[data-routines-failed-runs]")!.click());
-    expect(calls).toEqual(["failed"]);
+    expect(calls).toEqual(["failed:week"]);
     await mount(routines, runs.filter((r) => r.status !== "failed"));
     expect(host.querySelector("[data-routines-failed-runs]")).toBeNull();
     expect(text('[data-testid="routines-rate"]')).toContain("100%");
@@ -68,15 +69,45 @@ describe("RoutinesOverview", () => {
     expect(text('[data-testid="routines-outcome"]')).toContain("No runs yet");
   });
 
-  it("draws one row per routine with its bot, last run and next run or Paused", async () => {
+  it("draws one row per routine with its bot, its 7-run trend and its next run or a Paused chip", async () => {
     await mount(routines, runs);
     const rows = [...host.querySelectorAll("[data-routine-row]")];
     expect(rows.map((r) => r.getAttribute("data-routine-id"))).toEqual(["r1", "r2"]);
     expect(rows[0]!.querySelector("[data-routine-bot]")?.textContent).toBe("Atlas");
-    expect(rows[0]!.querySelector("[data-routine-last-run]")?.getAttribute("data-routine-last-run")).toBe("completed");
     expect(rows[0]!.querySelector("[data-routine-next]")).not.toBeNull();
     expect(rows[1]!.querySelector("[data-routine-state]")?.textContent).toBe("Paused");
-    expect(rows[1]!.querySelector("[data-routine-last-run]")?.getAttribute("data-routine-last-run")).toBe("none");
+  });
+
+  it("draws the trend as 7 marks, oldest at the left, a shape per result, and says it in words", async () => {
+    await mount(routines, runs);
+    const trend = host.querySelector('[data-routine-id="r1"] [data-routine-trend]')!;
+    const marks = [...trend.querySelectorAll("[data-trend-mark]")].map((mark) => mark.getAttribute("data-trend-mark"));
+    expect(marks).toEqual(["empty", "empty", "empty", "success", "failed", "success", "success"]);
+    expect(trend.getAttribute("aria-label")).toBe("Last 7 runs: succeeded: 3, failed: 1; most recent 3 h ago");
+    expect(trend.querySelector("[data-trend-ago]")?.textContent).toBe("3 h ago");
+    // seven bars of the same size, each in its result's colour; no outline, triangle or diamond
+    const bars = [...trend.querySelectorAll("[data-trend-mark]")] as HTMLElement[];
+    expect(bars.every((bar) => bar.className.includes("h-4") && bar.className.includes("w-1"))).toBe(true);
+    expect(bars.map((bar) => /bg-(success|danger|warning|accent|ink)/.exec(bar.className)?.[1])).toEqual(["ink", "ink", "ink", "success", "danger", "success", "success"]);
+    expect(trend.querySelector("svg")).toBeNull();
+  });
+
+  it("gives each mark its date, result and duration, and opens that run on a click", async () => {
+    await mount(routines, runs);
+    const failedMark = host.querySelector<HTMLButtonElement>('[data-routine-id="r1"] [data-trend-mark="failed"]')!;
+    expect(failedMark.title).toMatch(/Failed/);
+    expect(failedMark.title).toMatch(/2 min/);
+    act(() => failedMark.click());
+    expect(calls).toEqual(["run:c"]);
+  });
+
+  it("shows 7 faint outlines and Not run yet for a routine that never ran", async () => {
+    await mount(routines, runs);
+    const trend = host.querySelector('[data-routine-id="r2"] [data-routine-trend]')!;
+    expect([...trend.querySelectorAll("[data-trend-mark]")].every((mark) => mark.getAttribute("data-trend-mark") === "empty")).toBe(true);
+    expect(trend.querySelectorAll("[data-trend-mark]")).toHaveLength(7);
+    expect(trend.querySelector("[data-trend-ago]")?.textContent).toBe("Not run yet");
+    expect(trend.getAttribute("aria-label")).toBe("Last 7 runs: none yet");
   });
 
   it("opens the routine from its name and its menu from the ... button, never for a read-only routine", async () => {

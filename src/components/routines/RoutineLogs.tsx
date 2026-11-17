@@ -16,7 +16,7 @@ const SELECT = "min-w-0 max-w-[200px] truncate rounded-lg border border-hairline
 import type { Bot } from "@/state/store";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
 
-export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, error, routineId, status, onStatusChange, onClearRoutine, onRoutineChange, onClearLogs, onOpen, now = Date.now() }: {
+export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, error, routineId, status, onStatusChange, onClearRoutine, onRoutineChange, onClearLogs, onMarkAllSeen, initialPeriod = "all", onOpen, now = Date.now() }: {
   runs: RoutineRun[];
   bots: Bot[];
   /** A wider scope (2026-10-09): the owner and bot of a run's routine; the
@@ -34,13 +34,17 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   now?: number;
   /** Deletes every saved run the viewer may see; the button shows only when given. */
   onClearLogs?: () => void;
+  /** Marks every problem run read; the button shows while one is unread (2026-11-17: it left the page menu). */
+  onMarkAllSeen?: () => void;
+  /** The period the log opens on ("View failed runs" keeps the Overview's). */
+  initialPeriod?: RoutineLogPeriod;
   onOpen: (run: RoutineRun) => void;
 }) {
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(50);
   const [confirmClear, setConfirmClear] = useState(false);
   const [botId, setBotId] = useState<string>("");
-  const [period, setPeriod] = useState<RoutineLogPeriod>("all");
+  const [period, setPeriod] = useState<RoutineLogPeriod>(initialPeriod);
   // The routines and bots the logs can narrow to: the ones that ran, a
   // deleted routine included (its runs stay, #1567).
   const routineChoices = [...new Map(runs.map((run) => [run.routineId, run.routineName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
@@ -57,6 +61,7 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
       {onRoutineChange && routineChoices.length > 1 && <select data-logs-routine aria-label={t("routines.logs.filterRoutine")} value={routineId ?? ""} onChange={(event) => { onRoutineChange(event.target.value || undefined); setLimit(50); }} className={SELECT}><option value="">{t("routines.logs.allRoutines")}</option>{routineChoices.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>}
       {botChoices.length > 1 && <select data-logs-bot aria-label={t("routines.logs.filterBot")} value={botId} onChange={(event) => { setBotId(event.target.value); setLimit(50); }} className={SELECT}><option value="">{t("approvals.filter.allBots")}</option>{botChoices.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select>}
       <select data-logs-period aria-label={t("routines.logs.period")} value={period} onChange={(event) => { setPeriod(event.target.value as RoutineLogPeriod); setLimit(50); }} className={SELECT}>{(["all", "day", "week", "month"] as const).map((value) => <option key={value} value={value}>{t(`routines.logs.period.${value}`)}</option>)}</select>
+      {onMarkAllSeen && runs.some((run) => isRoutineProblemRun(run) && !run.seenAt) && <button type="button" data-logs-mark-all onClick={onMarkAllSeen} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink hover:bg-raised">{t("routines.markAllSeen")}</button>}
       {onClearLogs && <button type="button" disabled={runs.length === 0} onClick={() => setConfirmClear(true)} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink hover:bg-raised disabled:opacity-40">{t("routines.clearLogs")}</button>}
       {onClearLogs && <ConfirmDialog open={confirmClear} title={t("routines.clearLogsTitle")} body={t("routines.clearLogsBody")} confirmLabel={t("routines.clearLogsConfirm")} onCancel={() => setConfirmClear(false)} onConfirm={() => { setConfirmClear(false); onClearLogs(); }} />}
     </div>

@@ -21,36 +21,28 @@
 // route" says the neutral "Available after the server update.", never a red
 // error.
 import { ArrowDown, ArrowUp, Check, ChevronRight, Folder, FolderInput, FolderPlus, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
-import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { api, openRoutineRun, type Bot } from "@/state/store";
-import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import { useStoreSelector } from "@/state/store-selector";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { flipRoutine } from "@/lib/routine-toggle";
-import { useServerFeature } from "@/lib/server-features";
-import { featureMissingOnServer } from "@/lib/server-route";
 import {
-  answerRoutinePrefixOffer,
   collapsedRoutineFolders,
-  settleRoutinePrefixOffer,
   saveCollapsedRoutineFolders,
 } from "@/lib/routine-folder-prefs";
 import {
-  groupRoutinesByFolder,
   ROUTINE_FOLDER_MAX,
   routineFolderKey,
   routinePrefixPlan,
-  type RoutineFolderAction,
-  type RoutineFolderUndo,
 } from "../../../shared/routine-folders";
 import { RoutineList } from "./RoutineList";
+import { useRoutineFolders, type FolderNotice } from "./useRoutineFolders";
 import { routineRowActions, RoutineMenuPortal, RoutineRowMenuItems } from "./RoutineRowMenu";
 import { MENU_ROW, MenuDivider, menuRow } from "@/components/menu-look";
-
-interface FolderAnswer { folders: string[]; routines: Routine[]; undo?: RoutineFolderUndo }
 
 type MenuState =
   | { kind: "row"; routine: Routine; x: number; y: number; trigger: HTMLElement }
@@ -61,10 +53,6 @@ type MenuState =
 export interface RoutineFolderControl {
   openSectionMenu: (at: { x: number; y: number }, trigger: HTMLElement) => void;
 }
-
-type Notice = { text: string; undo: RoutineFolderUndo };
-
-const EMPTY: string[] = [];
 
 /** Sort by prefix stays on offer while a title starts with [X] and the person
  * may change the routines; a server known to lack folders hides it. */
@@ -107,26 +95,15 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
    * no folder headers. Calendar and the Routines page keep the grouped list. */
   leadingClock?: boolean;
 }) {
-  // only what the list draws: another bot's frame renders nothing here (#3624)
-  const dispatch = useStoreDispatch();
-  const order = useStoreSelector((current) => current.routineFolders?.[bot.id] ?? EMPTY);
-  const storeRoutines = useStoreSelector((current) => current.routines);
-  // What a folder action reaches: the bot's routines in the store and the
-  // caller's full list, the shown rows winning (their copy is the newest).
-  const botRoutines = useMemo(() => {
-    const byId = new Map<string, Routine>();
-    for (const routine of [...(storeRoutines ?? []), ...(allRoutines ?? [])]) if (routine.botId === bot.id) byId.set(routine.id, routine);
-    for (const routine of routines) byId.set(routine.id, routine);
-    return [...byId.values()];
-  }, [storeRoutines, allRoutines, routines, bot.id]);
-  const groups = useMemo(() => groupRoutinesByFolder(routines, order), [routines, order]);
-  const folders = groups.flatMap((group) => group.folder ? [group.folder] : []);
-  const editable = routines.length === 0 || routines.some((routine) => routine.canEdit !== false);
-  // "unknown" (a server from before the feature list, not yet seen) offers
-  // folders; the first answer settles it.
-  const supported = useServerFeature("routineFolders") !== "no";
-  const [serverNote, setServerNote] = useState(false);
   const [collapsed, setCollapsed] = useState(() => collapsedRoutineFolders(bot.id));
+  // A routine filed into a folded folder opens it (the ref: the hook is called before `expand` exists).
+  const expandRef = useRef<(folder: string) => void>(() => {});
+  const {
+    dispatch, groups, folders, botRoutines, editable, supported, busy, pending, serverNote, setServerNote, notice, setNotice,
+    prefixPlan, prefixFolders, showSortAction, showOffer, dismissOffer,
+    act, step, reorder, setFolderEnabled, removeFolder, sortByPrefix, undo,
+    drag, dropTarget, startDrag, canDrag: foldersDrag,
+  } = useRoutineFolders({ bot, routines, allRoutines, onFiledInto: (folder) => expandRef.current(folder) });
   const [menu, setMenu] = useState<MenuState | null>(null);
   // a row's menu acts on the whole state, read only while it is open
   const rowMenuState = useStoreSelector((current) => (menu?.kind === "row" ? current : null));
@@ -144,42 +121,9 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
     onRenameSave: renameRoutine,
     onRenameCancel: () => setRenamingRoutine(null),
   };
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const prefixPlan = useMemo(() => routinePrefixPlan(routines), [routines]);
-  const settle = () => settleRoutinePrefixOffer(bot.id, { loaded: routines.length > 0, hasPrefixTitles: prefixPlan.length > 0, hasFolders: order.length > 0 || routines.some((routine) => !!routine.folder) });
-  const [offerAnswered, setOfferAnswered] = useState(settle);
-  // A row held with the mouse or trackpad (pointer events): the routine, the
-  // pointer (for the preview) and the folder under it ("" = no folder).
-  const [drag, setDrag] = useState<{ routine: Routine; x: number; y: number } | null>(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const dragging = drag !== null;
-  const dragCleanup = useRef<(() => void) | null>(null);
-  useEffect(() => () => dragCleanup.current?.(), []);
-  const [busy, setBusy] = useState(false);
-  const pending = useRef(new Set<string>());
-  useEffect(() => { setCollapsed(collapsedRoutineFolders(bot.id)); setNotice(null); }, [bot.id]);
-  // The bot changed, or its routines just loaded: the soft migration runs.
-  useEffect(() => { setOfferAnswered(settle()); }, [bot.id, routines.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setCollapsed(collapsedRoutineFolders(bot.id)); }, [bot.id]);
   useImperativeHandle(controlRef, () => ({ openSectionMenu: (at, trigger) => setMenu({ kind: "section", x: at.x, y: at.y, trigger }) }), []);
-  const prefixFolders = new Set(prefixPlan.map((step) => routineFolderKey(step.folder))).size;
-  const showSortAction = editable && supported && prefixPlan.length > 0;
-  const showOffer = editable && supported && !offerAnswered && !notice && prefixPlan.length > 0;
-
-  const act = async (body: RoutineFolderAction): Promise<FolderAnswer | null> => {
-    setBusy(true);
-    try {
-      const answer = await api<FolderAnswer>("/api/routines/folders", { method: "POST", body: JSON.stringify(body) });
-      for (const routine of answer.routines) dispatch({ type: "routinePatched", routine });
-      dispatch({ type: "routineFoldersPatched", botId: bot.id, folders: answer.folders });
-      return answer;
-    } catch (failure) {
-      if (featureMissingOnServer("routineFolders", failure)) { setServerNote(true); return null; }
-      dispatch({ type: "error", message: failure instanceof Error && failure.message ? failure.message : t("routineFolders.failed") });
-      return null;
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const toggleFolder = (folder: string) => {
     const key = routineFolderKey(folder);
@@ -192,67 +136,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
     if (!collapsed.has(routineFolderKey(folder))) return;
     toggleFolder(folder);
   };
-
-  // The same call as Move to folder. The row moves at once; if the call
-  // fails the row goes back (act has already said why).
-  const move = async (routineIds: string[], folder: string | null) => {
-    const known = folder === null || folders.some((name) => routineFolderKey(name) === routineFolderKey(folder));
-    const before = known ? routines.filter((routine) => routineIds.includes(routine.id)) : [];
-    for (const routine of before) {
-      const { folder: _old, ...rest } = routine;
-      dispatch({ type: "routinePatched", routine: folder === null ? rest : { ...rest, folder } });
-    }
-    const answer = await act({ action: "move", botId: bot.id, routineIds, folder });
-    if (!answer) for (const routine of before) dispatch({ type: "routinePatched", routine });
-    if (answer && folder) expand(folder);
-  };
-  // Alt+Up / Alt+Down on a row: to the previous or next place in the list
-  // (no folder, then each folder in order).
-  const step = (routine: Routine, direction: -1 | 1) => {
-    const places: Array<string | null> = [null, ...folders];
-    const at = routine.folder ? places.findIndex((name) => name !== null && routineFolderKey(name) === routineFolderKey(routine.folder!)) : 0;
-    const target = places[at + direction];
-    if (target === undefined || at < 0) return;
-    void move([routine.id], target);
-    requestAnimationFrame(() => requestAnimationFrame(() => (document.querySelector(`[data-routine-id="${routine.id}"] button`) as HTMLElement | null)?.focus()));
-  };
-
-  const reorder = (folder: string, direction: -1 | 1) => {
-    const index = folders.indexOf(folder);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= folders.length) return;
-    const next = [...folders];
-    [next[index], next[target]] = [next[target]!, next[index]!];
-    dispatch({ type: "routineFoldersPatched", botId: bot.id, folders: next });
-    void act({ action: "reorder", botId: bot.id, order: next });
-  };
-  const setFolderEnabled = (folder: string, enabled: boolean) => {
-    const key = routineFolderKey(folder);
-    for (const routine of botRoutines) {
-      if (routine.folder && routineFolderKey(routine.folder) === key && routine.enabled !== enabled) void flipRoutine(routine, pending.current, api, dispatch);
-    }
-  };
-  const removeFolder = async (folder: string) => {
-    const key = routineFolderKey(folder);
-    const inside = botRoutines.filter((routine) => routine.folder && routineFolderKey(routine.folder) === key);
-    const undo: RoutineFolderUndo = { botId: bot.id, folders: [...folders], routines: inside.map((routine) => ({ id: routine.id, name: routine.name, folder: routine.folder })) };
-    const answer = await act({ action: "delete", botId: bot.id, name: folder });
-    if (answer) setNotice({ text: t("routineFolders.deleted", { name: folder }), undo });
-  };
-  const sortByPrefix = async () => {
-    const answer = await act({ action: "sort-by-prefix", botId: bot.id });
-    // Marked seen only when it worked: a failure, or a server without the
-    // route, leaves the offer and the menu action where they were.
-    if (!answer) return;
-    answerRoutinePrefixOffer(bot.id);
-    setOfferAnswered(true);
-    if (answer.undo) setNotice({ text: t("routineFolders.sorted", { count: answer.routines.length, folders: prefixFolders }), undo: answer.undo });
-  };
-  const undo = async () => {
-    if (!notice) return;
-    const answer = await act({ action: "restore", botId: bot.id, undo: notice.undo });
-    if (answer) setNotice(null);
-  };
+  expandRef.current = expand;
 
   const closeMenu = (focus = true) => {
     const trigger = menu?.trigger;
@@ -260,59 +144,6 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
     if (focus) requestAnimationFrame(() => trigger?.isConnected && trigger.focus());
   };
 
-  // Pressing a row starts nothing until the pointer has moved a few pixels,
-  // so a click and the switch work as before. Once it moves, a preview follows
-  // the pointer, the folder under it lights up (a folded one opens after a
-  // moment), and letting go over a folder, its header or the no-folder area
-  // files the routine there. The click that ends a drag is swallowed.
-  const folderUnder = (x: number, y: number, fallback: EventTarget | null): string | null => {
-    const hit = (typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : null) ?? (fallback instanceof Element ? fallback : null);
-    const section = hit?.closest("[data-routine-folder-section]");
-    return section ? section.getAttribute("data-routine-folder-section") : null;
-  };
-  const startDrag = (routine: Routine, down: ReactPointerEvent<HTMLElement>) => {
-    dragCleanup.current?.();
-    const originX = down.clientX;
-    const originY = down.clientY;
-    let active = false;
-    let target: string | null = null;
-    const move = (event: PointerEvent) => {
-      if (!active) {
-        if (Math.hypot(event.clientX - originX, event.clientY - originY) < 5) return;
-        active = true;
-        document.body.style.userSelect = "none";
-      }
-      setDrag({ routine, x: event.clientX, y: event.clientY });
-      target = folderUnder(event.clientX, event.clientY, event.target);
-      setDropTarget(target);
-    };
-    const swallowClick = (event: MouseEvent) => { event.stopPropagation(); event.preventDefault(); };
-    const finish = (drop: boolean) => {
-      window.removeEventListener("pointermove", move, true);
-      window.removeEventListener("pointerup", up, true);
-      window.removeEventListener("pointercancel", cancel, true);
-      window.removeEventListener("keydown", key, true);
-      document.body.style.userSelect = "";
-      dragCleanup.current = null;
-      setDrag(null);
-      setDropTarget(null);
-      if (!active) return;
-      window.addEventListener("click", swallowClick, { capture: true, once: true });
-      setTimeout(() => window.removeEventListener("click", swallowClick, true), 0);
-      if (drop && target !== null && routineFolderKey(routine.folder ?? "") !== routineFolderKey(target)) void move_(routine.id, target === "" ? null : target);
-    };
-    const up = () => finish(true);
-    const cancel = () => finish(false);
-    const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); finish(false); } };
-    const move_ = (id: string, folder: string | null) => void moveRef.current(id, folder);
-    window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", up, true);
-    window.addEventListener("pointercancel", cancel, true);
-    window.addEventListener("keydown", key, true);
-    dragCleanup.current = () => finish(false);
-  };
-  const moveRef = useRef<(id: string, folder: string | null) => void>(() => {});
-  moveRef.current = (id, folder) => { void move([id], folder); };
   // A folded folder under the pointer opens after a short moment.
   useEffect(() => {
     if (!dragging || !dropTarget || !collapsed.has(routineFolderKey(dropTarget))) return;
@@ -325,7 +156,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   const openRunning = (routine: Routine, run: RoutineRun) => openRoutineRun(dispatch, { runId: run.id, routineId: routine.id, botId: run.botId ?? routine.botId });
   // Flat Upcoming keeps Move to folder in the row menu; pointer drag needs
   // the folder headers, so it stays off here (#2174).
-  const canDrag = !leadingClock && editable && supported && folders.length > 0;
+  const canDrag = !leadingClock && foldersDrag;
   const list = (items: Routine[], label?: string) => <RoutineList
     routines={items}
     viewerPrincipalId={viewerPrincipalId}
@@ -343,29 +174,14 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
     {...rename}
   />;
 
-  const notices = <>
-    {serverNote && <div data-routine-folder-server-note="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
-      <FolderInput size={14} className="shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{t("serverRoute.needsUpdate")}</span>
-      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setServerNote(false)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
-    </div>}
-    {notice && <div data-routine-folder-notice="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
-      <Check size={14} className="shrink-0 text-success" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{notice.text}</span>
-      <button type="button" data-routine-folder-undo="" disabled={busy} onClick={() => void undo()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50">{t("routineFolders.undo")}</button>
-      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setNotice(null)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
-    </div>}
-  </>;
+  const folderNotices = { serverNote, setServerNote, notice, setNotice, busy, undo, showOffer, offerCount: prefixPlan.length, offerFolders: prefixFolders, sortByPrefix, dismissOffer };
+  const notices = <FolderNotices {...folderNotices} showOffer={false} />;
 
   const menus = menu && <RoutineMenuPortal x={menu.x} y={menu.y} kind={menu.kind} label={menu.kind === "row" ? menu.routine.name : menu.kind === "folder" ? menu.folder : t("computer.tab.routines")} onClose={closeMenu}>
-      {menu.kind === "section" ? (menu.naming
-        ? <FolderNameInput label={t("routineFolders.newFolderLabel")} onCancel={() => closeMenu()} onSave={async (name) => { const answer = await act({ action: "create", botId: bot.id, name }); if (answer) closeMenu(); }} />
-        : <>
-          {supported && <button type="button" role="menuitem" autoFocus data-routine-new-folder="" className={MENU_ROW} onClick={() => setMenu({ ...menu, naming: true })}>
-            <FolderPlus size={14} aria-hidden="true" />{t("routineFolders.newFolder")}
-          </button>}
-          {showSortAction && <SortByPrefixItem autoFocus={!supported} onSelect={() => { closeMenu(); void sortByPrefix(); }} />}
-        </>)
+      {menu.kind === "section" ? <SectionMenuBody naming={Boolean(menu.naming)} supported={supported} showSortAction={showSortAction}
+        onStartNaming={() => setMenu({ ...menu, naming: true })} onCancel={() => closeMenu()}
+        onCreate={async (name) => { const answer = await act({ action: "create", botId: bot.id, name }); if (answer) closeMenu(); }}
+        onSort={() => { closeMenu(); void sortByPrefix(); }} />
         : menu.kind === "row" ? <RoutineRowMenuItems routine={menu.routine} actions={routineRowActions({
           routine: menu.routine, bot, state: rowMenuState!, dispatch, close: closeMenu,
           onOpen: () => onOpen(menu.routine),
@@ -438,13 +254,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
       className="pointer-events-none fixed z-50 flex max-w-[260px] items-center gap-2 rounded-lg border-[0.5px] border-border bg-elevated px-3 py-1.5 text-[13px] leading-[18px] text-ink opacity-95 shadow-lg">
       <FolderInput size={14} className="shrink-0 text-accent" /><span className="truncate">{drag.routine.name}</span>
     </div>, document.body)}
-    {showOffer && <div data-routine-prefix-offer="" role="note" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
-      <FolderInput size={14} className="shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{t("routineFolders.offer", { count: prefixPlan.length, folders: prefixFolders })}</span>
-      <button type="button" data-routine-prefix-sort="" disabled={busy} onClick={() => void sortByPrefix()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50">{t("routineFolders.offerSort")}</button>
-      <button type="button" aria-label={t("routineFolders.offerDismiss")} title={t("routineFolders.offerDismiss")} onClick={() => { answerRoutinePrefixOffer(bot.id); setOfferAnswered(true); }} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
-    </div>}
-    {notices}
+    <FolderNotices {...folderNotices} />
 
     {(loose.routines.length > 0 || folders.length === 0 || loading || error) ? (
       <div data-routine-folder-section="" className={cn("rounded-xl", dropTarget === "" && "ring-1 ring-accent/50")}>
@@ -476,6 +286,42 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
 
     {menus}
   </div>;
+}
+
+/** The quiet lines above a folder list: a server without folders, the result of a
+ * delete or a sort with its Undo, and the offer to sort "[X]" titles into folders. */
+export function FolderNotices({ serverNote, setServerNote, notice, setNotice, busy, undo, showOffer, offerCount, offerFolders, sortByPrefix, dismissOffer }: {
+  serverNote: boolean;
+  setServerNote: (open: boolean) => void;
+  notice: FolderNotice | null;
+  setNotice: (notice: FolderNotice | null) => void;
+  busy: boolean;
+  undo: () => Promise<void>;
+  showOffer: boolean;
+  offerCount: number;
+  offerFolders: number;
+  sortByPrefix: () => Promise<void>;
+  dismissOffer: () => void;
+}) {
+  return <>
+    {showOffer && <div data-routine-prefix-offer="" role="note" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
+      <FolderInput size={14} className="shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{t("routineFolders.offer", { count: offerCount, folders: offerFolders })}</span>
+      <button type="button" data-routine-prefix-sort="" disabled={busy} onClick={() => void sortByPrefix()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50">{t("routineFolders.offerSort")}</button>
+      <button type="button" aria-label={t("routineFolders.offerDismiss")} title={t("routineFolders.offerDismiss")} onClick={dismissOffer} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
+    </div>}
+    {serverNote && <div data-routine-folder-server-note="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
+      <FolderInput size={14} className="shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{t("serverRoute.needsUpdate")}</span>
+      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setServerNote(false)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
+    </div>}
+    {notice && <div data-routine-folder-notice="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
+      <Check size={14} className="shrink-0 text-success" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{notice.text}</span>
+      <button type="button" data-routine-folder-undo="" disabled={busy} onClick={() => void undo()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50">{t("routineFolders.undo")}</button>
+      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setNotice(null)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
+    </div>}
+  </>;
 }
 
 /** A folder's header, the sidebar section's: 30px high, the name at 12px
@@ -527,17 +373,37 @@ export function RoutineFolderHeader({ name, count, paused, collapsed, icon = fal
   </div>;
 }
 
-function SortByPrefixItem({ onSelect, autoFocus }: { onSelect: () => void; autoFocus?: boolean }) {
+/** The section's "..." (New folder, Sort by prefix), and the name field New folder opens. */
+export function SectionMenuBody({ naming, supported, showSortAction, onStartNaming, onCancel, onCreate, onSort, lead }: {
+  naming: boolean; supported: boolean; showSortAction: boolean;
+  onStartNaming: () => void; onCancel: () => void; onCreate: (name: string) => Promise<void>; onSort: () => void;
+  /** Items before New folder (the grouped table's New routine). */
+  lead?: ReactNode;
+}) {
+  if (naming) return <FolderNameInput label={t("routineFolders.newFolderLabel")} onCancel={onCancel} onSave={onCreate} />;
+  return <>
+    {lead}
+    {supported && <button type="button" role="menuitem" autoFocus={!lead} data-routine-new-folder="" className={MENU_ROW} onClick={onStartNaming}>
+      <FolderPlus size={14} aria-hidden="true" />{t("routineFolders.newFolder")}
+    </button>}
+    {showSortAction && <SortByPrefixItem autoFocus={!supported && !lead} onSelect={onSort} />}
+  </>;
+}
+
+export function SortByPrefixItem({ onSelect, autoFocus }: { onSelect: () => void; autoFocus?: boolean }) {
   return <button type="button" role="menuitem" autoFocus={autoFocus} data-routine-sort-by-prefix="" className={MENU_ROW} onClick={onSelect}>
     <span aria-hidden="true"><FolderInput size={14} /></span>{t("routineFolders.offerSort")}
   </button>;
 }
 
-function FolderMenuItems({ canMoveUp, canMoveDown, anyOn, anyRoutine, canSortByPrefix, onSortByPrefix, onRename, onMove, onSetEnabled, onDelete }: {
+export function FolderMenuItems({ canMoveUp, canMoveDown, anyOn, anyRoutine, canSortByPrefix, onSortByPrefix, onNew, onRename, onMove, onSetEnabled, onDelete }: {
   canMoveUp: boolean; canMoveDown: boolean; anyOn: boolean; anyRoutine: boolean; canSortByPrefix: boolean; onSortByPrefix: () => void;
+  /** A new routine in this folder (the grouped table has no + beside it). */
+  onNew?: () => void;
   onRename: () => void; onMove: (direction: -1 | 1) => void; onSetEnabled: (enabled: boolean) => void; onDelete: () => void;
 }) {
   const items: Array<{ key: string; label: string; icon: ReactNode; onSelect: () => void; group: number; danger?: boolean }> = [
+    ...(onNew ? [{ key: "new", label: t("routineFolders.newInFolder"), icon: <Plus size={14} />, onSelect: onNew, group: 0 }] : []),
     { key: "rename", label: t("routineFolders.rename"), icon: <Pencil size={14} />, onSelect: onRename, group: 0 },
     ...(canMoveUp ? [{ key: "up", label: t("routineFolders.moveUp"), icon: <ArrowUp size={14} />, onSelect: () => onMove(-1), group: 0 }] : []),
     ...(canMoveDown ? [{ key: "down", label: t("routineFolders.moveDown"), icon: <ArrowDown size={14} />, onSelect: () => onMove(1), group: 0 }] : []),
@@ -556,7 +422,7 @@ function FolderMenuItems({ canMoveUp, canMoveDown, anyOn, anyRoutine, canSortByP
 }
 
 /** A folder name typed in place: Enter saves, Escape cancels. */
-function FolderNameInput({ initial = "", label, onSave, onCancel }: { initial?: string; label: string; onSave: (name: string) => Promise<void>; onCancel: () => void }) {
+export function FolderNameInput({ initial = "", label, onSave, onCancel }: { initial?: string; label: string; onSave: (name: string) => Promise<void>; onCancel: () => void }) {
   const [value, setValue] = useState(initial);
   const [saving, setSaving] = useState(false);
   const ref = useRef<HTMLInputElement>(null);

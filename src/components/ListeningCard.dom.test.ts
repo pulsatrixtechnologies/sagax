@@ -74,7 +74,9 @@ describe("the listening card (#4100)", () => {
     const card = host.querySelector("[data-listening-card='here']")!;
     expect(card.querySelector("[data-avatar]")).not.toBeNull();
     expect(card.querySelector("[data-listening-dot]")?.className).toContain("bg-danger");
-    expect(card.textContent).toContain("Listening to Conversation");
+    // the short title fits a 390px phone; the region keeps the full name
+    expect(card.textContent).toMatch(/^Listening(?! to)/);
+    expect(card.querySelector('[role="region"]')?.getAttribute("aria-label")).toBe("Listening to Conversation");
     expect(card.querySelector("[data-listening-sources]")?.textContent).toBe("Microphone");
     expect(card.querySelector("[data-listening-newest]")?.textContent).toBe("Speaker 2 Okay, I'll put that in the brief");
     const lines = Array.from(card.querySelectorAll("[data-listening-line]"));
@@ -138,7 +140,7 @@ describe("the listening row (#4100)", () => {
     const row = { id: "m1", role: "bot", kind: "text", text: "Listening to a conversation", at: 1,
       listening: { sessionId: "ls_bbbbbbbbbbbbbbbbbbbb", state: "listening", startedAt: 1, lineCount: 1, speakers: [], last: { speaker: "Speaker 1", text: "Friday then." } } } as unknown as Message;
     const host = mount(createElement("div", null, createElement(ListeningCard, { bot, messages: [row] }), createElement(ListeningRowLine, { message: row })));
-    expect(host.textContent).toContain("Listening to Conversation");
+    expect(host.querySelectorAll('[role="region"][aria-label="Listening to Conversation"]').length).toBe(1);
     expect(host.textContent).not.toContain("Listening to a conversation");
     expect(host.querySelectorAll("[data-listening-row]").length).toBe(0);
   });

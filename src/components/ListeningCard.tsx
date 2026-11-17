@@ -93,9 +93,10 @@ export function ListeningCard({ bot, messages }: { bot: Bot; messages: readonly 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="size-2 shrink-0 animate-pulse rounded-full bg-danger motion-reduce:animate-none" aria-hidden data-listening-dot="" />
-              <span className="truncate text-[13.5px] font-semibold text-ink">{t("listening.title")}</span>
+              {/* the short title fits a 390px phone; the source is the muted word after it, cut first */}
+              <span className="shrink-0 text-[13.5px] font-semibold text-ink">{t("listening.titleShort")}</span>
               {here && (
-                <span data-listening-sources="" className="shrink-0 text-[11.5px] text-ink-tertiary">
+                <span data-listening-sources="" className="min-w-0 truncate text-[11.5px] text-ink-tertiary">
                   {here.sources.computer ? t("listening.source.both") : t("listening.source.microphone")}
                 </span>
               )}

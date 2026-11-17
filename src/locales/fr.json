@@ -7686,6 +7686,7 @@
   "call.live.pill": "En appel en direct avec {name}",
   "listening.menu": "Écouter une conversation",
   "listening.title": "Écoute de la conversation",
+  "listening.titleShort": "Écoute",
   "listening.speaker": "Interlocuteur {n}",
   "listening.stop": "Arrêter l'écoute",
   "listening.showTranscript": "Afficher la transcription en direct",

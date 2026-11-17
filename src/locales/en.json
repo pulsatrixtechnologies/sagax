@@ -1687,6 +1687,7 @@
   "call.live.pill": "On a Live call with {name}",
   "listening.menu": "Listen to a conversation",
   "listening.title": "Listening to Conversation",
+  "listening.titleShort": "Listening",
   "listening.speaker": "Speaker {n}",
   "listening.stop": "Stop listening",
   "listening.showTranscript": "Show the live transcript",

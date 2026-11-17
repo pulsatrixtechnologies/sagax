@@ -23,7 +23,7 @@ describe("sagax_help", () => {
 
   it("finds generated sections for questions no guide was written for", () => {
     const top = (question: string) => searchKnowledge(index, question, 3).map((match) => match.section.id);
-    expect(top("Peux-tu changer le thème de l'app en sombre ?")).toContain("setting:appearance");
+    expect(top("Peux-tu changer le thème de l'app en sombre ?")).toContain("setting:general"); // Appearance is a section of General since the seven-entry settings
     expect(top("Peux-tu réagir avec un emoji à mon message ?")).toContain("tool:react_to_message");
     expect(top("Peux-tu chercher dans nos anciennes conversations ?")).toContain("tool:session_search");
     expect(top("Où je mets mon mot de passe pour que tu remplisses un formulaire ?")).toContain("setting:credentials"); // the vault has its own page since the settings split

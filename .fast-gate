@@ -7,6 +7,18 @@
 # rewords a tool there runs this file too.
 agents-proxy: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(drivers/(agents-catalog[^/]*|agents-[^/]*-tools|agents-tools/[^/]*|agents-call[^/]*|agents-merged)|tools/agent-tool-policy)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/drivers/agents-proxy.test.ts; else echo "fast-gate: skip: no tool of the agents server touched"; fi
 
+# agents-catalog (#4518): the tool list a bot is sent on every turn is
+# measured against its ceiling (server/drivers/agents-catalog-budget.test.ts),
+# its part a Claude turn loads up front is measured (agents-catalog-deferred),
+# and it is pinned byte for byte (agents-catalog-wire.test.ts, a guard test)
+# and by family (agents-merged.test.ts). A lot that adds tool text touches a
+# definition, a shared schema or a profile that reaches those tests only
+# through agents-catalog.ts, so three of them stayed red on main unseen. A
+# lot that touches any file the catalog imports (CATALOG_ROOTS and their
+# imports, CATALOG_TESTS, in scripts/verify/release/guard-tests.mjs) runs
+# them, and the widget tool texts agents-call-cards.test.ts pins. About 25 s.
+agents-catalog: G="$(node scripts/verify/release/guard-tests.mjs --catalog --touched)"; case "$G" in skip:*) echo "fast-gate: $G" ;; *) ./node_modules/.bin/vitest run --reporter=dot $G ;; esac
+
 # index-reach (#3477): the reach rule lives in server/peers/ and is enforced by
 # the routine, room and bot-chat routes, but its end-to-end cases sit in
 # server/index.test.ts, which the stem rule runs only when server/index.ts

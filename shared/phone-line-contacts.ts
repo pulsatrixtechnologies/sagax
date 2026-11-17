@@ -132,18 +132,18 @@ export function parsePhoneLineContactAction(args: unknown):
 export const PHONE_LINE_CONTACT_TOOL_SPEC = {
   name: PHONE_LINE_CONTACT_TOOL,
   description:
-    "Configure how this bot replies to an allowlisted SMS contact on the person's Perspicax Voice line (#2194). The number must already be on the person's SMS allowlist in Perspicax; this tool only stores the persona and summary rules in the person's Sagax profile. Pass number and persona. Optional: label, language (fr or en), hide_owner_name (never reveal the owner's or bot's name), summarize_to_owner (default true: one line in the owner's unified chat after each exchange). action remove deletes the contact. The contact's texts still wake Bot phone triggers; the persona is handed to that run as directives. Never a separate phone thread.",
+    "Configure how this bot replies to an SMS contact on the person's Perspicax Voice line. The number must already be on their SMS allowlist in Perspicax; this stores only the persona and summary rules in their Sagax profile. The contact's texts still wake Bot phone triggers, with the persona as directives; never a separate phone thread.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
     properties: {
       action: { type: "string", enum: ["set", "remove", "list"], description: "set (default), remove, or list." },
-      number: { type: "string", description: "The contact's number, such as +1 514 555 0142." },
+      number: { type: "string", description: "Such as +1 514 555 0142; with persona for set." },
       persona: { type: "string", description: "How the bot replies to this contact (tone, language, what it may look up)." },
       label: { type: "string", description: "Short label for the owner." },
       language: { type: "string", enum: ["fr", "en"] },
-      hide_owner_name: { type: "boolean" },
-      summarize_to_owner: { type: "boolean" },
+      hide_owner_name: { type: "boolean", description: "Never reveal the owner's or bot's name." },
+      summarize_to_owner: { type: "boolean", description: "Default true: one line in the owner's unified chat after each exchange." },
       notice_unknown: { type: "boolean", description: "With action set and no number: whether unknown senders also post a notice in the owner's chat." },
     },
   },

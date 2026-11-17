@@ -6,10 +6,10 @@
 // model on every turn and pinned by agents-catalog-wire.test.ts.
 const FIELDS = {
   title: { type: "string" },
-  html: { type: "string", description: "Self-contained HTML with inline CSS and JS; no network (strict CSP). Read window.sagax.data; window.sagax.onData(fn) gets each refresh's JSON." },
+  html: { type: "string", description: "Self-contained, inline CSS and JS, no network (strict CSP); reads window.sagax.data, window.sagax.onData(fn) per refresh." },
   source: {
     type: "object",
-    description: "Re-run by Sagax on the interval, with no turn of yours: {kind:\"tool\",tool,args} (a read tool: workspace_read of a JSON file you keep, a connector query) or {kind:\"command\",command} (read-only, prints JSON). A call that would need approval is marked blocked. null removes it.",
+    description: "Re-run each interval, no turn of yours: {kind:\"tool\",tool,args} (a read tool) or {kind:\"command\",command} (read-only, prints JSON); one needing approval is blocked; null removes it.",
     properties: { kind: { type: "string", enum: ["tool", "command"] }, tool: { type: "string" }, args: { type: "object" }, command: { type: "string" } },
     required: ["kind"],
   },
@@ -67,7 +67,7 @@ export const CHOOSE_PAGE_TARGET_TOOL = "choose_page_target";
 export const CHOOSE_PAGE_TARGET_DEF = {
   name: CHOOSE_PAGE_TARGET_TOOL,
   description:
-    "When asked to create a page or an artifact with no surface named, call this first. It returns the target to publish with (sagax_page → propose_page, sagax_artifact → save_artifact, claude_artifact → claude_artifact, or another registered target), or shows a choice card when several are available and this bot has no remembered default (one target, or a working default, skips the card). After the person picks (the next message is the target id), call that target's tool. Do not invent a surface: no propose_page, save_artifact or claude_artifact for a new page until this tool or the person names the target. intent narrows the list: page, artifact, or any.",
+    "When asked to create a page or an artifact with no surface named, call this first. It returns the target to publish with (sagax_page → propose_page, sagax_artifact → save_artifact, claude_artifact → claude_artifact, or another registered target), or shows a choice card when several are available and this bot has no remembered default (one target, or a working default, skips the card). After the person picks (the next message is the target id), call that target's tool. Do not invent a surface: no propose_page, save_artifact or claude_artifact for a new page until this tool or the person names the target.",
   inputSchema: {
     type: "object",
     additionalProperties: false,

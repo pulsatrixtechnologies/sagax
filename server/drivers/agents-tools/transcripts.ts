@@ -9,7 +9,7 @@ import { jsonRecord, recallSpeaker, recallWhen } from "./shared.ts";
 export const DEF_LIST_THREADS = {
     name: "list_threads",
     description:
-      "See your own threads and the threads you opened on teammates, newest first: each with its bot, title, state (running, waiting on the person, queued, idle, or closed), whether the person has unread there, and the delegation id if it was a handoff. Use it to check how the threads you started are going before reporting to the person; when you mention one to the person, name the work by its subject, never as a thread to open. A teammate's other threads are never listed, only the ones you opened. This is a read: it starts nothing and changes nothing.",
+      "See your own threads and the threads you opened on teammates, newest first: each with its bot, title, state (running, waiting on the person, queued, idle, or closed), whether the person has unread there, and the delegation id if it was a handoff. Use it to check how the threads you started are going before reporting to the person; when you mention one to the person, name the work by its subject, never as a thread to open. A teammate's other threads are never listed, only the ones you opened.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   };
 
@@ -63,8 +63,8 @@ export const DEF_RECALL_TOPIC = {
       type: "object",
       additionalProperties: false,
       properties: {
-        topic_id: { type: "string", description: "The topic id from the Earlier topics digest or from a listing. Omit to list the topics." },
-        before: { type: "string", description: "Optional: a message id from the page you already read; returns the messages before it." },
+        topic_id: { type: "string", description: "Omit to list the topics." },
+        before: { type: "string" },
       },
     },
   };

@@ -42,7 +42,8 @@ export function phoneToolDefinition(tools: readonly PhoneToolId[]) {
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      properties: {
+      // #4518: only the fields of the offered tools (ARG_KEYS), the call reads no other
+      properties: Object.fromEntries(Object.entries({
         tool: { type: "string", enum: offered },
         reason: { type: "string", description: "One short sentence the phone shows: why you need it." },
         precise: { type: "boolean" },
@@ -68,7 +69,7 @@ export function phoneToolDefinition(tools: readonly PhoneToolId[]) {
         name: { type: "string" },
         input: { type: "string" },
         request_id: { type: "string", description: "Keep waiting on an earlier request (its other fields are ignored)." },
-      },
+      }).filter(([key]) => key === "tool" || key === "request_id" || offered.some((tool) => ARG_KEYS[tool].includes(key)))),
       required: ["tool"],
     },
   };

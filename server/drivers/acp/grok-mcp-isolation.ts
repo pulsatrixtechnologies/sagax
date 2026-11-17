@@ -114,10 +114,16 @@ function readOptional(path: string): string | undefined {
   }
 }
 
+/** Where the isolated home of `source` lives under `root`: the GROK_HOME a
+ * bot turn's CLI really reads and writes (campaigns_state.json included). */
+export function grokIsolatedHomePath(source: string, root: string): string {
+  return join(root, createHash("sha256").update(source).digest("hex").slice(0, 16), ".grok");
+}
+
 /** Builds (or refreshes) the isolated home for `source` under `root` and
  * returns its path. Safe to call on every turn and from parallel turns. */
 export function syncGrokIsolatedHome(source: string, root: string): string {
-  const target = join(root, createHash("sha256").update(source).digest("hex").slice(0, 16), ".grok");
+  const target = grokIsolatedHomePath(source, root);
   mkdirSync(target, { recursive: true, mode: 0o700 });
   mkdirSync(source, { recursive: true, mode: 0o700 });
   for (const name of SHARED_DIRECTORIES) mkdirSync(join(source, name), { recursive: true, mode: 0o700 });

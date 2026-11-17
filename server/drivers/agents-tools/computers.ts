@@ -31,8 +31,8 @@ export const DEF_VM_EXEC = {
       type: "object",
       additionalProperties: false,
       properties: {
-        command: { type: "string", description: "The shell command to run, for example: python3 make_report.py && ls -l report.pdf" },
-        timeout_seconds: { type: "integer", minimum: 1, maximum: 300, description: "How long it may run before it is stopped. Default 60." },
+        command: { type: "string" },
+        timeout_seconds: { type: "integer", minimum: 1, maximum: 300 },
       },
       required: ["command"],
     },

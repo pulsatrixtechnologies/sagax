@@ -544,6 +544,9 @@ const OFFERED_REFERENCES: ReadonlyArray<{ tool: string; missing: string; from: s
   { tool: "open_connector_setup", missing: "connect_github", from: " GitHub is never this tool: call connect_github (Sagax's own link and code).", to: " For GitHub it posts Sagax's own link and code instead." },
   // QA 0.8.67: Remote Access tools come with Perspicax only; without them the
   // remote-access-unattended guide in sagax_help says what it needs
+  // host_computer comes with Perspicax only (REMOTE_SESSION_TOOL_NAMES); a
+  // host picked without it is still the conversation's place
+  { tool: "select_computer", missing: "host_computer", from: "host picks one, then use host_computer", to: "host picks one" },
   { tool: "sagax_help", missing: "remote_support_hosts", from: " Not for Sagax Remote Access (install, status, open a session): call remote_support_hosts directly instead.", to: "" },
 ];
 

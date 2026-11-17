@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** botCapabilitiesFor (#1388). Pure move from server/index.ts. */
-import { toolKeepPersonFor, toolKeepView } from "../tools/tool-keep-person.ts";
+import { toolKeepEngine, toolKeepPersonFor, toolKeepView } from "../tools/tool-keep-person.ts";
 export type Host = Record<string, any>;
 
 export function createBotCapabilitiesFor(getHost: () => Host): any {
@@ -18,7 +18,9 @@ function botCapabilitiesFor(auth: RequestAuth, botId: string, engineId: string |
   const answer = host.botCapabilitiesAs(bot, engineId, { ...(principal ? { principal } : {}), mayChange, marketplace: host.marketplaceViewer(auth) });
   // #4527 lot E: the reader's own left out tools for this bot, never another person's
   const person = toolKeepPersonFor({ organization: host.IDENTITY.kind === "perspicax", sessionPrincipal, effectiveBotOwner: host.effectiveBotOwner }, auth, bot);
-  const withKeep = (result: any) => result?.ok && person ? { ...result, capabilities: { ...result.capabilities, toolKeep: toolKeepView(bot.id, person) } } : result;
+  // what THIS bot's engine really leaves out of its list up front
+  const engine = toolKeepEngine(bot, host.registry?.get(engineId ?? bot.modelSelection?.instanceId)?.driverKind);
+  const withKeep = (result: any) => result?.ok && person ? { ...result, capabilities: { ...result.capabilities, toolKeep: toolKeepView(bot.id, person, engine) } } : result;
   return typeof answer?.then === "function" ? answer.then(withKeep) : withKeep(answer);
 
 }

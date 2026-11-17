@@ -2,7 +2,7 @@
 // Never imports server/index.ts.
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { teamPatchPlan } from "../team/team-defaults.ts";
-import { applyToolKeepChange, parseToolKeepChange, toolKeepPersonFor } from "../tools/tool-keep-person.ts";
+import { applyToolKeepChange, parseToolKeepChange, toolKeepEngine, toolKeepPersonFor } from "../tools/tool-keep-person.ts";
 
 export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m } = state;
@@ -31,7 +31,12 @@ export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): P
       return true;
     }
     const person = toolKeepPersonFor({ organization: env.IDENTITY.kind === "perspicax", sessionPrincipal: env.sessionPrincipal, effectiveBotOwner: env.effectiveBotOwner }, env.auth, target);
-    env.json(env.res, 200, { toolKeep: applyToolKeepChange(target.id, person, change) });
+    if (!person) {
+      env.json(env.res, 403, { error: "toolKeep changes the signed-in person's own list." });
+      return true;
+    }
+    const engine = toolKeepEngine(target, env.registry?.get(target.modelSelection?.instanceId)?.driverKind);
+    env.json(env.res, 200, { toolKeep: applyToolKeepChange(target.id, person, change, engine) });
     return true;
   }
   // I2: the team's model and computer join the body here, before every

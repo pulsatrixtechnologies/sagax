@@ -319,3 +319,39 @@ describe("PATCH /api/bots/:id toolKeep", () => {
     expect(readToolKeep("osprey", "pr_owner").leftOut).toEqual([]);
   });
 });
+
+// #4527 review: isolation between people, and a card that says what the engine leaves out
+describe("PATCH /api/bots/:id toolKeep, review", () => {
+  const leaveOut = (person: string, ids: string[]) => {
+    toolKeepTurn({ botId: "osprey", person, threadId: `t-${person}`, prompt: true });
+    readToolKeep("osprey", person).leftOut = [...ids];
+  };
+  const org = (principal: string | null, driverKind = "codex") => baseDeps({
+    IDENTITY: { kind: "perspicax" },
+    sessionPrincipal: vi.fn(() => principal),
+    viewerBotLevel: vi.fn(() => "use"),
+    effectiveBotOwner: vi.fn(() => "pr_owner"),
+    registry: { get: vi.fn(() => ({ driverKind, models: { options: [] }, displayName: "Engine" })) },
+  });
+
+  it("on an organization server, a caller who is no signed-in person changes nobody's list, the owner's included", async () => {
+    forgetToolKeepInMemory();
+    leaveOut("pr_owner", ["agents/run_routine"]);
+    const { ctx, json } = context("/api/bots/osprey", "PATCH", { toolKeep: { bringAllBack: true } });
+    ctx.auth = { kind: "loopback", trust: "service", scopes: ["admin"] } as never;
+    await createBotsMutateRoutes(org(null))(ctx);
+    expect(json).toHaveBeenCalledWith(ctx.res, 403, expect.objectContaining({ error: expect.stringContaining("toolKeep") }));
+    expect(readToolKeep("osprey", "pr_owner").leftOut).toEqual(["agents/run_routine"]);
+  });
+
+  it("shows as left out only what this bot's engine leaves out up front", async () => {
+    for (const [driverKind, shown] of [["codex", ["agents/run_routine"]], ["grokAgent", ["agents/run_routine"]], ["museCode", ["agents/run_routine"]], ["openai-compat", ["agents/run_routine"]], ["claudeAgent", ["agents/run_routine", "crm/old_report"]]] as const) {
+      forgetToolKeepInMemory();
+      leaveOut("pr_alice", ["agents/run_routine", "crm/old_report"]);
+      const { ctx, json } = context("/api/bots/osprey", "PATCH", { toolKeep: { tool: "agents/list_bots", alwaysListed: false } });
+      ctx.auth = { kind: "session", scopes: ["client"], session: { principalId: "pr_alice" } } as never;
+      await createBotsMutateRoutes(org("pr_alice", driverKind))(ctx);
+      expect(json).toHaveBeenCalledWith(ctx.res, 200, { toolKeep: { leftOut: shown, alwaysListed: [] } });
+    }
+  });
+});

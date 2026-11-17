@@ -86,18 +86,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/auth/authz-matrix.e2e.test.ts",
-      "test": "(whole file)",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "src/components/ChatErrorBanner.test.ts",
       "test": "ChatErrorBanner > announces the error and offers a dismiss control",
       "platforms": [
@@ -1600,42 +1588,6 @@
     {
       "file": "server/engines/claude-account-api.test.ts",
       "test": "Claude account HTTP API > rejects busy-account edits while sibling changes preserve the running process and later SSE events",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/testing/authz-routes.test.ts",
-      "test": "authorization matrix route list (server/auth/authz-matrix.e2e.test.ts) > expands every CLIENT_ALLOW row and names every id in it",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/testing/authz-routes.test.ts",
-      "test": "authorization matrix route list (server/auth/authz-matrix.e2e.test.ts) > each shape, filled with fake ids, is a path its own row accepts",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/testing/authz-routes.test.ts",
-      "test": "authorization matrix route list (server/auth/authz-matrix.e2e.test.ts) > aims at something a person owns in most rows",
       "platforms": [
         "macos-latest",
         "ubuntu-latest",

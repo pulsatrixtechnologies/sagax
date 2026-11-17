@@ -12238,7 +12238,6 @@
   "serverError.adminRoute.orgLibrary": "Only an administrator can do this: the organization's library is what every person sees and installs.",
   "serverError.adminRoute.teamLibrary": "Only an administrator can do this: the shared team library is what every person sees and installs.",
   "serverError.adminRoute.teamLibraryImport": "Only an administrator can do this: importing into the shared team library changes it for everyone.",
-  "serverError.adminRoute.teamMemory": "Only an administrator can do this: a section's shared memory is read by every bot and person of that section.",
   "serverError.adminRoute.sectionContext": "Only an administrator can do this: a section's shared brief is read by every bot of that section.",
   "serverError.adminRoute.templateLinks": "Only an administrator can do this: a template link is public and is built from this server's New bot defaults, which everyone starts from.",
   "serverError.adminRoute.moderationReports": "Only an administrator can do this: reports are about other people's messages.",

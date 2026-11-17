@@ -29,7 +29,6 @@ export const ADMIN_ROUTES: readonly HeldRoute[] = [
   { methods: ALL, path: /^\/api\/org-library(?:\/|$)/, key: "serverError.adminRoute.orgLibrary", reserved: "the organization's library is what every person sees and installs" },
   { methods: ALL, path: /^\/api\/team-library\/(?:catalog|github|teams\/[a-z0-9-]+)$/, key: "serverError.adminRoute.teamLibrary", reserved: "the shared team library is what every person sees and installs" },
   { methods: ALL, path: /^\/api\/teams\/(?:scout(?:\/directory)?|import-plugin)$/, key: "serverError.adminRoute.teamLibraryImport", reserved: "importing into the shared team library changes it for everyone" },
-  { methods: ALL, path: /^\/api\/team-memory(?:\/|$)/, key: "serverError.adminRoute.teamMemory", reserved: "a section's shared memory is read by every bot and person of that section" },
   { methods: ALL, path: /^\/api\/section-context$/, key: "serverError.adminRoute.sectionContext", reserved: "a section's shared brief is read by every bot of that section" },
   { methods: ALL, path: /^\/api\/template-links(?:\/|$)/, key: "serverError.adminRoute.templateLinks", reserved: "a template link is public and is built from this server's New bot defaults, which everyone starts from" },
   { methods: ALL, path: /^\/api\/moderation\/reports(?:\/|$)/, key: "serverError.adminRoute.moderationReports", reserved: "reports are about other people's messages" },

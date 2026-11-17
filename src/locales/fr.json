@@ -12248,7 +12248,6 @@
   "serverError.adminRoute.orgLibrary": "Seul un administrateur peut faire ça : la bibliothèque de l'organisation est ce que chaque personne voit et installe.",
   "serverError.adminRoute.teamLibrary": "Seul un administrateur peut faire ça : la bibliothèque d'équipes partagée est ce que chaque personne voit et installe.",
   "serverError.adminRoute.teamLibraryImport": "Seul un administrateur peut faire ça : importer dans la bibliothèque d'équipes partagée la change pour tout le monde.",
-  "serverError.adminRoute.teamMemory": "Seul un administrateur peut faire ça : la mémoire partagée d'une section est lue par chaque bot et chaque personne de cette section.",
   "serverError.adminRoute.sectionContext": "Seul un administrateur peut faire ça : le brief partagé d'une section est lu par chaque bot de cette section.",
   "serverError.adminRoute.templateLinks": "Seul un administrateur peut faire ça : un lien de modèle est public et part des réglages Nouveau bot de ce serveur, dont tout le monde part.",
   "serverError.adminRoute.moderationReports": "Seul un administrateur peut faire ça : les signalements portent sur les messages d'autres personnes.",

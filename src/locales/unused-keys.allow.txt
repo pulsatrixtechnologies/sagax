@@ -453,8 +453,6 @@ people.portal.managed
 people.portal.note
 people.portal.open
 people.portal.subtitle
-personLabel.mine
-personLabel.mineHint
 persona.action.rename
 persona.categories
 persona.files.new

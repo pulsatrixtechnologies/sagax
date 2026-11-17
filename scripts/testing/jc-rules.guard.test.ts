@@ -350,7 +350,8 @@ const describeCard = (hit: CardHit) => `${hit.file}:${hit.line}: ${hit.text.slic
 
 describe("every approval card offers Always allow, which keeps a rule (#2091)", () => {
   it("finds the card emitters at all", () => {
-    expect(cards.length).toBeGreaterThan(15);
+    // 15 since #4529: a bot saves team memory itself, so its proposal card is gone.
+    expect(cards.length).toBeGreaterThanOrEqual(15);
     // #1388: approval card emitters left server/index.ts for index-leaves/
     expect(cards.some((hit) => hit.file.startsWith("server/index-leaves/"))).toBe(true);
     expect(cards.some((hit) => hit.file === "server/outbound/outbound-wiring.ts")).toBe(true);

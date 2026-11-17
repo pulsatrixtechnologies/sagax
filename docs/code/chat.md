@@ -976,6 +976,26 @@ setting is the person's own (`sagax.voiceDashes.v1`, Settings > Models and
 voice > Voice), on by default for French. A solo server cannot read the
 browser's choice, so it follows the server language there.
 
+## How a bot's reply bubble is drawn (2026-11-17, #4485, #4486)
+
+Two personal toggles in Settings > Appearance > Conversation, both leaving the
+reference look for a person who touches nothing (`src/lib/bot-reply-bubbles.ts`,
+the one class a bot's reply asks for in `Bubble`, `RoomTextMessage` and
+`LiveReply`):
+- Show bot replies in bubbles (`sagax.botReplyBubbles.v1`, on by default,
+  `appearance.botReplyBubbles` for the settings tool). Off removes the fill
+  and the horizontal padding of a bot's reply, settled or streaming, in a
+  direct conversation and in a room. Its sentences stay separate messages,
+  never folded under the working line. Human messages and structured cards
+  keep their presentation.
+- Accent on bot bubbles (`sagax.botBubble.v1`, "1" is on, off by default,
+  `appearance.botBubbleAccent`). On tints only the bot's own reply bubble
+  (class `bot-reply-accent`, `src/styles.css`) with the accent; another
+  person's message in a room and every other surface on the grey keep it. It is
+  one synced key with the phone, which draws the same 14 % tint
+  (`ios/Sources/CompanionCore/BotBubble.swift`, `BubbleColor.botReply`) in a
+  chat and in a room, and reads Show bot replies in bubbles too.
+
 ## Record links in a bot's reply (2026-11-16, #4507)
 
 After the dashes, `pushAssistantText` passes the final text through

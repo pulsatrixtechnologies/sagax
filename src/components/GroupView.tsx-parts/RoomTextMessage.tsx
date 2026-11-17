@@ -1,3 +1,4 @@
+import { useBotReplyBubbleClass } from "@/lib/bot-reply-bubbles";
 import { recordTextOf } from "../../../shared/record-cards";
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { useEffect, useRef, useState } from "react";
@@ -91,6 +92,7 @@ export function RoomTextMessage({
   reactionSelf: readonly string[];
 }) {
   "use memo";
+  const botReplyClass = useBotReplyBubbleClass();
   const dispatch = useStoreDispatch();
   const focus = useStoreSelector((current) => current.focusMessage);
   const tts = useStoreSelector((current) => current.config?.tts);
@@ -226,7 +228,7 @@ export function RoomTextMessage({
               // its tighter fit and no bubble.
               ? (!m.text?.trim() && !m.replyToId && m.attachments?.length
                   ? "w-fit max-w-[min(80%,560px,calc(100%-82px))] text-ink"
-                  : "w-fit max-w-[min(94%,780px,calc(100%-82px))] rounded-[18px] bg-bubble-bot px-3 py-[7px] text-ink")
+                  : cn("w-fit max-w-[min(94%,780px,calc(100%-82px))] rounded-[18px] text-ink", botReplyClass))
               // A person keeps a rounded bubble: yours in the accent (--color-bubble-user),
               // another person's in the bot's grey.
               : mediaOnly

@@ -1,24 +1,35 @@
-// Settings > Appearance > "Color 1:1 messages with the bot color"
-// (`sagax.botBubble.v1`). Off by default: bubbles stay the skin's, black
-// on Black. On, a 1:1 bot chat paints the assistant bubble and its cards
-// with that bot's colour. The person's own bubbles stay. A room never
-// sets an open bot colour, so it is unchanged.
+// Settings > Appearance > Conversation > "Accent on bot bubbles"
+// (`sagax.botBubble.v1`, the key the desktop writes too). Off by default:
+// the bot's reply bubble stays the skin's grey. On, ONLY a bot's own reply
+// bubble (1:1 chat and room, settled or being written) takes a soft tint of the
+// skin's accent over that grey, the page's own ink on it, exactly the
+// desktop's `.bot-reply-accent` (src/styles.css: 14 % of the accent mixed
+// into the bubble grey). The person's bubbles, another person's message and
+// the cards stay as they are.
 import Foundation
 
 public enum BotBubble {
     /// Synced with the person (`USER_PREFERENCE_KEYS`). "1" is on.
     public static let key = "sagax.botBubble.v1"
 
+    /// The share of the accent mixed into the grey (desktop: 14%).
+    public static let tint = 0.14
+
     public struct Paint: Equatable, Sendable {
         public var fill: SkinColor
         public var ink: SkinColor
     }
 
-    /// Nil keeps the skin. `panel` is the surface the fill has to read on.
-    public static func paint(enabled: Bool, botColor: String?, panel: SkinColor) -> Paint? {
-        guard enabled, let name = botColor?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
-              let hex = MausColors.hex(for: name), let color = SkinColor(css: hex) else { return nil }
-        let fill = BotAccent.holdContrast(color, on: panel, ratio: 3)
-        return Paint(fill: fill, ink: BotAccent.ink(on: fill))
+    /// Nil keeps the skin. `base` is the skin's bot bubble grey, `ink` the
+    /// page's text on it (kept as is: the tint is too light to change its contrast).
+    public static func paint(enabled: Bool, accent: SkinColor, base: SkinColor, ink: SkinColor) -> Paint? {
+        guard enabled else { return nil }
+        return Paint(fill: tinted(accent: accent, base: base), ink: ink)
+    }
+
+    /// `color-mix(in srgb, accent 14%, base)`: the one mix, for the phone's
+    /// palette and for the iPad desktop layout's own colour set.
+    public static func tinted(accent: SkinColor, base: SkinColor) -> SkinColor {
+        SkinColor(accent.hex, alpha: tint).over(base)
     }
 }

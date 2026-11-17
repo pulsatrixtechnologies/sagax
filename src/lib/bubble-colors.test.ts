@@ -147,6 +147,19 @@ describe("bubble colours", () => {
     }
   });
 
+  it("keeps the page's text readable on the accent-tinted bot bubble, in every skin, for any accent (the 14% in src/styles.css)", () => {
+    const rule = /\.bg-bubble-bot\.bot-reply-accent\s*\{([^}]*)\}/.exec(readFileSync(join(ROOT, "src/styles.css"), "utf8"))?.[1] ?? "";
+    expect(rule).toMatch(/color-mix\(in srgb, var\(--color-accent\) 14%, var\(--color-bubble-bot\)\)/);
+    const accents = [...Object.values(MASCOT_COLOR_HEX), "#ffffff", "#000000", "#ff0000", "#00ff00", "#0000ff", "#ffff00", "#00ffff", "#ff00ff"];
+    for (const c of contexts) {
+      const bot = shipped(c.selector).bot;
+      for (const accent of [c.accent, ...accents]) {
+        const tinted = mixSrgb(accent, bot, 0.14);
+        expect(contrastHex(c.ink, tinted), `${c.id}: ink ${c.ink} on ${bot} + ${accent}`).toBeGreaterThanOrEqual(BUBBLE_MIN_CONTRAST);
+      }
+    }
+  });
+
   it("holds 4.5:1 for any brand accent, a hue sweep included", () => {
     const accents = ["#f97316", "#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ffffff", "#000000", "#808080", "#e8e8e8", "#c2410c", "#7c3aed", "#14b8a6"];
     for (let hue = 0; hue < 360; hue += 15) accents.push(`hsl:${hue}`);

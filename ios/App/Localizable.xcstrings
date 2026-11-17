@@ -117312,50 +117312,6 @@
         }
       }
     },
-    "Color 1:1 messages with the bot color": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Color 1:1 messages with the bot color"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Colorer les messages 1:1 avec la couleur du bot"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Colorir as mensagens 1:1 com a cor do bot"
-          }
-        }
-      }
-    },
-    "Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dans un chat en tête-à-tête, les bulles et les cartes du bot prennent sa couleur. Désactivé, elles gardent la couleur du thème."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Em uma conversa individual, os balões e cartões do bot usam a cor dele. Desativado, ficam na cor do tema."
-          }
-        }
-      }
-    },
     "shortcuts.group.essentials": {
       "localizations": {
         "en": {
@@ -118319,6 +118275,94 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir as configurações deste bot"
+          }
+        }
+      }
+    },
+    "Accent on bot bubbles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accent on bot bubbles"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accent sur les bulles du bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Destaque nos balões do bot"
+          }
+        }
+      }
+    },
+    "A bot's reply bubbles take a soft tint of the accent. Off leaves them in the skin's grey.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A bot's reply bubbles take a soft tint of the accent. Off leaves them in the skin's grey."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les bulles de réponse du bot prennent une légère teinte de l'accent. Désactivé, elles restent dans le gris du thème."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os balões de resposta do bot ganham um leve tom do destaque. Desativado, ficam no cinza do tema."
+          }
+        }
+      }
+    },
+    "Show bot replies in bubbles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show bot replies in bubbles"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les réponses du bot dans des bulles"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar as respostas do bot em balões"
+          }
+        }
+      }
+    },
+    "Off draws a bot's replies as plain text, without the bubble.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off draws a bot's replies as plain text, without the bubble."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé, les réponses du bot s'affichent en texte simple, sans bulle."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desativado, as respostas do bot aparecem como texto simples, sem balão."
           }
         }
       }

@@ -318,6 +318,16 @@ struct DesktopAppearanceSettings: View {
             DesktopBackgroundEffectsPicker()
         }
         DesktopSettingsGroup(Text("Conversations"), identifier: "conversation") {
+            DesktopCompactRow(Text("Show bot replies in bubbles"), identifier: "botReplyBubbles") {
+                DesktopSwitch(isOn: prefs.botReplyBubbles, label: Text("Show bot replies in bubbles"), identifier: "desktop-settings.bot-reply-bubbles") {
+                    prefs.setBotReplyBubbles(session, !prefs.botReplyBubbles)
+                }
+            }
+            DesktopCompactRow(Text("Accent on bot bubbles"), identifier: "botBubbleAccent") {
+                DesktopSwitch(isOn: prefs.botBubble, label: Text("Accent on bot bubbles"), identifier: "desktop-settings.bot-bubble-accent") {
+                    prefs.setBotBubble(session, !prefs.botBubble)
+                }
+            }
             DesktopCompactRow(Text("Show replies as they are written"), identifier: "streamReplies") {
                 DesktopSwitch(isOn: prefs.streamReplies, label: Text("Show a bot reply word by word while it is written, instead of all at once when it is finished"), identifier: "desktop-settings.stream-replies") {
                     prefs.setStreamReplies(session, !prefs.streamReplies)

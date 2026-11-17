@@ -79,12 +79,12 @@ export function fitWholeSentences(lead: string, more: string, max = QUESTION_TIT
 /** The card's ask_choice input, in the person's words. */
 export function productFixCardInput(change: ProductHealthChange, names: { product?: string }, words: ApprovalWords): ProductFixCardInput {
   const voice = change.kind === "voice_line";
-  const product = (names.product?.trim() || change.api || "").slice(0, 80);
+  const product = (names.product?.trim() || change.hostname?.trim() || change.api || "").slice(0, 80);
   // a line sent without its number reads without it
   const lead = (voice
     ? words.t(change.state === "out_of_credits" ? "product.fixCard.voiceCredits" : "product.fixCard.voiceFailing", { number: change.number ?? "" })
     : words.t("product.fixCard.failing", { product })).replace(/ {2,}/g, " ");
-  const question = fitWholeSentences(lead, change.reason);
+  const question = change.kind === "host_presence" ? `${lead} ${change.reason}`.trim() : fitWholeSentences(lead, change.reason);
   const choices: Array<[string, string]> = [
     [words.t(voice ? "product.fixCard.checkLine" : "product.fixCard.check"), words.t(voice ? "product.fixCard.checkLineDetail" : "product.fixCard.checkDetail")],
     [words.t("product.fixCard.explain"), words.t("product.fixCard.explainDetail")],
@@ -190,7 +190,7 @@ function readState(value: unknown): ProductFixState | null {
   const change = row?.change as Partial<ProductHealthChange> | undefined;
   if (!row || typeof row.at !== "number" || typeof row.eventId !== "string" || typeof row.receivedAt !== "number" || !change) return null;
   if (typeof change.principalId !== "string" || typeof change.key !== "string" || typeof change.failing !== "boolean") return null;
-  if (change.kind !== "product_health" && change.kind !== "voice_line") return null;
+  if (change.kind !== "product_health" && change.kind !== "voice_line" && change.kind !== "host_presence") return null;
   return { at: row.at, eventId: row.eventId, receivedAt: row.receivedAt, told: row.told === true, change: change as ProductHealthChange };
 }
 

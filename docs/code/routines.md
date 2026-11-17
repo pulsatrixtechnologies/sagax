@@ -1036,3 +1036,9 @@ for 30 minutes, usage limits until their reset (30 minutes when unknown),
 sign-out until a verified sign-in. A newer completed turn clears that account.
 Admission skips are blocked, and interrupted runs marked `ROUTINE_RESTARTED`
 never count in failure streaks. Reconnect waits survive restarts.
+
+The phone and tablet use `RoutineResultStack.Form.problem` for failures,
+problem streaks, blocked runs, open goals and results waiting on the person
+(#4262). The compact row opens the run as a whole. It names the state on
+its red or orange glyph, keeps the brief and streak count under the name,
+and keeps Resume, Stop, attention and delegation outside the open button.

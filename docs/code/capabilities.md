@@ -1133,3 +1133,18 @@ What comes from the organization console has its own section at the top of each 
 **One menu, one tooltip, one neutral tile** (review of e3cfa533bd): a detail page's "..." is `ItemTrailer`'s menu (the header carries `columns={false}`), the same one a row has; the state icon, the nudge button and a skill row's "shared" mark share `TipBubble`/`TipHost`; an item with no mark of its own is `NeutralTile`, one quiet tile with a generic glyph per kind (connector, skill, plugin, vendor), never a letter. The unfolding vendor row is gone: a vendor is a bundle row (Plugins) and its products are flat rows (Connectors). A row with a vendor chip is a container with ONE button over its area and the chip as its own button. The tree of Contents has the tree keys (Up, Down, Left, Right, Home, End, roving tab stop); the featured set has a pause control, 24 px dot targets and reads the reduced-motion setting live; closing a page returns focus to the row that opened it (`usePluginsPanelState`). A README loads an https image only (an http one is a link, a relative or local one its words).
 
 **Updates contract** (`src/lib/capability-updates.ts`, #4504): an item may carry `updateUnknown` (no mark, never counted) and `organizationId` (an organization row has no `updateKey`: it is joined by this id, never by its name); a result may be `unknown`, which the page says calmly ("its source could not be checked just now", `UpdateNotice`), never as a failure. The server side is on main (`server/capabilities/capability-updates.ts`, #4511); `src/lib/capability-updates.routes.test.ts` runs the page's hook and notices against the real routes and service (GET and POST `/api/me/capability-updates`, the `capability.updates` frame), not a stand-in.
+
+The phone's account connectors use `ProviderConnectorGroups`, as the iPad
+provider sections do. Each provider gets its own connector state and manage
+link. `providerConnectorNoticeText` supplies the shared notices on both
+layouts; connector data still comes from `HarnessConnectorsModel`.
+
+## Connector call deadlines (#4467)
+
+The Claude, Codex and Grok connector hosts share one deadline for waiting
+in the engine start queue, startup and the upstream call. Reads use 30 seconds;
+other calls use 90 seconds. An expired queued call cannot start later.
+Timeouts name their cause and keep an uncertain write result uncertain.
+A turn closing unfinished tool rows distinguishes a person stopping it from
+an engine cancellation, interruption or exit. Restart recovery keeps its own
+restart explanation. Native calls inside an engine keep that engine's timeout.

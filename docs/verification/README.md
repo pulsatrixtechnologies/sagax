@@ -352,3 +352,15 @@ printed path. Never kill processes by name and never delete a broad temp root.
 - [Prompt diet](prompt-diet.md)
 - [Routine smoke](routine-smoke.md)
 - [Team isolation](teams-isolation-2045.md)
+
+## Test temporary files
+
+Vitest global setup puts each run under its own `sagax-test-run-*` folder
+and passes it to workers and children through `TMPDIR`, `TMP`, and `TEMP`.
+Teardown removes that whole folder even when assertions fail. Individual
+suites still close their processes and database handles before teardown.
+The merge gate prunes abandoned run folders older than six hours, keeping
+any whose owner PID still exists, and known legacy test-home prefixes.
+Generic Playwright folders from older runs have no ownership marker and
+are not swept; new Playwright children inherit the run's temp root.
+Check the lifecycle with `node --test scripts/testing/test-temp.node-test.mjs`.

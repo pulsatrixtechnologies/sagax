@@ -1606,12 +1606,6 @@ struct ConnectAppsProviders: View {
                 HarnessConnectorsSection(model: harness)
                     .task { await harness.load(session.settingsClient) }
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(String(localized: "Grok: its connectors do not reach bots in Sagax."))
-                Text(String(localized: "Gemini: Google's extensions do not reach bots in Sagax."))
-            }
-            .font(.footnote)
-            .foregroundStyle(Theme.textSecondary)
         }
     }
 }

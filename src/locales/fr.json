@@ -15265,6 +15265,8 @@
   "connectApps.updates.reason.uncheckable": "Sa source n'a pas pu être vérifiée pour le moment.",
   "connectApps.featured.pause": "Mettre les diapos en pause",
   "connectApps.featured.resume": "Reprendre les diapos",
+  "settings.botReplyBubbles.title": "Afficher les réponses du bot dans des bulles",
+  "settings.botBubbleAccent.title": "Accent sur les bulles du bot",
   "recordCard.kindFallback": "Fiche",
   "recordCard.productFallback": "Ce produit",
   "recordCard.chipName": "{kind} {number}, {product}, appuie sur Entrée pour les détails",

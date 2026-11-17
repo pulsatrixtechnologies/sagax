@@ -71,8 +71,8 @@ describe("additive template imports in the real renderer", () => {
         snapshot,
       });
       if (source === "library") {
-        await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "Load"');
-        await click("Load");
+        await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "Show Sales crew"');
+        await click("Show Sales crew");
       } else {
         await click("Import");
         // Exercise the file input's actual change handler, not the OS picker.
@@ -91,6 +91,9 @@ describe("additive template imports in the real renderer", () => {
     }
     const evidence = join(ROOT, ".omb-scratch", "verify-evidence", "template-import-sections.png");
     await ui("screenshot", "--out", evidence);
+    const renderer = await ui("console");
+    expect(renderer.ok).toBe(true);
+    expect((renderer.messages as Array<{ type: string }>).filter(message => message.type === "error")).toEqual([]);
     process.stdout.write(`${JSON.stringify({ fixture: info!, screenshot: evidence, libraryAndFileImports: true, originalConversationUnchanged: true })}\n`);
   }, launchTimeout + 120_000);
 });

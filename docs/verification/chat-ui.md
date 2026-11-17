@@ -144,6 +144,12 @@ reason otherwise; `SAGAX_UI_E2E=1` forces the verified download. The `ui-smoke`
 job in `.github/workflows/ci.yml` runs it on Ubuntu 24.04 and uploads the
 screenshot; it is not one of the required checks.
 
+The same off-Mac job also runs the named settings and team flows: Cline,
+team computers, restricted bot drafts, direct coordination, Slack management,
+team access, template imports, tool selection, trust controls and workspace
+backups. These exercise the current pages and keep renderer console errors
+visible. Cloud preview was retired with the old cloud builder in #4385.
+
 ## Thinking timer across thread switches
 
 `scripts/testing/thinking-timer-ui.e2e.test.ts` holds the working row's

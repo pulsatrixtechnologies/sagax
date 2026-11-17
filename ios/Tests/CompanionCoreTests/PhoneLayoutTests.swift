@@ -147,8 +147,9 @@ final class PhoneLayoutTests: XCTestCase {
     func testTheStreamingAnswerGrowsInTheSettledReplysBubble() throws {
         let live = try source("App/Features/Chat/StreamingBubble.swift")
         let settled = try source("App/Features/Chat/TextBubble.swift")
-        XCTAssertTrue(live.contains(".fill(BubbleColor.theirs(desktop: desktop))"))
-        XCTAssertTrue(settled.contains("return BubbleColor.theirs(desktop: desktop)"))
+        // one fill for both: the grey, tinted or clear by the two appearance toggles
+        XCTAssertTrue(live.contains(".fill(BubbleColor.botReply(desktop: desktop))"))
+        XCTAssertTrue(settled.contains("return BubbleColor.botReply(desktop: desktop)"))
         XCTAssertTrue(live.contains("Theme.Chat.bubblePaddingH"))
         XCTAssertTrue(live.contains("BubbleColor.theirsText"))
         XCTAssertFalse(live.contains("Theme.textPrimary)"))

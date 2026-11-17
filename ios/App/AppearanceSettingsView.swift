@@ -87,8 +87,15 @@ struct AppearanceSettingsView: View {
                 )
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
                 SettingsRow(
-                    title: "Color 1:1 messages with the bot color",
-                    subtitle: "Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color.",
+                    title: "Show bot replies in bubbles",
+                    subtitle: "Off draws a bot's replies as plain text, without the bubble.",
+                    accessory: .toggle(Binding(get: { prefs.botReplyBubbles }, set: { prefs.setBotReplyBubbles(session, $0) })),
+                    identifier: "settings.botReplyBubbles"
+                )
+                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsRow(
+                    title: "Accent on bot bubbles",
+                    subtitle: "A bot's reply bubbles take a soft tint of the accent. Off leaves them in the skin's grey.",
                     accessory: .toggle(Binding(get: { prefs.botBubble }, set: { prefs.setBotBubble(session, $0) })),
                     identifier: "settings.botBubble"
                 )

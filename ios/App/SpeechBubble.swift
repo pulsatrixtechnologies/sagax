@@ -94,29 +94,33 @@ enum BubbleColor {
     static var mine: Color { Theme.bubbleUser }
     static var mineText: Color { Theme.bubbleUserText }
 
-    /// What a bot said: the skin's assistant card (#202020 on Black), or
-    /// the open bot's colour when "Color 1:1 messages with the bot color"
-    /// is on. Read from the skin, never from the phone's light or dark.
-    static var theirs: Color { BotBubblePaint.current?.fill ?? Theme.bubbleAssistant }
-    static var theirsText: Color { BotBubblePaint.current?.ink ?? Theme.bubbleAssistantText }
+    /// What a bot said: the skin's assistant card (#202020 on Black).
+    /// Read from the skin, never from the phone's light or dark.
+    static var theirs: Color { Theme.bubbleAssistant }
+    static var theirsText: Color { Theme.bubbleAssistantText }
 
     /// A bot's reply bubble on the phone, or in the iPad desktop shell (its
     /// `bubbleBot`): the settled reply and the one being written share it,
     /// so the answer never changes look when it lands (#4066).
     static func theirs(desktop: DesktopTheme?) -> Color {
-        BotBubblePaint.current?.fill ?? desktop?.bubbleBot ?? Theme.bubbleAssistant
+        desktop?.bubbleBot ?? Theme.bubbleAssistant
     }
-}
 
-/// The open 1:1 bot's bubble paint, when the person asked for it.
-enum BotBubblePaint {
-    // Read while SwiftUI draws, on the main actor.
-    static var current: (fill: Color, ink: Color)? {
+    /// A bot's OWN reply bubble: `theirs(desktop:)`, tinted with the skin's
+    /// accent when "Accent on bot bubbles" is on, and clear when "Show bot
+    /// replies in bubbles" is off. Never for another person's message or a card.
+    static func botReply(desktop: DesktopTheme?) -> Color {
         MainActor.assumeIsolated {
-            guard SidebarPrefsModel.shared.botBubble,
-                  let painted = BotBubble.paint(enabled: true, botColor: ThemeStore.shared.openBotColor, panel: Theme.palette.inset)
-            else { return nil }
-            return (painted.fill.color, painted.ink.color)
+            let prefs = SidebarPrefsModel.shared
+            guard prefs.botReplyBubbles else { return .clear }
+            // the iPad desktop layout draws from its own colour set, with the
+            // accent off and on, as the computer app does
+            if let desktop, prefs.botBubble { return desktop.bubbleBotAccent }
+            let palette = Theme.palette
+            guard let tinted = BotBubble.paint(enabled: prefs.botBubble, accent: palette.accent, base: palette.bubbleAssistant, ink: palette.bubbleAssistantText) else {
+                return theirs(desktop: desktop)
+            }
+            return tinted.fill.color
         }
     }
 }

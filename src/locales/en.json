@@ -15265,6 +15265,8 @@
   "connectApps.updates.reason.uncheckable": "Its source could not be checked just now.",
   "connectApps.featured.pause": "Pause the slides",
   "connectApps.featured.resume": "Resume the slides",
+  "settings.botReplyBubbles.title": "Show bot replies in bubbles",
+  "settings.botBubbleAccent.title": "Accent on bot bubbles",
   "recordCard.kindFallback": "Record",
   "recordCard.productFallback": "This product",
   "recordCard.chipName": "{kind} {number}, {product}, press Enter for details",

@@ -6,6 +6,7 @@ import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.t
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
+import { dismissOverlays, openSettingsPageJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enabled = Boolean(resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env })) || process.env.SAGAX_UI_E2E === "1";
@@ -37,10 +38,22 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     const initial = await bots();
     const first = initial.find(bot => bot.name === "Pepper")!;
     const second = initial.find(bot => bot.id !== first.id)!;
-    const selectBot = (name: string) => evaluate(`(() => {
+    const selectBot = async (name: string) => {
+      await dismissOverlays({ evaluate, snapshot });
+      return evaluate(`(() => {
       const button = [...document.querySelectorAll('main > div button')].find(button => button.textContent.trim().endsWith(': ' + ${JSON.stringify(name)}));
       if (!button) throw new Error('Missing fixture bot'); button.click(); return true;
     })()`);
+    };
+    const openTools = async (name: string) => {
+      await click("Open app settings");
+      await expect.poll(() => evaluate(openSettingsPageJs("Developer"))).toBe(true);
+      await expect.poll(() => evaluate("Boolean(document.querySelector('[data-developer-bot-picker] button'))")).toBe(true);
+      await evaluate("document.querySelector('[data-developer-bot-picker] button').click(); true");
+      await expect.poll(() => evaluate(`[...document.querySelectorAll('[role=option]')].some(option => option.textContent.trim() === ${JSON.stringify(name)})`)).toBe(true);
+      await evaluate(`[...document.querySelectorAll('[role=option]')].find(option => option.textContent.trim() === ${JSON.stringify(name)}).click(); true`);
+      await expect.poll(snapshot).toContain("Engine tools");
+    };
     // #2092: the raw lists live behind Advanced; "custom" is the allow-list switch there,
     // "all" is its reset button.
     const mode = (value: "all" | "custom") => evaluate(`(() => {
@@ -65,7 +78,7 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
       })()`);
     };
     const scope = async (id = first.id) => (await bots()).find(bot => bot.id === id)?.toolScope;
-    await selectBot(first.name); await click("Open settings"); await click("Access");
+    await selectBot(first.name); await openTools(first.name);
     await evaluate("document.querySelectorAll('details[data-advanced-fold]').forEach(d => { d.open = true; }); true");
     expect(await snapshot()).toContain("Engine tools");
     await mode("custom");
@@ -74,7 +87,7 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     await click("Save tool selection");
     const selected = { allow: ["native:*", "mcp:mail:read_notes"], deny: ["mcp:mail:send"] };
     await expect.poll(() => scope()).toEqual(selected);
-    expect(await snapshot()).toContain("Exceptions: 2");
+    expect(await evaluate("document.querySelector('textarea[aria-label=\"Allow (one per line)\"]').value")).toBe("native:*\nmcp:mail:read_notes");
 
     await fill("Allow (one per line)", "native:read*");
     expect(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Save tool selection')?.disabled")).toBe(true);
@@ -120,7 +133,7 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     await fill("Allow (one per line)", ""); await click("Save tool selection");
     await expect.poll(snapshot).toContain("Saving tool selection…");
     await selectBot(second.name);
-    await click("Open settings"); await click("Access");
+    await openTools(second.name);
     await expect.poll(snapshot).toContain("Engine tools");
     await evaluate("window.rejectSelection(); true");
     expect(await snapshot()).not.toContain("Late first-bot error");
@@ -145,14 +158,17 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     expect(await evaluate("window.duplicateCreation.settings.toolScope")).toEqual({ allow: ["native:*"], deny: [] });
     await expect.poll(async () => (await bots()).find(bot => bot.name === `${first.name} copy`)?.toolScope).toEqual({ allow: ["native:*"], deny: [] });
 
-    await selectBot(first.name); await click("Open settings"); await click("Access");
+    await selectBot(first.name); await openTools(first.name);
     await runControlOmb(["send", "--bot", first.id, "--text", "Stay active for the settings test.", "--url", info.url]);
     await expect.poll(async () => (await bots()).find(bot => bot.id === first.id)?.busy).toBe(true);
-    await expect.poll(() => evaluate("document.querySelector('select[aria-label=\"Tool selection\"]')?.disabled")).toBe(true);
+    await expect.poll(() => evaluate("document.querySelector('[data-tool-advanced] fieldset')?.disabled")).toBe(true);
     expect(await snapshot()).toContain("Wait until this bot finishes all active tasks");
     await runControlOmb(["interrupt", "--bot", first.id, "--url", info.url]);
     await runControlOmb(["wait", "--bot", first.id, "--timeout", "30", "--url", info.url]);
-    await expect.poll(() => evaluate("document.querySelector('select[aria-label=\"Tool selection\"]')?.disabled")).toBe(false);
+    await expect.poll(() => evaluate("document.querySelector('[data-tool-advanced] fieldset')?.disabled")).toBe(false);
+    const renderer = await ui("console");
+    expect(renderer.ok).toBe(true);
+    expect((renderer.messages as Array<{ type: string }>).filter(message => message.type === "error")).toEqual([]);
   } finally {
     if (child?.connected) child.send("stop");
     await waitForExit(child, { graceMs: 30_000 });

@@ -42,7 +42,7 @@ final class ChatRelevantFormsTests: XCTestCase {
     }
 
     func testRunsInProgressAndNothingToReportAreTheRow() {
-        for status in ["queued", "running", "waiting", "failed", "cancelled", "nothing_to_report"] {
+        for status in ["queued", "running", "waiting", "cancelled", "nothing_to_report"] {
             let card = RoutineRunCard(runId: "1", routineId: "r", routineName: "Inbox", status: status)
             XCTAssertEqual(RoutineResultStack.form(card, attention: nil, folded: false), .row, status)
         }
@@ -56,9 +56,17 @@ final class ChatRelevantFormsTests: XCTestCase {
         let folded = RoutineResultStack.foldedIds(messages)
         XCTAssertEqual(folded, ["a"], "the newest is the card, a problem stays a card until its routine works again")
         let b = messages[1].routineRun!
-        XCTAssertEqual(RoutineResultStack.form(b, attention: nil, folded: folded.contains("b")), .card)
+        XCTAssertEqual(RoutineResultStack.form(b, attention: nil, folded: folded.contains("b")), .problem)
         // a later run of the same routine works again: the problem folds
         XCTAssertTrue(RoutineResultStack.foldedIds(messages + [run("d", routine: "b", at: 4)]).contains("b"))
+    }
+
+    func testFailuresAndOpenGoalsUseTheCompactProblemRow() {
+        for status in ["failed", "missed", "blocked"] {
+            let card = RoutineRunCard(runId: "1", routineId: "r", routineName: "Inbox", status: status)
+            XCTAssertEqual(RoutineResultStack.form(card, attention: nil, folded: false), .problem)
+            XCTAssertEqual(RoutineResultStack.form(card, attention: nil, folded: true), .row)
+        }
     }
 
     func testThePersonsMessageBreaksAStack() {
@@ -74,14 +82,14 @@ final class ChatRelevantFormsTests: XCTestCase {
         XCTAssertFalse(folded.contains("r16"))
     }
 
-    func testABlockedRunDecodesAndIsAProblemCard() throws {
+    func testABlockedRunDecodesAndIsAProblemRow() throws {
         let json = #"{"runId":"1","routineId":"r","routineName":"Sync","status":"blocked","brief":"Sign in again.","repeat":{"firstRunId":"0","count":4,"since":1,"lastAt":2},"recovered":{"afterRuns":2,"since":1}}"#
         let card = try JSONDecoder().decode(RoutineRunCard.self, from: Data(json.utf8))
         XCTAssertEqual(card.knownStatus, .blocked)
         XCTAssertEqual(card.repeat?.count, 4)
         XCTAssertNotNil(card.recovered)
         XCTAssertEqual(card.briefText, "Sign in again.")
-        XCTAssertEqual(RoutineResultStack.form(card, attention: nil, folded: false), .card)
+        XCTAssertEqual(RoutineResultStack.form(card, attention: nil, folded: false), .problem)
     }
 
     // MARK: The bot's words (#4437)
@@ -201,6 +209,6 @@ final class ChatRelevantFormsTests: XCTestCase {
         let runs = messages.filter { $0.kind == .routineRun }
         XCTAssertEqual(runs.count, 17)
         let cards = runs.filter { RoutineResultStack.form($0.routineRun!, attention: $0.attention, folded: folded.contains($0.id)) == .card }
-        XCTAssertEqual(cards.map(\.id), ["rr2", "rr15"], "the lasting problem and the newest result; the running run is a row")
+        XCTAssertEqual(cards.map(\.id), ["rr15"], "only the newest result is a card; the lasting problem has its compact problem row")
     }
 }

@@ -138,30 +138,13 @@ struct DesktopProvidersSection: View {
         .accessibilityIdentifier("desktop-providers.group.\(group.engine.rawValue)")
     }
 
-    private func noticeText(_ group: ProviderConnectorGroup, _ notice: ProviderGroupNotice) -> Text {
-        let name = group.name
-        switch notice {
-        case .loading: return Text("Reading the connectors of your \(name) account…")
-        case .empty: return Text("Your \(name) account has no connector yet. Add one on \(name).")
-        case .noAccount: return Text("No \(name) account is connected. Connect one to use its connectors (mail, calendar, Teams) in your bots.")
-        case let .unavailable(reason):
-            switch reason {
-            case "managed_policy": return Text("Your organization restricts MCP servers on this computer, so your \(name) connectors are not used here.")
-            case "no_engine": return Text("No \(name) engine is set up yet. Add one to use the connectors of your \(name) account.")
-            case "not_signed_in": return Text("You are not signed in to \(name) with your own account here. Sign in to see and use its connectors.")
-            case "not_operator": return Text("The \(name) sign-in on this computer belongs to its owner: its connectors are theirs, not yours.")
-            case "key": return Text("This \(name) engine runs on an API key. Connectors come only with a \(name) subscription sign-in.")
-            default: return Text("\(name) did not answer when its connectors were read.")
-            }
-        }
-    }
 
     /// `GroupNotice`: rounded-xl, the inset colour, 12.5 pt, its way out.
     private func noticeCard(_ group: ProviderConnectorGroup, _ notice: ProviderGroupNotice) -> some View {
         HStack(spacing: 12) {
             HStack(spacing: 8) {
                 if notice == .loading { ProgressView().controlSize(.small) }
-                noticeText(group, notice).lineSpacing(3)
+                providerConnectorNoticeText(group, notice).lineSpacing(3)
             }
             Spacer(minLength: 0)
             switch notice.action {

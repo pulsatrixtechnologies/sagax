@@ -6,11 +6,12 @@ import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.t
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
+import { clickAccessible, openBotMenuJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env }));
 interface FixtureInfo { ui: string; url: string; logPath: string }
-interface SavedBot { id: string; name: string; modelSelection: { instanceId: string; model: string }; outbound?: unknown; connectorScopes?: unknown; fallback?: unknown }
+interface SavedBot { id: string; name: string; modelSelection: { instanceId: string; model: string }; outbound?: unknown; fallback?: unknown }
 
 describe("trust controls in the real renderer", () => {
   let child: ChildProcess | undefined;
@@ -19,7 +20,7 @@ describe("trust controls in the real renderer", () => {
     await waitForExit(child, { graceMs: 30_000 });
   });
 
-  (enabled ? it : it.skip)("refreshes receipts, saves intersecting limits and serializes memory edits", async () => {
+  (enabled ? it : it.skip)("refreshes tool receipts, saves outbound limits and serializes memory edits", async () => {
     let output = "", errors = "";
     let info!: FixtureInfo;
     const launcher = new URL("./control-omb-ui.ts", import.meta.url).href;
@@ -43,10 +44,11 @@ describe("trust controls in the real renderer", () => {
     const type = async (name: string, text: string) => {
       // The mapped browser "type" appends and refocuses the field. Clear
       // through the native input setter first, including React's input event.
+      await click(name);
       await evaluate(`(() => {
-        const input = [...document.querySelectorAll('input')].find(el => el.getAttribute('aria-label') === ${JSON.stringify(name)});
-        if (!input) throw new Error('No input to clear');
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '');
+        const input = document.activeElement;
+        if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) throw new Error('No input to clear: ' + ${JSON.stringify(name)});
+        Object.getOwnPropertyDescriptor(input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(input, '');
         input.dispatchEvent(new Event('input', { bubbles: true }));
         return true;
       })()`);
@@ -59,51 +61,39 @@ describe("trust controls in the real renderer", () => {
     const saved = async () => (await bots()).find(candidate => candidate.id === bot.id)!;
     const memory = async () => (await fetch(`${info.url}/api/team-memory?section=`).then(response => response.json())).entries as Array<{ id: string; name: string; detail: string }>;
 
-    await click("More");
-    await click("Activity");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Nothing yet.");
+    await ui("flag", "--set", "features.showToolCalls=true");
     await runControlOmb(["send", "--bot", bot.id, "--text", "Run the harmless fixture tool.", "--url", info.url]);
     await runControlOmb(["wait", "--bot", bot.id, "--timeout", "20", "--url", info.url]);
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Worked, 1 tool, press to see the detail");
+    await clickAccessible({ click, evaluate }, "Worked, 1 tool, press to see the detail");
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Ran a command");
     await ui("screenshot", "--out", `${info.logPath}.activity.png`);
-    await click("Close Activity");
 
+    await evaluate("document.querySelector('.achievement-toast button')?.click(); true");
     const interactive = await ui("snapshot", "--interactive");
     const profile = Object.entries(interactive.refs as Record<string, { role: string; name: string }>)
-      .find(([, entry]) => entry.role === "button" && entry.name === "Open Pepper's profile");
+      .find(([, entry]) => entry.role === "button" && entry.name === "Open Pepper's panel");
     expect(profile).toBeDefined();
-    await ui("click", "--ref", `@${profile![0]}`);
-    await click("Permissions");
-    await click("Allow a daily amount");
+    await clickAccessible({ click, evaluate }, profile![1].name);
+    await expect.poll(() => evaluate(openBotMenuJs())).toBe(true);
+    await click("Edit bot");
+    await expect.poll(() => evaluate("Boolean(document.querySelector('[data-bot-profile-subpage-open=advanced]'))")).toBe(true);
+    await evaluate("document.querySelector('[data-bot-profile-subpage-open=advanced]').click(); true");
+    await evaluate("document.querySelectorAll('details[data-advanced-fold]').forEach(node => { node.open = true; }); true");
+    const policy = async (name: string) => {
+      await evaluate("document.querySelector('button[aria-label=\"Sending on your behalf\"]').click(); true");
+      await expect.poll(() => evaluate(`[...document.querySelectorAll('[role=option]')].some(option => option.textContent.trim() === ${JSON.stringify(name)})`)).toBe(true);
+      await evaluate(`[...document.querySelectorAll('[role=option]')].find(option => option.textContent.trim() === ${JSON.stringify(name)}).click(); true`);
+    };
+    await policy("Allow a daily amount");
     await type("Daily outbound limit", "7");
     await ui("press", "--keys", "Tab");
     await expect.poll(async () => (await saved()).outbound, { timeout: 10_000 }).toEqual({ policy: "allow", dailyCap: 7 });
-    await click("Ask every time");
+    await policy("Ask every time");
     await expect.poll(async () => (await saved()).outbound, { timeout: 10_000 }).toEqual({ policy: "ask", dailyCap: 7 });
 
-    // Only this page's inventory reads are synthetic; policy writes still
-    // pass through the real bot queue and server validation.
-    await evaluate(`(async () => {
-      const original = window.fetch.bind(window);
-      window.fetch = (input, init) => String(input) === '/api/connectors/connected'
-        ? Promise.resolve(new Response(JSON.stringify({ services: { gmail: { connected: true } } }), { headers: {'content-type':'application/json'} }))
-        : String(input) === '/api/connectors/tools'
-          ? Promise.resolve(new Response(JSON.stringify({ configured: true, services: { gmail: [] } }), { headers: {'content-type':'application/json'} }))
-          : original(input, init);
-      await (await import('/src/components/PluginsPanel.tsx')).preloadConnectedApps(true);
-      return true;
-    })()`);
-    await click("Access");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Limit this bot to specific apps");
-    await click("Limit this bot to specific apps");
-    await expect.poll(async () => (await saved()).connectorScopes, { timeout: 10_000 }).toEqual({ apps: {} });
-    await click("Read");
-    await expect.poll(async () => (await saved()).connectorScopes, { timeout: 10_000 }).toEqual({ apps: { gmail: "read" } });
-    expect(await snapshot()).toContain("Per-app tools");
-    await click("Read & write");
-    await expect.poll(async () => (await saved()).connectorScopes, { timeout: 10_000 }).toEqual({ apps: { gmail: "write" } });
-    await click("Limit this bot to specific apps");
-    await expect.poll(async () => (await saved()).connectorScopes, { timeout: 10_000 }).toBeUndefined();
+    // Composio and its per-app scopes were removed in #1014
+    // (a35880dfbb). That retired control no longer belongs in this smoke.
     // Seed a saved chain without any real account/auth or execution. The
     // actual Model control must remove it via the existing bot patch queue.
     const seeded = await fetch(`${info.url}/api/bots/${bot.id}`, {
@@ -111,20 +101,24 @@ describe("trust controls in the real renderer", () => {
       body: JSON.stringify({ fallback: [{ instanceId: bot.modelSelection.instanceId, model: bot.modelSelection.model }] }),
     });
     expect(seeded.ok).toBe(true);
-    await click("Model");
-    expect(await snapshot()).toContain("Automatic recovery is off. This list stays inactive");
-    expect(await snapshot()).toContain("Work that may have run is not replayed");
+    // A sub-page opens in its own window over the profile: close it, then open Model from General.
+    await evaluate("document.querySelector('[data-bot-page-modal] > [data-dialog-close]').click(); true");
+    await expect.poll(() => evaluate("!document.querySelector('[data-bot-page-modal]') && Boolean(document.querySelector('[data-bot-profile-subpage-open=model]'))")).toBe(true);
+    await evaluate("document.querySelector('[data-bot-profile-subpage-open=model]').click(); true");
+    expect(await snapshot()).toContain("when the provider proves the request never started");
     await expect.poll(() => evaluate("Boolean(document.querySelector('button[aria-label$=\"from the fallback list\"]'))"), { timeout: 10_000 }).toBe(true);
     await evaluate("document.querySelector('button[aria-label$=\"from the fallback list\"]').click(); true");
     await expect.poll(async () => (await saved()).fallback, { timeout: 10_000 }).toEqual([]);
     expect((await saved()).modelSelection).toEqual(bot.modelSelection);
-    await ui("press", "--keys", "Escape");
+    await evaluate("document.querySelector('[data-bot-profile-topbar] [data-window-close]').click(); true");
 
     await evaluate(`(() => { localStorage.setItem('sagax.interfaceMode.v1','advanced'); window.dispatchEvent(new StorageEvent('storage', {key:'sagax.interfaceMode.v1'})); return true; })()`);
+    await click("You");
+    await click("Tools");
     await click("Team map");
     const openMemory = async () => {
       await evaluate(`(() => { const menu = document.querySelector('[data-team-key=""] details'); if (!menu) throw new Error('No General team menu'); if (!menu.open) menu.querySelector('summary').click(); return true; })()`);
-      await click("General team memory");
+      await click("Unassigned team memory");
     };
     await openMemory();
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Nothing shared yet.");
@@ -164,6 +158,10 @@ describe("trust controls in the real renderer", () => {
     await expect.poll(() => evaluate("document.querySelector('[aria-label=\"MCHQ detail\"]')?.value"), { timeout: 10_000 }).toBe("Reviewed HQ");
     await ui("screenshot", "--out", `${info.logPath}.team-memory.png`);
     await click("Remove MCHQ");
+    await click("Confirm removal");
     await expect.poll(memory, { timeout: 10_000 }).toEqual([]);
+    const renderer = await ui("console");
+    expect(renderer.ok).toBe(true);
+    expect((renderer.messages as Array<{ type: string }>).filter(message => message.type === "error")).toEqual([]);
   }, 420_000);
 });

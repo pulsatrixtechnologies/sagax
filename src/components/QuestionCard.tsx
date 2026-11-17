@@ -15,6 +15,7 @@ import { Check } from "lucide-react";
 import { api, useStore, type Bot, type Message, type OptionCardData } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { whenLabel } from "@/lib/schedule-label";
 import { pageTargetKeys } from "@/lib/page-target-copy";
 import {
   answerWithoutPreamble,
@@ -26,7 +27,10 @@ import {
   type AskQuestion,
 } from "../../shared/ask-question";
 import { otherChoiceIndex } from "../../shared/other-choice";
+import { answerWithoutNote } from "../../shared/options-card";
+import { serverCardKind } from "../../shared/fix-card-keys";
 import { ASK_SMALL_PILL, returnFocusToComposer } from "./AskCard";
+import { TechnicalDetails } from "./ApprovalParts";
 import { ExpandableText } from "./ExpandableText";
 import { QuestionForm } from "./QuestionForm";
 import {
@@ -234,13 +238,15 @@ export function QuestionCard({
   }
 
   if (settled) {
-    const answer = skipped ? null : card.answeredText ?? sent;
+    // #4438: the note a released app reads after the answer is said once, below
+    const answer = skipped ? null : card.answeredText !== undefined ? answerWithoutNote(card.answeredText, card.answerNote) : sent;
     // A question nobody answered (the run ended, or it was closed) is not
     // "answered": say so, the rows dimmed.
     const closed = skipped || (!answer && card.expired === true) || (!answer && Boolean(card.answered) && card.answered !== "answer");
     // #3471: skipped or expired, it says so in one quiet line
-    const closedNote = skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : undefined;
-    return <SettledQuestion questions={questions} answer={answer} closed={closed} closedNote={closedNote} answeredBy={closed ? undefined : answererName(card.answeredBy)} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
+    // #4438: a card closed because its matter is settled says why
+    const closedNote = skipped ? t("waitingCard.skipped") : card.expired ? card.answerNote || t("waitingCard.expired") : undefined;
+    return <SettledQuestion questions={questions} answer={answer} closed={closed} closedNote={closedNote} answeredBy={closed ? undefined : answererName(card.answeredBy)} answerNote={closed ? undefined : card.answerNote} technical={card.technicalDetails} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
   }
 
   const currentIndex = Math.min(active, questions.length - 1);
@@ -368,6 +374,7 @@ export function QuestionCard({
     respond();
   }
 
+  const factsAt = cardFactsAt(card, message.at);
   const named = bot ? t("question.card.named", { name: bot.name }) : t("question.card.title");
   // The question is the title, the way a person would ask it. A long one,
   // or a set of them, keeps a short title and shows the text below.
@@ -417,6 +424,11 @@ export function QuestionCard({
       {askTo && (
         <div className="-mt-1.5 mb-2 text-[12px] text-ink-secondary" data-ask-to="">{t("question.addressedTo", { name: askTo.name })}</div>
       )}
+      {/* #4438: a bot's keyed card describes a state nothing re-checks
+          until the bot runs again: it says since when its facts were read */}
+      {factsAt !== undefined && (
+        <div className="-mt-1.5 mb-2 text-[12px] text-ink-tertiary" data-facts-as-of="">{t("question.factsAsOf", { time: whenLabel(factsAt) })}</div>
+      )}
 
       {!single && (
         <div role="tablist" aria-label={t("question.aria.tabs")} className="-mt-0.5 mb-2 flex flex-wrap items-center gap-1.5">
@@ -444,6 +456,7 @@ export function QuestionCard({
       {!questionIsTitle && (
         <ExpandableText text={current.question} className="mb-2 text-[13.5px] leading-relaxed text-ink" />
       )}
+      {card.technicalDetails && <TechnicalDetails text={card.technicalDetails} />}
       {multi && <div className="-mt-1 mb-2 text-[12px] text-ink-tertiary">{t("question.multiHint")}</div>}
 
       {forOther ? (
@@ -500,7 +513,17 @@ function answererName(by: OptionCardData["answeredBy"]): string | undefined {
 
 /** The answered card: the same card, each question with what was chosen
  * marked and the rest dimmed, and an answer in words under its rows. */
-function SettledQuestion({ questions, answer, closed, closedNote, answeredBy, title }: { questions: readonly AskQuestion[]; answer: string | null; closed: boolean; closedNote?: string; answeredBy?: string; title: string }) {
+/** #4438: when a bot's keyed card read its facts (raised, or its words
+ * replaced in place), or undefined when it needs no such line: a card the
+ * server raised itself is re-checked by the server (shared/fix-card-keys.ts)
+ * and an unkeyed one belongs to the turn that is still asking. */
+export function cardFactsAt(card: Pick<OptionCardData, "askKey" | "factsAt">, at: number): number | undefined {
+  if (!card.askKey || serverCardKind(card.askKey)) return undefined;
+  const read = typeof card.factsAt === "number" ? card.factsAt : at;
+  return Number.isFinite(read) && read > 0 ? read : undefined;
+}
+
+function SettledQuestion({ questions, answer, closed, closedNote, answeredBy, answerNote, technical, title }: { questions: readonly AskQuestion[]; answer: string | null; closed: boolean; closedNote?: string; answeredBy?: string; answerNote?: string; technical?: string; title: string }) {
   const byQuestion = answer ? questionAnswersByQuestion(answer, questions) : {};
   const single = questions.length === 1;
   const fallback = answer ? answerWithoutPreamble(answer) : "";
@@ -523,6 +546,9 @@ function SettledQuestion({ questions, answer, closed, closedNote, answeredBy, ti
       {/* an answer the questions cannot be read back from is shown whole */}
       {fallback && parts.every((part) => !part.picked.length && !part.rest) && <SheetNote>{fallback}</SheetNote>}
       {closed && <SheetNote closed>{closedNote ?? t("question.status.closed")}</SheetNote>}
+      {/* #4438: what the server did with the answer at once, in one line */}
+      {answerNote && <SheetNote>{answerNote}</SheetNote>}
+      {technical && <TechnicalDetails text={technical} />}
       {/* #4219: a keyed card of a room says who answered it, in its one note */}
       {answeredBy ? <SheetNote>{t("question.answeredBy", { name: answeredBy })}</SheetNote>
         : !closed && !answer && <SheetNote>{t("question.status.answered")}</SheetNote>}

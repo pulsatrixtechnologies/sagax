@@ -142,7 +142,13 @@
           },
           "retire": {
             "type": "boolean",
-            "description": "true with key: close that pending card now (other fields ignored); a later answer starts nothing."
+            "description": "true with key: close that pending card now (other fields ignored except reason); a later answer starts nothing."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "With retire: one short line the closed card shows, why it closed (\"Already approved on Nov 16\")."
           },
           "to": {
             "type": "string",

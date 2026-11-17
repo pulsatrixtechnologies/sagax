@@ -102,7 +102,7 @@ export function ProactiveChoiceCard({ card, onAnswer, onNever, onSkip, showNever
 
   if (card.answered || card.expired) {
     const accepted = !card.expired && card.answered === yes;
-    const said = card.skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : card.answeredText ?? card.answered ?? "";
+    const said = card.skipped ? t("waitingCard.skipped") : card.expired ? card.answerNote || t("waitingCard.expired") : card.answeredText ?? card.answered ?? "";
     return (
       <StepRow
         testId="proactive-choice-receipt"

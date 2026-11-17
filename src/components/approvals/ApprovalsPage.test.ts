@@ -243,7 +243,8 @@ describe("ApprovalsPage", () => {
       ],
     };
     await render();
-    expect(fixture.calls.every((call) => call.path === "/api/approvals")).toBe(true);
+    // #4438: the screen's first read says the person opened it; none reads the History
+    expect(fixture.calls.every((call) => call.path === "/api/approvals" || call.path === "/api/approvals?opened=1")).toBe(true);
     await click([...host.querySelectorAll("[role=tab]")].find((tab) => tab.textContent === "History"));
     expect(fixture.calls.some((call) => call.path === "/api/approvals?history=1")).toBe(true);
     const items = () => [...host.querySelectorAll("[data-approvals-history] li")];

@@ -18886,7 +18886,16 @@
       "serverError.adminRoute.beforeSignIn": "49d49393553abcad8df79933d4c79ebb31933887b058bce219709b7710c4b002",
       "serverError.adminRoute.signedToken": "5cae5958a96ffb42319ed859c8aa526ef1136a7048f569219f3963e4682e7d59",
       "serverError.adminRoute.desktopApp": "26ad1a6316ad863fa49921de31dc9f5dbf37e6a1f9c640a44f5407c8488398f9",
-      "serverError.adminRoute.outbound": "8f6683c7e153df65072edb03da808363de061357525bed00791c3e0bc39b8629"
+      "serverError.adminRoute.outbound": "8f6683c7e153df65072edb03da808363de061357525bed00791c3e0bc39b8629",
+      "routine.problemCard.savedResultGone": "3149c7ebc8b38ed13fa335ed3761cad30adb0021cf5dd43c79ef0f10f9f44792",
+      "routine.problemCard.checkStarted": "fed3bf2c900220cda14626daa451ff82b5145a6c95233e3b8dfe7b87ee383a1f",
+      "routine.problemCard.checkRunning": "aa16b3c4eef8457ff540994942ebca7ecb06a029800ed0974cbdd6783634b122",
+      "routine.problemCard.pausedNow": "057b4a9696ddaddbabbd7f020b38cc26d4868b0e4b7b6f42055a4fe7e3d639af",
+      "routine.problemCard.opened": "cba1ab4655b01a89511bdfedef3863249ec4da76b892fc7d71ff8ae765c74041",
+      "routine.problemCard.alreadyFixed": "807ebd30de1a11883e9bc3998ba70bee84ce3f4f7dc25b98734aa2f40b945e06",
+      "routine.problemCard.gone": "32dcb22d5cbb53167eb93acb3b457657af2881d57c0812c77e4d170fe57d1bf6",
+      "routine.problemCard.openWhere": "746b3a1872460d777222b00fcbf319f43ca767882ef6a17fb1ef3c7d4b9a15c8",
+      "question.factsAsOf": "2ae4fdd5dfbf7101fdc1455d138f87186aa1894b2f0e3b56fd9dcea469928898"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

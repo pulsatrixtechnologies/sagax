@@ -95,6 +95,21 @@ function cardAnswerer(target: Message | undefined): string {
   return target?.kind === "options" && target.card?.askKey ? answererText(target.card.answeredBy) : "";
 }
 
+/** #4438: when the card's facts were read (raised, or its words replaced in
+ * place), as an ISO time, or "" when unknown. */
+function cardFactsAt(target: Message | undefined): string {
+  if (!target || target.kind !== "options") return "";
+  const at = typeof target.card?.factsAt === "number" ? target.card.factsAt : target.at;
+  return typeof at === "number" && Number.isFinite(at) && at > 0 ? new Date(at).toISOString() : "";
+}
+
+/** #4438: an answer is never applied on stale facts. The card describes the
+ * state as it was when it was raised; the thing it asks about may have been
+ * done another way since. */
+export function staleCardRule(factsAt: string): string {
+  return `The card's facts were read at ${factsAt}. What it asks about may have changed since: before you act on this answer, read the current state again. If it is already done or no longer applies, change nothing and tell the person so in one short line, in your own words.`;
+}
+
 export function promptWithReply(text: string, target: ReplyTarget | undefined, userName = "User"): string {
   const question = cardQuestion(target);
   if (question) {
@@ -102,6 +117,7 @@ export function promptWithReply(text: string, target: ReplyTarget | undefined, u
     // question whole (the key names it; nothing to parse from a quote)
     const key = cardKey(target);
     const answerer = cardAnswerer(target);
+    const factsAt = cardFactsAt(target);
     return [
       key
         ? `The current message is the person's answer to the question you asked them in the card with key ${JSON.stringify(key)}.`
@@ -113,6 +129,7 @@ export function promptWithReply(text: string, target: ReplyTarget | undefined, u
       "--- your question ---",
       key ? question.trim() : replyExcerpt(question),
       "--- end your question ---",
+      ...(factsAt ? [staleCardRule(factsAt)] : []),
       "Current message:",
       text,
     ].join("\n");

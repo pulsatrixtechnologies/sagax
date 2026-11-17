@@ -180,3 +180,22 @@ describe("a reply to a question card (#3007)", () => {
     expect(transcriptText(line, new Map([["card-1", cardMessage]]))).toBe("[answering your question: “Quel billet ?”]\n299783");
   });
 });
+
+describe("an answer is never applied on stale facts (#4438)", () => {
+  const card = (patch: Partial<NonNullable<Message["card"]>> = {}) => message({
+    kind: "options", text: undefined, at: Date.UTC(2026, 10, 16, 14, 0),
+    card: { title: "Time sheet", subtitle: "Approve the time sheet of week 46? It is still waiting for approval.", options: ["Approve", "Leave it"], requestId: "r1", requestType: "question", askKey: "timesheet-46", ...patch },
+  });
+
+  it("the bot reads the state again before acting, and says so when there is nothing left to do", () => {
+    const prompt = promptWithReply("Approve", card());
+    expect(prompt).toContain("The card's facts were read at 2026-11-16T14:00:00.000Z.");
+    expect(prompt).toMatch(/read the current state again\. If it is already done or no longer applies, change nothing and tell the person/);
+    expect(prompt.indexOf("read the current state again")).toBeLessThan(prompt.indexOf("Current message:"));
+  });
+
+  it("a card replaced in place since says when its words were read last", () => {
+    const prompt = promptWithReply("Approve", card({ factsAt: Date.UTC(2026, 10, 16, 15, 30) }));
+    expect(prompt).toContain("The card's facts were read at 2026-11-16T15:30:00.000Z.");
+  });
+});

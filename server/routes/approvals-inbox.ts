@@ -64,6 +64,14 @@ export interface ApprovalsInboxDeps {
   viewer(auth: RequestAuth): InboxViewer | null;
   /** Every card this person sees on the screen, decidable or not. */
   pending(auth: RequestAuth, viewer: InboxViewer): InboxApproval[];
+  /** #4438: the server's own cards read their facts again before they are
+   * listed (a routine's fix card whose problem is over closes itself), so
+   * the chat, its pinned card or Today never shows a settled one. `opened`:
+   * the person just opened the list (`?opened=1`, the screen's first read,
+   * never its polls): the bots also re-check their own cards of this person
+   * whose facts are old. `botId`: the list is one bot's (its chat, its
+   * pinned panel): only that bot re-checks; none (Today) is every bot. */
+  recheck?(viewer: InboxViewer, opened: boolean, botId?: string): void;
   history(auth: RequestAuth, viewer: InboxViewer): InboxPayload["history"];
   scopes(auth: RequestAuth, viewer: InboxViewer): InboxPayload["scopes"];
   /** Answer one card, allow or deny, as this person; `rule` "allow" also
@@ -141,6 +149,8 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
       const viewer = deps.viewer(auth);
       if (!viewer) return json(res, 403, { error: "Sign in to see your approvals.", code: "no_person" });
       res.setHeader("cache-control", "no-store");
+      const listBot = url.searchParams.get("botId");
+      try { deps.recheck?.(viewer, url.searchParams.get("opened") === "1", listBot && ID.test(listBot) ? listBot : undefined); } catch { /* a re-check never fails the list */ }
       const pending = deps.pending(auth, viewer);
       const payload: InboxPayload = {
         pending,

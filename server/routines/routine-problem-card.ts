@@ -70,6 +70,37 @@ export interface RoutineProblemCardInput {
   question: string;
   options: string[];
   details: string[];
+  /** #4438: the raw words a plain sentence replaced (a tool's own error and
+   * its code), kept on the card under Details (`card.technicalDetails`). */
+  technical?: string;
+}
+
+/** #4438: tool errors that mean nothing to the person, each with the plain
+ * sentence the card says instead. A saved result (a connector's result
+ * handle) that is unknown or expired can never come back: the routine could
+ * not read it. */
+const PLAIN_PROBLEMS: ReadonlyArray<{ raw: RegExp; key: string }> = [
+  { raw: /\bhandle\s+\S+\s+is\s+(?:unknown|expired)\b|\bhandle_(?:unknown|expired)\b/i, key: "routine.problemCard.savedResultGone" },
+];
+
+/** A raw code a tool puts in parentheses at the end of its error
+ * (`(handle_unknown)`, `(not_found)`): never shown to the person. */
+const TRAILING_CODE = /\s*\((?:[a-z][a-z0-9]*_)+[a-z0-9]+\)\s*$/;
+
+/** #4438: the problem in the person's words. A line that is a known tool
+ * error becomes its plain sentence, a trailing raw code is dropped, and the
+ * raw words are returned once, for the card's Details. */
+export function plainProblemText(summary: string, words: ApprovalWords): { text: string; raw?: string } {
+  let changed = false;
+  const lines: string[] = [];
+  for (const line of summary.split("\n")) {
+    const known = PLAIN_PROBLEMS.find((entry) => entry.raw.test(line));
+    const plain = known ? words.t(known.key) : line.replace(TRAILING_CODE, "");
+    if (plain !== line) changed = true;
+    // the same plain sentence twice (two failed reads of the same kind) is said once
+    if (!(known && lines.includes(plain))) lines.push(plain);
+  }
+  return changed ? { text: lines.join("\n"), raw: summary.trim() } : { text: summary };
 }
 
 /** The card's ask_choice input, in the person's words. A paused routine is
@@ -87,7 +118,10 @@ export function routineProblemCardInput(
     : count === 1
       ? words.t("routine.problemCard.problemOnce", { routine: name })
       : words.t("routine.problemCard.problem", { routine: name, count });
-  const question = [lead, facts.summary.trim(), facts.readiness?.trim() ?? ""].filter(Boolean).join("\n\n");
+  const summary = plainProblemText(facts.summary.trim(), words);
+  const readiness = plainProblemText(facts.readiness?.trim() ?? "", words);
+  const technical = [summary.raw, readiness.raw].filter(Boolean).join("\n\n");
+  const question = [lead, summary.text.trim(), readiness.text.trim()].filter(Boolean).join("\n\n");
   const choices: Array<[string, string]> = [
     [words.t("routine.problemCard.check"), words.t("routine.problemCard.checkDetail")],
     ...(need.kind === "paused" ? [] : [[words.t("routine.problemCard.pause"), words.t("routine.problemCard.pauseDetail")] as [string, string]]),
@@ -102,6 +136,7 @@ export function routineProblemCardInput(
     question,
     options: choices.map(([label]) => label),
     details: choices.map(([, detail]) => detail),
+    ...(technical ? { technical } : {}),
   };
 }
 
@@ -119,7 +154,7 @@ export interface RoutineProblemCardsDeps<R extends { id: string; name: string; b
   words(routine: R): ApprovalWords;
   /** ask_choice as the routine's bot, in its conversation with the person:
    * raises, replaces in place (same key) or retires (`retire` true). */
-  ask(routine: R, input: RoutineProblemCardInput | { tool: typeof ASK_CHOICE_TOOL; key: string; retire: true }, options?: { quiet?: boolean }): void;
+  ask(routine: R, input: RoutineProblemCardInput | { tool: typeof ASK_CHOICE_TOOL; key: string; retire: true; reason?: string }, options?: { quiet?: boolean }): void;
   /** Whether the run the need names already rang its own failure (the
    * routine-failed notification of that run): the card it raises then
    * shows without a second ring for the same run. */
@@ -166,7 +201,7 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
     for (const [id, entry] of this.shown) {
       if (seen.has(id)) continue;
       this.shown.delete(id);
-      if (entry.episode) this.retire(entry.routine);
+      if (entry.episode) this.retire(entry.routine, "routine.problemCard.gone");
     }
   }
 
@@ -177,7 +212,7 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
     if (!need) {
       this.shown.set(routine.id, { routine, episode: "", question: "" });
       // a card raised before (or before a restart) leaves at the first good run
-      if (last?.episode || !last) this.retire(routine);
+      if (last?.episode || !last) this.retire(routine, "routine.problemCard.alreadyFixed");
       return;
     }
     const episode = `${need.kind}:${need.since}`;
@@ -221,9 +256,11 @@ export class RoutineProblemCards<R extends { id: string; name: string; botId?: s
     }
   }
 
-  private retire(routine: R): void {
+  /** #4438: the card closes saying why (`why`: its line, "the routine
+   * worked since"), never "Expired, no answer". */
+  private retire(routine: R, why: string): void {
     const key = routineProblemKey(routine.id);
-    if (this.deps.pending(routine, key)) this.deps.ask(routine, { tool: ASK_CHOICE_TOOL, key, retire: true });
+    if (this.deps.pending(routine, key)) this.deps.ask(routine, { tool: ASK_CHOICE_TOOL, key, retire: true, reason: this.deps.words(routine).t(why) });
     this.deps.signals?.settle(this.person(routine), routine.botId ?? "", key, "retired");
   }
 

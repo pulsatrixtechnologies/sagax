@@ -112,11 +112,11 @@ function world(opts: { conv?: string; scope?: (threadId: string) => boolean } = 
           askKeys: {
             find: (key) => index.find(key, scope),
             remember: (key, threadId, messageId) => index.remember(key, threadId, messageId),
-            retire: (threadId, message) => {
+            retire: (threadId, message, reason) => {
               retireOpenQuestions({
                 messagesFor: (id) => rows(id), isPersistentQuestionCard,
                 patch: (id, rowId, card) => { store.patchMessage(id, rowId, { card }); },
-              }, threadId, { messageId: message.id });
+              }, threadId, { messageId: message.id, ...(reason ? { reason } : {}) });
             },
           },
         });
@@ -198,6 +198,8 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     cards.sync(r);
     expect(w.open()).toHaveLength(0);
     expect(w.rows(CONV).find((row) => row.id === card!.id)!.card!.expired).toBe(true);
+    // #4438: it says why it closed, never "Expired, no answer"
+    expect(w.rows(CONV).find((row) => row.id === card!.id)!.card!.answerNote).toBe("Nothing left to do: the routine worked since this card was raised.");
     expect(w.rings).toEqual([card!.id]);
   });
 
@@ -361,6 +363,8 @@ describe("a lasting routine problem raises one keyed fix card (#4233 Q2)", () =>
     expect(w.open()).toHaveLength(1);
     cards.syncAll([]);
     expect(w.open()).toHaveLength(0);
+    // #4438: the closed card says why
+    expect(w.rows(CONV).find((row) => row.kind === "options")!.card!.answerNote).toBe("This routine no longer exists.");
   });
 
   it("only a told problem or a pause asks for a fix", () => {

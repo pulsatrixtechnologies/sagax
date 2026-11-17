@@ -178,8 +178,8 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
         const answer = typeof body.message === "string" ? body.message.trim() : "";
         if (!answer) return json(res, 400, { error: "a question answer is required" });
         try {
-          const reply = await deliverLateQuestionAnswer(auth, bot.threadId, requestId, answer, pending, bot);
-          return json(res, 200, { ok: true, outcome: "answered", late: true, ...(reply.queued ? { queued: true } : {}) });
+          const reply = await deliverLateQuestionAnswer(auth, bot.threadId, requestId, answer, pending, bot, undefined, undefined, body.opens === true);
+          return json(res, 200, { ok: true, outcome: "answered", late: true, ...(reply.queued ? { queued: true } : {}), ...lateAnswerExtras(reply) });
         } catch (error) {
           return json(res, 409, { error: error instanceof Error ? error.message : "the late answer could not be queued" });
         }
@@ -417,8 +417,8 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
         if (!answer) return json(res, 400, { error: "a question answer is required" });
         if (!owner) return json(res, 409, { error: "the bot that asked this question is no longer available" });
         try {
-          const reply = await deliverLateQuestionAnswer(auth, threadId, requestId, answer, pending, owner);
-          return json(res, 200, { ok: true, outcome: "answered", late: true, ...(reply.queued ? { queued: true } : {}) });
+          const reply = await deliverLateQuestionAnswer(auth, threadId, requestId, answer, pending, owner, undefined, undefined, body.opens === true);
+          return json(res, 200, { ok: true, outcome: "answered", late: true, ...(reply.queued ? { queued: true } : {}), ...lateAnswerExtras(reply) });
         } catch (error) {
           return json(res, 409, { error: error instanceof Error ? error.message : "the late answer could not be queued" });
         }
@@ -435,4 +435,10 @@ export function createBotsMessagesBotRespondRoutes(deps: BotsMessagesRouteDeps):
 
 export function createBotsMessagesThreadRespondRoutes(deps: BotsMessagesRouteDeps): RouteHandler {
   return (ctx) => handleThreadRespond(deps, ctx);
+}
+
+/** #4438: a server card's choice done at once (no turn), and the place the
+ * device opens for it (the routine's page). */
+function lateAnswerExtras(reply: { direct?: boolean; open?: unknown }): Record<string, unknown> {
+  return reply.direct ? { direct: true, ...(reply.open ? { open: reply.open } : {}) } : {};
 }

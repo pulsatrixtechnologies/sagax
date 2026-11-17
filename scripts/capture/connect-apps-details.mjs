@@ -38,7 +38,9 @@ try {
     const tag = `${width}x${height}-${scheme}-${lang}`;
     const page = await (await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, colorScheme: scheme })).newPage();
     page.on("pageerror", (error) => console.error("page error:", error.stack));
-    const shot = async (name) => {
+    const shot = async (name, attempt = 0) => {
+     try {
+      await page.waitForLoadState("networkidle").catch(() => {});
       await page.waitForTimeout(700);
       const file = join(outDir, `${name}-${tag}.png`);
       await page.screenshot({ path: file });
@@ -56,6 +58,11 @@ try {
         return { names: document.querySelectorAll("[data-plugins-detail-name]").length, titles: document.querySelectorAll("[data-plugins-page-title]").length, off: off.slice(0, 5), overflow: document.documentElement.scrollWidth > window.innerWidth };
       });
       console.log("shot", file, JSON.stringify(report));
+     } catch (error) {
+      // the dev server reloads once when it optimizes a dependency: the page is gone for a moment
+      if (attempt >= 2 || !/context was destroyed/.test(String(error))) throw error;
+      await shot(name, attempt + 1);
+     }
     };
     const open = async (query) => {
       await page.goto(`${base}?view=manage&products=many${query}&skin=${skin}&lang=${lang}`, { waitUntil: "networkidle" });
@@ -112,6 +119,19 @@ try {
     await page.click('[data-skill-tab="contents"]');
     await page.waitForSelector("[data-file-explorer]");
     await shot("71-skill-contents");
+    }
+    // an item the organization installed and that is on for the person: Overview, then Contents; an offered one that is off has no page
+    if (scene("orgitem")) {
+    await open("&role=member");
+    await kind("plugins");
+    await page.locator("[data-org-capability-open]").first().click();
+    await page.waitForSelector("[data-org-item-page]");
+    await shot("75-org-item-overview");
+    if (await page.locator('[data-org-item-tab="contents"]').count()) {
+      await page.click('[data-org-item-tab="contents"]');
+      await page.waitForSelector("[data-file-explorer]");
+      await shot("76-org-item-contents");
+    }
     }
     // a connector's pages: a product of the console (Overview, Tools) and a connector with accounts
     if (scene("connector")) {

@@ -127,20 +127,19 @@ try {
     await shot(`02-yours-${name}`);
   }
 
-  // a vendor row unfolded to its products
+  // (a vendor is one bundle page now, not an unfolding row: see connect-apps-details.mjs)
   await kind("connectors");
   await view("installed");
-  await page.click("[data-vendor-toggle]");
-  await shot("03-vendor-unfolded");
-  await page.click("[data-vendor-toggle]");
 
   // the right-click menu on a vendor row, then "Choose the bots"
-  const row = page.locator("[data-vendor] [data-item-row]").first();
+  const row = page.locator("[data-person-product] , [data-item-row]").first();
   await row.click({ button: "right", position: { x: 160, y: 24 } });
   await shot("04-right-click-menu");
-  await page.click('[data-entry-action="choose"]');
-  await page.waitForTimeout(300);
-  await shot("05-choose-the-bots");
+  if (await page.locator('[data-entry-action="choose"]').count()) {
+    await page.click('[data-entry-action="choose"]');
+    await page.waitForTimeout(300);
+    await shot("05-choose-the-bots");
+  }
   await page.keyboard.press("Escape");
   await page.mouse.click(5, 5);
 
@@ -174,7 +173,7 @@ try {
     await shot(`10-discover-${name}`);
   }
   await view("installed");
-  await page.click("[data-plugins-more-button]");
+  await clickIf("[data-plugins-more-button]");
   await shot("11-more-menu");
   await page.keyboard.press("Escape");
 

@@ -214,7 +214,8 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     if (!scopedPluginTarget) return;
     void botAction(`toggle:${id}`, () => setBotPluginEnabled(scopedPluginTarget!, id, enabled));
   };
-  const botCard = (item: PluginItem): ReactNode => {
+  /** headerUpdates: the page's header already offers Update (from the updates list) */
+  const botCard = (item: PluginItem, headerUpdates = false): ReactNode => {
     if (!scopedPluginView || !scopedPluginTarget || item.kind !== "plugin") return null;
     const plugin = botPluginState(scopedPluginView, item.id);
     if (!plugin) return null;
@@ -224,6 +225,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         key={`${scope}:${item.key}`}
         installInHeader={scope !== "workspace"}
         statedAbove={scope !== "workspace"}
+        updateInHeader={headerUpdates || Boolean(item.installed && item.updateAvailable)}
         personal={scope === "me"}
         botName={scopedPluginName}
         view={scopedPluginView}

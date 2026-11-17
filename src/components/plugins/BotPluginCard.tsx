@@ -29,6 +29,8 @@ export interface BotPluginCardProps {
   installInHeader?: boolean;
   /** the page above already says where it is installed, with its switch beside that chip: the card does not say it again */
   statedAbove?: boolean;
+  /** the page's header already offers "Update": the card does not repeat it */
+  updateInHeader?: boolean;
 }
 
 function Names({ label, names }: { label: string; names: string[] }) {
@@ -41,7 +43,7 @@ function Names({ label, names }: { label: string; names: string[] }) {
   );
 }
 
-export function BotPluginCard({ botName, personal = false, view, plugin, busy, onInstall, onToggle, onUninstall, onSaveConfig, installInHeader = false, statedAbove = false }: BotPluginCardProps) {
+export function BotPluginCard({ botName, personal = false, view, plugin, busy, onInstall, onToggle, onUninstall, onSaveConfig, installInHeader = false, statedAbove = false, updateInHeader = false }: BotPluginCardProps) {
   const installed = plugin.installed;
   const change = view.canChange;
   const contents = plugin.contents;
@@ -70,17 +72,17 @@ export function BotPluginCard({ botName, personal = false, view, plugin, busy, o
           <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.botPlugin.readAtInstall")}</p>
         )}
         {installed && installed.removed.length > 0 && <p className="mt-2 text-[12px] text-ink-secondary">{t("plugins.removed", { parts: installed.removed.join(", ") })}</p>}
-        {installed && installed.declaredMcpServers.length > 0 && <p className="mt-1 text-[12px] text-ink-secondary">{t("plugins.declaredMcp", { names: installed.declaredMcpServers.join(", ") })}</p>}
+        {!statedAbove && installed && installed.declaredMcpServers.length > 0 && <p className="mt-1 text-[12px] text-ink-secondary">{t("plugins.declaredMcp", { names: installed.declaredMcpServers.join(", ") })}</p>}
         {installed?.config && installed.config.fields.length > 0 && (
           <PluginConfigForm config={installed.config} canChange={change && Boolean(onSaveConfig)} onSave={(values) => onSaveConfig ? onSaveConfig(values) : Promise.resolve()} />
         )}
         {!change && <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("plugins.readOnly")}</p>}
         {change && !(installInHeader && !installed) && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <button type="button" data-bot-plugin-install disabled={busy !== null} onClick={onInstall} className={installed ? "ui-button flex items-center gap-1.5 text-[12px]" : "ui-button ui-button-primary flex items-center gap-1.5 text-[12px]"}>
+            {!(installed && updateInHeader) && <button type="button" data-bot-plugin-install disabled={busy !== null} onClick={onInstall} className={installed ? "ui-button flex items-center gap-1.5 text-[12px]" : "ui-button ui-button-primary flex items-center gap-1.5 text-[12px]"}>
               {busy === "install" && <Loader2 size={13} className="animate-spin" />}
               {busy === "install" ? t("plugins.installing") : installed ? t("plugins.update") : personal ? t("connectApps.mePlugin.install") : t("connectApps.botPlugin.install", { name: botName })}
-            </button>
+            </button>}
             {installed && (
               <button type="button" data-bot-plugin-uninstall disabled={busy !== null} onClick={onUninstall} className="rounded-lg border border-danger/40 px-3 py-1.5 text-[12px] font-medium text-danger hover:bg-danger/10 disabled:opacity-40">
                 {personal ? t("connectApps.mePlugin.uninstall") : t("connectApps.botPlugin.uninstall", { name: botName })}

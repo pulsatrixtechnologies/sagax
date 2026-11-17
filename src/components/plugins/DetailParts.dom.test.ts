@@ -469,6 +469,10 @@ describe("said once (the owner's second review)", () => {
     expect(inside.querySelector("[data-person-product-line]")?.textContent).toBe("Service DeskTickets and time");
     const outside = await render(createElement(ProductRow, { product, ctx }));
     expect(outside.querySelector("[data-person-product-line]")?.textContent).toContain("Provided by your organization");
+    // the console's section heading says it once: its rows (productRows) never do
+    const { productRows } = await import("./ProductRows");
+    const listed = await render(createElement("div", null, productRows([product], ctx)[0]!.node));
+    expect(listed.textContent).not.toContain("Provided by your organization");
   });
 
   it("where a plugin is installed is one chip per scope with its switch beside it, and the card under it does not say it again", async () => {
@@ -488,5 +492,17 @@ describe("said once (the owner's second review)", () => {
     expect(card.textContent).not.toContain("Installed for all your bots");
     expect(card.querySelector("[role='switch']")).toBeNull();
     expect(card.textContent).toContain("a");
+  });
+
+  it("the card under a page that has the header's Update, and that lists its connectors, says neither again", async () => {
+    const { BotPluginCard } = await import("./BotPluginCard");
+    const plugin = { key: "kit@market", marketplace: "market", plugin: "kit", external: false, installed: { key: "kit@market", name: "kit", marketplace: "market", enabled: true, removed: [], declaredMcpServers: ["notes-reader"] }, contents: { agents: ["a"], commands: [], skills: [] } };
+    const props = { botName: "Rocket", personal: true, view: { canChange: true, engine: { loadsPlugins: true } } as never, plugin: plugin as never, busy: null, onInstall: vi.fn(), onToggle: vi.fn(), onUninstall: vi.fn(), statedAbove: true };
+    const again = await render(createElement(BotPluginCard, { ...props, updateInHeader: true }));
+    expect(again.querySelector("[data-bot-plugin-install]")).toBeNull();
+    expect(again.querySelector("[data-bot-plugin-uninstall]")).not.toBeNull();
+    expect(again.textContent).not.toContain("notes-reader");
+    const alone = await render(createElement(BotPluginCard, props));
+    expect(alone.querySelector("[data-bot-plugin-install]")).not.toBeNull();
   });
 });

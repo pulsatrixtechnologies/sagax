@@ -187,12 +187,13 @@ export function PluginsPanelSubpage({
   }
   if (page.page === "detail" && detailItem) {
     const identity = detailIdentity(detailItem, entries);
+    const run = itemUpdate?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     const base = detailProps(detailItem, {
       mcp, mcpAccountDraft, setMcpAccountDraft, openGithub, githubKey, githubSection,
       items, marketplaces: shownMarketplaces, installing, openItem,
       uninstallPlugin: (item) => void uninstallPlugin(item),
       updatePlugin: (item) => void updatePlugin(item),
-      scope, scopeBotId: s.scopeBotId, botCard: botCard(detailItem),
+      scope, scopeBotId: s.scopeBotId, botCard: botCard(detailItem, Boolean(run?.onUpdate)),
       contentsOf: (pluginId) => {
         const known = botPluginState(scope === "me" ? s.personalView : scope === "bot" ? s.botView : null, pluginId);
         return known ? { skills: known.contents?.skills ?? [], agents: known.contents?.agents ?? [], commands: known.contents?.commands ?? [], servers: known.installed?.declaredMcpServers ?? [] } : undefined;
@@ -202,7 +203,6 @@ export function PluginsPanelSubpage({
     // the versions (from, to) and the notes when the source gives them: said once, in the Overview
     const upd = updateInfo?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     const updateWaiting = upd ? { from: upd.installedVersion, to: upd.availableVersion, notes: upd.updateNotes } : detailItem.updateAvailable ? { from: detailItem.installedVersion, to: detailItem.version } : undefined;
-    const run = itemUpdate?.(updateKindOf(detailItem.kind), detailItem.name, detailItem.updateKey);
     return (
       <PluginDetailView
         {...base}

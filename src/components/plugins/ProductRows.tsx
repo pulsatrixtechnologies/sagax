@@ -213,14 +213,14 @@ export function vendorLine(connectors: number, on: number): string {
   });
 }
 
-/** The rows of the console's section for one kind. Under Connectors every
+/** The rows of the console's section for one kind (its heading already says they come from the organization, so no row does). Under Connectors every
  * product is its own row (marked "in <vendor>" when it is part of a bundle,
  * the chip opening it); under Plugins a vendor is one bundle row. */
 export function productRows(products: readonly PersonProduct[], ctx: ProductRowsContext, bundles?: { mode: "connectors" | "plugins"; onOpenVendor: (key: string) => void }): Array<{ key: string; node: ReactNode }> {
   if (bundles?.mode === "connectors") {
     return products.map((product) => ({
       key: `product:${product.id}`,
-      node: <ProductRow product={product} ctx={ctx} partOf={product.group ? { name: product.group.name, onOpen: () => bundles.onOpenVendor(`vendor:${product.group!.id}`) } : undefined} />,
+      node: <ProductRow product={product} ctx={ctx} hideOrigin partOf={product.group ? { name: product.group.name, onOpen: () => bundles.onOpenVendor(`vendor:${product.group!.id}`) } : undefined} />,
     }));
   }
   if (bundles?.mode === "plugins") {
@@ -230,5 +230,5 @@ export function productRows(products: readonly PersonProduct[], ctx: ProductRows
     }));
   }
   // no bundles asked for: every product is its own row
-  return products.map((product) => ({ key: `product:${product.id}`, node: <ProductRow product={product} ctx={ctx} /> }));
+  return products.map((product) => ({ key: `product:${product.id}`, node: <ProductRow product={product} ctx={ctx} hideOrigin /> }));
 }

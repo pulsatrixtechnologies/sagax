@@ -133,7 +133,7 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen
               const text = (
                 <>
                   <span className="block break-words text-[13px] font-medium leading-[18px] text-ink">{item.name}</span>
-                  <span className="block text-[12px] leading-4 text-ink-secondary" data-org-capability-origin="">{[bare ? t(item.mode === "imposed" ? "connectApps.origin.required" : "connectApps.origin.offered") : "", formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
+                  <span className="block text-[12px] leading-4 text-ink-secondary" data-org-capability-origin="">{[bare ? t(item.mode === "imposed" ? "connectApps.origin.required" : "connectApps.origin.offered") : "", bare ? "" : formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
                 </>
               );
               // a plugin or skill that is installed and on for the person has a page: its files are theirs to read

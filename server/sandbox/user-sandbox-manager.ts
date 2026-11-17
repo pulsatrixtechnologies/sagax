@@ -149,6 +149,36 @@ export class UserSandboxManager {
    * starts, and when a call finds it gone, wake it (a call that certainly
    * did not reach it is sent once more). */
   private wakingClient(client: SandboxdClient, waker: SandboxClusterWaker, who: { principalId: string; botId?: string }, mode: WakeMode): SandboxdClient {
+    const run = this.wakingRun(waker, who, mode);
+    return {
+      info: () => run(() => client.info(), true),
+      status: (key) => run(() => client.status(key), true),
+      ensure: (key) => run(() => client.ensure(key), true),
+      stop: (key) => run(() => client.stop(key)),
+      pause: (key) => run(() => client.pause(key)),
+      resume: (key) => run(() => client.resume(key)),
+      markUsed: (key) => run(() => client.markUsed(key), true),
+      stats: (key) => run(() => client.stats(key), true),
+      remove: (key, options) => run(() => client.remove(key, options)),
+      exec: (key, input) => run(() => client.exec(key, input)),
+      desktopStream: (key, options) => run(() => client.desktopStream(key, options)),
+      stdioStream: (key, spec) => run(() => client.stdioStream(key, spec)),
+      ...(client.ttyStream ? { ttyStream: (key: string, size: { cols: number; rows: number }, cwd?: string) => run(() => client.ttyStream!(key, size, cwd)) } : {}),
+    };
+  }
+
+  /** A command of a bot waits for the cluster before it takes its place in
+   * the person's line (#3296 after #3440): every waiting command says it
+   * waits and is told when the wait ends, not only the few that hold a
+   * place while the cluster starts. Docker and a cluster already up return
+   * at once. */
+  private async untilClusterReady(principalId: string, botId?: string): Promise<void> {
+    const backend = this.options.backendFor?.(principalId, botId) ?? "docker";
+    if (backend === "docker" || !this.options.kubernetes || !this.options.kubernetesWaker) return;
+    await this.wakingRun(this.options.kubernetesWaker, { principalId, ...(botId ? { botId } : {}) }, "wake")(async () => undefined, true);
+  }
+
+  private wakingRun(waker: SandboxClusterWaker, who: { principalId: string; botId?: string }, mode: WakeMode): <T>(call: () => Promise<T>, idempotent?: boolean) => Promise<T> {
     const notify = (phase: ClusterWaitEvent["phase"], waitingFor?: SandboxWakeWaitingFor, since?: number) => {
       try {
         this.options.onClusterWait?.({ ...who, phase, ...(waitingFor ? { waitingFor } : {}), ...(since !== undefined ? { since } : {}) });
@@ -231,21 +261,7 @@ export class UserSandboxManager {
         throw error;
       }
     };
-    return {
-      info: () => run(() => client.info(), true),
-      status: (key) => run(() => client.status(key), true),
-      ensure: (key) => run(() => client.ensure(key), true),
-      stop: (key) => run(() => client.stop(key)),
-      pause: (key) => run(() => client.pause(key)),
-      resume: (key) => run(() => client.resume(key)),
-      markUsed: (key) => run(() => client.markUsed(key), true),
-      stats: (key) => run(() => client.stats(key), true),
-      remove: (key, options) => run(() => client.remove(key, options)),
-      exec: (key, input) => run(() => client.exec(key, input)),
-      desktopStream: (key, options) => run(() => client.desktopStream(key, options)),
-      stdioStream: (key, spec) => run(() => client.stdioStream(key, spec)),
-      ...(client.ttyStream ? { ttyStream: (key: string, size: { cols: number; rows: number }, cwd?: string) => run(() => client.ttyStream!(key, size, cwd)) } : {}),
-    };
+    return run;
   }
 
   /** Stop and delete reach both provisioners so a revert does not leave the other one running. */
@@ -482,6 +498,11 @@ export class UserSandboxManager {
       `The server environment was busy with ${load.active} other commands of this person's bots (${load.waiting} more waiting) for ${Math.round((this.now() - startedAt) / 1000)} s, so this command did not run. Call it again.`,
       "busy",
     );
+    try {
+      await this.untilClusterReady(principalId, botId);
+    } catch (error) {
+      throw asUnavailable(error);
+    }
     for (;;) {
       const release = await this.execQueue.acquire(key, Math.max(0, deadline - this.now()), busy);
       try {

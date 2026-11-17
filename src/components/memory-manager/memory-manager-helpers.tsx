@@ -1,6 +1,8 @@
 import { t } from "@/lib/i18n";
 import { botNames, isLinked, type FolderLink, type LinkBot } from "@/lib/memory-folders";
 import { swatchStyle, type MausColor } from "@/lib/mascot";
+import type { MemoryTierRow } from "@/lib/memory-manager";
+import type { PageRow } from "@/lib/memory-page";
 
 export const TEAM_KINDS = ["person", "place", "decision", "term"];
 export const PINS = "sagax.memory.pins";
@@ -37,4 +39,18 @@ export function linkLines(link: FolderLink): string[] {
     t("memoryManager.linkedTo", { bot: botNames(link) }),
     ...(link.routines.length ? [t("memoryManager.routinesLine", { names: link.routines.join(", ") })] : []),
   ];
+}
+
+/** #4460: an entry of the viewer's own memory (or one an admin holds with
+ * no known author) moves to a tier of the organization console it may
+ * write: a team of theirs, the organization or their own. */
+export function teamPublishable(entry: PageRow, pxTiers: MemoryTierRow[]): boolean {
+  return entry.source.kind === "team" && Boolean(entry.source.owner) && entry.source.mayWrite !== false && pxTiers.some((tier) => tier.mayWrite);
+}
+
+/** Where a team entry moves by default: the first team tier the viewer
+ * writes, else the organization's, else their own. */
+export function defaultPublishScope(pxTiers: MemoryTierRow[]): string {
+  const writable = pxTiers.filter((tier) => tier.mayWrite);
+  return (writable.find((tier) => tier.kind === "team") ?? writable.find((tier) => tier.kind === "org") ?? writable[0])?.scope ?? "me";
 }

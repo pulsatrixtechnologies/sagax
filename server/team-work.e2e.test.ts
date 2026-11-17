@@ -174,3 +174,69 @@ it("groups the hand-overs of one named piece of work and counts its declared pla
     await session.close();
   }
 }, 180_000);
+
+// #4421: a piece of work ends without every planned step handed out. With a
+// plan of three and one step handed out and done, the row reads 1/3; the
+// orchestrator closes it with coordinate_bots end_work and the row leaves.
+// A second one, the person clears from the panel's route: it leaves too.
+it("a piece of work closed by the orchestrator, or cleared by the person, leaves the list", async () => {
+  const session = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, { scripted: true }, []);
+  const cli = (...args: string[]) => runControlOmb(args, { env: { SAGAX_URL: session.info.url } }) as Promise<any>;
+  const api = (path: string, body?: unknown, method = "POST") =>
+    request(path, body === undefined ? {} : { method, body: JSON.stringify(body) }, session.info.url) as Promise<any>;
+  try {
+    const orc = (await cli("new-bot", "--name", "Orca", "--section", "Code")).bot;
+    const dev = (await cli("new-bot", "--name", "Devon", "--section", "Code")).bot;
+    const planPath = join(session.info.dataDir, "room-plan.json");
+    const send = (title: string, message: string, label: Record<string, unknown>) =>
+      [{ tool: "send_to_bot", arguments: { bot_id: dev.id, title, message, ...label } }];
+    writeFileSync(planPath, JSON.stringify({
+      [orc.id]: { script: [
+        { key: "build", match: ["Start the release"], reply: "Handed out",
+          steps: send("Build", "Build the release.", { work: "Release", step: "Build", plan: [{ step: "Build" }, { step: "Test" }, { step: "Ship" }] }) },
+        { key: "close", match: ["The release is done elsewhere"], reply: "Closed",
+          steps: [{ tool: "coordinate_bots", arguments: { work: "Release", end_work: { outcome: "dropped", why: "Taken over by another session" } } }] },
+        { key: "docs", match: ["Start the docs"], reply: "Handed out",
+          steps: send("Write", "Write the docs.", { work: "Docs", step: "Write", plan: [{ step: "Write" }, { step: "Publish" }] }) },
+      ] },
+      [dev.id]: { script: [
+        { key: "build", match: ["Build the release"], reply: "Built." },
+        { key: "docs", match: ["Write the docs"], reply: "Written." },
+      ] },
+    }));
+    const since = Date.now() - 3_600_000;
+    const work = async () => api(`/api/bots/${orc.id}/team-work?since=${since}`, undefined, "GET");
+    const figures = async (name: string) => {
+      const read = await work();
+      const found = [...(read.live ?? []), ...(read.doneToday ?? [])].find((candidate: any) => candidate.name === name);
+      return found ? `${found.done}/${found.total}${found.finished ? " finished" : ""}` : "none";
+    };
+    // each step's thread runs in a repository folder on the server: code work
+    const repo = async () => {
+      const tasks = ((await api("/api/bots", undefined, "GET")).bots.find((bot: any) => bot.id === dev.id)?.tasks ?? [])
+        .filter((task: any) => task.openedBy?.botId === orc.id && task.cwd);
+      for (const task of tasks) mkdirSync(join(task.cwd, ".git"), { recursive: true });
+      return tasks.length;
+    };
+
+    await cli("send", "--bot", orc.id, "--task", orc.activeTaskId, "--text", "Start the release.");
+    await expect.poll(repo, { timeout: 30_000 }).toBe(1);
+    // one step of three handed out and done: listed, never finished on its own
+    await expect.poll(() => figures("Release"), { timeout: 30_000 }).toBe("1/3");
+    expect((await work()).live[0].toCome.map((step: any) => step.name)).toEqual(["Test", "Ship"]);
+
+    // the orchestrator closes it with the tool it declared the plan with
+    await cli("send", "--bot", orc.id, "--task", orc.activeTaskId, "--text", "The release is done elsewhere.");
+    await expect.poll(() => figures("Release"), { timeout: 30_000 }).toBe("none");
+
+    // the person clears a row themselves
+    await cli("send", "--bot", orc.id, "--task", orc.activeTaskId, "--text", "Start the docs.");
+    await expect.poll(repo, { timeout: 30_000 }).toBe(2);
+    await expect.poll(() => figures("Docs"), { timeout: 30_000 }).toBe("1/2");
+    const cleared = await api(`/api/bots/${orc.id}/team-work/clear?since=${since}`, { keys: ["work:docs"] });
+    expect([...cleared.live, ...cleared.doneToday].map((item: any) => item.name)).toEqual([]);
+    expect(await figures("Docs")).toBe("none");
+  } finally {
+    await session.close();
+  }
+}, 180_000);

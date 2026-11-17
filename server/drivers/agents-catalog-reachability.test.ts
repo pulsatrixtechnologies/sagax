@@ -29,8 +29,9 @@ import { incidentText } from "../peers/incidents.ts";
 import { peerRosterSystemPrompt } from "../peers/peer-roster.ts";
 import {
   CREDENTIAL_PROMPT, LEARN_PROMPT, PROFILE_CREATOR_PROMPT, PROFILE_PROMPT, REACTION_PROMPT, richOutputPrompt,
-  ROUTINE_PROMPT, TEAM_MEMORY_PROMPT, WIDGET_APPROVAL_PROMPT, WIDGET_PROMPT,
+  ROUTINE_PROMPT, WIDGET_APPROVAL_PROMPT, WIDGET_PROMPT,
 } from "../system-prompt.ts";
+import { teamMemoryWording } from "../memory/team-memory-scope.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 type Tool = { name: string; description: string; inputSchema?: unknown };
@@ -247,7 +248,9 @@ describe("reachability guard: what a person's direct chat is told", () => {
     richOutput: richOutputPrompt(true),
     routine: ROUTINE_PROMPT,
     learn: LEARN_PROMPT,
-    teamMemory: TEAM_MEMORY_PROMPT,
+    teamMemory: teamMemoryWording(false).prompt,
+    // #4460: a server several people use
+    teamMemoryOwn: teamMemoryWording(true).prompt,
     profile: PROFILE_PROMPT,
     profileCreator: PROFILE_CREATOR_PROMPT,
   };

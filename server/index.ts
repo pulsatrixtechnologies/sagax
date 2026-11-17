@@ -50,7 +50,7 @@ import { groupOwnerId, ownsGroup, type GroupActor } from "./groups/group-ownersh
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { ToolGrantStore } from "./tools/tool-grants.ts";
 import { foreignToolSpelling, sagaxInternalSelfAnswers, sagaxInternalTool } from "./sagax-internal-tools.ts";
@@ -696,6 +696,7 @@ import {
   sectionContextKey,
   sectionContextLabel,
   sectionContextSystemPrompt,
+  parseTeamDataKey,
   teamDataKey,
   writeSectionContext,
   writeTeamDefaults
@@ -753,7 +754,6 @@ import { buildSystemPrompt,
   LEARN_PROMPT,
   PROFILE_PROMPT,
   PROFILE_CREATOR_PROMPT,
-  TEAM_MEMORY_PROMPT,
   ROUTINE_PROMPT,
   ROUTINE_EXECUTION_PROMPT,
   WEBHOOK_PROMPT,
@@ -835,7 +835,8 @@ import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts"
 import { profileRevision, profileSnapshot } from "./profiles/profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument } from "./bots/bot-package.ts";
-import { TeamMemory } from "./memory/team-memory.ts";
+import { TeamMemory, type TeamMemoryEntry } from "./memory/team-memory.ts";
+import { teamMemoryScope, teamMemoryWording, UNCLAIMED_MEMORY_KEY, type TeamMemoryScope } from "./memory/team-memory-scope.ts";
 import { teamMemoryReviewRefusal } from "./memory/team-memory-review.ts";
 import { teamMemoryCardSettled, teamMemoryLateAnswer } from "./memory/team-memory-cards.ts";
 import { isTeamMemorySharing, storedTeamMemorySharing, teamMemorySharingOf } from "../shared/team-memory-sharing.ts";
@@ -852,7 +853,7 @@ import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./triggers/webhook-ingress.ts";
 import { assertModelVariantSupported, memberTurnSelection } from "./turns/member-turn.ts";
 import { WebhookManager } from "./triggers/webhooks.ts";
-import { webhookExecTargetAdminOnly, workplaceIsBotComputer } from "./exec-target.ts";
+import { EXEC_USE_BOT_COMPUTER, ownPlaceRefusal, webhookExecTargetAdminOnly, workplaceIsBotComputer } from "./exec-target.ts";
 import { GraphSubscriptions, graphConnectorOptions, type GraphTokenSource } from "./graph-subscriptions.ts";
 import { TriggerPollers } from "./triggers/trigger-pollers.ts";
 import { TriggerPollerCredentials } from "./triggers/trigger-poller-credentials.ts";
@@ -1206,6 +1207,7 @@ import { markWorkspaceUse, promptSectionPaths } from "./workspace/workspace-usag
 import { createBotActivityReader, createBotActivityRoutes, type BotActivityRouteDeps } from "./routes/bot-activity.ts";
 import { createBotTeamWorkRoutes } from "./routes/bot-team-work.ts";
 import { createTeamWorkReader } from "./team-work/team-work.ts";
+import { teamWorkClearSteps } from "../shared/team-work.ts";
 import { createPersonNote, setPersonNoteSink } from "./team-work/person-note.ts";
 import { queueTeamWorkFrames } from "./team-work/frames.ts";
 import { createPageDataRoutes } from "./routes/page-data.ts";
@@ -1377,8 +1379,8 @@ import { createRoutineRunInternalRoutes, routineRunNowAllowed } from "./routes/r
 import { createEventSubscriptionsInternalRoutes } from "./routes/event-subscriptions-internal.ts";
 import { createPerspicaxOrgRoutes, orgDirectoryEntries } from "./perspicax/perspicax-org-routes.ts";
 import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
-import { PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
-import { createMeMemoryNotesRoutes } from "./routes/me-memory-notes.ts";
+import { memoryReadPath, PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
+import { createMeMemoryNotesRoutes, memoryPrincipal } from "./routes/me-memory-notes.ts";
 import { createMemoryManagerRoutes } from "./routes/memory-manager.ts";
 import { ownEnvironmentSensitiveRead, ownEnvironmentTurnOrigin } from "./people/member-environment.ts";
 import { lineageEnvironmentCall } from "./approvals/owner-autonomy.ts";
@@ -1443,7 +1445,7 @@ import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAtt
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./media/office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachments/attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace } from "../shared/bot-workplace.ts";
-import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, perspicaxOwnerScopedServer, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engines/engine-access.ts";
+import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberBotAdminReason, memberOwnedBot, perspicaxOwnerScopedServer, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engines/engine-access.ts";
 import { assignBotHost, createTurnBell, createWorkerRoutes, destinationForBot, directMachinePlan, enqueueOfflineTurn, expireWorkers, failPulledOnAuthorCancel, selectionOnMachine, type DeviceQueuedTurn, type Worker } from "./workers.ts";
 import { createMachineRunRoutes, createMachineRuns } from "./machine-run.ts";
 import { createDeciderRoutes } from "./routes/decider.ts";
@@ -1508,7 +1510,9 @@ import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
-import { createInstancesRoutes, instancesInView } from "./routes/instances.ts";
+import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedAccountRemovalDeps } from "./routes/instances.ts";
+import { accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
+import { addedAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes } from "./routes/config-http.ts";
@@ -2940,6 +2944,10 @@ bindLeafHost({
   get sectionMigrationOwner() { return sectionMigrationOwner; },
   get orgSectionNames() { return orgSectionNames; },
   get teamStorageKeyFor() { return teamStorageKeyFor; },
+  get teamMemoryKeyFor() { return teamMemoryKeyFor; },
+  get teamMemoryPromptFor() { return teamMemoryPromptFor; },
+  get teamMemoryToolPrompt() { return teamMemoryToolPrompt; },
+  get teamMemoryPersonScoped() { return teamMemoryPersonScoped; },
   get teamStorageKeyForAuth() { return teamStorageKeyForAuth; },
   get providerAccountOwner() { return providerAccountOwner; },
   get syncPersonalProviders() { return syncPersonalProviders; },
@@ -3281,7 +3289,6 @@ bindLeafHost({
   get Store() { return Store; },
   get SubscriptionDepositor() { return SubscriptionDepositor; },
   get TASK_WORKSPACES_DIR() { return TASK_WORKSPACES_DIR; },
-  get TEAM_MEMORY_PROMPT() { return TEAM_MEMORY_PROMPT; },
   get TEAM_SETUP_DESKTOP_MESSAGE() { return TEAM_SETUP_DESKTOP_MESSAGE; },
   get TEAM_SETUP_DESKTOP_ONLY() { return TEAM_SETUP_DESKTOP_ONLY; },
   get TELEPHONY_ASSERTION_ACTORS() { return TELEPHONY_ASSERTION_ACTORS; },
@@ -5949,6 +5956,7 @@ bindLeafHost({
   get masteryNightly() { return masteryNightly; },
   get workplacePreference() { return workplacePreference; },
   get turnWorkplaces() { return turnWorkplaces; },
+  get turnPluginMcpServers() { return turnPluginMcpServers; },
   get egressProxy() { return egressProxy; },
   get declaredToolProduct() { return declaredToolProduct; },
   get ruleProductsOf() { return ruleProductsOf; },
@@ -9041,8 +9049,15 @@ type TurnWorkplace = {
   /** Sagax mounted computer_select (`sagax-computer`) for this turn: how the
    * approval path recognizes it (member-environment.ts ownComputerChoiceCall). */
   computerChoice?: boolean;
+  /** #4449: the person whose own Mac apps (`messages`) Sagax mounted for
+   * this turn through their desktop app: their card, never an admin's. */
+  messagesPrincipal?: string;
 };
 const turnWorkplaces = new Map<string, TurnWorkplace>();
+/** #4449: the plugin MCP servers mounted for the person of a thread's
+ * current turn, per bot (mountPluginMcp): theirs, never the shared host's.
+ * Cleared with the turn's capabilities (revokeInternalCapabilityGeneration). */
+const turnPluginMcpServers = new Map<string, Map<string, { generation: string; servers: Set<string> }>>();
 let egressProxy: EgressProxy | null = null;
 
 /** The person a shared-computer call provably acts for
@@ -9630,7 +9645,9 @@ function viewerUsesTeamSection(viewer: AuthzViewer | undefined, section: string)
  * sees the card's bot and thread or channel. "shared": no extra condition. */
 function teamMemoryContextAllows(threadId: string, botId: string | undefined, viewerId: string | undefined): boolean {
   const bot = botId ? store.bot(botId) : store.botByThread(threadId);
-  if (!viewerId || teamMemorySharingOf(bot) === "shared") return true;
+  // #4460: on a server several people use, a card writes its bot owner's own
+  // memory: only who sees its bot and conversation, whatever the setting
+  if (!viewerId || (!teamMemoryPersonScoped() && teamMemorySharingOf(bot) === "shared")) return true;
   return memberSeesFrame({ threadId, ...(bot ? { botId: bot.id } : {}) }, viewerId);
 }
 
@@ -10100,7 +10117,10 @@ const personalProviderInstances = new PersonalProviderInstances({
     await registry.load(configs, decorateHostedProvider);
     bus.attach(Object.keys(configs).flatMap((id) => registry.get(id) ?? []));
   },
-  remove: async (id) => { bus.detach(id); await registry.dispose(id); }
+  remove: async (id) => { bus.detach(id); await registry.dispose(id); },
+  // #4435: an account a person added on an organization server is theirs
+  // (a solo server has one person: nothing to tell apart)
+  accountOwner: (id) => IDENTITY.kind === "perspicax" ? accountOwnerOf(cfg.instances, id) : undefined
 });
 const machineRuns = createMachineRuns({
   engine(instanceId) {
@@ -13397,6 +13417,23 @@ const engineLogins = IDENTITY.kind === "perspicax"
     }
   })
   : null;
+// #4435 point 4: accounts added before the server recorded who added them
+// stay the organization's (no owner is guessed); each one is listed once at
+// start with what the data says (who signed in to it, whose bots use it), so
+// the owner can decide. Ids only, never a name, an address or a secret.
+setTimeout(() => {
+  if (IDENTITY.kind !== "perspicax" || !engineLogins) return;
+  try {
+    const people = principals.list().map((principal) => principal.id.trim().toLowerCase());
+    const cases = unownedAddedAccounts(instanceConfigs(cfg), {
+      signedInAt: (instanceId, driver) => !isLoginDriver(driver) || !separateAccountInstance(instanceId) ? [] : people.flatMap((person) => {
+        try { return [{ principalId: person, at: statSync(join(engineLogins.loginDir(person, driver, "primary", instanceId), LOGIN_MARKER)).mtimeMs }]; } catch { return []; }
+      }),
+      botOwners: (instanceId) => store.bots.filter((bot) => accountUserNames([bot], (botId) => store.tasks(botId), instanceId).length > 0).map((bot) => effectiveBotOwner(bot)),
+    }, addedAccount, separateAccountInstance);
+    for (const entry of cases) console.warn(describeUnownedAccount(entry));
+  } catch (error) { reportBackgroundError(error); }
+}, 0).unref?.();
 /** Slice 4: shared sidebar sections (section-channels.ts), organization mode. */
 const sectionChannels: SectionChannels | null = IDENTITY.kind === "perspicax" ? new SectionChannels({ path: join(DATA_DIR, "section-channels.json") }) : null;
 // A person's teams changed (a refreshed id_token or a directory sync): every
@@ -15755,14 +15792,11 @@ const MEMBER_BOT_FULL_ACCESS = {
   code: "member_bot_full_access"
 } as const;
 const ADMIN_APPROVAL_REQUIRED = {
-  error: "This command would run on the organization's server: an organization admin has to approve it. To approve the server commands of your own bots yourself, ask an admin to give you \"Run commands on the organization's server\" in Perspicax (Bot rights > Who has what).",
+  // #4449: true for every reason a card still waits for an admin
+  // (engine-access.ts MEMBER_ADMIN_REASONS), not only a server command
+  error: "An organization admin has to approve this: it reaches past your own place (a bot of another person, the organization's shared server, or a server that is not yours). For a command on the organization's server, an admin can also give you \"Run commands on the organization's server\" in Perspicax (Bot rights > Who has what).",
   code: "admin_approval_required"
 } as const;
-/** 2026-10-22 a member bot's command would run on the shared
- * organization server (admin only), but the bot has its own computer: it runs
- * there instead, never in a wait-for-an-admin dead end. */
-const EXEC_USE_BOT_COMPUTER =
-  "Refused: this would run on the organization's server, which only an admin may use. Run it on this bot's own computer instead (its server environment, its Local VM, This computer or its cloud computer, for example sagax-environment run_command, sagax-desktop, vm_exec or the computer tools), not a shell on the host.";
 
 /** The server-command approvals waiting for an organization admin. */
 /** Slice 7: every pending approval card (not answered, dismissed or
@@ -18561,6 +18595,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get bookTurnUsage() { return bookTurnUsage; },
   get botForThread() { return botForThread; },
   get botHasOwnComputerForTurn() { return botHasOwnComputerForTurn; },
+  get ownPlaceRefusalForTurn() { return (threadId: string) => ownPlaceRefusal(turnWorkplaces.get(threadId)?.decision); },
   get botReplyQuoteId() { return botReplyQuoteId; },
   get botmailConfined() { return botmailConfined; },
   get broadcast() { return broadcast; },
@@ -18658,6 +18693,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get localVmLeaseFor() { return localVmLeaseFor; },
   get localVmThreadTargets() { return localVmThreadTargets; },
   get memberBotAdminApproval() { return memberBotAdminApproval; },
+  get memberBotAdminReason() { return memberBotAdminReason; },
   get memberHostToolPlace() { return memberHostToolPlace; },
   get memberOwnScopeTool() { return memberOwnScopeTool; },
   get memberOwnedInOrg() { return memberOwnedInOrg; },
@@ -21548,6 +21584,15 @@ ROUTES.push(createPerspicaxRoleRoutes({
   ),
 }));
 
+/** The person's own Perspicax memory notes (link token plus their sign-in):
+ * the memory manager's notes (createMeMemoryNotesRoutes) and, #4460, an
+ * entry of their own memory moved to a tier of the organization console. */
+const memoryNotesClient = new PerspicaxMemoryNotesClient({
+  baseUrl: () => perspicaxBase(),
+  accessToken: (principalId) => perspicaxAccessToken(principalId),
+  linkBearer: () => perspicaxDirectory?.linkBearer() ?? null,
+});
+
 /** 2026-11-05 (visible roles, batch 5): the person's own Perspicax journal
  * rows, read with their own sign-in bearer (as the memory notes are). */
 const roleJournalClient = new PerspicaxMemoryNotesClient({
@@ -23275,10 +23320,16 @@ function refusedModelsFor(person: string | null, instanceId: string): ReadonlySe
  * subscription sign-in or a key, #1098): the app offers it once theirs
  * serves it (shared/offered-engines.ts, GET /api/me/engines
  * `orgNotAllowed`), and Settings shows it to connect. */
-function orgOfferedEngines<T extends { instanceId: string }>(instances: readonly T[], person?: string | null): T[] {
+function orgOfferedEngines<T extends { instanceId: string }>(every: readonly T[], person?: string | null): T[] {
+  // #4435: another person's added account or own server is never offered
+  const instances = IDENTITY.kind === "perspicax" && person ? every.filter((instance) => personalProviderInstances.visible(instance.instanceId, person.trim().toLowerCase())) : every;
   const allowed = offeredEngines(instances, { organization: IDENTITY.kind === "perspicax", allowedEngines: orgAllowedEngines() }, "settings");
-  if (!person || IDENTITY.kind !== "perspicax" || !orgOwnAccountsOutsideList() || allowed.length === instances.length) return allowed;
-  return instances.filter((instance) => allowed.includes(instance) || personalEngine(instance.instanceId, person));
+  if (!person || IDENTITY.kind !== "perspicax" || allowed.length === instances.length) return allowed;
+  // #4435: a person always lists (and so can remove) the accounts they added,
+  // even while the organization's list leaves their provider out
+  const own = (instanceId: string) => accountOwnerOf(cfg.instances, instanceId) === person.trim().toLowerCase();
+  return instances.filter((instance) => allowed.includes(instance) || own(instance.instanceId)
+    || (orgOwnAccountsOutsideList() && personalEngine(instance.instanceId, person)));
 }
 /** #1098: an engine a person can run on their own account or key: one they
  * can sign in to or keep a key for, or one theirs already serves. */
@@ -24200,16 +24251,17 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     markWorkspaceUse,
     proposeTeamMemory: (section, entry, meta) => {
       const owner = meta.botId ? effectiveBotOwner(store.bot(meta.botId) ?? {}) : undefined;
-      return teamMemory.propose(teamStorageKeyFor(section, owner), entry, meta);
+      return teamMemory.propose(teamMemoryKeyFor(section, owner), entry, meta);
     },
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
     // #2091: a team-memory rule the person kept accepts the entry at once
+    teamMemoryPersonScoped,
     settleTeamMemoryByRule: (botId, threadId, proposed, section) => {
       const bot = store.bot(botId);
       if (!bot) return undefined;
       return settleProposalByRule(bot, threadId, proposed, () => {
-        const result = teamMemory.resolve(teamStorageKeyFor(section, effectiveBotOwner(bot)), proposed.requestId, "accept");
+        const result = teamMemory.resolve(teamMemoryKeyFor(section, effectiveBotOwner(bot)), proposed.requestId, "accept");
         if (result.claimed && result.state === "accepted") {
           const row = store.messagesFor(threadId).find((message) => message.id === proposed.messageId);
           if (row?.card) store.patchMessage(threadId, row.id, { card: { ...row.card, answered: "allow" } });
@@ -25372,6 +25424,20 @@ ROUTES.push(createMemoryManagerRoutes({
   })),
   botReachable: botMemoryReachable,
   teamSections: (auth) => {
+    // #4460: on an organization server, each person sees their own
+    // memory (their bots' entries, the ones moved out of a shared team
+    // memory among them), never another person's, an admin included
+    if (teamMemoryPersonScoped()) {
+      if (auth.kind === "loopback" && auth.trust === "service") return [];
+      const entries = teamMemory.list(teamMemoryKeyForAuth(auth, ""));
+      const own = { section: "", label: "Your memory", mayWrite: true, count: entries.length, owner: "self" as const };
+      // the entries that left a shared memory with no known author were the
+      // whole server's: its admins list, edit, delete or publish them
+      const unclaimed = teamMemoryUnclaimedReader(auth) ? teamMemory.list(UNCLAIMED_MEMORY_KEY) : [];
+      return unclaimed.length
+        ? [own, { section: UNCLAIMED_MEMORY_KEY, label: "No known author", mayWrite: true, count: unclaimed.length, owner: "unclaimed" as const }]
+        : [own];
+    }
     const may = auth.kind === "loopback"
       ? auth.trust !== "service"
       : auth.scopes.includes("admin") || (IDENTITY.kind === "perspicax" && orgAdminCaller(auth));
@@ -27202,6 +27268,11 @@ ROUTES.push(createBotTeamWorkRoutes({
   },
   viewerId: (auth) => channelFilterViewerId(auth),
   read: (botId, viewerId, since) => teamWorkReader.read(botId, viewerId, since),
+  // #4421: the person clears their own rows; the hand-overs they read carry the end
+  clear: (botId, viewerId, since, clear) => {
+    const ids = teamWorkClearSteps(teamWorkReader.read(botId, viewerId, since), clear);
+    return ids.length ? coordinator.endWork(ids, { at: Date.now(), outcome: "cleared" }) : 0;
+  },
 }));
 setPersonNoteSink(createPersonNote({
   thread: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
@@ -29047,6 +29118,8 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
       store.bots.filter((bot) => effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase()),
       (botId) => store.tasks(botId).filter((task) => !task.ownerPrincipalId || task.ownerPrincipalId.trim().toLowerCase() === principalId.trim().toLowerCase()),
       instanceId),
+    // #4435: the entry of a person's own account, removed with it
+    removeAccountEntry: (instanceId: string, beforeRemove: () => Promise<void>) => removeAddedAccount(addedAccountRemoval, instanceId, { beforeRemove }),
     engineDisplayName,
     secondLoginSupported,
     grokAccountsFor,
@@ -29146,6 +29219,87 @@ function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
   return teamStorageKeyFor(sectionName, owner);
 }
 
+/** #4460: a server several people use (teamMemoryShared: an organization
+ * server, or a workspace with members) keeps no team memory between people:
+ * each person's bots read that person's own
+ * (server/memory/team-memory-scope.ts). Shared memory is the organization
+ * console's teams; a workspace with no console keeps none. */
+function teamMemoryPersonScoped(): boolean {
+  return teamMemoryShared();
+}
+/** #4460: the person a team memory prompt names, their organization teams
+ * by name, and whether a console keeps team memory. */
+function teamMemoryPerson(principalId: string): { name: string; teams: string[]; console: boolean } {
+  const person = principals.byId(principalId);
+  const name = person?.name?.trim() || person?.login?.trim() || person?.email?.trim() || "this person";
+  const teams = (person?.teams ?? []).map((team) => orgTeams.name(team.id) ?? team.id);
+  return { name, teams, console: IDENTITY.kind === "perspicax" };
+}
+/** #4460: who reads the entries kept aside when they left a shared memory
+ * with no known author: they were the whole server's, so its admins. */
+function teamMemoryUnclaimedReader(auth: RequestAuth): boolean {
+  if (auth.kind === "loopback") return auth.trust !== "service";
+  return auth.scopes.includes("admin") && (IDENTITY.kind !== "perspicax" || orgAdminCaller(auth));
+}
+/** #4460: shared keys left from before (a section, General) move to their
+ * authors' own memory on an organization server. */
+function scopeTeamMemoryToPeople(): void {
+  if (!teamMemoryPersonScoped() || !teamMemory.hasSharedKeys()) return;
+  const authorOf = (key: string, entry: TeamMemoryEntry): string | null => {
+    const bot = entry.source.botId ? store.bot(entry.source.botId) : undefined;
+    if (bot) return effectiveBotOwner(bot);
+    const team = parseTeamDataKey(key);
+    if (team && team.ownerPrincipalId !== UNCLAIMED_OWNER) return team.ownerPrincipalId;
+    if (!key || !sectionChannels) return null;
+    const records = sectionChannels.list().filter((record) => record.name === key && record.ownerPrincipalId !== UNCLAIMED_OWNER);
+    return records.length === 1 ? records[0]!.ownerPrincipalId : null;
+  };
+  const labelOf = (key: string) => {
+    const team = parseTeamDataKey(key);
+    const record = team && sectionChannels ? sectionChannels.byId(team.sectionId) : null;
+    return record?.name ?? sectionContextLabel(key);
+  };
+  try {
+    const { moved, unclaimed } = teamMemory.scopeToPeople(authorOf, labelOf);
+    if (moved.length || unclaimed) {
+      const people = new Set(moved.map((row) => row.person)).size;
+      console.log(`team memory: ${moved.length} shared entr${moved.length === 1 ? "y" : "ies"} moved to ${people} author(s)' own memory; ${unclaimed} without a known author listed for the admins, read by no bot`);
+    }
+  } catch (error) {
+    console.error(`[team-memory] Could not move shared team memory to its authors: ${(error as Error).message}`);
+  }
+}
+/** #4460: the team memory a bot reads and writes (server/memory/team-memory-scope.ts). */
+function teamMemoryForBot(bot: { section?: string; sectionId?: string; ownerUserId?: unknown } | null | undefined): TeamMemoryScope {
+  scopeTeamMemoryToPeople();
+  const owner = bot ? effectiveBotOwner(bot) : "";
+  return teamMemoryScope({ personScoped: teamMemoryPersonScoped(), owner, section: () => teamStorageForBot(bot), person: () => teamMemoryPerson(owner) });
+}
+/** #4460: the team memory key of a section name for this owner. */
+function teamMemoryKeyFor(sectionName: string | null | undefined, ownerPrincipalId?: string | null): string {
+  scopeTeamMemoryToPeople();
+  return teamMemoryScope({ personScoped: teamMemoryPersonScoped(), owner: ownerPrincipalId ?? "", section: () => ({ key: teamStorageKeyFor(sectionName, ownerPrincipalId), label: "" }) }).key;
+}
+function teamMemoryKeyForAuth(auth: RequestAuth, sectionName: string): string {
+  // #4460: an admin reads and manages the entries kept aside (no known author)
+  if (teamMemoryPersonScoped() && sectionName === UNCLAIMED_MEMORY_KEY && teamMemoryUnclaimedReader(auth)) {
+    scopeTeamMemoryToPeople();
+    return UNCLAIMED_MEMORY_KEY;
+  }
+  const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+  return teamMemoryKeyFor(sectionName, owner);
+}
+/** #4460: a bot's team memory block, with where its entries come from. */
+function teamMemoryPromptFor(bot: { section?: string; sectionId?: string; ownerUserId?: unknown } | null | undefined): string {
+  const scope = teamMemoryForBot(bot);
+  return teamMemory.systemPrompt(scope.key, scope.label, scope.person);
+}
+/** #4460: the propose_team_memory instruction, worded for this server's
+ * mode (team-memory-scope.ts teamMemoryWording). */
+function teamMemoryToolPrompt(): string {
+  return teamMemoryWording(teamMemoryPersonScoped()).prompt;
+}
+
 /** I2: the caller's team model and computer. */
 function teamDefaultsForAuth(auth: RequestAuth, sectionName: string) {
   return sectionName ? readTeamDefaults(teamStorageKeyForAuth(auth, sectionName)) : null;
@@ -29179,6 +29333,8 @@ if (sectionChannels) {
   };
   const movedBriefs = migrateSectionContextKeys(resolveTeamOwner);
   const movedMemory = teamMemory.migrateSectionKeys(resolveTeamOwner);
+  // #4460: then no team memory stays shared between people on this server
+  scopeTeamMemoryToPeople();
   // #2045: bot/group membership links move from display name to section id.
   // Unknown names create that owner's private section so rename never orphans.
   // Never fall back to byName: two people may share a display name.
@@ -30298,11 +30454,7 @@ if (IDENTITY.kind === "perspicax") {
   ROUTES.push(createMeMemoryNotesRoutes({
     issuer,
     linked: () => Boolean(perspicaxDirectory?.linkBearer()),
-    client: new PerspicaxMemoryNotesClient({
-      baseUrl: () => perspicaxBase(),
-      accessToken: (principalId) => perspicaxAccessToken(principalId),
-      linkBearer: () => perspicaxDirectory?.linkBearer() ?? null,
-    }),
+    client: memoryNotesClient,
   }));
 } else {
   // Slice 8: the copy of the operator's own bots for an organization server.
@@ -32295,7 +32447,9 @@ function orgMcpServers(): Array<{ name: string; transport: "remote" | "stdio"; u
 const orgOpsDeps: OpsDeps = {
   connections: async (): Promise<ConnectionsView> => {
     const people = orgPeopleDeps.people().filter((person) => !person.perspicaxDisabled && !person.consoleDisabled);
-    const engines = registry.entries().map((entry) => {
+    // #4435: an account a person added is theirs alone: not in the console either
+    const personal = (id: string) => Boolean(personalProviderInstances.ownerOf(id));
+    const engines = registry.entries().filter((entry) => !personal(entry.instanceId)).map((entry) => {
       const driver = entry.shadow?.driverKind ?? entry.live?.driverKind ?? "";
       return {
         id: entry.instanceId,
@@ -32320,7 +32474,7 @@ const orgOpsDeps: OpsDeps = {
       engines,
       people: people.map((person) => ({
         person: adminPerson(person.principalId),
-        engines: person.engines.map((engine) => ({ id: engine.id, via: engine.via, ok: null, checkedAt: null })),
+        engines: person.engines.filter((engine) => !personal(engine.id)).map((engine) => ({ id: engine.id, via: engine.via, ok: null, checkedAt: null })),
         mcpServers: Object.keys(personConnections.servers(person.principalId)).length
       })),
       mcpServers,
@@ -32341,7 +32495,8 @@ const orgOpsDeps: OpsDeps = {
   },
   test: async (kind, id, principalId) => {
     if (kind === "engine") {
-      const live = registry.get(id);
+      // #4435: an account a person added is not the console's to test
+      const live = personalProviderInstances.ownerOf(id) ? undefined : registry.get(id);
       if (!live) return { ok: false, reason: "engine_not_installed", label: `No engine ${id} on this server.` };
       const snapshot = await live.snapshot();
       if (snapshot.state !== "available") return { ok: false, reason: "engine_unavailable", label: redactSecretsInText(snapshot.reason ?? "The engine is not available.").slice(0, 300) };
@@ -32393,7 +32548,8 @@ const orgOpsDeps: OpsDeps = {
         ownAccountsOutsideList: cfg.organization?.ownAccountsOutsideList === true,
         // 2026-10-30 (lot 2): per model, `<engine>/<model>`, and each engine's models to switch
         disabledModels: orgDisabledModels(),
-        engineModels: Object.fromEntries(registry.instances().map((instance) => [instance.instanceId,
+        // #4435: never an account a person added
+        engineModels: Object.fromEntries(registry.instances().filter((instance) => !personalProviderInstances.ownerOf(instance.instanceId)).map((instance) => [instance.instanceId,
           instance.models.options.filter((option) => !option.local).map((option) => ({ id: option.id, label: option.label || option.id }))])),
         defaults: { engine: selection?.instanceId ?? null, model: selection?.model ?? null, approvalMode: cfg.newBotDefaults?.profile.approvalMode ?? null }
       },
@@ -32403,7 +32559,7 @@ const orgOpsDeps: OpsDeps = {
   saveSettings: (changes, adminPrincipalId) => {
     const actor: AdminActor = { kind: "person", principalId: adminPrincipalId, via: "console" };
     if (changes.allowedEngines !== undefined) {
-      const unknown = (changes.allowedEngines ?? []).find((id) => !registry.entries().some((entry) => entry.instanceId === id));
+      const unknown = (changes.allowedEngines ?? []).find((id) => personalProviderInstances.ownerOf(id) || !registry.entries().some((entry) => entry.instanceId === id));
       if (unknown) throw new ConsoleRefusal(400, "engine_not_installed", `No engine ${unknown} on this server.`);
     }
     if (changes.defaults && (changes.defaults.engine !== undefined || changes.defaults.model !== undefined)) {
@@ -32628,8 +32784,9 @@ function orgOwnAccountsOutsideList(): boolean {
  * every engine (shared/org-allowed-engines.ts). */
 function orgAllowedEngines(): string[] | null {
   const allowed = cfg.organization?.allowedEngines;
-  // [] is "none" (2026-10-17): only null or absent means every engine
-  return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowed : null;
+  // [] is "none" (2026-10-17): only null or absent means every engine.
+  // #4435: a person's own added account follows its provider's first one.
+  return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
 }
 /** Why a model choice may not use this engine here, if it may not.
  * 2026-10-30: an engine outside the organization's list is refused to
@@ -32932,8 +33089,10 @@ ROUTES.push(createBotRuntimeSettingsRoutes({
     return IDENTITY.kind === "perspicax" && callerCan(auth, area === "tools" ? "bots.tools" : "bots.behaviour");
   },
   isAdmin: (auth) => auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin"),
-  checkBackup: (selection) => {
-    const checked = checkedModelSelection(selection, undefined, true);
+  checkBackup: (selection, bot) => {
+    // #4435: the bot's owner may back it up with their own added account
+    const owner = store.bot(bot.id);
+    const checked = checkedModelSelection(selection, undefined, true, owner ? effectiveBotOwner(owner) : undefined);
     if (!checked.ok) return { ok: false, status: checked.status, error: checked.error };
     const target = registry.get(checked.selection.instanceId);
     if (!target?.enabled) return { ok: false, status: 400, error: "Enable the backup engine before selecting it for recovery." };
@@ -33955,6 +34114,7 @@ ROUTES.push(createDeciderRoutes({ decider }));
 ROUTES.push(createAntigravityLeftoverRoutes({
   hosted: Boolean(hostedModels),
   isAntigravity: (instanceId) => registry.get(instanceId)?.driverKind === "antigravityAgent",
+  accountOwner: (instanceId) => personalProviderInstances.ownerOf(instanceId),
   find: () => findAntigravityLeftovers(),
   remove: () => removeAntigravityLeftovers()
 }));
@@ -34003,7 +34163,9 @@ ROUTES.push(createOpenAiCompatServerRoutes({
 ROUTES.push(createAntigravityAccountRoutes({
   instances: () => persistableInstanceConfigs(cfg),
   persist: persistProviderInstance,
-  describe: describeInstances,
+  // #4435: the adder's own account on an organization server, listed as they see it
+  ownerPrincipalId: (auth) => IDENTITY.kind === "perspicax" && auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null,
+  describe: (auth) => instancesForViewer(auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null),
   exclusive: (work) => {
     if (providerConfigBusy) return null;
     providerConfigBusy = true;
@@ -34370,7 +34532,18 @@ ROUTES.push(createTeamMemoryHttpRoutes({
   resolve: (section, entryId, decision) => teamMemory.resolve(section, entryId, decision),
   remove: (section, entryId) => teamMemory.remove(section, entryId),
   update: (section, entryId, patch) => teamMemory.update(section, entryId, patch),
-  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
+  storageKey: (auth, section) => teamMemoryKeyForAuth(auth, section),
+  // #4460: a person's own memory is theirs to manage, no admin
+  mayUse: (auth) => teamMemoryPersonScoped() || auth.kind === "loopback" || auth.scopes.includes("admin"),
+  // #4460: a person moves an entry of their own memory to a tier of the
+  // organization console (a team of theirs), as themselves
+  ...(IDENTITY.kind === "perspicax" ? {
+    publish: (auth: RequestAuth, note: Parameters<NonNullable<Parameters<typeof createTeamMemoryHttpRoutes>[0]["publish"]>>[1]) => {
+      const who = IDENTITY.kind === "perspicax" ? memoryPrincipal(auth, IDENTITY.issuer) : null;
+      if (!who) return Promise.resolve({ ok: false as const, error: "unauthorized" as const });
+      return memoryNotesClient.call(who.principalId, "POST", memoryReadPath("/entry"), note);
+    },
+  } : {}),
   settleCards: settleTeamMemoryCards
 }));
 ROUTES.push(createSectionContextRoutes({
@@ -35313,8 +35486,22 @@ ROUTES.push(createAdminActivityRoutes({
   adminPersonName: (principalId) => adminPerson(principalId).name,
   adminActivityRecording
 }));
-ROUTES.push(createInstancesRoutes({
+// The provider-account edits both the instance routes and a person's own
+// list (removeAccountEntry, #4435) go through.
+const addedAccountRemoval: AddedAccountRemovalDeps = {
   cfg,
+  getProviderConfigBusy: () => providerConfigBusy,
+  setProviderConfigBusy: (busy) => { providerConfigBusy = busy; },
+  providerInstancesChanging,
+  persistProviderInstance,
+  bots: () => store.bots,
+  tasks: (botId) => store.tasks(botId),
+  threadBusy,
+  botForThread,
+  activeGroupTurnForBot: (botId) => Boolean(activeGroupTurnForBot(botId))
+};
+ROUTES.push(createInstancesRoutes({
+  ...addedAccountRemoval,
   dataDir: DATA_DIR,
   hostedModels: Boolean(hostedModels),
   identityKind: () => IDENTITY.kind,
@@ -35334,6 +35521,8 @@ ROUTES.push(createInstancesRoutes({
   },
   providerAccounts,
   providerAccountOwner,
+  // #4435: a person's added account or own server, theirs alone
+  accountOwner: (id) => personalProviderInstances.ownerOf(id),
   providerAuthSessions,
   sessionsIsLive: (id) => sessions.isLive(id),
   saveConfig,
@@ -35341,19 +35530,10 @@ ROUTES.push(createInstancesRoutes({
   broadcast,
   configStatus,
   providerConfigs,
-  getProviderConfigBusy: () => providerConfigBusy,
-  setProviderConfigBusy: (busy) => { providerConfigBusy = busy; },
-  providerInstancesChanging,
   claudeUpdatesInFlight,
-  persistProviderInstance,
   reloadProviders,
   selfCheckedEngine,
-  cliProbeEnvironment,
-  bots: () => store.bots,
-  tasks: (botId) => store.tasks(botId),
-  threadBusy,
-  botForThread,
-  activeGroupTurnForBot: (botId) => Boolean(activeGroupTurnForBot(botId))
+  cliProbeEnvironment
 }));
 ROUTES.push(createCliTestRoutes({
   hostedModels: Boolean(hostedModels),
@@ -35854,7 +36034,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   REACTION_PROMPT,
   ROUTINE_PROMPT,
   SESSION_SEARCH_SYSTEM_PROMPT,
-  TEAM_MEMORY_PROMPT,
+  teamMemoryToolPrompt,
   THREADS_PROMPT,
   WITHHELD_HOST_TOOLS_PROMPT,
   accessCardFor,
@@ -36081,7 +36261,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,
-  teamMemory,
+  teamMemoryPromptFor,
   toolErrorCorrectiveRoundsFor,
   toolScopeForTurn,
   turnCommandEnvironment,
@@ -36153,7 +36333,7 @@ const startTurnRunner = createStartTurn({
   ROUTINE_PROMPT,
   SESSION_SEARCH_SYSTEM_PROMPT,
   SMALL_TALK_TURN_NOTE,
-  TEAM_MEMORY_PROMPT,
+  teamMemoryToolPrompt,
   THREADS_PROMPT,
   TurnAuthenticationRefusedError,
   TurnNotStartedError,
@@ -36546,7 +36726,7 @@ const startTurnRunner = createStartTurn({
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,
-  teamMemory,
+  teamMemoryPromptFor,
   threadBusy,
   threadPrewarm,
   toolDefinitionBytes,

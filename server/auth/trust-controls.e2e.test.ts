@@ -127,12 +127,15 @@ afterAll(async () => {
 });
 
 // Sagax: a bot a member cannot see answers 404 (its existence is not named); 403 and 404 both refuse.
-it("keeps activity, direct shared-memory edits and policy changes admin-only; a member reviews only through the card", async () => {
+it("keeps activity and policy changes admin-only; a member's team memory is their own", async () => {
   const b = await bot("Trust authority");
   expect((await api("GET", `/api/bots/${b.id}/activity`)).status).toBe(200);
   expect((await api("GET", `/api/bots/${b.id}/activity`, undefined, member)).status).toBeOneOf([403, 404]);
-  expect((await api("GET", "/api/team-memory?section=", undefined, member)).status).toBeOneOf([403, 404]);
-  expect((await api("POST", "/api/team-memory?section=", { kind: "term", name: "Denied", detail: "not admin" }, member)).status).toBeOneOf([403, 404]);
+  // #4460: on a workspace several people use, a member's team memory is
+  // their own: they manage it without an admin, and it never reaches anyone else's
+  expect((await api("GET", "/api/team-memory?section=", undefined, member)).status).toBe(200);
+  expect((await api("POST", "/api/team-memory?section=", { kind: "term", name: "Own entry", detail: "the member's own" }, member)).status).toBe(201);
+  expect(JSON.stringify((await api("GET", "/api/team-memory?section=")).body)).not.toContain("Own entry");
   expect((await api("PATCH", "/api/team-memory/fixture?section=", { detail: "not admin" }, member)).status).toBeOneOf([403, 404]);
   expect((await api("DELETE", "/api/team-memory/fixture?section=", undefined, member)).status).toBeOneOf([403, 404]);
   for (const patch of [{ outbound: { policy: "allow", dailyCap: 100 } }, { connectorScopes: null }, { fallback: [] }]) {

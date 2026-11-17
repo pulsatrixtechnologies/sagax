@@ -97,11 +97,11 @@ async function openSub(page: BotProfileSubPage): Promise<HTMLElement> {
     await act(async () => { dispatch({ type: "openPersonaEditor", botId: fixture.bot.id, section: "overview" } as never); });
     await settle();
   }
-  const back = host.querySelector<HTMLElement>("[data-bot-profile-back]");
-  if (back) await click(back, "Back");
+  // a sub-page is a modal over the page (#4470): close the one open first
+  for (const modal of Array.from(document.querySelectorAll<HTMLElement>("[data-bot-page-modal]")).reverse()) await click(modal.querySelector<HTMLElement>(":scope > [data-dialog-close]"), "close");
   await click(host.querySelector<HTMLElement>(`[data-bot-profile-tab="${botProfileTabOfPage(page)}"]`), "tab");
   await click(host.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${page}"]`), `row ${page}`);
-  return host.querySelector<HTMLElement>(`[data-bot-profile-subpage="${page}"]`)!;
+  return document.querySelector<HTMLElement>(`[data-bot-page-modal] [data-bot-profile-subpage="${page}"]`)!;
 }
 
 // "Voice notes" stays on the Voice sub-page ("Notify me" moved in place to
@@ -120,15 +120,15 @@ describe("bot page sub-pages apply each change in place (#3397)", () => {
     await click(toggle, "Voice notes");
     // The workspace's bot has the change right away: nothing waits.
     expect(voiceNotes()).toBe(!was);
-    expect(notesSwitch(host.querySelector<HTMLElement>("[data-bot-profile-subpage=\"voice\"]")!)?.getAttribute("aria-checked")).toBe(String(!was));
+    expect(notesSwitch(document.querySelector<HTMLElement>("[data-bot-profile-subpage=\"voice\"]")!)?.getAttribute("aria-checked")).toBe(String(!was));
   });
 
   it("no sub-page ends with a Cancel and Save bar", async () => {
     await mount("fr");
     for (const page of BOT_PROFILE_SUBPAGES) {
       const sub = await openSub(page);
-      if (!sub) continue;
-      expect(sub.querySelector("[data-bot-profile-savebar]"), `save bar on ${page}`).toBeNull();
+      expect(sub, `the modal of ${page}`).not.toBeNull();
+      expect(sub.closest("[data-bot-page-modal]")!.querySelector("[data-bot-profile-savebar]"), `save bar on ${page}`).toBeNull();
     }
   });
 
@@ -136,14 +136,15 @@ describe("bot page sub-pages apply each change in place (#3397)", () => {
     await mount("en");
     const sub = await openSub("voice");
     await click(notesSwitch(sub), "Voice notes");
-    const page = host.querySelector<HTMLElement>("[data-bot-profile-page]")!;
+    const modal = sub.closest<HTMLElement>("[data-bot-page-modal]")!;
     // No confirm provider here: a discard question would fail closed and
     // keep the sub-page open.
     await act(async () => {
-      page.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      modal.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     });
     await settle();
-    expect(host.querySelector("[data-bot-profile-subpage]")).toBeNull();
+    expect(document.querySelector("[data-bot-profile-subpage]")).toBeNull();
+    expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
     expect(host.querySelector('[data-bot-profile-row="page-voice"]')).not.toBeNull();
   });
 });

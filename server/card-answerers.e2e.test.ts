@@ -22,14 +22,14 @@
 //   9. (PR #934) a team-memory card is the team's: a member who can use a
 //      bot of that section confirms it on either route, though not the bot's
 //      owner; someone outside the team is refused; a bot moved to another
-//      section since its proposal no longer lets its old team confirm; the
-//      dialog's direct writes stay admin; a local service confirms none
+//      section since its proposal no longer lets its old team confirm; a
+//      member's direct write lands in their own memory (#4460); a local
+//      service confirms none
 //  10. that card also notifies, and lists in the inbox of, the members who may
 //      confirm it (never a stranger, never another kind of approval)
-//  11. per-bot team memory sharing: "shared" (the default) lists the card
-//      for every member of the section, marked not answerable where they
-//      cannot answer; "private" keeps it to the members who see the bot and
-//      its thread or channel (owner and those members still get it)
+//  11. #4460: the card writes its bot owner's own memory, so whatever the
+//      bot's sharing setting it reaches only the members who see the bot and
+//      its thread or channel (owner and those members get it)
 //  12. the bot's own memory never travels as a team-memory card, whatever
 //      the setting
 //  13. the team-memory page settling an entry (accept, edit, delete) closes
@@ -422,9 +422,11 @@ posixOnly("who may answer an approval card on a shared workspace", () => {
     expect(acceptedBot.status, JSON.stringify(acceptedBot.body)).toBe(200);
     expect((await teamEntry("Dispatch", "Board B"))?.status).toBe("accepted");
 
-    // the dialog's direct writes stay admin: the card is a member's only way in
-    expect((await api("POST", "/api/team-memory?section=Dispatch", { kind: "term", name: "Direct", detail: "no card" }, ADA)).status).toBe(403);
-    expect((await api("DELETE", `/api/team-memory/${viaThread}?section=Dispatch`, undefined, ADA)).status).toBe(403);
+    // #4460: a member's direct write lands in their own memory, never the
+    // bot owner's, and cannot reach an entry of the owner's
+    expect((await api("POST", "/api/team-memory?section=Dispatch", { kind: "term", name: "Direct", detail: "no card" }, ADA)).status).toBe(201);
+    expect(await teamEntry("Dispatch", "Direct")).toBeUndefined();
+    expect((await api("DELETE", `/api/team-memory/${viaThread}?section=Dispatch`, undefined, ADA)).status).toBe(404);
     expect((await teamEntry("Dispatch", "Board A"))?.status).toBe("accepted");
     // any other approval on Juniper stays its owner's
     const command = await cardFrom(juniper, threadId, ADA);
@@ -488,7 +490,7 @@ posixOnly("who may answer an approval card on a shared workspace", () => {
     }
   }, 90_000);
 
-  it("shares a team-memory card with the whole section by default, and keeps it to those who see the bot when private", async () => {
+  it("keeps a team-memory card to those who see the bot and conversation, whatever the sharing setting", async () => {
     // Both bots sit in one section; Ada uses only the first, Bob only the second.
     const bot = await makeTeamBot("Sharing A", "Dispatch Sharing", [ADA]);
     await makeTeamBot("Sharing B", "Dispatch Sharing", [BOB]);
@@ -501,15 +503,13 @@ posixOnly("who may answer an approval card on a shared workspace", () => {
     const ownView = async () => ((await api("GET", "/api/bots?messages=0", undefined, BOSS)).body.bots as any[]).find((candidate) => candidate.id === bot.id);
     expect((await ownView())?.teamMemorySharing).toBeUndefined();
 
-    // shared (the default): Bob, a member of the section, sees the card, but
-    // may not answer on a conversation he cannot open
+    // shared (the default): #4460, on a workspace several people use the
+    // card writes the bot owner's own memory, so Bob, another member of the
+    // section who does not see this bot, gets nothing either
     const sharedRequest = await proposeTeamMemory(bot, threadId, "Shared board");
     const adas = await listed(ADA, sharedRequest);
     expect(adas![0]).toMatchObject({ threadId, decidable: true });
-    const bobs = await listed(BOB, sharedRequest);
-    expect(bobs, "a member of the section sees a shared card").toHaveLength(1);
-    expect(bobs![0]).toMatchObject({ threadId, decidable: false, bulk: "not-yours" });
-    expect(bobs![0].message?.card?.teamMemoryRequest?.section).toBe("Dispatch Sharing");
+    expect(await inbox(BOB, sharedRequest)).toHaveLength(0);
     expect((await api("POST", `/api/threads/${threadId}/respond`, { requestId: sharedRequest, behavior: "deny" }, ADA)).status).toBe(200);
 
     // private: only the people who see the bot and the conversation
@@ -557,9 +557,10 @@ posixOnly("who may answer an approval card on a shared workspace", () => {
       .filter((item: any) => item.requestId === requestId);
     const listed = (as: string, requestId: string) => waitFor(async () => { const rows = await inbox(as, requestId); return rows.length ? rows : null; }, 10_000);
 
-    // shared: Bob, outside the channel, sees it and may not answer it
+    // shared: #4460, Bob, outside the channel, gets nothing either
     const sharedRequest = await proposeTeamMemory(bot, group.threadId, "Shared room board");
-    expect((await listed(BOB, sharedRequest))![0]).toMatchObject({ decidable: false });
+    expect((await listed(ADA, sharedRequest))![0]).toMatchObject({ decidable: true });
+    expect(await inbox(BOB, sharedRequest)).toHaveLength(0);
     expect((await api("POST", `/api/threads/${group.threadId}/respond`, { requestId: sharedRequest, behavior: "deny" }, BOSS)).status).toBe(200);
 
     expect((await api("PATCH", `/api/bots/${bot.id}`, { teamMemorySharing: "private" }, BOSS)).status).toBe(200);
@@ -635,8 +636,10 @@ posixOnly("who may answer an approval card on a shared workspace", () => {
       ] as const;
       for (const item of cases) {
         const requestId = await proposeTeamMemory(bot, threadId, item.name);
-        // before: the owner, Ada (who uses this bot) and Bob (section member, shared) each list it
-        for (const as of [BOSS, ADA, BOB]) expect(await listed(as, requestId), `${item.name} ${as}`).toHaveLength(1);
+        // before: the owner and Ada (who uses this bot) list it; Bob, another
+        // member of the section, does not (#4460)
+        for (const as of [BOSS, ADA]) expect(await listed(as, requestId), `${item.name} ${as}`).toHaveLength(1);
+        expect(await inbox(BOB, requestId), `${item.name} bob`).toHaveLength(0);
         const settled = await item.settle(requestId);
         expect(settled.status, `${item.name}: ${JSON.stringify(settled.body)}`).toBe(200);
         // the card is closed in the conversation, with who settled it

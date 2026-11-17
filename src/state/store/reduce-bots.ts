@@ -5,6 +5,7 @@ import {clearThreadReturnIfHome, currentTaskBot, mergeTaskStamps, openedUnreadDi
 import {fallbackSelection} from "@/lib/selection-fallback";
 import {threadOpensUnread, threadReadCursor} from "@/lib/unread-divider";
 import {sameModelSelection} from "../../../shared/thread-model";
+import {isFirstRunQuizCard} from "../../../shared/options-card";
 import {withPrimaryBot} from "@/lib/primary-bot";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
@@ -64,9 +65,10 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
       return withMascotMotion(
         patchCard(state, action.botId, action.messageId, {
           answered: action.answer,
-          // talking past the first-run quiz hides it; live asks and a
-          // proactive proposal stay, with the pick marked
-          ...(card?.requestId || card?.proactiveProposal ? {} : { dismissed: true }),
+          // talking past the first-run quiz hides it; live asks, a bot's
+          // question drawn in the chat (#4475) and a proactive proposal stay,
+          // with the pick marked
+          ...(isFirstRunQuizCard(card) ? { dismissed: true } : {}),
           ...(card?.proactiveProposal ? { answeredText: action.answer } : {}),
         }),
         action.botId,

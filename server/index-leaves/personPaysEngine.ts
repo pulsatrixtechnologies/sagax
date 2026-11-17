@@ -19,7 +19,9 @@ function personPaysEngine(principalId: string, instanceId: string) {
     speaker: { origin: "person", principalId: id },
     owner: { principalId: id, ...orgPersonFacts(person) },
     instance: { instanceId, driver: driverKind, installed: host.engineInstalled(instanceId),
-      ...(host.personalProviderInstances.get(instanceId) ? { keyOnly: true, keyProvider: host.personalProviderInstances.get(instanceId)!.provider, personalOwner: host.personalProviderInstances.get(instanceId)!.owner } : {}) },
+      ...(host.personalProviderInstances.get(instanceId) ? { keyOnly: true, keyProvider: host.personalProviderInstances.get(instanceId)!.provider, personalOwner: host.personalProviderInstances.get(instanceId)!.owner } : {}),
+      // #4435: an added account runs for the person who added it only
+      ...(host.personalProviderInstances.ownerOf?.(instanceId) ? { accountOwner: host.personalProviderInstances.ownerOf(instanceId) } : {}) },
     subscriptionSignedIn: (pid, driver, instanceId) => host.engineLogins?.signedIn(pid, driver, "primary", instanceId) ?? false,
     subscriptionExpired: (pid, driver, instanceId) => host.engineLogins?.expired(pid, driver, "primary", instanceId) ?? false,
     hasKey: (sub, provider) => host.perspicaxDirectory?.providerKeys(sub).includes(provider) ?? false,

@@ -10,12 +10,19 @@ async function mountPluginMcp(   integrations: NonNullable<SendTurnInput["integr
   // GitHub servers left out: the person has no GitHub connection (the
   // turn's prompt says so, githubWithheldPrompt).
   const githubWithheld: string[] = [];
-
+  // #4449: the servers mounted here are the person's own for this turn
+  // (remote as them, or a command relayed into their own sandbox): never
+  // the shared host, so their cards are never an admin's
+  // (ownerScopedMcpServerFor). A turn that mounts none leaves none behind.
+  const previous = host.turnPluginMcpServers.get(input.threadId);
+  previous?.delete(input.botId);
+  if (previous && !previous.size) host.turnPluginMcpServers.delete(input.threadId);
   if (!input.customMcp) return { githubWithheld };
   const bot = host.store.bot(input.botId);
   if (!bot) return { githubWithheld };
   const person = host.IDENTITY.kind === "perspicax" ? input.principal?.trim().toLowerCase() : host.localPrincipalId();
   if (!person) return { githubWithheld };
+  const mounted = new Set<string>();
   for (const server of host.scopedPluginMcp(bot, person)) {
     const refused = pluginMcpPrecheck(server.name, server.spec, {
       taken: (name) => Object.hasOwn(integrations.custom ?? {}, name),
@@ -37,6 +44,12 @@ async function mountPluginMcp(   integrations: NonNullable<SendTurnInput["integr
       spec = host.personalStdioIntegration(input.botId, input.threadId, input.generation, person, server.name, { scope: server.scope, key: server.key, name: server.name });
     } else spec = pluginSpecOnComputer(spec, { name: server.plugin, dir: server.dir });
     integrations.custom = { ...integrations.custom, [server.name]: spec };
+    mounted.add(server.name);
+  }
+  if (mounted.size) {
+    const byBot = host.turnPluginMcpServers.get(input.threadId) ?? new Map();
+    byBot.set(input.botId, { generation: input.generation, servers: mounted });
+    host.turnPluginMcpServers.set(input.threadId, byBot);
   }
   return { githubWithheld };
 }

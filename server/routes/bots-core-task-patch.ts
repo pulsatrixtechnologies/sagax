@@ -199,7 +199,7 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
           if (!harnessed.ok) return json(res, harnessed.status, { error: harnessed.error });
           picked = harnessed.selection;
         }
-        const checked = checkedModelSelection(picked, { selection: current.modelSelection, busy: threadBusy(current.id, current.threadId) }, body.requireAvailableModel === true, sessionPrincipal(auth));
+        const checked = checkedModelSelection(picked, { selection: current.modelSelection, busy: threadBusy(current.id, current.threadId) }, body.requireAvailableModel === true, sessionPrincipal(auth), deps.effectiveBotOwner(current));
         if (!checked.ok) return json(res, checked.status, { error: checked.error });
         patch.modelSelection = checked.selection;
       }

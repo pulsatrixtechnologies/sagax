@@ -64,10 +64,18 @@ describe("the Run now button", () => {
     expect(markup).not.toContain("disabled");
   });
 
-  it("is hidden while a run of the routine is queued, running or waiting, never greyed (#3294)", () => {
+  it("keeps its place while a run is queued, running or waiting: the same box says Running, does nothing, never greyed (#4436)", () => {
     for (const status of ["queued", "running", "waiting"] as const) {
       fixture.state = { ...fixture.state!, routineRuns: [run(status)] };
-      expect(render()).toBe("");
+      const markup = render();
+      expect(markup).toContain("data-run-now");
+      expect(markup).toContain('class="ui"');
+      expect(markup).toContain("data-run-in-flight");
+      expect(markup).toContain("<span>Running</span>");
+      expect(markup).toContain('aria-disabled="true"');
+      expect(markup).toContain("animate-spin");
+      // not the greyed disabled look, and not a second run (#3294: the server answers 409)
+      expect(markup).not.toMatch(/\sdisabled=""/);
     }
     expect(routineRunInFlight([run("completed"), run("failed")], "r1")).toBe(false);
     expect(routineRunInFlight([{ ...run("running"), routineId: "other" }], "r1")).toBe(false);

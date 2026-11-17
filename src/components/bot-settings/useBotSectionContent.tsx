@@ -102,7 +102,6 @@ export function useBotSectionContent(bot: Bot, {
   vaultElsewhere = false,
   notifyElsewhere = false,
   routinesSwitchElsewhere = false,
-  onAllBotsUsage,
 }: {
   /** The section on screen: the overview and history load when it is theirs. */
   section: BotSettingsSection;
@@ -128,9 +127,6 @@ export function useBotSectionContent(bot: Bot, {
   /** "Collaborators can create routines" is drawn elsewhere (the profile
    * page's Settings card, #3398): Routines leaves it out. */
   routinesSwitchElsewhere?: boolean;
-  /** Analytics' "All bots": the profile page opens every bot's usage as a
-   * page of its own (#4420); without it, Settings > Usage. */
-  onAllBotsUsage?: () => void;
 }): { renderSectionBody: (id: BotSettingsSection) => ReactNode; dialogs: ReactNode; derived: ReturnType<typeof useBotSettingsDerived> } {
   const dispatch = useStoreDispatch();
   const { flushBotPatches } = useStoreCommands();
@@ -389,7 +385,7 @@ export function useBotSectionContent(bot: Bot, {
           />
         );
       case "usage":
-        return <BotAnalyticsSection bot={bot} onAllBots={onAllBotsUsage} />;
+        return <BotAnalyticsSection bot={bot} />;
       default:
         return null;
     }

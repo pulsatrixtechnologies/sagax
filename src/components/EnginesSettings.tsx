@@ -426,7 +426,8 @@ export function EngineRow({ instance, mine, member = false, issuer = "", bare = 
       {access && claudePart}
       {access && signedPart}
       {details && instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
-      {part === "all" && !member && <AddAnotherAccount instance={instance} />}
+      {/* #4435: anyone adds their own account, a member of an organization too */}
+      {part === "all" && <AddAnotherAccount instance={instance} />}
       {details && !tool && advancedExtra && <div className="mt-3 flex flex-col gap-2">{advancedExtra}</div>}
       {details && tool && (
         <div className="-mx-3.5 mt-3 border-t border-hairline/40">

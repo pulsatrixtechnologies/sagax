@@ -147,12 +147,32 @@ describe("composer command menu (Sagax and the engine)", () => {
     const menu = composerCommandMenu(sagax, engine, "");
     expect(menu.map((item) => [item.group, item.label])).toEqual([
       ["goal", "/goal"], ["sagax", "/setup"],
-      ["engine", "/compact"], ["engine", "/engine:goal"], ["engine", "/context"], ["engine", "/model"],
+      ["engine", "/compact"], ["engine", "/engine:goal"], ["engine", "/model"], ["engine", "/context"],
       ["plugins", "/pulsatrix-flow:using-px-flow"],
       ["mcp", "/mcp__github__review_pr"],
     ]);
+    // a command the app manages runs its own action (#4450)
     const model = menu.find((item) => item.label === "/model");
-    expect(model?.kind === "engine" && model.unavailable).toBe("managed");
+    expect(model?.kind === "engine" && model.appAction).toBe("model");
+  });
+
+  it("maps each managed command to the app's action, or leaves it out (#4450)", () => {
+    const managed: HarnessCommand[] = [
+      "clear", "reset", "new", "model", "effort", "fast", "permissions", "allowed-tools", "config", "settings",
+      "resume", "rename", "login", "logout", "exit", "mcp", "plugin", "sandbox",
+    ].map((name) => ({ name, description: "", group: "engine" as const, unavailable: "managed" as const }));
+    const terminal: HarnessCommand = { name: "doctor", description: "", group: "engine", unavailable: "interactive" };
+    const menu = composerCommandMenu([], [...managed, terminal], "");
+    expect(Object.fromEntries(menu.map((item) => [item.label, item.kind === "engine" ? item.appAction : null]))).toEqual({
+      "/clear": "newChat", "/reset": "newChat", "/new": "newChat",
+      "/model": "model", "/effort": "model", "/fast": "model",
+      "/permissions": "permissions", "/allowed-tools": "permissions",
+      "/config": "settings", "/settings": "settings",
+    });
+    // a group's conversation is the group's: its bots offer no New chat
+    const group = composerGroupCommandMenu([], [{ bot: { id: "a", name: "Scout" }, commands: managed, mention: false }], "");
+    expect(group.map((item) => item.label)).not.toContain("/clear");
+    expect(group.map((item) => item.label)).toContain("/model");
   });
 
   it("filters by name, a plugin command's short name, an alias and the description", () => {
@@ -173,7 +193,7 @@ describe("composer command menu (Sagax and the engine)", () => {
     expect(menu.map((item) => [item.group, item.label])).toEqual([
       ["goal", "/goal"], ["sagax", "/setup"],
       ["skills", "/compact"], ["skills", "/presentation"],
-      ["engine", "/engine:goal"], ["engine", "/context"], ["engine", "/model"],
+      ["engine", "/engine:goal"], ["engine", "/model"], ["engine", "/context"],
       ["plugins", "/pulsatrix-flow:using-px-flow"],
       ["mcp", "/mcp__github__review_pr"],
     ]);

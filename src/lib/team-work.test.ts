@@ -202,3 +202,28 @@ describe("team work words", () => {
     expect(teamNoteCount(note(60_000, 2), [note(0), note(30_000)])).toBe(4);
   });
 });
+
+// #4421: a piece of work the orchestrator closed as done reads finished, in
+// its words why; the list without the rows a clear takes, before the answer.
+describe("closed and cleared work (#4421)", () => {
+  const release: TeamStepFacts = { id: "h1", botId: "dev", requesterBotId: "orc", threadId: "t1", title: "Build", work: "Release", step: "Build",
+    plan: [{ name: "Build" }, { name: "Test" }, { name: "Ship" }], mode: "work", status: "completed", createdAt: 100_000, startedAt: 100_000, finishedAt: 200_000, coding: true,
+    ended: { at: 400_000, outcome: "done", why: "Merged by another session" } };
+
+  it("closed as done: the orchestrator, the figures, finished and its words why", () => {
+    setLocale("en");
+    const work = buildTeamWork({ orchestratorId: "orc", now: NOW, since: 0, steps: [release] });
+    const line = teamWorkLine(work.doneToday[0]!, () => undefined, NOW, { botId: "orc", name: "Lead" });
+    expect(teamLineText(line)).toBe(`Lead · 1/3 · finished ${teamAge(NOW - 400_000)} ago · Merged by another session`);
+    expect(line.action).toBe(2);
+  });
+
+  it("withoutCleared drops the keys named, or every settled row, and nothing that runs", async () => {
+    const { withoutCleared } = await import("./use-team-work");
+    const running: TeamStepFacts = { id: "h2", botId: "rev", requesterBotId: "orc", threadId: "t2", title: "Hotfix", mode: "work", status: "running", createdAt: 500_000, coding: true };
+    const open = { ...release, ended: undefined };
+    const work = buildTeamWork({ orchestratorId: "orc", now: NOW, since: 0, steps: [open, running] });
+    expect(withoutCleared(work, { finished: true }).live.map((item) => item.key)).toEqual(["step:h2"]);
+    expect(withoutCleared(work, { keys: ["step:h2"] }).live.map((item) => item.key)).toEqual(["work:release"]);
+  });
+});

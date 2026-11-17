@@ -30,7 +30,6 @@ export type StartTurnHost = {
   ROUTINE_PROMPT: any,
   SESSION_SEARCH_SYSTEM_PROMPT: any,
   SMALL_TALK_TURN_NOTE: any,
-  TEAM_MEMORY_PROMPT: any,
   THREADS_PROMPT: any,
   TurnAuthenticationRefusedError: any,
   TurnNotStartedError: any,
@@ -425,7 +424,9 @@ export type StartTurnHost = {
   surfacePrompt: any,
   teamAvailabilityPart: any,
   teamComputerPrompt: any,
-  teamMemory: any,
+  /** #4460: the bot's team memory block (server/memory/team-memory-scope.ts). */
+  teamMemoryPromptFor: any,
+  teamMemoryToolPrompt: any,
   threadBusy: any,
   threadPrewarm: any,
   toolDefinitionBytes: any,

@@ -586,7 +586,8 @@ function AccountLine({ row, group, list, index, total, open, show }: {
 function AccountsSection({ group, list, open, show }: { group: ProviderGroup; list: ProviderList; open: string | null; show: (rowId: string | null) => void }) {
   const accounts = accountRows(group);
   const lineInstances = accounts.flatMap((row) => rowInstances(row, list.instances));
-  const adders = list.member ? [] : lineInstances.filter((instance, index) => lineInstances.findIndex((other) => other.driverKind === instance.driverKind) === index);
+  // #4435: anyone adds their own account, a member of an organization too
+  const adders = lineInstances.filter((instance, index) => lineInstances.findIndex((other) => other.driverKind === instance.driverKind) === index);
   if (!accounts.length) return null;
   return (
     <SettingsGroup title={t("providers.page.accounts")} groupId="provider-accounts">

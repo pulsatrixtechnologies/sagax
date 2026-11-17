@@ -6,12 +6,14 @@ import { composerCommandMenu, composerGroupCommandMenu } from "@/lib/composer-co
 import { ComposerCommandMenu } from "./ComposerCommandMenu";
 
 describe("ComposerCommandMenu", () => {
-  it("shows the groups, argument hints, and what the chat cannot run with its reason", () => {
+  it("shows the groups and argument hints; every engine row runs (#4450)", () => {
     const items = composerCommandMenu(
       [{ id: "setup", label: "/setup", description: "Set this bot up" }],
       [
         { name: "compact", description: "Free up context", group: "engine", argumentHint: "<instructions>" },
         { name: "color", description: "Prompt bar color", group: "engine", unavailable: "interactive" },
+        { name: "clear", description: "Clear conversation history", group: "engine", argumentHint: "[name]", unavailable: "managed" },
+        { name: "login", description: "Sign in", group: "engine", unavailable: "managed" },
         { name: "pulsatrix-flow:using-px-flow", description: "Flow entry", group: "plugins" },
         { name: "mcp__github__review_pr", description: "Review a PR", group: "mcp" },
       ],
@@ -23,9 +25,16 @@ describe("ComposerCommandMenu", () => {
     for (const text of ["Sagax", "Engine", "Plugins", "MCP", "/setup", "/compact", "&lt;instructions&gt;", "/pulsatrix-flow:using-px-flow", "/mcp__github__review_pr"]) {
       expect(markup).toContain(text);
     }
-    expect(markup).toContain("aria-disabled=\"true\"");
-    expect(markup).toContain("Needs the engine&#x27;s own terminal");
-    expect(markup).not.toContain("Prompt bar color");
+    // /clear runs the app's New chat: listed, never dimmed, said as what it does
+    expect(markup).toContain("/clear");
+    expect(markup).toContain("Start a new conversation with this bot");
+    expect(markup).not.toContain("[name]");
+    // what the chat cannot run is not listed at all
+    expect(markup).not.toContain("/color");
+    expect(markup).not.toContain("/login");
+    expect(markup).not.toContain("Managed by");
+    expect(markup).not.toContain("aria-disabled");
+    expect(markup).not.toContain("opacity-55");
     expect(markup).toContain("Refresh engine commands");
   });
 

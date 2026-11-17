@@ -370,13 +370,18 @@ function memoryPathsOnDisk(botId: string): string[] {
  * stat (its plaintext size): the seed of a search's sync pass and of a backup. */
 function memoryFilesOnDisk(botId: string): Array<{ path: string; mtimeMs: number; bytes: number }> {
   const dir = workspaceDir(botId);
-  return memoryPathsOnDisk(botId).flatMap((relativePath) => {
-    try {
-      const stat = memoryEntryStat(join(dir, relativePath));
-      return stat.isFile() ? [{ path: relativePath, mtimeMs: stat.mtimeMs, bytes: plainBytes(join(dir, relativePath), stat) }] : [];
-    } catch {
-      return [];
-    }
+  // #4456: a topic file's stat is its listing's own, not a second one
+  return withMemoryListingOnce(() => {
+    const topics = topicEntries(botId).map(({ name, stat }) => ({ path: `memory/${name}`, mtimeMs: stat.mtimeMs, bytes: plainBytes(join(dir, "memory", name), stat) }));
+    const listed = new Set(topics.map((topic) => topic.path));
+    return [...topics, ...memoryPathsOnDisk(botId).filter((relativePath) => !listed.has(relativePath)).flatMap((relativePath) => {
+      try {
+        const stat = memoryEntryStat(join(dir, relativePath));
+        return stat.isFile() ? [{ path: relativePath, mtimeMs: stat.mtimeMs, bytes: plainBytes(join(dir, relativePath), stat) }] : [];
+      } catch {
+        return [];
+      }
+    })];
   });
 }
 
@@ -795,36 +800,53 @@ function listDocNames(botId: string): string[] {
   return entries.filter((name) => isMemoryTopicName(name) && regularFile(join(dir, name)));
 }
 
-/** The names of the bot's memory/ topic files, no sizes. */
-function listMemoryTopicNames(botId: string): string[] {
+/** #4456: inside withMemoryListingOnce, each bot's topic files are listed
+ * (a stat per file) once: a turn's recall listed them four times over. */
+let listingScope: Map<string, Array<{ name: string; stat: Stats }>> | null = null;
+
+/** Runs `read` with each bot's topic listing read once. Only for a stretch
+ * that writes no memory file (a turn's recall): a topic written inside it
+ * drops the listing (writeMemoryTopic). */
+export function withMemoryListingOnce<T>(read: () => T): T {
+  if (listingScope) return read();
+  listingScope = new Map();
+  try {
+    return read();
+  } finally {
+    listingScope = null;
+  }
+}
+
+/** The bot's memory/ topic files with their stat, in folder order. */
+function topicEntries(botId: string): Array<{ name: string; stat: Stats }> {
+  const known = listingScope?.get(botId);
+  if (known) return known;
   const dir = join(workspaceDir(botId), "memory");
   let entries: string[];
-  try { entries = memoryFolderEntries(dir); } catch { return []; }
-  return entries.filter((name) => {
-    if (!isMemoryTopicName(name)) return false;
-    try { return memoryEntryStat(join(dir, name)).isFile(); } catch { return false; }
+  try { entries = memoryFolderEntries(dir); } catch { entries = []; }
+  const listed = entries.filter(isMemoryTopicName).flatMap((name) => {
+    try {
+      const stat = memoryEntryStat(join(dir, name));
+      return stat.isFile() ? [{ name, stat }] : [];
+    } catch {
+      return [];
+    }
   });
+  listingScope?.set(botId, listed);
+  return listed;
+}
+
+/** The names of the bot's memory/ topic files, no sizes. */
+function listMemoryTopicNames(botId: string): string[] {
+  return topicEntries(botId).map((entry) => entry.name);
 }
 
 /** The bot's memory/ topic files, name + size only — contents are fetched
  * one at a time so listing stays cheap however large the notes grow. */
 export function listMemoryTopics(botId: string): Array<{ name: string; bytes: number }> {
-  let entries: string[];
-  try {
-    entries = memoryFolderEntries(join(workspaceDir(botId), "memory"));
-  } catch {
-    return [];
-  }
-  return entries
-    .filter(isMemoryTopicName)
-    .flatMap((name) => {
-      try {
-        const stat = memoryEntryStat(join(workspaceDir(botId), "memory", name));
-        return stat.isFile() ? [{ name, bytes: plainBytes(join(workspaceDir(botId), "memory", name), stat) }] : [];
-      } catch {
-        return [];
-      }
-    })
+  const dir = join(workspaceDir(botId), "memory");
+  return topicEntries(botId)
+    .map(({ name, stat }) => ({ name, bytes: plainBytes(join(dir, name), stat) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -835,6 +857,7 @@ export function writeMemoryTopic(botId: string, name: string, text: string): voi
   if (!isMemoryTopicName(name)) throw new Error("invalid topic name");
   ensureWorkspace(botId);
   writeFileAtomic(join(workspaceDir(botId), "memory", name), redactSecretsInText(text), { mode: 0o600 });
+  listingScope?.delete(botId);
   indexWrittenMemoryFile(botId, `memory/${name}`);
   for (const listener of topicWriteListeners) {
     try { listener(botId, name); } catch { /* a listener never fails a write that succeeded */ }
@@ -965,7 +988,10 @@ export function memorySystemPrompt(botId: string, opts: { managedWrites?: boolea
     excerptBytes ?? "",
   ].join("|");
   const root = workspaceDir(botId);
-  const fingerprint = `${pathsFingerprint([join(root, "MEMORY.md")])}|${dirFingerprint(join(root, "memory"))}`;
+  // #4456: the topic files only: the daily log written after each turn
+  // (memory/log/) changed the folder's fingerprint at every turn, and every
+  // turn read the head of every topic file again to build the same block
+  const fingerprint = `${pathsFingerprint([join(root, "MEMORY.md")])}|${dirFingerprint(join(root, "memory"), isMemoryTopicName)}`;
   // #1950: reuse the MEMORY.md + topic index block while those files stay put.
   // Company memory is appended after the cache so one person's shared notes
   // never poison another bot's entry.

@@ -97,6 +97,41 @@ public struct HarnessCommandsAnswer: Decodable, Hashable, Sendable {
     }
 }
 
+/// `HarnessCommandAppAction`: the app's own action for a command it
+/// manages, run when the command is picked or typed (#4450). A managed
+/// command without one is never listed.
+public enum HarnessCommandAppAction: String, Hashable, Sendable {
+    case newChat, model, permissions, settings
+
+    static let claude: [String: HarnessCommandAppAction] = [
+        "clear": .newChat, "reset": .newChat, "new": .newChat,
+        "model": .model, "effort": .model, "fast": .model,
+        "permissions": .permissions, "allowed-tools": .permissions,
+        "config": .settings, "settings": .settings,
+    ]
+}
+
+extension HarnessCommand {
+    /// `harnessCommandAppAction`: nil for a command the engine runs, or one
+    /// the chat cannot run at all.
+    public var appAction: HarnessCommandAppAction? {
+        unavailable == .managed ? HarnessCommandAppAction.claude[name] : nil
+    }
+
+    /// `typedCommandAppAction`: the app action a typed `/clear` asks for,
+    /// checked against the bot's list when one was read.
+    public static func typedAppAction(_ message: String, commands: [HarnessCommand]) -> HarnessCommandAppAction? {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("/") else { return nil }
+        var name = String(trimmed.dropFirst().prefix { !$0.isWhitespace })
+        guard !name.isEmpty, !ComposerCommandNames.isSagax(name) else { return nil }
+        if name.lowercased().hasPrefix(ComposerCommandNames.enginePrefix) { name = String(name.dropFirst(ComposerCommandNames.enginePrefix.count)) }
+        if commands.isEmpty { return HarnessCommandAppAction.claude[name] }
+        let command = commands.first { $0.name == name } ?? commands.first { $0.aliases?.contains(name) == true }
+        return command?.appAction
+    }
+}
+
 // MARK: - Names
 
 public enum ComposerCommandNames {
@@ -353,7 +388,8 @@ public struct ComposerMenuItem: Hashable, Identifiable, Sendable {
     public var label: String
     public var description: String
     public var argumentHint: String?
-    public var unavailable: HarnessCommandUnavailable?
+    /// A command the app manages: picking it runs the app's own action.
+    public var appAction: HarnessCommandAppAction?
     /// In a room: the bot whose engine lists it.
     public var bot: MenuBot?
     /// In a room that names no single bot: the mention picking it adds.
@@ -374,16 +410,19 @@ public struct ComposerMenuItem: Hashable, Identifiable, Sendable {
     }
 
     /// `pickCommand`: what picking the row puts in place of the slash token.
-    /// Nil for a row the chat cannot run (it stays listed with its reason).
+    /// Nil for a row that runs the app's own action instead.
     public var insertion: String? {
         switch kind {
         case let .sagax(command): return command.insertion
         case .skill: return "\(label) "
         case .engine:
-            if unavailable != nil { return nil }
+            if appAction != nil { return nil }
             return "\(mentionPrefix ?? "")\(label) "
         }
     }
+
+    /// Picking the row does something: it inserts, or runs the app's action.
+    public var runs: Bool { insertion != nil || appAction != nil }
 }
 
 public enum ComposerCommandMenu {
@@ -407,15 +446,18 @@ public enum ComposerCommandMenu {
     }
 
     /// `composerCommandMenu`: Sagax's commands first, then the bot's skills,
-    /// then the engine's by group; within a group the closest names first,
-    /// what the chat cannot run last. An engine command a skill shadows is
-    /// left out: `/name` runs the skill.
+    /// then the engine's by group; within a group the closest names first.
+    /// A listed command runs (#4450): one the app manages runs the app's
+    /// action (`appActions`: the ones this screen runs), one the chat cannot
+    /// run is not listed. An engine command a skill shadows is left out:
+    /// `/name` runs the skill.
     public static func items(
         sagax: [SagaxSlashCommand],
         sagaxDescription: (SagaxSlashCommand) -> String = { _ in "" },
         sagaxHint: (SagaxSlashCommand) -> String? = { _ in nil },
         skills: [SlashSkill] = [],
         engine: [HarnessCommand],
+        appActions: Set<HarnessCommandAppAction> = [.newChat],
         query rawQuery: String
     ) -> [ComposerMenuItem] {
         let query = rawQuery.lowercased()
@@ -439,6 +481,8 @@ public enum ComposerCommandMenu {
         for (order, command) in engine.enumerated() {
             let label = ComposerCommandNames.label(command)
             if skillNames.contains(String(label.dropFirst())) { continue }
+            let appAction = command.appAction.flatMap { appActions.contains($0) ? $0 : nil }
+            if command.unavailable != nil, appAction == nil { continue }
             let names = [String(label.dropFirst()).lowercased(), command.name.lowercased()]
                 + (command.aliases ?? []).map { $0.lowercased() }
             guard let rank = rank(query, names: names, description: command.description) else { continue }
@@ -450,9 +494,9 @@ public enum ComposerCommandMenu {
             }
             ranked.append((ComposerMenuItem(
                 kind: .engine(command), key: "engine:\(command.name)", group: group, label: label,
-                description: command.description, argumentHint: command.argumentHint,
-                unavailable: command.unavailable
-            ), rank + (command.unavailable != nil ? 10 : 0), order))
+                description: command.description, argumentHint: appAction == nil ? command.argumentHint : nil,
+                appAction: appAction
+            ), rank, order))
         }
         let groupIndex = { (group: ComposerMenuItem.Group) in ComposerMenuItem.Group.allCases.firstIndex(of: group) ?? 0 }
         ranked.sort { a, b in
@@ -496,7 +540,8 @@ public enum ComposerCommandMenu {
         let perBot = limitPerBot(sets.count)
         for set in sets {
             var shown = 0
-            for var item in items(sagax: [], engine: set.commands, query: query) {
+            // a room's conversation is the room's: no bot starts a new one there
+            for var item in items(sagax: [], engine: set.commands, appActions: [], query: query) {
                 if shown >= perBot { break }
                 item.key = "bot:\(set.bot.id):\(item.key)"
                 item.bot = set.bot

@@ -28,8 +28,9 @@ import {
 } from "../peers/peer-roster.ts";
 import { requiresDecisionCard } from "../runtime/done-when.ts";
 import type { HandedOver } from "../runtime/coordinator-types.ts";
-import { openWorkEcho } from "../team-work/team-work.ts";
-import { workLabel } from "../team-work/work-label.ts";
+import { openWorkEcho, workRowsNamed } from "../team-work/team-work.ts";
+import { workEnd, workLabel } from "../team-work/work-label.ts";
+import { TEAM_WORK_WINDOW_MS, type TeamWorkEnded } from "../../shared/team-work.ts";
 import { botTurnLimit, COORDINATE_MESSAGE_MAX_CHARS } from "../../shared/turn-limits.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
@@ -113,6 +114,8 @@ export interface InternalBotChatCoordinator {
   outstandingFor(threadId: string): Array<{ id: string }>;
   /** #3463: the work this bot's turns handed out (the open names echoed). */
   handedOutBy?(botId: string, since: number): HandedOver[];
+  /** #4421: end a piece of work on these hand-overs (coordinate_bots end_work). */
+  endWork?(ids: readonly string[], ended: TeamWorkEnded): number;
 }
 
 /** One row of the runtime's status read (runtime/coordinator-types StatusView). */
@@ -677,6 +680,12 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       rooms, note: "Each bot uses its own environment and permissions. Files are not transferred: pass absolute paths only when accessible to the recipient, otherwise pass the content." });
   }
   if (method === "POST" && path === "/api/internal/coordinate-bots") {
+    const body = await readInternalBody();
+    // #4421: end_work closes a piece of work (done, or dropped, one line
+    // why) though steps of its plan were never handed out; nothing is sent
+    if (body && typeof body === "object" && (body as Record<string, unknown>).endWork !== undefined) {
+      return endNamedWork(opened, body as Record<string, unknown>, address.threadId);
+    }
     const parsed = z.object({
       groupId: z.string().min(1).max(128).optional(),
       botIds: z.array(z.string().min(1).max(128)).min(1).max(4).refine(ids => new Set(ids).size === ids.length),
@@ -703,7 +712,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       work: z.unknown().optional(),
       step: z.unknown().optional(),
       plan: z.unknown().optional(),
-    }).safeParse(await readInternalBody());
+    }).safeParse(body);
     if (!parsed.success) return json(res, 400, { error: `Provide 1-4 distinct botIds and a message of 1-${COORDINATE_MESSAGE_MAX_CHARS} characters.` });
     const oneWay = parsed.data.reply === "none";
     if (oneWay && (parsed.data.consult || parsed.data.mode === "consult")) {
@@ -963,6 +972,33 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     });
   }
   return PASS;
+}
+
+/** coordinate_bots with end_work (#4421): the named piece of work this
+ * bot's turns handed out for this person ends; each of its rows carries the
+ * end, so the person's panel no longer lists it (done: under Done today). */
+function endNamedWork(opened: OpenedBotChat, body: Record<string, unknown>, threadId: string): void {
+  const { res, json, coordinator, store, joinPerson, internalSender } = opened;
+  const name = typeof body.work === "string" ? body.work.trim() : "";
+  const ended = workEnd(body.endWork, Date.now());
+  if (!name || !ended) {
+    return json(res, 400, { error: "end_work takes work (the name of the piece of work) and end_work.outcome done or dropped, with end_work.why in one line." });
+  }
+  const person = joinPerson(threadId);
+  const rows = coordinator.handedOutBy?.(internalSender.id, Date.now() - TEAM_WORK_WINDOW_MS) ?? [];
+  const ids = workRowsNamed(rows, internalSender.id, person, name);
+  const echo = () => openWorkEcho(coordinator.handedOutBy?.bind(coordinator), internalSender.id, person,
+    (thread) => store.isConfidentialThread?.(thread) === true);
+  if (!ids.length || !coordinator.endWork) {
+    return json(res, 404, { error: `No piece of work named ${JSON.stringify(name)} was handed out from your turns for this person.`, ...echo() });
+  }
+  coordinator.endWork(ids, ended);
+  const where = ended.outcome === "done" ? "it shows under Done today on the person's panel" : "it left the person's panel";
+  return json(res, 200, {
+    message: `Ended ${JSON.stringify(name)} as ${ended.outcome}; ${where}. Nothing was sent to a teammate.`,
+    ended: { work: name, outcome: ended.outcome, ...(ended.why ? { why: ended.why } : {}) },
+    ...echo(),
+  });
 }
 
 /**

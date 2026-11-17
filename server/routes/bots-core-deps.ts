@@ -156,6 +156,8 @@ export interface BotsCoreRouteDeps {
     current: { selection?: ModelSelection; busy?: boolean } | undefined,
     requireAvailable: boolean,
     principal: string | null,
+    /** #4435: the bot's owner, whose own added accounts it may run on. */
+    accountUser?: string | null,
   ): { ok: true; selection: ModelSelection } | { ok: false; status: number; error: string };
   /** #4329 lot 5: the bot's model on the engine it runs with
    * (server/models/resolve-harness.ts). Absent in tests that do not need it. */

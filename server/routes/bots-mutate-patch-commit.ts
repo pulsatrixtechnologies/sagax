@@ -135,13 +135,13 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
       env.json(env.res, 404, { error: "no such task" });
       return;
     }
-    const checked = env.checkedModelSelection(normalizedSelection, { selection: current.modelSelection, busy: env.threadBusy(current.id, current.threadId) }, false, env.sessionPrincipal(env.auth));
+    const checked = env.checkedModelSelection(normalizedSelection, { selection: current.modelSelection, busy: env.threadBusy(current.id, current.threadId) }, false, env.sessionPrincipal(env.auth), env.effectiveBotOwner(current));
     if (!checked.ok) {
       env.json(env.res, checked.status, { error: checked.error });
       return;
     }
     if (freshBrowserBot && env.activeGroupTurnForBot(freshBrowserBot.id)) {
-      const groupChecked = env.checkedModelSelection(normalizedSelection, { selection: freshBrowserBot.modelSelection, busy: true }, false, env.sessionPrincipal(env.auth));
+      const groupChecked = env.checkedModelSelection(normalizedSelection, { selection: freshBrowserBot.modelSelection, busy: true }, false, env.sessionPrincipal(env.auth), env.effectiveBotOwner(freshBrowserBot));
       if (!groupChecked.ok) {
         env.json(env.res, groupChecked.status, { error: groupChecked.error });
         return;

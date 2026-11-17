@@ -421,6 +421,8 @@ const instanceConfigSchema = z.object({
   environment: z.record(z.string(), z.string()).optional(),
   enabled: z.boolean().optional(),
   access: z.enum(["subscription", "custom", "api"]).optional(),
+  // #4435: the person an added account belongs to (organization server)
+  ownerPrincipalId: optionalText,
   config: z.json().optional(),
 });
 const instanceConfigMapSchema = z.record(z.string(), instanceConfigSchema);
@@ -639,7 +641,7 @@ const appConfigSchema = z.object({
    * org-wide (an organization admin's only to change). */
   openaiCompatServers: z.record(z.string().max(80), z.object({
     key: optionalText,
-    ownerPrincipalId: z.string().trim().min(1).max(200).optional(),
+    ownerPrincipalId: optionalText,
   }).strict()).optional(),
   /** 2026-10-30 (lot 2): on a solo server, the models its person turned off
    * (`<engine>/<model>`, shared/offered-models.ts). */

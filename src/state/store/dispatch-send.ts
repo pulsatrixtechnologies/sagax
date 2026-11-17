@@ -12,6 +12,7 @@ import { voiceCallId } from "@/lib/call";
 import { devPodsTurnField } from "@/components/dev-pods/prefs";
 import { teamMemorySettled } from "@/lib/team-memory-settled";
 import { proactiveProposalBody } from "../../../shared/proactive-proposal";
+import { isFirstRunQuizCard } from "../../../shared/options-card";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../../shared/skill-request";
 import { terminalRequestBehavior } from "../../../shared/terminal-request";
 import { meetingRequestBehavior } from "../../../shared/meeting-request";
@@ -285,11 +286,16 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
                 });
               }
               if (inRoom) return;
-              persistCard(action.botId, action.messageId, { answered: action.answer, dismissed: true });
-              return api(`/api/bots/${action.botId}/messages`, {
-                method: "POST",
-                body: JSON.stringify({ text: action.answer, threadId: action.threadId }),
-              });
+              // #4475: the card is settled where it lives (its own thread)
+              // before the pick goes out as the person's message, so the
+              // turn that answer starts reads it answered and the bot's other
+              // questions still open; a bot's question keeps its card with
+              // the pick marked, only the first-run quiz is put away
+              return persistCard(action.botId, action.messageId, { answered: action.answer, ...(isFirstRunQuizCard(card) ? { dismissed: true } : {}) }, action.threadId)
+                .then(() => api(`/api/bots/${action.botId}/messages`, {
+                  method: "POST",
+                  body: JSON.stringify({ text: action.answer, threadId: action.threadId }),
+                }));
             })
             .catch((error) => {
               // settled already, elsewhere: the card shows the real outcome
@@ -335,7 +341,7 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
               body: JSON.stringify({ requestId: card.requestId, ...dismissResponse(card) }),
             }).catch(() => {});
           } else if (!inRoom) {
-            persistCard(action.botId, action.messageId, { dismissed: true });
+            persistCard(action.botId, action.messageId, { dismissed: true }, action.threadId);
           }
           break;
         }

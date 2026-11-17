@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { adminWillAnswerLine, ApprovalCard, approvalCardStaysInChat } from "./ApprovalCard";
+import { adminWaitingLine, adminWaitsOnServerRight, adminWillAnswerLine, ApprovalCard, approvalCardStaysInChat } from "./ApprovalCard";
 import { approvalWho } from "./PerspicaxOrgSettings";
 import { pendingApprovals, PendingApprovalPanel, spokenApprovalPrompt, type Pending } from "./PendingApproval";
 import type { Bot, Message } from "@/state/store";
@@ -793,6 +793,19 @@ describe("a card waiting for an organization admin (2026-10-08)", () => {
     );
     expect(adminWillAnswerLine([" "])).toContain("The organization's admins get it as a card in the chat of their Primary Bot.");
     expect(adminWillAnswerLine(undefined)).toContain("The organization's admins");
+  });
+  it("#4449: says the true reason it waits; only work on the shared host says it runs there", () => {
+    expect(adminWaitingLine("other-bot-act")).toContain("another person");
+    expect(adminWaitingLine("foreign-tool")).toContain("not yours");
+    expect(adminWaitingLine("host-tool")).toContain("shared server");
+    for (const reason of ["other-bot-act", "foreign-tool", "host-tool"]) {
+      expect(adminWaitingLine(reason)).not.toContain("This command runs on the organization's server");
+      expect(adminWaitsOnServerRight(reason)).toBe(false);
+    }
+    // an older server sends no reason: the server line it always had
+    expect(adminWaitingLine(undefined)).toContain("organization's server");
+    expect(adminWaitsOnServerRight("host-shell")).toBe(true);
+    expect(adminWaitsOnServerRight(undefined)).toBe(true);
   });
   it("shows the member's waiting card with that line, and what happens next", () => {
     const message = {

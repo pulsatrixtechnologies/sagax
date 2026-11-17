@@ -15,7 +15,9 @@ function personRunsEngine(principalId: string | null | undefined, instance: Sele
     speaker: { origin: "person", principalId: id },
     owner: { principalId: id, ...orgPersonFacts(host.principals.byId(id)) },
     instance: { instanceId: instance.instanceId, driver: instance.driverKind, installed: host.engineInstalled(instance.instanceId), keyOnly: host.keyOnlyInstance(instance.instanceId),
-      ...(host.personalProviderInstances.get(instance.instanceId) ? { keyProvider: host.personalProviderInstances.get(instance.instanceId)!.provider, personalOwner: host.personalProviderInstances.get(instance.instanceId)!.owner } : {}) },
+      ...(host.personalProviderInstances.get(instance.instanceId) ? { keyProvider: host.personalProviderInstances.get(instance.instanceId)!.provider, personalOwner: host.personalProviderInstances.get(instance.instanceId)!.owner } : {}),
+      // #4435: an added account runs for the person who added it only
+      ...(host.personalProviderInstances.ownerOf?.(instance.instanceId) ? { accountOwner: host.personalProviderInstances.ownerOf(instance.instanceId) } : {}) },
     subscriptionSignedIn: (pid, driver, instanceId) => host.engineLogins?.signedIn(pid, driver, "primary", instanceId) ?? false,
     subscriptionExpired: (pid, driver, instanceId) => host.engineLogins?.expired(pid, driver, "primary", instanceId) ?? false,
     hasKey: (sub, provider) => host.perspicaxDirectory?.providerKeys(sub).includes(provider) ?? false,

@@ -3,7 +3,7 @@
 // YAML frontmatter (`title`, `description`, `aliases`); aliases are the other
 // words someone might search with, which matters because every lookup here
 // is word matching, not meaning. Only the head of each file is read.
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { looksSealed } from "../encryption/content-file-crypto.ts";
@@ -82,15 +82,20 @@ export function topicBody(text: string): string {
 
 /** The heads of the topic files the prompt's index was last built from,
  * while each file is unchanged: every turn builds that index again. */
-const heads = new Map<string, { ino: number; size: number; mtimeMs: number; head: string }>();
+const heads = new Map<string, { ino: number; size: number; mtimeMs: number; ctimeMs: number; head: string }>();
 
 export function readTopicHead(path: string): string {
   let fd: number | undefined;
   try {
+    // #4456: an unchanged file costs one stat, not an open, a stat and a
+    // close: recall and the prompt's index read every topic's head each turn
+    const known = heads.get(path);
+    if (known) {
+      const seen = statSync(path);
+      if (known.ino === seen.ino && known.size === seen.size && known.mtimeMs === seen.mtimeMs && known.ctimeMs === seen.ctimeMs) return known.head;
+    }
     fd = openSync(path, "r");
     const stat = fstatSync(fd);
-    const known = heads.get(path);
-    if (known && known.ino === stat.ino && known.size === stat.size && known.mtimeMs === stat.mtimeMs) return known.head;
     const buffer = Buffer.alloc(HEAD_BYTES);
     const read = readSync(fd, buffer, 0, HEAD_BYTES, 0);
     // sealed at rest (server/encryption/content-at-rest.ts): a topic file is small, open it whole
@@ -98,7 +103,7 @@ export function readTopicHead(path: string): string {
       ? readAtRestSync(path, fd).subarray(0, HEAD_BYTES).toString("utf8")
       : buffer.subarray(0, read).toString("utf8");
     if (heads.size > 5_000) heads.clear();
-    heads.set(path, { ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, head });
+    heads.set(path, { ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, head });
     return head;
   } catch {
     return "";

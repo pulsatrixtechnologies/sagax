@@ -13,6 +13,7 @@ import {
   completedProposalResult,
   confirmationResult,
 } from "./shared.ts";
+import { teamMemoryWording } from "../../memory/team-memory-scope.ts";
 
 export const DEF_START_THREAD = {
     name: "start_thread",
@@ -323,8 +324,7 @@ export const DEF_PROPOSE_PROACTIVE = {
 
 export const DEF_PROPOSE_TEAM_MEMORY = {
     name: "propose_team_memory",
-    description:
-      "Propose something every bot on the team should know: who a person is (person), where something lives (place), what was decided (decision), or what a name means (term). Every addition or replacement waits for a member of this team, or an organization admin, to confirm its card before entering shared prompts. End the turn and do not claim it is remembered before confirmation; accepted facts stay unchanged until then.",
+    description: teamMemoryWording(false).toolDescription,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -337,6 +337,12 @@ export const DEF_PROPOSE_TEAM_MEMORY = {
       required: ["kind", "name", "detail"],
     },
   };
+
+/** #4460: on a server several people use, the entry goes to the bot
+ * owner's own memory (team-memory-scope.ts teamMemoryWording). */
+export function proposeTeamMemoryDef(personScoped: boolean): typeof DEF_PROPOSE_TEAM_MEMORY {
+  return personScoped ? { ...DEF_PROPOSE_TEAM_MEMORY, description: teamMemoryWording(true).toolDescription } : DEF_PROPOSE_TEAM_MEMORY;
+}
 
 export const DEF_NUDGE_PERSON = {
     name: "nudge_person",
@@ -686,7 +692,8 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
         aliases: Array.isArray(args.aliases) ? args.aliases.filter((alias) => typeof alias === "string") : undefined,
       }),
     });
-    return confirmationResult(r, `remembering ${entryName} for the team`, "entry");
+    // #4460: SAGAX_OWN_TEAM_MEMORY, as the tool's description (agents-catalog.ts)
+    return confirmationResult(r, `remembering ${entryName} ${teamMemoryWording(process.env.SAGAX_OWN_TEAM_MEMORY === "1").resultTarget}`, "entry");
   }
   return null;
 }

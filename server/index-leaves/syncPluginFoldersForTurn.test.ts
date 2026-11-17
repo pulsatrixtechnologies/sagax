@@ -15,7 +15,7 @@ import { readFolderSliced } from "../sandbox/sandbox-workspace-copy.ts";
 import { UserSandboxManager } from "../sandbox/user-sandbox-manager.ts";
 import type { SandboxdClient } from "../sandbox/user-sandbox-client.ts";
 import { createSyncPluginFoldersForTurn } from "./syncPluginFoldersForTurn.ts";
-import { createSyncPluginsForTurn, PLUGIN_COPY_TURN_WAIT_MS, pluginCopyForTurnStart } from "./syncPluginsForTurn.ts";
+import { createSyncPluginsForTurn, pluginCopyForTurnStart } from "./syncPluginsForTurn.ts";
 
 const root = mkdtempSync(join(tmpdir(), "sagax-plugin-turn-"));
 afterAll(() => removeTempDir(root));
@@ -292,11 +292,10 @@ describe("a plugin copy into an environment that takes minutes to start (#4394)"
       const startedAt = Date.now();
       let copied = false;
       const copy = syncPluginsForTurn("alice", "turn-1", "alice:bot-a").then(() => { copied = true; });
-      await pluginCopyForTurnStart(copy);
-      // the turn goes on after its bounded wait, the environment still starting
+      pluginCopyForTurnStart(copy);
+      // #4456: the turn goes on at once, the environment still starting
       const waited = Date.now() - startedAt;
-      expect(waited).toBeGreaterThanOrEqual(PLUGIN_COPY_TURN_WAIT_MS - 50);
-      expect(waited).toBeLessThan(PLUGIN_COPY_TURN_WAIT_MS + 1_500);
+      expect(waited).toBeLessThan(500);
       expect(copied).toBe(false);
       expect(env.markers.size).toBe(0);
 

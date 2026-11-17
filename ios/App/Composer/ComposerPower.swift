@@ -106,6 +106,11 @@ extension ChatView {
     /// `pickCommand`: the row's insertion replaces the slash token. A room's
     /// /goal goes in as typed text, which sends as a goal.
     func pickCommand(_ item: ComposerMenuItem) {
+        if let action = item.appAction {
+            power.commandMenuForced = false
+            runAppCommand(action)
+            return
+        }
         guard let context = slashContext, var insertion = item.insertion else { return }
         // /loop status and /loop stop run at once (`runLoopCommand`)
         if case let .sagax(command) = item.kind, command.runsAtOnce {
@@ -118,6 +123,17 @@ extension ChatView {
         power.commandMenuForced = false
         draft = context.trigger.replacing(in: draft, with: insertion)
         composerFocused = true
+    }
+
+    /// `runAppCommand` (useComposerCommands.ts): /clear, picked or typed in
+    /// a bot's own chat, is the header's New topic (#4450). The phone lists
+    /// only the managed commands it runs (`ComposerCommandMenu.items`).
+    @discardableResult
+    func runAppCommand(_ action: HarnessCommandAppAction) -> Bool {
+        guard action == .newChat, case let .bot(bot) = current else { return false }
+        draft = ""
+        session.startNewTopic(session.state.bot(bot.id) ?? bot)
+        return true
     }
 
     /// `runLoopCommand` (useComposerCommands.ts): /loop writes a routine for

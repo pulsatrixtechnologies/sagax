@@ -310,42 +310,39 @@ describe("bot profile page shell", () => {
     expect(barHtml).toContain(">Pepper<");
   });
 
-  it("regression #4078, #4420: a sub-page's link back is in the top bar, at its top left (the reference's leading back), the close button at the right after Share", () => {
+  it("regression #4470: a link to a sub-page's section opens the bot page with that sub-page as a modal over it, and no link back in the top bar", () => {
     for (const section of ["permissions", "soul", "model", "rules"] as const) {
       const html = render(section);
-      const bar = at(html, "data-bot-profile-topbar");
-      const close = at(html, "data-window-close");
-      const back = at(html, 'data-bot-profile-back=""');
-      const banner = at(html, 'data-bot-profile-banner=""');
-      const sub = at(html, "data-bot-profile-subpage=");
-      expect(sub, section).toBeGreaterThan(0);
-      // in the bar, first, before the condensed name; the X last, after Share (#4420)
-      expect(back, section).toBeGreaterThan(bar);
-      expect(back, section).toBeLessThan(at(html, 'data-bot-profile-condensed=""'));
-      expect(close, section).toBeGreaterThan(at(html, 'data-bot-profile-share=""'));
-      expect(close, section).toBeLessThan(banner);
-      expect(back, section).toBeLessThan(banner);
-      // one link back on the page: none left in the column above the title
-      expect(html.split('data-bot-profile-back=""').length - 1, section).toBe(1);
-      // the bar's labelled pill, Share's look
-      const tag = html.slice(html.lastIndexOf("<", back), html.indexOf(">", back) + 1);
-      for (const cls of CIRCLE_LABEL.split(" ")) expect(tag, section).toContain(cls);
-      // the place it left is closed up: the title opens the sub-page
-      expect(html, section).toMatch(/data-bot-profile-subpage="[^"]+" class="mt-4 [^"]*"><h2 data-bot-profile-subpage-title="" class="px-3 text-\[20px\]/);
+      const page = botProfileSubPageFor(section)!;
+      const modal = at(html, `data-bot-page-modal="page-${page}"`);
+      expect(modal, section).toBeGreaterThan(0);
+      // the page is all there under it: the banner, the tab row, the tab's cards
+      expect(at(html, 'data-bot-profile-banner=""'), section).toBeLessThan(modal);
+      expect(at(html, 'role="tablist"'), section).toBeLessThan(modal);
+      expect(at(html, 'data-bot-profile-panel="'), section).toBeLessThan(modal);
+      // the modal: the reference's frame, its centred header, the sub-page's cards
+      const tag = html.slice(html.lastIndexOf("<", modal), html.indexOf(">", modal) + 1);
+      expect(tag, section).toContain('role="dialog"');
+      expect(tag, section).toContain('aria-modal="true"');
+      for (const cls of ["rounded-[20px]", "w-[min(560px,calc(100vw-32px))]", "h-[min(700px,calc(100dvh-96px))]", "border-[0.5px]"]) expect(tag, section).toContain(cls);
+      expect(html.slice(modal), section).toMatch(/data-bot-page-modal-header=""[^>]*text-center[^>]*><h2 [^>]*text-\[22px\] font-medium leading-7/);
+      expect(html.slice(modal), section).toContain(`data-bot-profile-subpage="${page}"`);
+      // no link back left in the top bar; the X stays last, after Share (#4420)
+      expect(html, section).not.toContain("data-bot-profile-back");
+      expect(at(html, "data-window-close"), section).toBeGreaterThan(at(html, 'data-bot-profile-share=""'));
     }
-    // the tabs themselves have no link back
-    expect(render("overview")).not.toContain("data-bot-profile-back");
+    expect(render("overview")).not.toContain("data-bot-page-modal");
   });
 
   it("names the tabs, the header and the channels in French", () => {
     setLocale("fr");
     const html = render("overview");
     for (const label of [">Général<", ">Connaissances<", ">Analytique<", ">Apparence", ">Réglages<", ">Canaux<", ">Accès<", ">Plus<", ">Avant d&#x27;agir<", ">Quand il agit seul<"]) expect(html).toContain(label);
-    // the channels are in place on General (#3398); a sub-page's link back names its tab
+    // the channels are in place on General (#3398); a sub-page's modal is named in French (#4470)
     for (const label of [">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
     const rules = render("rules");
-    expect(rules).toContain('aria-label="Retour à Général"');
-    expect(rules).toMatch(/data-bot-profile-back=""[^>]*>[\s\S]*?Général<\/button>/);
+    expect(rules).toMatch(/data-bot-page-modal="page-rules"[\s\S]*?<h2 [^>]*>Règles<\/h2>/);
+    expect(rules).toContain('aria-label="Fermer"');
   });
 
   it("renders nothing when closed or when the bot is gone", () => {
@@ -379,10 +376,9 @@ describe("bot profile page shell", () => {
       const page = botProfileSubPageFor(section)!;
       expect(subPageOf(html), section).toBe(page);
       expect(html).toContain(`data-bot-profile-subpage="${page}"`);
-      // a sub-page is Back, a title (the Settings page title style, 20 px) and one line of intro, no tab row
-      expect(html).toContain("data-bot-profile-back");
-      expect(html).toMatch(/data-bot-profile-subpage-title=""[^>]*text-\[20px\]/);
-      expect(html).not.toContain('role="tablist"');
+      // #4470: a sub-page is a modal over the page (its title and intro in the header), the tab row under it
+      expect(html).toContain(`data-bot-page-modal="page-${page}"`);
+      expect(html).toContain('role="tablist"');
       expect(sectionHtml(html, section).open).toBe(true);
       for (const id of BOT_PROFILE_SUBPAGE_SECTIONS[page]) if (id !== "visibility") expect(sectionsOf(html)).toContain(id);
     }

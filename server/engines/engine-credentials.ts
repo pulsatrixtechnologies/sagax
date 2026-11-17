@@ -249,7 +249,9 @@ export interface EngineCredentialInput {
   owner: { principalId: string; sub?: string; disabled?: boolean };
   /** `keyOnly`: an API-key engine (`access: "api"`), which runs on a key
    * only, never on a person's subscription (#1533). */
-  instance: { instanceId: string; driver: string; installed: boolean; keyOnly?: boolean; keyProvider?: ModelProvider; personalOwner?: string };
+  /** `accountOwner` (#4435): an account a person added beside the
+   * provider's first one; only a turn that person pays for runs on it. */
+  instance: { instanceId: string; driver: string; installed: boolean; keyOnly?: boolean; keyProvider?: ModelProvider; personalOwner?: string; accountOwner?: string };
   /** A person other than the owner, by principal id (undefined: unknown). */
   person?: (principalId: string) => PersonFacts | undefined;
   /** The person signed in to this driver with their own subscription (D10). */
@@ -318,7 +320,10 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   // A disabled person's credentials serve nobody, and their turn (their
   // routines included) does not fall back on the organization either (S4-14).
   if (facts?.disabled) return { ok: false, reason: "no_access", cause: "payer_disabled", ...who };
-  if (input.instance.personalOwner && key(input.instance.personalOwner) !== key(payer.principalId)) return { ok: false, reason: "no_access", cause: "no_credentials", ...who };
+  // A person's own server or added account (#4435) runs for them alone:
+  // never another person's turn, routine or delegated hop, whoever's bot it is.
+  const ownedBy = input.instance.personalOwner ?? input.instance.accountOwner;
+  if (ownedBy && key(ownedBy) !== key(payer.principalId)) return { ok: false, reason: "no_access", cause: "no_credentials", ...who };
   const driver = input.instance.driver;
   const signedIn = Boolean(payer.principalId) && !input.instance.keyOnly && subscriptionDriver(driver) && input.subscriptionSignedIn(payer.principalId, driver, input.instance.instanceId);
   // An expired sign-in is skipped: the payer's key or the organization's

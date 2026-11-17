@@ -25,6 +25,9 @@ import {
   type GroupEngineCommands,
 } from "@/lib/composer-commands";
 import { useGroupHarnessCommands, useHarnessCommands } from "@/lib/harness-commands";
+import { useShowThreads } from "@/lib/thread-preferences";
+import { startNewTopic } from "@/state/store";
+import { typedCommandAppAction, type HarnessCommandAppAction } from "../../../shared/harness-commands";
 import { useSlashSkills } from "@/lib/use-slash-skills";
 import { LOOP_SUBCOMMANDS, loopRoutineName, type LoopCommand } from "@/lib/composer-loop";
 import { useMenuMotion } from "../MenuMotion";
@@ -378,10 +381,42 @@ export function useComposerCommands({
     editText("");
   };
 
+  /** A command the app manages (/clear, /model…), picked or typed: the
+   * app's own action for that bot, the same for a member on their own bot
+   * as for an admin (#4450). /clear is the chat's New chat. */
+  const showThreads = useShowThreads();
+  const runAppCommand = (action: HarnessCommandAppAction, target: Bot | undefined): boolean => {
+    if (!target) return false;
+    if (action === "newChat") {
+      if (group) return false;
+      if (showThreads) dispatch({ type: "newTask", botId: target.id });
+      else startNewTopic(dispatch, target);
+    } else {
+      const section = action === "settings" ? "overview" : action;
+      dispatch({ type: "toggleSettings", open: true, section, botId: target.id });
+    }
+    editText("");
+    setChannelMode("chat");
+    return true;
+  };
+
+  /** A typed `/clear` (or another managed command) sent in a bot's own
+   * chat runs the app's action instead of reaching the engine. */
+  const runTypedAppCommand = (message: string): boolean => {
+    if (group || !bot) return false;
+    const action = typedCommandAppAction(message, engineCommands.answer?.commands ?? []);
+    return action ? runAppCommand(action, bot) : false;
+  };
+
   const pickCommand = (item: ComposerMenuItem | undefined) => {
     if (!slash || !item) return;
-    // What the chat cannot run stays listed, with its reason, but inserts nothing.
-    if (item.kind === "engine" && item.unavailable) return;
+    if (item.kind === "engine" && item.appAction) {
+      setDismissedSlashAt(slash.start);
+      const target = item.bot ? storeBots.find((candidate) => candidate.id === item.bot!.id) ?? (members ?? []).find((candidate) => candidate.id === item.bot!.id) : bot;
+      runAppCommand(item.appAction, target);
+      return;
+    }
+    // A Sagax command with nothing to act on stays listed, with its reason, but inserts nothing.
     if (item.kind === "sagax" && item.command.unavailableReason) return;
     if (item.kind === "sagax" && item.command.id.startsWith("goal-")) {
       setDismissedSlashAt(slash.start);
@@ -422,6 +457,6 @@ export function useComposerCommands({
     mention, orgPeople, roomPeople, mentionAll, candidates,
     mentionEveryoneCount, mentionPickerOpen,
     commandMotion, mentionMotion,
-    pickMention, runGoalSubcommand, runLoopCommand, pickCommand,
+    pickMention, runGoalSubcommand, runLoopCommand, runTypedAppCommand, pickCommand,
   };
 }

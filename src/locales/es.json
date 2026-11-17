@@ -1854,5 +1854,9 @@
   "model.step.models": "{count} modelos",
   "model.step.oneModel": "1 modelo",
   "connectApps.scope.server": "Este servidor",
-  "connectApps.scope.serverNote": "Apps, servidores y plugins instalados en tu propio servidor, para todos tus bots."
+  "connectApps.scope.serverNote": "Apps, servidores y plugins instalados en tu propio servidor, para todos tus bots.",
+  "composer.commands.app.newChat": "Empezar una conversación nueva con este bot",
+  "composer.commands.app.model": "Abrir el modelo y el esfuerzo de este bot",
+  "composer.commands.app.permissions": "Abrir las aprobaciones de este bot",
+  "composer.commands.app.settings": "Abrir la configuración de este bot"
 }

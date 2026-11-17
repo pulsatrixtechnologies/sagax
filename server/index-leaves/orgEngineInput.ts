@@ -15,7 +15,9 @@ function orgEngineInput(bot: BotRecord, instance: { instanceId: string; driverKi
     peerOwnerPrincipalId: host.peerOwnerPrincipal(speaker),
     owner: { principalId: ownerId, ...host.orgPersonFacts(owner) },
     instance: { instanceId: instance.instanceId, driver: instance.driverKind, installed: host.engineInstalled(instance.instanceId), keyOnly: host.keyOnlyInstance(instance.instanceId),
-      ...(host.personalProviderInstances.get(instance.instanceId) ? { keyProvider: host.personalProviderInstances.get(instance.instanceId)!.provider, personalOwner: host.personalProviderInstances.get(instance.instanceId)!.owner } : {}) },
+      ...(host.personalProviderInstances.get(instance.instanceId) ? { keyProvider: host.personalProviderInstances.get(instance.instanceId)!.provider, personalOwner: host.personalProviderInstances.get(instance.instanceId)!.owner } : {}),
+      // #4435: an added account runs for the person who added it only
+      ...(host.personalProviderInstances.ownerOf?.(instance.instanceId) ? { accountOwner: host.personalProviderInstances.ownerOf(instance.instanceId) } : {}) },
     person: (principalId) => {
       const person = host.principals.byId(principalId);
       return person ? host.orgPersonFacts(person) : undefined;

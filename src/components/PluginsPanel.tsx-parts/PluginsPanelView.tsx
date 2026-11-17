@@ -47,7 +47,6 @@ import { accountConnectorRows, connectorGroups, type AccountConnectorRow } from 
 import { PublishedPagesSettings } from "../PublishedPages";
 import { MarketplacesSection } from "../plugins/MarketplacesSection";
 import { DataCenterDialog } from "../plugins/DataCenterDialog";
-import { usePageHost } from "../page-host";
 import { MacAppsInstalledSection } from "../plugins/MacAppsView";
 import { pluginSourceLabel, skillReadOnlyReason } from "./helpers";
 import { grokRowAction } from "./GrokConnectors";
@@ -662,7 +661,6 @@ function PluginsPanelFrame({
 }) {
   const dataCenterAnchor = useRef<HTMLElement | null>(null);
   dataCenterAnchor.current = dataCenterFor?.anchor ?? null;
-  const host = usePageHost();
   const dataCenter = dataCenterFor && (
     <DataCenterDialog
       name={dataCenterFor.item.name}
@@ -677,31 +675,6 @@ function PluginsPanelFrame({
       }}
     />
   );
-
-  if (host) {
-    // #4420: a page inside the host page (the bot's profile page), under
-    // the host's top bar (its link back, Share and close), in the same
-    // column, never the centred window. Escape steps back, then returns to
-    // the host page (usePluginsPanelState).
-    return (
-      <div
-        ref={dialogRef}
-        data-tour="apps-panel"
-        data-plugins-page={page.page}
-        data-plugins-scope={scope}
-        data-plugins-depth={stackDepth}
-        data-plugins-presentation="page"
-        role="region"
-        aria-labelledby="plugins-title"
-        tabIndex={-1}
-        className="absolute inset-0 z-30 flex min-h-0 flex-col bg-app outline-none"
-      >
-        {host.header}
-        <div className={cn(CATEGORY_MODAL.content, "mx-auto w-full max-w-[920px]")}>{content}</div>
-        {dataCenter}
-      </div>
-    );
-  }
 
   return (
     <div

@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandedOver, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
 import type { WorkOrigin } from "./peers/peer-provenance.ts";
-import type { TeamWorkLabel } from "../shared/team-work.ts";
+import type { TeamWorkEnded, TeamWorkLabel } from "../shared/team-work.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, continuationLine, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";
 import { importLegacyDelegations, importLegacyHandoffs, type LegacyThreadResolver } from "./runtime/import-legacy.ts";
@@ -157,6 +157,21 @@ export function handedOver(a: Assignment): HandedOver {
     ...(a.person !== undefined ? { person: a.person } : {}),
     ...(a.work !== undefined ? { work: a.work } : {}),
   };
+}
+
+/** #4421: the end of a piece of work, written on the work label of each of
+ * these rows (display only: nothing is stopped, lineage and outcomes never
+ * read it). Answers the rows written. */
+export function endWorkRows(store: Pick<RuntimeStore, "get" | "update">, ids: readonly string[], ended: TeamWorkEnded): Assignment[] {
+  const rows: Assignment[] = [];
+  for (const id of new Set(ids)) {
+    const row = store.get(id);
+    if (!row) continue;
+    const next: Assignment = { ...row, work: { ...row.work, ended } };
+    store.update(next);
+    rows.push(next);
+  }
+  return rows;
 }
 
 /** #3461: the requester bots whose hand-overs are among these changed rows
@@ -306,6 +321,15 @@ export class RuntimeCoordinator implements Coordinator {
   handedOutBy(botId: string, since: number): HandedOver[] {
     this.ready();
     return this.store.handedOutBy(botId, since).map(handedOver);
+  }
+
+  endWork(ids: readonly string[], ended: TeamWorkEnded): number {
+    this.ready();
+    const rows = endWorkRows(this.store, ids, ended);
+    // the panel of that orchestrator and person reads its work again
+    const changes = handedOutChanges(rows);
+    if (changes.length) this.host.handedOutChanged?.(changes);
+    return rows.length;
   }
 
   // ── enqueue ──────────────────────────────────────────────────────────

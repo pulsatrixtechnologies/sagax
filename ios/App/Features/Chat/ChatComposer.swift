@@ -53,6 +53,13 @@ extension ChatView {
             runLoopCommand(loop)
             return
         }
+        // A typed "/clear" in a bot's own chat is the app's New topic, never
+        // a message the engine refuses (useComposerSend.ts, #4450).
+        if explicitText == nil, outgoingAttachments.isEmpty, case let .bot(bot) = chatAtSend,
+           let action = HarnessCommand.typedAppAction(text, commands: power.commands(botId: bot.id, threadId: bot.threadId)?.commands ?? []),
+           runAppCommand(action) {
+            return
+        }
         // A room's typed "/goal …" runs as a bounded team goal.
         var words = text
         var goal = false

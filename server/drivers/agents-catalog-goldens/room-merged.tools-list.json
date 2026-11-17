@@ -289,12 +289,31 @@
                 "step"
               ]
             }
+          },
+          "end_work": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional, with work and without bot_ids or message: end that piece of work though steps of its plan were never handed out (finished another way, taken over elsewhere, stopped). It leaves the person's panel; nothing is sent. A later step under the same work name opens it again.",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "done",
+                  "dropped"
+                ],
+                "description": "done: the work is finished. dropped: it will not be finished."
+              },
+              "why": {
+                "type": "string",
+                "description": "One line why (120 characters)."
+              }
+            },
+            "required": [
+              "outcome"
+            ]
           }
         },
-        "required": [
-          "bot_ids",
-          "message"
-        ]
+        "required": []
       }
     },
     {

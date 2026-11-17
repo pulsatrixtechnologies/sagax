@@ -331,7 +331,13 @@ export class PersonConnections {
         raw = readFileSync(join(principalDir(this.dataDir, principalId), LEGACY_FILE), "utf8");
         legacy = true;
       } catch (oldError) {
-        if ((oldError as NodeJS.ErrnoException).code === "ENOENT") return emptyDocument();
+        if ((oldError as NodeJS.ErrnoException).code === "ENOENT") {
+          // #4456: a person with no saved connections is read many times a
+          // turn: kept like a saved document, until this store writes one
+          const empty = emptyDocument();
+          this.cache.set(principalId, empty);
+          return structuredClone(empty);
+        }
         throw new PersonConnectionsError("Your saved connections could not be read.", "store_unavailable", 503);
       }
     }

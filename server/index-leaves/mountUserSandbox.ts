@@ -17,6 +17,8 @@ function mountUserSandbox(   integrations: NonNullable<SendTurnInput["integratio
   // and say the Mac is offline (2026-11-06).
   if (decision.principal && !integrations.messages && host.IDENTITY.kind === "perspicax" && host.desktopBridges.macAppsOn(decision.principal).length) {
     integrations.messages = host.messagesIntegration(input.botId, input.threadId, input.generation, decision.principal);
+    // #4449: the person's own Mac: their card, never an admin's
+    host.turnWorkplaces.get(input.threadId).messagesPrincipal = decision.principal;
   }
   if (!input.customMcp || !decision.principal) return;
   // 2026-10-16: the servers Sagax mounts here are the person's environment

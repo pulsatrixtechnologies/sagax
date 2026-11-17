@@ -65,9 +65,8 @@ export function MemoryManagerPanel() {
   const linkRoutines = state.routines;
   const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const close = useCallback(() => dispatch({ type: "toggleMemoryManager", open: false }), [dispatch]);
-  // #4420: opened from the bot's profile page, Memory is a page of that
-  // page: the host's top bar (its link back, Share and close) replaces the
-  // window strip and this page's own close.
+  // #4420, #4470: opened from the bot's profile page, Memory is drawn in
+  // that page's modal: no window strip, and its own close closes the modal.
   const host = usePageHost();
   const mac = useMemo(() => isMacPlatform(), []);
 
@@ -206,7 +205,7 @@ export function MemoryManagerPanel() {
 
   // ---- render ----------------------------------------------------------------------------
 
-  // the host page is the <main>: hosted, this page is a region of it
+  // the host page is the <main>: hosted, this page is a section of it
   const Shell = host ? "section" : "main";
 
   const viewOptions = [
@@ -217,8 +216,8 @@ export function MemoryManagerPanel() {
   ];
 
   return (
-    <Shell className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink" data-memory-manager-page="" data-memory-manager-panel="" data-memory-manager-presentation={host ? "page" : undefined} aria-label={host ? t("memoryManager.title") : undefined}>
-      {host ? host.header : <PageTopStrip />}
+    <Shell className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink" data-memory-manager-page="" data-memory-manager-panel="" data-memory-manager-presentation={host ? "modal" : undefined} aria-label={host ? t("memoryManager.title") : undefined}>
+      {!host && <PageTopStrip />}
       <PageHeader
         name="memory"
         icon={Brain}
@@ -261,11 +260,9 @@ export function MemoryManagerPanel() {
               )}
             </div>
           </details>
-          {!host && (
-            <button type="button" aria-label={t("memoryManager.close")} title={t("memoryManager.close")} className={PAGE_HEADER_BUTTON} onClick={close}>
-              <X size={16} />
-            </button>
-          )}
+          <button type="button" aria-label={t("memoryManager.close")} title={t("memoryManager.close")} className={PAGE_HEADER_BUTTON} onClick={host?.onClose ?? close}>
+            <X size={16} />
+          </button>
         </>}
         primaryStyle={noDragStyle}
         primary={<>

@@ -6,7 +6,6 @@ import { buildPluginItems, type PluginItem } from "@/lib/plugins-model";
 import { GROK_CLOUD_CONNECTORS } from "../../shared/grok-cloud-connectors";
 import { grokConnectorDetail, grokRowAction, openGrokConnectors } from "./PluginsPanel";
 import { ConnectAppsView, type ConnectAppsViewProps } from "./plugins/ConnectAppsView";
-import { PageHostProvider } from "./page-host";
 import { DiscoverView, type DiscoverViewProps } from "./plugins/DiscoverView";
 import { discoverItems } from "@/lib/installed-model";
 import { PluginDetailView } from "./plugins/PluginDetailView";
@@ -33,20 +32,6 @@ describe("Plugins panel views", () => {
     tab: "discover", onTab: noop, kind: "connectors", kindCounts: { skills: 3, connectors: 2, plugins: 0 }, refreshing: false, onRefresh: noop,
     discover: createElement(DiscoverView, discoverProps), installed: "INSTALLED", pages: "PAGES", sources: "SOURCES", ...overrides,
   }));
-
-  // #4420 review: as a page of the bot page (bg-app ground), a row of the
-  // window kept the window's tinted ground (bg-inset), a grey strip wider
-  // than the column's text edge. #4453: the head is no longer a sticky strip
-  // at all: nothing of it paints the window's tint, in a window or a page.
-  it("regression #4420: under a host page no strip of the window's tint", () => {
-    const search = createElement("input", { "data-plugins-search": "" });
-    const hosted = renderToStaticMarkup(createElement(PageHostProvider, { value: { header: null } }, createElement(ConnectAppsView, {
-      tab: "discover", onTab: noop, refreshing: false, onRefresh: noop, search,
-      discover: "DISCOVER", installed: "INSTALLED", pages: "PAGES", sources: "SOURCES",
-    })));
-    expect(hosted).not.toContain("bg-inset");
-    expect(page({ search })).not.toContain("bg-inset");
-  });
 
   it("#4453: Connect Apps is three kind tabs with their counts, Yours and Discover, the scope, the one search and Add; Bots, Pages and Sources under \"...\"", () => {
     const html = page({ tab: "installed", search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }), manageActions: createElement("button", { "data-test-add": "" }) });

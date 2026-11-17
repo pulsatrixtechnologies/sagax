@@ -6,7 +6,7 @@ import { cwToolResult, commandSummary, toolDetailPreview } from "../../tools/too
 import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
 import { acpLateToolInput, acpToolEndEvents } from "./tool-items.ts";
 import { allocUnkeyedToolSeq, nextUnkeyedToolId, trackRunningTool } from "./helpers.ts";
-import { noteTurnActivity } from "./turn-latency.ts";
+import { noteTurnActivity, noteTurnShown } from "./turn-latency.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 
 export type StreamHandlerDeps = {
@@ -130,6 +130,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
                     !trimmed.startsWith("The following is a <SYSTEM_MESSAGE") &&
                     !trimmed.startsWith("<SYSTEM_NOTIFICATION")) {
                   emit({ ...base(threadId, current.turnId), type: "content.delta", streamKind: "assistant_text", delta });
+                  noteTurnShown(current.latency, Date.now());
                 }
               }
               break;

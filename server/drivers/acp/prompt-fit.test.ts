@@ -175,7 +175,8 @@ describe("an opening prompt the size of the one in #3510", () => {
     { id: "threads", label: "Threads", text: THREADS_PROMPT },
     { id: "routine", label: "Routines", text: ROUTINE_PROMPT },
     { id: "perspicax", label: "Perspicax", text: PERSPICAX_CONVENTIONS_PROMPT },
-    { id: "claude-ai", label: "Connectors", text: filler("connectors", 6_000) },
+    // 5_800, was 6_000: the rules grew by 81 bytes (#4456) and this fixture sat on the edge of leaving out a third section
+    { id: "claude-ai", label: "Connectors", text: filler("connectors", 5_800) },
     { id: "skills", label: "Skills index", text: filler("skills", 14_000) },
     { id: "memory", label: "Memory", text: filler("memory", 8_000) },
     { id: "recall", label: "Recall", text: filler("recall", 4_000) },

@@ -95,9 +95,12 @@ describe("prompt size by engine and turn kind (#1997)", () => {
       // table for records' line; the routine prompt measures 14206 bytes
       // (files engines), the 60 % cap leaves about 130 bytes of margin. Room 53500
       // to 53700 and 48100 to 48300 for the same rule in RICH_OUTPUT_PROMPT.
+      // Raised again (routine 23900 to 24000, #4456): "How you work" now asks for a
+      // first sentence before the first tool call (81 bytes); the routine prompt
+      // measures 14400 bytes (files engines) and 14175 (others, 23500 to 23700, room 48300 to 48400); room 53700 to 53800 for the same line.
       const before = engineWorksInFiles(engine)
-        ? { chat: 62102, routine: 23900, room: 53700, "sub-agent": 59893 }
-        : { chat: 56278, routine: 23500, room: 48300, "sub-agent": 54069 };
+        ? { chat: 62102, routine: 24000, room: 53800, "sub-agent": 59893 }
+        : { chat: 56278, routine: 23700, room: 48400, "sub-agent": 54069 };
       expect(bytes).toBeLessThanOrEqual(before[kind] * 0.6);
       const oldSkills = engineWorksInFiles(engine) ? 30306 : 25249;
       expect(skills.index.bytes).toBeLessThanOrEqual(oldSkills * 0.6);

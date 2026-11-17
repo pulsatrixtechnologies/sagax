@@ -130,6 +130,11 @@ describe("scopes", () => {
       ["POST", "/api/bots/b/secret-cards/m-1/product-key"],
     ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("client");
     expect(requiredScope("POST", "/api/me/perspicax/products")).toBe("admin");
+    // #4460: team memory is the caller's own (the handler keys every read and write by caller)
+    for (const [method, path] of [
+      ["GET", "/api/team-memory"], ["POST", "/api/team-memory"],
+      ["PATCH", "/api/team-memory/entry_1"], ["DELETE", "/api/team-memory/entry_1"],
+    ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("client");
     expect(requiredScope("GET", "/api/me/perspicax/products/cw-1/key")).toBe("admin");
   });
   // #3471: a question in words of the person's own conversation is marked
@@ -230,10 +235,6 @@ describe("scopes", () => {
       ["POST", "/api/bots/x/skills"], ["PATCH", "/api/bots/x/skills/s"],
       ["PATCH", "/api/bots/x/model"], ["GET", "/api/teams/scout"], ["POST", "/api/org-library/add"],
       ["PUT", "/api/section-context"], ["GET", "/api/threads/t/events"],
-      // shared team memory: direct reads and writes stay admin; a member only
-      // answers the team-memory card of their own team (the respond routes)
-      ["GET", "/api/team-memory"], ["POST", "/api/team-memory"],
-      ["PATCH", "/api/team-memory/entry_1"], ["DELETE", "/api/team-memory/entry_1"],
       ["POST", "/api/mcp/servers"], ["PATCH", "/api/mcp/servers/x"], ["DELETE", "/api/mcp/servers/x"], ["POST", "/api/connectors/slack/authorize"],
       ["POST", "/api/bots/x/slack-management"], ["GET", "/api/bots/x/slack-management/extra"],
       ["PUT", "/api/config"], ["POST", "/api/auth/pairing"], ["GET", "/api/auth/sessions"], ["DELETE", "/api/auth/sessions/abc"],

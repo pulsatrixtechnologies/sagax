@@ -245,17 +245,16 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     expect(answerLearningNote([], [])).toBeUndefined();
   });
 
-  it("an item's number, id or date may change; an amount, a level or a quantity is part of the question", () => {
+  it("only an item's number may change; an amount, a level, a quantity or a date is part of the question", () => {
     const covers = (chosenOn: string, asked: string) => {
       const ledger = ledgerOn(tempDir());
       rememberAlwaysChoice(ledger, SCOPE, { kind: "ticket", question: chosenOn, options: ["Oui", "Non"], answer: "Oui" });
       return alwaysChoiceOn(ledger, SCOPE, "ticket", asked, ["Oui", "Non"]) !== null;
     };
-    // the item's number, an id, a date: the same question
+    // the item's number or id: the same question
     expect(covers("Fermer le billet 1013 ?", "Fermer le billet 1014 ?")).toBe(true);
     expect(covers("Close ticket #1013?", "Close ticket #2077?")).toBe(true);
     expect(covers("Fermer le billet INC0012 ?", "Fermer le billet INC0457 ?")).toBe(true);
-    expect(covers("Reporter au 2026-11-17 ?", "Reporter au 2026-12-02 ?")).toBe(true);
     expect(covers("チケット1013を閉じますか？", "チケット1014を閉じますか？")).toBe(true);
     // an amount, a level, a quantity: another question, the card goes back to the person
     expect(covers("Rembourser 50 $ ?", "Rembourser 5000 $ ?")).toBe(false);
@@ -277,6 +276,13 @@ describe("\"Always do this for this routine\" after three identical answers", ()
     // a level, a size or a model written in one piece counts
     expect(covers("Passer au palier Tier2 ?", "Passer au palier Tier9 ?")).toBe(false);
     expect(covers("Redimensionner la VM en D4s_v5 ?", "Redimensionner la VM en D64s_v5 ?")).toBe(false);
+    // a date counts, in digits as in words (a month or a day in words is text)
+    expect(covers("Reporter au 2026-11-17 ?", "Reporter au 2026-12-02 ?")).toBe(false);
+    expect(covers("Reporter au 17/11/2026 ?", "Reporter au 02/12/2026 ?")).toBe(false);
+    expect(covers("Reporter au 3 décembre ?", "Reporter au 30 juin ?")).toBe(false);
+    expect(covers("Reporter au 3 décembre ?", "Reporter au 30 décembre ?")).toBe(false);
+    expect(covers("Postpone to December 3?", "Postpone to June 30?")).toBe(false);
+    expect(covers("Fermer le billet 1013 du 3 décembre ?", "Fermer le billet 1014 du 3 décembre ?")).toBe(true);
     // a version is not a date
     expect(covers("Mettre à jour vers 10.4.12 ?", "Mettre à jour vers 10.4.13 ?")).toBe(false);
   });

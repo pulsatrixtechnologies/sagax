@@ -465,13 +465,13 @@ An "always" answer is the person's, never the routine's text:
     factura, incidente, caso, expediente, chamado, fatura, тікет, заявка,
     інцидент, справа, टिकट, चालान, घटना, チケット, 請求書, インシデント, 案件, 工单, 工單, 发票, 發票,
     事件, 案例 (a word that is also a verb or another common word, "order",
-    "commande", "fall", is left out);
-  - a full date in digits (year, month and day: 2026-11-17, with its time
-    when it has one, 17/11/2026).
+    "commande", "fall", is left out).
 
   Every other number is part of the question: an amount, a level or a size
   (Tier2, D4s_v5), a quantity, a time or a duration (1:30), a version
-  (10.4.12). "always Oui" on "Fermer le billet 1013 ?" covers "Fermer le
+  (10.4.12), a date in digits or in words (a month or a day written in words
+  is part of the text compared: "Reporter au 3 décembre ?" never covers
+  "Reporter au 30 juin ?"). "always Oui" on "Fermer le billet 1013 ?" covers "Fermer le
   billet 1014 ?", never "Facturer le billet 1014 au client ?";
   "Rembourser 50 $ ?" never covers "Rembourser 5000 $ ?", "Payer la facture
   500 $ ?" never "50000 $", "niveau 1" never "niveau 3", "2 licences" never
@@ -507,8 +507,8 @@ An "always" answer is the person's, never the routine's text:
   before More: the question, what it covers ("This question for any item of
   this kind, with Oui · Non"), when it was chosen, the answer and Remove;
   never a key. Its help says it in one sentence: only the item's number
-  (after its word or after #) or a full date may change; any other number
-  asks again. Nothing shows when there is none.
+  (after its word or after #) may change; any other number, a date
+  included, asks again. Nothing shows when there is none.
   `GET /api/routines/:id/always-choices` lists them and
   `DELETE /api/routines/:id/always-choices/:id` removes one for good, for the
   routine's person only (another person, an admin included, gets 404).

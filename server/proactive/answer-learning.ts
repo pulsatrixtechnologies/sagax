@@ -227,25 +227,19 @@ const ITEM_NUMBER = new RegExp(`(?<![\\p{L}])(${ITEM_WORDS.join("|")})\\s*(\\p{L
 /** A money, unit, percent or duration mark next to the number: then it is
  * an amount or a quantity, never the item's id ("facture 500 $"). */
 const NEAR_UNIT = /^\s*(?:[$€£¥₹₴%円元件個个時分日月年]|(?:usd|cad|eur|euros?|dollars?|k|m|h|hrs?|hours?|heures?|min|mins|minutes?|s|secs?|seconds?|secondes?|days?|jours?|weeks?|semaines?|months?|mois|years?|ans?|années?|gb|go|mb|mo|tb|to|kg|g|km|units?|unités?)(?![\p{L}\p{N}]))/iu;
-/** A full date written with digits (year, month and day), with its time
- * when it has one: 2026-11-17, 2026-11-17T09:30, 17/11/2026. Nothing else
- * that looks like a date: an h:mm alone is a time or a duration and counts,
- * a version (10.4.12) counts. */
-const FULL_DATE = /(?<![\p{N}.])(?:\d{4}-\d{1,2}-\d{1,2}(?:[t ]\d{1,2}:\d{2}(?::\d{2})?)?|\d{1,2}[/.]\d{1,2}[/.]\d{4}|\d{4}\/\d{1,2}\/\d{1,2})(?![\p{N}.])/gu;
-
 /** #4558: a question's words without what names one item, case and spacing
  * ignored: a number or id right after an explicit id mark (#1013, n° 1013),
- * a bare whole number or a letter-led id right after an item word (billet
- * 1013, ticket INC0012) with no money, unit, percent or duration mark next
- * to it, and a full date in digits. Every other number stays part of the
- * question: an amount ("Payer la facture 500 $ ?"), a level ("Tier2",
- * "niveau 1"), a quantity ("2 licences"), a time or a duration ("1:30").
+ * and a bare whole number or a letter-led id right after an item word
+ * (billet 1013, ticket INC0012) with no money, unit, percent or duration
+ * mark next to it. Every other number stays part of the question: an amount
+ * ("Payer la facture 500 $ ?"), a level ("Tier2", "niveau 1"), a quantity
+ * ("2 licences"), a time or a duration ("1:30"), a date in digits or in
+ * words ("Reporter au 3 décembre ?" is not "Reporter au 30 juin ?").
  * "Fermer le billet 1013 ?" and "Fermer le billet 1014 ?" are one question
  * asked of two items; "Rembourser 50 $ ?" and "Rembourser 5000 $ ?" are two.
  * In doubt the number counts: the card goes back to the person. */
 export function questionShape(question: string): string {
   return same(question)
-    .replace(FULL_DATE, "<date>")
     .replace(MARKED_ID, "<id>")
     .replace(ITEM_NUMBER, (match: string, word: string, value: string, offset: number, whole: string) =>
       /^\d/.test(value) && NEAR_UNIT.test(whole.slice(offset + match.length)) ? match : `${word} <id>`);

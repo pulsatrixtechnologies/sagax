@@ -720,7 +720,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         {/* One centred column, the reference's reading width (920px, 32px
             gutters, #4420), a 16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[920px] flex-col px-4 pb-12 sm:px-8">
-          <BotProfileHeader bot={bot} derived={derived} hero={hero} />
+          <BotProfileHeader bot={bot} hero={hero} />
 
           <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} attention={tabAttention} />
 

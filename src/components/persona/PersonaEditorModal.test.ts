@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot, BotSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
 import { CIRCLE_CLOSE_BUTTON, CIRCLE_LABEL } from "@/lib/circle-button";
-import { MASCOT_HERO_SIZE } from "@/components/floating-bots/MascotLookPreview";
+import { MASCOT_HERO_SIZE, MASCOT_RING_SIZE } from "@/components/floating-bots/MascotLookPreview";
 
 const fixture = vi.hoisted(() => ({
   state: {} as Partial<AppState>,
@@ -172,22 +172,27 @@ describe("bot profile page shell", () => {
     const html = render("overview");
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(tabs).toBeGreaterThan(0);
-    for (const marker of ['data-bot-profile-title=""', 'data-bot-profile-label=""', 'data-bot-profile-description=""']) {
+    for (const marker of ['data-bot-profile-title=""', 'data-bot-profile-label=""']) {
       expect(at(html, marker)).toBeGreaterThan(0);
       expect(at(html, marker)).toBeLessThan(tabs);
     }
     expect(tabsOf(html).length).toBeLessThanOrEqual(5);
-    // the name alone on its line, the label under it, smaller and secondary (the owner, never "Name · Label")
+    // ONE line "Name · Label" (the owner 2026-11-17, as the reference): the name, a separator, the label, secondary
     const title = html.slice(at(html, 'data-bot-profile-title=""'), at(html, 'data-bot-profile-label=""'));
     expect(title).toContain(">Pepper<");
+    expect(title).toContain("data-bot-profile-separator");
     expect(title).not.toContain("Research");
-    expect(title).not.toContain(">·<");
     const label = html.slice(at(html, 'data-bot-profile-label=""'), at(html, 'data-bot-profile-audience'));
     expect(label).toContain(">Research<");
     expect(label).toContain("text-ink-secondary");
-    expect(label).toContain("text-[14px]");
-    // the description, edited in place
-    expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*>Finds sources\.<\/textarea>/);
+    // the label sits inside the heading, on its line, and shrinks first
+    const heading = html.slice(at(html, 'data-bot-profile-title=""'), at(html, 'data-bot-profile-audience'));
+    expect(heading.indexOf("</h2>")).toBeGreaterThan(heading.indexOf('data-bot-profile-label=""'));
+    expect(label).toContain("min-w-0 shrink");
+    // no description line in the header, even when the bot has one (the bot changes it when asked)
+    expect(html).not.toContain("data-bot-profile-description");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("Finds sources.");
     // each tab is a panel of ONE column (the owner 2026-11-06: no two-column grid)
     for (const tab of ["general"]) {
       const panel = html.slice(at(html, `id="bot-profile-panel-${tab}"`), at(html, `id="bot-profile-panel-${tab}"`) + 400);
@@ -223,17 +228,17 @@ describe("bot profile page shell", () => {
     expect(html).not.toContain("data-bot-profile-appearance-toggle");
   });
 
-  it("regression: nothing of the Appearance shows on General, the description then the tabs (the owner 2026-11-06)", () => {
+  it("regression: nothing of the Appearance shows on General, the audience line then the tabs (the owner 2026-11-06)", () => {
     const html = render("overview");
     for (const marker of ["data-mascot-color", "data-bot-profile-colors", "data-appearance-modes", "data-appearance-mode=", "data-appearance-reset", "data-mascot-randomize", "data-appearance-tabs"]) {
       expect(html).not.toContain(marker);
     }
     for (const word of [">Generate<", ">Upload<", ">Reset<", ">Randomize<"]) expect(html).not.toContain(word);
-    // straight from the description to the General / Appearance / Knowledge / Stats tabs
-    const description = at(html, 'data-bot-profile-description=""');
+    // straight from the audience line to the General / Appearance / Knowledge / Stats tabs
+    const audience = at(html, "data-bot-profile-audience");
     const tabs = at(html, 'data-bot-profile-tabs=""');
-    expect(description).toBeGreaterThan(0);
-    expect(html.slice(description, tabs)).not.toContain("<button");
+    expect(audience).toBeGreaterThan(0);
+    expect(html.slice(audience, tabs)).not.toContain("<button");
   });
 
   it("carries no gear: the bot's settings are its tabs and the bot panel's (#2173)", () => {
@@ -255,7 +260,7 @@ describe("bot profile page shell", () => {
     expect(banner).toBeLessThan(hero);
     expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner h-\[124px\] /i);
     // the mascot over the banner's lower edge, at the left of the column
-    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[50px\] flex flex-col items-start/);
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[35px\] flex flex-col items-start/);
     const heroHtml = html.slice(hero, audience);
     expect(heroHtml).toContain("data-mascot-hero");
     // no card: no border, no panel, no tinted ground around the mascot
@@ -264,10 +269,14 @@ describe("bot profile page shell", () => {
     for (const cls of ["border", "rounded-2xl", "radial-gradient", "bg-panel", "p-4"]) expect(card).not.toContain(cls);
     expect(card).toContain("items-start");
     expect(card).not.toContain("items-center");
-    // the hero size (#4420: 96px mascot in a 100px frame) and clipped to it
+    // the reference's avatar (owner 2026-11-17): 64px mascot in a 3px ring of the page colour (70px plate), this page only
+    const ring = /<span[^>]*data-mascot-ring=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
+    expect(ring).toContain("size-[70px]");
+    expect(ring).toContain("rounded-full");
+    expect(ring).toContain("bg-app");
     const stage = /<button[^>]*data-mascot-stage=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
-    expect(stage).toContain(`width:${MASCOT_HERO_SIZE + 4}px`);
-    expect(stage).toContain("overflow-hidden");
+    expect(stage).toContain(`width:${MASCOT_RING_SIZE}px`);
+    expect(stage).not.toContain("overflow-hidden");
     // name (26px, #4420) then the label, left-aligned, inside the hero, before who sees it
     const heading = at(html, "data-mascot-heading");
     const title = at(html, 'data-bot-profile-title=""');
@@ -277,11 +286,11 @@ describe("bot profile page shell", () => {
     expect(title).toBeLessThan(label);
     expect(label).toBeLessThan(audience);
     expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-start text-left text-\[26px\] font-medium/);
+    expect(MASCOT_HERO_SIZE).toBeGreaterThan(MASCOT_RING_SIZE);
     // no button row nor summary in the header: they head the Appearance tab
     for (const marker of ["data-mascot-play", "data-mascot-randomize", "data-mascot-summary", "data-mascot-action", "data-bot-profile-appearance-toggle"]) expect(heroHtml).not.toContain(marker);
-    // nothing lost under it: who sees it, the description, left-aligned
+    // nothing lost under it: who sees it, left-aligned (no description line, the bot is asked for it)
     expect(html.slice(audience - 200, audience)).toContain("justify-start");
-    expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*class="[^"]*text-left/);
     // the column the reference's reading width (#4420) with a 16px gutter on a phone
     expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[920px\] flex-col px-4 pb-12 sm:px-8"/);
   });
@@ -446,7 +455,7 @@ describe("regression #4420: the bot page's header is the reference's", () => {
   it("draws a 124px banner, the mascot on its lower edge, the name at 26px medium, and one left edge for the name, the tabs and the cards' labels", () => {
     const html = render("overview");
     expect(html).toMatch(/class="bot-profile-banner h-\[124px\] w-full shrink-0"/);
-    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[50px\] /);
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[35px\] /);
     expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*text-\[26px\] font-medium leading-8 tracking-\[-0\.015em\]/);
     // the header 12px into the column; the cards' grey labels on the same edge
     expect(html).toMatch(/<header data-bot-profile-header=""[^>]*class="flex min-w-0 flex-col px-3"/);
@@ -454,7 +463,7 @@ describe("regression #4420: the bot page's header is the reference's", () => {
     const labelRow = html.slice(settings, html.indexOf("</h3>", settings));
     expect(labelRow).toMatch(/class="flex min-w-0 items-center gap-1\.5 px-3"/);
     // what Sagax shows beyond the reference stays: the label, who sees it, the description, the search, Outcomes
-    for (const marker of ['data-bot-profile-label=""', "data-bot-profile-audience", 'data-bot-profile-description=""', "data-bot-profile-search-toggle", 'data-bot-profile-tab="outcomes"']) expect(html).toContain(marker);
+    for (const marker of ['data-bot-profile-label=""', "data-bot-profile-audience", "data-bot-profile-search-toggle", 'data-bot-profile-tab="outcomes"']) expect(html).toContain(marker);
   });
 });
 

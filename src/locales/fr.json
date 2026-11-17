@@ -4118,8 +4118,6 @@
   "persona.menu.rename": "Renommer le bot",
   "persona.noMatch": "Rien ne correspond à « {query} »",
   "persona.overview.actions": "Actions rapides",
-  "persona.overview.description": "Courte description",
-  "persona.overview.noDescription": "Pas encore de description.",
   "persona.overview.owner": "Propriétaire",
   "persona.overview.sharedCount": "Partagé avec {count}",
   "persona.overview.summary": "Ce qu'il fait",

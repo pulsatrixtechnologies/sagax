@@ -1422,8 +1422,6 @@
   "persona.menu.rename": "Renomear o bot",
   "persona.noMatch": "Nada corresponde a “{query}”",
   "persona.overview.actions": "Ações rápidas",
-  "persona.overview.description": "Descrição curta",
-  "persona.overview.noDescription": "Ainda sem descrição.",
   "persona.overview.owner": "Dono",
   "persona.overview.sharedCount": "Compartilhado com {count}",
   "persona.overview.summary": "O que ele faz",

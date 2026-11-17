@@ -8,6 +8,7 @@
 // short sections: the best sentences of each, where it is in the app, who
 // may use it. BM25 over title, keywords and text, with French words mapped
 // to the English of the catalog.
+import { ensureGeneratedKnowledge } from "../../scripts/self-knowledge/ensure.mjs";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -27,6 +28,10 @@ const GUIDE_CHARS = 3000;
  * without blocking the event loop. */
 export async function readBundledKnowledge(): Promise<KnowledgeBase | null> {
   const here = dirname(fileURLToPath(import.meta.url));
+  const sourceRoot = join(here, "../..");
+  if (!existsSync(join(here, KNOWLEDGE_FILE_NAME)) && existsSync(join(sourceRoot, "scripts/self-knowledge/generate.ts"))) {
+    await ensureGeneratedKnowledge(sourceRoot);
+  }
   for (const path of [join(here, KNOWLEDGE_FILE_NAME), join(here, "self-knowledge", KNOWLEDGE_FILE_NAME)]) {
     if (!existsSync(path)) continue;
     try {

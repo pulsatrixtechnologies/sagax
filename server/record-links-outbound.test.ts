@@ -77,6 +77,37 @@ describe("no record address leaves the chat", () => {
     }
   });
 
+  it("a connector call, an outside API request, an outside engine or vendor carries the label (the tool dispatcher)", async () => {
+    const sent: string[] = [];
+    const answer = async (_path: string, init?: { body?: string }) => { sent.push(String(init?.body ?? "")); return { text: "ok" }; };
+    const api = vi.fn(answer);
+    const apiResponse = vi.fn(async (path: string, init?: { body?: string }) => ({ ok: true, status: 200, body: await answer(path, init) }));
+    const context = { botId: "orc", threadId: "t1", depth: 0, client: { api, apiResponse } } as unknown as ToolCallContext;
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["call_connector", { connector: "mail", tool: "send_email", arguments: { to: "ada@desk.example", body: LINKED } }],
+      ["vault_http_request", { handle: "cred_1", url: "https://desk.example/api/notes", method: "POST", body: LINKED }],
+      ["launch_cloud_agent", { provider: "nimbus_cloud", prompt: LINKED }],
+      ["cloud_agent_follow_up", { cloud_agent_id: "ca_1", text: LINKED }],
+      ["make_image", { prompt: LINKED }],
+      ["make_video", { prompt: LINKED }],
+      ["sagax_web_search", { query: LINKED }],
+    ];
+    for (const [name, args] of calls) {
+      const before = sent.length;
+      await callTool(name, args, context);
+      expect(sent.length, name).toBeGreaterThan(before);
+      for (const body of sent.slice(before)) {
+        expect(body, name).not.toMatch(NO_ADDRESS);
+        expect(body, name).toContain("#481516");
+      }
+    }
+    // a connector's file content keeps its words exactly
+    const code = 'const PREFIX = "sagax://record/";';
+    const before = sent.length;
+    await callTool("call_connector", { connector: "code_host", tool: "create_or_update_file", arguments: { path: "src/a.ts", content: code, message: "x" } }, context);
+    expect(sent.slice(before).join(""), "file content").toContain(JSON.stringify(code).slice(1, -1));
+  });
+
   it("leaves the words of a file, a skill, an artifact or a memory note exactly as written (the tool dispatcher)", async () => {
     const sent: string[] = [];
     const answer = async (_path: string, init?: { body?: string }) => { sent.push(String(init?.body ?? "")); return { ok: true, artifact: { id: "a1" }, staged: true }; };

@@ -998,14 +998,19 @@ that draws record links reads `recordText` (`recordTextOf`, which falls back
 to `text` when the words changed since). Nothing that leaves the chat carries
 the address: a text (`smsReplyBody`), a mail draft (`normalizeDraftForSend`),
 speech (`speakable`), a push or reach-me line (`markdownToPlainText`), a
-message to another bot, a room, an agent conversation or a person, a send
-and a published page (the agents dispatcher, `callTool` in
-`server/drivers/agents-call.ts`, for those tools only), every console tool's
-arguments (the Perspicax relay), and a send or a mounted connector's tool the
-Claude CLI runs once allowed (the permission proxy, whose card shows the
-input that runs) all reduce a link to its label (`withoutRecordLinks`). A
-file, a skill, an artifact, a memory note, code and the CLI's own Edit,
-Write, MultiEdit, NotebookEdit and Bash keep their words byte for byte.
+message to another bot, a room, an agent or a person, a call, a connector
+call, an outside API request, a prompt to an outside engine or vendor and a
+published page all reduce a link to its label (`withoutRecordLinks`). One
+rule decides which tools strip (`shared/record-link-tools.ts`), read by the
+agents dispatcher (`callTool` in `server/drivers/agents-call.ts`) and the
+Claude CLI permission proxy (whose card shows the input that runs); every
+catalog tool of every profile is in its leave list or its keep list
+(`server/drivers/record-link-tools.test.ts` fails on a tool in neither), and
+an unlisted tool is stripped at run time. Files, skills, artifacts, memory,
+widgets' HTML, code, a connector's file content (a path with its content, or
+a files list) and the CLI's own Edit, Write, MultiEdit, NotebookEdit and Bash
+keep their words byte for byte. The Perspicax relay strips every console
+call.
 Streamed text holds back only a part that could still become a record link
 (from a `[` or a `sagax:`, 256 characters and 1.5 s at most, released at once
 when it cannot be one) and sends it without the address

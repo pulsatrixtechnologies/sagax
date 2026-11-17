@@ -342,6 +342,21 @@ describe("permission proxy", () => {
     expect(asks[1].input).toEqual({ title: "Suivi", content: stripped });
   });
 
+  it("gives a connector tool whose input is file content its input byte for byte", async () => {
+    answerWith = () => ({ behavior: "allow" });
+    const inputs: Array<[string, Record<string, unknown>]> = [
+      ["mcp__code_host__create_or_update_file", { path: "src/prefix.ts", content: 'const PREFIX = "sagax://record/";', message: "add" }],
+      ["mcp__code_host__push_files", { owner: "o", repo: "r", branch: "main", files: [{ path: "a.ts", content: "sagax://record/a/b/c" }], message: "push" }],
+      ["mcp__files__write_file", { path: "/w/a.md", content: "[#1](sagax://record/nimbus_desk/ticket/1)" }],
+    ];
+    let id = 20;
+    for (const [tool, input] of inputs) {
+      id += 1;
+      rpc({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "approve", arguments: { tool_name: tool, input } } });
+      expect(resultJson(await waitFor(id)).updatedInput, tool).toEqual(input);
+    }
+  });
+
   it("gives the CLI's own Edit, Write, MultiEdit, NotebookEdit and Bash their input byte for byte", async () => {
     answerWith = () => ({ behavior: "allow" });
     const inputs: Array<[string, Record<string, unknown>]> = [

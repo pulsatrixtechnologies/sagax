@@ -27,7 +27,7 @@ import { allowsTool, parseToolScope } from "../shared/tool-scope.ts";
 import { permissionRoute, preallowedFromEnv, searchedServersFromEnv } from "../shared/searched-tool-call.ts";
 import { reportBackgroundError } from "./background-error.ts";
 import { withoutRecordLinksIn } from "../shared/record-cards.ts";
-import { isOutboundTool } from "../shared/outbound.ts";
+import { harnessToolWordsLeave } from "../shared/record-link-tools.ts";
 
 // #1276: the servers whose catalog is searched; a call_tool there is asked
 // about as the tool it runs (shared/searched-tool-call.ts).
@@ -172,22 +172,13 @@ async function answerNativeQuestions(input: unknown): Promise<string> {
   return JSON.stringify({ behavior: "allow", updatedInput: { ...asRecord(input), answers } });
 }
 
-/** Sagax's own servers in the CLI: their tools reach the app's own
- * dispatcher or relay, which decide for themselves (a file, a skill or code
- * keeps its words exactly). */
-const SAGAX_SERVERS = new Set(["ogb", "agents", "computer", "phone", "messages", "browser", "data", "dweb"]);
-
-/**
- * #4507: the input a tool runs with. Only words that leave for someone else
- * lose a record address (reduced to its label): a tool that sends, and the
- * tools of a connector mounted in the harness. The CLI's own file, notebook
- * and shell tools, and Sagax's own servers, keep their input byte for byte.
- */
+/** #4507: the input a tool runs with: a record link keeps only its label
+ * when the tool's words leave the app (shared/record-link-tools.ts, the one
+ * rule the agents dispatcher reads too); the CLI's own file, notebook and
+ * shell tools, Sagax's own files and a connector's file content keep their
+ * input byte for byte. */
 function recordSafeInput(tool: unknown, input: unknown): unknown {
-  if (typeof tool !== "string" || !tool.startsWith("mcp__")) return input;
-  const server = /^mcp__([^_]+(?:_[^_]+)*?)__/.exec(tool)?.[1]?.toLowerCase() ?? "";
-  const connector = server !== "" && !SAGAX_SERVERS.has(server) && !server.startsWith("perspicax");
-  return connector || isOutboundTool(tool, input) ? withoutRecordLinksIn(input) : input;
+  return typeof tool === "string" && harnessToolWordsLeave(tool, input) ? withoutRecordLinksIn(input) : input;
 }
 
 const TOOLS = [

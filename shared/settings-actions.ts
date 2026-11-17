@@ -393,6 +393,24 @@ add({
   } }),
   write: () => "bot.capabilities is read only: bot.plugin, bot.skill and bot.mcpServers change what it lists.",
 });
+// #4527 lot E: the tools a bot stopped listing up front for this person
+// (server/tools/tool-keep-person.ts): "Bring all back", or one tool kept
+// listed always. The person's own list only; it shows at the bot's next
+// conversation.
+add({
+  key: "bot.toolsLeftOut", family: "bot", target: "bot", value: "object",
+  label: "Tools the bot stopped listing up front because it never uses them (each one is still found by search when needed): get lists them and the ones kept listed always; set {bringAllBack: true} brings every one back, {tool: <server>/<tool>, alwaysListed: true|false} keeps one listed always or gives it back to the rule. Takes effect at the bot's next conversation",
+  where: "Settings > Developer > Per bot > Tool selection",
+  read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/capabilities`, shape: (v) => (v as { toolKeep?: unknown } | null)?.toolKeep ?? { leftOut: [], alwaysListed: [] } }),
+  write: (ids, v) => {
+    const r = (v ?? {}) as { bringAllBack?: unknown; tool?: unknown; alwaysListed?: unknown };
+    if (r.bringAllBack === true) return { method: "PATCH", path: `/api/bots/${enc(ids.target!)}`, body: { toolKeep: { bringAllBack: true } } };
+    if (typeof r.tool === "string" && /^[A-Za-z0-9][\w-]{0,63}\/[A-Za-z0-9][\w.:-]{0,199}$/.test(r.tool) && typeof r.alwaysListed === "boolean") {
+      return { method: "PATCH", path: `/api/bots/${enc(ids.target!)}`, body: { toolKeep: { tool: r.tool, alwaysListed: r.alwaysListed } } };
+    }
+    return "value is {bringAllBack: true} or {tool: <server>/<tool>, alwaysListed: true|false} (get bot.toolsLeftOut lists the tools).";
+  },
+});
 // 2026-10-29: plugins of a configured marketplace, as Capabilities installs
 // them: For <bot> (/api/bots/:id/plugins) or Everyone (/api/marketplaces)
 const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;

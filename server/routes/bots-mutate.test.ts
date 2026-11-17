@@ -5,6 +5,7 @@ import { PASS, dispatchRoutes, type RouteContext } from "./table.ts";
 import { buildBotPatchProfile } from "./bots-mutate-patch-build-profile.ts";
 import { buildBotPatchAccess } from "./bots-mutate-patch-build-access.ts";
 import { createBotPatchState, type BotPatchState, type BotsMutateEnv } from "./bots-mutate-helpers.ts";
+import { forgetToolKeepInMemory, readToolKeep, setToolAlwaysListed, toolKeepTurn } from "../tools/tool-keep.ts";
 
 function context(path: string, method = "GET", body: unknown = {}, headers: Record<string, string> = {}) {
   const json = vi.fn();
@@ -250,5 +251,71 @@ describe("bots-mutate routes", () => {
     await Promise.all(["pr_osprey", "pr_wren"].map((person) =>
       scope.run(person, () => dispatchRoutes([route], context("/api/bots/osprey", "DELETE").ctx))));
     expect(seen.sort()).toEqual(["pr_osprey", "pr_wren"]);
+  });
+});
+
+// #4527 lot E: the person's own tools left out of a bot's list
+describe("PATCH /api/bots/:id toolKeep", () => {
+  /** A person's state with one tool left out (the rule's verdict, set directly). */
+  const leaveOut = (person: string) => {
+    toolKeepTurn({ botId: "osprey", person, threadId: `t-${person}`, prompt: true });
+    setToolAlwaysListed("osprey", person, "agents/list_rooms", true);
+    setToolAlwaysListed("osprey", person, "agents/list_rooms", false);
+    const state = readToolKeep("osprey", person);
+    state.leftOut = ["agents/run_routine"];
+  };
+  const org = (principal: string, level: string | null = "use") => baseDeps({
+    IDENTITY: { kind: "perspicax" },
+    sessionPrincipal: vi.fn(() => principal),
+    viewerBotLevel: vi.fn(() => level),
+    effectiveBotOwner: vi.fn(() => "pr_owner"),
+  });
+  const member = (ctx: RouteContext, principal: string) => { ctx.auth = { kind: "session", scopes: ["client"], session: { principalId: principal } } as never; };
+
+  it("a member brings every tool back for their own list, with no administrator, and nobody else's moves", async () => {
+    forgetToolKeepInMemory();
+    leaveOut("pr_alice");
+    leaveOut("pr_bob");
+    const { ctx, json } = context("/api/bots/osprey", "PATCH", { toolKeep: { bringAllBack: true } });
+    member(ctx, "pr_alice");
+    await createBotsMutateRoutes(org("pr_alice"))(ctx);
+    expect(json).toHaveBeenCalledWith(ctx.res, 200, { toolKeep: { leftOut: [], alwaysListed: [] } });
+    expect(readToolKeep("osprey", "pr_alice").restoredAt).toBeGreaterThan(0);
+    expect(readToolKeep("osprey", "pr_bob").leftOut).toEqual(["agents/run_routine"]);
+  });
+
+  it("keeps one tool listed always, then gives it back to the rule", async () => {
+    forgetToolKeepInMemory();
+    leaveOut("pr_alice");
+    const on = context("/api/bots/osprey", "PATCH", { toolKeep: { tool: "agents/run_routine", alwaysListed: true } });
+    member(on.ctx, "pr_alice");
+    await createBotsMutateRoutes(org("pr_alice"))(on.ctx);
+    expect(on.json).toHaveBeenCalledWith(on.ctx.res, 200, { toolKeep: { leftOut: [], alwaysListed: ["agents/run_routine"] } });
+    const off = context("/api/bots/osprey", "PATCH", { toolKeep: { tool: "agents/run_routine", alwaysListed: false } });
+    member(off.ctx, "pr_alice");
+    await createBotsMutateRoutes(org("pr_alice"))(off.ctx);
+    expect(off.json).toHaveBeenCalledWith(off.ctx.res, 200, { toolKeep: { leftOut: [], alwaysListed: [] } });
+  });
+
+  it("answers 404 for a bot the person cannot see, and 400 for a malformed change or one with other fields", async () => {
+    const hidden = context("/api/bots/osprey", "PATCH", { toolKeep: { bringAllBack: true } });
+    member(hidden.ctx, "pr_eve");
+    await createBotsMutateRoutes(org("pr_eve", null))(hidden.ctx);
+    expect(hidden.json).toHaveBeenCalledWith(hidden.ctx.res, 404, { error: "no such bot" });
+    for (const body of [{ toolKeep: { bringAllBack: "yes" } }, { toolKeep: { tool: "list_rooms", alwaysListed: true } }, { toolKeep: { bringAllBack: true }, name: "Renamed" }]) {
+      const bad = context("/api/bots/osprey", "PATCH", body);
+      member(bad.ctx, "pr_alice");
+      await createBotsMutateRoutes(org("pr_alice"))(bad.ctx);
+      expect(bad.json).toHaveBeenCalledWith(bad.ctx.res, 400, expect.objectContaining({ error: expect.stringContaining("toolKeep") }));
+    }
+  });
+
+  it("on a personal server, the bot's owner's list", async () => {
+    forgetToolKeepInMemory();
+    leaveOut("pr_owner");
+    const { ctx, json } = context("/api/bots/osprey", "PATCH", { toolKeep: { bringAllBack: true } });
+    await createBotsMutateRoutes(baseDeps({ viewerBotLevel: vi.fn(() => "owner"), effectiveBotOwner: vi.fn(() => "pr_owner") }))(ctx);
+    expect(json).toHaveBeenCalledWith(ctx.res, 200, { toolKeep: { leftOut: [], alwaysListed: [] } });
+    expect(readToolKeep("osprey", "pr_owner").leftOut).toEqual([]);
   });
 });

@@ -151,6 +151,18 @@ export interface BotCapabilities {
    * the Perspicax console). `name` is readable, never an id; `principalId`
    * is for a tooltip only. Absent when the list is the viewer's own. */
   computedFor?: { principalId: string; name: string };
+  /** #4527 lot E: the tools this bot stopped listing up front for the
+   * person reading (server/tools/tool-keep.ts), as tool ids. */
+  toolKeep?: ToolKeepView;
+}
+
+/** The person's own view of the tools a bot keeps listed: `leftOut`, the
+ * tools it stopped listing (each still one search away), and
+ * `alwaysListed`, the ones the person keeps listed always. Ids
+ * `<server>/<tool>`. */
+export interface ToolKeepView {
+  leftOut: string[];
+  alwaysListed: string[];
 }
 
 export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/capabilities`;

@@ -68,7 +68,7 @@ function agentsIntegration(
       // A room turn in a group whose shared memory is on gets
       // group_memory_update (server/memory/group-memory.ts); the route re-checks.
       SAGAX_GROUP_MEMORY: host.groupMemoryWritable(host.store.groupByThread(threadId), botId) ? "1" : "0",
-      // #4460: propose_team_memory says the entry goes to the bot owner's
+      // #4460: save_team_memory says the entry goes to the bot owner's
       // own memory on a server several people use (team-memory-scope.ts)
       SAGAX_OWN_TEAM_MEMORY: host.teamMemoryPersonScoped() ? "1" : "0",
       // The shared-computer tools are advertised only while the workspace

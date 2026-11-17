@@ -83,7 +83,7 @@ under Full access, or would write lasting instructions from untrusted text.
 | `select_computer` | own (picks among their own places) | admin tier | own | Own destination. |
 | `manage_pairing` | own (create: a code bound to the speaking person and capped to their scopes, on an organization server; list stays an admin route) | admin tier | own, self scope (2026-10-26: no longer host level) | Own devices. |
 | `propose_team_setup` | own (a card for their own team of bots) | admin tier | own, self scope | A proposal they confirm. |
-| `propose_team_memory` | org (memory the section reads) | admin tier | a member of that section, or an admin, confirms the card | The section's own people. |
+| `save_team_memory` (old name `propose_team_memory`) | own (the memory its person may write: the bot owner's own on a server several people use) | admin tier | own, self scope; the bot saves it at once, no card (#4439); an organization Refuse or Ask first rule on the tool still holds it | Their own memory. |
 | `create_bot`, `propose_bot_deletion`, `create_room`, `manage_room` | own (self scope override) | allowed at self | unchanged | Already. |
 | `create_agent`, `delete_agent`, `archive_bot` | own (a temporary agent or a bot of theirs) | admin tier | own, self scope (2026-10-26); `delete_agent` on their own agent needs no grant (tool guard `ownerScoped`) | Own bots. |
 | `add_mcp_server` | own (2026-10-28: the person's own servers, Settings > Connections; a command runs in their own environment) | admin tier | own, self scope; the route adds to the speaking person's own list on an organization server and refuses a person whose integrations an admin manages | Their own list. The server's shared list stays an admin's screen. |

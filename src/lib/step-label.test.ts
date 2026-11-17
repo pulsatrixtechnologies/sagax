@@ -47,6 +47,14 @@ describe("step labels in plain words", () => {
     expect(readStep({ name: "mcp__example__acme_desk__get_ticket", ok: true, input: JSON.stringify({ ticketId: 297048 }), product: "Acme Desk" }).target).toBe("#297048");
   });
 
+  // #4439: saving team memory reads as a memory update, never "Propose"
+  it("labels a team memory save, under its new or old name, as a memory update", () => {
+    for (const name of ["mcp__agents__save_team_memory", "mcp__agents__propose_team_memory"]) {
+      expect(stepLabel({ name, ok: true })).toBe("Updated its memory");
+      expect(stepLabel({ name, ok: true })).not.toMatch(/propos/i);
+    }
+  });
+
   it("labels the simplified memory tools like the ones they replace", () => {
     expect(stepLabel({ name: "mcp__perspicax__memory_find", ok: true })).toBe(stepLabel({ name: "mcp__perspicax__memory_search", ok: true }));
     expect(stepLabel({ name: "mcp__perspicax__memory_save", ok: true })).toBe(stepLabel({ name: "mcp__perspicax__memory_write", ok: true }));

@@ -48,7 +48,7 @@ export const WORDS_KEEP_TOOLS: ReadonlySet<string> = new Set([
   // files, artifacts, skills, memory, docs, code
   "attach_file", "save_artifact", "update_artifact", "delete_artifact", "claude_artifact", "skill_manage",
   "memory_write", "memory_update", "memory_log", "memory_forget", "memory_feedback", "memory_propose",
-  "group_memory_update", "propose_team_memory", "docs_update", "review_write", "vm_exec", "remote_session_exec",
+  "group_memory_update", "save_team_memory", "docs_update", "review_write", "vm_exec", "remote_session_exec",
   // a widget's HTML drawn in the chat is code
   "show_html", "show_widget", "update_html", "update_widget",
   // the app's own settings, cards and actions on its own things

@@ -80,8 +80,8 @@ async function stop() {
   await waitForExit(child, { signal: "SIGTERM" });
 }
 
-/** The bot's shell proposes a team-memory entry from this thread. */
-async function proposeTeamMemory(botId: string, threadId: string, name: string, detail: string): Promise<string> {
+/** The bot's shell saves a team-memory entry from this thread (#4439: at once). */
+async function saveTeamMemory(botId: string, threadId: string, name: string, detail: string): Promise<string> {
   const minted = await fetch(`${BASE}/api/testing/internal-capability`, {
     method: "POST", headers: { "content-type": "application/json", "x-openmausbot-test-capability": CAPABILITY_KEY },
     body: JSON.stringify({ botId, threadId, kind: "agents" }),
@@ -92,9 +92,10 @@ async function proposeTeamMemory(botId: string, threadId: string, name: string, 
     method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({ fromBotId: botId, fromThreadId: threadId, kind: "term", name, detail }),
   });
-  const body = await proposed.json() as { status: string; requestId: string };
+  const body = await proposed.json() as { status: string; entryId: string };
   expect(proposed.status, JSON.stringify(body)).toBe(201);
-  return body.requestId;
+  expect(body.status).toBe("saved");
+  return body.entryId;
 }
 
 posixOnly("#4460 team memory stays with its person on a workspace with members and no console", () => {
@@ -110,10 +111,6 @@ posixOnly("#4460 team memory stays with its person on a workspace with members a
     const preview = await api("GET", `/api/bots/${botId}/system-prompt`, as);
     expect(preview.status, preview.text).toBe(200);
     return (preview.body.sections as Array<{ id: string; text: string }>).find((section) => section.id === "team-memory")?.text ?? "";
-  };
-  const confirm = async (as: string, threadId: string, requestId: string) => {
-    const answered = await api("POST", `/api/threads/${threadId}/respond`, as, { requestId, behavior: "allow" });
-    expect(answered.status, answered.text).toBe(200);
   };
   const listed = async (as: string, section = "") => (await api("GET", `/api/team-memory?section=${encodeURIComponent(section)}`, as)).body.entries as Array<{ name: string; movedFrom?: string }> ?? [];
 
@@ -139,14 +136,12 @@ posixOnly("#4460 team memory stays with its person on a workspace with members a
     if (home) await removeTempDir(home);
   });
 
-  it("keeps what one person confirmed from the other person's ungrouped bot: prompt, listing, approvals", async () => {
+  it("keeps what one person's bot saved from the other person's ungrouped bot: prompt, listing, approvals", async () => {
     const adaBot = await makeBot(ADA, "Ada helper");
     const bobBot = await makeBot(BOB, "Bob helper");
-    const requestId = await proposeTeamMemory(bobBot.id, bobBot.threadId, "Zephyr", "Zephyr is the name of Bob's scheduling bot");
-    expect(JSON.stringify((await api("GET", "/api/approvals", ADA)).body)).not.toContain(requestId);
-    // the card names the owner's own memory, not a team's
-    expect(JSON.stringify((await api("GET", "/api/approvals", BOB)).body)).toContain("Remember this in the bot owner's own memory?");
-    await confirm(BOB, bobBot.threadId, requestId);
+    const entryId = await saveTeamMemory(bobBot.id, bobBot.threadId, "Zephyr", "Zephyr is the name of Bob's scheduling bot");
+    // #4439: no card for anyone
+    for (const as of [ADA, BOB]) expect(JSON.stringify((await api("GET", "/api/approvals", as)).body)).not.toContain(entryId);
 
     const bobPrompt = await promptOf(BOB, bobBot.id);
     expect(bobPrompt).toContain("Zephyr");
@@ -164,10 +159,9 @@ posixOnly("#4460 team memory stays with its person on a workspace with members a
   it("keeps two sections of the same name apart", async () => {
     const adaOps = await makeBot(ADA, "Ada ops", "Ops");
     const bobOps = await makeBot(BOB, "Bob ops", "Ops");
-    const requestId = await proposeTeamMemory(adaOps.id, adaOps.threadId, "Nimbus", "Nimbus is the board Ada dispatches from");
-    expect(JSON.stringify((await api("GET", "/api/approvals", BOB)).body)).not.toContain(requestId);
-    expect((await api("POST", `/api/threads/${adaOps.threadId}/respond`, BOB, { requestId, behavior: "allow" })).status).toBeOneOf([403, 404]);
-    await confirm(ADA, adaOps.threadId, requestId);
+    const entryId = await saveTeamMemory(adaOps.id, adaOps.threadId, "Nimbus", "Nimbus is the board Ada dispatches from");
+    expect(JSON.stringify((await api("GET", "/api/approvals", BOB)).body)).not.toContain(entryId);
+    expect((await api("DELETE", `/api/team-memory/${entryId}?section=Ops`, BOB)).status).toBeOneOf([403, 404]);
     expect(await promptOf(ADA, adaOps.id)).toContain("Nimbus");
     expect(await promptOf(BOB, bobOps.id)).not.toContain("Nimbus");
     expect(JSON.stringify(await listed(BOB, "Ops"))).not.toContain("Nimbus");

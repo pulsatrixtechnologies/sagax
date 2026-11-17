@@ -107,7 +107,7 @@ const API: Record<string, unknown> = {
   "/api/team-memory": {
     entries: [
       { id: "e1", kind: "term", name: "OMS", detail: "Order management system", aliases: [], status: "accepted", source: { botId: "bot-atlas", botName: "Atlas", threadId: "t1", at: 1 }, updatedAt: 1 },
-      { id: "e2", kind: "person", name: "Sam Example", detail: "Ops lead", aliases: ["Sam"], status: "proposed", source: { botId: "bot-atlas", botName: "Atlas", threadId: "t1", at: 1 }, updatedAt: 1 },
+      { id: "e2", kind: "person", name: "Sam Example", detail: "Ops lead", aliases: ["Sam"], status: "accepted", source: { botId: "bot-atlas", botName: "Atlas", threadId: "t1", at: 1 }, updatedAt: 1 },
     ],
   },
   "/api/admin/remote-sessions": { sessions: rows, admin: true },

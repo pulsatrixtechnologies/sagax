@@ -40,7 +40,7 @@ export function createKeyModelCatalogs(options: {
   const maxKeys = Math.max(1, options.maxKeys ?? KEY_MODEL_CATALOG_MAX_KEYS);
   const now = options.now ?? Date.now;
   const entries = new Map<string, Entry>();
-  const refresh = (id: string, entry: Entry, read: () => Promise<ModelCatalog | null>): Promise<ModelCatalog | null> => {
+  const refresh = (entry: Entry, read: () => Promise<ModelCatalog | null>): Promise<ModelCatalog | null> => {
     if (entry.pending) return entry.pending;
     entry.pending = read()
       .then((next) => (next && next.options.length ? next : null))
@@ -70,10 +70,10 @@ export function createKeyModelCatalogs(options: {
       }
       if (entry.at !== undefined && now() - entry.at < ttl) return entry.catalog ?? options.fallback();
       if (entry.catalog) {
-        void refresh(id, entry, read);
+        void refresh(entry, read);
         return entry.catalog;
       }
-      return (await refresh(id, entry, read)) ?? options.fallback();
+      return (await refresh(entry, read)) ?? options.fallback();
     },
   };
 }

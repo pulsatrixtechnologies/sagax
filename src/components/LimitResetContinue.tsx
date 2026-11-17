@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { limitLine, nearLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
 import { openModelWindow } from "@/lib/model-window";
@@ -85,17 +87,17 @@ export function EngineLimitIndicator({
         <div
           role="menu"
           data-testid="engine-limit-menu"
-          className="absolute bottom-full right-0 mb-1.5 w-max max-w-[280px] rounded-xl border border-popover-hairline bg-popover p-2 text-[13px] text-popover-ink shadow-2xl shadow-black/50"
+          className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute bottom-full right-0 mb-1.5")}
         >
-          <p className="px-1 py-0.5 tabular-nums">{line}</p>
-          {near && weekly && <p className="px-1 py-0.5 text-ink-secondary">{t(weekly.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: weekly.percent, name: weekly.name })}</p>}
+          <p className="px-2 py-1 tabular-nums">{line}</p>
+          {near && weekly && <p className="px-2 py-1 text-ink-secondary">{t(weekly.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: weekly.percent, name: weekly.name })}</p>}
           {near && continueAt && (
             <button
               type="button"
               role="menuitem"
               data-testid="engine-limit-continue"
               onClick={() => { continueAt.onClick(); setOpen(false); }}
-              className="mt-1 w-full rounded-lg px-1 py-1 text-left hover:bg-raised"
+              className={MENU_ROW}
             >
               {continueAt.label}
             </button>
@@ -106,7 +108,7 @@ export function EngineLimitIndicator({
               role="menuitem"
               data-testid="engine-limit-switch"
               onClick={() => { setOpen(false); openModelWindow(botId); }}
-              className="w-full rounded-lg px-1 py-1 text-left hover:bg-raised"
+              className={MENU_ROW}
             >
               {t("sendBlock.switchEngine")}
             </button>
@@ -115,7 +117,7 @@ export function EngineLimitIndicator({
             type="button"
             role="menuitem"
             onClick={() => { setOpen(false); dispatch({ type: "toggleAppSettings", open: true, section: "usage" }); }}
-            className="w-full rounded-lg px-1 py-1 text-left text-ink-secondary hover:bg-raised"
+            className={MENU_ROW}
           >
             {t("chat.notice.weekly.more")}
           </button>

@@ -27,7 +27,9 @@ export function useComposerFocus({
       const input = inputRef.current;
       if (!input || input.disabled || !composerShouldRefocus(document.activeElement, input)) return;
       const at = Math.min(caretRef.current, input.value.length);
-      input.focus();
+      // A plain focus() counts as keyboard focus, so after a send the field
+      // matches :focus-visible and draws the keyboard ring (#4526).
+      input.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
       input.setSelectionRange(at, at);
     });
   }, []);

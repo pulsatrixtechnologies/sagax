@@ -497,8 +497,12 @@ Windows, Linux or the web.
   Each row carries `kind` (`read`, `write`, `delete`, `send`: the one place a
   tool's class is written; `macAppToolWrites` is derived from it) and `needs`
   (`automation` or `fullDiskAccess`). `macAppsStatus` gives each app an
-  `actions` list (tool, kind, need, granted) that the window reads; the
-  window's line per action is the locale key `connectApps.mac.action.<tool>`.
+  `actions` list (tool, kind, need, granted) that the window reads. The
+  detail lists each granted action as one line (`connectApps.mac.action.<tool>`).
+  An action whose permission is missing sits under that permission step
+  ("Granting this adds"), never as a disabled line. With no `actions` (an
+  older desktop app) the detail keeps its two paragraphs. Panes the setup
+  opens: Automation, Full Disk Access, Calendars, Reminders, Contacts.
 - Mail (2026-11-13, #4158 lot `mac-mail-actions`):
   `mac_mail_list_mailboxes` (accounts, nested mailboxes, unread counts),
   `mac_mail_search` (one mailbox, default the inbox; words, sender, since,

@@ -61,7 +61,8 @@ function sseFrameFor(   client: SseClient,   seq: number,   payload: Record<stri
   // a person left a group: that person's own streams only (server/groups/group-leave.ts)
   if (payload?.kind === "group.left") return host.groupLeftFrameAllowed(payload, client.viewerId, host.localPrincipalId()) ? clientFrame ?? frame : null;
   if ((payload?.kind === "nudge" || payload?.kind === "nudge.sent") && !host.nudgeFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
-  if ((payload?.kind === "voice.opener" || payload?.kind === "voice.call.ended") && !voiceOpenerFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
+  // a person's voice frames and listening sessions (#4100) reach that person's own streams only
+  if (payload && !voiceOpenerFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
   if (payload?.kind === "presence.changed" && !host.presenceFrameAllowed(payload, client)) return null;
   if (payload?.kind === "cloud.agent" && typeof payload.botId === "string") {
     const bot = host.store.bot(payload.botId);

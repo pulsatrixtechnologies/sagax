@@ -101,7 +101,7 @@ function settingsActions() {
       host.store.appendMessage(input.threadId, {
         role: "bot",
         kind: "access",
-        text: `${owner.bot.name} asks you to sign in to ${card.name}. Open Settings > Models to sign in.`,
+        text: `${owner.bot.name} asks you to sign in to ${card.name}. Open Settings > Providers > Models to sign in.`,
         ...(owner.group ? { from: { botId: owner.bot.id, name: owner.bot.name, color: owner.bot.color } } : {}),
         access: { reason: "sign_in", engine: card.name, instanceId: card.instanceId, botId: owner.bot.id, botName: owner.bot.name, ownerPrincipalId: person, payerPrincipalId: person }
       });

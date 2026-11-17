@@ -31,6 +31,7 @@
 // copy without the host settings that stay an admin's (memberImportReset), and a rollback that
 // removes everything the import wrote when any step fails.
 import { isHarnessId } from "../../shared/harness-matrix.ts";
+import { isContextSize } from "../../shared/context-size.ts";
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { exportedSecretFile, registrySettingsPath, withoutRegistrySecrets } from "../backup/workspace-backup-policy.ts";
 import { randomUUID } from "node:crypto";
@@ -164,6 +165,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   helperModel: "settings",
   // #4329 lot 5: kept with the model it runs, dropped when the model is
   harness: "settings",
+  // #4417: the bot's context size travels with its settings
+  contextWindow: "settings",
   parkDirectMessages: "settings",
   approvePeerComms: "settings",
   localPrompt: "settings",
@@ -911,6 +914,7 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(settings.builtinPlugins !== undefined ? { builtinPlugins: { ...settings.builtinPlugins } } : {}),
       ...(settings.helperModel !== undefined ? { helperModel: settings.helperModel } : {}),
       ...(keptModel && isHarnessId(settings.harness) ? { harness: settings.harness } : {}),
+      ...(isContextSize(settings.contextWindow) ? { contextWindow: settings.contextWindow } : {}),
       ...(settings.parkDirectMessages !== undefined ? { parkDirectMessages: settings.parkDirectMessages } : {}),
       ...(settings.approvePeerComms !== undefined ? { approvePeerComms: settings.approvePeerComms } : {}),
       ...(settings.localPrompt !== undefined ? { localPrompt: settings.localPrompt } : {}),

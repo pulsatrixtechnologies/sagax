@@ -11,8 +11,10 @@
 // - Runs with (#4329 lot 6, #4384): what runs the person's bots with this
 //   provider, their default for it (src/components/RunsWith.tsx); absent
 //   when one engine only can;
-// - Models: the provider's models unfolding in place, one switch each, the
-//   same switches as Settings > Models > Active models;
+// - Models: the context size its models run at by default when they offer
+//   more than one (#4417, src/components/ContextSize.tsx), then the
+//   provider's models unfolding in place, one switch each, the same
+//   switches as Settings > Models > Active models;
 // - Advanced, folded each time the page opens: who pays, the tool by its
 //   name with its version, location and updates, a server's address, the
 //   model list problem, the identifier.
@@ -26,7 +28,7 @@ import type { LocaleKey } from "@/locales";
 import { copyText } from "@/lib/copy-text";
 import { readableError } from "@/lib/plain-error";
 import { useOfferedInstances } from "@/lib/offered-instances";
-import { perspicaxKeysUrl, reloadMyEngines, type MyEngine } from "@/lib/perspicax-org";
+import { perspicaxKeysUrl, reloadMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-org";
 import {
   connectionAction,
   connectionLabel,
@@ -37,7 +39,7 @@ import {
 } from "@/lib/provider-rows";
 import { COMPUTER_PROVIDER_ID } from "../../../shared/model-provider";
 import { PERSONAL_PROVIDER_NAMES } from "../../../shared/provider-accounts";
-import { addedAccount } from "../../../shared/added-account";
+import { addedAccount, removableAccount } from "../../../shared/added-account";
 import { AddAnotherAccount, EngineRow } from "../EnginesSettings";
 import { EngineApiKeyField } from "../EngineApiKeyField";
 import { engineReady } from "../EngineLibrary";
@@ -56,6 +58,7 @@ import { PiServerDetail, removePiServer } from "./PiModelServers";
 import { BotsLinkAdvanced, BotsLinkSection, botsLinkOnPage, useBotsLink } from "./LinkedGrokBotSettings";
 import { ProviderModels, activeModelProviders, useModelSwitches } from "./ModelSwitchesSettings";
 import { RunsWith, runsWithShown, useProviderRunsWith } from "../RunsWith";
+import { ContextSize, contextSizeShown, useProviderContextSizes } from "../ContextSize";
 import { accountAddress, accountName, accountRows } from "./provider-summary";
 import { SignInState, SignInSteps, signInWay, useAccountSignIn } from "./AccountSignIn";
 import {
@@ -377,6 +380,23 @@ function RunsWithSection({ group }: { group: ProviderGroup }) {
   );
 }
 
+/** "Context size" (#4417), at the head of the Models section: the person's
+ * default for this provider's models that offer more than one size; a bot's
+ * own size wins. Absent where each model has one size. */
+function ProviderContextSizeRow({ group }: { group: ProviderGroup }) {
+  const { choices, busy, error } = useProviderContextSizes(group.id);
+  if (!contextSizeShown(choices)) return null;
+  const label = t("model.contextSize");
+  return (
+    <div data-provider-context-size={group.id}>
+      <DescribedRow label={label} description={t("providers.page.contextSizeHelp", { provider: groupName(group) })} rowId="providers.page.contextSize">
+        <ContextSize tone="settings" choices={choices} disabled={busy} ariaLabel={label} />
+      </DescribedRow>
+      {error && <p role="alert" className="px-3.5 py-1.5 text-[12px] text-danger">{error}</p>}
+    </div>
+  );
+}
+
 /** The provider's models on its own page (#4376: never sent to another
  * page): the count line unfolds in place into one switch per model, a
  * search when the list is long; the same provider, rows and switches as
@@ -388,6 +408,7 @@ function ModelsSection({ group }: { group: ProviderGroup }) {
   if (!provider) return null;
   return (
     <SettingsGroup title={t("providers.page.modelsTitle")} groupId="provider-models">
+      <ProviderContextSizeRow group={group} />
       <div data-provider-models={group.id}>
         <ProviderModels provider={provider} switches={switches} mayEdit={mayEdit} onToggle={toggle} busy={busy} inPage />
       </div>
@@ -483,10 +504,20 @@ export function accountRemovalError(cause: unknown): string {
   return readableError(cause);
 }
 
+/** The engine an account row acts on, and its driver: the person's own on an
+ * organization server, else the server's. */
+function accountLead(row: ProviderRow, list: ProviderList): { instanceId: string; driver: string } | null {
+  const mine = mineOfRow(row, list);
+  const instance = rowInstances(row, list.instances)[0];
+  const instanceId = mine?.instanceId ?? instance?.instanceId;
+  return instanceId ? { instanceId, driver: mine?.driver ?? instance?.driverKind ?? "" } : null;
+}
+
 /** One account (#4376, #4415): its name (renamed in place), the address and
- * state under it, ONE way in or out (Sign in, Sign out), and Remove for an
- * account added beside the provider's first one. A sign-in runs in the row
- * itself: its state takes the button's place, its one step sits under it. */
+ * state under it, ONE way in or out (Sign in, Sign out), and Remove while
+ * the provider keeps another account (#4426, the first one too). A sign-in
+ * runs in the row itself: its state takes the button's place, its one step
+ * sits under it. */
 function AccountLine({ row, group, list, index, total, open, show }: {
   row: ProviderRow; group: ProviderGroup; list: ProviderList; index: number; total: number; open: boolean; show: (rowId: string | null) => void;
 }) {
@@ -511,11 +542,21 @@ function AccountLine({ row, group, list, index, total, open, show }: {
     ]);
   };
   const flow = useAccountSignIn(way, refresh);
-  // a member removes their own added account from their list; who manages
-  // the server's accounts removes it from the server (the same people as Add)
-  const lead = mine?.instanceId ?? instance?.instanceId;
-  const driver = mine?.driver ?? instance?.driverKind ?? "";
-  const removable = Boolean(lead) && !row.slot && addedAccount(lead!, driver) && (list.organization || !list.member);
+  // a member removes their own account from their list; who manages the
+  // server's accounts removes it from the server (the same people as Add).
+  // An engine's second sign-in (Grok) goes with Sign out, never alone.
+  // who removes from the server (not from their own list) on an organization server
+  const orgServer = usePerspicaxOrg() !== null && !list.member;
+  const account = accountLead(row, list);
+  const lead = account?.instanceId;
+  const driver = account?.driver ?? "";
+  const others = accountRows(group).filter((other) => other !== row && !other.slot)
+    .map((other) => accountLead(other, list))
+    .filter((other) => other?.driver === driver)
+    .map((other) => other!.instanceId)
+    // an account a person added on an organization server is theirs, not the provider's account for everyone (the server leaves it out of its count too)
+    .filter((id) => !(orgServer && addedAccount(id, driver)));
+  const removable = Boolean(lead) && !row.slot && (addedAccount(lead!, driver) || removableAccount(lead!, others)) && (list.organization || !list.member);
   const run = (work: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);

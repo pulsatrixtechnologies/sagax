@@ -199,6 +199,30 @@ interface PiExtensionApi {
   setActiveTools?(names: string[]): void;
 }
 
+/** #4410: the sign-ins pi bills with (server/drivers/pi.ts PI_SIGN_IN_ENV,
+ * a test keeps the two lists equal). pi reads them from its own variables
+ * at each request, so they stay there; nothing pi starts for the bot (its
+ * shell commands, its MCP servers) gets them. */
+export const PI_SIGN_IN_VARIABLES = ["ANTHROPIC_OAUTH_TOKEN"] as const;
+
+/** A copy of an environment without the sign-ins. */
+export function withoutSignIns(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out = { ...env };
+  for (const name of PI_SIGN_IN_VARIABLES) delete out[name];
+  return out;
+}
+
+/** #4410: a `tool_call` of pi's shell runs its command with the sign-ins
+ * unset first (pi's shell inherits pi's variables). Mutates the call's
+ * input, as pi's extension API allows; any other call is left alone. */
+export function hideSignInsFromShell(event: Record<string, unknown> | undefined): undefined {
+  if (event?.toolName !== "bash") return undefined;
+  const input = event.input as { command?: unknown } | undefined;
+  if (!input || typeof input.command !== "string") return undefined;
+  input.command = `unset ${PI_SIGN_IN_VARIABLES.join(" ")}; ${input.command}`;
+  return undefined;
+}
+
 const MCP_STARTUP_TIMEOUT_MS = 8_000;
 const MCP_TOOL_TIMEOUT_MS = 10 * 60_000;
 const MCP_MAX_LIST_PAGES = 100;
@@ -227,7 +251,7 @@ export class StdioMcp {
     this.remote = def.directory === true;
     this.child = spawnChild(def.command, def.args ?? [], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, ...def.env },
+      env: { ...withoutSignIns(process.env), ...def.env },
     });
     this.child.stderr.on("data", () => {
       /* best-effort drain so a chatty server never blocks */
@@ -732,6 +756,7 @@ function askUserTool(allowed: () => boolean): PiToolDefinition {
 }
 
 export default async function (pi: PiExtensionApi): Promise<void> {
+  if (PI_SIGN_IN_VARIABLES.some((name) => process.env[name])) pi.on("tool_call", hideSignInsFromShell);
   const configPath = process.env.SAGAX_MCP_CONFIG;
   if (!configPath) return;
 

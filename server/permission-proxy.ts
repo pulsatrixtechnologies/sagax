@@ -4,9 +4,12 @@
 // Forwards each ask over a unix socket to the broker living in the
 // Sagax server and waits for the human's answer.
 //
-//   approve   — the CLI calls this for any tool use its permission mode
-//               would deny; the answer is the --permission-prompt-tool
-//               JSON contract ({behavior:"allow"|"deny", …}).
+//   approve:  the --permission-prompt-tool JSON contract
+//               ({behavior:"allow"|"deny", …}). Since #4525 the Claude
+//               driver launches with --permission-prompt-tool stdio
+//               (server/drivers/claude/can-use-tool.ts, the same rules in
+//               permission-prompt.ts); this tool stays for a caller that
+//               names it.
 //   ask_user  — the agent can pose a question mid-run and wait; the
 //               human's words come back verbatim. With multiSelect it is
 //               asked as a question card the person can pick several from.
@@ -24,10 +27,14 @@ import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
 import { parseAskQuestions, questionAnswersByQuestion, type AskQuestion } from "../shared/ask-question.ts";
 import { allowsTool, parseToolScope } from "../shared/tool-scope.ts";
-import { permissionRoute, preallowedFromEnv, searchedServersFromEnv } from "../shared/searched-tool-call.ts";
+import { preallowedFromEnv, searchedServersFromEnv } from "../shared/searched-tool-call.ts";
 import { reportBackgroundError } from "./background-error.ts";
-import { withoutRecordLinksIn } from "../shared/record-cards.ts";
-import { harnessToolWordsLeave } from "../shared/record-link-tools.ts";
+import {
+  ASK_USER_QUESTION,
+  allowPermissionResult,
+  answerNativeQuestions,
+  classifyPermissionPrompt,
+} from "./drivers/claude/permission-prompt.ts";
 
 // #1276: the servers whose catalog is searched; a call_tool there is asked
 // about as the tool it runs (shared/searched-tool-call.ts).
@@ -109,78 +116,6 @@ function multiSelectQuestion(args: Record<string, unknown>): AskQuestion[] | nul
   return parseAskQuestions({ questions: [{ question: args.question, multiSelect: true, options }] });
 }
 
-// ── the CLI's own AskUserQuestion ──────────────────────────────────────
-const ASK_USER_QUESTION = "AskUserQuestion";
-
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-
-/** One question, in the shape the broker and the option card understand. */
-/**
- * Ask the person every question at once, then answer the tool the way it
- * documents.
- *
- * The answer is NOT a bare allow. A bare allow tells the CLI to go and run
- * AskUserQuestion, and a headless run has no dialog to collect anything —
- * the model gets "The user did not answer the questions." back and the
- * click is thrown away. The `answers` object is the field the tool's own
- * schema calls "User answers collected by the permission component":
- * keyed by the question's text, one comma-joined string per question.
- *
- * One ask, not one per question: the card draws the whole set with a tab
- * each, so a person sees what they are committing to before answering any
- * of it. `questionAnswersByQuestion` maps the answer text back per question.
- *
- * There is deliberately no "fall through to the permission path" here. That
- * path cannot answer this tool — allowing it throws the click away, as
- * above — so the fallback offered a person an Allow/Deny dialog over raw JSON.
- * That dialog is the bug this file exists to remove.
- */
-async function answerNativeQuestions(input: unknown): Promise<string> {
-  // Unanswerable entries are SKIPPED by the parser, not fatal: one bad entry
-  // must not cost the user the good questions beside it. Nothing left means
-  // the whole call was unanswerable, which becomes a denial.
-  const questions = parseAskQuestions(input);
-  if (!questions?.length) {
-    return JSON.stringify({
-      behavior: "deny",
-      message:
-        "Sagax: this AskUserQuestion call had no answerable question (each one needs question text), so nobody was shown it. Ask again with a well-formed call, or continue without it.",
-    });
-  }
-  const answer = await askBroker({
-    t: "ask",
-    id: randomUUID(),
-    kind: "question",
-    tool: ASK_USER_QUESTION,
-    input: { questions },
-  });
-  // A question is only ever denied when the broker is gone.
-  if (answer.behavior === "deny") {
-    return JSON.stringify({ behavior: "deny", message: answer.message || "Denied from Sagax" });
-  }
-  // What lands in `answers` turns on WHO answered, not on whether there are
-  // words. The broker's own notes are words — the timeout's "nobody answered
-  // in time, use your best judgment" is a whole sentence — so filing anything
-  // non-blank hands the model system text in the slot reserved for what the
-  // person chose. Left out, the CLI reports the question as unanswered, which
-  // is the truth.
-  const answers =
-    answer.source === "user" && typeof answer.message === "string"
-      ? questionAnswersByQuestion(answer.message, questions)
-      : {};
-  return JSON.stringify({ behavior: "allow", updatedInput: { ...asRecord(input), answers } });
-}
-
-/** #4507: the input a tool runs with: a record link keeps only its label
- * when the tool's words leave the app (shared/record-link-tools.ts, the one
- * rule the agents dispatcher reads too); the CLI's own file, notebook and
- * shell tools, Sagax's own files and a connector's file content keep their
- * input byte for byte. */
-function recordSafeInput(tool: unknown, input: unknown): unknown {
-  return typeof tool === "string" && harnessToolWordsLeave(tool, input) ? withoutRecordLinksIn(input) : input;
-}
-
 const TOOLS = [
   {
     name: "approve",
@@ -240,52 +175,53 @@ async function handle(msg: any) {
     // AskUserQuestion is a question wearing a permission's clothes. It never
     // continues into the permission path below — see nativeQuestions.
     if (name === "approve" && args.tool_name === ASK_USER_QUESTION) {
-      return reply(await answerNativeQuestions(args.input));
+      return reply(await answerNativeQuestions(args.input, async (questions) => askBroker({
+        t: "ask",
+        id: randomUUID(),
+        kind: "question",
+        tool: ASK_USER_QUESTION,
+        input: { questions },
+      })));
     }
     const askId = randomUUID();
     const isQuestion = name === "ask_user";
     const picksSeveral = isQuestion ? multiSelectQuestion(args) : null;
+    if (isQuestion) {
+      const answer: any = await askBroker({ t: "ask", id: askId, kind: "question", tool: "ask_user", input: { question: args.question, choices: args.choices, ...(picksSeveral ? { questions: picksSeveral } : {}) } });
+      let text = answer.message || "No answer was given: use your best judgment.";
+      // The card answers in its Q:/A: form; hand back just the picks, the way
+      // a one-tap answer arrives. Only the person's own words are unpacked.
+      if (picksSeveral && answer.source === "user" && typeof answer.message === "string") {
+        text = questionAnswersByQuestion(answer.message, picksSeveral)[picksSeveral[0]!.question] ?? text;
+      }
+      return reply(text);
+    }
     // the CLI may include its own suggested permission rules; on allow we
     // hand them straight back as updatedPermissions so claude stops asking
-    // at its own layer — no invented rule syntax (agentcal)
+    // at its own layer. No invented rule syntax (agentcal). A searched
+    // call_tool is asked about as the tool it runs, so that suggested rule
+    // (every call_tool of the server) is never handed back.
     const suggestions = Array.isArray(args.permission_suggestions)
       ? args.permission_suggestions
       : Array.isArray(args.suggestions)
         ? args.suggestions
         : null;
-    // A call_tool on a searched server is asked about as the tool it runs,
-    // so its card, its rules and Always allow are that tool's. Claude's own
-    // suggested rule would allow every call_tool of the server: never handed back.
-    // #1374: the agents bridge's use_tool likewise; one naming no tool, or
-    // another meta tool, runs nothing and is refused without a card.
-    // #4507: a send or a connector's tool carries a record link's label,
-    // never the app's own address; the card shows exactly what will run
-    const input = isQuestion ? (args.input ?? {}) : recordSafeInput(args.tool_name, args.input ?? {});
-    const route = isQuestion || typeof args.tool_name !== "string" ? null : permissionRoute(args.tool_name, input, SEARCHED, PREALLOWED, ARTIFACT_READS);
-    if (route?.kind === "deny") return reply(JSON.stringify({ behavior: "deny", message: route.message }));
-    if (route?.kind === "allow") return reply(JSON.stringify({ behavior: "allow", updatedInput: input } satisfies AllowPermissionResult));
-    const runs = route?.kind === "ask" ? route : null;
-    const answer: any = await askBroker(
-      isQuestion
-        ? { t: "ask", id: askId, kind: "question", tool: "ask_user", input: { question: args.question, choices: args.choices, ...(picksSeveral ? { questions: picksSeveral } : {}) } }
-        : { t: "ask", id: askId, tool: runs?.searched ? runs.tool : args.tool_name, input: runs?.searched ? runs.input : input },
+    const classified = classifyPermissionPrompt(
+      { searched: SEARCHED, preallowed: PREALLOWED, artifactReads: ARTIFACT_READS },
+      args.tool_name,
+      args.input ?? {},
+      suggestions,
     );
-    let text = answer.message || "No answer was given — use your best judgment.";
-    // The card answers in its Q:/A: form; hand back just the picks, the way
-    // a one-tap answer arrives. Only the person's own words are unpacked.
-    if (picksSeveral && answer.source === "user" && typeof answer.message === "string") {
-      text = questionAnswersByQuestion(answer.message, picksSeveral)[picksSeveral[0]!.question] ?? text;
+    if (classified.kind === "deny") return reply(JSON.stringify({ behavior: "deny", message: classified.message }));
+    if (classified.kind === "allow") {
+      return reply(JSON.stringify({ behavior: "allow", updatedInput: classified.updatedInput as object } satisfies AllowPermissionResult));
     }
-    if (!isQuestion) {
-      if (answer.behavior === "allow") {
-        const result: AllowPermissionResult = { behavior: "allow", updatedInput: input };
-        if (answer.always && suggestions && !runs?.searched) result.updatedPermissions = suggestions;
-        text = JSON.stringify(result);
-      } else {
-        text = JSON.stringify({ behavior: "deny", message: answer.message || "Denied from Sagax" });
-      }
+    if (classified.kind !== "ask") return reply(JSON.stringify({ behavior: "deny", message: "Sagax: this permission prompt could not be shown" }));
+    const answer: any = await askBroker({ t: "ask", id: askId, tool: classified.tool, input: classified.askInput });
+    if (answer.behavior === "allow") {
+      return reply(JSON.stringify(allowPermissionResult(classified.updatedInput, classified.suggestions, Boolean(answer.always), classified.searched, false) satisfies AllowPermissionResult));
     }
-    return reply(text);
+    return reply(JSON.stringify({ behavior: "deny", message: answer.message || "Denied from Sagax" }));
   }
   if (String(msg.method ?? "").startsWith("notifications/")) return;
   if (msg.id != null) {

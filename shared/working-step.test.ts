@@ -53,6 +53,23 @@ describe("workingStepFor: the same step whatever the engine", () => {
     expect(workingStepFor({ name: "browser_click" })).toEqual({ key: "browse" });
   });
 
+  it("names each step of the built-in browser, on the page it is on, whatever the engine calls it (#4394)", () => {
+    // A browser task once read "Browsing the web" for 8 minutes and 41 steps.
+    for (const name of ["agent_browser_open", "mcp__browser__agent_browser_open", "browser_agent_browser_open"]) {
+      expect(workingStepFor({ name, input: JSON.stringify({ url: "https://social.example/compose" }) }), name).toEqual({ key: "browse", detail: "social.example" });
+    }
+    // Steps with no address read on the page the browser is on.
+    const onPage = { pageHost: "social.example" };
+    expect(workingStepFor({ name: "agent_browser_click", input: JSON.stringify({ selector: "@e4" }), ...onPage })).toEqual({ key: "browse", detail: "social.example" });
+    expect(workingStepFor({ name: "browser_agent_browser_fill", ...onPage })).toEqual({ key: "browse", detail: "social.example" });
+    for (const name of ["agent_browser_snapshot", "agent_browser_get_text", "agent_browser_read", "mcp__browser__agent_browser_get_url"]) {
+      expect(workingStepFor({ name, ...onPage }), name).toEqual({ key: "readPage", detail: "social.example" });
+    }
+    expect(workingStepFor({ name: "agent_browser_screenshot", ...onPage })).toEqual({ key: "screen" });
+    // Without a known page, the plain phrase.
+    expect(workingStepFor({ name: "agent_browser_click" })).toEqual({ key: "browse" });
+  });
+
   it("names the file a file tool touches, by its name only", () => {
     const reads = sameEverywhere([
       { name: "Read", input: JSON.stringify({ file_path: "/home/me/project/notes.md" }) },

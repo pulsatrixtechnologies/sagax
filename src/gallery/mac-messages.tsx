@@ -10,7 +10,13 @@ import { createRoot } from "react-dom/client";
 import { MessagesSetupView } from "../components/plugins/MessagesSetupView";
 import { MacAppsInstalledSection } from "../components/plugins/MacAppsView";
 import { MacAppSetupView } from "../components/plugins/MacAppSetupView";
-import { MAC_APP_SETUP_IDS, type MacAppSetupId, type MacAppsSetupStatus } from "../../shared/mac-apps-setup.ts";
+import {
+  MAC_APP_SETUP_IDS,
+  type MacAppPermissionNeed,
+  type MacAppSetupAction,
+  type MacAppSetupId,
+  type MacAppsSetupStatus,
+} from "../../shared/mac-apps-setup.ts";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import "../styles.css";
@@ -62,19 +68,47 @@ const STATUSES: Record<string, FakeStatus> = {
 const status = STATUSES[state] ?? (state === "server" ? STATUSES.ready! : STATUSES.off!);
 const app = (params.get("app") ?? "mail") as Exclude<MacAppSetupId, "messages">;
 
+/** One line per tool the detail can show. Kinds are not drawn. */
+const GALLERY_TOOLS: Record<MacAppSetupId, Array<{ tool: string; needs: MacAppPermissionNeed }>> = {
+  messages: [
+    { tool: "mac_messages_list_chats", needs: "fullDiskAccess" },
+    { tool: "mac_messages_read", needs: "fullDiskAccess" },
+    { tool: "mac_messages_read_attachment", needs: "fullDiskAccess" },
+    { tool: "mac_messages_send", needs: "automation" },
+  ],
+  mail: ["mac_mail_list_mailboxes", "mac_mail_search", "mac_mail_read", "mac_mail_read_attachment", "mac_mail_update", "mac_mail_move", "mac_mail_delete", "mac_mail_send", "mac_mail_reply", "mac_mail_forward", "mac_mail_create_draft", "mac_mail_list_rules", "mac_mail_update_rule"].map((tool) => ({ tool, needs: "automation" as const })),
+  calendar: ["mac_calendar_list_calendars", "mac_calendar_list", "mac_calendar_read", "mac_calendar_create", "mac_calendar_update", "mac_calendar_delete", "mac_calendar_create_calendar", "mac_calendar_update_calendar", "mac_calendar_delete_calendar"].map((tool) => ({ tool, needs: "automation" as const })),
+  contacts: ["mac_contacts_search", "mac_contacts_read", "mac_contacts_create", "mac_contacts_update", "mac_contacts_delete", "mac_contacts_list_groups", "mac_contacts_create_group", "mac_contacts_update_group", "mac_contacts_delete_group"].map((tool) => ({ tool, needs: "automation" as const })),
+  reminders: ["mac_reminders_list_lists", "mac_reminders_list", "mac_reminders_create", "mac_reminders_update", "mac_reminders_complete", "mac_reminders_delete", "mac_reminders_create_list", "mac_reminders_update_list", "mac_reminders_delete_list"].map((tool) => ({ tool, needs: "automation" as const })),
+  notes: ["mac_notes_list_folders", "mac_notes_search", "mac_notes_read", "mac_notes_create", "mac_notes_update", "mac_notes_move", "mac_notes_delete", "mac_notes_create_folder", "mac_notes_update_folder", "mac_notes_delete_folder"].map((tool) => ({ tool, needs: "automation" as const })),
+};
+
+function galleryActions(id: MacAppSetupId, permissions: Partial<Record<MacAppPermissionNeed, string>>): MacAppSetupAction[] {
+  return GALLERY_TOOLS[id].map((tool) => ({
+    tool: tool.tool,
+    kind: "read",
+    needs: tool.needs,
+    granted: permissions[tool.needs] === "granted",
+  }));
+}
+
 /** The same states for every Apple app (Messages keeps its FDA row). */
 function appsStatus(): MacAppsSetupStatus {
   const granted = status.permissions.automation === "granted";
   return {
     available: status.available,
     onThisMac: status.onThisMac,
-    apps: MAC_APP_SETUP_IDS.map((id) => ({
-      id,
-      enabled: id === "messages" ? status.useMessages : status.useMessages || (id === "calendar" && granted),
-      permissions: id === "messages"
+    apps: MAC_APP_SETUP_IDS.map((id) => {
+      const permissions = id === "messages"
         ? { automation: status.permissions.automation as "granted", fullDiskAccess: status.permissions.fullDiskAccess as "granted" }
-        : { automation: (status.available ? (state === "off" ? "notAsked" : "granted") : "unsupported") as "granted" },
-    })),
+        : { automation: (status.available ? (state === "off" ? "notAsked" : "granted") : "unsupported") as "granted" };
+      return {
+        id,
+        enabled: id === "messages" ? status.useMessages : status.useMessages || (id === "calendar" && granted),
+        permissions,
+        actions: status.available ? galleryActions(id, permissions) : [],
+      };
+    }),
   };
 }
 

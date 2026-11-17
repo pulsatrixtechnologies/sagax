@@ -71,6 +71,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("sends:status", "read", "send_status"),
   p("sessions:search", "read", "session_search"),
   p("sessions:read", "read", "session_read"),
+  // #4100: a session this chat listened to (server/routes/listening.ts)
+  p("listening:read", "read", "listening_read"),
   p("topics:recall", "read", "recall_topic"),
   p("toolresult:read", "read", "tool_result_read"),
   p("routines:list", "read", "list_routines"),

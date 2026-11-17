@@ -24,8 +24,7 @@
 //
 // xAI is ears and a voice only; it never answers. call-machine.ts holds the
 // states and decides; this file runs the devices and the effects.
-import vadModelUrl from "./models/silero-vad-v5.onnx?url";
-import speakerModelUrl from "./models/campplus-sv-en-int8.onnx?url";
+import { loadVoiceModels as defaultModels, speakerModelUrl } from "./voice-models";
 import { streamVoiceModeSpeech } from "./api";
 import { type CallSettings } from "./call-settings";
 import { INITIAL_CALL, step, type CallEffect, type CallEvent, type CallState } from "./call-machine";
@@ -45,7 +44,7 @@ import { BARGE_IN_CONFIRM_MS, completeClause, EARLY_CUT_CONTINUATION_MS, FRAME_M
 import { formatTimeline, materiallyDifferent, normalizedWords, type TurnMetrics } from "./latency";
 import { discardSpeculation, holdSpeculativePlayback, mayReviseSpeculation, maySpeculate } from "./speculative";
 import { NO_LEAD, ttsLeadStep, type TtsLeadAction, type TtsLeadState } from "./tts-lead";
-import { LevelVad, SileroVad, VAD_FRAME, type VoiceProbability } from "./vad";
+import { LevelVad, VAD_FRAME, type VoiceProbability } from "./vad";
 import { stripFillers, VOICE_MODE_MAX_TEXT, type VoiceModeSettings } from "../../../shared/voice-mode";
 
 const RATE = 16_000;
@@ -1640,15 +1639,6 @@ export function resampler(fromRate: number): (input: Float32Array) => Float32Arr
     base += keepFrom;
     return out;
   };
-}
-
-async function defaultModels(withSpeaker: boolean): Promise<{ vad: VoiceProbability; embedder: SpeakerEmbedder | null }> {
-  const ort = await loadOrt();
-  const [vad, embedder] = await Promise.all([
-    SileroVad.load(ort, vadModelUrl),
-    withSpeaker ? SpeakerEmbedder.load(ort, speakerModelUrl).catch(() => null) : Promise.resolve(null),
-  ]);
-  return { vad, embedder };
 }
 
 async function readPcm(body: ReadableStream<Uint8Array>): Promise<Uint8Array> {

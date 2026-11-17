@@ -23,6 +23,7 @@ import {
 import { WindowDragStrip } from "../DesktopCapabilities";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { bulkAnswer, inboxChatTarget, inboxTitle, useHeldSignals, useInbox } from "@/lib/approvals-inbox";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableErrorMessage } from "@/lib/readable-error";
@@ -88,12 +89,12 @@ function BotFilter({ entries, bots, value, onChange }: { entries: readonly Inbox
         <ChevronDown size={12} aria-hidden="true" />
       </Chip>
       {open && (
-        <div role="menu" className="absolute left-0 top-8 z-30 min-w-52 overflow-hidden rounded-xl border border-hairline/50 bg-popover p-1 shadow-lg">
-          <button type="button" role="menuitemradio" aria-checked={!value} onClick={() => { onChange(""); setOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-control">
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute left-0 top-8 z-30 overflow-hidden")}>
+          <button type="button" role="menuitemradio" aria-checked={!value} onClick={() => { onChange(""); setOpen(false); }} className={value ? MENU_ROW : MENU_ROW_ACTIVE}>
             {t("approvals.filter.allBots")}
           </button>
           {counts.map(([id, row]) => (
-            <button key={id} type="button" role="menuitemradio" aria-checked={value === id} onClick={() => { onChange(id); setOpen(false); }} className={cn("flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-control", value === id && "bg-control")}>
+            <button key={id} type="button" role="menuitemradio" aria-checked={value === id} onClick={() => { onChange(id); setOpen(false); }} className={value === id ? MENU_ROW_ACTIVE : MENU_ROW}>
               <InboxAvatar bot={bots.get(id)} name={row.name} size={20} />
               <span className="min-w-0 flex-1 truncate">{row.name}</span>
               <span className="text-[11.5px] tabular-nums text-ink-tertiary">{row.n}</span>

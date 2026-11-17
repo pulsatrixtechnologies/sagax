@@ -69,7 +69,9 @@ describe("Settings → Decision model", () => {
     // an old link to the section opens the page that holds the card
     fixture.section = "decisionModel";
     const panel = await render();
-    expect(panel).toContain('<option value="engines" selected="">');
+    // #4457: Models is Providers > Models and context size
+    expect(panel).toContain('<option value="providers" selected="">');
+    expect(panel).toContain('data-settings-subpage="providers.models"');
     expect(panel).toContain("A fast decision model that picks");
   });
 
@@ -99,7 +101,7 @@ describe("Settings → Decision model", () => {
 
   it("matches searches for decision, jev, typesafe, routing and auto", async () => {
     const { SECTIONS, sectionMatches } = await import("./SettingsModal");
-    const section = SECTIONS.find((entry) => entry.id === "engines")!;
+    const section = SECTIONS.find((entry) => entry.id === "providers")!;
     for (const query of ["decision", "jev", "typesafe", "routing", "auto"]) expect(sectionMatches(section, query)).toBe(true);
     expect(sectionMatches(section, "backups")).toBe(false);
   });

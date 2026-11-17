@@ -42,6 +42,7 @@ import { useConversationGallery } from "./conversation-gallery-context";
 import { isInlineRasterDataUrl } from "@/lib/rich-blocks";
 import { TableFileButton } from "./TableFilePreview";
 import { ImageLoading } from "./ImageLoading";
+import { revealLabel } from "./ChatFileLink";
 import { useOnScreen } from "@/lib/on-screen";
 
 import {
@@ -220,9 +221,14 @@ export function MessageFolderFiles({ folderPath, listing, message }: {
 // offered for reveal: main refuses them. Shared by the inline bot link and its
 // attachment chip; the caller sets the text size.
 const REVEALABLE_PATH = /^(?:\/(?!\/)|[a-zA-Z]:[\\/])/;
-function revealBridge(): NonNullable<Window["ogb"]>["revealInFolder"] {
+/** The local file manager bridge; none for a paired remote client or a browser. */
+export function revealBridge(): NonNullable<Window["ogb"]>["revealInFolder"] {
   const ogb = typeof window === "undefined" ? undefined : window.ogb;
   return ogb?.remoteClient?.active ? undefined : ogb?.revealInFolder;
+}
+
+export function canRevealLocalPath(filePath: string): boolean {
+  return Boolean(revealBridge() && REVEALABLE_PATH.test(filePath));
 }
 
 export function OutsideWorkspaceFile({ filePath }: { filePath: string }) {
@@ -254,7 +260,7 @@ export function OutsideWorkspaceFile({ filePath }: { filePath: string }) {
         className="inline-flex items-center gap-1 text-accent underline decoration-accent/40 hover:decoration-accent"
       >
         <FolderOpen size={12} className="shrink-0" aria-hidden="true" />
-        {t("attach.showInFolder")}
+        {revealLabel()}
       </button>
       {problem && <span role="alert" className="text-danger">{problem}</span>}
     </>

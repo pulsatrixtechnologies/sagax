@@ -30,6 +30,7 @@ import { cardStandingGrants, orgServerExecRouting } from "../exec-target.ts";
 import { HOST_RUN_REASONS } from "../engines/engine-access.ts";
 import { providerLabel } from "../memes/providers.ts";
 import { providerMcpTool, providerToolAllowKey } from "../provider-tool-allow.ts";
+import { ARTIFACT_DATA_TOOL, isArtifactDataTool } from "../../shared/artifact-data-consent.ts";
 import {
   memberEnvironmentAutonomyAllowed,
   ownAttachmentRead,
@@ -483,9 +484,14 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
         ? providerMcpTool(event.tool)
         : null;
       const configuredMcp = providerTool && asker ? host.engineMcpServers(asker, event.threadId)[providerTool.server] : undefined;
-      const toolAllowKey = configuredMcp === undefined
+      // #4525: Claude's ArtifactData tool. Its Always allow is the bot's
+      // "ArtifactData" grant, the same one Access > Always allowed writes,
+      // and it is read as the person's agreement to the consent disclosure.
+      const artifactDataKey = permission && asker && event.requestId && !guestDriven && !strictCard && !foreignDestination
+        && isArtifactDataTool(event.tool) ? ARTIFACT_DATA_TOOL : null;
+      const toolAllowKey = artifactDataKey ?? (configuredMcp === undefined
         ? null
-        : providerToolAllowKey(providerInstanceId, event.tool, configuredMcp);
+        : providerToolAllowKey(providerInstanceId, event.tool, configuredMcp));
       // 2026-10-21 (parité 1C): a message send whose every recipient is on
       // the bot's allowed recipients goes with no card (shared/allowed-recipients.ts).
       const recipientsListed = Boolean(permission && asker && event.requestId && !strictCard && !guestDriven && !foreignDestination

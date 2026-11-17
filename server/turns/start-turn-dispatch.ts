@@ -8,6 +8,7 @@ import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir
 import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
 import { keepHubRows } from "./turn-connectors.ts";
 import { dispatchedConnectorPlan } from "../connectors/turn-plan.ts";
+import { turnUsesClaudeAccount } from "../drivers/pi-claude-refusal.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 import { warmCachePrime } from "./warm-cache-prime.ts";
@@ -176,7 +177,9 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...(state.onCall ? { keepWarm: true } : {}),
       ...(state.warmOnly ? { warmOnly: true, ...warmCachePrime(Boolean(state.onCall), state.opts?.primeCache === true), ...(state.opts?.warmSignal ? { warmSignal: state.opts.warmSignal } : {}) } : {}),
       startupRecovery: !state.warmOnly &&
-        (state.opts?.automaticRecoveryIndex ?? 0) < botRecoveryBackups(state.liveBot ?? state.bot, cfg).length,
+        ((state.opts?.automaticRecoveryIndex ?? 0) < botRecoveryBackups(state.liveBot ?? state.bot, cfg).length ||
+          // #4410: a turn on the person's Claude account under pi waits for its first word
+          (!state.opts?.automaticRecoveryAttempted && turnUsesClaudeAccount({ access: turnAccess }))),
       text: state.warmOnly ? "" : (engineCommand ? engineCommand.engineText : withRecalled(state.recalled, state.dispatchContext.turnText)),
       // read again as the engine takes the turn (below), and by an engine
       // the server calls itself before each model call
@@ -193,6 +196,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...(state.routineEffort ? { subagentEffort: turnEffort } : {}),
       effort: turnEffort,
       variant: state.variant,
+      ...(state.contextWindow ? { contextWindow: state.contextWindow } : {}),
       // a rewound thread never resumes the abandoned branch's session
       // the active task's own session — another task's cursor would
       // resume the wrong conversation and defeat the context bubble

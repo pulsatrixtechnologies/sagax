@@ -601,7 +601,7 @@ describe("Plugins, driven like the owner does", () => {
     expect($('[data-harness-notice="not_signed_in"]')?.textContent).toContain("not signed in to Claude");
     await click($('[data-harness-setup="claude"]'));
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "togglePlugins", open: false }));
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "toggleAppSettings", open: true, section: "engines" }));
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "toggleAppSettings", open: true, section: "providers", subPage: "providers.models" }));
   });
 
   it("Manage > engine accounts: the Claude account's connectors listed like Grok's when they are read", async () => {

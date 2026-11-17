@@ -158,6 +158,19 @@
 //                      Unset, a turn makes the single default Bash call.
 //                      `parent` (another call's id) makes it a sub-agent's
 //                      call (parent_tool_use_id); that parent settles last.
+//   FAKE_CLAUDE_CAN_USE_TOOL JSON array of {tool_name, input?, when?,
+//                      description?}: before its reply, a turn (whose prompt
+//                      holds `when`, if set) calls each tool the way the real
+//                      CLI does under --permission-prompt-tool stdio (#4547):
+//                      it runs at once when the launch allows it unasked
+//                      (bypassPermissions, an --allowedTools name or its
+//                      mcp__<server>, acceptEdits for Edit/Write), is refused
+//                      when --disallowedTools names it, and otherwise writes a
+//                      control_request can_use_tool on stdout and waits for the
+//                      host's control_response on stdin. Allowed, the call
+//                      runs with the answer's updatedInput.
+//   FAKE_CLAUDE_TOOL_RAN path of a JSON-lines file each of those calls that
+//                      RAN appends {tool, input, asked} to.
 //   FAKE_CLAUDE_USES_CLOUD_COMPUTER 1: a turn launched with the cloud
 //                      computer's tools (the harness-mcp-proxy `computer`
 //                      server in --mcp-config) first takes one screenshot
@@ -980,6 +993,59 @@ function recordTranscript(prompt: JsonValue): void {
 /** The volatile half of the instructions this process last received. */
 let volatileNote: string | null = null;
 
+/** control_response frames the host owes this process, by request_id. */
+const pendingControl = new Map<string, (response: Record<string, any>) => void>();
+type StdioPermissionCall = { tool_name: string; input?: Record<string, unknown>; when?: string; description?: string };
+const stdioPermissionCalls: StdioPermissionCall[] | null = (() => {
+  const raw = process.env.FAKE_CLAUDE_CAN_USE_TOOL;
+  if (!raw) return null;
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error("FAKE_CLAUDE_CAN_USE_TOOL must be a JSON array");
+  return parsed as StdioPermissionCall[];
+})();
+/** The real CLI's own decision before it asks anyone (2.1.x). */
+function launchVerdict(tool: string): "run" | "refuse" | "ask" {
+  const names = (flag: string) => (argAfter(flag) ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  const covers = (list: string[]) => list.some((name) => name === tool || (name.startsWith("mcp__") && !name.slice(5).includes("__") && tool.startsWith(`${name}__`)));
+  if (covers(names("--disallowedTools"))) return "refuse";
+  if (permissionMode === "bypassPermissions") return "run";
+  if (covers(names("--allowedTools"))) return "run";
+  if (permissionMode === "acceptEdits" && (tool === "Edit" || tool === "Write" || tool === "MultiEdit")) return "run";
+  return "ask";
+}
+async function playStdioPermissionCalls(prompt: JsonValue): Promise<string> {
+  const promptText = JSON.stringify(prompt);
+  const notes: string[] = [];
+  for (const call of (stdioPermissionCalls ?? []).filter((entry) => !entry.when || promptText.includes(entry.when))) {
+    const toolUseId = `toolu_stdio_${process.pid}_${++toolUseCount}`;
+    const input = call.input ?? {};
+    out({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: toolUseId, name: call.tool_name, input }] } });
+    const verdict = launchVerdict(call.tool_name);
+    let answer: Record<string, any> = verdict === "run" ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: `Permission to use ${call.tool_name} has been denied.` };
+    if (verdict === "ask" && argAfter("--permission-prompt-tool") === "stdio") {
+      const requestId = `can-use-${process.pid}-${toolUseCount}`;
+      answer = await new Promise<Record<string, any>>((resolve) => {
+        pendingControl.set(requestId, resolve);
+        out({ type: "control_request", request_id: requestId, request: {
+          subtype: "can_use_tool", tool_name: call.tool_name, input, tool_use_id: toolUseId,
+          permission_suggestions: [{ type: "addRules", rules: [{ toolName: call.tool_name }], behavior: "allow", destination: "localSettings" }],
+          ...(call.description ? { description: call.description } : {}),
+        } });
+      });
+    }
+    if (answer.behavior === "allow") {
+      const ran = (answer.updatedInput ?? input) as Record<string, unknown>;
+      if (process.env.FAKE_CLAUDE_TOOL_RAN) appendFileSync(process.env.FAKE_CLAUDE_TOOL_RAN, `${JSON.stringify({ tool: call.tool_name, input: ran, asked: verdict === "ask" })}\n`);
+      out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseId, content: `ran ${call.tool_name}` }] } });
+      notes.push(`ran ${call.tool_name}`);
+    } else {
+      out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseId, is_error: true, content: String(answer.message ?? "denied") }] } });
+      notes.push(`denied ${call.tool_name}`);
+    }
+  }
+  return notes.join("\n");
+}
+
 const playTurn = (prompt: JsonValue, late = false) => {
   recordTranscript(prompt);
   turnRunning = true;
@@ -1268,6 +1334,14 @@ const playTurn = (prompt: JsonValue, late = false) => {
   }
 
   if (process.env.FAKE_CLAUDE_USES_CLOUD_COMPUTER === "1") useCloudComputer();
+
+  if (stdioPermissionCalls) {
+    void playStdioPermissionCalls(prompt).then(
+      (note) => playReply(prompt, note),
+      (error: unknown) => playReply(prompt, `permission:error:${error instanceof Error ? error.message : String(error)}`),
+    );
+    return;
+  }
 
   if (fakeMcpCalls) {
     const promptText = JSON.stringify(prompt);
@@ -1729,6 +1803,11 @@ process.stdin.on("data", (c) => {
     const control = prompt && typeof prompt === "object" && !Array.isArray(prompt) ? prompt as Record<string, any> : null;
     if (control?.type === "control_response") {
       if (process.env.FAKE_CLAUDE_CONTROL_LOG) appendFileSync(process.env.FAKE_CLAUDE_CONTROL_LOG, `${line}\n`);
+      const settle = pendingControl.get(String(control.response?.request_id ?? ""));
+      if (settle) {
+        pendingControl.delete(String(control.response.request_id));
+        settle(control.response?.subtype === "success" && control.response.response && typeof control.response.response === "object" ? control.response.response : { behavior: "deny", message: "the host answered with an error" });
+      }
       continue;
     }
     if (control?.type === "control_request" && control.request?.subtype === "initialize") {

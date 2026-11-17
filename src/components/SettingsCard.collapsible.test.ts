@@ -153,16 +153,10 @@ describe("collapsible settings card", () => {
 });
 
 describe("collapsed card summaries", () => {
-  it("summarizes About me, keys, cleanup and VM setup in one line each", async () => {
+  it("summarizes keys, cleanup and VM setup in one line each", async () => {
     const { cardsMatching } = await import("./SettingsModal");
-    const { aboutMeFirstLine } = await import("./AboutMeSettings");
     const { threadCleanupSummary } = await import("./ThreadCleanupSettings");
     const { setupStep } = await import("./LocalComputerSection");
-
-    expect(aboutMeFirstLine(undefined)).toBe("Not set");
-    expect(aboutMeFirstLine("  \n")).toBe("Not set");
-    expect(aboutMeFirstLine("I run an MSP")).toBe("I run an MSP");
-    expect(aboutMeFirstLine("\n## Who I am\nTwo\nThree")).toBe("Who I am");
 
     expect(threadCleanupSummary(null, null)).toBe("Off");
     expect(threadCleanupSummary(30, 52_428_800)).toBe("Delete after 30 days · Trim at 50 MiB");
@@ -172,7 +166,8 @@ describe("collapsed card summaries", () => {
 
     expect(cardsMatching("ab")).toEqual([]);
     expect(cardsMatching("jev")).toEqual(["engines.decisionModel"]);
-    expect(cardsMatching("about")).toEqual(["general.aboutMe"]);
+    // the owner 2026-11-17: About me left the settings, the bots keep it
+    expect(cardsMatching("about me")).toEqual([]);
     // 2026-10-30: the keys are on Providers, where nothing folds them
     expect(cardsMatching("openrouter")).toEqual([]);
     // #2080: nothing waits under a To connect fold any more (Add a provider covers it)
@@ -181,12 +176,6 @@ describe("collapsed card summaries", () => {
     expect(cardsMatching("avatar")).toEqual(["connections.image"]);
   });
 
-  it("French summaries come from the pack", async () => {
-    const { aboutMeFirstLine } = await import("./AboutMeSettings");
-    setLocale("fr");
-    expect(aboutMeFirstLine("a\nb")).toBe("a");
-    expect(aboutMeFirstLine("")).toBe("Non défini");
-  });
 });
 
 describe("card counts", () => {
@@ -233,15 +222,18 @@ describe("Settings → Account and General, compact", () => {
     expect(advanced).not.toContain(">3 per bot<");
     // 2026-10-15: group turns and MCP calls are cards of Organization
     for (const id of ["organization.roomTurns", "organization.mcpCalls"]) expect(advanced).not.toContain(`data-settings-card="${id}"`);
-    expect(html).toContain(">Not set<");
-    // About me is edited on its sub-page; Account shows its first line and Edit
-    expect(html).toContain('data-settings-card="general.aboutMe" data-settings-subpage-row');
+    // the owner 2026-11-17: no About me row nor editor, the bots keep it
+    expect(html).not.toContain('data-settings-card="general.aboutMe"');
     expect(html).not.toContain('id="profile-about-me"');
     // every other card on the page is the collapsible kind; the account card
     // (2026-10-15) is always open, never collapsed. Security keys left for
     // the Security page of their own (#1510, 2026-10-28).
     expect(html).not.toContain('data-settings-card="general.profile"');
     expect(html).not.toContain('data-settings-card="security"');
-    expect(html.match(/data-settings-card="[^"]*"(?! data-open| data-settings-subpage-row)/g)).toEqual(['data-settings-card="general.account"']);
+    // #4457: General's cards wrap groups of rows (Appearance, Notifications,
+    // Mascots, System); the account card is the one card of Account
+    const plain = html.match(/data-settings-card="[^"]*"(?! data-open| data-settings-subpage-row)/g) ?? [];
+    expect(plain).toContain('data-settings-card="general.account"');
+    for (const card of plain) expect(['data-settings-card="general.account"', 'data-settings-card="general.input"', 'data-settings-card="appearance.skin"', 'data-settings-card="general.notifications"', 'data-settings-card="general.mascots"', 'data-settings-card="general.system"', 'data-settings-card="connections.audio"', 'data-settings-card="voice.microphone"', 'data-settings-card="general.bots"'], card).toContain(card);
   });
 });

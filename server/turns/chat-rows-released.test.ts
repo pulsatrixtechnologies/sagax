@@ -4,10 +4,13 @@
 // and its trace) must be a shape the released apps draw
 // (shared/fixtures/chat-rows-released.json), else they show an update
 // notice or an empty row.
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { WireMessage } from "../../shared/wire.ts";
+import { ListeningSessions } from "../listening/listening-sessions.ts";
 import { mirrorBackgroundReply, mirrorLateRunReply, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
 
 interface ReleasedApp { kinds: string[]; relayVia: string[]; relayTrace: string[] }
@@ -74,6 +77,51 @@ describe("the rows a bot's main chat gets from work done elsewhere, in released 
           if (row.relayVia) expect(drawn.relayVia, `relayVia ${row.relayVia}`).toContain(row.relayVia);
           // an app that does not read the trace draws the row's own words
           if (row.relayTrace && !drawn.relayTrace.includes(row.relayTrace)) expect((row.text ?? "").trim()).not.toBe("");
+          expect((row.text ?? "").trim(), `${row.kind} carries plain words`).not.toBe("");
+        }
+      });
+    }
+  }
+});
+
+/** #4100: the one row a listening session keeps in the person's conversation,
+ * as written at the start, while lines arrive and once it ended. */
+function listeningRows(): WireMessage[] {
+  const dir = mkdtempSync(join(tmpdir(), "sagax-listening-rows-"));
+  try {
+    const written: WireMessage[] = [];
+    let clock = 1_000;
+    const sessions = new ListeningSessions({
+      dir,
+      now: () => clock,
+      appendRow: (_threadId, row) => { const stored = { id: "m1", at: clock, ...row } as WireMessage; written.push(stored); return stored; },
+      patchRow: (_threadId, messageId, patch) => { written.push({ ...written.find((row) => row.id === messageId)!, ...patch }); },
+      broadcast: () => {},
+    });
+    const session = sessions.start({ botId: "bot-a", threadId: "main", principalId: "pr_ada" })!;
+    sessions.addLines(session.id, "pr_ada", { lines: [{ seq: 1, at: 2_000, speaker: "s1", text: "We ship Friday." }], speakers: [{ key: "s1", label: "Speaker 1" }] });
+    clock += 24 * 60_000;
+    sessions.stop(session.id, "pr_ada");
+    return written;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe("the listening row in released apps (#4100)", () => {
+  const rows = listeningRows();
+
+  it("is one plain line, patched in place, that says when it is on and how it ended", () => {
+    expect(new Set(rows.map((row) => row.id))).toEqual(new Set(["m1"]));
+    expect(rows.map((row) => row.text)).toEqual(["Listening to a conversation", "Listening to a conversation", "Listened 24 min, 1 speaker"]);
+  });
+
+  for (const [release, apps] of Object.entries(released.releases)) {
+    for (const [app, drawn] of Object.entries(apps)) {
+      it(`is drawn by the ${release} ${app} app`, () => {
+        for (const row of rows) {
+          expect(drawn.kinds, `kind ${row.kind}`).toContain(row.kind);
+          expect(row.role).toBe("bot");
           expect((row.text ?? "").trim(), `${row.kind} carries plain words`).not.toBe("");
         }
       });

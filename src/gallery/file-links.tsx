@@ -36,8 +36,8 @@ const opened: string[] = [];
 };
 
 const TEXT = params.get("lang") === "en"
-  ? "I created the file `pelican-a-velo.html` on your desktop, and updated `rapport.md`. I did not touch `autre.html`."
-  : "J'ai créé le fichier `pelican-a-velo.html` sur ton bureau et mis à jour `rapport.md`. Je n'ai pas touché à `autre.html`.";
+  ? "I created the file `pelican-a-velo.html` on your desktop, and updated `rapport.md`. I did not touch `autre.html`. The working folder is [projects](/Users/demo/projets/notes)."
+  : "J'ai créé le fichier `pelican-a-velo.html` sur ton bureau et mis à jour `rapport.md`. Je n'ai pas touché à `autre.html`. Le dossier de travail est [projets](/Users/demo/projets/notes).";
 
 function Gallery() {
   return (

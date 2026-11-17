@@ -93,14 +93,12 @@ export function wireTurnBudget(host: TurnBudgetHost): TurnBudget {
     ...(host.clearTimer ? { clearTimer: host.clearTimer } : {}),
   });
   // QA 0.8.67 G4: the same direct conversations get the browser failure
-  // guard, which ends a loop of failed web page calls well before the ceiling.
+  // guard's note (#4394: a note to the bot only, never a stop).
   const browser = createBrowserFailureGuard({
     settings: () => browserGuardSettings(host.env ?? process.env),
     live: busy,
     canSteer: busy,
     steer,
-    interrupt,
-    post,
     language,
     ...(host.log ? { log: host.log } : {}),
   });

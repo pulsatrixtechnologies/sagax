@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { PASS, type RouteHandler } from "./table.ts";
 import { cleanAccountName } from "../engines/account-names.ts";
 import { accountInUseRefusal } from "../engines/account-users.ts";
-import { addedAccount, separateAccountInstance } from "../../shared/added-account.ts";
+import { ONLY_ACCOUNT_ERROR, addedAccount, removableAccount, separateAccountInstance } from "../../shared/added-account.ts";
 
 /** The person's sign-in folder of an engine, or null when it keeps none
  * (#4415: engines reading the same folder are one account). */
@@ -121,31 +121,46 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
     deps.accountNames.set(principalId, instanceId, name);
     return json(res, 200, { ok: true, ...(name ? { displayName: name } : {}) });
   }
-  // #4415: DELETE /api/me/engines/:id takes an account added beside the
-  // provider's first one off the person's own list, and signs them out of
-  // it; the organization's engine stays for everyone else. Refused, with the
-  // bots to move, while one of the person's bots still uses it.
+  // #4415, #4426: DELETE /api/me/engines/:id takes one of the person's
+  // accounts off their own list, the first one too while the provider keeps
+  // another, and signs them out of it in the same gesture. The organization's
+  // engine stays for everyone else. A person's own account (#4435) leaves
+  // the fleet too. Refused, with the bots to move, while one still uses it.
   const removing = method === "DELETE" ? /^\/api\/me\/engines\/([\w.-]+)$/.exec(path) : null;
   if (removing) {
     const instanceId = removing[1];
-    const entry = deps.orgOfferedEngines(deps.registry.entries(), principalId)
-      .find((candidate: any) => candidate.instanceId === instanceId && deps.personalProviderInstances.visible(candidate.instanceId, principalId));
-    if (!entry || deps.accountNames?.removed?.(principalId, instanceId)) return json(res, 404, { error: "unknown account" });
-    const driver = entry.shadow?.driverKind ?? entry.live?.driverKind ?? "";
-    if (!addedAccount(instanceId, driver)) return json(res, 400, { error: "Only an account added beside the provider's first one can be removed." });
-    const users = deps.accountUsers?.(principalId, instanceId) ?? [];
+    const driverOf = (candidate: any): string => candidate.shadow?.driverKind ?? candidate.live?.driverKind ?? "";
+    const listed = deps.orgOfferedEngines(deps.registry.entries(), principalId)
+      .filter((candidate: any) => deps.personalProviderInstances.visible(candidate.instanceId, principalId) && !deps.accountNames?.removed?.(principalId, candidate.instanceId));
+    const entry = listed.find((candidate: any) => candidate.instanceId === instanceId);
+    if (!entry) return json(res, 404, { error: "unknown account" });
+    const driver = driverOf(entry);
+    const signsIn = Boolean(deps.isLoginDriver(driver) && !deps.keyOnlyInstance?.(instanceId));
+    const folder = signsIn ? signInFolder(deps, principalId, driver, instanceId) : null;
+    // one sign-in is one account: the engines reading the same folder (Codex
+    // and the ChatGPT plan) go together, as the page lists them in one row.
+    // A key engine of the same tool is a key, not an account.
+    const same = listed.filter((candidate: any) => driverOf(candidate) === driver && !deps.keyOnlyInstance?.(candidate.instanceId));
+    const account = folder ? same.filter((candidate: any) => signInFolder(deps, principalId, driver, candidate.instanceId) === folder) : [entry];
+    const others = same.filter((candidate: any) => !account.includes(candidate)).map((candidate: any): string => candidate.instanceId);
+    // a key engine is removed with its key, never as an account
+    if (deps.keyOnlyInstance?.(instanceId) || !(addedAccount(instanceId, driver) || removableAccount(instanceId, others))) return json(res, 400, { error: ONLY_ACCOUNT_ERROR });
+    const users: string[] = [...new Set<string>(account.flatMap((candidate: any): string[] => deps.accountUsers?.(principalId, candidate.instanceId) ?? []))];
     if (users.length) return json(res, 409, accountInUseRefusal(users, false));
     // #4435: the person's own account goes for good (its entry, its sign-in
     // folder); the organization's stays for everyone else, off this list only
     const own = deps.personalProviderInstances.ownerOf?.(instanceId) === principalId.toLowerCase();
     if (own && deps.cfg.defaultModelSelection?.instanceId === instanceId) return json(res, 409, accountInUseRefusal([], true));
-    // its own sign-in folder goes with it; a folder another account reads stays
+    const owner = auth.kind === "session" ? auth.session.id : "loopback";
+    // its sign-in goes with it, connected or not, in this one gesture
     const signOut = async () => {
-      if (deps.isLoginDriver(driver) && separateAccountInstance(instanceId) && deps.logins.signedIn(principalId, driver, "primary", instanceId)) {
-        await deps.logins.signOut(principalId, instanceId, auth.kind === "session" ? auth.session.id : "loopback");
+      if (signsIn && deps.logins.signedIn(principalId, driver, "primary", instanceId)) {
+        await deps.logins.signOut(principalId, instanceId, owner);
+      }
+      if (signsIn && deps.secondLoginSupported?.(driver) && deps.logins.signedIn(principalId, driver, "second", instanceId)) {
+        await deps.logins.signOut(principalId, instanceId, owner, "second");
       }
     };
-    if (!own) await signOut();
     if (own) {
       // the removal of the instance routes (server/routes/instances.ts
       // removeAddedAccount): a turn in flight on it waits, then the person
@@ -156,7 +171,8 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       deps.accountNames.set(principalId, instanceId, "");
       return json(res, 200, { ok: true });
     }
-    deps.accountNames.remove(principalId, instanceId);
+    await signOut();
+    for (const candidate of account) deps.accountNames.remove(principalId, candidate.instanceId);
     return json(res, 200, { ok: true });
   }
   const status = /^\/api\/me\/engines\/([\w.-]+)\/login\/status$/.exec(path);

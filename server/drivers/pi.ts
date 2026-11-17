@@ -27,6 +27,7 @@ import { randomUUID } from "node:crypto";
 
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { PI_ORG_KEY_VARIABLES, PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
+import { PI_CLAUDE_SIGN_IN_ENV } from "../engines/engine-credentials.ts";
 import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
 import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
@@ -1166,9 +1167,15 @@ function piEnvironment(source: Record<string, string | undefined>): Record<strin
   stripWorkspaceCredentialEnv(env);
   for (const key of PROVIDER_CREDENTIAL_ENV) delete env[key];
   for (const key of PI_ACCESS_KEY_ENV) delete env[key];
+  for (const key of PI_SIGN_IN_ENV) delete env[key];
   for (const key of Object.keys(env)) if (key.startsWith(MODEL_SERVER_KEY_ENV_PREFIX)) delete env[key];
   return env;
 }
+
+/** #4410: the sign-ins pi bills with, by variable: only a payer's own, set
+ * for one turn by piAccessEnvironment, never inherited, never a placeholder
+ * of the catalog read, never a command variable of the bot's. */
+export const PI_SIGN_IN_ENV = [PI_CLAUDE_SIGN_IN_ENV] as const;
 
 /** The provider keys pi reads, as engine-credentials.ts PROVIDER_KEY_ENV
  * hands them: the Perspicax providers pi knows natively (#2024). */
@@ -1182,7 +1189,7 @@ export const PI_ACCESS_KEY_ENV = [
 /** Whether a variable is one pi bills a provider with: a native key name or
  * the key of a Perspicax model server (pi-model-servers.ts). */
 function isPiKeyVariable(name: string): boolean {
-  return (PI_ACCESS_KEY_ENV as readonly string[]).includes(name) || name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX);
+  return (PI_ACCESS_KEY_ENV as readonly string[]).includes(name) || (PI_SIGN_IN_ENV as readonly string[]).includes(name) || name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX);
 }
 
 /** Organization server: one turn's credentials (SendTurnInput.access), over
@@ -1221,7 +1228,7 @@ export function piAccessEnvironment(
  * bash tool in, never a provider key name pi would bill. pi starts for every
  * turn, so a change or a revoke holds at the next one. */
 export function piTurnEnvironment(env: Record<string, string | undefined>, commandEnvironment: Record<string, string> | undefined): Record<string, string | undefined> {
-  const reserved = [...PI_ACCESS_KEY_ENV, ...Object.keys(commandEnvironment ?? {}).filter((name) => name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX))];
+  const reserved = [...PI_ACCESS_KEY_ENV, ...PI_SIGN_IN_ENV, ...Object.keys(commandEnvironment ?? {}).filter((name) => name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX))];
   applyEngineCommandVariables(env, commandEnvironment, reserved);
   return env;
 }

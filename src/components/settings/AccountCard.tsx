@@ -1,25 +1,32 @@
-// Settings > General > Account: the account row of the Account group
-// (2026-10-15 one card; 0.5.6 the reference design's layout).
+// Settings > General > Account: the account card, exactly the reference's
+// (#4457, the owner 2026-11-17, reference-wanted-2):
 //
-//   [avatar]  Name                                         [Sign out]
-//             label (pencil on hover)
+//   [avatar]  Name                           [Add account] [Sign out]
 //             email [copy]
-//             Managed by your organization · Edit in Perspicax
+//   Team  <the organization signed in to>
+//
+// Nothing else in the card: a 44px avatar, 14px gap, 16px padding, the
+// page's plain pill buttons (30px), the rows placed as measured on the
+// reference (avatar 22px under the card's edge, Team 65px under its centre). On a solo install with no organization
+// the Team row is hidden and the card is one row. The server's address and
+// "Managed by your organization" are the tooltip of the organization's name
+// (the address also stays on the Computer page); with a Perspicax profile
+// link the name opens it ("Edit in Perspicax", in the same tooltip).
 //
 // On an organization server (Pulsatrix Perspicax) the name and email are
 // Perspicax's and read-only; the signed-in person changes their own photo
 // from the avatar (OwnAvatarField: crop, then written to Perspicax as them,
-// 2026-10-16); the server and the organization stay one
-// hover away, on "Managed by your organization". On a personal server the
-// operator edits name, email and photo here; the label stays; the action is
-// the desktop's server switcher instead of Sign out. Sign out is the
-// desktop's server mode bridge (src/lib/launch.ts): it asks natively, signs
-// out and returns to the launch screen, unchanged. No help paragraph: the
-// native confirmation says what Sign out does.
+// 2026-10-16). On a personal server the operator edits name, email and photo
+// here; the action is Add account (the desktop server list) beside Sign out.
+// Sign out is the desktop's server mode bridge (src/lib/launch.ts): it asks
+// natively, signs out and returns to the launch screen, unchanged. About me
+// is not here: the person's bots keep it (sagax_settings account.aboutMe).
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Cloud, Copy, Laptop, X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { openExternalLink } from "@/lib/app-links";
 import { useCopyFeedback } from "@/lib/copy-text";
+import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE } from "@/components/menu-look";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { serverModeBridge } from "@/lib/launch";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -29,12 +36,11 @@ import { InitialsAvatar } from "../Avatar";
 import { useDesktopWorkspace } from "../DesktopWorkspaceSwitcher";
 import type { ServerModeState } from "../ServerModeSettings";
 import { profileInitials, profileLabel } from "../SidebarProfileMenu";
-import { MyLabelField } from "./MyLabelField";
 import { OwnAvatarField, OwnAvatarStatusLine, setOwnAvatarNotice, useOwnAvatarNotice } from "./OwnAvatarField";
 import { AnchoredPopover, useAnchoredDismissRoot } from "@/components/AnchoredPopover";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 
-type LockedServer = Extract<ServerModeState, { active: true }>;
+export type LockedServer = Extract<ServerModeState, { active: true }>;
 
 function host(origin: string): string {
   try {
@@ -44,13 +50,14 @@ function host(origin: string): string {
   }
 }
 
-/** Where this account lives, for the tooltip of "Managed by your
- * organization": the server's address and the organization's name. */
-export function accountServerDetails(input: { origin?: string | null; organization?: string | null }): string {
+/** The tooltip of the organization's name on the Team row: the server's
+ * address, then "Managed by your organization" and, with a Perspicax
+ * profile link, "Edit in Perspicax". */
+export function accountServerDetails(input: { origin?: string | null; managed?: boolean; editable?: boolean }): string {
   const parts: string[] = [];
   if (input.origin) parts.push(t("settings.serverMode.connectedTo", { server: host(input.origin) }));
-  const organization = input.organization?.trim();
-  if (organization) parts.push(t("settings.serverMode.organization", { name: organization }));
+  if (input.managed) parts.push(t("settings.serverMode.managedShort"));
+  if (input.managed && input.editable) parts.push(t("settings.profile.editInPerspicax"));
   return parts.join(" · ");
 }
 
@@ -67,19 +74,23 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
   // own photo here; it is written to Perspicax as them (OwnAvatarField).
   const ownPhotoPrincipal = managed && viewer && !viewer.operator ? viewer.principalId?.trim() || null : null;
   const workspace = useDesktopWorkspace();
-  const switcher = !lockedServer && workspace.available;
 
-  const action = lockedServer
-    ? <SignOutButton onFailed={setSignOutFailed} />
-    : switcher ? <ServerSwitchButton workspace={workspace} /> : null;
-  const details = accountServerDetails({ origin: lockedServer?.origin, organization });
+  const action = lockedServer || workspace.available
+    ? (
+      <>
+        {workspace.available && <AddAccountButton workspace={workspace} />}
+        {lockedServer && <SignOutButton onFailed={setSignOutFailed} />}
+      </>
+    )
+    : null;
+  const editUrl = managed?.url || null;
+  const details = accountServerDetails({ origin: lockedServer?.origin, managed: Boolean(managed), editable: Boolean(editUrl) });
 
   return (
     <div
       role="group"
       aria-label={t("settings.profile.title")}
       data-settings-card="general.account"
-      className="px-3.5 py-2.5"
     >
       {operator
         ? <OperatorIdentity action={action} />
@@ -97,31 +108,29 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
                 onStatus={setOwnAvatarNotice}
               />
             ) : undefined}
-          >
-            {managed ? (
-              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1 text-[12px] leading-4 text-ink-secondary">
-                <span title={details || undefined} data-account-managed="">{t("settings.serverMode.managedShort")}</span>
-                {managed.url && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <button
-                      type="button"
-                      onClick={() => void openExternalLink(managed.url!)}
-                      className="rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                    >
-                      {t("settings.profile.editInPerspicax")}
-                    </button>
-                  </>
-                )}
-              </div>
-            ) : lockedServer && details ? (
-              <div className="mt-0.5 truncate text-[12px] leading-4 text-ink-secondary" data-server-connected="">{details}</div>
-            ) : null}
-          </ReadOnlyIdentity>
+          />
         )}
-      <OwnAvatarStatusLine status={photoStatus} />
-      {signOutFailed && <p role="alert" className="mt-2 text-[12px] text-danger">{t("settings.serverMode.signOutFailed")}</p>}
-      {workspace.error && <p role="alert" className="mt-2 text-[12px] text-danger">{workspace.error}</p>}
+      {organization && (
+        <div data-account-team="" className="flex min-w-0 items-baseline gap-2 px-4 pb-[9px] pt-[19px] text-[13px] leading-[18px]">
+          <span className="shrink-0 text-ink-secondary">{t("settings.account.team")}</span>
+          {editUrl
+            ? (
+              <button
+                type="button"
+                title={details || undefined}
+                data-account-server={lockedServer?.origin ? host(lockedServer.origin) : undefined}
+                onClick={() => void openExternalLink(editUrl)}
+                className="min-w-0 truncate rounded-sm text-left text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+              >
+                {organization}
+              </button>
+            )
+            : <span title={details || undefined} data-account-server={lockedServer?.origin ? host(lockedServer.origin) : undefined} className="min-w-0 truncate text-ink">{organization}</span>}
+        </div>
+      )}
+      <div className="px-4"><OwnAvatarStatusLine status={photoStatus} /></div>
+      {signOutFailed && <p role="alert" className="px-4 pb-3 text-[12px] text-danger">{t("settings.serverMode.signOutFailed")}</p>}
+      {workspace.error && <p role="alert" className="px-4 pb-3 text-[12px] text-danger">{workspace.error}</p>}
     </div>
   );
 }
@@ -156,32 +165,33 @@ function CopyEmailButton({ state, copy }: ReturnType<typeof useCopyFeedback>) {
   );
 }
 
-function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action, children }: {
+function ReadOnlyIdentity({ name, email, avatarUrl, avatar, action }: {
   name: string;
   email: string;
   avatarUrl?: string;
   /** Replaces the picture (the person's own photo button). */
   avatar?: React.ReactNode;
   action: React.ReactNode;
-  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 text-left" data-testid="account-identity">
+    <div className="flex items-center gap-3.5 px-4 py-[15px] text-left" data-testid="account-identity">
       {avatar ?? (avatarUrl ? (
-        <img src={avatarUrl} alt="" width={36} height={36} className="size-9 shrink-0 rounded-full object-cover" />
+        <img src={avatarUrl} alt="" width={44} height={44} className="size-11 shrink-0 rounded-full object-cover" />
       ) : (
-        <InitialsAvatar initials={profileInitials({ name, email })} size={36} />
+        <InitialsAvatar initials={profileInitials({ name, email })} size={44} />
       ))}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-medium leading-[18px] text-ink">{profileLabel({ name, email })}</div>
-        <MyLabelField />
         <EmailLine email={email} />
-        {children}
       </div>
-      {action && <div className="shrink-0" data-account-action="">{action}</div>}
+      {action && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2" data-account-action="">{action}</div>}
     </div>
   );
 }
+
+/** The reference card's pills, measured on it: 32px tall, 14px text, 12px
+ * sides (the page's other pills stay 30px and 13px). */
+const ACCOUNT_PILL = "h-8 px-3 text-[14px]";
 
 /** Sign out of the organization server: the desktop asks for confirmation,
  * signs out and leaves this page. */
@@ -195,28 +205,24 @@ function SignOutButton({ onFailed }: { onFailed: (failed: boolean) => void }) {
     void bridge.leave().catch(() => onFailed(true)).finally(() => setBusy(false));
   };
   return (
-    <button type="button" onClick={leave} disabled={busy} className="ui-button">
+    <button type="button" onClick={leave} disabled={busy} className={`ui-button ${ACCOUNT_PILL}`}>
       {t("settings.serverMode.signOut")}
     </button>
   );
 }
 
-/** The desktop's own server list (native menu), on this computer's page. */
-function ServerSwitchButton({ workspace }: { workspace: ReturnType<typeof useDesktopWorkspace> }) {
-  const name = workspace.current?.name ?? t("settings.thisComputer.title");
-  const Icon = workspace.current?.local === false ? Cloud : Laptop;
+/** "Add account": the desktop's own server list (native menu), where another
+ * account or server is added or chosen. */
+function AddAccountButton({ workspace }: { workspace: ReturnType<typeof useDesktopWorkspace> }) {
   return (
     <button
       type="button"
-      aria-label={t("settings.thisComputer.switch", { name })}
       aria-haspopup="menu"
       aria-expanded={workspace.open}
       onClick={workspace.openMenu}
-      className="ui-button inline-flex max-w-[200px] items-center gap-1.5"
+      className={`ui-button ${ACCOUNT_PILL}`}
     >
-      <Icon size={13} aria-hidden="true" className="shrink-0" />
-      <span className="min-w-0 truncate">{name}</span>
-      <ChevronDown size={12} aria-hidden="true" className="shrink-0" />
+      {t("settings.account.addAccount")}
     </button>
   );
 }
@@ -295,9 +301,8 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
     }).catch(() => {});
   };
 
-  const initials = (name.trim() || email.trim() || "?").slice(0, 1).toUpperCase();
   return (
-    <div className="flex items-center gap-3" data-testid="account-identity">
+    <div className="flex items-center gap-3.5 px-4 py-[15px]" data-testid="account-identity">
       <div ref={avatarRootRef} className="relative shrink-0">
         <button
           ref={avatarButtonRef}
@@ -305,27 +310,26 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
           aria-label={t("settings.profile.changeAvatar")}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}
-          className="flex size-9 items-center justify-center overflow-hidden rounded-full bg-raised text-[13px] font-semibold text-ink"
+          className="flex size-11 items-center justify-center overflow-hidden rounded-full"
         >
-          {avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : initials}
+          {avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : <InitialsAvatar initials={profileInitials({ name, email })} size={44} />}
         </button>
         {menuOpen && (
-          <AnchoredPopover anchorRef={avatarButtonRef} popoverRef={avatarMenuRef} gap={8} className="flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px]">
-            <button type="button" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover">{t("settings.profile.uploadPhoto")}</button>
-            {avatarUrl && <button type="button" onClick={() => { setAvatarUrl(""); setMenuOpen(false); save({ avatarUrl: "" }); }} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover">{t("settings.profile.removePhoto")}</button>}
+          <AnchoredPopover anchorRef={avatarButtonRef} popoverRef={avatarMenuRef} role="menu" aria-label={t("settings.profile.changeAvatar")} gap={8} className={cn(MENU_SURFACE, MENU_FIT_ROW)}>
+            <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className={MENU_ROW}>{t("settings.profile.uploadPhoto")}</button>
+            {avatarUrl && <button type="button" role="menuitem" onClick={() => { setAvatarUrl(""); setMenuOpen(false); save({ avatarUrl: "" }); }} className={MENU_ROW_DANGER}>{t("settings.profile.removePhoto")}</button>}
           </AnchoredPopover>
         )}
         <input ref={fileRef} type="file" accept="image/*" className="hidden" aria-label={t("settings.profile.uploadAvatar")} onChange={(event) => { choosePhoto(event.target.files?.[0]); event.target.value = ""; }} />
       </div>
       <div className="min-w-0 flex-1">
         <input aria-label={t("settings.profile.name")} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.name")} className="w-full bg-transparent text-[13px] font-medium leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none" />
-        <MyLabelField />
         <div className="flex min-w-0 items-center gap-1">
           <input type="email" aria-label={t("phone.signIn.email")} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.emailPlaceholder")} className="min-w-[12ch] max-w-full bg-transparent text-[13px] leading-[18px] text-ink-secondary [field-sizing:content] placeholder:text-ink-secondary focus:outline-none" />
           {email.trim() && <OperatorCopyEmail email={email.trim()} />}
         </div>
       </div>
-      {action && <div className="shrink-0" data-account-action="">{action}</div>}
+      {action && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2" data-account-action="">{action}</div>}
     </div>
   );
 }

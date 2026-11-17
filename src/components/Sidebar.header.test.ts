@@ -1,6 +1,8 @@
 // Density is an occasional preference chosen in Settings > Appearance; the
-// Sagax sidebar head keeps only its frequent controls (search and New). The
-// edge collapses it: see `sidebarDragTarget` in sidebar-preferences.
+// Sagax sidebar head keeps only its frequent controls: the reference's
+// "Collapse sidebar" first (#4484), then search and New. The rail wears
+// "Expand sidebar" in its foot. Dragging the edge collapses it too: see
+// `sidebarDragTarget` in sidebar-preferences.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement } from "react";
@@ -67,15 +69,15 @@ afterEach(() => {
 
 describe("sidebar header", () => {
   it.each(["comfortable", "compact", "icons"] as const)(
-    "keeps search and New but no collapse button or density menu at %s density",
+    "keeps Collapse sidebar (full widths) or Expand sidebar (rail), search and New, and no density menu at %s density",
     (density) => {
       fixture.density = density;
       const html = render();
       expect(html).toContain('aria-label="New"');
-      expect(html).not.toContain("data-sidebar-collapse");
-      expect(html).not.toContain('aria-label="Expand sidebar"');
+      expect(html.includes("data-sidebar-collapse")).toBe(density !== "icons");
+      expect(html.includes('aria-label="Collapse sidebar"')).toBe(density !== "icons");
+      expect(html.includes('aria-label="Expand sidebar"')).toBe(density === "icons");
       expect(html).not.toContain('aria-label="Collapse sidebar to avatars"');
-      expect(html).not.toContain("lucide-panel-left");
       expect(html).not.toContain("Choose sidebar density");
       expect(html).not.toContain('title="Sidebar density"');
     },

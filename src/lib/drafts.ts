@@ -515,9 +515,10 @@ export function useNetworkOnline(): boolean {
 
 /** Recovers a rejected POST without ever replacing a newer draft. A send
  * that failed with no network is always queued (never put back in the box),
- * so it can be labelled and sent when the connection returns. */
+ * attachments included, so it can be labelled and sent when the connection
+ * returns. The composed request already names the uploaded files. */
 export function recoverFailedComposerSend(sent: ComposerSendSnapshot): "restored" | "outbox" {
-  if ((isNetworkOffline() && sent.attachments.length === 0) || draftRevision(sent.draftId) !== sent.revision) {
+  if (isNetworkOffline() || draftRevision(sent.draftId) !== sent.revision) {
     rememberFailedComposerSend(sent.draftId, {
       sendId: sent.sendId,
       text: sent.text,

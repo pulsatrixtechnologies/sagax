@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { api, useStore } from "@/state/store";
-import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "@/components/menu-look";
 
 const POLL_ACTIVE_MS = 8_000;
 
@@ -96,19 +96,19 @@ function RowMenu({ record, botId }: { record: CloudAgentRecord; botId: string })
         <MoreHorizontal size={14} aria-hidden />
       </button>
       {open && (
-        <div role="menu" className={cn(MENU_SURFACE, "absolute right-0 top-7 z-20 w-52")}>
+        <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-7 z-20")}>
           <button
             type="button" role="menuitem" className={item}
             disabled={!cloudAgentStatusActive(record.status)}
             onClick={() => { setOpen(false); void api(`/api/bots/${encodeURIComponent(botId)}/cloud-agents/${encodeURIComponent(record.id)}/cancel`, { method: "POST" }).catch(() => {}); }}
           >
-            <Square size={13} aria-hidden />{t("code.action.stop")}
+            <MenuGlyph><Square size={16} /></MenuGlyph>{t("code.action.stop")}
           </button>
           <button type="button" role="menuitem" className={item} disabled={!prUrl} onClick={() => { setOpen(false); if (prUrl) void copyText(prUrl); }}>
-            <Copy size={13} aria-hidden />{t("code.action.copyPr")}
+            <MenuGlyph><Copy size={16} /></MenuGlyph>{t("code.action.copyPr")}
           </button>
           <a role="menuitem" className={cn(item, !prUrl && "pointer-events-none opacity-50")} href={prUrl ?? undefined} target="_blank" rel="noreferrer" aria-disabled={!prUrl} onClick={() => setOpen(false)}>
-            <ExternalLink size={13} aria-hidden />{t("code.action.openPr")}
+            <MenuGlyph><ExternalLink size={16} /></MenuGlyph>{t("code.action.openPr")}
           </a>
         </div>
       )}

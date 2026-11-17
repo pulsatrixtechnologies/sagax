@@ -310,6 +310,46 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     expect(listed.find((candidate) => candidate.id === reported.id)?.output).toBe(REPORT);
   });
 
+  // #4432 (third point): a run that completed but whose tool failed every
+  // time ("Flow failed 2 times and never succeeded after: Tool not found")
+  // is a problem run like any other: one summary after three in a row,
+  // never a card on each run.
+  it("runs that complete with the same tool failure: one summary at the third, counted in place, never one per run (#4432)", async () => {
+    const { routines, advance } = manager(start);
+    const routine = routines.create({ name: "Flow sweep", prompt: "Sweep the board with Flow", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const chat = conversation({ routines });
+    const failing = async (): Promise<RoutineRun> => {
+      advance(3_600_000);
+      const started = routines.runNow(routine.id)!;
+      await routines.tick();
+      const threadId = routines.listRuns().find((candidate) => candidate.id === started.id)!.threadId!;
+      const emit = (event: Record<string, unknown>) =>
+        routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), threadId, ...event } as never);
+      for (const index of [0, 1]) {
+        emit({ type: "item.started", itemType: "tool", itemId: `flow-${index}`, title: "Flow" });
+        emit({ type: "item.completed", itemType: "tool", itemId: `flow-${index}`, ok: false, output: "Tool not found: Flow" });
+      }
+      emit({ type: "item.completed", itemType: "assistant_text", text: "Swept the board.\nNOTHING_TO_REPORT" });
+      emit({ type: "turn.completed", ok: true });
+      const done = routines.listRuns().find((candidate) => candidate.id === started.id)!;
+      chat.sync(done);
+      return done;
+    };
+    const first = await failing();
+    expect(first.status).toBe("completed");
+    expect(first.problems).toContain("failed 2 times and never succeeded after: Tool not found: Flow");
+    await failing();
+    expect(routineCards(chat.rows)).toEqual([]);
+    expect(chat.unread).toEqual([]);
+    const third = await failing();
+    expect(third.problemRepeat).toMatchObject({ firstRunId: first.id, count: 3 });
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.text).toContain("3 runs with problems since");
+    const fourth = await failing();
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, repeat: { count: 4, lastAt: fourth.finishedAt } });
+  });
+
   it("a streak of two then ok writes nothing", async () => {
     const { routines, run } = manager(start);
     const routine = routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });

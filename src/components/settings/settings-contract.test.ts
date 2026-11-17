@@ -50,9 +50,7 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
     "ServerModeSettings.tsx",
   ],
   roundedBorder: [
-    "settings/AccountCard.tsx",
     "settings/OrgSharing.tsx",
-    "settings/OwnAvatarField.tsx",
     "settings/ProviderKeys.tsx",
     "ConnectedWorkspacesSettings.tsx",
     "LiveCallSettings.tsx",
@@ -109,12 +107,12 @@ describe("Settings search keywords", () => {
     expect(twice).toEqual([]);
   });
 
-  it("draws the pages of the final rail (General, Updates, Developer, About), no Grok Import card", async () => {
-    const { SECTIONS, CARD_KEYWORDS } = await import("./settings-nav");
-    expect(SECTIONS).toHaveLength(17); // #2614 Permissions, #2636 Developer, 2026-11-08 Experimental is a section of Developer
-    // #2090 Updates; 2026-11-06 General (system) and About (id about, the owner 2026-11-07); every page has its intro line
+  it("draws the seven pages of the rail (#4457), each with its intro line, no Grok Import card", async () => {
+    const { SECTIONS, CARD_KEYWORDS, railSections } = await import("./settings-nav");
+    expect(railSections(SECTIONS)).toHaveLength(7);
+    expect(SECTIONS).toHaveLength(8); // and Organization, off the rail
+    // Permissions keeps the id "security"; every other page its own intro line
     expect(SECTIONS.every((entry) => entry.introKey === `settings.intro.${entry.id}`)).toBe(true);
-    expect(SECTIONS.find((entry) => entry.id === "about")?.introKey).toBe("settings.intro.about");
     expect(Object.keys(CARD_KEYWORDS)).toEqual(expect.arrayContaining(["about.help", "about.about", "general.system", "general.input", "general.interface"]));
     for (const gone of ["about.holding", "about.startup", "about.input", "backups.import", "about.updates"]) {
       expect(Object.keys(CARD_KEYWORDS), gone).not.toContain(gone);
@@ -122,18 +120,17 @@ describe("Settings search keywords", () => {
   });
 
   // 2026-11-06 (the owner: « un gros fourre-tout ») : the old App page split, each
-  // option where a person looks for it. Nothing lost: every option is found
-  // by search on its new page and on no other page.
+  // option where a person looks for it; #4457 folds those pages into the
+  // seven. Nothing lost: every option is found by search on its page and on
+  // no other page.
   it("puts every option of the old App page on its own page, found by search there only", async () => {
     const { SECTIONS, sectionMatches } = await import("./settings-nav");
-    const { CARD_HOME } = await import("@/lib/settings-sections");
+    const { CARD_HOME, settingsTarget } = await import("@/lib/settings-sections");
     const home: Record<string, string[]> = {
-      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck"],
-      about: ["licence", "release notes", "tours", "send feedback"],
-      backups: ["stockage"],
+      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck", "stockage"],
       security: ["people's tool access"],
-      // #2636: every technical option is on Developer
-      developer: ["advanced mode", "scheduled update", "loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter",
+      // #2636: every technical option is on Developer, Updates > Advanced since #4457; About beside it
+      updates: ["licence", "release notes", "tours", "send feedback", "advanced mode", "scheduled update", "loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter",
         // #2658: the bot page's technical cards and the Claude Code switches
         "webhooks", "export zip", "embeddings", "skills folder", "always allowed", "daily logs"],
     };
@@ -155,5 +152,9 @@ describe("Settings search keywords", () => {
       "about.startup": "general", "about.input": "general", "about.holding": "general",
     };
     for (const [card, page] of Object.entries(cards)) expect(CARD_HOME[card], card).toBe(page);
+    // and where they open now (#4457)
+    expect(settingsTarget("general", "general.loopGuard")).toEqual({ section: "updates", subPage: "updates.advanced" });
+    expect(settingsTarget("general", "about.help")).toEqual({ section: "updates", subPage: "updates.about" });
+    expect(settingsTarget("general", "general.peopleToolAccess")).toEqual({ section: "security", subPage: "security.peopleToolAccess" });
   });
 });

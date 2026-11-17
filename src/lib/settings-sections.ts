@@ -1,6 +1,7 @@
 // Which Settings page a section id opens today. The ids live in
 // settings-section.ts so this file does not import the store.
 import type { AppSettingsSection } from "@/state/settings-section";
+import type { LocaleKey } from "@/locales";
 
 /** Sections that are a card of another page now, and that card.
  * 2026-10-14: Integrations ("connections") and Models and accounts
@@ -14,7 +15,8 @@ const MERGED: Partial<Record<AppSettingsSection, { section: AppSettingsSection; 
   // 2026-10-30: keys are on Providers
   connections: { section: "providers", cardId: "providers.list" },
   decisionModel: { section: "engines", cardId: "engines.decisionModel" },
-  privacy: { section: "notifications", cardId: "notifications.privacy" },
+  // #4457: Privacy is a card of Permissions
+  privacy: { section: "security", cardId: "notifications.privacy" },
   memory: { section: "organization", cardId: "organization.memory" },
   // #2080 (L0): Import is a card of Backups and import.
   import: { section: "backups", cardId: "backups.import" },
@@ -51,8 +53,9 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   "credentials.onePassword": "credentials",
   "connections.voice": "voice",
   "voice.advanced": "voice",
-  "voice.microphone": "voice",
-  "connections.audio": "voice",
+  // #4457: the microphone is a row of General > System
+  "voice.microphone": "general",
+  "connections.audio": "general",
   "connections.voiceKeys": "providers",
   // 2026-10-30 (Providers, lot 1): the engines' sign-ins and every key are on Providers
   "engines.keys": "providers",
@@ -114,13 +117,14 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
  * Account. General is a page again since 2026-11-06 (system, keys, Advanced mode). 2026-10-15: People and Installations joined them, so Email (a
  * card of People) opens General too. */
 const HIDDEN: Partial<Record<AppSettingsSection, AppSettingsSection>> = {
-  companion: "account",
-  activity: "account",
-  mail: "account",
-  people: "account",
-  workspaces: "account",
+  // #4457: Account is a card of General; these open General.
+  companion: "general",
+  activity: "general",
+  mail: "general",
+  people: "general",
+  workspaces: "general",
   // Published pages moved to Connect apps > Manage; openSettings opens it there.
-  pages: "account",
+  pages: "general",
 };
 
 /** Cards of General > Advanced that moved to Organization (2026-10-15):
@@ -148,14 +152,112 @@ export function isMovedOrganizationCard(cardId: string | null | undefined): bool
   return Boolean(cardId) && ORGANIZATION_CARD_IDS.has(currentSettingsCard(cardId!));
 }
 
-export function currentSettingsSection(section: AppSettingsSection, cardId?: string): AppSettingsSection {
+/** #4457 (the owner, 2026-11-16): Settings has seven pages, with no group
+ * titles, as the reference app: General, Computer, Permissions, Vault,
+ * Providers, Usage, Updates. Permissions keeps the id "security" (its old
+ * links, the keys and rules, land there); the old "permissions" page (this
+ * computer's OS permissions) is one of its sub-pages. */
+export const RAIL_PAGES = ["general", "computer", "security", "credentials", "providers", "usage", "updates"] as const satisfies readonly AppSettingsSection[];
+
+/** Organization left the rail (#4457: everything is managed in the
+ * organization console). Its page stays, reached by the search and by its
+ * own address, until the console offers each of its settings. */
+export const OFF_RAIL_PAGES = ["organization"] as const satisfies readonly AppSettingsSection[];
+
+/** A sub-page of a page (src/components/SettingsSubPage.tsx): the rail page
+ * that holds it, its title, and the former section whose visibility rules it
+ * keeps (`gate`: shown where that section would have been). The page itself
+ * is drawn by src/components/settings/settings-sub-pages.tsx. */
+export interface SettingsSubPageInfo {
+  section: AppSettingsSection;
+  titleKey: LocaleKey;
+  gate?: AppSettingsSection;
+}
+
+/** Every sub-page of Settings (#4457 "▸": a page of the settings stack,
+ * never a modal). Each holds what a former page or card held; nothing was
+ * removed, some things are one page further. */
+const SUB_PAGES_DEFINED = {
+  // General
+  "account.crop": { section: "general", titleKey: "settings.profile.photoCropTitle" },
+  "general.appearance": { section: "general", titleKey: "settings.sub.moreAppearance", gate: "appearance" },
+  "general.notifications": { section: "general", titleKey: "settings.sub.moreNotifications", gate: "notifications" },
+  "general.mascots": { section: "general", titleKey: "settings.mascotsCard.title", gate: "appearance" },
+  "general.shortcuts": { section: "general", titleKey: "settings.sub.shortcuts", gate: "general" },
+  "general.backups": { section: "general", titleKey: "settings.section.backupsAndStorage", gate: "backups" },
+  // Permissions
+  "security.rules": { section: "security", titleKey: "myRules.title", gate: "security" },
+  "security.toolGrants": { section: "security", titleKey: "myToolAccess.title", gate: "security" },
+  "security.peopleToolAccess": { section: "security", titleKey: "settings.toolAccess.people.title", gate: "security" },
+  "security.keys": { section: "security", titleKey: "security.keys.title", gate: "security" },
+  "security.system": { section: "security", titleKey: "settings.sub.systemPermissions", gate: "permissions" },
+  // Providers
+  "providers.models": { section: "providers", titleKey: "settings.sub.modelsAndContext", gate: "engines" },
+  "providers.voice": { section: "providers", titleKey: "settings.sub.liveCalls", gate: "voice" },
+  // Usage
+  "usage.traces": { section: "usage", titleKey: "usage.trace.title", gate: "usage" },
+  // Updates
+  "updates.about": { section: "updates", titleKey: "settings.section.about", gate: "about" },
+  "updates.advanced": { section: "updates", titleKey: "settings.advanced.title", gate: "developer" },
+} as const satisfies Record<string, SettingsSubPageInfo>;
+
+export type SettingsSubPageId = keyof typeof SUB_PAGES_DEFINED;
+
+export const SETTINGS_SUB_PAGES: Readonly<Record<SettingsSubPageId, SettingsSubPageInfo>> = SUB_PAGES_DEFINED;
+
+/** #4457: where each former page lives now: a rail page, or one of its
+ * sub-pages. An old link, deep link or saved section opens it there. */
+const SECTION_PLACE: Partial<Record<AppSettingsSection, { section: AppSettingsSection; subPage?: SettingsSubPageId }>> = {
+  account: { section: "general" },
+  // The theme, accent and language are on General's Appearance card; the
+  // rest of the former page is General > More appearance.
+  appearance: { section: "general" },
+  notifications: { section: "general", subPage: "general.notifications" },
+  backups: { section: "general", subPage: "general.backups" },
+  // Privacy is a card of Permissions
+  privacy: { section: "security" },
+  permissions: { section: "security", subPage: "security.system" },
+  engines: { section: "providers", subPage: "providers.models" },
+  // Connected apps joined Models on 2026-10-14 (settings-link.ts names it so)
+  connectedApps: { section: "providers", subPage: "providers.models" },
+  voice: { section: "providers", subPage: "providers.voice" },
+  developer: { section: "updates", subPage: "updates.advanced" },
+  about: { section: "updates", subPage: "updates.about" },
+};
+
+/** Cards that sit on a sub-page of their page (#4457), by card id. A link to
+ * one opens that sub-page, where the card is. */
+const CARD_SUB_PAGE: Readonly<Record<string, SettingsSubPageId>> = {
+  "security.keys": "security.keys",
+  security: "security.keys",
+  myApprovalRules: "security.rules",
+  myToolAccess: "security.toolGrants",
+  "general.peopleToolAccess": "security.peopleToolAccess",
+  "appearance.mascots-hd": "general.mascots",
+  "appearance.mascots": "general.mascots",
+  "usage.traces": "usage.traces",
+};
+
+/** Where a section id (and, often, a card) opens today: a page of the rail
+ * (or Organization) and, when the place is one page further, its sub-page. */
+export function settingsTarget(section: AppSettingsSection, cardId?: string): { section: AppSettingsSection; subPage?: SettingsSubPageId } {
+  const card = cardId && currentSettingsCard(cardId);
+  if (card && Object.hasOwn(CARD_SUB_PAGE, card)) {
+    const subPage = CARD_SUB_PAGE[card]!;
+    return { section: SETTINGS_SUB_PAGES[subPage].section, subPage };
+  }
+  let page: AppSettingsSection;
   // A card that has a page of its own since 2026-10-28 opens that page
   // (#2636: the timeouts of Bot rules are on Developer, checked first).
-  const card = cardId && currentSettingsCard(cardId);
-  if (card && Object.hasOwn(CARD_HOME, card)) return CARD_HOME[card]!;
+  if (card && Object.hasOwn(CARD_HOME, card)) page = CARD_HOME[card]!;
   // A link to a card moved to Organization opens Organization.
-  if (card && isMovedOrganizationCard(card)) return "organization";
-  return MERGED[section]?.section ?? HIDDEN[section] ?? section;
+  else if (card && isMovedOrganizationCard(card)) page = "organization";
+  else page = MERGED[section]?.section ?? HIDDEN[section] ?? section;
+  return SECTION_PLACE[page] ?? { section: page };
+}
+
+export function currentSettingsSection(section: AppSettingsSection, cardId?: string): AppSettingsSection {
+  return settingsTarget(section, cardId).section;
 }
 
 /** The card an old section id stands for, opened when a link names only the

@@ -231,7 +231,7 @@ const bridge = {
     set: (app, enabled) => ipcRenderer.invoke("mac-apps:set", app, enabled),
     test: (app) => ipcRenderer.invoke("mac-apps:test", app),
     askAutomation: (app) => ipcRenderer.invoke("mac-apps:ask-automation", app),
-    openSettings: (pane) => ipcRenderer.invoke("mac-apps:open-settings", pane),
+    openSettings: (anchor) => ipcRenderer.invoke("mac-apps:open-settings", anchor),
   },
   localControl: {
     status: () => ipcRenderer.invoke("cua:linux-status"),
@@ -241,6 +241,8 @@ const bridge = {
   },
   /** Arms exactly one display-media request from the current renderer frame. */
   beginScreenPreviewIntent: () => ipcRenderer.sendSync("screen:preview-intent"),
+  /** #4100: the one-shot intent before getDisplayMedia asks for the computer's sound. */
+  beginListeningComputerIntent: () => ipcRenderer.sendSync("listening:computer-intent"),
   /** One frame of this computer's screen as a data: URL when supported. */
   screenFrame: () => ipcRenderer.invoke("screen:frame"),
   /** A small capture of this computer for the bot panel, only once Screen Recording is granted. */

@@ -359,6 +359,7 @@ export function useComposerSend({
     // takes its place). A click had moved focus there, and a disabled or
     // removed control drops it on the page, so the next message needed
     // another click. Enter never left the field; the click sometimes did.
+    // The caret comes back without the keyboard ring (#4526).
     refocusInput();
     if (group) setChannelMode("chat");
   };

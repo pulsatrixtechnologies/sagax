@@ -17,7 +17,9 @@ describe("agents tool priority (#2189)", () => {
     });
     expect(names).toContain("send_prompt");
     expect(names).toContain("api_search");
-    expect(names).toContain("flow_action");
+    // #4432: flow stays on the account connection, so agents does not withhold it.
+    expect(names).not.toContain("flow");
+    expect(names).not.toContain("flow_action");
     expect(names.every((name) => !name.includes("__"))).toBe(true);
   });
 

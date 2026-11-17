@@ -33,7 +33,8 @@ import { cn } from "@/lib/cn";
 import { openExternalLink } from "@/lib/app-links";
 import { readableError } from "@/lib/plain-error";
 import { copyText } from "@/lib/copy-text";
-import { MENU_ROW, MENU_SURFACE } from "./menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "./menu-look";
+import { TRANSCRIPT_BOX, TranscriptLine } from "./TranscriptLines";
 
 const PHASE_LABEL: Record<PhoneCallPhase, LocaleKey> = {
   dialing: "outbound.call.phase.dialing",
@@ -392,19 +393,20 @@ function LiveConversationBody({ card, onError }: { card: OutboundCardData; onErr
             {open ? t("outbound.call.hideLive") : t("outbound.call.showLive")}
           </button>
           {open && (
-            <div data-outbound-live-transcript aria-live="polite" className="mt-1.5 max-h-72 space-y-1.5 overflow-auto rounded-lg bg-inset px-3 py-2 text-[12.5px]">
+            <div data-outbound-live-transcript aria-live="polite" className={cn("mt-1.5 max-h-72", TRANSCRIPT_BOX)}>
               {stream.length === 0 && <p className="text-[12px] text-ink-tertiary">{t("outbound.call.status.inProgress")}</p>}
               {stream.map((item) => item.kind === "event" ? (
                 <p key={`e-${item.index}-${item.at}`} data-outbound-live-event={item.event.kind} className="text-[12px] italic text-ink-tertiary">
                   {eventLine(item.event)}
                 </p>
               ) : (
-                <p key={`l-${item.index}-${item.at}`} className="whitespace-pre-wrap break-words">
-                  <span className={item.line.speaker === "bot" ? "font-medium text-accent" : item.line.speaker === "system" ? "font-medium text-ink-tertiary" : "font-medium text-ink-secondary"}>
-                    {item.line.speaker === "bot" ? card.botName : item.line.speaker === "system" ? t("outbound.call.liveTranscript") : (card.calleeName?.trim() || t("outbound.call.otherParty"))}
-                  </span>
-                  {" "}{item.line.text}
-                </p>
+                <TranscriptLine
+                  key={`l-${item.index}-${item.at}`}
+                  tone={item.line.speaker === "bot" ? "bot" : item.line.speaker === "system" ? "system" : "other"}
+                  speaker={item.line.speaker === "bot" ? card.botName : item.line.speaker === "system" ? t("outbound.call.liveTranscript") : (card.calleeName?.trim() || t("outbound.call.otherParty"))}
+                >
+                  {item.line.text}
+                </TranscriptLine>
               ))}
             </div>
           )}
@@ -488,11 +490,11 @@ function RecordingPlayer({ url, onUnavailable }: { url: string; onUnavailable: (
           <Ellipsis size={14} aria-hidden="true" />
         </button>
         {menuOpen && (
-          <div role="menu" className={cn(MENU_SURFACE, "absolute end-0 top-8 z-10 min-w-[200px]")}>
+          <div role="menu" className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute end-0 top-8 z-10")}>
             <a role="menuitem" data-outbound-download href={url} download
               className={MENU_ROW}
               onClick={() => setMenuOpen(false)}>
-              <Download size={13} aria-hidden="true" className="text-ink-secondary" />
+              <MenuGlyph><Download size={16} /></MenuGlyph>
               {t("outbound.call.downloadRecording")}
             </a>
           </div>
@@ -603,14 +605,11 @@ function CallResult({ result, botName, calleeName, initialOpen, liveTranscript }
             </button>
           </div>
           {open && (
-            <div data-outbound-transcript className="mt-1.5 max-h-72 space-y-1.5 overflow-auto rounded-lg bg-inset px-3 py-2 text-[12.5px]">
+            <div data-outbound-transcript className={cn("mt-1.5 max-h-72", TRANSCRIPT_BOX)}>
               {transcript.map((line, index) => (
-                <p key={index} className="whitespace-pre-wrap break-words">
-                  <span className={line.speaker === "bot" ? "font-medium text-accent" : "font-medium text-ink-secondary"}>
-                    {line.speaker === "bot" ? botName : t("outbound.call.otherParty")}
-                  </span>
-                  {" "}{line.text}
-                </p>
+                <TranscriptLine key={index} tone={line.speaker === "bot" ? "bot" : "other"} speaker={line.speaker === "bot" ? botName : t("outbound.call.otherParty")}>
+                  {line.text}
+                </TranscriptLine>
               ))}
               {result.truncated && <p className="text-[12px] text-ink-tertiary">{t("outbound.call.truncated")}</p>}
             </div>

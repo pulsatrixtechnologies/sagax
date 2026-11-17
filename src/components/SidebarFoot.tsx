@@ -12,6 +12,7 @@
 // really has no room left for it.
 import { useEffect, useState, type ReactNode } from "react";
 import { t } from "@/lib/i18n";
+import { useAccountMenuAbove } from "@/lib/account-menu-above";
 import { api } from "@/state/store";
 import { useStoreSelector } from "@/state/store-selector";
 import { connectedAppItems, type AccountConnector } from "@/lib/connected-apps";
@@ -99,8 +100,10 @@ export function FootConnectApps({ apps, onOpen }: { apps: readonly PluginItem[];
 
 export function SidebarFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]; onOpenApps: () => void }) {
   const apps = useConnectedApps();
+  const menuAbove = useAccountMenuAbove();
   return (
-    <div data-sidebar-account-row className="-mx-1.5 flex items-center gap-1.5">
+    // the round buttons stay on the name's line when the menu is kept above it
+    <div data-sidebar-account-row className={menuAbove ? "-mx-1.5 flex items-end gap-1.5" : "-mx-1.5 flex items-center gap-1.5"}>
       <SidebarProfileMenu avatarOnly withName places={places} />
       {/* an update in progress: the same kind of round button, beside the grid */}
       <SidebarUpdatePill layout="compact" />

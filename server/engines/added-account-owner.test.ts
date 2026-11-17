@@ -138,12 +138,13 @@ describe("#4435: an added account runs only for the person who added it", () => 
   });
 
   it("removing an added account, from a person's own list or the instance routes, waits for a turn in flight on it", async () => {
-    const cfg = { instances: { [ALEX_ACCOUNT]: { driver: "claudeAgent", ownerPrincipalId: ALEX } } } as unknown as AddedAccountRemovalDeps["cfg"];
+    const cfg = { instances: { claude: { driver: "claudeAgent" }, [ALEX_ACCOUNT]: { driver: "claudeAgent", ownerPrincipalId: ALEX } } } as unknown as AddedAccountRemovalDeps["cfg"];
     let busy = true;
     const steps: string[] = [];
     let configBusy = false;
     const deps: AddedAccountRemovalDeps = {
       cfg,
+      saveConfig: () => {},
       getProviderConfigBusy: () => configBusy,
       setProviderConfigBusy: (value) => { configBusy = value; },
       providerInstancesChanging: { add: () => {}, delete: () => {} },

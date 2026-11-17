@@ -8,7 +8,8 @@ import { SettingsModal } from "./SettingsModal";
 const fixture = vi.hoisted(() => ({ section: "general" as AppSettingsSection }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
-  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: [] }, dispatch: vi.fn() }),
+  // #4457: "appearance" opens General; the tool calls row is on General > More appearance
+  useStore: () => ({ state: { appSettingsSection: fixture.section, appSettingsSubPage: fixture.section === "appearance" ? "general.appearance" : null, instances: [], bots: [] }, dispatch: vi.fn() }),
 }));
 
 const stored = new Map<string, string>();
@@ -47,7 +48,8 @@ describe("Settings Simple and Advanced", () => {
     expect(dev).toContain('aria-label="Advanced mode"');
     expect(dev).toContain('aria-checked="true"');
     fixture.section = "general";
-    for (const id of ["engines", "usage", "computer", "developer"]) {
+    // #4457: Models and Developer are Providers and Updates sub-pages
+    for (const id of ["providers", "usage", "computer", "updates"]) {
       expect(html, id).toContain(`<option value="${id}"`);
     }
   });
@@ -61,12 +63,11 @@ describe("Settings Simple and Advanced", () => {
     const html = render();
     expect(html).toContain('data-settings-card="general.advancedFold"');
     expect(html).not.toContain("data-settings-scope");
-    expect(html).toContain('<option value="account"');
-    expect(html).toContain('<option value="appearance"');
-    for (const id of ["connections", "connectedApps"]) {
+    // #4457: the seven pages, in Simple too
+    for (const id of ["connections", "connectedApps", "account", "appearance", "engines", "voice"]) {
       expect(html, id).not.toContain(`<option value="${id}"`);
     }
-    for (const id of ["engines", "computer", "providers", "voice"]) {
+    for (const id of ["general", "computer", "security", "credentials", "providers", "updates"]) {
       expect(html, id).toContain(`<option value="${id}"`);
     }
     // 2026-10-15: Usage (the person's own plan and cost) shows in Simple too
@@ -85,7 +86,7 @@ describe("Settings Simple and Advanced", () => {
     expect(dev).toContain('aria-label="Advanced mode"');
     expect(dev).toContain('aria-checked="true"');
     fixture.section = "general";
-    for (const id of ["engines", "usage", "computer", "developer"]) {
+    for (const id of ["providers", "usage", "computer", "updates"]) {
       expect(html, id).toContain(`<option value="${id}"`);
     }
     // Integrations is no longer an entry: it is part of Models and voice.

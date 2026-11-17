@@ -135,7 +135,8 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
           : exceptions.length ? t("botAccess.tools.exceptions", { count: exceptions.length })
             : on ? t("botAccess.tools.groupAll") : t("botAccess.tools.groupOff");
         return <div key={group.ns} data-tool-group={group.ns}>
-          <div className={cn("flex min-h-[44px] items-center gap-2 py-2", rows.row)}>
+          {/* a compact row of the pane (its label opens the group's exceptions) */}
+          <div data-settings-rowkind="compact" className={cn("flex min-h-[44px] items-center gap-2 py-2", rows.row)}>
             <button type="button" aria-expanded={expanded} aria-label={t("botAccess.tools.expand", { name: group.label })}
               onClick={() => { setOpen(expanded ? null : group.ns); setAdding(""); }}
               className="flex min-w-0 flex-1 items-center gap-2 text-left">

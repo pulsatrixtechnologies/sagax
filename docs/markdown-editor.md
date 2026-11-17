@@ -35,7 +35,7 @@ and the same request as the plain text box it replaced.
   lines. Code blocks and front matter are left byte for byte.
 - **Counts.** Words and characters in the status line, and the cap when the
   field has one (`maxLength`). Fields with their own counter (SOUL.md bytes,
-  About me, team instructions) keep it there.
+  team instructions) keep it there.
 - **Task boxes.** Clicking `[ ]` or `[x]` in the editor toggles it.
 
 ## Shortcuts
@@ -84,7 +84,6 @@ so dark, light and every skin apply.
 | Routine instructions, full editor and quick create | `RoutineCalendarPage.tsx` (`EventEditor`, `QuickComposer`) |
 | Trigger instructions | `TriggersPanel.tsx` |
 | Webhook default instructions | `WebhooksPanel.tsx` (`WebhookEditor`) |
-| About me | `AboutMeSettings.tsx` |
 
 Plain text boxes stay where the text is not markdown: a bot's one-line
 description, image prompts, JSON imports, shell commands, tool and people

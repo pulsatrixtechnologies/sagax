@@ -1,6 +1,6 @@
 import { killCliTree, spawnCli } from "../procs.ts";
 import { scrubHeldSecrets } from "../../shared/redact.ts";
-import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, verifiedBrowserNavigation, type PageState } from "./browser-tool-shape.ts";
+import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, isPageBlockNote, OBSERVE_PAGE_SCRIPT, pageBlock, pageBlockNote, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, verifiedBrowserNavigation, type PageState } from "./browser-tool-shape.ts";
 import { randomBytes } from "node:crypto";
 import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "../vault/credential-fill.ts";
 import { noteFilledSecret } from "../vault/filled-secret-guard.ts";
@@ -15,6 +15,7 @@ import { parseUpdateTrackingCall, UPDATE_ORDER_TRACKING_TOOL, UPDATE_ORDER_TRACK
 import { clearScript, loginOutcomeText, loginStateScript, markerScript, MAX_LOGIN_STEPS, parseLoginState, stepFields, submitScript, type LoginField, type LoginOutcome, type LoginPageState } from "../login-fill.ts";
 import type { VaultFillField } from "../../shared/credential-vault.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { browserStopNote } from "../host/browser-failure-guard.ts";
 
 export interface BrowserSpawnSpec {
   command: string;
@@ -215,6 +216,18 @@ const FIELD_NAMES: Record<VaultFillField, string> = {
 
 function toolText(text: string, isError = false): { content: Array<{ type: "text"; text: string }>; isError?: true } {
   return { content: [{ type: "text", text }], ...(isError ? { isError: true as const } : {}) };
+}
+
+/** Results the runtime refused itself, before the page was touched. */
+const HARNESS_REFUSALS = new WeakSet<object>();
+
+/** A refusal the harness decided (a guard around a filled login, a busy
+ * browser): the step did not fail on the page, so it neither counts toward
+ * the failures in a row nor carries their note (#4394). */
+function refusalText(text: string): ReturnType<typeof toolText> {
+  const result = toolText(text, true);
+  HARNESS_REFUSALS.add(result);
+  return result;
 }
 
 /** One timed browser action, logged with SAGAX_BROWSER_TIMING=1. Times are in
@@ -470,7 +483,45 @@ interface Gate {
   idleClose?: Promise<void>;
   /** Closed while idle since the last agent call, which is told so. */
   idleClosed: boolean;
+  /** #4394: the bot's current run of browser steps (see BrowsingRun). */
+  run?: BrowsingRun;
+  /** #4394: the visit signature failed in this browser; it is not tried
+   * again on each page (a process start of up to 8 s each) until this
+   * browser closes or restarts (forgetSession clears it). */
+  unsigned?: boolean;
 }
+
+/** #4394: one run of a bot's browser steps, for one turn of one
+ * conversation, until the browser rests for BROWSING_RUN_GAP_MS. A browser
+ * session belongs to a bot (or a shared profile), not to a conversation: its
+ * next turn, or another conversation, starts a fresh run. A browser task once ran 41 steps on a site that kept
+ * the bot out: the engine resends every earlier result on each step, so the
+ * input grew to 175k tokens, and the note after two failures in a row
+ * never reached that engine (it takes no steered note). The run carries both
+ * into the results themselves, on every engine. */
+interface BrowsingRun {
+  /** The turn the run belongs to (its conversation and turn), when known. */
+  turn: string | undefined;
+  /** Characters the run's results put into the conversation so far. */
+  chars: number;
+  failedInRow: number;
+  failedTools: string[];
+  lastAt: number;
+}
+
+/** A pause this long between browser steps starts a new run. */
+const BROWSING_RUN_GAP_MS = 120_000;
+/** Characters of results a run gets at the full per-result budget (about
+ * 16k tokens): two whole snapshots of a heavy page. */
+export const BROWSING_RUN_FULL_CHARS = 64_000;
+/** The per-result budget once a run spent its full share (about 1.5k tokens
+ * a step): the result keeps its start and says how to ask for less. */
+export const BROWSING_RUN_LATER_BUDGET = 6_000;
+/** Failed browser steps in a row before the result carries the note. */
+const BROWSING_RUN_NOTE_AT = 2;
+const BROWSING_RUN_TOOLS_NAMED = 6;
+/** Harness tools whose refusals are decisions, not failed page steps. */
+const HARNESS_DECISION_TOOLS = new Set<string>([FILL_CREDENTIAL_TOOL, REQUEST_PURCHASE_TOOL, RECORD_PURCHASE_TOOL, UPDATE_ORDER_TRACKING_TOOL]);
 
 /** A session's MCP client, the launch settings it was started with, and its
  * one-time page sizing. */
@@ -591,6 +642,54 @@ export class BrowserRuntime {
     });
   }
 
+  /** The session's current run of browser steps, a new one after a rest or
+   * for another turn (#4394 review: another conversation's heavy pages must
+   * not cut this turn's results, nor its failures count as this turn's). */
+  private browsingRun(session: string, turn: string | undefined): BrowsingRun {
+    const gate = this.gate(session);
+    const now = Date.now();
+    if (!gate.run || now - gate.run.lastAt > BROWSING_RUN_GAP_MS || gate.run.turn !== turn) gate.run = { turn, chars: 0, failedInRow: 0, failedTools: [], lastAt: now };
+    gate.run.lastAt = now;
+    return gate.run;
+  }
+
+  /** #4394: count a step of the run; at the second failure in a row the
+   * result itself tells the bot to stop the browser, so an engine that takes
+   * no steered note hears it too. Not when the result already says what
+   * blocks the page. */
+  private noteBrowsingStep(run: BrowsingRun, toolName: string | undefined, result: unknown): unknown {
+    const note = this.browsingStepNote(run, toolName, result);
+    if (!note) return result;
+    // First, so an engine's short preview of the result keeps it (the guard reads it there).
+    const content = (result as { content?: unknown }).content;
+    return { ...result as object, content: [{ type: "text", text: note }, ...Array.isArray(content) ? content : []] };
+  }
+
+  /** The note a step's result must carry, or null: counts the step. */
+  private browsingStepNote(run: BrowsingRun, toolName: string | undefined, result: unknown): string | null {
+    // The harness's own decisions (a fill refused off its origin, in a frame,
+    // into the wrong input or for an ungranted bot; a purchase or tracking
+    // refused) are deliberate answers, not page steps: they neither count nor
+    // break a run of failures, and keep their own words.
+    if (toolName && HARNESS_DECISION_TOOLS.has(toolName)) return null;
+    const failed = (result as { isError?: unknown } | null)?.isError === true;
+    if (!failed) {
+      run.failedInRow = 0;
+      run.failedTools = [];
+      return null;
+    }
+    run.failedInRow += 1;
+    const tool = toolName ?? "browser";
+    if (!run.failedTools.includes(tool) && run.failedTools.length < BROWSING_RUN_TOOLS_NAMED) run.failedTools.push(tool);
+    if (run.failedInRow !== BROWSING_RUN_NOTE_AT) return null;
+    const content = (result as { content?: unknown }).content;
+    const parts = Array.isArray(content) ? content : [];
+    // A page block already says what to do, and a stuck engine's result says to restart it.
+    const said = (text: unknown) => isPageBlockNote(text) || (typeof text === "string" && text.includes(BROWSER_RESTART_TOOL));
+    if (parts.some((part) => said((part as { text?: unknown } | null)?.text))) return null;
+    return browserStopNote({ failures: run.failedInRow, tools: run.failedTools });
+  }
+
   private gate(session: string): Gate {
     let gate = this.gates.get(session);
     if (!gate) {
@@ -650,8 +749,9 @@ export class BrowserRuntime {
 
   /** One MCP request from the bot's turn. Every tool result it answers,
    * the runtime's own recovery notes included, loses the values Sagax filled
-   * in this session and any held secret on the way out. */
-  async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, credentials?: CredentialFillAccess): Promise<unknown> {
+   * in this session and any held secret on the way out. `turn` names the
+   * calling turn (conversation and turn), which owns its run of steps. */
+  async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, credentials?: CredentialFillAccess, turn?: string): Promise<unknown> {
     if (method === "tools/call" && toolNameOf(params) === "agent_browser_set_headers" && signatureHeaderSet(params)) {
       return toolText("The visit signature is not a header a tool sets. A saved login uses request_login, and the value stays hidden.", true);
     }
@@ -665,20 +765,27 @@ export class BrowserRuntime {
     const gate = this.gate(session);
     gate.spec = spec;
     gate.calls++;
+    const run = method === "tools/call" ? this.browsingRun(session, turn) : null;
     try {
       // A value Sagax filled never comes back to a bot, whatever tool reads the page.
-      const redacted = this.redactor.redact(session, await this.agentRpcUnredacted(session, spec, method, params, beforeDispatch, credentials));
+      const raw = await this.agentRpcUnredacted(session, spec, method, params, beforeDispatch, credentials);
+      const redacted = this.redactor.redact(session, raw);
       if (method !== "tools/call") return redacted;
-      const result = withNotice(scrubBrowserResult(redacted, this.scrub), this.egressNotice?.(session) ?? null);
+      const shaped = withNotice(scrubBrowserResult(redacted, this.scrub), this.egressNotice?.(session) ?? null);
+      const refused = !!raw && typeof raw === "object" && HARNESS_REFUSALS.has(raw);
+      const result = refused ? shaped : this.noteBrowsingStep(run!, toolNameOf(params), shaped);
       if (!gate.idleClosed) return result;
       gate.idleClosed = false;
       const content = (result as { content?: unknown } | null)?.content;
       const note = idleClosedNote(spec.env.AGENT_BROWSER_RESTORE_SAVE !== "never");
       return { ...result as object, content: [{ type: "text", text: note }, ...Array.isArray(content) ? content : []] };
     } catch (error) {
+      // #4394: a step that throws counts too, and its error carries the note.
+      const note = run ? this.browsingStepNote(run, toolNameOf(params), { isError: true }) : null;
       if (error instanceof Error) {
         const message = this.redactor.redactText(session, error.message);
         if (message !== error.message) error.message = message;
+        if (note) error.message = `${note}\n${error.message}`;
       }
       throw error;
     } finally {
@@ -690,7 +797,7 @@ export class BrowserRuntime {
   private async agentRpcUnredacted(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, credentials?: CredentialFillAccess): Promise<unknown> {
     if (method !== "tools/list" && method !== "tools/call") throw new Error("Unsupported browser method.");
     if (method === "tools/call" && cssSelectorArgument(params) !== null && (this.redactor.hasTaint(session) || credentials?.armed())) {
-      return toolText(REFS_ONLY, true);
+      return refusalText(REFS_ONLY);
     }
     // tools/list bypasses withAgentAction (a human may hold control), so it
     // must refuse the closing window itself or its client outlives restart().
@@ -765,9 +872,9 @@ export class BrowserRuntime {
           // guarded in the same evaluation, so a later fill there refuses
           // (a listener could still be waiting) and a tab switch in between
           // cannot make it run on another document than the one recorded.
-          if (credentials?.armed()) return toolText(SCRIPTS_OFF_WHILE_ALLOWED, true);
-          if (this.redactor.hasTaint(session)) return toolText(SCRIPTS_OFF_AFTER_FILL, true);
-          if (toolName !== "agent_browser_eval") return toolText("This tool is not available in Sagax's browser.", true);
+          if (credentials?.armed()) return refusalText(SCRIPTS_OFF_WHILE_ALLOWED);
+          if (this.redactor.hasTaint(session)) return refusalText(SCRIPTS_OFF_AFTER_FILL);
+          if (toolName !== "agent_browser_eval") return refusalText("This tool is not available in Sagax's browser.");
           const origin = await this.engineOrigin(entry.client);
           beforeDispatch?.();
           if (!origin) return toolText("The page's address could not be read; the script did not run.", true);
@@ -775,7 +882,7 @@ export class BrowserRuntime {
           guardedParams = guardScript(params, origin);
         }
         if (method === "tools/call" && toolName === "agent_browser_screenshot" && this.redactor.hasTaint(session)) {
-          return toolText(SCREENSHOT_AFTER_FILL_REFUSAL, true);
+          return refusalText(SCREENSHOT_AFTER_FILL_REFUSAL);
         }
         // Keys and typing on a browser where a login was filled: never into
         // a filled field (editing it, or copying from it, would defeat the
@@ -783,10 +890,10 @@ export class BrowserRuntime {
         // with the session held alone so nothing moves the focus in between.
         let releaseKeys: (() => void) | null = null;
         if (method === "tools/call" && keyboardTool(toolName) && this.redactor.hasTaint(session) && controlCharacters(params)) {
-          return toolText(CONTROL_KEYS_REFUSAL, true);
+          return refusalText(CONTROL_KEYS_REFUSAL);
         }
         if (method === "tools/call" && keyboardTool(toolName) && this.redactor.hasTaint(session)) {
-          if (!await this.holdExclusive(session)) return toolText(BROWSER_FILLING, true);
+          if (!await this.holdExclusive(session)) return refusalText(BROWSER_FILLING);
           releaseKeys = () => { this.gate(session).exclusive = false; };
           try {
             const target = elementRef(params);
@@ -797,18 +904,19 @@ export class BrowserRuntime {
             }
             const focused = parseWrite(await entry.client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: FOCUS_ON_FILLED_SCRIPT, timeoutMs: 5_000 } }));
             beforeDispatch?.();
-            if (focused !== "free") { releaseKeys(); return toolText(KEYS_INTO_FILLED_REFUSAL, true); }
+            if (focused !== "free") { releaseKeys(); return refusalText(KEYS_INTO_FILLED_REFUSAL); }
           } catch (error) {
             releaseKeys();
             throw error;
           }
         }
-        if (this.signNavigation && method === "tools/call" && (toolName === "agent_browser_open" || toolName === "agent_browser_reload")) {
+        if (this.signNavigation && !this.gate(session).unsigned && method === "tools/call" && (toolName === "agent_browser_open" || toolName === "agent_browser_reload")) {
           const url = browserCallUrl(params);
           if (toolName === "agent_browser_reload" || /^https?:\/\//i.test(url)) {
             try {
               await this.signNavigation({ session, spec, url });
             } catch (error) {
+              this.gate(session).unsigned = true;
               if (!this.signatureFailureLogged) {
                 this.signatureFailureLogged = true;
                 const message = error instanceof Error && error.message ? error.message : "the visit could not be signed";
@@ -884,7 +992,11 @@ export class BrowserRuntime {
           if (after) {
             const action = result as { content?: unknown[] };
             const change = { type: "text", text: describePageChange(before, after) };
-            result = { ...action, content: [...(Array.isArray(action.content) ? action.content : []), change] };
+            // #4394: an action that lands on a challenge or a refusal is a failed step that says so.
+            const block = pageBlock(after, { landing: false });
+            result = block
+              ? { ...action, isError: true, content: [{ type: "text", text: pageBlockNote(block) }, ...(Array.isArray(action.content) ? action.content : []), change] }
+              : { ...action, content: [...(Array.isArray(action.content) ? action.content : []), change] };
           }
         }
         if (toolName === "agent_browser_open" && result && typeof result === "object" &&
@@ -912,19 +1024,29 @@ export class BrowserRuntime {
           const navigation = result as { content?: unknown[] };
           const page = observation as { content?: unknown[]; isError?: boolean } | null;
           const observed = verifiedBrowserNavigation(browserCallUrl(params), observation);
+          // #4394: a page that keeps the bot out says so at the first look.
+          const landed = observed ? await observePage() : null;
+          beforeDispatch?.();
+          const block = landed ? pageBlock(landed, { landing: true }) : null;
+          const wall = block && !(block.kind === "sign-in" && credentials?.armed()) ? block : null;
           result = {
             content: [
+              ...(wall ? [{ type: "text", text: pageBlockNote(wall) }] : []),
               ...(Array.isArray(navigation.content) ? navigation.content : []),
               { type: "text", text: !observed
                 ? "Navigation returned, but page verification failed. Do not claim the requested page loaded and do not blindly repeat navigation."
                 : "Page observed after navigation. Its refs are current, so act on them without another snapshot. Check this result for redirects, sign-in requirements or page errors before reporting task success:" },
               ...(Array.isArray(page?.content) ? page.content : []),
             ],
-            ...(!observed ? { isError: true } : {}),
+            ...(!observed || (wall && wall.kind !== "sign-in") ? { isError: true } : {}),
           };
         }
-        const shaped = shapeBrowserToolResult(result, { toolName, budget: this.options.resultBudget });
+        // #4394: once the run took its share, each further result is cut short.
+        const run = this.gate(session).run;
+        const budget = run && run.chars >= BROWSING_RUN_FULL_CHARS ? Math.min(this.options.resultBudget, BROWSING_RUN_LATER_BUDGET) : this.options.resultBudget;
+        const shaped = shapeBrowserToolResult(result, { toolName, budget });
         phases.chars = resultChars(shaped);
+        if (run) run.chars += phases.chars;
         return shaped;
       }
       catch (error) {
@@ -1339,6 +1461,9 @@ export class BrowserRuntime {
    * again at once, so no script of the bot runs in the new browser either. */
   private forgetSession(session: string): void {
     this.redactor.forget(session);
+    // #4394: a new browser process tries the visit signature again.
+    const gate = this.gates.get(session);
+    if (gate) gate.unsigned = false;
     if (this.signingIn(session)) this.redactor.taint(session, PERSON_SIGN_IN);
   }
 

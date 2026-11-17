@@ -36,6 +36,7 @@ describe("turn clock at the engine hand-off", () => {
       workplaceTurnText: (text: string) => ({ text }), withWorkplaceNote: (text: string) => text,
       turnClockEnabled: () => true, turnZoneFor: () => zone, withTurnClock, isSmallTalk: () => false, routineLineage: () => false,
       officeTurnText: (text: string) => ({ text, images: [] }),
+      listeningSoFarFor: (_threadId: string, _person: string, text: string) => text,
       handoffs: { dispatching: noOp }, directTurnClaimIsCurrent: () => true, directTurnClaimExists: () => true,
       fitTurnImagesForModel: async () => [], botRecoveryBackups: () => [],
       withDesktopModelPerson: (_person: unknown, work: () => unknown) => work(), runAsBotEngine: (_botId: string, work: () => unknown) => work(),

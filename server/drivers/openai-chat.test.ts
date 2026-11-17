@@ -60,8 +60,10 @@ async function runTurn(body: string | (() => Response), driver: "openai-compat" 
 
 describe("createOpenAIChatRuntime one-shot usage", () => {
   const fixture = async (body: unknown) => {
-    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => {
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
       init?.signal?.throwIfAborted();
+      // The account's model list read at start (#4416) is not a one-shot.
+      if (String(url).endsWith("models")) return Response.json({ models: [] });
       return new Response(typeof body === "string" ? body : JSON.stringify(body), { headers: { "content-type": "application/json" } });
     }));
     return GrokDriver.create({
@@ -70,6 +72,7 @@ describe("createOpenAIChatRuntime one-shot usage", () => {
     });
   };
   const choices = [{ message: { content: "helper result" }, finish_reason: "stop" }];
+  const oneShots = () => vi.mocked(fetch).mock.calls.filter(([url]) => !String(url).endsWith("models"));
 
   it("reports the actual helper model and known provider usage once, preserving the text result", async () => {
     const instance = await fixture({
@@ -78,7 +81,7 @@ describe("createOpenAIChatRuntime one-shot usage", () => {
     });
     const onUsage = vi.fn();
     await expect(instance.generateText!("summarize", { onUsage })).resolves.toBe("helper result");
-    expect(JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string).model).toBe("grok-3-mini");
+    expect(JSON.parse(oneShots()[0]![1]!.body as string).model).toBe("grok-3-mini");
     expect(instance.models.default).toBe("grok-4.7");
     expect(onUsage.mock.calls).toEqual([[{ model: "grok-3-mini-actual", input: 120, output: 20, cachedInput: 100, costUsd: 0.004 }]]);
     await expect(instance.generateText!("plain summary")).resolves.toBe("helper result");
@@ -88,7 +91,7 @@ describe("createOpenAIChatRuntime one-shot usage", () => {
   it("signs a one-shot and the permission review in with the key the bot's turn uses (#3519)", async () => {
     const instance = await fixture({ model: "grok-3-mini", choices });
     const access = { via: "owner-key" as const, identity: "owner-key:p1:fp", environment: { XAI_API_KEY: "fixture-person-key", SAGAX_PERSONAL_PROVIDER_KEY: "fixture-person-key" } };
-    const bearer = (index: number) => new Headers(vi.mocked(fetch).mock.calls[index]![1]!.headers as ConstructorParameters<typeof Headers>[0]).get("authorization");
+    const bearer = (index: number) => new Headers(oneShots()[index]![1]!.headers as ConstructorParameters<typeof Headers>[0]).get("authorization");
     await expect(instance.generateText!("summarize", { access })).resolves.toBe("helper result");
     expect(bearer(0)).toBe("Bearer fixture-person-key");
     await instance.generateText!("summarize");

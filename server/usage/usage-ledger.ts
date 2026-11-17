@@ -87,6 +87,9 @@ export interface UsageRow {
    * who spoke, or the bot's owner (their own turn, the bot's routines);
    * absent when the organization's key paid. */
   payerPrincipalId?: string;
+  /** #4100: what the usage served when it is not the engine's own turn:
+   * the hearing of a listening session. Absent on every other row. */
+  purpose?: "listening";
 }
 
 export type UsageGroupBy = "bot" | "model" | "user" | "day" | "engine" | "routine";

@@ -11,6 +11,7 @@ import {
   renewalPrompt,
 } from "../../context/context-renewal.ts";
 import { killCliTree } from "../../procs.ts";
+import { claudeSignInExpired } from "../claude-errors.ts";
 import { classifyError, computeBackoff, interruptibleDelay, mayResendTurn } from "../retry.ts";
 import { turnCostFromRunningTotal } from "./cost.ts";
 import { sumTurnModels } from "./session-types.ts";
@@ -142,19 +143,22 @@ const finalizeClose = async (code: number | null) => {
     const retry = retryState.get(threadId) ?? { attempt: 0, cancelled: false };
     const message = `claude exited ${code} before result${session.stderr ? `: ${session.stderr.trim().slice(-300)}` : ""}`;
     const verdict = classifyError({ exitCode: code, stderr: message });
+    // A refused sign-in cannot heal by launching again. It is not a
+    // warm-process death, and it does not get the one free resume.
+    const signInRefusal = verdict.reason === "auth";
     // A process kept warm from an earlier turn ended before it
     // announced this one: it never took the prompt. That is a session
     // ending between turns, not a failed turn, so the same turn
-    // resumes the session on a fresh process at once — no retry row,
-    // no retry budget spent. (A fresh process is never retained, so
-    // this happens at most once per turn.)
-    const endedBeforeTurn = session.turn.awaitingInit === true ||
-      (refusedAutocompact && !session.turn.sawStreamDelta);
+    // resumes once on a fresh process: no retry row. The resume spends
+    // one `attempt`, so a second death before init is not free.
+    const endedBeforeTurn = !signInRefusal && (session.turn.awaitingInit === true ||
+      (refusedAutocompact && !session.turn.sawStreamDelta));
     // A turn that already got an assistant message (a tool call
     // included) is never sent again: that model call is paid for and
     // the CLI retried its own API calls (mayResendTurn).
     if (!retry.cancelled && mayResendTurn({ endedBeforeTurn, exitCode: code, transient: verdict.transient,
-      streamed: session.turn.sawStreamDelta, answered: session.turn.answered === true, attempt: retry.attempt })) {
+      streamed: session.turn.sawStreamDelta, answered: session.turn.answered === true, attempt: retry.attempt,
+      auth: signInRefusal })) {
       // the CLI is gone but the TURN continues: keep the thread busy,
       // emit no terminal event, and relaunch after the backoff. The
       // `active` entry STAYS — it is what makes an interrupt during
@@ -176,9 +180,11 @@ const finalizeClose = async (code: number | null) => {
       }
       sessions.delete(threadId);
       session.turn = null;
+      // The free pre-init resume spends one attempt too, with no row
+      // and no wait. A transient failure still waits and shows the row.
+      retry.attempt++;
       let delayMs = 0;
       if (!endedBeforeTurn) {
-        retry.attempt++;
         delayMs = computeBackoff(retry.attempt - 1);
         emit({
           ...base(threadId, turnId),
@@ -255,7 +261,7 @@ const finalizeClose = async (code: number | null) => {
       promptSubmitted: session.sawInit,
       producedOutput: session.turn.sawStreamDelta,
     });
-    if (mayReplay(resumeFailure) && !retry.cancelled) {
+    if (!signInRefusal && mayReplay(resumeFailure) && !retry.cancelled) {
       const recovery = recoveryPromptFor({
         recoveryText: turn.recoveryText,
         currentText: turn.text,
@@ -301,13 +307,25 @@ const finalizeClose = async (code: number | null) => {
       })().catch(reportBackgroundError);
       return;
     }
-    retryState.delete(threadId);
-    emit({
-      ...base(threadId, currentTurnId()),
-      type: "runtime.error",
-      message,
-    });
-    settle(false, "exit_before_result");
+    const shown = signInRefusal ? claudeSignInExpired((session.stderr ?? "").trim().slice(-300) || message) : message;
+    if (signInRefusal && session.turn) session.turn.authFailureText = shown;
+    const loginDir = signInRefusal && session.turn?.input.access?.via === "subscription"
+      ? session.turn.input.access.claudeConfigDir?.trim() ?? ""
+      : "";
+    // One renew lives in settle when this turn still has the person's
+    // login directory. That path reports the refusal itself. Otherwise
+    // the existing setup error is the card (or the composer line).
+    const raceWillReport = signInRefusal && Boolean(loginDir) && !retry.authRaced && !retry.cancelled && session.turn?.stopRequested !== true;
+    if (!raceWillReport) retryState.delete(threadId);
+    if (!raceWillReport) {
+      emit({
+        ...base(threadId, currentTurnId()),
+        type: "runtime.error",
+        message: shown,
+        ...(signInRefusal ? { setup: true } : {}),
+      });
+    }
+    settle(false, signInRefusal ? "auth_required" : "exit_before_result");
   }
   if (session.idleTimer) clearTimeout(session.idleTimer);
   session.broker?.close();

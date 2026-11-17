@@ -30,7 +30,12 @@ describe("routineReportOutcome", () => {
   });
 
   it("is quiet only when the WHOLE message is a no-op (Owner review 2026-10-22)", () => {
-    for (const quiet of ["Nothing to report.", "Rien à signaler.", "Nothing to flag.", "Done. Nothing to report.", "ok — nothing to do", "No change needed."]) {
+    for (const quiet of [
+      "Nothing to report.", "Rien à signaler.", "Nothing to flag.", "Done. Nothing to report.", "ok \u2014 nothing to do", "No change needed.",
+      // #3990: a wake the person chose, whose whole message is only that nothing needs them
+      "Rien à faire de ton côté.", "Rien à remonter.", "Nothing to do on your side.", "Nothing to bring up.",
+      "You have nothing to do.", "Rien n'est bloqué, tu n'as rien à faire.",
+    ]) {
       expect(routineReportOutcome(quiet).quiet, quiet).toBe(true);
     }
     // a real finding that merely contains a no-op phrase must still reach the person
@@ -39,6 +44,7 @@ describe("routineReportOutcome", () => {
       "The 8:40 run is the invoicing-days boost. October 22 is outside days 1-5, so this pass ends with nothing to report.",
       "No new tickets. Nothing to do.",
       "Aucune nouvelle facture, rien à faire aujourd'hui.",
+      "Iris a fermé le billet, rien n'est bloqué, tu n'as rien à faire.",
     ]) {
       expect(routineReportOutcome(report).quiet, report).toBe(false);
     }

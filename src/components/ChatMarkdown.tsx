@@ -65,7 +65,7 @@ import { looksLikePermissionLink, parsePermissionLink } from "../lib/os-permissi
 import { OsPermissionChatButton } from "./settings/OsPermissions";
 import type { PreviewImage } from "./AttachmentPreview";
 import { MemeImage } from "./MemeImage";
-import { AttachmentPreviewDialog, MarkdownImagePreview, MessageFolderFiles, OutsideWorkspaceFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
+import { AttachmentPreviewDialog, MarkdownImagePreview, MessageFolderFiles, OutsideWorkspaceFile, canRevealLocalPath, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
 import { ThreadLink, ThreadRefsContext, threadLinkFromProps, type ThreadRefsValue } from "./ThreadRefs";
 import { t } from "../lib/i18n";
 import {
@@ -750,8 +750,9 @@ export function MermaidDiagram({ code }: MermaidDiagramProps) {
 function LocalFileLink({ filePath, name, children, message }: { filePath: string; name?: string; children?: ReactNode; message?: MessageAttachmentContext }) {
   "use memo";
   const save = useLocalFileSave(filePath, name, message);
+  const revealable = canRevealLocalPath(filePath);
   if (!message) {
-    return <span title={t("chatMarkdown.legacyFile")} className="break-words text-ink-secondary">{children}</span>;
+    return <span title={t("chatMarkdown.legacyFile")} className="break-words text-ink-secondary">{children}{revealable && <span className="ms-1.5"><OutsideWorkspaceFile filePath={filePath} /></span>}</span>;
   }
   const label = save.state === "saving"
     ? t("folder.saving")
@@ -791,7 +792,7 @@ function LocalFileLink({ filePath, name, children, message }: { filePath: string
           {save.state === "failed" ? saveFailureText(save) : label}
         </span>
       )}
-      {save.state === "failed" && save.outsideWorkspace && (
+      {(revealable || (save.state === "failed" && save.outsideWorkspace)) && (
         <span className="inline-flex flex-wrap items-center gap-x-1.5 text-[12px]">
           <OutsideWorkspaceFile filePath={filePath} />
         </span>

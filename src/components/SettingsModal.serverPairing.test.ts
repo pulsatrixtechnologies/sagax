@@ -46,15 +46,16 @@ describe("Settings > Pair devices is hidden", () => {
     const html = render();
     expect(html).not.toContain('<option value="companion"');
     expect(html).not.toContain(">Pair devices<");
-    expect(html).toContain('<option value="account" selected="">Account</option>');
+    expect(html).toContain('<option value="general" selected="">General</option>');
     expect(html).not.toContain("SERVER_PAIRING_CARD_MARKER");
     expect(html).not.toContain("COMPANION_SECTION");
   });
 
-  it("lands a remote client on Appearance instead", () => {
+  it("lands a remote client on General (its Appearance card) instead", () => {
     vi.stubGlobal("window", { ogb: { companion: {}, remoteClient: { active: true } } });
     const html = render();
-    expect(html).toContain('<option value="appearance" selected="">Appearance</option>');
+    expect(html).toContain('<option value="general" selected="">General</option>');
+    expect(html).toContain('data-settings-group="generalAppearance"');
     expect(html).not.toContain("SERVER_PAIRING_CARD_MARKER");
   });
 

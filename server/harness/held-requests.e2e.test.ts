@@ -12,8 +12,12 @@
 //            an org Refuse rule refuses; a member's bot gets the member's
 //            own card, never an admin card; the card expires when the turn
 //            ends; an answer after a restart is "unavailable"
+//   stdio    #4547: Claude's own ask over --permission-prompt-tool stdio,
+//            through the fake CLI's can_use_tool: Allow once runs the tool,
+//            Deny does not; Full never asks the person; an organization
+//            Refuse rule refuses and an Ask-first rule asks, at Full too
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -173,6 +177,10 @@ const MEMBER: FakeOidcUser = { sub: "01J9HRMEMBER000000000000M", email: "member@
 const READ = "crm__list_contacts";
 const SEND = "crm__send_email";
 const REFUSED = "crm__delete_contact";
+// #4547: what the fake CLI asks over stdio, by a marker in the prompt
+const STDIO_SEND = "mcp__crm__send_email";
+const STDIO_REFUSED = "mcp__crm__purge_contact";
+const STDIO_ASK_FIRST = "mcp__crm__merge_contact";
 
 let PORT = 0;
 let BASE = "";
@@ -226,6 +234,10 @@ async function signIn(user: FakeOidcUser): Promise<Auth> {
 
 const dumpOf = (instanceId: string) => join(home, `${instanceId}-dump.json`);
 const releaseFile = () => join(home, "release");
+const ranLog = () => join(home, "stdio-ran.jsonl");
+const ranTools = (): Array<{ tool: string; asked: boolean }> => existsSync(ranLog())
+  ? readFileSync(ranLog(), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { tool: string; asked: boolean })
+  : [];
 
 async function startServer() {
   log = "";
@@ -290,6 +302,19 @@ posixOnly("#3346: server-held requests through the organization server", () => {
         hold: hang("hold"),
         // a turn that ends on its own once the release file exists
         ends: hang("ends", { FAKE_CLAUDE_RELEASE: releaseFile() }),
+        // #4547: a turn that asks over stdio, then replies and ends
+        stdio: {
+          driver: "claudeAgent", access: "api",
+          environment: {
+            FAKE_CLAUDE_DUMP: dumpOf("stdio"), FAKE_CLAUDE_DUMP_LOG: join(home, "stdio-launches.jsonl"), FAKE_CLAUDE_TOOL_RAN: ranLog(),
+            FAKE_CLAUDE_CAN_USE_TOOL: JSON.stringify([
+              { when: "[stdio:send]", tool_name: STDIO_SEND, input: { to: "client" } },
+              { when: "[stdio:refused]", tool_name: STDIO_REFUSED, input: { id: "c-1" } },
+              { when: "[stdio:ask-first]", tool_name: STDIO_ASK_FIRST, input: { ids: ["c-1", "c-2"] } },
+            ]),
+          },
+          config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
+        },
       },
     }));
     await startServer();
@@ -324,9 +349,9 @@ posixOnly("#3346: server-held requests through the organization server", () => {
   }
 
   /** Start a turn of `bot` that waits, on the fake Claude CLI. */
-  async function startTurn(auth: Auth, bot: Bot, instanceId = "hold") {
+  async function startTurn(auth: Auth, bot: Bot, instanceId = "hold", text = "Fais le suivi du client.") {
     rmSync(dumpOf(instanceId), { force: true });
-    const sent = await api("POST", `/api/bots/${bot.id}/messages`, auth, { text: "Fais le suivi du client.", threadId: bot.threadId });
+    const sent = await api("POST", `/api/bots/${bot.id}/messages`, auth, { text, threadId: bot.threadId });
     expect(sent.status, sent.text).toBe(202);
     await waitFor(async () => existsSync(dumpOf(instanceId)), 30_000);
   }
@@ -534,6 +559,86 @@ posixOnly("#3346: server-held requests through the organization server", () => {
     await decidedBy(member, bot, "owner-rule");
     await end(member, bot);
   }, 90_000);
+
+  // ── #4547: Claude's own ask over --permission-prompt-tool stdio ──
+  // The admin's own bots: a member's engine runs on the organization's
+  // server, so its cards are an admin's (the rule this file's member cards
+  // do not meet, being connector calls). The wire is the same for both.
+  const engineCards = async (auth: Auth, bot: Bot) => (await messages(auth, bot))
+    .filter((m) => m.card?.requestType === "permission" && typeof m.card.requestId === "string" && !isHeldRequestId(m.card.requestId)).map((m) => m.card);
+  const engineCard = (auth: Auth, bot: Bot) => waitFor(async () => (await engineCards(auth, bot)).find((card) => !card.answered) ?? null, 30_000);
+  const idle = (auth: Auth, bot: Bot) => waitFor(async () => {
+    const listed = ((await api("GET", "/api/bots?messages=0", auth)).body.bots as Array<{ id: string; busy?: boolean }>).find((b) => b.id === bot.id);
+    return listed && !listed.busy;
+  }, 30_000);
+  const stdioTurn = async (bot: Bot, marker: string) => {
+    rmSync(ranLog(), { force: true });
+    await startTurn(admin, bot, "stdio", `${marker} Fais le suivi du client.`);
+    // the turn's own launch (the instance's one-shot -p calls write dumps too)
+    const launch = await waitFor(async () => (existsSync(join(home, "stdio-launches.jsonl"))
+      ? readFileSync(join(home, "stdio-launches.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { argv: string[]; prompt: unknown })
+      : []).findLast((row) => JSON.stringify(row.prompt).includes(marker) && row.argv.includes("--permission-prompt-tool")) ?? null);
+    expect(launch.argv[launch.argv.indexOf("--permission-prompt-tool") + 1]).toBe("stdio");
+  };
+
+  it("#4547 stdio: an Ask bot's card, answered Allow once, runs the tool", async () => {
+    const bot = await botOf(admin, "Stdio allow", "ask", "stdio");
+    await stdioTurn(bot, "[stdio:send]");
+    const card = await engineCard(admin, bot);
+    expect(JSON.stringify([card.mcpTool, card.tool])).toContain("crm__send_email");
+    expect(ranTools()).toEqual([]);
+    const answered = await respond(admin, bot, card.requestId, "allow");
+    expect(answered.status, answered.text).toBeLessThan(300);
+    await waitFor(async () => ranTools().some((row) => row.tool === STDIO_SEND && row.asked));
+    await idle(admin, bot);
+  }, 90_000);
+
+  it("#4547 stdio: answered Deny, the tool does not run", async () => {
+    const bot = await botOf(admin, "Stdio deny", "ask", "stdio");
+    await stdioTurn(bot, "[stdio:send]");
+    const card = await engineCard(admin, bot);
+    const answered = await respond(admin, bot, card.requestId, "deny");
+    expect(answered.status, answered.text).toBeLessThan(300);
+    await idle(admin, bot);
+    expect(ranTools()).toEqual([]);
+  }, 90_000);
+
+  it("#4547 stdio: a bot in Full access is never asked, and the tool runs", async () => {
+    const bot = await botOf(admin, "Stdio full", "full", "stdio");
+    await stdioTurn(bot, "[stdio:send]");
+    // the CLI did ask over stdio; the bot's level answered it, no card
+    await waitFor(async () => ranTools().some((row) => row.tool === STDIO_SEND && row.asked));
+    await idle(admin, bot);
+    expect(await engineCards(admin, bot)).toEqual([]);
+  }, 90_000);
+
+  it("#4547 stdio: an organization Refuse rule refuses, at Ask and at Full", async () => {
+    const rule = await api("POST", "/api/org/admin/org-approvals/rules", adminConsole(), { when: `utiliser l'outil ${STDIO_REFUSED}`, behavior: "deny" });
+    expect(rule.status, rule.text).toBe(201);
+    for (const level of ["ask", "full"] as const) {
+      const bot = await botOf(admin, `Stdio refused ${level}`, level, "stdio");
+      await stdioTurn(bot, "[stdio:refused]");
+      await idle(admin, bot);
+      expect(ranTools(), level).toEqual([]);
+      expect(await engineCards(admin, bot), level).toEqual([]);
+      await decidedBy(admin, bot, "custom-rule-deny");
+    }
+  }, 120_000);
+
+  it("#4547 stdio: an organization Ask-first rule asks, at Full too; allowed, the tool runs", async () => {
+    const rule = await api("POST", "/api/org/admin/org-approvals/rules", adminConsole(), { when: `utiliser l'outil ${STDIO_ASK_FIRST}`, behavior: "ask" });
+    expect(rule.status, rule.text).toBe(201);
+    for (const level of ["ask", "full"] as const) {
+      const bot = await botOf(admin, `Stdio ask first ${level}`, level, "stdio");
+      await stdioTurn(bot, "[stdio:ask-first]");
+      const card = await engineCard(admin, bot);
+      expect(ranTools(), level).toEqual([]);
+      const answered = await respond(admin, bot, card.requestId, "allow");
+      expect(answered.status, answered.text).toBeLessThan(300);
+      await waitFor(async () => ranTools().some((row) => row.tool === STDIO_ASK_FIRST && row.asked));
+      await idle(admin, bot);
+    }
+  }, 120_000);
 
   it("an answer after a restart is unavailable", async () => {
     const bot = await botOf(member, "Restarted", "ask");

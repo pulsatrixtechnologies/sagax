@@ -9,9 +9,11 @@ import SafariServices
 import SwiftUI
 import UIKit
 
-/// The sheet's measures (#4103): the bot panel's card, row and type
-/// (`Theme.PhonePanel`, #4101) and the sheet's own (`PhoneSheetMetrics`),
-/// measured on the reference app's sheets.
+/// The sheet's measures: `PhoneSheetMetrics`, the 402 pt references' (#4510:
+/// row 44.5, words 13.5, notes 11; #4103 had taken the bot panel's 430 pt
+/// measures whole, 14 % taller and 18 % larger). The shared styles below
+/// (row, group title, footer, header title, switch) all read them, so every
+/// Settings page follows.
 enum SettingsMetrics {
     /// The round control: 17 pt in from the sheet's leading and top edges.
     static let headerInset = CGFloat(PhonePanelMetrics.margin)
@@ -26,29 +28,33 @@ enum SettingsMetrics {
     static let firstCardTop = CGFloat(PhoneSheetMetrics.firstCard)
     /// A title beside the control starts this far after it.
     static let titleGap = CGFloat(PhoneSheetMetrics.appsTitleGap)
-    static let cardMargin = Theme.PhonePanel.margin
-    /// Text, values and switches sit 20 pt from the card's edges.
-    static let rowInset = Theme.PhonePanel.textInset
-    static let trailingInset = Theme.PhonePanel.textInset
-    /// The chevron's ink ends 24 pt before the card's trailing edge.
-    static let chevronTrailing = Theme.PhonePanel.chevronTrailing
+    static let cardMargin = CGFloat(PhoneSheetMetrics.margin)
+    /// Text, values and switches sit 17.5 pt from the card's edges.
+    static let rowInset = CGFloat(PhoneSheetMetrics.textInset)
+    static let trailingInset = CGFloat(PhoneSheetMetrics.textInset)
+    /// The chevron's ink ends 21 pt before the card's trailing edge.
+    static let chevronTrailing = CGFloat(PhoneSheetMetrics.chevronTrailing)
     static let cardGap = CGFloat(PhoneSheetMetrics.cardGap)
     /// Previous card bottom to the next card top when a group title sits between.
-    static let labelledGap = CGFloat(PhoneSheetMetrics.titledGap) + 14.3 + Theme.PhonePanel.titleToCard
+    static let labelledGap = CGFloat(PhoneSheetMetrics.labelledGap)
     static let footerGap: CGFloat = 30.3
     static let tracking135: CGFloat = 0
     /// The sheet's top corners.
     static let sheetRadius: CGFloat = 38
     /// A one-line row, the person's row, a two-line row's padding.
-    static let row = Theme.PhonePanel.row
+    static let row = CGFloat(PhoneSheetMetrics.row)
     static let personRow = CGFloat(PhoneSheetMetrics.personRow)
     static let twoLinePadding = CGFloat(PhoneSheetMetrics.twoLinePadding)
     static let lineGap = CGFloat(PhoneSheetMetrics.lineGap)
     static let valueGap = CGFloat(PhoneSheetMetrics.valueGap)
     /// A leading glyph (+, the bin) at the text inset, its words 50 pt in.
-    static let glyphColumn: CGFloat = 30
+    static let glyphColumn = CGFloat(PhoneSheetMetrics.glyphColumn)
+    static let glyphSize = CGFloat(PhoneSheetMetrics.glyphSize)
+    static let switchSize = CGSize(width: PhoneSheetMetrics.switchWidth, height: PhoneSheetMetrics.switchHeight)
 
-    static var rowFont: Font { Theme.PhonePanel.rowFont }
+    static var rowFont: Font { Theme.font(CGFloat(PhoneSheetMetrics.rowSize)) }
+    static var titleBarFont: Font { Theme.font(CGFloat(PhoneSheetMetrics.rowSize), .medium) }
+    static var groupTitleFont: Font { Theme.font(CGFloat(PhoneSheetMetrics.groupTitleSize)) }
     static var subtitleFont: Font { Theme.font(CGFloat(PhoneSheetMetrics.subtitleSize)) }
 }
 
@@ -129,7 +135,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             }
             if let title {
                 Text(title)
-                    .font(Theme.PhonePanel.titleBarFont)
+                    .font(SettingsMetrics.titleBarFont)
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -195,37 +201,49 @@ struct SettingsCard<Content: View>: View {
     }
 }
 
-/// The muted group title above a card ("Bot", "Switch Account"): the bot
-/// panel's group title (#4101) at the card's text inset, in the gap the
-/// sheet keeps between two cards.
+/// The muted group title above a card ("Bot", "Switch Account"): 11 pt at
+/// the card's text inset, in the gap the sheet keeps between two cards.
 struct SettingsSectionLabel: View {
     @Environment(\.themePalette) var themePalette
     let text: LocalizedStringKey
 
     var body: some View {
-        PanelGroupTitle(text: text)
+        Text(text)
+            .font(SettingsMetrics.groupTitleFont)
+            .foregroundStyle(Theme.textTertiary)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, SettingsMetrics.rowInset)
+            .padding(.bottom, 10.7)
             .padding(.horizontal, SettingsMetrics.cardMargin)
             .frame(height: SettingsMetrics.labelledGap, alignment: .bottom)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
-/// The muted sentence under a card: the bot panel's footnote (#4101).
+/// The muted sentence under a card: 11 pt at the text inset, 10.7 pt under
+/// the card, the next card 30.3 pt below its last line.
 struct SettingsFooter: View {
     @Environment(\.themePalette) var themePalette
     let text: LocalizedStringKey
 
     var body: some View {
-        PanelFootnote(text: text)
+        Text(text)
+            .font(SettingsMetrics.groupTitleFont)
+            .foregroundStyle(Theme.textTertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, SettingsMetrics.rowInset)
+            .padding(.top, 10.7)
             .padding(.horizontal, SettingsMetrics.cardMargin)
-            .padding(.bottom, SettingsMetrics.cardGap - Theme.PhonePanel.footnoteTop)
+            .padding(.bottom, SettingsMetrics.footerGap - 3)
     }
 }
 
-/// A row in a settings card, the bot panel's row (#4101): 16 pt words 20 pt
-/// from the card's edges, a one-line row 52 pt high, a two-line row 15.5 pt
-/// above its title and under its muted 13 pt line, the chevron's ink 24 pt
-/// from the trailing edge, a value 15 pt before it.
+/// A row in a settings card (#4510): 13.5 pt words 17.5 pt from the card's
+/// edges, a one-line row 44.5 pt high, a two-line row 14.5 pt above its title
+/// and under its muted 11 pt line, the chevron's ink 21 pt from the trailing
+/// edge, a value 15 pt before it.
 struct SettingsRow: View {
     @Environment(\.themePalette) var themePalette
     enum Accessory {
@@ -279,7 +297,7 @@ struct SettingsRow: View {
             }
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: systemImage == "trash" ? 17 : 19, weight: .light))
+                    .font(.system(size: systemImage == "trash" ? SettingsMetrics.glyphSize - 1.5 : SettingsMetrics.glyphSize, weight: .light))
                     .foregroundStyle(titleColor)
                     .frame(width: SettingsMetrics.glyphColumn, alignment: .leading)
                     .accessibilityHidden(true)
@@ -348,18 +366,18 @@ struct SettingsRow: View {
         case let .toggle(binding):
             Toggle("", isOn: binding)
                 .labelsHidden()
-                .toggleStyle(ParityToggleStyle(width: Theme.PhonePanel.switchSize.width, height: Theme.PhonePanel.switchSize.height))
+                .toggleStyle(ParityToggleStyle(width: SettingsMetrics.switchSize.width, height: SettingsMetrics.switchSize.height))
                 .accessibilityLabel(titleText)
                 .accessibilityIdentifier((identifier ?? "") + ".toggle")
         case .check:
             Image(systemName: "checkmark")
-                .font(.system(size: 17, weight: .regular))
+                .font(.system(size: SettingsMetrics.glyphSize - 2, weight: .regular))
                 .foregroundStyle(Theme.textPrimary)
         case .progress:
             ProgressView().controlSize(.small).tint(Theme.textSecondary)
         case .external:
             Image(systemName: "arrow.up.right")
-                .font(.system(size: 17, weight: .light))
+                .font(.system(size: SettingsMetrics.glyphSize - 2, weight: .light))
                 .foregroundStyle(Theme.chevron)
                 .accessibilityHidden(true)
         }
@@ -404,9 +422,9 @@ struct AccountPhoto: View {
     }
 }
 
-/// The person's row (#4103): an 89 pt row, the 42 pt round photo or
-/// initials 20 pt into the card, the name in 16 pt and the lines under it
-/// (mail, organization) in muted 13 pt, an optional chevron.
+/// The person's row (#4510): a 65.5 pt row, the 38.5 pt round photo or
+/// initials 17.5 pt into the card, the name in 13.5 pt and the lines under
+/// it (mail, organization) in muted 11 pt, an optional chevron.
 struct AccountCardRow: View {
     @Environment(\.themePalette) var themePalette
     let name: String

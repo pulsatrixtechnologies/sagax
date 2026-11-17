@@ -12,7 +12,7 @@ import type { SendTurnInput } from "../contracts.ts";
 describe("routine effort at turn admission and dispatch", () => {
   function fixture(driverKind = "codex") {
     const selection = { instanceId: "engine", model: "chat-model", effort: "high" as const };
-    const bot = { id: "bot", name: "Runner", modelSelection: selection as typeof selection & { fast?: { instanceId: string; model: string } } };
+    const bot = { id: "bot", name: "Runner", modelSelection: selection as typeof selection & { fast?: { instanceId: string; model: string } }, contextWindow: undefined as number | undefined };
     const sendTurn = vi.fn(async (_input: SendTurnInput) => ({}));
     const instance = { instanceId: "engine", driverKind, models: { options: [{ id: "chat-model" }, { id: "routine-model" }] },
       adapter: { capabilities: { effortLevels: ["low", "high"] }, sendTurn } };
@@ -48,6 +48,8 @@ describe("routine effort at turn admission and dispatch", () => {
       guardTurnDispatch: (work: unknown) => work, withRecalled: (_recalled: unknown, text: string) => text,
       savedSteps: { dispatch: { sendTurn: (_engine: unknown, _replay: unknown, input: SendTurnInput, dispatch: (input: SendTurnInput) => unknown) => dispatch(input) } },
       managedPolicy: { restrictsMcp: () => false }, connectorPlanForTurn,
+      // #4417: the size in force, as the server resolves it (shared/context-size.ts)
+      turnContextWindow: (turnBot: typeof bot) => turnBot.contextWindow,
     };
     const host = new Proxy(values, { get: (target, key: string) => target[key] ?? noOp }) as unknown as StartTurnHost;
     async function turn() {
@@ -68,6 +70,15 @@ describe("routine effort at turn admission and dispatch", () => {
       takeover: () => { takenOver = true; },
     };
   }
+
+  // #4417: the bot's context size reaches its next turn, and only when set
+  it("sends the bot's context size with the turn, and nothing without one", async () => {
+    const f = fixture("claudeAgent");
+    f.setRoutine(false);
+    expect((await f.turn()).contextWindow).toBeUndefined();
+    f.bot.contextWindow = 200_000;
+    expect(await f.turn()).toMatchObject({ model: "chat-model", contextWindow: 200_000 });
+  });
 
   it.each(["codex", "claudeAgent"])("sends low routine effort to %s and its sub-agents; chat keeps the bot's settings", async (driver) => {
     const f = fixture(driver);

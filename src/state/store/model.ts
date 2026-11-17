@@ -193,6 +193,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   teamNote?: import("../../../shared/wire").WireMessage["teamNote"];
   /** #3480: the quiet line when the bot's quiet mode went off (WireMessage.quietSummary). */
   quietSummary?: import("../../../shared/wire").WireMessage["quietSummary"];
+  /** #4100: a listening session's one row, patched in place (WireMessage.listening). */
+  listening?: import("../../../shared/wire").WireMessage["listening"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];
@@ -530,6 +532,9 @@ export interface Bot {
   /** #4329 lot 5: what runs this bot ("Runs with"), the driver kind the
    * person chose for it (shared/wire.ts); absent: no choice of its own. */
   harness?: string;
+  /** #4417: the context size this bot's turns run at (shared/context-size.ts);
+   * null while a clear is on its way to the server. */
+  contextWindow?: number | null;
   /** Where this bot's turns run. Absent means the server (the fleet). */
   host?: { kind: "fleet" } | { kind: "machine"; userId: string; deviceId: string };
   /** Where this bot works: a computer, only the built-in browser tab, or
@@ -1167,7 +1172,7 @@ export interface InstanceInfo {
       message: string;
     };
   };
-  models: { default: string; issue?: ModelListIssue; options: Array<{ id: string; label: string; custom?: boolean; loaded?: boolean; local?: boolean; anthropic?: boolean; server?: string; sharedBy?: string; provider?: string; contextWindow?: number; variants?: ModelVariantOption[];
+  models: { default: string; issue?: ModelListIssue; options: Array<{ id: string; label: string; custom?: boolean; loaded?: boolean; local?: boolean; anthropic?: boolean; server?: string; sharedBy?: string; provider?: string; contextWindow?: number; contextWindows?: number[]; variants?: ModelVariantOption[];
     /** #3085: a pi row the person's (or the organization's) key pays for. */
     keyPaid?: boolean;
     /** Per-model reasoning levels and default (shared/model-capabilities.ts). */
@@ -1715,7 +1720,7 @@ export type Action =
   // `threadId` is the thread the card was shown in; `groupId` when the card
   // is in a room: the message lives on the room's list, and the answer goes
   // to the room's thread
-  | { type: "answerCard"; botId: string; messageId: string; answer: string; threadId?: string; groupId?: string;
+  | { type: "answerCard"; botId: string; messageId: string; answer: string; threadId?: string; groupId?: string; sendId?: string;
       /** A terminal card: the destination the person picked (absent: the bot's). */
       terminalDestination?: import("../../../shared/terminal-request").TerminalDestinationPick;
       /** #3457: a choice card's switches, the watches kept on with its yes. */
@@ -1752,6 +1757,13 @@ export type Action =
        * (409): the card already shows the server's real outcome, so the
        * caller must not roll it back. */
       onError?: (message: string, settled?: boolean) => void;
+      /** #4489: the card's receipt at the click (Allowed once, Declined),
+       * rolled back if the answer does not reach the server. */
+      settle?: Partial<OptionCardData>;
+      /** #4489: a live turn waits on this answer, so the working line comes
+       * on at the click. Never for a server's own card (a routine fix
+       * card's Open the routine, Run a check, Pause), which starts no turn. */
+      resumes?: boolean;
     }
   | { type: "newTask"; botId: string; projectId?: string; cwd?: string; confidential?: boolean; /** "New topic" in the single stream */ stream?: boolean; onCreated?: () => void; onError?: (message: string) => void }
   /** One way only (src/lib/confidential-thread.ts): the server refuses any
@@ -1788,6 +1800,11 @@ export type Action =
   | { type: "markUnread"; botId: string }
   /** Play a one-shot mascot motion on a bot, as the appearance card's moves do. */
   | { type: "playMascotMotion"; botId: string; kind: Exclude<MausMotion, "none"> }
+  /** #4489: a button choice was taken. The working line comes on now. */
+  | { type: "choiceContinuing"; botId: string; threadId?: string }
+  /** #4489: a decideRequest with `settle` / `resumes` did not reach the
+   * server: `settle` puts the card back, and the turn waits again. */
+  | { type: "decideFailed"; threadId: string; requestId: string; settle?: Partial<OptionCardData>; resumes?: boolean }
   | { type: "botPatched"; bot: BotAnnouncement }
   | { type: "messageAdded"; threadId: string; message: Message }
   | { type: "messagePatched"; threadId: string; message: Message }

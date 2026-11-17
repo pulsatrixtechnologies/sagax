@@ -566,6 +566,40 @@ Permissions, Coffre, Utilisation et facturation, Mises à jour. Sagax a plus de 
   choisir une région) se fait dans la fenêtre même : en place dans la rangée, ou en
   sous-page avec retour, jamais une deuxième fenêtre par-dessus.
 
+**iPhone (#4510, Réglages : taille corrigée, remplace les mesures de rangée et de texte de #4103 ci-dessous).**
+Le propriétaire trouvait les menus des Réglages « genre 10 % trop gros ». Mesuré : la
+refonte #4103 avait repris tels quels les chiffres du panneau du bot (photos d'un
+téléphone de 430 pt, #4101) ; les références du harnais de parité (402 x 874 pt,
+`measure-settings.md`, écrans 12, 14, 15, 16, 21) en donnent d'autres, plus petits :
+la géométrie de Sagax était 14 % plus grande et le texte 18 % plus grand (le 10 % de
+l'oeil du propriétaire est la moyenne perçue). Les Réglages et leurs pages lisent
+maintenant les chiffres du 402 pt (`PhoneSheetMetrics`, un seul endroit : rangée,
+titre de groupe, note, titre de page, interrupteur ; le panneau du bot garde les siens).
+Avant, après (points ; mesures de Sagax sur iPhone 17 Pro, 402 pt, relevées dans les
+captures du harnais ; entre parenthèses la référence du 402 pt) :
+
+- Texte de rangée et valeur : 16 devient 13,5 (13,5) ; sous-titre, titre de groupe et
+  note : 13 devient 11 (11) ; titre de page : 16 moyen devient 13,5 moyen (13,5 moyen).
+- Rangée d'une ligne : 52,5 devient 44,8 (44,5) ; la personne : 89,2 devient 66,0
+  (65,5) ; titre et une note : 72 devient 64 (61) ; deux notes : 15,5 de marge devient
+  14,5 (74 à 75 de haut).
+- Marges : cartes 17 devient 15 (15,2) ; texte 20 devient 17,5 (17,5) ; chevron 24
+  devient 21 (21,2) ; entre deux cartes 31,3 devient 27,3 (27) ; titre de groupe :
+  55,4 devient 48,6 (48,6) ; première carte à 102 devient 90 du haut de la feuille (90,2).
+- Pastille ronde de la personne : 42 devient 38,5 (38,5) ; à côté du nom 12 devient 10 ;
+  glyphe de tête de rangée 19 devient 17 (17) ; interrupteur 66 x 30 devient 60,3 x
+  26,3 (60,3 x 26,3).
+- Connecter des apps : nom 16 devient 13,5, ligne 14 devient 11, titre de section 16
+  devient 11 gris, tuile 42 devient 38,5, rangée 68 devient 69 de pas (69), pastille
+  Ajouter 35 de haut devient 32,7 (32,7) et mots 13 devient 11 moyen ; recherche : mots
+  17 devient 13,5.
+- Zones tactiles : une rangée reste de 44,5 (au moins 44) ; la pastille d'une rangée est
+  dessinée à 32,7 mais se touche sur 44 ; la recherche et la roue restent à 44 ; le
+  texte suit le Dynamic Type à partir de la base corrigée.
+- Pas corrigé faute de mesure de référence : la demi-feuille d'un plugin (nom 20, texte
+  16, pastille 48 : voir #4103) et les pages ouvertes depuis les Réglages qui ont leurs
+  propres champs.
+
 **iPhone (#4103, mesuré sur les photos du propriétaire, téléphone de 430 pt).** Les
 feuilles reprennent la carte, la rangée, le titre de groupe, la note et l'interrupteur
 du panneau du bot (#4101) : une seule carte groupée, un seul style de rangée, un seul
@@ -1469,6 +1503,45 @@ code y reste à porter.
   `node scripts/capture/team-work.mjs` (galerie `bot-panel-team-work.html`).
 
 ---
+
+### 2.25 Écoute d'une conversation (#4100)
+
+Ajouté le 2026-11-14 (structure de la référence, mots Sagax). Captures du lot à côté de la
+carte d'appel en direct (2.19).
+
+**Départ.** Dans le chat d'un bot (jamais une salle), le menu + du compositeur offre
+« Écouter une conversation ». Le système demande ses propres permissions la première fois
+(micro ; sur le bureau, le son de l'ordinateur) ; aucune carte de consentement de l'app.
+Sans transcription vocale configurée, l'entrée ouvre la carte des clés, comme la dictée.
+
+**Carte flottante (`ListeningCard`).** En haut de la transcription, sous la barre d'en-tête,
+dans la pile des bannières (après la carte d'appel vocal). Surface de carte compacte du chat
+(`bg-composer`, `ring-composer-ring`, `rounded-3xl`, largeur de la colonne, max 720 px) :
+avatar du bot (32 px), point rouge (`bg-danger`, pulsation, coupée en mouvement réduit) et
+« Écoute de la conversation », la source entendue en tertiaire (« Micro » ou « Micro et son
+de l'ordinateur »), la ligne la plus récente dessous en secondaire (locuteur en gras). À
+droite : le contrôle de chat (bulle, bascule entre la transcription en direct et la
+conversation) et le bouton d'arrêt rond rouge (carré plein blanc), le rouge d'enregistrement
+de la barre d'appel. Sous l'en-tête, la transcription en direct dans la boîte inset des
+lignes d'appel (`TranscriptLines`, partagée avec `OutboundCard`) : étiquette du locuteur en
+secondaire, texte dessous, la ligne en cours en gris secondaire jusqu'à ce qu'elle soit
+finale. Le compositeur reste dessous et fonctionne. Sur un autre appareil de la même
+personne, la carte suit la session par sa ligne (dernière ligne, Arrêter), sans contrôle de chat.
+
+**Ligne dans la conversation.** Une seule ligne par session, mise à jour en place
+(`AskSettledLine`). Pendant l'écoute, la ligne ne dessine rien : la carte flottante le dit
+déjà, une seule fois. Une fois la session finie, elle montre « Écouté 24 min, 3 interlocuteurs » avec « Transcription », qui déplie la transcription
+complète en lecture seule (même boîte inset). Les apps publiées et le téléphone lisent le
+texte simple de la ligne.
+
+**Ailleurs dans l'app.** Point rouge sur la ligne du bot dans la barre latérale ; pastille au
+bas de la barre latérale quand un autre chat est à l'écran (retour, Arrêter) ; puce dans
+l'en-tête pour les fenêtres trop étroites. Le son de l'ordinateur refusé par le système : une
+ligne sur la carte avec « Ouvrir les réglages ».
+
+Composants : `src/components/ListeningCard.tsx`, `src/components/TranscriptLines.tsx`.
+Logique : `src/lib/listening/` (session, canal, locuteurs, lignes). Serveur :
+`server/listening/`, `server/routes/listening.ts`.
 
 ## 3. Cursor : ce qu'on retient
 
@@ -2581,15 +2654,14 @@ bordered box in a bordered box; `ManagedProfileIdentity flat` in General).
 A setting too long for a card gets a sub-page instead of a growing card
 (`src/components/SettingsSubPage.tsx`): the section shows a
 `SettingsSubPageRow` (title, one-line summary, Edit) and the page replaces
-the section with a back arrow and the breadcrumb "General > About me".
+the section with a back arrow and the breadcrumb "General > More appearance".
 Back, the breadcrumb and Escape return to the section (Escape is taken in
 the capture phase, so it never closes Settings from a sub-page). The open
 page is `appSettingsSubPage` in the store (`toggleAppSettings` with
 `subPage`; any other navigation clears it); register a page in `SUB_PAGES`
-in `SettingsModal.tsx`. About me is the first: a full-height editor that
-saves as you type, a character count (24,000 max, `server/config.ts`), a
-short guide with an outline, and the block bots read
-(`userProfileSystemPrompt`). Tests: `src/components/SettingsSubPage.test.ts`,
+in `SettingsModal.tsx`. About me was the first; it left the settings on
+2026-11-17 (the owner: the person's bots keep it, `sagax_settings`
+`account.aboutMe`), so General > More appearance is the example now. Tests: `src/components/SettingsSubPage.test.ts`,
 `src/components/SettingsModal.serverMode.test.ts`.
 
 #### Settings split: Account, Security, Vault, Models, Voice (2026-10-28)
@@ -3089,7 +3161,11 @@ Sagax's values (`ProvidersSettings.tsx`, `ProviderPage.tsx`):
   value one 12px grey line naming the tool, the reference's grey line; absent
   where one engine only can; the same control is the model menu's line, a
   "Runs with" column of Bot models with the plain words and a row of the
-  bot's Model tab), Models (a fold row whose line is
+  bot's Model tab), Models (#4417: first a described row "Context size",
+  the same shape as Runs with, its pill menu "Each model's own", 200K, 1M,
+  absent where every model has one size; the same control is the model
+  menu's line beside Thinking effort and a row of the bot's Model tab, its
+  first value "Default (1M)"; then a fold row whose line is
   "75 of 75 on" and whose count pill unfolds the switches in place, a search
   from 12 models) and Advanced folded each time the page opens: who pays,
   the tool by its name (version, location, updates), a server's address,
@@ -3098,8 +3174,9 @@ Sagax's values (`ProvidersSettings.tsx`, `ProviderPage.tsx`):
 #4415, Accounts: one sign-in is one line (two engines reading the same
 sign-in folder, Codex and the ChatGPT plan, are one account); a line has
 one way in or out (Sign in, Sign in again, Sign out, the 26px grey pill)
-and, for an account added beside the provider's first one, Remove, armed
-in red on a first click as the API key's Remove. No older block of one
+and, while the provider keeps another account (#4426: the first one too,
+signed in or not, in one gesture), Remove, armed in red on a first click as
+the API key's Remove; the only account has none. No older block of one
 engine is drawn in a line. A sign-in runs in its line
 (`src/components/settings/AccountSignIn.tsx`, the one flow of every
 provider): the pill is replaced by the flow's state, a 12px spinner and

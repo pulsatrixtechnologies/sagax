@@ -23,7 +23,8 @@ function localBridge() {
   return ogb && !ogb.remoteClient?.active ? ogb : undefined;
 }
 
-function revealLabel(): string {
+/** The platform's name for its file manager, shared with the outside-workspace chip. */
+export function revealLabel(): string {
   const platform = window.ogb?.platform;
   return t(platform === "darwin" ? "fileLink.showInFinder" : platform === "win32" ? "fileLink.showInExplorer" : "fileLink.showInFolder");
 }

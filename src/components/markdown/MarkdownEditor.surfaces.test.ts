@@ -47,7 +47,6 @@ const { SectionContextDialog } = await import("../TeamMapPage");
 const { RoutineEditor, QuickComposer } = await import("../RoutineCalendarPage");
 const { TriggersPanel } = await import("../TriggersPanel");
 const { WebhookEditor } = await import("../WebhooksPanel");
-const { AboutMeEditor } = await import("../AboutMeSettings");
 const { DraftMemory } = await import("../NewBotDialog");
 
 let host: HTMLDivElement;
@@ -262,20 +261,6 @@ describe("markdown fields", () => {
     const [path, init] = fixture.api.mock.calls.find(([, options]) => options?.method === "PATCH" || options?.method === "PUT")!;
     expect(path).toContain("/api/webhooks/w1");
     expect(JSON.parse(init.body).prompt).toBe("## Rule\n\n1. Triage it");
-  });
-
-  it("About me: mounts with the saved text and saves on blur", async () => {
-    fixture.state = { ...fixture.state, config: { profile: { aboutMe: "I run **ops**." } } };
-    fixture.api.mockImplementation(async (_path: string, init?: { body?: string }) => ({ profile: JSON.parse(init?.body ?? "{}").profile }));
-    render(createElement(AboutMeEditor));
-    const editor = await markdownEditorIn(host, "about-me");
-    expect(markdownText(editor)).toBe("I run **ops**.");
-    expect(editor.id).toBe("profile-about-me");
-    typeMarkdown(editor, "I run **ops** in Montreal.");
-    blurMarkdown(editor);
-    await settle();
-    // Each person has their own About me (#3428): it saves on its own route, not in the shared config.
-    expect(fixture.api).toHaveBeenCalledWith("/api/me/about-me", expect.objectContaining({ method: "PUT", body: JSON.stringify({ aboutMe: "I run **ops** in Montreal." }) }));
   });
 
   it("New bot draft memory: mounts with the template file and writes it back", async () => {

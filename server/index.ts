@@ -1057,6 +1057,7 @@ import { createProviderAccountsRoutes, providerCatalogFor, type ProviderCatalogD
 import type { ProviderCatalog } from "../shared/provider-catalog.ts";
 import type { EffortLevel } from "../shared/model-selection.ts";
 import { cleanHarnessDefaults } from "../shared/harness-matrix.ts";
+import { cleanContextDefaults, contextSizeForTurn } from "../shared/context-size.ts";
 import { createHarnessChoice, harnessChoices } from "./models/resolve-harness.ts";
 import { createPersonSettingsRoutes } from "./routes/person-settings.ts";
 import { isPersonalBrowserProfileId, type PersonalFeature } from "../shared/person-settings.ts";
@@ -1432,6 +1433,9 @@ import { createBotSendStateRoutes } from "./routes/bot-send-state.ts";
 import { createMeEngineModelsRoutes } from "./routes/me-engine-models.ts";
 import { createRoutineWatchCheckRoutes } from "./routes/routine-watch-check.ts";
 import { createThreadFilePinRoutes } from "./routes/thread-file-pins.ts";
+import { createListeningInternalRoutes, createListeningRoutes } from "./routes/listening.ts";
+import { ListeningSessions } from "./listening/listening-sessions.ts";
+import { listeningEndedTurn, withListeningSoFar } from "./listening/listening-turn.ts";
 import { remoteComputerForTurn, sandboxPrincipalForTurn } from "./sandbox/user-sandbox-routing.ts";
 import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
 import { BotFolderRegistry, WorkspaceTidier, attributeEntries, attributionFragments, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning } from "./sandbox/sandbox-bot-folder.ts";
@@ -1841,6 +1845,7 @@ import { createWebhookDelegateRefusal } from "./index-leaves/webhookDelegateRefu
 import { createWorkplaceTurnText } from "./index-leaves/workplaceTurnText.ts";
 import { createWriteWorkerTurn } from "./index-leaves/writeWorkerTurn.ts";
 import { createInstancesForViewer } from "./index-leaves/instancesForViewer.ts";
+import { createViewerAccountModels } from "./index-leaves/viewerAccountModels.ts";
 import { createBookTurnUsage } from "./index-leaves/bookTurnUsage.ts";
 import { createResendUserMessage } from "./index-leaves/resendUserMessage.ts";
 import { createPiKitIdentityFor } from "./index-leaves/piKitIdentityFor.ts";
@@ -4801,6 +4806,7 @@ bindLeafHost({
   get effortAcceptedByEngine() { return effortAcceptedByEngine; },
   get effortAcceptedByModel() { return effortAcceptedByModel; },
   get effortForModel() { return effortForModel; },
+  get turnContextWindow() { return turnContextWindow; },
   get encryptionOwnerForUpload() { return encryptionOwnerForUpload; },
   get endMemoryTurn() { return endMemoryTurn; },
   get endedToolOutput() { return endedToolOutput; },
@@ -7073,6 +7079,7 @@ bindLeafHost({
   get accessCardFor() { return accessCardFor; },
   get describeInstances() { return describeInstances; },
   get instancesForViewer() { return instancesForViewer; }, get accountNames() { return accountNames; },
+  get viewerAccountModels() { return viewerAccountModels; },
   get modelAccessRefusals() { return modelAccessRefusals; },
   get memberInstanceView() { return memberInstanceView; },
   get _stopCompanyInstancesImpl() { return _stopCompanyInstancesImpl; },
@@ -8174,6 +8181,7 @@ const holdSignInRefusal = createHoldSignInRefusal(getLeafHost);
 const accessCardFor = createAccessCardFor(getLeafHost);
 const describeInstances = createDescribeInstances(getLeafHost);
 const instancesForViewer = createInstancesForViewer(getLeafHost);
+const viewerAccountModels = createViewerAccountModels(getLeafHost);
 const memberInstanceView = createMemberInstanceView(getLeafHost);
 const persistProviderInstance = createPersistProviderInstance(getLeafHost);
 const revokeEngineCapabilities = createRevokeEngineCapabilities(getLeafHost);
@@ -8745,7 +8753,7 @@ setSharedHost(IDENTITY.kind === "perspicax");
 const ORG_ENGINE_NOT_ALLOWED = "Your organization does not allow this model provider.";
 /** 2026-10-30 (lot 2): a model turned off, by the organization or by the person. */
 const MODEL_TURNED_OFF_BY_ORG = "Your organization turned this model off. Pick another model or Auto.";
-const MODEL_TURNED_OFF_BY_PERSON = "You turned this model off in Settings > Models. Turn it back on there, or pick another model.";
+const MODEL_TURNED_OFF_BY_PERSON = "You turned this model off in Settings > Providers > Models. Turn it back on there, or pick another model.";
 /** Organization server: Perspicax owns each signed-in person's name and email. */
 const PROFILE_MANAGEMENT = profileManagement(IDENTITY);
 // Every stream frame and request rechecks email sessions against this list,
@@ -17947,6 +17955,14 @@ const oneShotSignIn = createOneShotSignIn<BotRecord, ProviderInstance>({
   signedIn: (_bot, instance, ranOn) => {
     if (ranOn?.payerPrincipalId) signInCards.signedIn(ranOn.payerPrincipalId, { instanceId: instance.instanceId });
   },
+  stillRefused: (bot, instance, ranOn) => {
+    const slot = turnSlotFor(bot, instance);
+    const payer = ranOn?.payerPrincipalId?.trim();
+    if (!payer) return signedOutHeld(instance.instanceId, refusalAccount("server", undefined, slot), Date.now());
+    const account = refusalAccount(ranOn?.via ?? "subscription", payer, slot);
+    if (signedOutHeld(instance.instanceId, account, Date.now())) return true;
+    return Boolean(engineLogins?.expired(payer, instance.driverKind, slot, instance.instanceId));
+  },
   log: (line) => console.info(line),
   redact: (text) => redactSecretsInText(text),
 });
@@ -19229,6 +19245,12 @@ function attentionPerson(bot: BotRecord, threadId: string): string | undefined {
   const task = store.taskByThread(bot.id, threadId);
   return task?.ownerPrincipalId || routines?.runForThread(threadId)?.runAs || threadPersonKey(threadId) || effectiveBotOwner(bot) || undefined;
 }
+/** An outside agent's conversation, or an AI client's hidden one (#291):
+ * the client reads it. A peer's hidden work thread is not one. */
+function aiClientConversation(botId: string, threadId: string): boolean {
+  const task = store.taskByThread(botId, threadId);
+  return isAgentConversation(task) || (task?.hidden === true && !task.routineRunId && !task.openedBy?.botId);
+}
 const CW_OPEN_RECORD = /https:\/\/([a-z0-9.-]+)\/v4_6_release\/services\/system_io\/router\/openrecord\.rails\?[^"\s]*?companyName=([A-Za-z0-9_.-]+)/i;
 /** A ConnectWise ticket's deep link: the site the server is told
  * (SAGAX_CW_SITE), else the one the thread's own ConnectWise cards link to. */
@@ -19239,12 +19261,7 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   patch: (threadId, messageId, patch) => { store.patchMessage(threadId, messageId, patch); },
   markUnread: (botId, threadId) => store.patchTask(botId, threadId, { unread: true }),
   conversation: (bot, threadId) => conversationOrStart(bot, attentionPerson(bot, threadId)),
-  // an outside agent's conversation, or an AI client's hidden one (#291):
-  // the client reads it. A peer's hidden work thread is not one.
-  agentConversation: (botId, threadId) => {
-    const task = store.taskByThread(botId, threadId);
-    return isAgentConversation(task) || (task?.hidden === true && !task.routineRunId && !task.openedBy?.botId);
-  },
+  agentConversation: (botId, threadId) => aiClientConversation(botId, threadId),
   routineRun: (threadId) => {
     const run = routines?.runForThread(threadId);
     return run && run.target === "bot" ? { id: run.id, routineName: run.routineName, status: run.status } : null;
@@ -23685,7 +23702,7 @@ const meetingService: MeetingService = createMeetingService({
     try { assertWithinBudget(cfg, DATA_DIR); } catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
     if (!key.ok) {
       return { error: key.cause === "no_credentials"
-        ? "Meeting notes need speech to text: add an xAI key in Settings > Models."
+        ? "Meeting notes need speech to text: add an xAI key in Settings > Providers > Models."
         : `Speech to text is not available for you right now (${key.cause}).` };
     }
     const target = { botId, botName: bot.name, threadId };
@@ -24170,7 +24187,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       store.appendMessage(threadId, {
         role: "bot",
         kind: "access",
-        text: `${owner.bot.name} asks you to sign in to ${name} again to use ${account.label} connectors. Open Settings > Models to sign in.`,
+        text: `${owner.bot.name} asks you to sign in to ${name} again to use ${account.label} connectors. Open Settings > Providers > Models to sign in.`,
         ...(owner.group ? { from: { botId: owner.bot.id, name: owner.bot.name, color: owner.bot.color } } : {}),
         access: { reason: "sign_in", engine: name, instanceId: engine.instanceId, botId: owner.bot.id, botName: owner.bot.name, ownerPrincipalId: principalId, payerPrincipalId: principalId }
       });
@@ -24203,7 +24220,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       store.appendMessage(threadId, {
         role: "bot",
         kind: "access",
-        text: `${owner.bot.name} asks you to sign in to ${name}. Open Settings > Models to sign in.`,
+        text: `${owner.bot.name} asks you to sign in to ${name}. Open Settings > Providers > Models to sign in.`,
         ...(owner.group ? { from: { botId: owner.bot.id, name: owner.bot.name, color: owner.bot.color } } : {}),
         access: { reason: "sign_in", engine: name, instanceId: claude.instanceId, botId: owner.bot.id, botName: owner.bot.name, ownerPrincipalId: principalId, payerPrincipalId: principalId }
       });
@@ -24506,8 +24523,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       },
     ),
     claimTurnResource: (capability, resource) => claimTurnResource(capability as InternalCapability, resource),
-    browserAgentRpc: (session, spec, method, params, beforeDispatch, credentials) =>
-      browserRuntime.agentRpc(session, spec as never, method as "tools/call" | "tools/list", params, beforeDispatch, credentials as never),
+    browserAgentRpc: (session, spec, method, params, beforeDispatch, credentials, turn) =>
+      browserRuntime.agentRpc(session, spec as never, method as "tools/call" | "tools/list", params, beforeDispatch, credentials as never, turn),
     myChromeMemory: () => myChrome.memory,
     myChromeTakeNotes: (session) => myChrome.takeNotes(session),
     myChromeToolAllowed: (tool) => myChromeToolRefusal(tool) === null,
@@ -30572,6 +30589,18 @@ ROUTES.push(createModelSwitchRoutes({
       await applyHarnessDefaults(owner, auth, cleared);
     },
   },
+  // #4417: the person's default context size per provider, read per turn
+  contextDefaults: {
+    read: (owner) => contextDefaultsOf(owner),
+    save: (owner, map) => {
+      if (owner === "installation") {
+        saveConfig({ contextByProvider: map });
+        cfg.contextByProvider = map;
+      } else {
+        personSettings.setContextDefaults(owner, map);
+      }
+    },
+  },
 }));
 ROUTES.push(createProviderAccountsRoutes({
   accounts: providerAccounts,
@@ -31332,13 +31361,59 @@ const voiceModeDeps: VoiceModeDeps = {
       costSource: "estimated" as const,
       trigger: usage.speaker.principalId && IDENTITY.kind === "perspicax" ? { kind: "user", principalId: usage.speaker.principalId } : { kind: "owner" },
       ...(IDENTITY.kind === "perspicax" ? { access: usage.via, ...(bot ? { ownerPrincipalId: effectiveBotOwner(bot) } : {}) } : {}),
-      ...(usage.payerPrincipalId ? { payerPrincipalId: usage.payerPrincipalId } : {})
+      ...(usage.payerPrincipalId ? { payerPrincipalId: usage.payerPrincipalId } : {}),
+      ...(usage.purpose ? { purpose: usage.purpose } : {}),
     };
     noteSpend(DATA_DIR, row, appendUsage(DATA_DIR, row));
   }
 };
 const voiceModeRoutes = createVoiceModeRoutes(voiceModeDeps);
 ROUTES.push(voiceModeRoutes);
+
+// #4100: listening to a conversation. The person's own sessions, sealed
+// under their conversation's key; one row patched in place and a frame to
+// that person's devices. A device that went quiet is ended without a turn.
+const listeningDir = join(DATA_DIR, "listening");
+// Register the context before opening a session sealed on an earlier run.
+registerAtRestRoot({ id: "listening", dir: listeningDir, context: path => `listening/${path}`, files: () => listeningSessions.files() });
+const listeningSessions = new ListeningSessions({
+  dir: listeningDir,
+  appendRow: (threadId, row) => {
+    const bot = store.botByThread(threadId);
+    return bot && store.taskByThread(bot.id, threadId) ? store.appendMessage(threadId, row) : null;
+  },
+  patchRow: (threadId, messageId, patch) => { store.patchMessage(threadId, messageId, patch); },
+  broadcast: (frame) => broadcast({ ...frame }),
+  // at the person's stop the bot gets the transcript as data, in one turn
+  // that speaks for that person (server/listening/listening-turn.ts)
+  onEnded: listeningEndedTurn({
+    startTurn: ({ botId, threadId, prompt, principalId }) => startMeetingSummary(botId, threadId, prompt, { speaker: personSpeaker(principalId), what: "the answer to the conversation you listened to" }),
+  }),
+  log: (line) => console.warn(line),
+});
+// the bot's own read of a session of the conversation its turn runs in
+INTERNAL_ROUTES.push(createListeningInternalRoutes({ sessions: listeningSessions }));
+/** #4100: a message the person sends in a conversation they are listening
+ * in carries the transcript so far, added here (no client field). */
+function listeningSoFarFor(threadId: string, principal: string, text: string): string {
+  const live = listeningSessions.liveFor(threadId);
+  if (!live || !principal || live.principalId.trim().toLowerCase() !== principal.trim().toLowerCase()) return text;
+  return withListeningSoFar(text, live);
+}
+setInterval(() => { try { listeningSessions.sweep(); } catch (error) { reportBackgroundError(error); } }, 30_000).unref();
+ROUTES.push(createListeningRoutes({
+  sessions: listeningSessions,
+  person: (auth) => actorPrincipalId(auth).trim().toLowerCase(),
+  // the voice listen socket's rule: the named conversation when the person
+  // may post to it, else their own; never an AI client's hidden one
+  conversation: (auth, botId, threadId) => {
+    const target = voiceModeDeps.target(auth, botId, threadId);
+    if ("status" in target) return target;
+    // never in a room, never an AI client's hidden conversation (#4100)
+    if (store.groupByThread(target.threadId) || aiClientConversation(target.botId, target.threadId)) return { status: 404, error: "no such conversation" };
+    return { botId: target.botId, threadId: target.threadId };
+  },
+}));
 
 // The caller's own claude.ai connectors, read through their own Claude
 // account (server/harness-connectors.ts); always on, no server switch.
@@ -33166,6 +33241,26 @@ function personHarnessDefaults(principalId: string | null | undefined): Record<s
   if (IDENTITY.kind !== "perspicax") return cleanHarnessDefaults(cfg.harnessByProvider);
   const owner = personSettingsOwner(principalId);
   return owner ? personSettings.get(owner).harnessByProvider ?? {} : {};
+}
+/** #4417: the default context size per provider of a bot's owner (a
+ * turn's read, shared/context-size.ts). */
+function personContextDefaults(principalId: string | null | undefined): Record<string, number> {
+  if (IDENTITY.kind !== "perspicax") return cleanContextDefaults(cfg.contextByProvider);
+  const owner = personSettingsOwner(principalId);
+  return owner ? personSettings.get(owner).contextByProvider ?? {} : {};
+}
+/** #4417: the context size a bot's turn runs at on this model: its own
+ * choice, else its owner's default for the model's provider, when the model
+ * offers it; undefined for the model's own size. */
+function turnContextWindow(bot: Pick<BotRecord, "contextWindow" | "ownerUserId">, instance: { instanceId: string; driverKind: string; displayName: string; models: { options: ReadonlyArray<{ id: string; contextWindow?: number; contextWindows?: number[] }> } }, model: string): number | undefined {
+  return contextSizeForTurn({
+    instance, option: instance.models.options.find((option) => option.id === model),
+    chosen: bot.contextWindow, defaults: personContextDefaults(effectiveBotOwner(bot)),
+  });
+}
+/** #4417: the same map for a settings owner (GET/PUT /api/me/models). */
+function contextDefaultsOf(owner: string | "installation"): Record<string, number> {
+  return owner === "installation" ? cleanContextDefaults(cfg.contextByProvider) : { ...personSettings.get(owner).contextByProvider };
 }
 /** The default engine per provider kept for a settings owner. */
 function harnessDefaultsOf(owner: string | "installation"): Record<string, string> {
@@ -35944,6 +36039,7 @@ ROUTES.push(createAdminActivityRoutes({
 // list (removeAccountEntry, #4435) go through.
 const addedAccountRemoval: AddedAccountRemovalDeps = {
   cfg,
+  saveConfig,
   getProviderConfigBusy: () => providerConfigBusy,
   setProviderConfigBusy: (busy) => { providerConfigBusy = busy; },
   providerInstancesChanging,
@@ -37248,6 +37344,7 @@ const startTurnRunner = createStartTurn({
   voiceBriefText,
   voiceCallSection,
   voiceCallTurnPrompt,
+  listeningSoFarFor,
   voiceCalls,
   voiceLatency,
   voicePickForTurn,

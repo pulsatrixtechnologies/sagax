@@ -317,7 +317,8 @@ const __BUILD_DATE__: string;
         set(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId, enabled: boolean): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         test(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppTestResult>;
         askAutomation(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
-        openSettings(pane: "automation" | "fullDiskAccess"): Promise<boolean>;
+        /** A System Settings privacy anchor (shared/mac-apps-setup.ts macAppPrivacyAnchor). */
+        openSettings(anchor: string): Promise<boolean>;
       };
       localControl: {
         status(): Promise<LinuxLocalControlStatus>;
@@ -327,6 +328,8 @@ const __BUILD_DATE__: string;
       };
       /** Arms one user-initiated display capture request from this frame. */
       beginScreenPreviewIntent(): boolean;
+      /** #4100: the one-shot intent before getDisplayMedia asks for the computer's sound. */
+      beginListeningComputerIntent?(): boolean;
       /** One full frame of this computer: the local page only, never the
        * page served by the organization server (#3565). */
       screenFrame?(): Promise<string | null>;
@@ -568,7 +571,7 @@ const __BUILD_DATE__: string;
       saveFile?(filePath: string): Promise<string | null>;
       /** Points this computer's file manager at a file a bot linked outside
        * its workspace, without opening or reading it. Local app only. */
-      revealInFolder?(filePath: string): Promise<"shown" | "missing" | "invalid">;
+      revealInFolder?(filePath: string): Promise<"shown" | "missing" | "invalid" | "failed">;
       /** Opens a file a bot wrote with this computer's default app (a leading
        * ~ is the home folder). Local app only. */
       openLocalFile?(filePath: string): Promise<"opened" | "missing" | "failed" | "invalid">;

@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureDirs, NATIVE_DIR } from "../config.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
+import { redactSecretsInText } from "../redact.ts";
 import { encodeInjectId, localHost } from "./local-inject.ts";
 import { VOLATILE_SECTIONS_NOTE_PREFIX } from "./prompt-split.ts";
 import { sagaxInternalSelfAnswers } from "../sagax-internal-tools.ts";
@@ -540,6 +541,37 @@ describe("PiDriver turns (fake CLI)", () => {
   afterEach(async () => {
     recorder?.stop();
     await instance?.dispose();
+  });
+
+  // #4410 lot 1: a Claude account under pi, through ANTHROPIC_OAUTH_TOKEN
+  it("hands the payer's Claude sign-in in pi's variables only: never in arguments, models.json, an inherited or a command variable", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-pi-sign-in-"));
+    const dump = join(dir, "rpc.jsonl");
+    const payerHome = join(dir, "principals", "pr_test", "piAgent-key");
+    const token = "sk-ant-oat01-fake-sign-in-value-000000000000000001";
+    // the server's own variable never reaches a turn
+    await create(undefined, { HOME: dir, FAKE_PI_DUMP: dump, ANTHROPIC_OAUTH_TOKEN: "sk-ant-oat01-server-own-value-0000000000000001" });
+    const run = async (threadId: string, input: Record<string, unknown>) => {
+      const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi", model: "anthropic/claude-test", ...input });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      const rows = readFileSync(dump, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      return rows.filter((row) => Array.isArray(row.envConfigured)).at(-1) as { argv: string[]; envConfigured: string[] };
+    };
+    const without = await run("t-pi-no-sign-in", { commandEnvironment: { ANTHROPIC_OAUTH_TOKEN: "sk-ant-oat01-command-variable-000000000000001" } });
+    expect(without.envConfigured).not.toContain("ANTHROPIC_OAUTH_TOKEN");
+    const signed = await run("t-pi-sign-in", { access: { via: "subscription", identity: "subscription:pr_test:claude", engineHome: payerHome, environment: { ANTHROPIC_OAUTH_TOKEN: token } } });
+    expect(signed.envConfigured).toContain("ANTHROPIC_OAUTH_TOKEN");
+    expect(JSON.stringify(signed.argv)).not.toContain(token);
+    // the extension that keeps it out of the bot's shell is loaded
+    expect(signed.argv).toContain("-e");
+    const written = [join(payerHome, "models.json"), join(payerHome, "auth.json"), join(payerHome, "settings.json")].filter((path) => existsSync(path)).map((path) => readFileSync(path, "utf8"));
+    for (const text of written) expect(text).not.toContain(token);
+    expect(readFileSync(dump, "utf8")).not.toContain(token);
+    // its value goes through the vault's filled-value list: redacted text
+    // masks it and the encodings a log would show, not only the plain text
+    const b64 = Buffer.from(token, "utf8").toString("base64");
+    const reversed = [...token].reverse().join("");
+    for (const shown of [token, b64, reversed]) expect(redactSecretsInText(`out: ${shown} end`)).not.toContain(shown);
   });
 
   // Command variables (server/vault/credential-command-env.ts): pi's bash tool runs
@@ -1144,6 +1176,22 @@ describe("PiDriver turns (fake CLI)", () => {
     const { turnId } = await instance.adapter.sendTurn({ threadId: "t-hosted-error", text: "hi", model: "openai/gpt-4o" });
     await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
     expect(recorder.events.find((e) => e.type === "runtime.error" && e.turnId === turnId)).toMatchObject({ message: "503 Service Unavailable" });
+  });
+
+  // #4410: the vendor refuses the person's Claude account under pi: the turn
+  // is rejected as not started with nothing shown, so the harness lands it
+  // in the Claude engine; another failure keeps pi's own words
+  it("rejects a turn whose Claude account the vendor refused, with nothing shown, and keeps other failures", async () => {
+    const signIn = { via: "subscription", identity: "subscription:pr_test:claude", environment: { ANTHROPIC_OAUTH_TOKEN: "sk-ant-oat01-fake-refused-value-0000000000000001" } };
+    await create("turn-error", { FAKE_PI_ERROR: "OAuth authentication is currently not supported." });
+    await expect(instance.adapter.sendTurn({ threadId: "t-refused", text: "hi", model: "anthropic/claude-test", startupRecovery: true, access: signIn as never }))
+      .rejects.toMatchObject({ name: "PiClaudeAccountRefusedError" });
+    expect(recorder.events.filter((e) => e.threadId === "t-refused" && (e.type === "runtime.error" || e.type === "turn.completed"))).toEqual([]);
+    await instance?.dispose();
+    await create("turn-error", { FAKE_PI_ERROR: "429 rate_limit_error" });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "t-limited", text: "hi", model: "anthropic/claude-test", startupRecovery: true, access: signIn as never });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    expect(recorder.events.find((e) => e.type === "runtime.error" && e.turnId === turnId)).toMatchObject({ message: "429 rate_limit_error" });
   });
 
   it("advertises images and every harness effort level", async () => {

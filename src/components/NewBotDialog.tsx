@@ -25,7 +25,7 @@ import { PermissionsSection } from "./bot-settings/PermissionsSection";
 import { VoiceSection } from "./bot-settings/VoiceSection";
 import { useBotSettingsDerived } from "./bot-settings/useBotSettingsDerived";
 import { BotEditorContext } from "./bot-settings/BotEditorContext";
-import { CompactRow, ConfirmPill, DescribedRow, FIELD, FieldRow, PILL, PillSelect, PRIMARY_PILL, Switch, type PillOption, DIALOG, GROUP_CARD } from "./SettingsPrimitives";
+import { CompactRow, ConfirmPill, DescribedRow, FIELD, FieldRow, HelpTip, PILL, PillSelect, PRIMARY_PILL, Switch, type PillOption, DIALOG, GROUP_CARD } from "./SettingsPrimitives";
 import { RoutineEditor } from "./RoutinesPage";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { SharePresetDialog } from "./SharePresetDialog";
@@ -701,7 +701,10 @@ export function newBotDefaultsSummary(config: ConfigStatus | null | undefined): 
 function DefaultsTitle({ summary }: { summary: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-[13px] leading-[18px] text-ink">{t("newBot.defaults")}</div>
+      <div className="flex items-center gap-1 text-[13px] leading-[18px] text-ink">
+        {t("newBot.defaults")}
+        <HelpTip label={t("settings.moreAbout", { title: t("newBot.defaults") })}>{t("botModels.defaults.help")}</HelpTip>
+      </div>
       {summary ? <p className="truncate text-[12px] leading-[16px] text-ink-secondary">{summary}</p> : null}
     </div>
   );

@@ -70,6 +70,13 @@ const TERMINAL_PATTERNS: Array<{ pattern: RegExp; reason: TerminalReason }> = [
     pattern: /\b(?:40[13]|unauthorized|forbidden|invalid api key|missing bearer|authentication required|not logged in|logged out)\b/i,
     reason: "auth",
   },
+  // Claude Code's own refusal when the OAuth grant cannot be renewed
+  // ("Failed to authenticate: OAuth session expired and could not be refreshed").
+  // A fresh process dies the same way, so it is never a transient crash.
+  {
+    pattern: /\b(?:oauth session expired|oauth token (?:has )?expired|failed to authenticate:\s*oauth|authentication_failed|oauth\b[^.\n]{0,80}could not be refreshed)\b/i,
+    reason: "auth",
+  },
   // Config refusal before the quota words: bare "billing"/"subscription" in
   // these sentences must not block the engine for an hour (#1758).
   { pattern: PROVIDER_NOT_CONFIGURED, reason: "auth" },
@@ -144,11 +151,14 @@ export function classifyError(err: FailureInput): ErrorClassification {
 }
 
 /** Whether a turn whose CLI exited before its result may be sent again. Only work the provider never did is resent:
- * a launch that ended before taking the prompt, or a transient failure before any model call answered or any text
- * streamed. Once a call answered, the subscription has paid for it and the CLI already retried its own API calls. */
+ * one launch that ended before taking the prompt (the same `attempt` counter; a second death before init is not free),
+ * or a transient failure before any model call answered or any text streamed. A refused sign-in is never resent.
+ * Once a call answered, the subscription has paid for it and the CLI already retried its own API calls. */
 export function mayResendTurn(turn: { endedBeforeTurn: boolean; exitCode: number | null; transient: boolean; streamed: boolean;
-  answered: boolean; attempt: number }): boolean {
-  if (turn.endedBeforeTurn) return true;
+  answered: boolean; attempt: number; auth?: boolean }): boolean {
+  if (turn.auth) return false;
+  // a warm process that ended cleanly between turns (exit 0) resumes too
+  if (turn.endedBeforeTurn && turn.attempt < 1) return true;
   return turn.exitCode !== 0 && turn.transient && !turn.streamed && !turn.answered && turn.attempt < RETRY_MAX_ATTEMPTS - 1;
 }
 

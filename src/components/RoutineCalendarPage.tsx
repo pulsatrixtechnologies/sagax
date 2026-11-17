@@ -25,6 +25,7 @@ import {
 import { BotAvatar } from "@/components/Avatar";
 import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 import { DetailPanel } from "@/components/DetailPanel";
 import { RoutineTitle } from "@/components/routines/RoutineRowMenu";
 import { RoutineOwnerBadge } from "@/components/routines/RoutineScopeBar";
@@ -733,10 +734,11 @@ const CalendarGrid = memo(function CalendarGrid({
                   <div key={group.id} data-slot-more className={cn("absolute", moreOpen === group.id ? "z-40" : "z-20")} style={{ left: `calc(${((layout.column + 1) / layout.columns) * 100}% - 34px)`, width: 30, top, height: Math.max(16, HOUR_HEIGHT / 2) }}>
                     <button ref={moreOpen === group.id ? moreButtonRef : undefined} type="button" aria-expanded={moreOpen === group.id} aria-label={t("routineCalendar.moreAt", { count: group.items.length, time: niceTime(group.at) })} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setMoreOpen((current) => current === group.id ? null : group.id); }} className="h-full w-full rounded-md border border-hairline/60 bg-raised px-0.5 text-center text-[11px] font-semibold text-ink-secondary hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent">+{group.items.length}</button>
                     {moreOpen === group.id && (
-                      <AnchoredPopover anchorRef={moreButtonRef} role="menu" data-slot-more="" maxHeight={256} onPointerDown={(event) => event.stopPropagation()} className="w-56 overflow-y-auto rounded-lg border border-border bg-elevated p-1 shadow-lg">
+                      <AnchoredPopover anchorRef={moreButtonRef} role="menu" data-slot-more="" maxHeight={256} onPointerDown={(event) => event.stopPropagation()} className={cn(MENU_SURFACE, MENU_FIT_ROW, "max-h-64 overflow-y-auto")}>
                         {group.items.map((entry) => (
-                          <button key={entry.id} type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setMoreOpen(null); onOpen(entry); }} className="block w-full truncate rounded-md px-2 py-1.5 text-left text-[12px] text-ink hover:bg-raised">
-                            <span className="text-ink-secondary">{niceTime(entry.at)}</span> {entry.kind === "call" ? entry.call.name : entry.routine?.name ?? t("botPanel.coding.kind.routine")}
+                          <button key={entry.id} type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setMoreOpen(null); onOpen(entry); }} className={MENU_ROW}>
+                            <span className="shrink-0 text-ink-secondary">{niceTime(entry.at)}</span>
+                            <span className="min-w-0 flex-1 truncate">{entry.kind === "call" ? entry.call.name : entry.routine?.name ?? t("botPanel.coding.kind.routine")}</span>
                           </button>
                         ))}
                       </AnchoredPopover>

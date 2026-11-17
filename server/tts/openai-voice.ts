@@ -48,9 +48,9 @@ export function openAiRefusal(status: number, body = ""): string {
   const said = detail(body);
   const tag = `${said.code ?? ""} ${said.type ?? ""}`;
   if (/insufficient_quota|billing|credit/i.test(tag) || status === 402) return "The OpenAI account needs credits to generate speech.";
-  if (status === 401 || status === 403 || /invalid_api_key|permission/i.test(tag)) return "OpenAI rejected the key or its permissions. Check the OpenAI key in Settings > Voice.";
+  if (status === 401 || status === 403 || /invalid_api_key|permission/i.test(tag)) return "OpenAI rejected the key or its permissions. Check the OpenAI key in Settings > Providers > Voice.";
   if (status === 429) return "OpenAI is rate-limiting speech. Wait a moment and try again.";
-  if (status === 404 || (status === 400 && said.param === "voice")) return "OpenAI could not find that voice. Pick another voice in Settings > Voice.";
+  if (status === 404 || (status === 400 && said.param === "voice")) return "OpenAI could not find that voice. Pick another voice in Settings > Providers > Voice.";
   return `OpenAI voice failed (HTTP ${status}). Try again later.`;
 }
 

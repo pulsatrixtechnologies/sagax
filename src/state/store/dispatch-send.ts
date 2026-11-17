@@ -242,6 +242,10 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
               // A settings flush failure deliberately stops the response;
               // otherwise it could resume work under a stale approval level.
               showError(error);
+              if (action.settle || action.resumes) {
+                const reopen = action.settle ? Object.fromEntries(Object.keys(action.settle).map((key) => [key, undefined])) : undefined;
+                rawDispatch({ type: "decideFailed", threadId: action.threadId, requestId: action.requestId, ...(reopen ? { settle: reopen } : {}), ...(action.resumes ? { resumes: true } : {}) });
+              }
               action.onError?.(readableError(error));
             });
           break;
@@ -298,13 +302,20 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
               return persistCard(action.botId, action.messageId, { answered: action.answer, ...(isFirstRunQuizCard(card) ? { dismissed: true } : {}) }, action.threadId)
                 .then(() => api(`/api/bots/${action.botId}/messages`, {
                   method: "POST",
-                  body: JSON.stringify({ text: action.answer, threadId: action.threadId }),
-                }));
+                  body: JSON.stringify({ text: action.answer, threadId: action.threadId, ...(action.sendId ? { sendId: action.sendId } : {}) }),
+                }))
+                .then((body) => {
+                  // #4489: a quiz hides on the click. The answer is the person's
+                  // message, drawn now, replaced by this row when it lands.
+                  const where = action.threadId ?? host?.threadId;
+                  if (action.sendId && body?.message && where) rawDispatch({ type: "messageAdded", threadId: where, message: body.message });
+                });
             })
             .catch((error) => {
               // settled already, elsewhere: the card shows the real outcome
               const settled = teamMemorySettled(error);
               const threadId = action.threadId ?? host?.threadId;
+              if (action.sendId && threadId) rawDispatch({ type: "optimisticMessageRemoved", threadId, sendId: action.sendId });
               if (settled && card?.requestId && threadId) {
                 rawDispatch({ type: "cardSettled", threadId, requestId: card.requestId, patch: settled.card });
                 showError(settled.text);

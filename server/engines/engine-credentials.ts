@@ -29,6 +29,13 @@
 //      (`subscriptionExpired`, the #1533 marker) is
 //      skipped: the next steps serve, else
 //                                                       -> no_access (sign_in_expired)
+//   3b. pi (#4410): the payer is signed in to their own
+//      Claude account (the Claude engine's sign-in, not
+//      expired). It is added NEXT TO the plan of steps
+//      4, 4b and 5 (`claudeAccount`) for Claude models,
+//      only when no Anthropic key of that plan pays
+//      them; it never takes the place of a key. When
+//      none of them serves (step 6)                     -> subscription (claudeAccount)
 //   4. the payer keeps a key for the engine's provider
 //      in Perspicax (claudeAgent: anthropic, codex:
 //      openai, grokAgent: xai, geminiAgent: google,
@@ -161,23 +168,27 @@ export function piKeyProvider(piProvider: string | undefined): ModelProvider | n
 }
 
 /** #3085: the providers whose pi models the turn's payer can really run,
- * resolved like a turn (resolveEngineAccess): the payer's own keys, else the
- * organization's keys (`orgKeyProviders`) when the org-key step serves them.
+ * resolved like a turn (resolveEngineAccess): the payer's own keys and their
+ * Claude sign-in (#4410), else the organization's keys (`orgKeyProviders`) when the org-key step serves them.
  * Null: no filter (solo, where pi itself lists only what its keys serve).
  * Names only, never a key value. */
 export function piPayerProviders(input: EngineCredentialInput, orgKeyProviders: readonly ModelProvider[]): ReadonlySet<ModelProvider> | null {
   if (input.identity !== "perspicax") return null;
-  const plan = resolveEngineAccess(input);
+  const plan = resolveEngineAccess({ ...input, orgKeyProviders });
   if (!plan.ok) return new Set();
-  if (plan.via === "org-key") return new Set(orgKeyProviders.filter((provider) => DRIVER_PROVIDERS.piAgent.includes(provider)));
+  // #4410: the payer's Claude sign-in counts as holding the Claude provider,
+  // beside the keys of the plan
+  const signIn: ModelProvider[] = plan.claudeAccount ? ["anthropic"] : [];
+  if (plan.via === "org-key") return new Set([...orgKeyProviders.filter((provider) => DRIVER_PROVIDERS.piAgent.includes(provider)), ...signIn]);
+  if (plan.via === "subscription" && plan.claudeAccount) return new Set(signIn);
   if (keyVia(plan.via) && plan.provider && plan.payerPrincipalId) {
     const sub = payerFacts(input, plan.payerPrincipalId)?.sub;
-    if (!sub) return new Set();
-    return new Set(DRIVER_PROVIDERS.piAgent.filter((provider) => input.hasKey(sub, provider)));
+    if (!sub) return new Set(signIn);
+    return new Set([...DRIVER_PROVIDERS.piAgent.filter((provider) => input.hasKey(sub, provider)), ...signIn]);
   }
   // A personal endpoint or a file key: not a provider key; the model-server
   // rows carry it.
-  return new Set();
+  return new Set(signIn);
 }
 
 /** The variable each provider's key reaches an engine as. Codex is apart: its
@@ -279,10 +290,13 @@ export interface EngineCredentialInput {
   /** 2026-10-27 (#1098): the organization's list allows this engine
    * (`allowedEngines`). False: its key never serves it. Absent means allowed. */
   orgEngineAllowed?: boolean;
+  /** #4410: the providers the organization's pi keys serve (names only,
+   * config.ts piOrgKeyProviders). Absent means none known. */
+  orgKeyProviders?: readonly string[];
 }
 
 export type EngineCredentialPlan =
-  | { ok: true; via: AccessVia; payer: AccessPayer; payerPrincipalId?: string; provider?: ModelProvider; localKey?: true; routine?: true; ownerPays?: true }
+  | { ok: true; via: AccessVia; payer: AccessPayer; payerPrincipalId?: string; provider?: ModelProvider; localKey?: true; routine?: true; ownerPays?: true; claudeAccount?: true }
   | { ok: false; reason: EngineAccessRefusal; cause?: NoAccessCause; payer?: "speaker" | "owner"; payerPrincipalId?: string; routine?: true; ownerPays?: true };
 
 const key = (id: string | undefined) => id?.trim().toLowerCase() ?? "";
@@ -306,9 +320,22 @@ export function turnPayer(input: Pick<EngineCredentialInput, "speaker" | "owner"
   return { principalId: speaker, routine };
 }
 
+/** #4410: the variable pi reads a Claude account's short access token from
+ * (pi docs, providers.md). Set for one turn only, from the payer's own
+ * sign-in; never in arguments, models.json or a file of pi's home. */
+export const PI_CLAUDE_SIGN_IN_ENV = "ANTHROPIC_OAUTH_TOKEN";
+
+/** #4410: the payer's own Claude sign-in (the Claude engine's first account
+ * folder) is there and not refused since: pi may run Claude models on it. */
+function claudeSignInServes(input: EngineCredentialInput, principalId: string): boolean {
+  if (!principalId || !input.subscriptionSignedIn(principalId, "claudeAgent", "claudeAgent")) return false;
+  return input.subscriptionExpired?.(principalId, "claudeAgent", "claudeAgent") !== true;
+}
+
 /** The resolution order above, pure. `skip.key` drops step 4 (the key went
- * away between admission and dispatch). */
-export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: boolean } = {}): EngineCredentialPlan {
+ * away between admission and dispatch); `skip.signIn` drops step 3b (the
+ * Claude sign-in could not be read at dispatch). */
+export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: boolean; signIn?: boolean } = {}): EngineCredentialPlan {
   if (input.identity !== "perspicax") return { ok: true, via: "server", payer: "organization" };
   const payer = turnPayer(input);
   const routine = { ...(payer.routine ? { routine: true as const } : {}), ...(payer.ownerPays ? { ownerPays: true as const } : {}) };
@@ -332,26 +359,36 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   if (signedIn && !expired) {
     return { ok: true, via: "subscription", ...who };
   }
+  // #4410: pi on the payer's own Claude sign-in (their bill, like a key of theirs)
+  const claudeAccount = !skip.signIn && driver === "piAgent" && !input.instance.keyOnly && !input.instance.personalOwner && claudeSignInServes(input, payer.principalId);
+  const signIn = claudeAccount ? { claudeAccount: true as const } : {};
   const providers = input.instance.keyProvider ? [input.instance.keyProvider] : providersOfInstance(input.instance.instanceId, driver);
   const provider = facts?.sub ? providers.find((candidate) => input.hasKey(facts.sub!, candidate)) : undefined;
   if (!skip.key && provider && facts?.sub) {
-    return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, provider };
+    return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, provider, ...signIn };
   }
+  // #4410: the sign-in alone, only when no key of any step serves
+  const signInOnly = { ok: true as const, via: "subscription" as const, ...who, provider: "anthropic" as const, claudeAccount: true as const };
   // An endpoint owned by this payer can also serve without authentication
   // (a local model server). Never substitute an org key or another file.
   if (input.instance.personalOwner) return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who };
   if (!input.instance.personalOwner && payer.principalId && input.hasLocalKey?.(payer.principalId, driver)) {
-    return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, localKey: true };
+    // a key pasted on this server never pays pi's Claude models (pi has no file key)
+    return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, localKey: true, ...signIn };
   }
   if (input.keyBacked && !input.instance.personalOwner) {
     // The organization's key serves only the people it was given to. A turn
     // nobody is known to speak for is judged as the bot's owner's.
     const judged = payer.principalId || input.owner.principalId;
     if (input.orgEngineAllowed === false || (input.serverEngineAllowed && !input.serverEngineAllowed(judged, input.instance.instanceId))) {
+      if (claudeAccount) return signInOnly;
       return { ok: false, reason: "no_access", cause: expired ? "sign_in_expired" : "server_engine_not_allowed", ...who };
     }
-    return { ok: true, via: "org-key", payer: "organization", ...routine };
+    // the organization's Anthropic key keeps paying Claude models
+    const orgPaysClaude = input.orgKeyProviders?.includes("anthropic") === true;
+    return { ok: true, via: "org-key", payer: "organization", ...routine, ...(orgPaysClaude ? {} : signIn) };
   }
+  if (claudeAccount) return signInOnly;
   return { ok: false, reason: "no_access", cause: expired ? "sign_in_expired" : "no_credentials", ...who };
 }
 
@@ -367,6 +404,12 @@ export function subscriptionIdentity(payer: string, instanceId: string): string 
   return separateAccountInstance(instanceId) ? `subscription:${payer}:${instanceId}` : `subscription:${payer}`;
 }
 
+/** #4410: a person's Claude sign-in as a pi turn takes it: the short access
+ * token (kept fresh by the single-flight renewal), never the refresh token. */
+export interface ClaudeSignInToken {
+  accessToken: string;
+}
+
 export interface MaterializeDeps {
   dataDir: string;
   resolveKey: (sub: string, provider: ModelProvider) => Promise<ProviderKeyResult>;
@@ -374,6 +417,16 @@ export interface MaterializeDeps {
   /** The person's login directory for a driver (principal-engine-logins.ts). */
   /** #2373: an added account (`claude-<uuid>`) has its own directory. */
   loginDir: (principalId: string, driver: SubscriptionDriver, instanceId: string) => string;
+  /** #4410: the payer's Claude sign-in, renewed when near its end, or null
+   * when it cannot be read. Absent: no sign-in serves pi. */
+  claudeSignIn?: (principalId: string) => Promise<ClaudeSignInToken | null>;
+}
+
+/** #4410: the payer's Claude sign-in as pi's variable, or null when it
+ * cannot be read (the turn then runs on the plan's keys alone). */
+async function claudeSignInEnvironment(deps: MaterializeDeps, principalId: string): Promise<Record<string, string> | null> {
+  const signIn = await deps.claudeSignIn?.(principalId).catch(() => null);
+  return signIn?.accessToken ? { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken } : null;
 }
 
 export type MaterializedAccess =
@@ -388,26 +441,42 @@ function payerFacts(input: EngineCredentialInput, principalId: string): PersonFa
 /** Turn a plan into what the driver needs, fetching the payer's key when the
  * plan uses it. A key Perspicax no longer has (no_key, user_inactive) falls
  * through to the next steps; an unreachable Perspicax is no_access. */
-export async function materializeEngineAccess(input: EngineCredentialInput, plan: EngineCredentialPlan, deps: MaterializeDeps): Promise<MaterializedAccess> {
+export async function materializeEngineAccess(input: EngineCredentialInput, plan: EngineCredentialPlan, deps: MaterializeDeps, skipped: { key?: boolean; signIn?: boolean } = {}): Promise<MaterializedAccess> {
   if (!plan.ok) return { ok: false, reason: plan.reason, plan };
   const driver = input.instance.driver;
   const payer = plan.payerPrincipalId ?? "";
+  if (plan.via === "subscription" && plan.claudeAccount && payer) {
+    const signIn = await deps.claudeSignIn?.(payer).catch(() => null);
+    // unreadable since admission: the next steps serve, else the refusal
+    if (!signIn) return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, signIn: true }), deps, { ...skipped, signIn: true });
+    return {
+      ok: true,
+      plan,
+      access: {
+        via: "subscription",
+        identity: `subscription:${payer}:claude`,
+        environment: { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken },
+        engineHome: join(deps.dataDir, "principals", payer, `${driver}-key`),
+      },
+    };
+  }
   if (plan.via === "subscription" && subscriptionDriver(driver) && payer) {
     const dir = deps.loginDir(payer, driver, input.instance.instanceId);
     const where = driver === "claudeAgent" ? { claudeConfigDir: dir } : driver === "codex" ? { codexHome: dir } : { engineHome: dir };
     return { ok: true, plan, access: { via: "subscription", identity: subscriptionIdentity(payer, input.instance.instanceId), ...where } };
   }
   if (keyVia(plan.via) && plan.localKey && payer) {
-    return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:local`, localKeyPrincipal: payer } };
+    const signIn = plan.claudeAccount ? await claudeSignInEnvironment(deps, payer) : null;
+    return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:local${signIn ? "+claude" : ""}`, localKeyPrincipal: payer, ...(signIn ? { environment: signIn } : {}) } };
   }
   if (keyVia(plan.via) && plan.provider && payer) {
     const facts = payerFacts(input, payer);
     const sub = facts?.sub;
-    if (!sub) return materializeEngineAccess(input, resolveEngineAccess(input, { key: true }), deps);
+    if (!sub) return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
     if (facts?.disabled) {
       // disabled since admission: never read the (cached) key
       deps.invalidate(sub, plan.provider);
-      return materializeEngineAccess(input, resolveEngineAccess(input, { key: true }), deps);
+      return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
     }
     const result = await deps.resolveKey(sub, plan.provider);
     if (result.ok && homeDriver(driver)) {
@@ -424,6 +493,14 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
           if (!more.ok) continue;
           environment[keyEnvironment(other, driver)] = more.key;
           fingerprints.push(more.fingerprint || "key");
+        }
+        // #4410: Claude models on the payer's sign-in when no Anthropic key of theirs pays them
+        if (plan.claudeAccount && !environment[keyEnvironment("anthropic", driver)]) {
+          const signIn = await claudeSignInEnvironment(deps, payer);
+          if (signIn) {
+            Object.assign(environment, signIn);
+            fingerprints.push("claude");
+          }
         }
       }
       return {
@@ -461,7 +538,7 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     }
     if (result.error === "no_key") {
       deps.invalidate(sub, plan.provider);
-      return materializeEngineAccess(input, resolveEngineAccess(input, { key: true }), deps);
+      return materializeEngineAccess(input, resolveEngineAccess(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
     }
     if (result.error === "user_inactive") {
       // Perspicax says the payer is out: refused, never the organization's
@@ -476,6 +553,11 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     // engine with a home of its own still gets an empty one, never the
     // server's login.
     const home = homeDriver(driver) ? { engineHome: join(deps.dataDir, "org", `${driver}-key`) } : {};
+    // #4410: the turn's payer's Claude sign-in beside the organization's keys
+    // (their own warm pi: the identity names them)
+    const signer = plan.claudeAccount ? turnPayer(input).principalId : "";
+    const signIn = signer ? await claudeSignInEnvironment(deps, signer) : null;
+    if (signIn) return { ok: true, plan, access: { via: "org-key", identity: `org-key:${signer}:claude`, environment: signIn, ...home } };
     return { ok: true, plan, access: { via: "org-key", identity: "org-key", ...home } };
   }
   if (keyVia(plan.via) && input.instance.personalOwner) return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:endpoint`, environment: {} } };

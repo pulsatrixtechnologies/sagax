@@ -5,6 +5,7 @@ import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { requirePinnedClientThread } from "./bots-mutate-helpers.ts";
 import { normalizeDirectTriggers } from "../../shared/direct-triggers.ts";
 import { isHarnessId } from "../../shared/harness-matrix.ts";
+import { isContextSize } from "../../shared/context-size.ts";
 
 export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m, body } = state;
@@ -164,6 +165,18 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
   }
   if (normalizedSelection) patch.modelSelection = normalizedSelection;
   if (harnessSpecified) patch.harness = harness ?? undefined;
+  // #4417: the bot's context size (shared/context-size.ts), the person's own
+  // like its model; null clears it. A size the model does not offer is kept
+  // and ignored by the turn until the bot runs a model that offers it.
+  if (Object.prototype.hasOwnProperty.call(body, "contextWindow")) {
+    const size = (body as Record<string, unknown>).contextWindow;
+    if (size === null) patch.contextWindow = undefined;
+    else if (isContextSize(size)) patch.contextWindow = size;
+    else {
+      env.json(env.res, 400, { error: "contextWindow must be a context size in tokens (for example 200000 or 1000000), or null for the default" });
+      return true;
+    }
+  }
   // one pinned message per thread; null/"" clears. The id is not
   // validated against the transcript here — a pin whose message was
   // edited to another branch or deleted simply resolves to nothing.

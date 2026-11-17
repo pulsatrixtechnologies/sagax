@@ -289,6 +289,10 @@ export function PinnedWaitingCard({
             pending={current.pending}
             threadId={askedIn}
             bot={botFor(current.pending)}
+            // #4489: Confirm leaves the pin at once. The receipt is the
+            // card's own settled row, back in the thread.
+            onDecided={() => pinned.answered(current.key)}
+            onDecideFailed={() => pinned.answerFailed(current.key)}
             // a parallel task's "cancel" stops that task, a bot-to-bot
             // conversation's stops that conversation's turn, an earlier
             // topic's stops that topic's turn, never this one's

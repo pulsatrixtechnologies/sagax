@@ -8,7 +8,7 @@
 // itself, and the thread's Events tab says so. Kept in the person's synced
 // voice preference (`omb.voiceMode.v1`): the desktop, the web and the
 // iPhone follow the same choice.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Volume2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -110,7 +110,9 @@ export function useVoicePicker(botId?: string) {
   return { settings, view, status, currentResolution, failed, voices, offeredTts, offeredStt, speaking, selectedVoice, voiceOptions };
 }
 
-export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: string } }) {
+/** `title` and `after` (#4457): Providers' Voice card names itself "Voice"
+ * and ends on its Live calls row. */
+export function VoiceProviderSettings({ bot, title, after }: { bot?: { id: string; name: string }; title?: string; after?: ReactNode }) {
   const botId = bot?.id;
   const { settings, view, status, currentResolution, failed, offeredTts, offeredStt, speaking, selectedVoice, voiceOptions } = useVoicePicker(botId);
   const [testing, setTesting] = useState(false);
@@ -218,7 +220,7 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
   }
   return (
     <div data-settings-card="voice.providers" data-voice-providers="person">
-      <SettingsGroup title={t("voiceProviders.title")} groupId="voiceProviders">{body}</SettingsGroup>
+      <SettingsGroup title={title ?? t("voiceProviders.title")} groupId="voiceProviders">{body}{after}</SettingsGroup>
     </div>
   );
 }

@@ -29,6 +29,11 @@ vi.mock("@/lib/mac-messages-setup", () => ({
   testMessagesSetup: vi.fn(async () => ({ conversationCount: 2, names: ["Ada Example", "Bea Example"] })),
 }));
 
+vi.mock("@/lib/mac-apps-setup", () => ({
+  attachMessagesActions: async (status: unknown) => status,
+  openMacAppPermissionPane: vi.fn(async () => {}),
+}));
+
 vi.mock("@/lib/i18n", () => ({
   t: (key: string, vars?: Record<string, string | number>) => {
     if (vars?.count != null) return `${key}:${vars.count}`;
@@ -91,12 +96,35 @@ describe("Mac Messages setup surface", () => {
     const step = host.querySelector<HTMLElement>('[data-messages-step="enable"]')!;
     expect(step, "the enable step").not.toBeNull();
     expect(step.textContent).toContain("connectApps.mac.messages.enable");
+    expect(host.textContent).toContain("connectApps.mac.messages.readTitle");
     const toggle = step.querySelector<HTMLElement>('[role="switch"]')!;
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     await act(async () => { toggle.click(); });
     expect(setMessagesEnabled).toHaveBeenCalledWith(true);
     act(() => root.unmount());
     host.remove();
+  });
+
+  it("lists the Messages actions this Mac offers and parks the rest under Full Disk Access", async () => {
+    vi.mocked(loadMessagesSetup).mockResolvedValueOnce({
+      available: true,
+      onThisMac: true,
+      useMessages: false,
+      permissions: { fullDiskAccess: "denied", automation: "granted" },
+      actions: [
+        { tool: "mac_messages_read", kind: "read", needs: "fullDiskAccess", granted: false },
+        { tool: "mac_messages_send", kind: "send", needs: "automation", granted: true },
+      ],
+    } as Awaited<ReturnType<typeof loadMessagesSetup>>);
+    const { host, done } = await mountSetup();
+    expect(host.querySelector("[data-mac-app-actions]")?.textContent).toContain("connectApps.mac.action.mac_messages_send");
+    expect(host.querySelector("[data-mac-app-actions]")?.textContent).not.toContain("mac_messages_read");
+    const disk = host.querySelector('[data-messages-step="fullDiskAccess"]');
+    expect(disk?.textContent).toContain("connectApps.mac.grantAdds");
+    expect(disk?.textContent).toContain("connectApps.mac.action.mac_messages_read");
+    expect(host.querySelector('[data-messages-step="automation"] [data-mac-app-grant-adds]')).toBeNull();
+    expect(host.textContent).not.toContain("connectApps.mac.messages.readTitle");
+    done();
   });
 
   // The blank page (2026-11-06): on an organization server /api/messages

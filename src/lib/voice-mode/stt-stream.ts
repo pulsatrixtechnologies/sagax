@@ -34,6 +34,8 @@ export interface LiveTranscriberOptions {
   botId: string;
   language: () => string;
   threadId: () => string | undefined;
+  /** #4100: what the hearing serves, for the usage ledger (`listening`) */
+  purpose?: "listening";
   /** injected in tests */
   socket?: (url: string) => WebSocket;
   transcribe?: typeof transcribeVoiceMode;
@@ -154,7 +156,9 @@ export class LiveTranscriber {
       let socket: WebSocket;
       try {
         this.language = this.options.language();
-        const url = voiceModeListenUrl(this.options.botId, this.language, this.options.threadId());
+        const listenUrl = voiceModeListenUrl(this.options.botId, this.language, this.options.threadId());
+        // #4100: a listening session's channel is booked under listening
+        const url = this.options.purpose ? `${listenUrl}&purpose=${this.options.purpose}` : listenUrl;
         socket = this.options.socket?.(url) ?? new WebSocket(url);
       } catch {
         this.streaming = false;

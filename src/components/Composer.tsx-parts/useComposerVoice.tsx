@@ -11,6 +11,10 @@ import { botCtaColors } from "@/lib/voice-cta";
 import { useVoiceModeCheck } from "@/lib/voice-mode/api";
 import { openProviderKeyDialog } from "../settings/ProviderKeys";
 import { isMacPlatform } from "@/lib/keyboard-shortcuts";
+import { startListening } from "@/lib/listening/listening-session";
+import { Ear } from "lucide-react";
+
+const LISTEN_ICON = <Ear size={16} aria-hidden="true" />;
 
 export function useComposerVoice({
   bot,
@@ -37,6 +41,7 @@ export function useComposerVoice({
   inputRef,
   dispatch,
   send,
+  personName,
 }: {
   bot?: Bot;
   group?: Group;
@@ -62,6 +67,8 @@ export function useComposerVoice({
   inputRef: RefObject<HTMLTextAreaElement | null>;
   dispatch: Dispatch<Action>;
   send: () => void;
+  /** the person's name: their own voice is labelled with it (#4100) */
+  personName: string;
 }) {
   // Dictation (the grey mic): the Mac's own, else voice mode's speech to
   // text for this bot, else the mic opens the Keys card (lib/composer-dictation).
@@ -181,6 +188,22 @@ export function useComposerVoice({
       // browser, a choice between that and showing it there
       onSelect: () => [learnAvailable, browserTeach, myChromeOffered].filter(Boolean).length > 1 ? setTeachChooser(true)
         : browserTeach ? showInBrowser() : myChromeOffered ? setMyChromeRecord(true) : startDraftWith("/learn "),
+    }] : []),
+    // #4100: listen to a conversation around the person, in a bot's chat
+    // (never a room); without speech to text the Keys card opens, as for dictation
+    ...(!group && bot ? [{
+      id: "listen",
+      group: "add" as const,
+      label: t("listening.menu"),
+      icon: LISTEN_ICON,
+      onSelect: () => {
+        if (!(voiceCheck.state === "ready" && voiceCheck.status.available)) {
+          openDictationSetup();
+          return;
+        }
+        void startListening({ botId: bot.id, threadId, personName: personName || t("sidebar.profile.you") })
+          .catch((error: unknown) => dispatch({ type: "error", message: t("listening.couldNotStart", { error: error instanceof Error ? error.message : String(error) }) }));
+      },
     }] : []),
   ];
 

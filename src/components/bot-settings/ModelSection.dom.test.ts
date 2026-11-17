@@ -367,3 +367,36 @@ describe("Bot > Model, Runs with", () => {
   });
 });
 
+// #4417: the bot's Model tab carries "Context size", the same control as the
+// model menu and the provider's page; absent where its model has one size.
+describe("Bot > Model, Context size", () => {
+  const claude = { instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "claude-opus-5-5", options: [
+    { id: "claude-opus-5-5", label: "Claude Opus 5.5", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] },
+    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+  ] } } as InstanceInfo;
+
+  it("offers the sizes the bot's model runs at, Default first, and a pick writes the bot's own size", async () => {
+    fixture.instances = [claude];
+    await render(bot({ modelSelection: { instanceId: "claude", model: "claude-opus-5-5" } }));
+    const row = $('[data-settings-row="botModel.contextSize"]')!;
+    expect(row.textContent).toContain("Context size");
+    expect(row.querySelector("button[data-pill-select]")!.textContent).toBe("Default (1M)");
+    await pick(row.querySelector("button[data-pill-select]"), "200K");
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "updateBot", botId: "bot-1", patch: { contextWindow: 200_000 } });
+  });
+
+  it("shows the bot's own size, in Quebec French", async () => {
+    setLocale("fr");
+    fixture.instances = [claude];
+    await render(bot({ modelSelection: { instanceId: "claude", model: "claude-opus-5-5" }, contextWindow: 200_000 }));
+    const row = $('[data-settings-row="botModel.contextSize"]')!;
+    expect(row.textContent).toContain("Taille du contexte");
+    expect(row.querySelector("button[data-pill-select]")!.textContent).toBe("200K");
+  });
+
+  it("is absent where the model has one size", async () => {
+    fixture.instances = [claude];
+    await render(bot({ modelSelection: { instanceId: "claude", model: "claude-haiku-4-5" } }));
+    expect($('[data-settings-row="botModel.contextSize"]')).toBeNull();
+  });
+});

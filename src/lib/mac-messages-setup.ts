@@ -7,10 +7,11 @@
 // the page never stays blank.
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
-import type {
-  MessagesSetupStatus,
-  MessagesSetupTestResult,
-  MessagesPrivacyPane,
+import {
+  messagesPrivacyAnchor,
+  type MessagesSetupStatus,
+  type MessagesSetupTestResult,
+  type MessagesPrivacyPane,
 } from "../../shared/mac-messages-setup.ts";
 import type { MacAppsSetupStatus } from "../../shared/mac-apps-setup.ts";
 
@@ -52,6 +53,7 @@ export function messagesFromMacApps(status: MacAppsSetupStatus): MessagesSetupSt
       fullDiskAccess: row?.permissions.fullDiskAccess ?? "unknown",
       automation: row?.permissions.automation ?? "unknown",
     },
+    ...(row?.actions && row.actions.length > 0 ? { actions: row.actions } : {}),
   };
 }
 
@@ -100,7 +102,7 @@ export function automationAction(state: string): "ask" | "openSettings" | null {
 export async function openMessagesPermissionPane(pane: MessagesPrivacyPane): Promise<void> {
   const macApps = desktopMacApps();
   if (macApps) {
-    await macApps.openSettings(pane);
+    await macApps.openSettings(messagesPrivacyAnchor(pane));
     return;
   }
   const electronPane = pane === "fullDiskAccess" ? "fullDisk" : "automation";

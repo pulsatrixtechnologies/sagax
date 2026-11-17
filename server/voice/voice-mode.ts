@@ -188,6 +188,9 @@ export interface VoiceUsage {
   input: number;
   /** whose key paid (2026-10-29): xAI when absent */
   provider?: VoiceProviderId;
+  /** #4100: hearing for a listening session (`/voice/listen?purpose=listening`),
+   * booked under listening rather than voice mode */
+  purpose?: "listening";
 }
 
 /** The ledger's model for one provider's speech or hearing. */
@@ -352,7 +355,7 @@ export async function resolveVoiceKey(deps: KeyDeps, speaker: VoiceSpeaker): Pro
 }
 
 const REFUSAL_TEXT: Record<VoiceModeRefusalCause, string> = {
-  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Voice.",
+  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Providers > Voice.",
   server_engine_not_allowed: "Your organization has not given you its xAI voice. Add your own xAI key, or ask an admin.",
   payer_disabled: "Your access is turned off in your organization.",
   perspicax_unreachable: "Perspicax could not be reached to read your xAI key. Try again in a moment.",
@@ -406,7 +409,7 @@ function scrub(message: string, key: string): string {
   return out.length > 300 ? `${out.slice(0, 300)}...` : out;
 }
 
-type Usage = (model: VoiceUsage["model"], input: number) => void;
+type Usage = (model: VoiceUsage["model"], input: number, purpose?: VoiceUsage["purpose"]) => void;
 /** The usage booker for the key a request ends up on. */
 type UsageFor = (candidate: VoiceKeyCandidate) => Usage;
 type Json = (res: import("node:http").ServerResponse, status: number, body: unknown) => unknown;
@@ -597,7 +600,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   };
   if (!deps.realtime) return refuse("realtime_unavailable", "Realtime calls are not available on this server.");
   if (blocked) return refuse("spend_cap", blocked);
-  if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Voice.");
+  if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Providers > Voice.");
   const callId = randomUUID();
   const link = deps.realtime.session(target, auth, callId);
   const tried: VoiceKeyRefusal[] = [];
@@ -647,7 +650,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   // every key refused for itself: say which to fix, never fall back to text to speech
   const keyRefused = tried.length > 0 && tried.every((entry) => entry.failure === "key" || entry.failure === "quota");
   refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
-    keyRefused ? "The realtime voice key was refused. Fix it in Settings > Voice." : "The realtime voice is not reachable. Try the call again.",
+    keyRefused ? "The realtime voice key was refused. Fix it in Settings > Providers > Voice." : "The realtime voice is not reachable. Try the call again.",
     { tried });
 }
 
@@ -1019,17 +1022,23 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
     }
   }
 
-  const usageFor: UsageFor = (candidate) => (model, input) => deps.recordUsage({
+  const usageFor: UsageFor = (candidate) => (model, input, purpose) => deps.recordUsage({
     target, speaker, via: candidate.via, model, input,
     ...(candidate.payerPrincipalId ? { payerPrincipalId: candidate.payerPrincipalId } : {}),
     ...(candidateProvider(candidate) !== "xai" ? { provider: candidateProvider(candidate) } : {}),
+    ...(purpose ? { purpose } : {}),
   });
 
   const keyterms = (): string[] => {
     try { return deps.keyterms?.(target, speaker) ?? []; } catch { return []; }
   };
   if (choice.badVoice && action !== "listen") return json(res, 400, { error: "voice must be a voice id" });
-  if (action === "listen") return listen(req, res, url, json, sttKeys, refusals, who, usageFor, keyterms(), target.threadId);
+  if (action === "listen") {
+    // #4100: a listening session's channel books its hearing under listening
+    const listening = url.searchParams.get("purpose") === "listening";
+    const booked: UsageFor = listening ? (candidate) => (model, input) => usageFor(candidate)(model, input, "listening") : usageFor;
+    return listen(req, res, url, json, sttKeys, refusals, who, booked, keyterms(), target.threadId);
+  }
   if (action === "speech") return speech(req, res, url, json, ttsKeys, refusals, who, usageFor, voiceFor, target.threadId, { speed: target.speed, language: target.language });
 
   if (action === "speak" || action === "stream") {

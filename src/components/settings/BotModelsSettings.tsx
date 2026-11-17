@@ -325,29 +325,22 @@ function BulkBackupChoice({
   );
 }
 
-/** "Defaults for new bots": set in Perspicax in an organization (read-only
- * here with the current choice), editable solo. */
-export function NewBotDefaultsCard() {
+/** "Defaults for new bots" (the model, effort and other starting choices of
+ * a new bot): set in Perspicax in an organization (read-only here with the
+ * current choice), editable solo. #4457: a row of Providers > Models (it was
+ * a card of Developer > Models). */
+export function NewBotDefaultsRow() {
   const { state } = useStore();
   const org = usePerspicaxOrg();
-  const title = t("botModels.defaults.title");
-  return (
-    <SettingsGroup
-      title={title}
-      groupId="bot-models-defaults"
-      advanced={Boolean(org)}
-      accessory={<HelpTip label={t("settings.moreAbout", { title })}>{t("botModels.defaults.help")}</HelpTip>}
-    >
-      {org ? (
-        <DescribedRow
-          label={newBotDefaultsSummary(state.config) || t("botModels.defaults.perspicax")}
-          description={t("providers.chosenInPerspicax")}
-          rowId="models.newBotDefaults"
-        />
-      ) : (
-        <DefaultBotSettings />
-      )}
-    </SettingsGroup>
+  return org ? (
+    <DescribedRow
+      label={newBotDefaultsSummary(state.config) || t("botModels.defaults.perspicax")}
+      description={t("providers.chosenInPerspicax")}
+      help={t("botModels.defaults.help")}
+      rowId="models.newBotDefaults"
+    />
+  ) : (
+    <DefaultBotSettings />
   );
 }
 

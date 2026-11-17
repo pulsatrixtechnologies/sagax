@@ -166,6 +166,7 @@ export function Composer({
     inputRef: focus.inputRef,
     dispatch: session.dispatch as never,
     send: sendApi.send,
+    personName: session.config?.profile?.name?.trim() || session.config?.viewer?.name?.trim() || "",
   });
 
   const onKeyDown = useComposerKeyDown({

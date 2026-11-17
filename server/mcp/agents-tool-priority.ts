@@ -1,8 +1,8 @@
 // #2189: one canonical bare tool name across mounted MCP servers.
 //
 // When the agents server and an account connector (or any other MCP server)
-// both advertise the same bare tool name (send_prompt, api_search, flow_action,
-// …), the agents catalog wins. The connector's copy is withheld from
+// both advertise the same bare tool name (send_prompt, api_search, …),
+// the agents catalog wins. The connector's copy is withheld from
 // tools/list and refused on tools/call; the call is never renamed with an
 // added "__". Drivers pass the agents catalog names into the gate (or filter
 // the chat-completions catalog) whenever agents is mounted for the turn.

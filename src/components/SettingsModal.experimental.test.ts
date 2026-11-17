@@ -67,8 +67,8 @@ beforeEach(async () => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
-  const { DeveloperSettings, OrganizationSettings } = await import("./lazy-settings-sections");
-  await Promise.all([DeveloperSettings.preload(), OrganizationSettings.preload()]);
+  const { DeveloperSettings, OrganizationSettings, ProvidersModelsVoice, ProvidersSettings } = await import("./lazy-settings-sections");
+  await Promise.all([DeveloperSettings.preload(), OrganizationSettings.preload(), ProvidersModelsVoice.preload(), ProvidersSettings.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 const switchNamed = (label: string) => fixture.switches.filter((props) => props["aria-label"] === label).at(-1);
@@ -103,11 +103,13 @@ describe("Settings > Developer > Experimental", () => {
     const html = await render();
     expect(html).toContain('data-settings-group="experimental"');
     expect(html).toContain("Experimental features");
-    // skill authoring on; browser on Computer (#2080 L3); three served switches off; no Decision model (#2093)
-    expect(html).toContain("· 1 of 4 on");
-    for (const feature of ["skillAuthoring", "dataWindow", "meetingNotetaker", "llmThreadTitles"]) {
+    // skill authoring on; browser on Computer (#2080 L3); two served switches off; no Decision model (#2093)
+    expect(html).toContain("· 1 of 3 on");
+    for (const feature of ["skillAuthoring", "dataWindow", "meetingNotetaker"]) {
       expect(html, feature).toContain(`data-experimental-feature="${feature}"`);
     }
+    // #4457: Generated conversation titles is a row of Providers > Models
+    expect(html).not.toContain('data-experimental-feature="llmThreadTitles"');
     // #2729: Experimental is a card of Developer itself, no link back to Developer
     expect(html).not.toContain('data-experimental-feature="devPods"');
     expect(html).not.toContain('data-developer-link=""');
@@ -139,12 +141,12 @@ describe("Settings > Developer > Experimental", () => {
     await vi.waitFor(() => expect(fixture.dispatch).toHaveBeenCalled());
   });
 
-  it("gives generated conversation titles a switch: no more hand edit of config.json (2026-10-26)", async () => {
-    fixture.section = "developer";
+  it("gives generated conversation titles a switch: no more hand edit of config.json (2026-10-26), on Providers > Models (#4457)", async () => {
+    fixture.section = "providers";
     fixture.features = { llmThreadTitles: false };
     fixture.api.mockResolvedValue({ features: {} });
     const html = await render();
-    expect(html).toContain('data-experimental-feature="llmThreadTitles"');
+    expect(html).toMatch(/data-settings-card="providers\.models"[\s\S]*data-experimental-feature="llmThreadTitles"/);
     expect(html).not.toMatch(/[–—]/);
     switchNamed("Turn on generated conversation titles")!.onClick!({} as never);
     expect(fixture.api).toHaveBeenLastCalledWith("/api/config", { method: "PATCH", body: JSON.stringify({ features: { llmThreadTitles: true } }) });
@@ -233,8 +235,9 @@ describe("Settings > Organization (cards from General > Advanced, 2026-10-15; ti
     const { cardsMatching, SECTIONS, sectionMatches } = await import("./SettingsModal");
     expect(cardsMatching("mcp")).toContain("organization.mcpCalls");
     const org = SECTIONS.find((entry) => entry.id === "organization")!;
-    const developer = SECTIONS.find((entry) => entry.id === "developer")!;
-    const general = SECTIONS.find((entry) => entry.id === "account")!;
+    // #4457: Developer is Updates > Advanced; Account is a card of General
+    const developer = SECTIONS.find((entry) => entry.id === "updates")!;
+    const general = SECTIONS.find((entry) => entry.id === "general")!;
     expect(sectionMatches(org, "routines")).toBe(true);
     expect(sectionMatches(developer, "routines")).toBe(false);
     for (const word of ["mcp", "group turns"]) {
@@ -246,10 +249,10 @@ describe("Settings > Organization (cards from General > Advanced, 2026-10-15; ti
     const { currentSettingsSection, currentSettingsCard, isMovedOrganizationCard } = await import("@/lib/settings-sections");
     expect(currentSettingsSection("general", "general.routinesInConversation")).toBe("organization");
     // #2636: the timeouts' old and new ids open Developer
-    expect(currentSettingsSection("general", "general.mcpCalls")).toBe("developer");
-    expect(currentSettingsSection("general", "organization.roomTurns")).toBe("developer");
+    expect(currentSettingsSection("general", "general.mcpCalls")).toBe("updates");
+    expect(currentSettingsSection("general", "organization.roomTurns")).toBe("updates");
     expect(currentSettingsCard("general.roomTurns")).toBe("organization.roomTurns");
     expect(isMovedOrganizationCard("general.threadCleanup")).toBe(false);
-    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("developer");
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("updates");
   });
 });

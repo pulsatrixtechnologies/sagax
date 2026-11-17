@@ -150,6 +150,9 @@ it("a warm conversation's no-tool and tool turns reach the engine without a star
         expect(serverShareMs(line)).toBeLessThan(5_000);
       }
       if (toolMs) for (const line of lines) expect(Number(/tools=(\d+)/.exec(line)?.[1])).toBeGreaterThanOrEqual(1);
+      // #4394: the line splits the time after the prompt between the tools
+      // (the fake tool's 400 ms) and the engine's own time
+      if (toolMs) for (const line of lines) expect(Number(/ toolTime=(\d+)ms/.exec(line)?.[1] ?? 0)).toBeGreaterThanOrEqual(toolMs - 50);
       // #3598: no turn's preparation starts more processes in one synchronous
       // stretch than the agreed number (STRETCH_STARTS_LIMIT, spawn-helper.ts):
       // the server logs such a stretch, and none comes after the first send

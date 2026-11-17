@@ -972,8 +972,12 @@ bot records the steps and saves them as a skill it can replay.
    (`record-discard`); a 2px red frame (#aa122e) sits over the page. These
    are the values the reference app's own teaching controls use (its
    recording pill, Stop, Discard and recording frame).
-4. Stop (`record-stop`) opens the steps editor (`TeachStepsDialog`):
-   review, then Save as a skill.
+4. Stop (`record-stop`) opens the steps editor (`TeachStepsDialog`,
+   `inline`) inside that same screen window: review, then Save as a skill.
+   It is not a detail panel. That panel closes the computer, and the
+   window (which owned the editor) unmounted, so Stop dropped the steps.
+   If the browser window is already open, teaching still starts there:
+   the live view stays mounted and follows the teach prop.
 5. Describe it in words puts `/learn ` in the message bar. The bot asks
    what only the person can settle as a question card (its native question
    tool, else `ask_choice`), pinned over the message box like every

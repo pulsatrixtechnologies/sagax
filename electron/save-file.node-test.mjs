@@ -245,6 +245,26 @@ describe("Show in folder for a file outside the workspace", () => {
     assert.deepEqual(shown, [file, botHome]);
   });
 
+  it("opens a directory in the file manager while files remain selected in their parent", async () => {
+    const { shown, reveal } = shell();
+    const opened = [];
+    const openDirectory = async (target) => { opened.push(target); return ""; };
+    assert.equal(await revealInFolder(botHome, { reveal, openDirectory }), "shown");
+    assert.deepEqual(opened, [botHome]);
+    assert.deepEqual(shown, []);
+    assert.equal(await revealInFolder(botHome, { reveal, openDirectory: async () => "unavailable" }), "failed");
+  });
+
+  it("shows a package directory (an .app bundle) in its parent instead of opening it", async () => {
+    const { shown, reveal } = shell();
+    const opened = [];
+    const bundle = path.join(home, "Tool.app");
+    fs.mkdirSync(bundle, { recursive: true });
+    assert.equal(await revealInFolder(bundle, { reveal, openDirectory: async (target) => { opened.push(target); return ""; } }), "shown");
+    assert.deepEqual(opened, []);
+    assert.deepEqual(shown, [bundle]);
+  });
+
   it("says a missing file is missing and reveals nothing", async () => {
     const { shown, reveal } = shell();
     assert.equal(await revealInFolder(path.join(home, "gone.js"), { reveal }), "missing");

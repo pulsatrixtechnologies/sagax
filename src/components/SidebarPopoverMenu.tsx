@@ -16,7 +16,7 @@ import { useMenuMotion } from "./MenuMotion";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { trackInputModality } from "@/lib/input-modality";
 import { GLASS_POPUP_CHROME_TOP } from "@/lib/glass-popup";
-import { MENU_FIT, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
+import { MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow, SUBMENU_SIDE_OFFSET } from "./menu-look";
 
 export interface SidebarMenuItem {
   key: string;
@@ -116,7 +116,7 @@ export interface SubmenuPlace {
  * the row's other side when the right has no room. At the top it stays
  * under the window's top bar (the title-bar zone the glass pop-ups clear
  * too), so a tall card never covers the top bar's controls. */
-export const SUBMENU_SIDE_OFFSET = -4;
+export { SUBMENU_SIDE_OFFSET };
 export const SUBMENU_WINDOW_MARGIN = 12;
 export const SUBMENU_WINDOW_TOP = GLASS_POPUP_CHROME_TOP;
 
@@ -308,6 +308,7 @@ export function SidebarPopoverMenu({
   openOnHover = false,
   menuClassName = "left-0 right-0",
   placement = "above",
+  docked = false,
   banner,
   renderTrigger,
 }: {
@@ -315,9 +316,14 @@ export function SidebarPopoverMenu({
    * waiting update, #4093); it gets `close` for its own button. */
   banner?: (close: () => void) => React.ReactNode;
   /** "above" stretches over the trigger's width and opens upward (the
-   * sidebar's bottom menus); "below" hangs a fixed-width sheet under the
-   * trigger's right edge (a header icon). */
+   * sidebar's bottom menus); "below" hangs under the trigger's right edge
+   * and sizes to its labels (a header icon). */
   placement?: "above" | "below";
+  /** The menu stays open in the page's flow above its trigger, with the same
+   * rows and second levels, instead of floating over it (Settings > Appearance
+   * "Show the account menu above my name"). The trigger still opens and
+   * closes it. Nothing in a row changes: a click runs it and the menu stays. */
+  docked?: boolean;
   /** `data-tour` id for the trigger button */
   tourId?: string;
   items: SidebarMenuItem[];
@@ -333,13 +339,15 @@ export function SidebarPopoverMenu({
     attentionTone: "danger" | "accent";
   }) => React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(docked);
   const [pinned, setPinnedState] = useState(false);
   // the hover listeners are native and bound once, so they read the latest
   // pin and mode through refs rather than a stale render's closure
   const pinnedRef = useRef(false);
   const openOnHoverRef = useRef(openOnHover);
   openOnHoverRef.current = openOnHover;
+  const dockedRef = useRef(docked);
+  dockedRef.current = docked;
   const setPinned = (value: boolean) => {
     pinnedRef.current = value;
     setPinnedState(value);
@@ -428,7 +436,7 @@ export function SidebarPopoverMenu({
     createHoverIntent({
       openDelayMs: OPEN_DELAY_MS,
       closeDelayMs: CLOSE_DELAY_MS,
-      active: () => openOnHoverRef.current && !pinnedRef.current,
+      active: () => openOnHoverRef.current && !pinnedRef.current && !dockedRef.current,
       setOpen,
     }),
   );
@@ -440,22 +448,149 @@ export function SidebarPopoverMenu({
 
   const close = () => {
     clearTimers();
+    // docked, the menu is the page's own: a row leaves it open
+    if (docked) { setSub(null); return; }
     setPinned(false);
     setOpen(false);
     setSub(null);
   };
 
-  usePopoverDismiss(open, dismissRef, close);
+  usePopoverDismiss(open && !docked, dismissRef, close);
 
   const asking = items.filter((item) => item.attention);
   const attention = asking.length > 0;
   // a failure outranks good news when both are folded away
   const attentionTone = asking.some((item) => item.attentionTone !== "accent") ? "danger" : "accent";
 
+  const panel = (docked ? open : motion.shown) && (
+    <div
+      id={menuId}
+      role="menu"
+      aria-label={ariaLabel}
+      {...(docked ? {} : motion.exitProps)}
+      className={cn(
+        // the reference's menu in the configuration the owner compares
+        // (its typeface with 15px chat prose, #4093, #4157): 16px
+        // corners, 6px padding, 32px rows 2px apart, 14/20 type, 10px
+        // row corners; its fill, hairline and shadow are `.menu-surface`
+        MENU_SURFACE,
+        MENU_FIT_ROW,
+        docked ? "relative mb-1 w-full" : "absolute z-40",
+        // above: the foot's width (w-auto), still on the shared floor.
+        // below: the labels' width.
+        docked ? undefined : placement === "below" ? "top-full right-0 mt-1" : cn("bottom-full mb-1 w-auto", menuClassName),
+        docked ? undefined : motion.className,
+      )}
+    >
+      {banner?.(close)}
+      {items.map((item) => (
+        <div
+          key={item.key}
+          className={item.submenu ? "relative" : undefined}
+          onPointerOver={() => { if (sub !== (item.submenu ? item.key : null)) hoverSub(item.submenu ? item.key : null); }}
+        >
+          {item.separatorBefore && <MenuDivider />}
+          {item.heading && <div className="px-3 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">{item.heading}</div>}
+          <button
+            type="button"
+            role="menuitem"
+            data-tour={item.tourId}
+            data-menu-key={item.key}
+            disabled={item.disabled}
+            aria-haspopup={item.submenu ? "menu" : undefined}
+            aria-expanded={item.submenu ? sub === item.key : undefined}
+            onKeyDown={item.submenu ? (event) => {
+              if (event.key !== "ArrowRight") return;
+              event.preventDefault();
+              setSub(item.key);
+              focusSub(item.key);
+            } : undefined}
+            onClick={() => {
+              if (item.submenu) {
+                const next = sub === item.key ? null : item.key;
+                setSub(next);
+                if (next) focusSub(next);
+                return;
+              }
+              item.onSelect();
+              if (!item.keepOpen) close();
+            }}
+            className={cn(
+              menuRow(item.active || (item.submenu && sub === item.key) ? "active" : "idle"),
+              (item.subtitle || item.note) && "h-auto py-1.5",
+            )}
+          >
+            {item.icon && <MenuGlyph>{item.icon}</MenuGlyph>}
+            {item.subtitle || item.note ? (
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate">{item.label}</span>
+                {item.subtitle && <span className="truncate text-[12px] text-ink-secondary">{item.subtitle}</span>}
+                {item.note && <span className="text-[11.5px] leading-snug text-ink-tertiary">{item.note}</span>}
+              </span>
+            ) : (
+              <span className="flex-1 truncate">{item.label}</span>
+            )}
+            {item.value && <span data-menu-value="" className="shrink-0 tabular-nums text-ink-tertiary">{item.value}</span>}
+            {item.trailing}
+            {item.attention && (
+              <span
+                className={cn(
+                  "size-2 shrink-0 rounded-full",
+                  item.attentionTone === "accent" ? "bg-accent" : "bg-danger",
+                )}
+              />
+            )}
+            {item.submenu && <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-tertiary" />}
+          </button>
+          {item.submenu && sub === item.key && subAt && createPortal(
+            <div
+              ref={subRef}
+              role="menu"
+              aria-label={item.label}
+              data-submenu={item.key}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowLeft" && event.key !== "Escape") return;
+                event.preventDefault();
+                event.stopPropagation();
+                setSub(null);
+                rootRef.current?.querySelector<HTMLElement>(`[data-menu-key="${CSS.escape(item.key)}"]`)?.focus();
+              }}
+              data-sidebar
+              style={{ ...(item.submenuWidth != null ? { minWidth: item.submenuWidth } : {}), ...subAt }}
+              className={cn(MENU_SURFACE, MENU_FIT_ROW, "fixed z-[70] overflow-hidden")}
+            >
+              <div
+                data-submenu-rows=""
+                data-more={subMore ? "below" : undefined}
+                style={subFold === null ? undefined : { maxHeight: subFold }}
+                className="menu-scroll flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain"
+              >
+                {item.submenu.filter((entry) => !entry.foot).map((entry) => (
+                  <SubmenuEntryRow key={entry.key} entry={entry} starSlot={hasStarSlot(item.submenu!)} onClose={close} />
+                ))}
+              </div>
+              {item.submenu.some((entry) => entry.foot) && (
+                // the card's foot stays in view: only the rows above scroll (#4157)
+                <div data-submenu-foot="" className="flex shrink-0 flex-col gap-0.5">
+                  {/* the rows scroll above it: a hairline parts them from the foot */}
+                  {subFold !== null && <MenuDivider />}
+                  {item.submenu.filter((entry) => entry.foot).map((entry) => (
+                    <SubmenuEntryRow key={entry.key} entry={entry} starSlot={hasStarSlot(item.submenu!)} onClose={close} />
+                  ))}
+                </div>
+              )}
+            </div>,
+            document.body,
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div
       ref={rootRef}
-      className="relative"
+      className={cn("relative", docked && "flex flex-col")}
       // hover is bound natively in the effect above (see sidebar-hover-intent)
       // a keyboard user tabbing in gets the same menu a pointer gets
       onFocus={() => {
@@ -464,19 +599,22 @@ export function SidebarPopoverMenu({
         setOpen(true);
       }}
       onBlur={(event) => {
-        if (pinnedRef.current) return;
+        if (pinnedRef.current || dockedRef.current) return;
         if (!event.relatedTarget || !rootRef.current?.contains(event.relatedTarget as Node)) setOpen(false);
       }}
     >
+      {docked && panel}
       <button
         type="button"
         data-tour={tourId}
-        aria-haspopup="menu"
+        aria-haspopup={docked ? undefined : "menu"}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={ariaLabel}
         onClick={() => {
           clearTimers();
+          // docked, the name shows or hides the menu above it
+          if (docked) { setOpen((current) => !current); setSub(null); return; }
           if (open && (pinned || !openOnHover)) close();
           else {
             setPinned(true);
@@ -488,127 +626,7 @@ export function SidebarPopoverMenu({
         {renderTrigger({ open, attention, attentionTone })}
       </button>
 
-      {motion.shown && (
-        <div
-          id={menuId}
-          role="menu"
-          aria-label={ariaLabel}
-          {...motion.exitProps}
-          className={cn(
-            // the reference's menu in the configuration the owner compares
-            // (its typeface with 15px chat prose, #4093, #4157): 16px
-            // corners, 6px padding, 32px rows 2px apart, 14/20 type, 10px
-            // row corners; its fill, hairline and shadow are `.menu-surface`
-            MENU_SURFACE,
-            "absolute z-40 min-w-[200px]",
-            placement === "below" ? "top-full right-0 mt-1 w-72 max-w-[calc(100vw-2rem)]" : cn("bottom-full mb-1", menuClassName),
-            motion.className,
-          )}
-        >
-          {banner?.(close)}
-          {items.map((item) => (
-            <div
-              key={item.key}
-              className={item.submenu ? "relative" : undefined}
-              onPointerOver={() => { if (sub !== (item.submenu ? item.key : null)) hoverSub(item.submenu ? item.key : null); }}
-            >
-              {item.separatorBefore && <MenuDivider />}
-              {item.heading && <div className="px-3 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">{item.heading}</div>}
-              <button
-                type="button"
-                role="menuitem"
-                data-tour={item.tourId}
-                data-menu-key={item.key}
-                disabled={item.disabled}
-                aria-haspopup={item.submenu ? "menu" : undefined}
-                aria-expanded={item.submenu ? sub === item.key : undefined}
-                onKeyDown={item.submenu ? (event) => {
-                  if (event.key !== "ArrowRight") return;
-                  event.preventDefault();
-                  setSub(item.key);
-                  focusSub(item.key);
-                } : undefined}
-                onClick={() => {
-                  if (item.submenu) {
-                    const next = sub === item.key ? null : item.key;
-                    setSub(next);
-                    if (next) focusSub(next);
-                    return;
-                  }
-                  item.onSelect();
-                  if (!item.keepOpen) close();
-                }}
-                className={cn(
-                  menuRow(item.active || (item.submenu && sub === item.key) ? "active" : "idle"),
-                  (item.subtitle || item.note) && "h-auto py-1.5",
-                )}
-              >
-                {item.icon && <MenuGlyph>{item.icon}</MenuGlyph>}
-                {item.subtitle || item.note ? (
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate">{item.label}</span>
-                    {item.subtitle && <span className="truncate text-[12px] text-ink-secondary">{item.subtitle}</span>}
-                    {item.note && <span className="text-[11.5px] leading-snug text-ink-tertiary">{item.note}</span>}
-                  </span>
-                ) : (
-                  <span className="flex-1 truncate">{item.label}</span>
-                )}
-                {item.value && <span data-menu-value="" className="shrink-0 tabular-nums text-ink-tertiary">{item.value}</span>}
-                {item.trailing}
-                {item.attention && (
-                  <span
-                    className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      item.attentionTone === "accent" ? "bg-accent" : "bg-danger",
-                    )}
-                  />
-                )}
-                {item.submenu && <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-tertiary" />}
-              </button>
-              {item.submenu && sub === item.key && subAt && createPortal(
-                <div
-                  ref={subRef}
-                  role="menu"
-                  aria-label={item.label}
-                  data-submenu={item.key}
-                  onKeyDown={(event) => {
-                    if (event.key !== "ArrowLeft" && event.key !== "Escape") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setSub(null);
-                    rootRef.current?.querySelector<HTMLElement>(`[data-menu-key="${CSS.escape(item.key)}"]`)?.focus();
-                  }}
-                  data-sidebar
-                  style={{ minWidth: item.submenuWidth ?? 180, ...subAt }}
-                  className={cn(MENU_SURFACE, MENU_FIT, "fixed z-[70] overflow-hidden")}
-                >
-                  <div
-                    data-submenu-rows=""
-                    data-more={subMore ? "below" : undefined}
-                    style={subFold === null ? undefined : { maxHeight: subFold }}
-                    className="menu-scroll flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain"
-                  >
-                    {item.submenu.filter((entry) => !entry.foot).map((entry) => (
-                      <SubmenuEntryRow key={entry.key} entry={entry} starSlot={hasStarSlot(item.submenu!)} onClose={close} />
-                    ))}
-                  </div>
-                  {item.submenu.some((entry) => entry.foot) && (
-                    // the card's foot stays in view: only the rows above scroll (#4157)
-                    <div data-submenu-foot="" className="flex shrink-0 flex-col gap-0.5">
-                      {/* the rows scroll above it: a hairline parts them from the foot */}
-                      {subFold !== null && <MenuDivider />}
-                      {item.submenu.filter((entry) => entry.foot).map((entry) => (
-                        <SubmenuEntryRow key={entry.key} entry={entry} starSlot={hasStarSlot(item.submenu!)} onClose={close} />
-                      ))}
-                    </div>
-                  )}
-                </div>,
-                document.body,
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {!docked && panel}
     </div>
   );
 }

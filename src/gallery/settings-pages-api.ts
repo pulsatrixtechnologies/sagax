@@ -7,7 +7,7 @@
  * `botslink=none|off|org|paused-delivery`: the bots link's states, `noxai=1`:
  * no xAI account, `people=alone|others` (#4360): a server with no organization
  * whose owner is alone on it, or that has let one more person in,
- * `accounts=claude|openai|openai-solo|xai` (#4415): a provider's Accounts). */
+ * `accounts=claude|claude-one|openai|openai-solo|xai` (#4415, #4426): a provider's Accounts). */
 export function settingsPagesApi(params: URLSearchParams): Record<string, unknown> {
   const DAY = 86_400_000;
   const NOW = Date.UTC(2026, 9, 28, 14);
@@ -57,7 +57,8 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       newBotDefaults: { profile: { modelSelection: { instanceId: "claude", model: "sonnet", effort: "medium" }, approvalMode: "ask" } },
     },
     "/api/instances": { instances: params.get("empty") ? [] : [
-      { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1" }, { id: "sonnet", label: "Claude Sonnet 4.5" }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
+      // #4417: the sizes Claude Code runs a 1M model at (server/drivers/claude/config.ts)
+      { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "sonnet", label: "Claude Sonnet 4.5", contextWindow: 1_000_000, contextWindows: [200_000, 1_000_000] }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // &noxai=1 (#4329 lot 2): no xAI account here, for the bots link alone under its provider
       { instanceId: "grok", displayName: "Grok", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       // ?providers=1 (#2080): several accounts per provider (emails stay inside
@@ -249,7 +250,7 @@ function accountProviders(accounts: string | null): { providers?: unknown[] } {
   return { providers: lists.slice(0, Math.max(1, Math.min(3, Number(accounts) || 1))) };
 }
 
-/** &accounts=claude|openai|openai-solo|xai (#4415): a provider's Accounts in
+/** &accounts=claude|claude-one|openai|openai-solo|xai (#4415, #4426): a provider's Accounts in
  * each state the owner met: several accounts all signed out, one sign-in
  * read by two engines (one row), a second sign-in of one engine, and the
  * answers a sign-in in progress gets (a pasted code, a device code, the
@@ -288,6 +289,15 @@ function accountScenes(scene: string, config: Record<string, unknown>, role: "ad
       "/api/me/providers": { keys: [], servers: [] },
       [`/api/me/engines/${ids[1]}/login/start`]: waiting({ authorizationUrl: "https://claude.ai/oauth/authorize?code=true" }),
       [`/api/me/engines/${ids[1]}/login/status`]: waiting({ authorizationUrl: "https://claude.ai/oauth/authorize?code=true" }),
+    };
+  }
+  // #4426: a provider's only account, signed in: nothing to remove
+  if (scene === "claude-one") {
+    return {
+      ...org,
+      "/api/instances": { instances: [engine("claude", "claudeAgent", "Claude", true), pi] },
+      "/api/me/engines": { engines: [mine("claude", "claudeAgent", "Claude", true), piMine] },
+      "/api/me/providers": { keys: [], servers: [] },
     };
   }
   if (scene === "openai") {

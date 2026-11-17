@@ -9030,6 +9030,19 @@ describe("harness HTTP API", () => {
       expect((await api("POST", `/api/bots/${bot.id}/respond`, { requestId: writeCard.requestId, behavior: "deny" })).status).toBe(200);
       await expect(linearWrite).resolves.toMatchObject({ behavior: "deny" });
 
+      // #4525: an ArtifactData write offers the bot's "ArtifactData" grant
+      // (the one Access > Always allowed writes); it is the person's
+      // agreement to the consent disclosure, so the next write runs.
+      const firstArtifact = raise("ask-artifact-1", "save the day", { action: "set" }, "ArtifactData");
+      const artifactCard = await expect.poll(async () => (await messages()).find((m) => m.card?.subtitle === "save the day")?.card).toBeTruthy()
+        .then(async () => (await messages()).find((m) => m.card?.subtitle === "save the day")!.card!);
+      expect(artifactCard.allowKey).toBe("ArtifactData");
+      expect((await api("POST", `/api/bots/${bot.id}/always-allow`, { threadId: bot.threadId, allowKey: "ArtifactData" })).status).toBe(200);
+      expect((await api("POST", `/api/bots/${bot.id}/respond`, { requestId: artifactCard.requestId, behavior: "allow" })).status).toBe(200);
+      await expect(firstArtifact).resolves.toMatchObject({ behavior: "allow" });
+      await expect(raise("ask-artifact-2", "save the next day", { action: "set" }, "ArtifactData")).resolves.toMatchObject({ behavior: "allow" });
+      expect((await messages()).find((m) => m.card?.subtitle === "save the next day")).toBeUndefined();
+
       // A card that offers no session allow keeps none, whatever the answer
       // claims: widening the sandbox is allowed once at most.
       const widen = raise("ask-widen", "ls /", { dangerouslyDisableSandbox: true });
@@ -9051,6 +9064,7 @@ describe("harness HTTP API", () => {
       expect(nextTask.body.task.alwaysAllow).toBeUndefined();
       const savedBot = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
       expect(savedBot.alwaysAllow).toContain(linearCard.allowKey);
+      expect(savedBot.alwaysAllow).toContain("ArtifactData");
     } finally {
       for (const conn of conns) conn.destroy();
       await api("POST", `/api/bots/${bot.id}/interrupt`);

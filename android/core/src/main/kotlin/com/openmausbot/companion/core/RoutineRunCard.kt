@@ -29,6 +29,18 @@ data class RoutineRunCard(
     /** The run's real output, up to 2000 characters. */
     val summary: String? = null,
     val error: String? = null,
+    /** Completed, but not all of it went right. Empty reads as none. */
+    val problems: String? = null,
+    /** The kind of wake (peer, watch, suggestion). Absent on a plain routine. */
+    val wakeTopic: String? = null,
+    /** A wake's report written for the person. Absent on rows stored before. */
+    val forPerson: Boolean = false,
+    /** "person" when the person started this run. */
+    val startedBy: String? = null,
+    /** This failure paused the routine after this many failed runs in a row. */
+    val autoPausedAfter: Int? = null,
+    val `repeat`: RoutineRunRepeat? = null,
+    val recovered: RoutineRunRecovered? = null,
 ) {
     /**
      * The words after the routine's name. The goal outcome is the more exact
@@ -81,6 +93,19 @@ data class RoutineRunCard(
 }
 
 enum class RoutineRunTone { NEUTRAL, ACTIVE, ATTENTION, ERROR }
+
+/** A streak count stored on a run row (shared/routine-run.ts `repeat`). */
+@Serializable
+data class RoutineRunRepeat(
+    val streak: Boolean = false,
+    val firstRunId: String? = null,
+)
+
+/** The first run without problems after runs with problems. */
+@Serializable
+data class RoutineRunRecovered(
+    val streak: Boolean = false,
+)
 
 /** A routine-run message reads as its card; one without a card, as its text. */
 val Message.routineRunPreview: String

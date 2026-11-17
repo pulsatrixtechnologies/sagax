@@ -28,6 +28,7 @@ import { t, activeLocale } from "@/lib/i18n";
 import { AddComputerDialog } from "./remote-session/AddComputerDialog";
 import { fetchRemoteHosts, type RemoteHostCard } from "./remote-session/remote-hosts-client";
 import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PageHeader } from "./content-page";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "./menu-look";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import { unattendedHostLabel } from "./remote-session/UnattendedHostsSection";
 import { useMacInsetChrome } from "./DesktopCapabilities";
@@ -381,14 +382,14 @@ export function TeamMapPage() {
             if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); }
           }}>
             <summary aria-label={t("teamMap.addAria")} className={PAGE_ACTION_BUTTON}><Plus size={15} /> {t("common.add")}</summary>
-            <div className="absolute right-0 top-full z-40 mt-2 flex w-52 min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]" onClick={(event) => {
+            <div role="menu" aria-label={t("teamMap.addAria")} className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-40 mt-1.5")} onClick={(event) => {
               const details = event.currentTarget.closest("details"); details?.querySelector("summary")?.focus(); details?.removeAttribute("open");
             }}>
-              {canEditTeams && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setTeamEditor({})}><Users size={16} />{t("team.create")}</button>}
-              {canEditTeams && <button data-team-map-import-plugin="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setTeamEditor(null); setPluginImport(true); }}><Puzzle size={16} />{t("pluginTeam.menu")}</button>}
-              {ownComputers && <button data-team-map-unattended="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setAddingComputer(true)}><MonitorSmartphone size={16} />{t("teamMap.unattendedComputer")}</button>}
+              {canEditTeams && <button type="button" role="menuitem" className={MENU_ROW} onClick={() => setTeamEditor({})}><MenuGlyph><Users size={16} /></MenuGlyph>{t("team.create")}</button>}
+              {canEditTeams && <button type="button" role="menuitem" data-team-map-import-plugin="" className={MENU_ROW} onClick={() => { setTeamEditor(null); setPluginImport(true); }}><MenuGlyph><Puzzle size={16} /></MenuGlyph>{t("pluginTeam.menu")}</button>}
+              {ownComputers && <button type="button" role="menuitem" data-team-map-unattended="" className={MENU_ROW} onClick={() => setAddingComputer(true)}><MenuGlyph><MonitorSmartphone size={16} /></MenuGlyph>{t("teamMap.unattendedComputer")}</button>}
               {/* An OMB Cloud home has no Local VM (shared/cloud-home.ts). */}
-              {adminTeams && placeOffered("vm", state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><Monitor size={16} />{t("teamMap.localVm")}</button>}
+              {adminTeams && placeOffered("vm", state.config) && <button type="button" role="menuitem" className={MENU_ROW} onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><MenuGlyph><Monitor size={16} /></MenuGlyph>{t("teamMap.localVm")}</button>}
             </div>
           </details>}
         </>}

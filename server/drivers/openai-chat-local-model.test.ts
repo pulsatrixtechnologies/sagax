@@ -54,7 +54,7 @@ async function fixture(script: Script, driver: "local" | "hosted" = "local") {
   const directory = mkdtempSync(join(tmpdir(), "omb-chat-local-"));
   const requests: ChatRequest[] = [];
   const server = createServer(async (request, response) => {
-    if (request.url === "/v1/models") { response.setHeader("content-type", "application/json"); response.end('{"data":[]}'); return; }
+    if (request.url === "/v1/models" || request.url === "/v1/language-models") { response.setHeader("content-type", "application/json"); response.end('{"data":[]}'); return; }
     let data = "";
     for await (const part of request) data += part.toString();
     const body = JSON.parse(data) as ChatRequest;

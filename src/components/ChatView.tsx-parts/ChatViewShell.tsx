@@ -1,3 +1,4 @@
+import { citationReplyAction } from "@/lib/citation-reply";
 import { WorkingDots } from "@/components/WorkingIndicator";
 import { BotAvatar } from "../Avatar";
 import { TurnPresence } from "../TurnPresence";
@@ -341,7 +342,8 @@ export function ChatViewShell(m: Record<string, any>) {
       <CitationSelectionToolbar
         key={`${bot.id}:${bot.threadId}`}
         viewportRef={scrollRef}
-        onAdd={(citation) => appendDraftAttachments(`bot:${citation.source.ownerId}:${citation.source.threadId}`, [citation])}
+        onReply={(citation) => dispatch(citationReplyAction(citation, "bot", bot.id, bot.threadId))}
+        onAdd={(citation) => appendDraftAttachments(`bot:${bot.id}:${bot.threadId}`, [citation])}
       />
       )}
       </div>

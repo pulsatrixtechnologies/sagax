@@ -13,7 +13,7 @@ import {
   slugifyTranscriptFilename,
 } from "@/lib/export-transcript";
 import type { Message } from "@/state/store";
-import { MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider, MENU_FIT_ROW } from "./menu-look";
+import { MENU_ROW, MENU_ROW_ACTIVE, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider, MENU_FIT_ROW, SUBMENU_SIDE_OFFSET } from "./menu-look";
 
 /** A row of the menu: the chrome of the sidebar's popover menus. */
 const ROW = MENU_ROW;
@@ -290,7 +290,8 @@ export function ExportTranscriptMenu({
                     }
                     navigateThreadMenu(event);
                   }}
-                  className={cn(MENU_SURFACE, "absolute right-full top-[-6px] z-50 mr-2 w-max min-w-[200px] max-w-[320px]")}
+                  className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute top-0 z-50")}
+                  style={{ right: `calc(100% + ${SUBMENU_SIDE_OFFSET}px)` }}
                 >
                   {exports.map((entry) => exportRow(entry, true))}
                 </div>

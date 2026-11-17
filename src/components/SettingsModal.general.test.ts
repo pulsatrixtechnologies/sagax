@@ -1,7 +1,7 @@
 // Settings > General laid out as the reference design's (0.5.6, the owner): grey headings
-// (Account, Appearance, System) over cards of compact rows, Language as a
-// pill menu (the skin is chosen in Appearance only, 2026-10-19), Updates on a page of its own, and General >
-// Advanced described by what it holds today.
+// over cards of compact rows, Language as a pill menu, Updates on a page of
+// its own. #4457 (the owner 2026-11-16): General holds Account, Appearance
+// (with Language and Time zone), Notifications, Mascots and System.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,7 @@ import type { AppSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
 
 const fixture = vi.hoisted(() => ({
-  section: "account" as AppSettingsSection,
+  section: "general" as AppSettingsSection,
   config: { rooms: { turnTimeoutMinutes: 5 } } as Record<string, unknown> | undefined,
   advanced: true,
 }));
@@ -34,7 +34,7 @@ const render = () => renderToStaticMarkup(createElement(SettingsModal));
 const updater = { check: vi.fn(), install: vi.fn(), onState: vi.fn(), setPrereleases: vi.fn() };
 
 beforeEach(() => {
-  fixture.section = "account";
+  fixture.section = "general";
   fixture.config = { rooms: { turnTimeoutMinutes: 5 } };
   fixture.advanced = true;
   setLocale("en");
@@ -47,35 +47,35 @@ afterEach(() => {
 });
 
 describe("Settings > General, the reference design's layout", () => {
-  it("draws Account then Language and region (#2080 L2)", () => {
+  it("draws Account, Appearance, Notifications, Mascots, then System (#4457)", () => {
     const html = render();
-    const order = ['data-settings-group="account"', 'data-settings-group="languageRegion"'];
+    const order = ["account", "generalAppearance", "generalNotifications", "generalMascots", "generalSystem"].map((group) => `data-settings-group="${group}"`);
     const at = order.map((text) => html.indexOf(text));
     expect(at.every((value) => value >= 0)).toBe(true);
     expect([...at].sort((x, y) => x - y)).toEqual(at);
-    expect(html).toContain('data-settings-group="account"');
-    expect(html).toMatch(/<h3[^>]*text-ink-secondary[^>]*>Language and region<\/h3>/);
-    expect(html).not.toContain('data-settings-group="system"');
-    expect(html).not.toContain('data-settings-group="appearance"');
+    for (const heading of ["Appearance", "Notifications", "Mascots", "System"]) expect(html, heading).toMatch(new RegExp(`<h3[^>]*text-ink-secondary[^>]*>${heading}</h3>`));
+    // no group title "Language and region" any more: the rows sit on Appearance
+    expect(html).not.toContain('data-settings-group="languageRegion"');
   });
 
-  it("Language is a borderless pill menu, not a native select, with no help line; the skin is chosen in Appearance only", () => {
+  it("Language is a borderless pill menu, not a native select, with no help line, beside the theme", () => {
     const html = render();
-    const region = html.slice(html.indexOf('data-settings-group="languageRegion"'));
-    expect(region).not.toContain('data-settings-row="theme"');
-    expect(region).toContain('data-settings-row="language"');
-    expect(region).toContain('data-settings-row="timeZone"');
-    expect(region.match(/data-pill-select/g)).toHaveLength(1);
-    expect(region).not.toContain("<select");
-    expect(region).toContain('aria-haspopup="listbox"');
+    const card = html.slice(html.indexOf('data-settings-group="generalAppearance"'), html.indexOf('data-settings-group="generalNotifications"'));
+    expect(card).toContain('data-settings-row="language"');
+    expect(card).toContain('data-settings-row="timeZone"');
+    expect(card).toContain('data-settings-card="appearance.skin"');
+    expect(card).toContain('data-settings-card="general.appearance"');
+    expect(card).not.toContain("<select");
+    expect(card).toContain('aria-haspopup="listbox"');
     expect(html).not.toContain("Follows your system language");
     expect(html).not.toContain("Only part of the interface is translated");
   });
 
-  it("Guided tours live on About, with two buttons and no tour paragraphs", () => {
+  it("Guided tours live on Updates > About, with two buttons and no tour paragraphs", () => {
     expect(render()).not.toContain('data-settings-row="tours"');
     fixture.section = "about";
     const html = render();
+    expect(html).toContain('data-settings-subpage="updates.about"');
     const row = html.slice(html.indexOf('data-settings-row="tours"'));
     expect(row).toContain(">App tour</button>");
     expect(row).toContain(">Welcome tour</button>");
@@ -83,22 +83,23 @@ describe("Settings > General, the reference design's layout", () => {
     expect(html).not.toContain("The first-run walkthrough");
   });
 
-  it("Microphone permission is no longer on Account: it is in Models and voice > Audio, desktop app only", async () => {
+  it("Microphone permission is a row of General > System (#4457), desktop app only", async () => {
     vi.stubGlobal("window", { ogb: { permStatus: vi.fn(async () => ({ mic: "granted" })) } });
-    expect(render()).not.toContain('data-settings-row="microphoneAccess"');
+    const html = render();
+    const system = html.slice(html.indexOf('data-settings-group="generalSystem"'));
+    expect(system).toContain('data-settings-card="connections.audio"');
     const { MicrophonePermissionRow } = await import("./settings/MicrophoneSettings");
     expect(renderToStaticMarkup(createElement(MicrophonePermissionRow))).toContain('data-settings-row="microphoneAccess"');
     vi.stubGlobal("window", { ogb: {} });
     expect(renderToStaticMarkup(createElement(MicrophonePermissionRow))).toBe("");
   });
 
-  // #2090: Updates are a page of their own again, where the desktop app answers
-  it("Updates leave General for a page of their own, where the desktop app answers", () => {
-    expect(render()).not.toContain('<option value="updates"');
+  // #2090: Updates are a page of their own, where the desktop app answers;
+  // #4457: the page stays everywhere (About and Advanced live there)
+  it("Updates are a page of their own; the version card shows where the desktop app answers", () => {
+    expect(render()).toContain('<option value="updates">Updates</option>');
     vi.stubGlobal("window", { ogb: { updater } });
-    fixture.section = "account";
     const general = render();
-    expect(general).toContain('<option value="updates">Updates</option>');
     expect(general).not.toContain("Check for updates");
     fixture.section = "updates";
     const page = render();
@@ -107,11 +108,7 @@ describe("Settings > General, the reference design's layout", () => {
     expect(page).toContain("Update channel");
   });
 
-  it("keeps Account identity-only; system rows live on General, help on About", () => {
-    const html = render();
-    expect(html).toContain('data-settings-group="languageRegion"');
-    expect(html).not.toContain('data-settings-card="general.advanced"');
-    expect(html).not.toContain(">Visites guidées</div>");
+  it("keeps help on Updates > About; the system rows live on General", () => {
     fixture.section = "about";
     const app = render();
     expect(app).toContain('data-settings-card="about.help"');
@@ -121,25 +118,21 @@ describe("Settings > General, the reference design's layout", () => {
     const general = render();
     expect(general).toContain('data-settings-card="general.system"');
     expect(general).toContain('data-settings-card="general.input"');
-    // #2636: the loop guard is on Developer; General keeps one link there
+    // #2636: the loop guard is on Developer (Updates > Advanced)
     expect(general).not.toContain('data-settings-card="general.loopGuard"');
-    expect(general).toContain('data-developer-link=""');
   });
 
   it("reads in French", () => {
     setLocale("fr");
     vi.stubGlobal("window", { ogb: { updater } });
     const html = render();
-    expect(html).toContain(">Langue et région</h3>");
-    expect(html).not.toContain(">Système</h3>");
-    expect(html).not.toContain(">Thème</div>");
-    // #2080 L2: tours live on App, not Account. #2090: Updates is its own page.
+    expect(html).toContain(">Apparence</h3>");
+    expect(html).toContain(">Système</h3>");
     expect(html).not.toContain(">Visites guidées</div>");
-    // the owner 2026-11-07: Général first, À propos last
-    expect(html).toContain('<option value="general">Général</option><option value="updates">Mises à jour</option>');
-    expect(html).toContain('<option value="about">À propos</option>');
+    expect(html).toContain('<option value="general" selected="">Général</option>');
+    expect(html).toContain('<option value="updates">Mises à jour</option>');
+    expect(html).not.toContain('<option value="about">');
     expect(html).not.toContain("Aide et à propos");
-    expect(html).not.toContain(">Application</option>");
     expect(html).not.toMatch(/[–—]/);
   });
 });
@@ -149,44 +142,25 @@ describe("Settings search after the move", () => {
   it("finds updates and pre-releases on Updates, not on General", () => {
     for (const query of ["update", "prerelease", "pre-release", "beta", "mise à jour"]) {
       expect(sectionMatches(section("updates"), query), query).toBe(true);
-      expect(sectionMatches(section("account"), query), query).toBe(false);
+      expect(sectionMatches(section("general"), query), query).toBe(false);
     }
   });
-  it("finds About on its own App entry, not on Updates", () => {
+  it("finds About on Updates (its About sub-page), not on General", () => {
     for (const query of ["about", "à propos", "license", "licence", "github", "documentation"]) {
-      expect(sectionMatches(section("about"), query), query).toBe(true);
+      expect(sectionMatches(section("updates"), query), query).toBe(true);
+    }
+    for (const query of ["license", "licence", "github", "documentation"]) {
+      expect(sectionMatches(section("general"), query), query).toBe(false);
+    }
+  });
+  it("finds the rows General and Updates hold now (#4457)", () => {
+    for (const query of ["theme", "thème", "dark", "sombre", "variante", "language", "langue", "account", "copy email", "open at login", "hotkey", "send key", "spellcheck", "hardware acceleration", "app icon"]) {
+      expect(sectionMatches(section("general"), query), query).toBe(true);
       expect(sectionMatches(section("updates"), query), query).toBe(false);
     }
-    // "about me" stays on Account; license and github do not
-    for (const query of ["license", "licence", "github", "documentation"]) {
-      expect(sectionMatches(section("account"), query), query).toBe(false);
-    }
-  });
-  it("finds the rows Account and App hold now (#2080 L2)", () => {
-    for (const query of ["theme", "thème", "dark", "sombre", "variante"]) {
-      expect(sectionMatches(section("appearance"), query), query).toBe(true);
-      expect(sectionMatches(section("account"), query), query).toBe(false);
-    }
-    for (const query of ["language", "langue", "account", "copy email"]) {
-      expect(sectionMatches(section("account"), query), query).toBe(true);
-    }
-    for (const query of ["tour", "help", "feedback"]) {
-      expect(sectionMatches(section("about"), query), query).toBe(true);
-      expect(sectionMatches(section("account"), query), query).toBe(false);
+    for (const query of ["tour", "feedback", "diagnostic", "logs", "advanced mode"]) {
+      expect(sectionMatches(section("updates"), query), query).toBe(true);
       expect(sectionMatches(section("general"), query), query).toBe(false);
-    }
-    // #2636: diagnostics and logs are on Developer
-    for (const query of ["diagnostic", "logs"]) {
-      expect(sectionMatches(section("developer"), query), query).toBe(true);
-      expect(sectionMatches(section("about"), query), query).toBe(false);
-      expect(sectionMatches(section("general"), query), query).toBe(false);
-    }
-    // the owner 2026-11-08: Advanced mode moved to Developer
-    expect(sectionMatches(section("developer"), "advanced mode")).toBe(true);
-    expect(sectionMatches(section("general"), "advanced mode")).toBe(false);
-    for (const query of ["open at login", "hotkey", "send key", "spellcheck", "hardware acceleration", "app icon"]) {
-      expect(sectionMatches(section("general"), query), query).toBe(true);
-      expect(sectionMatches(section("about"), query), query).toBe(false);
     }
   });
 });

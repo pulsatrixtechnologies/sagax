@@ -15,17 +15,24 @@ import { completionPatch } from "@/lib/onboarding";
 import { CompactRow, LinkRow, SettingsGroup } from "../SettingsPrimitives";
 import { OpenAtLoginRow } from "../OpenAtLoginOffer";
 import { isSoloDesktop, SendFeedbackRow } from "./AdvancedSettings";
-import { DeveloperLink } from "./DeveloperLink";
 import { OrganizationBotRows } from "./OrganizationBotRules";
 import { PeopleToolAccessSettings } from "../ToolAccessSettings";
 import { canEditConfig } from "@/lib/viewer";
 import {
-  AppIconRow,
-  BotHotkeysRows,
+  AppearanceThemeRows,
   HardwareAccelerationRow,
   SendKeyRow,
   SpellcheckRow,
 } from "./AppearanceSettings";
+import { localeChoices } from "@/locales";
+import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/language-preference";
+import { PillSelect } from "../SettingsPrimitives";
+import { useSettingsPage } from "../SettingsSubPage";
+import { NotificationQuickRows } from "../lazy-settings-sections";
+import { AccountCard, type LockedServer } from "./AccountCard";
+import { MicrophonePermissionRow, MicrophoneSettings } from "./MicrophoneSettings";
+import { TimeZoneRows } from "./TimeZoneSettings";
+import { SubPageEntry } from "./sub-page-entry";
 
 /** Guided tours: one row, two actions kept (app tour and welcome). Mounted
  * on About so Account stays identity-only. */
@@ -66,31 +73,87 @@ export function GuidedToursRow() {
   );
 }
 
-/** General: System (open at login, app icon, hotkeys, GPU), Keyboard and
- * typing (send key, spell check), Interface (Advanced mode, always shown so
- * Simple can switch back). On a solo desktop Organization is hidden, so the
- * bot rules stay here under Advanced, with the loop guard. A remote client
- * hides Security and Backups (pages of the other computer), so the server's
- * cleanup and people's tool access stay reachable here for it. */
-export function GeneralPage({ remoteActive = false }: { remoteActive?: boolean }) {
+function LanguageRow() {
   const { state } = useStore();
+  // Follows the account: anyone can switch, including a chat-only teammate,
+  // and nobody changes another person's screen. The server's language is
+  // the default until this person picks one.
+  const current = effectiveLanguage(useLanguageChoice(), state.config?.language);
+  return (
+    <CompactRow label={t("settings.language.title")} rowId="language">
+      <PillSelect
+        value={current}
+        ariaLabel={t("settings.language.aria")}
+        onChange={(next) => setLanguageChoice(next)}
+        options={[{ value: "", label: t("settings.language.system") }, ...localeChoices.map(({ code, label }) => ({ value: code, label }))]}
+      />
+    </CompactRow>
+  );
+}
+
+/** General (#4457, the owner 2026-11-16): the reference app's General, five
+ * cards. Account (who is signed in; About me is kept by the bots); Appearance (theme, accent,
+ * language, time zone, spell check, send key, then More appearance);
+ * Notifications (desktop notifications, the approval chime, then More
+ * notifications); Mascots; System (microphone, hardware acceleration, open at
+ * login, Shortcuts, Backups and storage). Each card keeps its former page's
+ * rules (a remote client shows this desktop's own cards only). On a solo
+ * desktop Organization is hidden, so the bot rules stay here under Advanced;
+ * a remote client keeps people's tool access here. */
+export function GeneralPage({ remoteActive = false, lockedServer = null }: { remoteActive?: boolean; lockedServer?: LockedServer | null }) {
+  const { state } = useStore();
+  const scope = useSettingsPage();
   const editConfig = canEditConfig(state.config);
   const solo = isSoloDesktop(state.config);
   return (
     <>
-      <div data-settings-card="general.system">
-        <SettingsGroup title={t("settings.general.system")} groupId="generalSystem">
-          <OpenAtLoginRow />
-          <AppIconRow />
-          <BotHotkeysRows />
-          <HardwareAccelerationRow />
+      {scope.allowed("account") && (
+        <SettingsGroup title={t("settings.section.account")} groupId="account">
+          <AccountCard lockedServer={lockedServer} />
+        </SettingsGroup>
+      )}
+
+      <div data-settings-card="general.input">
+        <SettingsGroup title={t("settings.section.appearance")} groupId="generalAppearance">
+          {scope.allowed("appearance") && <AppearanceThemeRows />}
+          {scope.allowed("account") && <LanguageRow />}
+          {scope.allowed("account") && <TimeZoneRows />}
+          <SpellcheckRow />
+          <SendKeyRow />
+          <SubPageEntry id="general.appearance" summary={t("settings.sub.moreAppearance.summary")} />
         </SettingsGroup>
       </div>
 
-      <div data-settings-card="general.input">
-        <SettingsGroup title={t("settings.general.keyboard")} groupId="generalKeyboard">
-          <SendKeyRow />
-          <SpellcheckRow />
+      {scope.allowed("notifications") && (
+        <div data-settings-card="general.notifications">
+          <SettingsGroup title={t("settings.section.notifications")} groupId="generalNotifications">
+            <NotificationQuickRows />
+            <SubPageEntry id="general.notifications" summary={t("settings.sub.moreNotifications.summary")} />
+          </SettingsGroup>
+        </div>
+      )}
+
+      {scope.allowed("appearance") && (
+        <div data-settings-card="general.mascots">
+          <SettingsGroup title={t("settings.group.mascots")} groupId="generalMascots">
+            <SubPageEntry id="general.mascots" summary={t("settings.sub.moreMascots.summary")} />
+          </SettingsGroup>
+        </div>
+      )}
+
+      <div data-settings-card="general.system">
+        <SettingsGroup title={t("settings.general.system")} groupId="generalSystem">
+          {/* this computer's microphone: everyone's (#4457, it sat on Voice) */}
+          {scope.allowed("voice") && (
+            <div data-settings-card="connections.audio" className="flex flex-col">
+              <MicrophonePermissionRow />
+              <MicrophoneSettings />
+            </div>
+          )}
+          <HardwareAccelerationRow />
+          <OpenAtLoginRow />
+          <SubPageEntry id="general.shortcuts" summary={t("settings.sub.shortcuts.summary")} />
+          <SubPageEntry id="general.backups" summary={t("settings.sub.backups.summary")} />
         </SettingsGroup>
       </div>
 
@@ -102,7 +165,6 @@ export function GeneralPage({ remoteActive = false }: { remoteActive?: boolean }
         </div>
       )}
       {remoteActive && editConfig && <PeopleToolAccessSettings />}
-      <DeveloperLink />
     </>
   );
 }
@@ -125,7 +187,6 @@ export function AboutPage({ remoteActive, openAbout }: { remoteActive: boolean; 
           <SendFeedbackRow />
         </SettingsGroup>
       </div>
-      <DeveloperLink />
     </>
   );
 }

@@ -783,6 +783,7 @@ describe("agents-proxy MCP surface", () => {
       "skills_find",
       "session_search",
       "session_read",
+      "listening_read",
       "list_cloud_agents",
       "get_cloud_agent",
       "launch_cloud_agent",
@@ -827,8 +828,6 @@ describe("agents-proxy MCP surface", () => {
       "api_upload",
       "api_reload",
       "identity",
-      "flow",
-      "flow_action",
       "remote_support_open",
       "remote_support_hosts",
       "remote_support_host_code",
@@ -932,7 +931,7 @@ describe("agents-proxy MCP surface", () => {
       // #3377: connectors only lists; call_connector acts and stays unannotated.
       "connectors",
       "workspace_read", "workspace_search",
-      "session_search", "session_read",
+      "session_search", "session_read", "listening_read",
       "list_cloud_agents", "get_cloud_agent", "find_cloud_agent_by_pr", "cloud_agent_transcript", "list_cloud_agent_artifacts",
       "list_routines", "skills_list",
     ];
@@ -1898,7 +1897,7 @@ describe("agents-proxy MCP surface", () => {
   });
 
   it("forwards the Perspicax gateway tools through the harness route", async () => {
-    for (const tool of ["memory_recall", "memory_write", "api_search", "api_result_query", "identity", "flow", "flow_action", "review_write"]) {
+    for (const tool of ["memory_recall", "memory_write", "api_search", "api_result_query", "identity", "review_write"]) {
       lastPerspicaxToolBody = null;
       const res = await callTool(tool, { query: "vpn" });
       expect(res.result.isError, tool).toBeFalsy();

@@ -996,6 +996,18 @@ the one class a bot's reply asks for in `Bubble`, `RoomTextMessage` and
   (`ios/Sources/CompanionCore/BotBubble.swift`, `BubbleColor.botReply`) in a
   chat and in a room, and reads Show bot replies in bubbles too.
 
+Cite on a selected passage sends a nonempty comment directly in the current
+conversation, with the selected passage as a citation (#4487). An empty
+comment and the quote shortcut still add a draft attachment. Opening the
+editor freezes the captured selection before focus moves. A failed send
+restores its words and citation alongside the current draft.
+
+Local absolute file and directory links offer the existing file-manager
+reveal action directly (#4483), without first attempting a download. On
+macOS it reads Show in Finder, on Windows Show in Explorer. The native
+bridge validates the path and reports a missing target. Remote clients
+continue to use server file access instead of opening a server path locally.
+
 ## Record links in a bot's reply (2026-11-16, #4507)
 
 After the dashes, `pushAssistantText` passes the final text through

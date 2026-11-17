@@ -3,6 +3,7 @@
 import type { AutoModelEntry, AutoModelExcluded } from "../../shared/auto-model.ts";
 import type { BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { requirePinnedClientThread } from "./bots-mutate-helpers.ts";
+import { ARTIFACT_DATA_TOOL } from "../../shared/artifact-data-consent.ts";
 
 export async function handleSmallBotMutations(env: BotsMutateEnv): Promise<boolean> {
   if (await handleBotModel(env)) return true;
@@ -286,7 +287,9 @@ async function handleBotAlwaysAllow(env: BotsMutateEnv): Promise<boolean> {
     });
     // An exact read-shaped provider tool grant belongs to the bot, not only to
     // the conversation where the card appeared: a later task inherits it.
-    if (allowKey.startsWith("provider-tool:")) {
+    // #4525: so is the ArtifactData grant, read as the consent agreement
+    // by every later conversation and routine of the bot.
+    if (allowKey.startsWith("provider-tool:") || allowKey === ARTIFACT_DATA_TOOL) {
       const owner = env.store.bot(bot.id);
       if (owner) env.store.patchBot(bot.id, { alwaysAllow: [...new Set([...(owner.alwaysAllow ?? []), allowKey])].slice(0, 200) });
     }

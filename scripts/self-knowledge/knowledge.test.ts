@@ -30,8 +30,9 @@ describe("self-knowledge base", () => {
   it("finds a non-empty Settings section list from settings-nav.ts", () => {
     const rows = settingsSectionRows(root);
     expect(rows.length, "settings-nav.ts SECTIONS must yield at least one page").toBeGreaterThan(0);
-    expect(rows.some((row) => row.id === "account")).toBe(true);
-    expect(rows.every((row) => row.labelKey && row.group && row.keywords.length > 0)).toBe(true);
+    // #4457: the seven pages (Account is a card of General)
+    expect(rows.some((row) => row.id === "general")).toBe(true);
+    expect(rows.every((row) => row.labelKey && row.keywords.length > 0)).toBe(true);
   });
 
   // #4329 lot 2: the bots link's technical fields are its part of the xAI

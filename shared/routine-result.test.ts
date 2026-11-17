@@ -32,3 +32,14 @@ describe("reportBrief (#3581): a result's one or two lines, from the bot's own w
     }
   });
 });
+
+// #4551: the phones read the one pattern from generated files
+// (scripts/gen-routine-nothing-pattern.mjs); run it after changing the phrases.
+describe("the phones' nothing-to-do pattern", () => {
+  it("is generated from ROUTINE_SAYS_NOTHING_SOURCE and up to date", async () => {
+    const generator = await import("../scripts/gen-routine-nothing-pattern.mjs") as { expected: () => Promise<Record<string, string>> };
+    for (const [file, text] of Object.entries(await generator.expected())) {
+      expect(readFileSync(file, "utf8"), `${file}: run node scripts/gen-routine-nothing-pattern.mjs`).toBe(text);
+    }
+  });
+});

@@ -11,6 +11,7 @@
 // can do, a run they started themselves, and the result of a routine they
 // set to post its results when it runs on a clock once a day or less often
 // (a briefing, a weekly report). Every run stays in the routine's run log.
+import { routineSaysNothing } from "./routine-result.ts";
 import { createCronRunPreview, type RoutineCronSchedule } from "./routine-schedule.ts";
 import { parseClock } from "./schedule-model.ts";
 import { isTriggerSchedule } from "./routines.ts";
@@ -181,6 +182,9 @@ type RunRowFacts = {
     goalStatus?: string | null;
     runId?: string;
     startedBy?: string | null;
+    /** The report the card shows. A completed row whose summary is only a
+     * nothing phrase leaves the chat (#3990), brief excluded. */
+    summary?: string | null;
     problems?: unknown;
     recovered?: { streak?: true | null } | null;
     repeat?: { firstRunId?: string; streak?: true | null } | null;
@@ -191,9 +195,11 @@ type RunRowFacts = {
 /** #3990: a routine run's row the chat no longer draws, cards stored by
  * older servers included: a row that only says how a run went (completed
  * with problems, works again, nothing to report, blocked, cancelled, the
- * same problem again), and a wake's row that carries nothing for the person,
+ * same problem again), a wake's row that carries nothing for the person,
  * whatever its topic (a teammate's message, a mail, a calendar event, a
- * heartbeat, a watch, an accepted suggestion). A wake's row tells a report
+ * heartbeat, a watch, an accepted suggestion), and a completed row whose
+ * summary is only a nothing phrase (routineSaysNothing), even when an older
+ * server marked it for the person. A wake's row tells a report
  * for the person by `forPerson`, written since the server stopped forcing a
  * quiet chosen wake to report; a row stored before cannot tell its forced
  * "nothing for you" words from a report, so it leaves the chat (the run log
@@ -213,7 +219,7 @@ export function routineRunRowOutOfChat(message: RunRowFacts, counted?: ReadonlyS
     case "missed":
       return false;
     case "completed":
-      return Boolean(run.problems || run.recovered || (run.wakeTopic && !run.forPerson));
+      return Boolean(run.problems || run.recovered || (run.wakeTopic && !run.forPerson) || routineSaysNothing(run.summary ?? undefined));
     default:
       return true;
   }

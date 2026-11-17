@@ -3,10 +3,25 @@
 // Organization server: the desktop app over IPC (window.ogb.macApps).
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
-import type { MacAppSetupId, MacAppsSetupStatus, MacAppTestResult } from "../../shared/mac-apps-setup.ts";
+import { macAppPrivacyAnchor, type MacAppPermissionNeed, type MacAppSetupId, type MacAppsSetupStatus, type MacAppTestResult } from "../../shared/mac-apps-setup.ts";
+import type { MessagesSetupStatus } from "../../shared/mac-messages-setup.ts";
 import { desktopMacApps, viaServerOrDesktop } from "./mac-messages-setup";
 
-export type { MacAppSetupId, MacAppsSetupStatus, MacAppTestResult };
+export type { MacAppPermissionNeed, MacAppSetupId, MacAppsSetupStatus, MacAppTestResult };
+
+/** Messages setup comes from /api/messages, which has no actions. The one
+ * list is the mac-apps status. A failure keeps the page on its two paragraphs. */
+export async function attachMessagesActions(status: MessagesSetupStatus): Promise<MessagesSetupStatus> {
+  if (!status.available || (status.actions && status.actions.length > 0)) return status;
+  try {
+    const mac = await loadMacApps();
+    const actions = mac.apps.find((row) => row.id === "messages")?.actions;
+    if (!actions || actions.length === 0) return status;
+    return { ...status, actions };
+  } catch {
+    return status;
+  }
+}
 
 export async function loadMacApps(): Promise<MacAppsSetupStatus> {
   return viaServerOrDesktop(() => api<MacAppsSetupStatus>("/api/mac-apps"), (macApps) => macApps.status());
@@ -38,13 +53,13 @@ export async function askMacAppAutomation(app: MacAppSetupId): Promise<MacAppsSe
   );
 }
 
-export async function openMacAppPermissionPane(pane: "automation" | "fullDiskAccess"): Promise<void> {
+export async function openMacAppPermissionPane(pane: MacAppPermissionNeed): Promise<void> {
   const macApps = desktopMacApps();
   if (macApps) {
-    await macApps.openSettings(pane);
+    await macApps.openSettings(macAppPrivacyAnchor(pane));
     return;
   }
-  if (window.ogb?.permOpenSettings) {
+  if (window.ogb?.permOpenSettings && (pane === "fullDiskAccess" || pane === "automation")) {
     await window.ogb.permOpenSettings(pane === "fullDiskAccess" ? "fullDisk" : "automation");
     return;
   }

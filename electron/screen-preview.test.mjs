@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { createDisplayMediaGuard, invokeDisplayMediaCallback, selectCaptureSource } = require(
+const { createDisplayMediaGuard, invokeDisplayMediaCallback, listenResponse, listensToComputer, selectCaptureSource } = require(
   "./screen-preview.cjs",
 );
 
@@ -53,6 +53,55 @@ describe("display media request guard", () => {
     const guard = createDisplayMediaGuard({ now: () => 1_000 });
     guard.begin(frame);
     expect(guard.consume({ ...validRequest, securityOrigin: undefined }, undefined)).toBe(false);
+  });
+});
+
+describe("the listen intent (#4100)", () => {
+  const listenRequest = { ...validRequest, audioRequested: true };
+
+  it("grants the computer's sound for that one gesture only", () => {
+    const guard = createDisplayMediaGuard({ now: () => 1_000 });
+    expect(guard.begin(frame, "listen")).toBe(true);
+    expect(guard.consumeKind(listenRequest, "http://127.0.0.1:8799")).toBe("listen");
+    expect(guard.consumeKind(listenRequest, "http://127.0.0.1:8799")).toBe(null);
+  });
+
+  it("keeps the screen preview without audio", () => {
+    const guard = createDisplayMediaGuard({ now: () => 1_000 });
+    guard.begin(frame);
+    expect(guard.consumeKind(listenRequest, "http://127.0.0.1:8799")).toBe(null);
+    guard.begin(frame);
+    expect(guard.consume(validRequest, "http://127.0.0.1:8799")).toBe(true);
+  });
+
+  it("never turns a listen intent into a screen preview, nor takes an unknown kind", () => {
+    const guard = createDisplayMediaGuard({ now: () => 1_000 });
+    guard.begin(frame, "listen");
+    expect(guard.consume(validRequest, "http://127.0.0.1:8799")).toBe(false);
+    expect(guard.begin(frame, "camera")).toBe(false);
+    expect(guard.consumeKind(listenRequest, "http://127.0.0.1:8799")).toBe(null);
+  });
+
+  it("rejects a listen request without a gesture or from another origin", () => {
+    const guard = createDisplayMediaGuard({ now: () => 1_000 });
+    guard.begin(frame, "listen");
+    expect(guard.consumeKind({ ...listenRequest, userGesture: false }, "http://127.0.0.1:8799")).toBe(null);
+    guard.begin(frame, "listen");
+    expect(guard.consumeKind({ ...listenRequest, securityOrigin: "https://example.com" }, "http://127.0.0.1:8799")).toBe(null);
+  });
+
+  it("answers the loopback sound beside the screen on Windows and macOS, nothing on Linux", () => {
+    const source = { id: "screen:1:0" };
+    expect(listenResponse("win32", source)).toEqual({ video: source, audio: "loopback" });
+    expect(listenResponse("darwin", source)).toEqual({ video: source, audio: "loopback" });
+    expect(listenResponse("linux", source)).toEqual({});
+    expect(listenResponse("win32", null)).toEqual({});
+  });
+
+  it("does not arm a listen intent on Linux, so the page listens on the microphone without a false permission message", () => {
+    expect(listensToComputer("win32")).toBe(true);
+    expect(listensToComputer("darwin")).toBe(true);
+    expect(listensToComputer("linux")).toBe(false);
   });
 });
 

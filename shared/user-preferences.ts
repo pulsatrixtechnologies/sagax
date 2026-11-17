@@ -69,6 +69,9 @@ export const USER_PREFERENCE_KEYS = [
   // automatic section (src/lib/sidebar-people-apart-preference.ts). "on" | "off";
   // absent is on (#1661).
   "sagax.sidebarPeopleApart.v1",
+  // Settings > Appearance > Sidebar: the account menu kept open above the name in
+  // the wide foot (src/lib/account-menu-above.ts). "on" | "off"; absent is off.
+  "sagax.accountMenuAbove.v1",
   // the Team map's layout: team positions and the personal card order
   // (src/lib/team-canvas.ts; solo servers keep it per workspace instead)
   "sagax.teamCanvasPositions.v1",

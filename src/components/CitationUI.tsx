@@ -30,11 +30,13 @@ function CitationEditor({
   point,
   onSave,
   onCancel,
+  sending = false,
 }: {
   citation: CitationAttachment;
   point?: Point;
   onSave: (citation: CitationAttachment) => void;
   onCancel: () => void;
+  sending?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -96,7 +98,7 @@ function CitationEditor({
       {tooLong && <p role="status" className="mt-1 text-[11px] text-danger">{t("citation.tooLong", { count: CITATION_MAX_COMMENT_LENGTH.toLocaleString(activeLocale()) })}</p>}
       <div className="mt-2 flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded-lg px-3 py-1.5 text-[12px] text-ink-secondary hover:bg-raised">{t("common.cancel")}</button>
-        <button type="button" disabled={tooLong} onClick={() => onSave(withCitationComment(citation, comment))} className="rounded-lg bg-accent px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-40">{t("common.save")}</button>
+        <button type="button" disabled={tooLong} onClick={() => onSave(withCitationComment(citation, comment))} className="ui-button-primary rounded-lg px-3 py-1.5 text-[12px] font-medium disabled:opacity-40">{t(sending && comment.trim() ? "chat.send" : "common.save")}</button>
       </div>
     </div>,
     document.body,
@@ -106,9 +108,11 @@ function CitationEditor({
 export function CitationSelectionToolbar({
   viewportRef,
   onAdd,
+  onReply,
 }: {
   viewportRef: RefObject<HTMLElement | null>;
   onAdd: (citation: CitationAttachment) => void;
+  onReply?: (citation: CitationAttachment) => void;
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const tabShortcut = useRef(citationTabShortcut()).current;
@@ -117,13 +121,14 @@ export function CitationSelectionToolbar({
     point: Point;
   } | null>(null);
   const [editing, setEditing] = useState(false);
+  const editingRef = useRef(false);
   const addRef = useRef(onAdd);
   addRef.current = onAdd;
 
   useEffect(() => {
     if (!captured) tabShortcut.reset();
     const update = () => {
-      if (editing) return;
+      if (editingRef.current) return;
       const viewport = viewportRef.current;
       const selection = viewport ? captureCitationSelection(viewport, window.getSelection()) : null;
       if (!selection) { setCaptured(null); return; }
@@ -185,10 +190,13 @@ export function CitationSelectionToolbar({
     return <CitationEditor
       citation={captured.citation}
       point={captured.point}
-      onCancel={() => { setEditing(false); setCaptured(null); focusComposer(); }}
+      sending={Boolean(onReply)}
+      onCancel={() => { editingRef.current = false; setEditing(false); setCaptured(null); focusComposer(); }}
       onSave={(citation) => {
-        onAdd(citation);
+        if (citation.comment?.trim() && onReply) onReply(citation);
+        else onAdd(citation);
         window.getSelection()?.removeAllRanges();
+        editingRef.current = false;
         setEditing(false);
         setCaptured(null);
         focusComposer();
@@ -202,8 +210,8 @@ export function CitationSelectionToolbar({
       type="button"
       disabled={tooLong}
       aria-label={tooLong ? "Selection is too long to cite" : "Cite selected text"}
-      onPointerDown={(event) => event.preventDefault()}
-      onClick={() => setEditing(true)}
+      onPointerDown={(event) => { event.preventDefault(); editingRef.current = true; }}
+      onClick={() => { editingRef.current = true; setEditing(true); }}
       onKeyDown={(event) => {
         if (event.key === "Escape") { event.preventDefault(); setCaptured(null); }
       }}

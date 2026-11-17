@@ -120,23 +120,34 @@ export function DetailPanel({
       <DockedPanelResizeHandle label={t("computer.resizeAria")} panel={width} />
       {bare ? (
         <div data-detail-panel-body="" className={cn("relative min-h-0 flex-1", bodyClassName)}>{children}</div>
-      ) : <>
-        <div data-detail-panel-header="" className="content-topbar flex h-12 shrink-0 items-center gap-2 border-b border-hairline/40 pl-4 pr-2">
-          {leading}
-          <div className="min-w-0 flex-1">{typeof title === "string" ? <h2 className="truncate text-[16px] font-medium text-ink">{title}</h2> : title}</div>
-          {actions}
-          <button type="button" data-detail-panel-close="" onClick={() => onCloseRef.current()} aria-label={closeLabel ?? t("common.close")} title={closeLabel ?? t("common.close")} className={cn(CIRCLE_BUTTON, "shrink-0")}>
-            <X size={17} strokeWidth={1.75} />
-          </button>
-        </div>
-        {/* The card (Pulsatrix Light draws it under the navy top band): the
-            footer sits inside it, on the card's own ground. */}
-        <div className="content-card-body flex min-h-0 flex-1 flex-col">
-          <div data-detail-panel-body="" className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", bodyClassName)}>{children}</div>
-          {footer && <div data-detail-panel-footer="" className="flex shrink-0 flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">{footer}</div>}
-        </div>
-      </>}
+      ) : (
+        <DetailPanelContent title={title} leading={leading} actions={actions} footer={footer} onClose={() => onCloseRef.current()} closeLabel={closeLabel} bodyClassName={bodyClassName}>
+          {children}
+        </DetailPanelContent>
+      )}
     </aside>
   );
   return slot ? createPortal(panel, slot) : panel;
+}
+
+/** The panel's heading row, body and footer, without the docked frame: a
+ * place that owns its own frame (the screen window's steps review, #4208)
+ * draws the same rows as a detail panel. */
+export function DetailPanelContent({ title, leading, actions, footer, onClose, closeLabel, bodyClassName, children }: Pick<DetailPanelProps, "title" | "leading" | "actions" | "footer" | "onClose" | "closeLabel" | "bodyClassName" | "children">) {
+  return <>
+    <div data-detail-panel-header="" className="content-topbar flex h-12 shrink-0 items-center gap-2 border-b border-hairline/40 pl-4 pr-2">
+      {leading}
+      <div className="min-w-0 flex-1">{typeof title === "string" ? <h2 className="truncate text-[16px] font-medium text-ink">{title}</h2> : title}</div>
+      {actions}
+      <button type="button" data-detail-panel-close="" onClick={onClose} aria-label={closeLabel ?? t("common.close")} title={closeLabel ?? t("common.close")} className={cn(CIRCLE_BUTTON, "shrink-0")}>
+        <X size={17} strokeWidth={1.75} />
+      </button>
+    </div>
+    {/* The card (Pulsatrix Light draws it under the navy top band): the
+        footer sits inside it, on the card's own ground. */}
+    <div className="content-card-body flex min-h-0 flex-1 flex-col">
+      <div data-detail-panel-body="" className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", bodyClassName)}>{children}</div>
+      {footer && <div data-detail-panel-footer="" className="flex shrink-0 flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">{footer}</div>}
+    </div>
+  </>;
 }

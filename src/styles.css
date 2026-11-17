@@ -5041,6 +5041,20 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --color-hairline-weak: color-mix(in srgb, var(--color-ink) 30%, transparent);
 }
 :root[data-contrast="high"] :focus-visible:not([data-pointer-focus]) { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+/* The composer pill draws focus on its own border. A send puts the caret
+   back with a programmatic focus(), which matches :focus-visible, and this
+   high-contrast outline then frames the text in a light rectangle. The
+   pill's focus-within border stays (#4526). */
+:is(:root[data-contrast="high"], :root) [data-tour="composer"] textarea:focus-visible {
+  outline: none;
+  border-color: transparent;
+}
+/* High contrast keeps a clearly visible keyboard focus: the pill itself, not
+   the text, draws it in the primary ink (a rounded ring, no layout shift). */
+:root[data-contrast="high"] [data-tour="composer"]:focus-within {
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 1.5px var(--color-ink);
+}
 /* Text size: the whole interface scales, so fixed pixel sizes follow. The
    desktop app zooms the window itself (data-zoom-native); this is the
    browser's fallback. */
@@ -5055,6 +5069,8 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 /* Settings search: the open page keeps the matching rows. The attribute
    survives a React render, unlike a class added beside the row's own. */
 [data-settings-filtering] [data-settings-search-miss] { display: none; }
+/* #4457: a sub-page drawn inline for a search hides with its last match */
+[data-settings-filtering] [data-settings-subpage-inline]:not(:has([data-settings-search-match])) { display: none; }
 [data-settings-search-hit] { background: var(--color-selected); }
 
 /* Computer screen calm asleep / waking (2026-11-01, Grok Bot style):

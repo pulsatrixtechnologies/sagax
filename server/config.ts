@@ -652,6 +652,9 @@ const appConfigSchema = z.object({
   /** #4329 lot 5: on a solo server, what runs its person's bots for each
    * provider ("Runs with"), `{ <provider id>: <driver kind> }`. */
   harnessByProvider: z.record(z.string().max(120), z.string().max(61)).optional(),
+  /** #4417: on a solo server, its person's default context size per
+   * provider, `{ <provider id>: <tokens> }` (shared/context-size.ts). */
+  contextByProvider: z.record(z.string().max(120), z.number().int().min(1_000).max(100_000_000)).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
   box: z.object({ token: optionalText }).optional(),
@@ -801,6 +804,9 @@ const appConfigSchema = z.object({
   browserEngine: browserEngineConfigSchema.optional(),
   browserProfiles: browserProfilesSchema.optional(),
   instances: instanceConfigMapSchema.optional(),
+  /** #4426: built-in engines a person removed as accounts (DELETE
+   * /api/instances/:id): instanceConfigs never adds them back. */
+  removedInstances: z.array(z.string().max(200)).max(200).optional(),
   /** User-configured MCP servers, mounted into every capable engine. Kept
    * loosely typed HERE on purpose: parseStoredConfig throws away the whole
    * file on a schema error, and one bad server entry must degrade to a
@@ -824,7 +830,7 @@ const storedAppConfigSchema = appConfigSchema.extend(helperStoredShape).extend({
       .optional(),
   }).optional(),
 });
-const appConfigPatchSchema = appConfigSchema.omit({ instances: true, mcpServers: true, harnessConnectors: true, cliStartup: true, customDomain: true, identityMigratedAt: true, privateThreadsMigratedAt: true, invites: true, mail: true })
+const appConfigPatchSchema = appConfigSchema.omit({ instances: true, removedInstances: true, mcpServers: true, harnessConnectors: true, cliStartup: true, customDomain: true, identityMigratedAt: true, privateThreadsMigratedAt: true, invites: true, mail: true })
   .extend({ threads: threadsPatchSchema.optional() });
 const jsonObjectSchema = z.record(z.string(), z.json());
 
@@ -917,6 +923,8 @@ export interface AppConfig extends HelperConfig {
   favoriteModels?: string[];
   /** #4329 lot 5: a solo server's default engine per provider. */
   harnessByProvider?: Record<string, string>;
+  /** #4417: a solo server's default context size per provider. */
+  contextByProvider?: Record<string, number>;
   /** Persisted under the historical config key "box" (ascii.dev renamed Box to Boat). */
   box?: { token?: string };
   /** A named host from the user's SSH config. Authentication stays with SSH. */
@@ -957,6 +965,8 @@ export interface AppConfig extends HelperConfig {
    * attach to it instead of looking for the person's Chrome (#1396). */
   browserEngine?: { attachCdpUrl?: string; egress?: BrowserEgressConfig; idleTimeoutMinutes?: number };
   instances?: InstanceConfigMap;
+  /** #4426: built-in engines removed as accounts, never added back to the fleet. */
+  removedInstances?: string[];
 }
 export type BrowserProfile = z.output<typeof browserProfileSchema> & {
   /** Exact durable Electron partition inherited from #567. Internal and
@@ -2037,9 +2047,11 @@ export function saveConfig(
   // Replaced whole: removing a named server removes its key.
   if (checkedPatch.openaiCompatServers !== undefined) disk.openaiCompatServers = checkedPatch.openaiCompatServers;
   if (checkedPatch.disabledModels !== undefined) disk.disabledModels = checkedPatch.disabledModels;
+  if (checkedPatch.removedInstances !== undefined) disk.removedInstances = checkedPatch.removedInstances;
   if (checkedPatch.favoriteModels !== undefined) disk.favoriteModels = checkedPatch.favoriteModels;
   // Replaced whole: a provider taken off the map runs on its own tool again.
   if (checkedPatch.harnessByProvider !== undefined) disk.harnessByProvider = checkedPatch.harnessByProvider;
+  if (checkedPatch.contextByProvider !== undefined) disk.contextByProvider = checkedPatch.contextByProvider;
   if (checkedPatch.identityMigratedAt !== undefined) disk.identityMigratedAt = checkedPatch.identityMigratedAt;
   if (checkedPatch.privateThreadsMigratedAt !== undefined) disk.privateThreadsMigratedAt = checkedPatch.privateThreadsMigratedAt;
   if (checkedPatch.invites !== undefined) disk.invites = checkedPatch.invites;
@@ -2486,22 +2498,28 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     ...CUSTOM_ONLY,
   } as const;
   const configured = cfg.instances && Object.keys(cfg.instances).length ? cfg.instances : null;
+  // #4426: a built-in engine the person removed as an account stays removed.
+  const removed = new Set(cfg.removedInstances ?? []);
+  const anchors = configured
+    ? Object.hasOwn(configured, "claude") || Object.hasOwn(configured, "grok") || Object.hasOwn(configured, "codex")
+    : false;
+  // No saved fleet is the default product fleet. A saved one that names
+  // claude, grok or codex, or that removed those accounts, is one too.
+  const productFleet = !configured || removed.size > 0 || anchors;
   // A fleet saved before the Computer engine was removed may still name it.
   const map: InstanceConfigMap = withoutComputerEngine(configured ? { ...configured } : { ...DEFAULT_FLEET });
   // An organization server serves Gemini CLI on each person's own Google key
   // (Perspicax provider `google`, server/engines/engine-credentials.ts): the retired
   // consumer login above is not what pays there, so the engine is listed.
-  if (process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax" && (!configured || Object.hasOwn(configured, "claude") || Object.hasOwn(configured, "grok") || Object.hasOwn(configured, "codex"))) {
-    if (!Object.hasOwn(map, "gemini")) map.gemini = { driver: "geminiAgent" };
+  // A fleet that removed its first accounts (#4426) is still a product one.
+  if (process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax" && productFleet) {
+    if (!Object.hasOwn(map, "gemini") && !removed.has("gemini")) map.gemini = { driver: "geminiAgent" };
   }
   // Product fleets pick up newly shipped engines. A one-off test/shadow map
-  // (no claude/grok/codex) is left exactly as written.
-  if (
-    configured &&
-    (Object.hasOwn(configured, "claude") || Object.hasOwn(configured, "grok") || Object.hasOwn(configured, "codex"))
-  ) {
+  // (no claude/grok/codex, and nothing removed) is left exactly as written.
+  if (configured && productFleet) {
     for (const [id, entry] of Object.entries(PRODUCT_FLEET_ADDITIONS)) {
-      if (!Object.hasOwn(map, id)) map[id] = { ...entry };
+      if (!Object.hasOwn(map, id) && !removed.has(id)) map[id] = { ...entry };
     }
   }
   // A saved `instances` map (any engine edit persists the whole fleet) keeps

@@ -50,6 +50,13 @@ const fixture = editBotFixture(false);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 /** Every browser action the window posted, in order. */
 let browserActions: Array<Record<string, unknown>> = [];
+/** Every save or refuse of the recorded steps. */
+let shownPath: Array<Record<string, unknown>> = [];
+/** What record-stop answers: the demonstration's steps. */
+const RECORDED = [
+  { id: "s1", kind: "open", url: "https://example.test/invoices" },
+  { id: "s2", kind: "click", url: "https://example.test/invoices", target: { role: "button", name: "New invoice" } },
+];
 
 const { StoreProvider, useStore } = await import("@/state/store");
 const { BotSettingsDialog } = await import("./BotSettingsDialog");
@@ -119,8 +126,13 @@ beforeAll(() => {
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://localhost/");
     if (/\/api\/bots\/[^/]+\/browser\/action$/.test(url.pathname)) {
-      browserActions.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
-      return Promise.resolve(json({ ok: true }));
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      browserActions.push(body);
+      return Promise.resolve(json(body.type === "record-stop" ? { ok: true, steps: RECORDED } : { ok: true }));
+    }
+    if (/\/api\/bots\/[^/]+\/shown-path$/.test(url.pathname)) {
+      shownPath.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return Promise.resolve(json({ ok: true, installed: "file-the-invoice" }));
     }
     return Promise.resolve(fixture.answer(url.pathname) ?? json({ error: "not in this gallery" }, 404));
   });
@@ -129,6 +141,7 @@ beforeAll(() => {
 });
 afterEach(() => {
   browserActions = [];
+  shownPath = [];
   streams.length = 0;
   act(() => root.unmount());
   host.remove();
@@ -173,6 +186,40 @@ describe("Teach a task, shown in the browser (#4208)", () => {
     expect(document.querySelector("[data-teach-recording] [data-teach-stop]")?.textContent).toMatch(/^0:0\d$/);
     expect(document.querySelector("[data-teach-recording] [data-teach-discard]")).not.toBeNull();
     expect(document.querySelector("[data-recording-frame]")).not.toBeNull();
+  });
+
+  it("Stop keeps the recorded steps in the same window, and Save saves them (#4208)", async () => {
+    await mount();
+    await act(async () => { document.querySelector<HTMLButtonElement>("button[data-teach-show]")!.click(); });
+    await settle();
+    await act(async () => { browserStream()!.emit("ready", { viewerId: "viewer-1" }); });
+    await settle();
+    await act(async () => { document.querySelector<HTMLButtonElement>("[data-teach-recording] [data-teach-stop]")!.click(); });
+    await settle();
+    expect(browserActions.map((body) => body.type)).toContain("record-stop");
+    // the steps are in the screen window, which stays open: not a detail
+    // panel, which closed the computer and dropped them
+    const review = document.querySelector("[data-teach-steps]");
+    expect(review?.getAttribute("data-teach-steps-place")).toBe("window");
+    expect(computerOpen()).toBe(true);
+    expect(document.querySelectorAll("[data-browser-holder]")).toHaveLength(1);
+    expect(document.querySelector("[data-detail-panel]")).toBeNull();
+    // the same heading row and footer a detail panel draws
+    expect(review!.querySelector("[data-detail-panel-header]")).not.toBeNull();
+    expect(review!.querySelector("[data-detail-panel-footer] [data-teach-save]")).not.toBeNull();
+    expect(Array.from(review!.querySelectorAll("input")).map((field) => field.value)).toContain("New invoice");
+
+    const name = review!.querySelector<HTMLInputElement>("label input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(name, "File the invoice");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { review!.querySelector<HTMLButtonElement>("[data-teach-save]")!.click(); });
+    await settle();
+    expect(shownPath).toHaveLength(1);
+    expect(shownPath[0]).toMatchObject({ mode: "save", title: "File the invoice", steps: RECORDED });
+    expect(document.querySelector("[data-teach-steps] [role=status]")?.textContent).toContain("file-the-invoice");
+    expect(computerOpen()).toBe(true);
   });
 
   it("works the same in Simple: the window stays open and the recording starts", async () => {

@@ -13,6 +13,7 @@ import { t } from "@/lib/i18n";
 import type { RoutineToggleEvent } from "../../shared/wire";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, MenuGlyph } from "./menu-look";
 
 /** "Disabled" or "Enabled", in the person's language. */
 export function routineToggleActionLabel(action: RoutineToggleEvent["action"]): string {
@@ -136,10 +137,7 @@ export function RoutineToggleLine({ event, canOpen, onOpen }: {
             aria-label={t("chat.routineToggle.menuAria")}
             data-routine-toggle-menu
             align="center"
-            className={cn(
-              "flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-0.5 overflow-hidden rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5",
-              motion.className,
-            )}
+            className={cn(MENU_SURFACE, MENU_FIT_ROW, "overflow-hidden", motion.className)}
             {...motion.exitProps}
           >
             {event.routines.map((routine) => {
@@ -157,9 +155,9 @@ export function RoutineToggleLine({ event, canOpen, onOpen }: {
                     setOpen(false);
                     onOpen(routine);
                   }}
-                  className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink enabled:hover:bg-hover disabled:cursor-default disabled:text-ink-secondary"
+                  className={MENU_ROW}
                 >
-                  <Clock size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-ink-secondary" />
+                  <MenuGlyph><Clock size={16} strokeWidth={1.5} /></MenuGlyph>
                   <span className="min-w-0 flex-1 truncate">{routine.name}</span>
                 </button>
               );

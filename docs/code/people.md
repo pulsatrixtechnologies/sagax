@@ -252,8 +252,9 @@ PL-4), `src/lib/person-labels.test.ts`, `src/components/PersonLabel.test.ts`,
   chip, a room's member list and the people pickers (To:, add to a group). The
   Team map has no people. Empty renders nothing; "Add a label" appears only
   where it can be edited: under the name on the person sheet (the person, an
-  admin, their team's manager; `canEditPersonLabel`) and in Settings >
-  General for your own (`settings/MyLabelField.tsx`).
+  admin, their team's manager; `canEditPersonLabel`), your own on your own
+  sheet; a bot sets its person's with `sagax_settings` `account.label`. Settings
+  has no label field since 2026-11-17.
 
 ## Presence: online, away, offline (organization server, 2026-10-08)
 

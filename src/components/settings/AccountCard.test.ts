@@ -4,11 +4,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { storedPersonLabel, resetPersonLabelsForTests } from "@/lib/person-labels";
+import { resetPersonLabelsForTests } from "@/lib/person-labels";
 import { setLocale } from "@/lib/i18n";
 
-// Settings > General's one account card, clicked in a DOM: the label is
-// edited in place under the name, and Sign out is the desktop's own leave.
+// Settings > General's one account card, clicked in a DOM: the reference's
+// two rows (identity, Team), and Sign out is the desktop's own leave.
 const fixture = vi.hoisted(() => ({
   viewer: {} as Record<string, unknown>,
   org: null as null | { org: { name: string } },
@@ -62,35 +62,37 @@ afterEach(async () => {
 });
 
 describe("Settings > General account card", () => {
-  it("organization: one row, label under the name, Sign out at the right, managed with the server in its tooltip", async () => {
+  it("organization: the identity row, then Team whose name holds the server and the managed note in its tooltip", async () => {
     vi.stubGlobal("ogb", undefined);
     await mount(LOCKED);
     const card = host.querySelector('[data-settings-card="general.account"]')!;
     expect(card).not.toBeNull();
-    const text = card.textContent ?? "";
-    expect(text.indexOf("Alex Martin")).toBeLessThan(text.indexOf("Add a label"));
-    expect(text.indexOf("Add a label")).toBeLessThan(text.indexOf("owner@example.com"));
-    expect(text).toContain("Edit in Perspicax");
-    expect(card.querySelector("[data-account-managed]")?.getAttribute("title")).toBe("Connected to bot.example.test · Organization: Pulsatrix");
+    // the identity row is the reference's two lines: name, then email
+    const identity = card.querySelector('[data-testid="account-identity"]')!.textContent ?? "";
+    expect(identity.indexOf("Alex Martin")).toBeLessThan(identity.indexOf("owner@example.com"));
+    expect(identity).not.toContain("Add a label");
+    expect(card.querySelector("[data-my-label]")).toBeNull();
+    // nothing else in the card: the identity row and Team (the owner 2026-11-17)
+    expect([...card.children].filter((node) => node.textContent).map((node) => node.getAttribute("data-testid") ?? (node.hasAttribute("data-account-team") ? "team" : node.outerHTML.slice(0, 60)))).toEqual(["account-identity", "team"]);
+    expect(card.querySelector("[data-account-team]")?.textContent).toBe("TeamPulsatrix");
+    const name = card.querySelector<HTMLButtonElement>("[data-account-team] button")!;
+    expect(name.getAttribute("title")).toBe("Connected to bot.example.test · Managed by your organization · Edit in Perspicax");
+    expect(card.querySelector("[data-server-connected]")).toBeNull();
+    expect(card.textContent).not.toContain("Server");
+    expect(card.textContent).not.toContain("Managed by your organization");
     // Sign out at the right of the row, no help paragraph
     expect(button("Sign out")?.closest("[data-account-action]")).not.toBeNull();
     expect(card.querySelector("[data-account-help]")).toBeNull();
     expect(button("Copy email")).toBeDefined();
   });
 
-  it("edits the label in place and saves it", async () => {
+  it("the organization's name opens the Perspicax profile", async () => {
+    const open = vi.fn();
+    (window as unknown as { ogb: unknown }).ogb = { openExternal: open };
     await mount(LOCKED);
-    await act(async () => { button("Edit label")!.click(); });
-    const input = host.querySelector<HTMLInputElement>('input[aria-label="Edit label"]')!;
-    expect(input).not.toBeNull();
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setter.call(input, "CTO");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); input.blur(); });
-    await vi.waitFor(() => expect(storedPersonLabel("pr_owner")).toBe("CTO"));
-    expect(calls).toContainEqual({ path: "/api/people/pr_owner/label", method: "PUT", body: { label: "CTO" } });
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-account-team] button")!.click(); });
+    expect(open).toHaveBeenCalledWith("https://px.example.test/console/me");
+    delete (window as unknown as { ogb?: unknown }).ogb;
   });
 
   it("Sign out calls the desktop's leave, and says so when it fails", async () => {
@@ -103,13 +105,15 @@ describe("Settings > General account card", () => {
     delete (window as unknown as { ogb?: unknown }).ogb;
   });
 
-  it("personal server: editable profile and label, no Managed by your organization nor Edit in Perspicax", async () => {
+  it("solo install: one row, editable profile, no Team nor Server row, no Managed by your organization nor Edit in Perspicax", async () => {
     fixture.org = null;
     fixture.viewer = { principalId: "pr_me", operator: true };
     await mount(null);
     const text = host.textContent ?? "";
     expect(host.querySelector<HTMLInputElement>('input[aria-label="Your name"]')?.value).toBe("Ada Local");
-    expect(text).toContain("Add a label");
+    expect(text).not.toContain("Add a label");
+    expect(host.querySelector("[data-account-team]")).toBeNull();
+    expect(host.querySelector("[data-server-connected]")).toBeNull();
     expect(text).not.toContain("Managed by your organization");
     expect(text).not.toContain("Edit in Perspicax");
   });
@@ -118,9 +122,9 @@ describe("Settings > General account card", () => {
     setLocale("fr");
     await mount(LOCKED);
     const text = host.textContent ?? "";
-    expect(text).toContain("Ajouter une étiquette");
+    expect(text).toContain("Équipe");
+    expect(text).not.toContain("Serveur");
     expect(text).toContain("Se déconnecter");
-    expect(text).toContain("Géré par ton organisation");
-    expect(text).toContain("Modifier dans Perspicax");
+    expect(host.querySelector("[data-account-team] button")?.getAttribute("title")).toBe("Connecté à bot.example.test · Géré par ton organisation · Modifier dans Perspicax");
   });
 });

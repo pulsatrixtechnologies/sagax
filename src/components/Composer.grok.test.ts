@@ -132,8 +132,9 @@ describe("composer controls (the reference app's prompt bar)", () => {
     click($("[data-composer-plus]"));
     const items = [...$('[data-composer-plus-menu]')!.querySelectorAll<HTMLElement>("[data-composer-plus-item]")];
     // nothing else moves: Attach files, then GIF
-    expect(items.map((item) => item.dataset.composerPlusItem)).toEqual(["attach", "gif"]);
-    expect(items.map((item) => item.querySelector(".truncate")?.textContent)).toEqual(["Attach files", "GIF"]);
+    // #4554: Listen to a conversation, in a bot's chat
+    expect(items.map((item) => item.dataset.composerPlusItem)).toEqual(["attach", "gif", "listen"]);
+    expect(items.map((item) => item.querySelector(".truncate")?.textContent)).toEqual(["Attach files", "GIF", "Listen to a conversation"]);
     click($("[data-composer-plus]"));
     type("/");
     const options = [...host.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => row.textContent ?? "");
@@ -151,10 +152,10 @@ describe("composer controls (the reference app's prompt bar)", () => {
     expect(menu.getAttribute("role")).toBe("menu");
     const items = [...menu.querySelectorAll<HTMLElement>("[data-composer-plus-item]")];
     expect(items.map((item) => [item.dataset.composerPlusGroup, item.dataset.composerPlusItem])).toEqual([
-      ["add", "attach"], ["add", "gif"], ["add", "teach"],
+      ["add", "attach"], ["add", "gif"], ["add", "teach"], ["add", "listen"],
     ]);
     const labels = items.map((item) => item.querySelector(".truncate")?.textContent);
-    expect(labels).toEqual(["Attach files", "GIF", "Teach a task"]);
+    expect(labels).toEqual(["Attach files", "GIF", "Teach a task", "Listen to a conversation"]);
     // no voice note, setup or approval rows; the Model row (and its hairline)
     // is there only for a narrow capsule, which folds the chip into it (#4093)
     const folded = menu.querySelector<HTMLElement>("[data-composer-plus-rows]")!;

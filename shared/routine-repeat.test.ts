@@ -129,6 +129,10 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
       // watch): its words were forced out of a quiet ending, so a stored
       // row cannot tell "nothing for you" from a report; it leaves the chat
       row({ status: "completed", summary: "Rien à remonter.", wakeTopic: "watch" }),
+      // #3990: a stored row marked for the person whose words are only nothing
+      row({ status: "completed", summary: "Rien à remonter.", wakeTopic: "watch", forPerson: true }),
+      row({ status: "completed", summary: "Nothing to do on your side.", wakeTopic: "suggestion", forPerson: true }),
+      row({ status: "completed", summary: "Rien à faire de ton côté." }),
       row({ status: "completed", summary: "Messages from teammates:\n- Bot B: ticket closed", wakeTopic: "peer" }),
       row({ status: "completed", summary: "The suggestion you accepted.", wakeTopic: "suggestion" }),
       row({ status: "completed", summary: "Your watch found a new ticket.", wakeTopic: "watch" }),
@@ -139,6 +143,10 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
     for (const message of out) expect(routineRunRowOutOfChat(message), JSON.stringify(message)).toBe(true);
     const kept = [
       row({ status: "completed", summary: "Three meetings today." }),
+      // a finding that only mentions a nothing phrase stays
+      row({ status: "completed", summary: "No new tickets. Nothing to do.", forPerson: true }),
+      row({ status: "completed", summary: "Iris a fermé le billet, rien n'est bloqué, tu n'as rien à faire.", wakeTopic: "watch", forPerson: true }),
+      row({ status: "completed", summary: "Rien à remonter.", startedBy: "person" }),
       // #3990: a wake's report written for the person since
       row({ status: "completed", summary: "The suggestion you accepted.", wakeTopic: "suggestion", forPerson: true }),
       row({ status: "completed", summary: "Your watch found a new ticket.", wakeTopic: "watch", forPerson: true }),

@@ -7,6 +7,8 @@ export interface Ask {
   tool: string;
   input: Record<string, unknown>;
   at: number;
+  /** Consent text the card subtitle shows in place of the arguments (#4525). */
+  disclosure?: string;
 }
 export type AskBehavior = "allow" | "deny" | "answer";
 export type AskResolutionSource = "user" | "timeout" | "system";
@@ -32,8 +34,10 @@ export function askQuestions(ask: Ask): AskQuestion[] | null {
   return ask.tool === ASK_USER_QUESTION_TOOL || ask.tool === ASK_USER_TOOL ? parseAskQuestions(ask.input) : null;
 }
 
-/** One human-readable line for an ask — what the card subtitle shows. */
+/** One human-readable line for an ask. The card subtitle shows it. */
 export function askSummary(ask: Ask): string {
+  const disclosure = ask.disclosure?.trim();
+  if (disclosure) return disclosure;
   const questions = askQuestions(ask);
   if (questions) return askQuestionSummary(questions);
   return askInputSummary(ask.input) ?? ask.tool ?? "tool";

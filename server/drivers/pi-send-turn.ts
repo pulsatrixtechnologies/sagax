@@ -2,6 +2,7 @@
 import type { SendTurnInput } from "../contracts.ts";
 import { leaveOutPiExtension, piSkippedNotice } from "./pi-extension-failures.ts";
 import { preparePiTurn } from "./pi-send-prepare.ts";
+import { holdClaudeAccountRefusal, turnUsesClaudeAccount } from "./pi-claude-refusal.ts";
 import { runPiSession } from "./pi-send-session.ts";
 import type { PiSendDeps } from "./pi-turn-ctx.ts";
 
@@ -14,10 +15,10 @@ export function createPiSendTurn(deps: PiSendDeps): (turn: SendTurnInput) => Pro
    * failed to load, the turn moves to a new attempt, under the same turn
    * id, without that one extension; the process remembers it, so the next
    * turns start pi once (#3063). */
-  async function attempt(turn: SendTurnInput, retryOf?: string, retries = 0): Promise<{ turnId: string; done: Promise<void> }> {
+  async function attempt(turn: SendTurnInput, retryOf?: string, retries = 0, hold?: PiSendDeps["emit"]): Promise<{ turnId: string; done: Promise<void> }> {
     let retired = false;
     // a retired attempt's late events (its close, a handshake error) stay silent
-    const scoped: PiSendDeps = { ...deps, emit: (event) => { if (!retired) deps.emit(event); } };
+    const scoped: PiSendDeps = { ...deps, emit: (event) => { if (!retired) (hold ?? deps.emit)(event); } };
     const prepared = await preparePiTurn(scoped, turn, retryOf ? { turnId: retryOf } : {});
     // #1276: a warm shows no turn
     if ("warmed" in prepared) return { turnId: prepared.turnId, done: Promise.resolve() };
@@ -32,12 +33,12 @@ export function createPiSendTurn(deps: PiSendDeps): (turn: SendTurnInput) => Pro
       ctx.onExtensionLoadFailure = (arg, line) => {
         retired = true;
         leaveOutPiExtension(arg, line);
-        retry = attempt(turn, ctx.turnId, retries + 1)
+        retry = attempt(turn, ctx.turnId, retries + 1, hold)
           .then((next) => next.done)
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
-            deps.emit({ ...deps.base(ctx.threadId, ctx.turnId), type: "runtime.error", message: `${line}\n${message}` });
-            deps.emit({ ...deps.base(ctx.threadId, ctx.turnId), type: "turn.completed", ok: false, stopReason: "failed" });
+            (hold ?? deps.emit)({ ...deps.base(ctx.threadId, ctx.turnId), type: "runtime.error", message: `${line}\n${message}` });
+            (hold ?? deps.emit)({ ...deps.base(ctx.threadId, ctx.turnId), type: "turn.completed", ok: false, stopReason: "failed" });
           });
       };
     }
@@ -54,8 +55,12 @@ export function createPiSendTurn(deps: PiSendDeps): (turn: SendTurnInput) => Pro
 
   return async function sendTurn(turn: SendTurnInput): Promise<{ turnId: string }> {
     if (deps.startupModelRefresh) await deps.startupModelRefresh;
-    const { turnId, done } = await attempt(turn);
+    // #4410: on the person's Claude account the first words are held, so a
+    // refusal of that account lands the turn in the Claude engine, silently
+    const hold = turn.startupRecovery && !turn.warmOnly && turnUsesClaudeAccount(turn) ? holdClaudeAccountRefusal(deps.emit) : null;
+    const { turnId, done } = await attempt(turn, undefined, 0, hold?.emit);
     await done;
+    if (hold) await hold.outcome;
     return { turnId };
   };
 }

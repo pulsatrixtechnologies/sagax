@@ -1,15 +1,19 @@
 /** ACP ProviderInstance factory. */
 import { PROVIDER_CREDENTIAL_ENV, stripControlPlaneEnv, WORKSPACE_CREDENTIAL_ENV } from "../../config.ts";
 import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
+import { createKeyModelCatalogs } from "../../models/key-model-catalogs.ts";
+import { applyAcpAccess } from "./apply-access.ts";
 import { DeviceAuthController } from "../device-auth.ts";
 import { LinkSignInController } from "../link-sign-in.ts";
 import { killCliTree, spawnCli } from "../../procs.ts";
 import { sanitizeAcpToolMessage } from "./helpers.ts";
 import type {
   DriverCreateInput,
+  ModelCatalog,
   ProviderInstance,
   RuntimeEvent,
   RuntimeEventListener,
+  TurnAccessInput,
 } from "../../contracts.ts";
 import { newEventId } from "../../contracts.ts";
 import { augmentedPath } from "../../env-path.ts";
@@ -81,7 +85,7 @@ export async function createAcpInstance(
   };
   // A later start serves the saved list and refreshes behind listen.
   // The first run still waits so the seeded default model does not change.
-  // Engines with no resolver (Gemini, custom ACP) and Antigravity
+  // Engines with no resolver (custom ACP) and Antigravity
   // (resolveModelsOnCreate: false) stay on the instant path.
   let startupModelRefresh: Promise<void> | null = null;
   if (support.resolveModels && support.resolveModelsOnCreate !== false) {
@@ -94,6 +98,19 @@ export async function createAcpInstance(
   } else if (support.resolveModelsOnCreate !== false) {
     await refreshModels();
   }
+  // #4416: an organization person's own key lists what their account
+  // offers, in the environment a turn on that access gets (applyAcpAccess);
+  // the instance's own key keeps the instance's list.
+  const perKey = createKeyModelCatalogs({ fallback: () => support.models });
+  const modelsForAccess = async (access: TurnAccessInput): Promise<ModelCatalog> => {
+    const env = childEnv();
+    const own = support.accountModelKey?.(env)?.trim() ?? "";
+    applyAcpAccess(env, support, DRIVER_KIND, access, input.environment);
+    const key = support.accountModelKey?.(env)?.trim() ?? "";
+    if (!key || key === own || !support.resolveModels) return models;
+    const resolve = support.resolveModels;
+    return perKey.forKey(key, async () => resolve(env, config, instanceId));
+  };
   const deviceSignIn = support.deviceSignIn
     ? new DeviceAuthController(support.deviceSignIn, { cli: config.cli, environment: () => childEnv(), onAuthenticated: refreshModels })
     : null;
@@ -300,6 +317,7 @@ export async function createAcpInstance(
       return models;
     },
     refreshModels: support.resolveModels ? refreshModels : undefined,
+    ...(support.resolveModels && support.accountModelKey ? { modelsForAccess } : {}),
     ...(startupModelRefresh ? { startupModelRefresh } : {}),
     ...(deviceSignIn ? {
       startAuthentication: () => deviceSignIn.start(),

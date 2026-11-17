@@ -116,6 +116,21 @@ cards["flow-go"] = {
   } as unknown as NonNullable<Message["card"]>,
 };
 
+// card=artifact-data: an ArtifactData write (#4525), its consent disclosure
+// as the subtitle and the bot's ArtifactData grant behind Always allow
+cards["artifact-data"] = {
+  tool: "ArtifactData",
+  card: {
+    requestId: "req-6",
+    tool: "ArtifactData",
+    title: "",
+    subtitle: "Writing to this artifact's database stores the data with the artifact. Everyone the artifact is shared with can read what is written. Approving lets this bot write it from now on.",
+    toolInput: JSON.stringify({ action: "set", collection: "days", key: "2026-11-17", value: { checked: 12 } }),
+    options: ["Allow", "Deny"],
+    allowKey: "ArtifactData",
+  } as unknown as NonNullable<Message["card"]>,
+};
+
 // card=candidate: the command card without an owner rule, whose Always allow
 // saves the server's proposed custom rule in one click
 if (which === "candidate") cards.candidate = { ...cards.command!, card: { ...cards.command!.card, ownerRule: undefined } };
@@ -148,6 +163,7 @@ const pending: Pending = {
   heldCode: chosen.card.heldCode,
   threadId: "thread-quasar-ottoline",
   askedBy: "Quasar",
+  ...(chosen.card.allowKey ? { allowKey: chosen.card.allowKey } : {}),
 };
 
 function Gallery() {

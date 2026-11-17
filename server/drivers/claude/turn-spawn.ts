@@ -12,6 +12,8 @@ import { PERM_PROXY_PATH, removePrivateTempDir } from "./helpers.ts";
 import { resolveClaudeConfigDir } from "./config.ts";
 import { readToolPaths } from "../../own-file-reads.ts";
 import { claudeElicitations } from "./elicitation.ts";
+import { claudeCanUseTool } from "./can-use-tool.ts";
+import { preallowedFromEnv } from "../../../shared/searched-tool-call.ts";
 import type { ClaudeSession } from "./session-types.ts";
 import { CLAUDE_OWN_MEMORY_OFF } from "./claude-own-memory.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
@@ -205,6 +207,11 @@ const session: ClaudeSession = {
     try { stdin.write(`${JSON.stringify(frame)}\n`, (err) => resolve(!err)); } catch { resolve(false); }
   }),
     (event) => emit({ ...base(threadId, session.turn?.turnId ?? turnId), ...event })),
+  canUseTool: claudeCanUseTool(() => session, (frame) => new Promise<boolean>((resolve) => {
+    const { stdin } = session.child;
+    if (!stdin.writable || stdin.destroyed) return resolve(false);
+    try { stdin.write(`${JSON.stringify(frame)}\n`, (err) => resolve(!err)); } catch { resolve(false); }
+  })),
   mcpConfigPath,
   systemPromptPath,
   argsKey,
@@ -215,6 +222,10 @@ const session: ClaudeSession = {
   contract,
   mcpNames: Object.keys(mcpServers),
   searchedMounts,
+  permissionFacts: {
+    preallowed: preallowedFromEnv(permissionEnv.SAGAX_PERMISSION_PREALLOWED),
+    artifactReads: permissionEnv.SAGAX_PERMISSION_ARTIFACT_READS === "1",
+  },
   // Launched with the stable half only, a warm process holds no
   // volatile half until its first real turn delivers it.
   // An engine slash command's launch message is the bare command, so

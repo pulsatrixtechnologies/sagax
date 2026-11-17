@@ -25,6 +25,7 @@ import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
 import { ARTIFACT_TOOLS } from "../../../shared/claude-chat-blocks.ts";
 import { claudeToolSearchSetting } from "./claude-tool-search.ts";
 import { withDesignRedirectHook } from "./design-redirect.ts";
+import { applyClaudeContextSize } from "./config.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
@@ -256,9 +257,12 @@ if ((autoAllowlist || fullAllowlist) && !turn.guestConfined) {
 // Keep ask_user available even in Full access. #1982: Full keeps the
 // broker too (no bypassPermissions), so MCP asks reach request.opened.
 // Broker is created in spawnClaudeSession for a new process only.
+// #4525: stdio can_use_tool carries a consent disclosure. The MCP approve
+// tool is only tool_name and input, so Claude refuses to forward
+// ArtifactData's disclosure on that wire. ask_user stays on ogb.
 const socketPath = permissionSocketPath(threadId, botId);
 if (permissionMode !== "bypassPermissions") {
-  args.push("--permission-prompt-tool", "mcp__ogb__approve");
+  args.push("--permission-prompt-tool", "stdio");
 }
 const permissionEnv: Record<string, string> = {
   ...NODE_ENV_FLAG,
@@ -296,6 +300,8 @@ if (Object.keys(mcpServers).length) {
 }
 
 const env = environment(turnModel, turn.access);
+// #4417: the context size the bot runs at (shared/context-size.ts)
+applyClaudeContextSize(env, turn.contextWindow);
 // No claude.ai connector unless the turn asked for them: the docs say
 // --strict-mcp-config alone does not exclude them, so say it twice.
 if (isolated && !mcpFromUserConfig && !keepsClaudeAiConnectors) env.ENABLE_CLAUDEAI_MCP_SERVERS = "false";
@@ -403,6 +409,8 @@ const contract = {
   warm: turn.keepWarm === true,
   cwd,
   model: injected.model ?? null,
+  // #4417: another context size is another launch
+  contextWindow: turn.contextWindow ?? null,
   // a routine's sub-agent model is another launch (a chat turn never reuses it)
   subagentModel,
   subagentEffort,

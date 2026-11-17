@@ -112,6 +112,13 @@ it.each(["/api/me/providers/keys/openai", "/api/me/providers/servers/lab", "/api
   expect(classifyRoute("DELETE", path)).toMatchObject({ tier: "write", scope: "me:write", defaultEnabled: true, destructive: true });
 });
 
+// #4558: the routine's person reads and removes their own "always" answers
+// without an admin (the handler answers that person only)
+it("keeps a routine's \"always\" answers with its person, no admin", () => {
+  expect(policyFor("GET", "/api/routines/r1/always-choices")).toMatchObject({ matched: true, tier: "read", scope: "routines:read", defaultEnabled: true });
+  expect(policyFor("DELETE", "/api/routines/r1/always-choices/0123456789abcdef")).toMatchObject({ matched: true, tier: "write", scope: "routines:write", defaultEnabled: true, destructive: true });
+});
+
 // 2026-11-03 (audit N-2): the generator still imported ./tool-policy-types.ts
 // after the regroup moved it to server/tools/, so the next regeneration broke
 // the typecheck. Its output must be the reviewed table, byte for byte.

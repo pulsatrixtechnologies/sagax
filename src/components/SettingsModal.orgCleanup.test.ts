@@ -20,7 +20,8 @@ vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: vi.fn(),
   useStore: () => ({
-    state: { appSettingsSection: fixture.section, instances: [], bots: [], groups: [], config: { features: fixture.features, viewer: fixture.viewer, rooms: { turnTimeoutMinutes: 5 }, ...Object.fromEntries(["openai", "anthropic", "xai", "openrouter", "mistral", "openaiCompat", "box", "vps", "opencodeGo"].map((key) => [key, { configured: false }])) } },
+    // #4457: "appearance" opens General; these tests read General > More appearance
+    state: { appSettingsSection: fixture.section, appSettingsSubPage: fixture.section === "appearance" ? "general.appearance" : null, instances: [], bots: [], groups: [], config: { features: fixture.features, viewer: fixture.viewer, rooms: { turnTimeoutMinutes: 5 }, ...Object.fromEntries(["openai", "anthropic", "xai", "openrouter", "mistral", "openaiCompat", "box", "vps", "opencodeGo"].map((key) => [key, { configured: false }])) } },
     dispatch: vi.fn(),
   }),
 }));
@@ -48,6 +49,8 @@ beforeAll(async () => {
     sections.LocalComputerSection.preload(),
     sections.NotificationSettings.preload(),
     sections.UsageSection.preload(),
+    sections.PrivacyRows.preload(),
+    sections.NotificationQuickRows.preload(),
   ]);
 }, 60_000);
 
@@ -95,10 +98,10 @@ describe("Settings on an organization server", () => {
     expect(solo).not.toContain("MAIL_SETTINGS_MARKER");
     expect(solo).not.toContain('<option value="mail"');
     expect(solo).not.toContain('<option value="activity"');
-    fixture.section = "notifications";
-    // #4360: a person alone has nobody to block and no reports: no Privacy card
+    // #4457: Privacy is a card of Permissions, beside Keep people apart
+    fixture.section = "security";
+    // #4360: a person alone has nobody to block and no reports: no blocked people
     const soloNotifications = await render();
-    expect(soloNotifications).not.toContain('data-settings-card="notifications.privacy"');
     expect(soloNotifications).not.toContain(">Blocked people<");
     expect(soloNotifications).not.toContain("Send read receipts");
     expect(soloNotifications).not.toContain("Perspicax is unreachable");
@@ -108,38 +111,33 @@ describe("Settings on an organization server", () => {
     expect(privacy).toContain('data-settings-card="notifications.privacy"');
     expect(privacy).toContain(">Privacy<");
     expect(privacy).toContain(">Blocked people<");
-    expect(privacy).toContain("Perspicax is unreachable");
     expect(privacy).not.toContain('<option value="privacy"');
+    // the organization's wording stays on More notifications
+    fixture.section = "notifications";
+    expect(await render()).toContain("Perspicax is unreachable");
   });
 
   it("names no organization in the rail or the page title for a person alone (#4360)", async () => {
     fixture.section = "organization";
     const solo = await render();
-    const heading = (html: string) => /id="app-settings-nav-workspace"[^>]*>([^<]+)</.exec(html)?.[1];
-    expect(heading(solo)).toBe("Installation");
-    expect(solo).toContain('<optgroup label="Installation">');
-    expect(solo).toContain('<option value="organization" selected="">Servers</option>');
+    // #4457: the page is off the rail, reached by its address; no group heading anywhere
+    expect(solo).not.toContain("app-settings-nav-workspace");
+    expect(solo).not.toContain('data-settings-nav-row="organization"');
+    expect(solo).toMatch(/<h2[^>]*>Servers<\/h2>/);
     expect(solo).toContain("Your server, and the servers you connect to.");
     expect(solo).not.toContain("Your organization&#x27;s server");
-    // the page's rail icon is a server, not the organization's building
-    const row = (html: string) => /data-settings-nav-row="organization"[\s\S]*?<\/button>/.exec(html)?.[0] ?? "";
-    expect(row(solo)).toContain("lucide-server");
-    expect(row(solo)).not.toContain("lucide-building");
-    // Computer and Backups and storage stay reachable under the same group
+    // Computer stays on the rail; Backups and storage is General > System
     expect(solo).toContain('data-settings-nav-row="computer"');
-    expect(solo).toContain('data-settings-nav-row="backups"');
-    // linked: unchanged
+    expect(solo).not.toContain('data-settings-nav-row="backups"');
+    // linked: the page reads Organization, and the rail links the console
     fixture.org = ORG;
     const linked = await render();
-    expect(heading(linked)).toBe("Organization");
-    expect(linked).toContain('<option value="organization" selected="">Organization</option>');
-    expect(linked).not.toContain('<optgroup label="Installation">');
-    expect(row(linked)).toContain("lucide-building");
+    expect(linked).toMatch(/<h2[^>]*>Organization<\/h2>/);
+    expect(linked).toContain("data-settings-console-link");
     // French, tu
     fixture.org = null;
     setLocale("fr");
     const fr = await render();
-    expect(heading(fr)).toBe("Installation");
     expect(fr).toContain("Ton serveur, et les serveurs auxquels tu te connectes.");
   });
 
@@ -148,7 +146,7 @@ describe("Settings on an organization server", () => {
       fixture.section = section;
       const html = await render();
       expect(html, section).not.toContain("MAIL_SETTINGS_MARKER");
-      expect(html, section).toContain('<option value="account" selected="">Account</option>');
+      expect(html, section).toContain('<option value="general" selected="">General</option>');
     }
     fixture.org = ORG;
     fixture.section = "privacy";
@@ -205,7 +203,8 @@ describe("an organization member", () => {
     // General is back in the navigation (#2430): it holds the composer and
     // system options a member sets for themself
     expect(nav).toContain(">General<");
-    expect(nav).toContain(">Account<");
+    // #4457: Account is General's card; Permissions holds the person's own rules
+    expect(nav).toContain(">Permissions<");
     expect(nav).toContain(">Computer<");
   });
 
@@ -268,7 +267,7 @@ describe("People and Installations are hidden in the app", () => {
     for (const section of ["people", "workspaces", "mail"] as const) {
       fixture.section = section;
       const html = await render();
-      expect(html, section).toContain('<option value="account" selected="">Account</option>');
+      expect(html, section).toContain('<option value="general" selected="">General</option>');
       expect(html, section).not.toContain("MAIL_SETTINGS_MARKER");
       expect(html, section).not.toContain('data-settings-card="people.list"');
     }

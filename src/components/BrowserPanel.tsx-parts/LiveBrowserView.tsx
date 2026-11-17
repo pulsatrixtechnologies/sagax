@@ -12,6 +12,7 @@ import { NetworkDebuggerDialog } from "../NetworkDebuggerDialog";
 import { TeachStepsDialog } from "../TeachStepsDialog";
 import { TEACH_RECORDING_FRAME, TeachRecordingBar } from "../TeachRecordingBar";
 import type { TeachStep } from "../../../shared/teach-recording";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
 import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 
@@ -94,7 +95,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
     urlEditing, command, input, reconnect, execute, startRecording, stopRecording, discardRecording, action, confirm, setError,
   } = p;
   return (
-<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-card text-ink">
+<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-card text-ink">
     <div className="flex min-h-12 items-center gap-1 px-2 pt-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {tabs.length ? tabs.map((tab) => <div key={tab.tabId} className={`flex max-w-52 shrink-0 items-center gap-1 rounded-xl px-1 text-[12px] ${tab.active ? "bg-inset text-ink" : "text-ink-secondary"}`}>
@@ -116,16 +117,16 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       <input ref={addressInput} aria-label={t("browser.address.label")} readOnly={!commandsReady} value={address} onChange={(e) => setAddress(e.target.value)} onFocus={(e) => { urlEditing.current = true; if (commandsReady) e.target.select(); }} onBlur={() => { urlEditing.current = false; }} placeholder={connected ? "about:blank" : t("browser.live.connecting")} spellCheck={false} className="mx-1 min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1.5 text-center text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:text-left" />
       <details className="relative shrink-0">
         <summary ref={menuSummary} className={`${button} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical size={17} /></summary>
-        <div className="absolute right-0 top-full z-20 mt-2 flex w-44 flex-col rounded-xl border border-hairline/50 bg-card p-1.5 text-[12px] shadow-xl">
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(false); setShowTyping(true); }}>{t("browser.menu.type")}</button>
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(true); setShowTyping(true); }}>{t("browser.typeSecret")}</button>
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!connected} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowNetwork(true); }}>{t("browser.menu.network")}</button>
-          <button type="button" data-teach-record="" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!recording && !commandsReady} onClick={(e) => {
+        <div role="menu" aria-label={t("browser.menu.label")} className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-20 mt-1")}>
+          <button type="button" role="menuitem" className={MENU_ROW} disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(false); setShowTyping(true); }}>{t("browser.menu.type")}</button>
+          <button type="button" role="menuitem" className={MENU_ROW} disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(true); setShowTyping(true); }}>{t("browser.typeSecret")}</button>
+          <button type="button" role="menuitem" className={MENU_ROW} disabled={!connected} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowNetwork(true); }}>{t("browser.menu.network")}</button>
+          <button type="button" role="menuitem" data-teach-record="" className={MENU_ROW} disabled={!recording && !commandsReady} onClick={(e) => {
             e.currentTarget.closest("details")?.removeAttribute("open");
             void (recording ? stopRecording() : startRecording());
           }}>{recording ? t("teach.stop") : t("teach.start")}</button>
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); reconnect(); }}>{t("browser.menu.reconnect")}</button>
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!connected || pending || taking} onClick={(e) => {
+          <button type="button" role="menuitem" className={MENU_ROW} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); reconnect(); }}>{t("browser.menu.reconnect")}</button>
+          <button type="button" role="menuitem" className={MENU_ROW} disabled={!connected || pending || taking} onClick={(e) => {
             e.currentTarget.closest("details")?.removeAttribute("open");
             void (async () => {
               // Confirm is async; a reconnect (or stream replace) while the
@@ -208,7 +209,11 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       </AnchoredPopover>
     )}
     {showNetwork && <NetworkDebuggerDialog botId={bot.id} botName={bot.name} onClose={() => setShowNetwork(false)} />}
-    {taught && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={taught.steps} recordedAt={taught.recordedAt} onClose={() => setTaught(undefined)} />}
+    {taught && (
+      <div className="absolute inset-0 z-20 flex min-h-0 flex-col">
+        <TeachStepsDialog inline botId={bot.id} botName={bot.name} steps={taught.steps} recordedAt={taught.recordedAt} onClose={() => setTaught(undefined)} />
+      </div>
+    )}
     {showTyping && (
       <AnchoredPopover
         anchorRef={menuSummary}

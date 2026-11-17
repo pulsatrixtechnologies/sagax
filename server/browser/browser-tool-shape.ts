@@ -98,14 +98,30 @@ export function withoutLifecycle(text: string): string {
   return JSON.stringify({ ...parsed, data });
 }
 
-/** The URL, title and visible text the runtime reads around an action. */
-export interface PageState { url: string; title: string; text: string }
+/** The URL, title and visible text the runtime reads around an action, and
+ * (#4394) whether the page shows a password field or a challenge to solve. */
+export interface PageState { url: string; title: string; text: string; password?: boolean; challenge?: boolean }
+
+/** #4394: the elements of a challenge the visitor must solve now: a
+ * Cloudflare interstitial, the image challenge of reCAPTCHA (its bframe) or
+ * hCaptcha. Never the reCAPTCHA badge or checkbox anchor, an invisible widget
+ * or a Turnstile box inside a form: many sites load those on every page and
+ * most pass on their own. Counted only when shown at a size a person sees. */
+const CHALLENGE_SELECTOR = [
+  "#challenge-form", "#cf-challenge-running", "#challenge-stage",
+  'iframe[src*="/recaptcha/api2/bframe"]', 'iframe[src*="/recaptcha/enterprise/bframe"]',
+  'iframe[src*="hcaptcha.com"][src*="frame=challenge"]',
+].join(", ");
 
 /** In-page script for PageState. agent-browser renumbers every @eN ref on
  * each snapshot, so the runtime reads the page with eval, never a snapshot:
  * the refs a model holds keep pointing at the same elements. */
 export const OBSERVE_PAGE_SCRIPT =
-  "JSON.stringify({ url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 200000) })";
+  "(() => { const shown = (el) => { const box = el.getBoundingClientRect(); const style = getComputedStyle(el); " +
+  "return box.width >= 100 && box.height >= 60 && box.bottom > 0 && box.right > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.1; }; " +
+  "return JSON.stringify({ url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 200000), " +
+  "password: Array.from(document.querySelectorAll('input[type=password]')).some((field) => field.getClientRects().length > 0), " +
+  `challenge: Array.from(document.querySelectorAll(${JSON.stringify(CHALLENGE_SELECTOR)})).some(shown) }); })()`;
 
 /** Parse an eval result of OBSERVE_PAGE_SCRIPT: a JSON string inside the
  * result text. Null when the result is anything else. */
@@ -116,10 +132,71 @@ export function parsePageState(result: unknown): PageState | null {
     let value: unknown = JSON.parse(text?.text ?? "");
     if (typeof value === "string") value = JSON.parse(value);
     if (isRecord(value) && typeof value.url === "string" && typeof value.title === "string" && typeof value.text === "string") {
-      return { url: value.url, title: value.title, text: value.text };
+      return {
+        url: value.url, title: value.title, text: value.text,
+        ...(value.password === true ? { password: true } : {}),
+        ...(value.challenge === true ? { challenge: true } : {}),
+      };
     }
   } catch { /* not a page state */ }
   return null;
+}
+
+/** #4394: what keeps the bot out of a page. sign-in: the page it opened asks
+ * to sign in; challenge: the site tests for a person (CAPTCHA, a "checking
+ * your browser" page, unusual traffic); refused: the site refuses the visit. */
+export type PageBlockKind = "sign-in" | "challenge" | "refused";
+export interface PageBlock { kind: PageBlockKind; host: string }
+
+/** A wall is a short page; a long one is a page to read, whatever it mentions. */
+const WALL_TEXT_MAX = 3_000;
+/** A title that is the whole wall, with at most a " | site" tail: "One more
+ * step to finish your order" or "Verify your email address" is no wall. */
+const wholeTitle = (body: string) => new RegExp(`^(?:${body})[\\s.!\u2026]*(?:[|:\u2013\u2014-].*)?$`, "i");
+const CHALLENGE_TITLE = wholeTitle("just a moment|attention required!?|security check|verify(?:ing)? (?:that )?you(?:'re| are) (?:a )?human|are you a robot\\??|checking your browser|one more step");
+const CHALLENGE_TEXT = /\b(?:verify (?:that )?you(?:'re| are) (?:a )?human|are you a robot|not a robot|unusual traffic|automated (?:queries|requests|access|traffic)|checking your browser|press (?:&|and) hold|complete the security check|enable javascript and cookies to continue)\b/i;
+const REFUSED_TITLE = wholeTitle("(?:error )?(?:401(?: unauthorized)?|403(?: forbidden)?|429(?: too many requests)?)|access denied|forbidden|too many requests|request blocked|error 1020");
+const REFUSED_TEXT = /\b(?:access denied|you don't have permission to access|request (?:was )?blocked|too many requests|403 forbidden|429 too many requests)\b/i;
+const SIGN_IN_PLACE = /(?:log-?in|sign-?in|signin|auth|session|checkpoint|account)/i;
+const SIGN_IN_TITLE = /\b(?:log ?in|sign ?in|connexion|se connecter|connecte-toi)\b/i;
+
+function hostOf(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, "") || url; } catch { return url; }
+}
+
+/** What blocks the page the runtime just observed, or null. `landing`: the
+ * page an open (navigation) reached; a sign-in form met during an action is
+ * the bot's own sign-in under way, never a wall. */
+export function pageBlock(state: PageState, options: { landing: boolean }): PageBlock | null {
+  const host = hostOf(state.url);
+  const short = state.text.length <= WALL_TEXT_MAX;
+  const title = state.title.trim();
+  // A challenge shown at a visible size is one; a title or a sentence only on a short page.
+  if (state.challenge || (short && (CHALLENGE_TITLE.test(title) || CHALLENGE_TEXT.test(state.text)))) return { kind: "challenge", host };
+  if (short && (REFUSED_TITLE.test(title) || REFUSED_TEXT.test(state.text))) return { kind: "refused", host };
+  if (options.landing && state.password && short) {
+    let place = "";
+    try { place = new URL(state.url).pathname; } catch { /* the title decides */ }
+    if (SIGN_IN_PLACE.test(place) || SIGN_IN_TITLE.test(title) || SIGN_IN_TITLE.test(state.text)) return { kind: "sign-in", host };
+  }
+  return null;
+}
+
+/** A result line pageBlockNote wrote. */
+export function isPageBlockNote(text: unknown): boolean {
+  return typeof text === "string" && /^Sagax: \S+ (?:asks to sign in|is checking for a person|refused the bot's browser)/.test(text);
+}
+
+/** The line a blocked page's result opens with: model-facing, so the bot
+ * stops at the first wall and tells the person itself what blocks it. */
+export function pageBlockNote(block: PageBlock): string {
+  if (block.kind === "sign-in") {
+    return `Sagax: ${block.host} asks to sign in before this page. If the Sagax vault may hold a login for it, call request_login, then fill_credential. Otherwise call request_sign_in with the site and a short reason, or tell the person in your own words that ${block.host} needs them to sign in, and end your turn. Do not look for a way around the sign-in.`;
+  }
+  const what = block.kind === "challenge"
+    ? `${block.host} is checking for a person (a CAPTCHA or an automation check) and will not let the bot's browser in`
+    : `${block.host} refused the bot's browser (access denied)`;
+  return `Sagax: ${what}. This is a hard stop for this page: do not try other addresses, reloads, clicks or scripts to get around it. Stop browsing it now and tell the person in your own words what blocks you and what they can do (do it themselves, or sign in and solve the check: request_sign_in with the site and a short reason asks them), then end your turn.`;
 }
 
 const CHANGE_LINES = 20;

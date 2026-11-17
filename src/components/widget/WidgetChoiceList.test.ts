@@ -23,7 +23,7 @@ const dinner = () => parsed(WIDGET_SAMPLES.dinnerChoice);
 const row = (root: WidgetRoot, more: Partial<WidgetPayload> = {}): Message => ({ id: "w1", role: "bot", kind: "widget", at: 1, text: "fallback", widget: { v: 1, root, ...more } });
 const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const fetchMock = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>();
-const store = { state: {}, dispatch: vi.fn(), flushBotPatches: async () => null } as unknown as ReturnType<typeof useStore>;
+const store = { state: { bots: [] }, dispatch: vi.fn(), flushBotPatches: async () => null } as unknown as ReturnType<typeof useStore>;
 
 let host: HTMLDivElement;
 let root: Root;

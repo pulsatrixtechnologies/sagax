@@ -38,11 +38,12 @@ const baseConfig = (over: Record<string, unknown> = {}) => ({
 async function page(section?: string): Promise<string> {
   if (section) fixture.section = section;
   const { SettingsModal } = await import("./SettingsModal");
-  const { DecisionModelSettings, EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  const { DecisionModelSettings, EnginesSettings, ProvidersModelsVoice, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
   await Promise.all([
     DecisionModelSettings.preload(),
     EnginesSettings.preload(),
     ProvidersSettings.preload(),
+    ProvidersModelsVoice.preload(),
     VoiceSettingsPage.preload(),
   ]);
   return renderToStaticMarkup(createElement(SettingsModal));
@@ -63,6 +64,7 @@ beforeAll(async () => {
     sections.DecisionModelSettings.preload(),
     sections.EnginesSettings.preload(),
     sections.ProvidersSettings.preload(),
+    sections.ProvidersModelsVoice.preload(),
     sections.VoiceSettingsPage.preload(),
   ]);
 }, 60_000);
@@ -87,7 +89,8 @@ afterEach(() => {
 describe("Settings > Models and voice", () => {
   it.each(["integrations", "Intégrations", "modèle de décision"])("is found by searching for %s", async (typed) => {
     const { SECTIONS, sectionMatches } = await import("./SettingsModal");
-    const page = SECTIONS.find((entry) => entry.id === "engines")!;
+    // #4457: Models is Providers > Models and context size
+    const page = SECTIONS.find((entry) => entry.id === "providers")!;
     // the modal lowercases and trims what was typed before matching
     expect(sectionMatches(page, typed.trim().toLowerCase())).toBe(true);
   });
@@ -100,50 +103,50 @@ describe("Settings > Models and voice", () => {
     expect(sectionMatches(page, typed.trim().toLowerCase())).toBe(true);
   });
 
-  // #2080 (L0): one word, one page; ElevenLabs is a provider, found on Providers
-  it.each(["voice", "voix", "microphone", "live calls", "appels en direct", "moteur de voix"])("finds Voice by searching for %s", async (typed) => {
+  // #2080 (L0): one word, one page; #4457: Voice is Providers > Voice
+  it.each(["voice", "voix", "live calls", "appels en direct", "moteur de voix"])("finds Voice by searching for %s", async (typed) => {
     const { SECTIONS, sectionMatches } = await import("./SettingsModal");
-    const page = SECTIONS.find((entry) => entry.id === "voice")!;
+    const page = SECTIONS.find((entry) => entry.id === "providers")!;
     expect(sectionMatches(page, typed.trim().toLowerCase())).toBe(true);
   });
 
   // 0.5.6: the search index follows the regrouped rows.
   it("finds the regrouped rows of Models, Voice and Usage, and opens the folded ones", async () => {
     const { SECTIONS, sectionMatches, cardsMatching } = await import("./SettingsModal");
-    const models = SECTIONS.find((entry) => entry.id === "engines")!;
-    const voice = SECTIONS.find((entry) => entry.id === "voice")!;
+    // #4457: Models and Voice are sub-pages of Providers; the microphone is General > System
+    const providers = SECTIONS.find((entry) => entry.id === "providers")!;
     const usage = SECTIONS.find((entry) => entry.id === "usage")!;
-    // Auto's explainer, Defaults and Keep warm moved to Developer (the owner 2026-11-08)
-    expect(sectionMatches(models, "modèle auto")).toBe(false);
-    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "developer")!, "modèle auto")).toBe(true);
-    // #2080 (L0): image and web search providers are found on Providers only
-    for (const typed of ["fournisseur d'images", "recherche web"]) {
-      expect(sectionMatches(SECTIONS.find((entry) => entry.id === "providers")!, typed), typed).toBe(true);
-      expect(sectionMatches(models, typed), typed).toBe(false);
+    // Auto's explainer, Defaults and Keep warm moved to Developer (the owner 2026-11-08), Updates > Advanced
+    expect(sectionMatches(providers, "modèle auto")).toBe(false);
+    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "updates")!, "modèle auto")).toBe(true);
+    for (const typed of ["fournisseur d'images", "recherche web", "à configurer", "moteur de voix", "appels en direct"]) {
+      expect(sectionMatches(providers, typed), typed).toBe(true);
     }
-    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "providers")!, "à configurer")).toBe(true);
-    for (const typed of ["moteur de voix", "appels en direct", "micro"]) {
-      expect(sectionMatches(voice, typed), typed).toBe(true);
-      expect(sectionMatches(models, typed), typed).toBe(false);
-    }
+    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "general")!, "micro")).toBe(true);
+    expect(sectionMatches(providers, "micro")).toBe(false);
     for (const typed of ["par bot", "30 derniers jours", "renouvelle", "sagax business"]) expect(sectionMatches(usage, typed), typed).toBe(true);
     expect(cardsMatching("par bot")).toContain("usage.breakdown");
     expect(cardsMatching("cloud coding")).toContain("connections.cloudAgents");
   });
 
-  it("is two menu entries, Models and Voice: no Integrations, no Models and accounts", async () => {
+  it("is the Models and Voice cards of Providers (#4457), between Accounts and Advanced: no Integrations, no Models and accounts", async () => {
     const { SECTIONS } = await import("./SettingsModal");
     expect(SECTIONS.map((entry) => entry.id)).not.toContain("connections");
-    const html = await page();
-    expect(html).toContain(">Models</button>");
-    expect(html).toContain(">Voice</button>");
+    const html = await page("providers");
+    // Accounts, Models (Defaults for new bots, Models and context size ▸), Voice (who speaks, Live calls ▸), then Advanced
+    expect(html).toMatch(/data-settings-card="providers\.list"[\s\S]*data-settings-card="providers\.models"[\s\S]*data-voice-providers="person"[\s\S]*data-settings-card="providers\.advanced"/);
+    expect(part(html, 'data-settings-card="providers.models"')).toContain(">Models and context size</span>");
+    expect(html).toContain('data-settings-card="providers.voice"');
+    expect(html).toContain(">Live calls</span>");
+    // Other services sit under Advanced
+    expect(html).toMatch(/data-settings-card="providers\.advanced"[\s\S]*data-settings-card="providers\.services"/);
     expect(html).not.toContain("Models and voice");
     expect(html).not.toContain(">Integrations<");
     expect(html).not.toContain("Models and accounts");
     setLocale("fr");
-    const fr = await page();
-    expect(fr).toContain(">Modèles</button>");
-    expect(fr).toContain(">Voix</button>");
+    const fr = await page("providers");
+    expect(fr).toContain(">Modèles et taille du contexte</span>");
+    expect(fr).toContain(">Appels en direct</span>");
     expect(fr).not.toContain("Modèles et voix");
     expect(fr).not.toContain(">Intégrations<");
     expect(fr).not.toContain("Modèles et comptes");
@@ -167,9 +170,12 @@ describe("Settings > Models and voice", () => {
     expect(models).not.toContain("data-open-providers");
     expect(models).not.toContain('data-settings-card="connections.image"');
     for (const retired of ["data-engines-list", "data-keys-section", "data-legacy-toggle", "data-provider-key="]) expect(models).not.toContain(retired);
+    // #4457: who speaks and who listens is Providers' Voice card; "voice" opens its Live calls page
+    expect(await page("providers")).toContain('data-voice-providers="person"');
     const voice = await page("voice");
-    expect(voice).toContain('data-voice-providers="person"');
-    expect(voice).toContain('data-settings-card="connections.audio"');
+    expect(voice).not.toContain('data-voice-providers="person"');
+    // #4457: the microphone is a row of General > System
+    expect(voice).not.toContain('data-settings-card="connections.audio"');
     expect(voice).toContain('data-settings-card="voice.advanced"');
     expect(voice).toContain('aria-label="Fish Audio model"');
     expect(voice).toContain('aria-label="Chatterbox server address"');

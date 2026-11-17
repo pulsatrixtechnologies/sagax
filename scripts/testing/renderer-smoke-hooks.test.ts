@@ -21,8 +21,6 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
  * until each smoke follows the current screen (#4363). An entry leaves when
  * its hook is alive again: the check fails while it stays listed. */
 const REPORTED_DEAD_HOOKS: Record<string, string[]> = {
-  "scripts/testing/cline-ui.e2e.test.ts": ["data-model-picker-content"],
-  "scripts/testing/team-computers-ui.e2e.test.ts": ["data-computer-drag-id", "data-computer-dropping"],
 };
 
 /** A smoke drives the real renderer: control-omb, a browser engine. */

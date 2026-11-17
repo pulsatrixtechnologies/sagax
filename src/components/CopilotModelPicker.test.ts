@@ -71,12 +71,18 @@ const bot = (instanceId: string, model: string): Bot => ({
 });
 
 it("lists the models Copilot advertised in the picker", () => {
+  // #3117: with more than one provider the menu opens on the providers,
+  // Copilot among them; a provider's models are its second step.
   fixture.instances = [claude(), copilot()];
   const selected = bot("githubCopilot", "auto");
+  const providers = renderToStaticMarkup(createElement(ModelPicker, { bot: selected, threadId: selected.threadId }));
+  expect(providers).toContain("GitHub Copilot");
+  expect(providers).toContain("Claude");
+  // Copilot alone opens straight on its models: the ones it advertised.
+  fixture.instances = [copilot()];
   const markup = renderToStaticMarkup(createElement(ModelPicker, { bot: selected, threadId: selected.threadId }));
   expect(markup).toContain("claude-haiku-4.5");
   expect(markup).toContain("gpt-5.6-luna");
-  expect(markup).toContain("GitHub Copilot");
 });
 
 it("offers the picked Copilot model's own effort levels", () => {

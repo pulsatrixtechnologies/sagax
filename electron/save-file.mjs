@@ -138,7 +138,9 @@ function localTarget(rawPath, pathApi, home) {
   return local(target) ? target : null;
 }
 
-export async function revealInFolder(rawPath, { reveal, fsp = fs.promises, pathApi = path, home }) {
+const PACKAGE_DIRECTORY = /\.(app|bundle|framework|plugin|kext|xpc|appex|prefPane|saver|rtfd|pages|numbers|key|xcodeproj|xcworkspace)[\\/]*$/i;
+
+export async function revealInFolder(rawPath, { reveal, openDirectory, fsp = fs.promises, pathApi = path, home }) {
   const target = localTarget(rawPath, pathApi, home);
   if (!target) return "invalid";
   let stats;
@@ -148,6 +150,13 @@ export async function revealInFolder(rawPath, { reveal, fsp = fs.promises, pathA
     return "missing";
   }
   if (!stats.isFile() && !stats.isDirectory()) return "invalid";
+  // A package (an .app, a bundle) is a directory to the disk and one item to
+  // the Finder: opening it would launch the app, so it is shown in its parent
+  // like a file.
+  if (stats.isDirectory() && openDirectory && !PACKAGE_DIRECTORY.test(target)) {
+    const error = await openDirectory(target);
+    return error ? "failed" : "shown";
+  }
   reveal(target);
   return "shown";
 }

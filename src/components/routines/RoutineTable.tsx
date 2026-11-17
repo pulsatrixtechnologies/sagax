@@ -22,9 +22,9 @@ export type RowMenu = (routine: Routine, at: { x: number; y: number }, trigger: 
 export type ColumnsMode = "both" | "bot" | "folder";
 const PHONE = "grid-cols-[minmax(0,1fr)_auto_28px] gap-x-3 gap-y-1";
 export const COLUMNS: Record<ColumnsMode, string> = {
-  both: `${PHONE} @[44rem]/routines:grid-cols-[minmax(0,1.1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_minmax(0,1.8fr)_7.5rem_minmax(0,0.9fr)_28px] @[64rem]/routines:grid-cols-[minmax(0,1.1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_minmax(0,1.8fr)_13.5rem_minmax(0,0.9fr)_28px]`,
-  bot: `${PHONE} @[44rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_7.5rem_minmax(0,0.9fr)_28px] @[64rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_13.5rem_minmax(0,0.9fr)_28px]`,
-  folder: `${PHONE} @[44rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_7.5rem_minmax(0,0.9fr)_28px] @[64rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_13.5rem_minmax(0,0.9fr)_28px]`,
+  both: `${PHONE} @[44rem]/routines:grid-cols-[minmax(0,1.1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_minmax(0,1.8fr)_7.5rem_minmax(0,0.9fr)_28px] @[64rem]/routines:grid-cols-[minmax(0,1.1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_minmax(0,1.8fr)_13.5rem_minmax(12.5rem,0.9fr)_28px]`,
+  bot: `${PHONE} @[44rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_7.5rem_minmax(0,0.9fr)_28px] @[64rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_13.5rem_minmax(12.5rem,0.9fr)_28px]`,
+  folder: `${PHONE} @[44rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_7.5rem_minmax(0,0.9fr)_28px] @[64rem]/routines:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.9fr)_13.5rem_minmax(12.5rem,0.9fr)_28px]`,
 };
 const HEAD_CELL = "text-[12px] leading-4 text-ink-secondary";
 
@@ -194,9 +194,9 @@ export function GroupBand({ lead, name, count, running, failing, collapsed, onTo
   children?: ReactNode;
 } & Record<`data-${string}`, string | number | undefined>) {
   return <div role="row" {...rest} onContextMenu={onMenu ? (event) => { event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }, event.currentTarget); } : undefined}>
-    <div role="rowheader" aria-colspan={columnCount} className="-mx-3 flex min-w-0 items-center gap-1 rounded-lg bg-inset pr-3">
+    <div role="rowheader" aria-colspan={columnCount} className="flex min-w-0 items-center gap-1 rounded-lg bg-inset">
       <button type="button" aria-expanded={!collapsed} data-group-toggle onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
         <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform motion-reduce:transition-none", !collapsed && "rotate-90")} />
         <span aria-hidden="true" className="flex shrink-0 items-center text-ink-secondary">{lead}</span>
         <span className="min-w-0 break-words text-[13px] font-medium leading-[18px] text-ink">{name}</span>

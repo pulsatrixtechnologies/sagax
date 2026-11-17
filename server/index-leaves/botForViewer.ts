@@ -41,6 +41,29 @@ function botForViewer<T extends Record<string, unknown>>(bot: T, viewerId: strin
   }
   if (conversations.length) (narrowed as Record<string, unknown>).botConversations = conversations;
   else delete (narrowed as Record<string, unknown>).botConversations;
+  // #4493: what the bot waits on (the card's thread, message and words) and
+  // the teammates it waits for, read over this viewer's own threads only.
+  // Worked out over every thread of the bot, it handed another person the
+  // id and the plain sentence of a card waiting in someone's confidential
+  // (or simply private) thread.
+  // (a wire bot only: wireBot always writes waitingForTeammates)
+  if ("waitingForTeammates" in narrowed) {
+    const shownIds = new Set<string>(Array.isArray(narrowed.tasks)
+      ? (narrowed.tasks as Array<{ threadId?: unknown }>).map((task) => String(task.threadId ?? "")) : []);
+    const viewerThreadId = typeof narrowed.threadId === "string" ? narrowed.threadId : "";
+    if (viewerThreadId) shownIds.add(viewerThreadId);
+    const viewerTasks = (record.tasks ?? []).filter((task) => shownIds.has(task.threadId));
+    const viewerRecord = { ...record, threadId: viewerThreadId };
+    const waitingOn = host.botWaitingOn(viewerRecord, narrowed.activity, viewerTasks);
+    if (waitingOn) (narrowed as Record<string, unknown>).waitingOn = waitingOn;
+    else delete (narrowed as Record<string, unknown>).waitingOn;
+    const coordinated = host.threadsWithActiveCoordination();
+    const selectedWaits = Boolean(viewerThreadId) && coordinated.has(viewerThreadId) && !host.threadBusy(record.id, viewerThreadId);
+    (narrowed as Record<string, unknown>).waitingForTeammates = selectedWaits;
+    const teammates = host.botWaitingOnTeammates(viewerRecord, selectedWaits, viewerTasks, coordinated);
+    if (teammates.length) (narrowed as Record<string, unknown>).waitingOnTeammates = teammates;
+    else delete (narrowed as Record<string, unknown>).waitingOnTeammates;
+  }
   // Only the bot-to-bot cards this viewer answers (approvalOwnerId).
   if (!("waitingApprovals" in narrowed)) return narrowed;
   const viewerKey = viewerId.trim().toLowerCase();

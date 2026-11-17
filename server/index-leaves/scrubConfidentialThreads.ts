@@ -17,6 +17,11 @@ function scrubConfidentialThreads(value: unknown, ids: ReadonlySet<string>): unk
     const selectedConfidential = typeof record.threadId === "string" && ids.has(record.threadId) && Array.isArray(record.tasks);
     for (const [key, child] of Object.entries(record)) {
       if (selectedConfidential && (transcript.includes(key) || key === "threadId" || key === "mainThreadId")) continue;
+      // #4493: a single entry of a confidential thread held in a field, not
+      // in a list (a bot's waitingOn: the card it waits on), is cut out as
+      // the same entry in a list is.
+      if (child && typeof child === "object" && !Array.isArray(child) && !Array.isArray((child as { tasks?: unknown }).tasks)
+        && ids.has(String((child as { threadId?: unknown }).threadId ?? ""))) continue;
       out[key] = scrub(child);
     }
     return out;

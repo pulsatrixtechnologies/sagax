@@ -712,12 +712,23 @@ final class Session: ObservableObject {
                let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }) {
                 let thread = state.bots[index].threadId
                 let json = #"{"role":"bot","kind":"text","text":"A new message while you fill the form in.","id":"f-incoming","at":1787030000000,"parentId":"f-user"}"#
-                DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-                    guard let self, let message = try? JSONDecoder().decode(Message.self, from: Data(json.utf8)) else { return }
-                    self.state.messages[thread, default: []].append(message)
-                    self.state.bots[index].activeLeafId = message.id
-                    self.state.activeLeafIds[thread] = message.id
+                // the message comes `seconds` after a field takes the keyboard
+                // (a slow run cannot deliver it before the person types)
+                func deliver(waited: Double) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        guard let self else { return }
+                        guard FormCardStore.shared.isEditing || waited > 300 else { return deliver(waited: waited + 0.5) }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                            guard let self, var message = try? JSONDecoder().decode(Message.self, from: Data(json.utf8)) else { return }
+                            // a child of the last row, or the card would leave the active branch
+                            message.parentId = self.state.messages[thread]?.last?.id
+                            self.state.messages[thread, default: []].append(message)
+                            self.state.bots[index].activeLeafId = message.id
+                            self.state.activeLeafIds[thread] = message.id
+                        }
+                    }
                 }
+                deliver(waited: 0)
             }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).

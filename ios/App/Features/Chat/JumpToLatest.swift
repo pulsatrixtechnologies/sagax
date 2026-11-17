@@ -67,9 +67,29 @@ final class BottomFollow: ObservableObject {
                 // drawn rows shorter than their estimates can leave the
                 // offset past the content without the offset moving
                 Self.rescueBlank(scroll)
+                self?.nudgeWhenSettled(scroll)
             }
         })
         pinToBottomIfFollowing(view)
+    }
+
+    private var settleTask: Task<Void, Never>?
+
+    /// A very tall row that changes height after its first layout can leave
+    /// the lazy stack with the right geometry and nothing drawn. Once the
+    /// content size has stopped changing, move the offset by a point and back
+    /// so the stack realizes and draws the rows in view.
+    private func nudgeWhenSettled(_ scroll: UIScrollView) {
+        settleTask?.cancel()
+        let height = scroll.contentSize.height
+        settleTask = Task { @MainActor [weak scroll] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled, let scroll, scroll.contentSize.height == height,
+                  !Self.userScrolling(scroll), scroll.contentSize.height > scroll.bounds.height else { return }
+            let y = scroll.contentOffset.y
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y - 1), animated: false)
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
+        }
     }
 
     private func distance(_ scroll: UIScrollView) -> CGFloat {

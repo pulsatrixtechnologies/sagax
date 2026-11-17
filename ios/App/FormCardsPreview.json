@@ -401,30 +401,30 @@
     {
      "kind": "options",
      "card": {
-      "title": "Report details",
+      "title": "Twelve questions",
       "subtitle": "A few answers before the weekly report goes out.",
       "options": [],
-      "requestId": "form-kinds-short",
+      "requestId": "form-twelve",
       "questionRequest": {
        "version": 1,
        "questions": [
         {
-         "question": "Which day should the report cover?",
+         "question": "Row 1: Which day should the report cover?",
          "kind": "date",
          "options": []
         },
         {
-         "question": "When should it go out?",
+         "question": "Row 2: When should it go out?",
          "kind": "time",
          "options": []
         },
         {
-         "question": "How many reviewers?",
+         "question": "Row 3: How many reviewers?",
          "kind": "number",
          "options": []
         },
         {
-         "question": "Which channels?",
+         "question": "Row 4: Which channels?",
          "kind": "multi",
          "options": [
           {
@@ -441,13 +441,90 @@
           }
          ],
          "multiSelect": true
+        },
+        {
+         "question": "Row 5: Which day should the report cover?",
+         "kind": "date",
+         "options": []
+        },
+        {
+         "question": "Row 6: When should it go out?",
+         "kind": "time",
+         "options": []
+        },
+        {
+         "question": "Row 7: How many reviewers?",
+         "kind": "number",
+         "options": []
+        },
+        {
+         "question": "Row 8: Which channels?",
+         "kind": "multi",
+         "options": [
+          {
+           "label": "Email"
+          },
+          {
+           "label": "Chat"
+          },
+          {
+           "label": "Newsletter"
+          },
+          {
+           "label": "Blog"
+          }
+         ],
+         "multiSelect": true
+        },
+        {
+         "question": "Row 9: Which day should the report cover?",
+         "kind": "date",
+         "options": []
+        },
+        {
+         "question": "Row 10: When should it go out?",
+         "kind": "time",
+         "options": []
+        },
+        {
+         "question": "Row 11: How many reviewers?",
+         "kind": "number",
+         "options": []
+        },
+        {
+         "question": "Row 12: Which channels?",
+         "kind": "multi",
+         "options": [
+          {
+           "label": "Email"
+          },
+          {
+           "label": "Chat"
+          },
+          {
+           "label": "Newsletter"
+          },
+          {
+           "label": "Blog"
+          }
+         ],
+         "multiSelect": true,
+         "optional": true
         }
        ]
       }
      },
      "role": "bot",
-     "id": "f-kinds-short",
+     "id": "f-twelve",
      "at": 1787028602000,
+     "parentId": "f-user"
+    },
+    {
+     "role": "bot",
+     "kind": "text",
+     "text": "Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. \n\nHere is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. \n\nHere is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. \n\nHere is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. \n\nHere is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. \n\nHere is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. Here is a very long note for the capture. \n\n",
+     "id": "f-long-text",
+     "at": 1787028800000,
      "parentId": "f-user"
     }
    ],

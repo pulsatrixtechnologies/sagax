@@ -22,14 +22,13 @@ struct FormCardView: View {
     @FocusState private var focus: Int?
     /// #4490: Dynamic Type. Every size in the form and its sheet scales with it.
     @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
-    /// A date or time row whose picker is open and not yet answered.
-    @State private var picking: Set<Int> = []
-    @State private var pickerDate: [Int: Date] = [:]
+    /// The date or time row whose picker sheet is open.
+    @State private var pickerTarget: PickerTarget?
 
     private var card: OptionCard? { message.card }
     private var questions: [AskQuestion] { card?.questions ?? [] }
     private var checklist: Bool { questions.count == 1 && questions[0].isChecklist }
-    private var colors: QuestionSheetColors { QuestionSheetColors(desktop: desktop, scale: scale) }
+    private var colors: QuestionSheetColors { QuestionSheetColors(desktop: desktop, scale: scale, secondaryOpacity: 0.7) }
     private var ink2: Color { colors.inkSecondary }
     private var settled: Bool { (card?.answered != nil) || sent != nil || card.flatMap(WaitingCardSkip.fold) != nil }
 
@@ -64,9 +63,31 @@ struct FormCardView: View {
     }
 
     var body: some View {
-        if let card, !questions.isEmpty {
-            if settled { settledCard(card) } else { pendingCard(card) }
+        Group {
+            if let card, !questions.isEmpty {
+                if settled { settledCard(card) } else { pendingCard(card) }
+            }
         }
+        .sheet(item: $pickerTarget) { target in
+            FormPickerSheet(
+                colors: colors, title: questions.indices.contains(target.row) ? questions[target.row].question : "",
+                component: target.component, initial: target.initial,
+                onDone: { date in
+                    update(target.row) { $0.value = Self.formatter(target.format).string(from: date) }
+                    pickerTarget = nil
+                },
+                onCancel: { pickerTarget = nil }
+            )
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    private struct PickerTarget: Identifiable {
+        let row: Int
+        let component: DatePickerComponents
+        let format: String
+        let initial: Date
+        var id: Int { row }
     }
 
     // MARK: pending
@@ -252,45 +273,41 @@ struct FormCardView: View {
         }
     }
 
-    /// A native date or time picker, open without a value: the row counts as
-    /// answered only once the person picks (or presses Set).
+    /// A date or time row: a pill that says what is picked (or asks for it),
+    /// opening the native picker in a sheet. The row is answered only when
+    /// the person presses Done there. No UIKit picker sits in the chat row
+    /// (a compact `DatePicker` in a very tall row left the whole chat blank,
+    /// and it cannot wrap at the largest text sizes).
     private func pickerRow(_ index: Int, _ question: AskQuestion, component: DatePickerComponents, format: String, prompt: String) -> some View {
         let formatter = Self.formatter(format)
-        let value = draft(index).value
-        let answered = formatter.date(from: value)
-        let open = answered != nil || picking.contains(index)
-        func commit(_ date: Date) {
-            update(index) { $0.value = formatter.string(from: date) }
-            picking.remove(index)
-        }
-        // the native picker is measured by the stack, never by the wrapping layout
-        // (at the largest text size that gave it an unbounded height)
-        @ViewBuilder var row: some View {
-            if open {
-                DatePicker(
-                    "", selection: Binding(
-                        get: { answered ?? pickerDate[index] ?? Date() },
-                        set: { next in pickerDate[index] = next; commit(next) }
-                    ),
-                    displayedComponents: component
-                )
-                .labelsHidden()
-                .frame(minHeight: 44)
-                .disabled(answering)
-                .accessibilityLabel(Text(verbatim: question.question))
-                if answered == nil {
-                    // today, or the time shown now, without having to move the picker
-                    Button(String(localized: "Set")) { Haptics.selection(); commit(pickerDate[index] ?? Date()) }
-                        .font(colors.font(13.5, .medium))
-                        .foregroundStyle(colors.ink)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .accessibilityLabel(Text(verbatim: "\(question.question), \(String(localized: "Set"))"))
-                }
+        let answered = formatter.date(from: draft(index).value)
+        let shown = answered.map { component == .date
+            ? $0.formatted(date: .abbreviated, time: .omitted) : $0.formatted(date: .omitted, time: .shortened) }
+        return FormPillsLayout(spacing: 8, lineSpacing: 0) {
+            Button {
+                Haptics.selection()
+                pickerTarget = PickerTarget(row: index, component: component, format: format, initial: answered ?? Date())
+            } label: {
+                Text(shown ?? prompt)
+                    .font(colors.font(13.5))
+                    .foregroundStyle(shown == nil ? ink2 : colors.ink)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .frame(minHeight: 34)
+                    .background(colors.ink.opacity(shown == nil ? 0.04 : 0.08), in: Capsule())
+                    .padding(.vertical, 5)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(answering)
+            .accessibilityLabel(Text(verbatim: "\(question.question), \(shown ?? prompt.lowercasedFirst)"))
+            if answered != nil {
                 Button {
                     Haptics.selection()
                     update(index) { $0.value = "" }
-                    picking.remove(index)
-                    pickerDate[index] = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(colors.font(15))
@@ -300,30 +317,7 @@ struct FormCardView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(verbatim: "\(question.question), \(String(localized: "Clear"))"))
-            } else {
-                Button {
-                    Haptics.selection()
-                    pickerDate[index] = Date()
-                    picking.insert(index)
-                } label: {
-                    Text(prompt)
-                        .font(colors.font(13.5))
-                        .foregroundStyle(ink2)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(colors.ink.opacity(0.04), in: Capsule())
-                        .padding(.vertical, 4)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(answering)
-                .accessibilityLabel(Text(verbatim: "\(question.question), \(prompt.lowercasedFirst)"))
             }
-        }
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { row }
-            VStack(alignment: .leading, spacing: 0) { row }
         }
     }
 
@@ -595,5 +589,66 @@ private struct FormPillsLayout: Layout {
             widest = max(widest, x - spacing)
         }
         return (origins, sizes, widest, y + rowHeight)
+    }
+}
+
+/// The native date or time picker, in a sheet: the card's row is answered
+/// when Done is pressed, never by opening the picker.
+private struct FormPickerSheet: View {
+    let colors: QuestionSheetColors
+    let title: String
+    let component: DatePickerComponents
+    let onDone: (Date) -> Void
+    let onCancel: () -> Void
+    @State private var date: Date
+
+    init(colors: QuestionSheetColors, title: String, component: DatePickerComponents, initial: Date,
+         onDone: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
+        self.colors = colors
+        self.title = title
+        self.component = component
+        self.onDone = onDone
+        self.onCancel = onCancel
+        _date = State(initialValue: initial)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(title)
+                    .font(colors.font(14, .semibold))
+                    .foregroundStyle(colors.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Group {
+                    if component == .date {
+                        DatePicker("", selection: $date, displayedComponents: component).datePickerStyle(.graphical)
+                    } else {
+                        DatePicker("", selection: $date, displayedComponents: component).datePickerStyle(.wheel)
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel(Text(verbatim: title))
+                HStack {
+                    Button("Cancel", action: onCancel)
+                        .font(colors.font(13.5, .medium))
+                        .foregroundStyle(colors.ink)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityIdentifier("form-picker-cancel")
+                    Spacer()
+                    Button { onDone(date) } label: {
+                        Text("Done")
+                            .font(colors.font(13.5, .medium))
+                            .foregroundStyle(colors.fill)
+                            .padding(.horizontal, 20)
+                            .frame(minHeight: 44)
+                            .background(Capsule().fill(colors.ink))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("form-picker-done")
+                }
+            }
+            .padding(20)
+        }
+        .background(colors.fill.ignoresSafeArea())
     }
 }

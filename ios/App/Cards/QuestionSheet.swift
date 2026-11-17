@@ -21,12 +21,14 @@ struct QuestionSheetColors {
     /// every other card exactly as it was.
     let scale: CGFloat
 
-    init(desktop: DesktopTheme?, scale: CGFloat = 1) {
+    /// `secondaryOpacity`: 0.62 keeps every other card as it was; the form passes 0.7,
+    /// which holds 4.5:1 on the card and on its pills in the light theme.
+    init(desktop: DesktopTheme?, scale: CGFloat = 1, secondaryOpacity: Double = 0.62) {
         self.desktop = desktop
         self.scale = scale
         fill = desktop?.card ?? BubbleColor.theirs
         ink = desktop?.ink ?? BubbleColor.theirsText
-        inkSecondary = desktop?.inkSecondary ?? BubbleColor.theirsText.opacity(0.62)
+        inkSecondary = desktop?.inkSecondary ?? BubbleColor.theirsText.opacity(secondaryOpacity)
     }
 
     func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {

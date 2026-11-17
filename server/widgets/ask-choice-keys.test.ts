@@ -253,6 +253,25 @@ describe("decisions are never answered for the person (#4205)", () => {
     expect(w.ask("t", { ...mayI, key: "pr-12" }, { approvalLevel: "full", raiseQuestion: undefined })).not.toHaveProperty("answered");
     expect(w.open("t")).toHaveLength(2);
   });
+
+  it("a Full access bot raises no card on the two settled paths: the may-I and the person's \"always\" answer (#4558)", () => {
+    const w = world();
+    const raised = vi.fn(() => ({ messageId: "never" }));
+    const always = { id: "0123456789abcdef", kind: "ticket", question: "Approve this time entry?", options: ["Approve", "Refuse"], answer: "Refuse", at: 1 };
+    const answerLearning = {
+      routineId: "r1", language: "en" as const,
+      answers: () => null,
+      always: (kind: string) => (kind === "ticket" ? always : null),
+    };
+    const full = { approvalLevel: "full" as const, raiseQuestion: raised, answerLearning };
+    const mayIResult = w.ask("t", mayI, full);
+    expect(mayIResult).toMatchObject({ ok: true, answered: { choice: "Yes, review both" } });
+    const standing = w.ask("t", { key: "ticket-9", question: "Approve this time entry?", options: ["Approve", "Refuse"], wait: false }, full);
+    expect(standing).toMatchObject({ ok: true, answered: { choice: "Refuse", standing: true } });
+    expect(raised).not.toHaveBeenCalled();
+    expect(w.open("t")).toEqual([]);
+    expect(w.rows("t").map((row) => row.card?.autoApplied)).toEqual([true, true]);
+  });
 });
 
 describe("dead cards (#4205)", () => {

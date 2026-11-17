@@ -7,14 +7,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { AlwaysChoice } from "../proactive/answer-learning.ts";
+import { requiredScope } from "../auth/request-auth.ts";
+import { policyFor } from "../tools/tool-policy.ts";
 import { createRoutineAlwaysChoicesRoutes } from "./routine-always-choices.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const servers: Server[] = [];
 afterEach(async () => { await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done)))); });
 
-function session(principalId: string, scopes: string[] = ["client"]): RequestAuth {
-  return { kind: "session", via: "cookie", scopes, session: { id: "s", label: "web", scopes, createdAt: 0, expiresAt: 0, lastUsedAt: 0, principalId } as never } as RequestAuth;
+function session(principalId: string, scopes: string[] = ["client"], via: "cookie" | "bearer" = "cookie"): RequestAuth {
+  return { kind: "session", via, scopes, session: { id: "s", label: "web", scopes, createdAt: 0, expiresAt: 0, lastUsedAt: 0, principalId } as never } as RequestAuth;
 }
 
 async function serve(auth: RequestAuth, choices: Map<string, AlwaysChoice>) {
@@ -56,5 +58,25 @@ describe("/api/routines/:id/always-choices (#4558)", () => {
       expect((await call("DELETE", "/api/routines/r1/always-choices/0123456789abcdef")).status).toBe(404);
     }
     expect(choices.size).toBe(1);
+  });
+
+  it("a member removes an \"always\" answer of their own routine without an admin, from the app or from their bot, and never another person's", async () => {
+    const LIST = "/api/routines/r1/always-choices";
+    const ONE = "/api/routines/r1/always-choices/0123456789abcdef";
+    // a member's session reaches both routes; an agent tool reaches them on by default, no grant
+    expect(requiredScope("GET", LIST)).toBe("client");
+    expect(requiredScope("DELETE", ONE)).toBe("client");
+    expect(policyFor("GET", LIST)).toMatchObject({ matched: true, tier: "read", defaultEnabled: true });
+    expect(policyFor("DELETE", ONE)).toMatchObject({ matched: true, tier: "write", defaultEnabled: true });
+    const make = () => new Map<string, AlwaysChoice>([["0123456789abcdef", { id: "0123456789abcdef", kind: "ticket", answer: "Approve", question: "Approve?", options: [], at: 5 }]]);
+    // the person's own app (cookie) and their bot speaking as them (bearer)
+    for (const via of ["cookie", "bearer"] as const) {
+      const own = make();
+      expect(await (await serve(session("pr_owner", ["client"], via), own))("DELETE", ONE)).toEqual({ status: 200, body: { ok: true } });
+      expect(own.size).toBe(0);
+      const theirs = make();
+      expect((await (await serve(session("pr_other", ["client"], via), theirs))("DELETE", ONE)).status).toBe(404);
+      expect(theirs.size).toBe(1);
+    }
   });
 });

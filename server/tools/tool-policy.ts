@@ -62,12 +62,16 @@ export function ownerScopedRoute(route: string): boolean {
 // Routes whose handler binds every operation to the signed-in person and
 // never takes another person's id (server/auth/client-allow.ts lets a member
 // reach them): their provider keys and model servers, their approval rules,
-// their custom review rules, their sidebar teams.
+// their custom review rules, their sidebar teams, their routines' "always"
+// answers.
 const PERSONAL: readonly RegExp[] = [
   /^me\/(?:providers|voice-keys|pi-model-servers|engines|perspicax\/products|records)(?:\/|\(|$)/,
   new RegExp(`^approval-rules\\/${ID}$`),
   new RegExp(`^custom-rules(?:\\/${ID})?$`),
   /^sidebar-sections$/,
+  // #4558: the routine's person's own "always" answers (routes/routine-always-choices.ts
+  // answers the routine's person only, anyone else gets 404)
+  new RegExp(`^routines\\/${ID}\\/always-choices(?:\\/${ID})?$`),
 ];
 
 /** A route of the person's own space only: its handler derives the person

@@ -814,7 +814,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/resource-usage\\/(ru_[a-f0-9]{18})(?:\\/(live|resume|pause))?$","tier":"write","readOnly":false,"scope":"resource-usage:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/routine-runs\\/([\\w-]+)\\/","tier":"write","readOnly":false,"scope":"routine-runs:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/routine-runs\\/([\\w-]+)\\/(cancel|seen)$","tier":"write","readOnly":false,"scope":"routine-runs:write","defaultEnabled":true},
-  {"method":"DELETE","kind":"pattern","route":"^\\/api\\/routines\\/([\\w-]{1,128})\\/always-choices\\/([0-9a-f]{16})$","tier":"admin","readOnly":false,"scope":"routines:admin","defaultEnabled":false,"destructive":true},
+  {"method":"DELETE","kind":"pattern","route":"^\\/api\\/routines\\/([\\w-]{1,128})\\/always-choices\\/([0-9a-f]{16})$","tier":"write","readOnly":false,"scope":"routines:write","defaultEnabled":true,"destructive":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/routines\\/([\\w-]{1,128})\\/always-choices$","tier":"read","readOnly":true,"scope":"routines:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/routines\\/([\\w-]{1,128})\\/away-seen$","tier":"write","readOnly":false,"scope":"routines:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/routines\\/([\\w-]+)(?:\\/|$)","tier":"write","readOnly":false,"scope":"routines:write","defaultEnabled":true},

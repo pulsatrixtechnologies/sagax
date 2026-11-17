@@ -569,6 +569,11 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   { methods: ["POST"], path: /^\/api\/routines$/ },
   { methods: ["GET", "PATCH", "DELETE"], path: /^\/api\/routines\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/routines\/[\w-]+\/(?:run|check)$/ },
+  // #4558: the person's own "always" answers on a routine's cards
+  // (routes/routine-always-choices.ts): the handler answers only the
+  // routine's person, anyone else (an admin included) gets 404
+  { methods: ["GET"], path: /^\/api\/routines\/[\w-]{1,128}\/always-choices$/ },
+  { methods: ["DELETE"], path: /^\/api\/routines\/[\w-]{1,128}\/always-choices\/[0-9a-f]{16}$/ },
   // "Check now" of "Only when something changes" (#1202): one reading, no
   // model, nothing kept; the handler applies the same rights as saving a
   // routine of that bot, so a member checks their own watch without an admin

@@ -19,7 +19,7 @@
 // One shell, nothing in duplicate: the layer (DialogLayer: the portal and
 // the backdrop), the close button and the keyboard (useModalDialog) are the
 // app's own; only the reference's measures are set here.
-import { useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -34,13 +34,17 @@ export const BOT_PAGE_MODAL = {
   size: {
     /** an editor, a list or a table: most of the window; the editors inside
      * grow with it through --bot-modal-fill (MarkdownEditor's fillModal) */
-    large: "h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:calc(100dvh-520px)]",
+    large: "h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:max(calc((100dvh-96px)/2),calc(100dvh-430px))]",
+    /** a list that may be short (Folder, Routines): as wide as large, as tall as its content up to the window */
+    wide: "max-h-[calc(100dvh-96px)] w-[min(1100px,calc(100vw-32px))] [--bot-modal-fill:max(calc((100dvh-96px)/2),calc(100dvh-430px))]",
     /** a few fields: wider than the reference's 560px, as tall as its content */
     medium: "max-h-[calc(100dvh-96px)] w-[min(720px,calc(100vw-32px))]",
   },
   header: "relative flex shrink-0 flex-col items-center gap-1 px-6 pb-3 pt-10 text-center",
   title: "w-full min-w-0 text-[22px] font-medium leading-7 tracking-[-0.012em] text-ink",
   description: "w-full min-w-0 text-[14px] leading-5 tracking-[-0.006em] text-ink-secondary",
+  /** the body's bottom edge fades while more is below (content-page's tab row fades the same way) */
+  bodyFade: "[mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]",
   body: "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-2",
   footer: "flex shrink-0 items-center justify-end gap-2 pb-4 pl-6 pr-4 pt-3",
 } as const;
@@ -66,6 +70,19 @@ export function BotPageModal({ id, title, description, size = "medium", footer, 
   const titleId = useId();
   const descriptionId = useId();
   useModalDialog(frameRef, onClose, { popoversOwnEscape: true });
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || bare) return;
+    const update = () => setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4);
+    update();
+    body.addEventListener("scroll", update, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(body);
+    if (body.firstElementChild) observer?.observe(body.firstElementChild);
+    return () => { body.removeEventListener("scroll", update); observer?.disconnect(); };
+  }, [bare]);
   return (
     <DialogLayer onBackdropMouseDown={onClose}>
       <div
@@ -86,7 +103,7 @@ export function BotPageModal({ id, title, description, size = "medium", footer, 
             {description && <p id={descriptionId} className={BOT_PAGE_MODAL.description}>{description}</p>}
           </div>
         )}
-        <div data-bot-page-modal-body="" className={bare ? "relative flex min-h-0 flex-1 flex-col" : BOT_PAGE_MODAL.body}>{children}</div>
+        <div ref={bodyRef} data-bot-page-modal-body="" data-more-below={more ? "" : undefined} className={bare ? "relative flex min-h-0 flex-1 flex-col" : cn(BOT_PAGE_MODAL.body, more && BOT_PAGE_MODAL.bodyFade)}>{children}</div>
         {footer && <div data-bot-page-modal-footer="" className={BOT_PAGE_MODAL.footer}>{footer}</div>}
       </div>
     </DialogLayer>

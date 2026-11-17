@@ -45,19 +45,19 @@ export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
 };
 
 /** Each sub-page's modal size: an editor, a list or a table gets the large
- * one, a few fields the medium one (BOT_PAGE_MODAL.size). */
+ * one (a short list the wide one: as tall as its content), a few fields the medium one (BOT_PAGE_MODAL.size). */
 export const SUBPAGE_SIZE: Record<BotProfileSubPage, BotPageModalSize> = {
   personality: "large",
   model: "medium",
-  beforeActing: "large",
+  beforeActing: "wide",
   sharing: "medium",
   rules: "large",
   actsAlone: "large",
   voice: "medium",
   advanced: "large",
   versions: "large",
-  routines: "large",
-  folder: "large",
+  routines: "wide",
+  folder: "wide",
 };
 
 /** The grey label over each group of rows (the channels and accounts

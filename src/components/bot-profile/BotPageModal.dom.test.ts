@@ -69,6 +69,10 @@ describe("bot page modals are larger (owner: we barely see anything)", () => {
     expect(BOT_PAGE_MODAL.size.large).toContain("h-[calc(100dvh-96px)]");
     expect(BOT_PAGE_MODAL.size.large).toContain("--bot-modal-fill");
     expect(BOT_PAGE_MODAL.size.medium).toContain("w-[min(720px,calc(100vw-32px))]");
+    expect(BOT_PAGE_MODAL.size.wide, "a short list is sized to its content").toContain("w-[min(1100px,calc(100vw-32px))]");
+    expect(BOT_PAGE_MODAL.size.wide).not.toMatch(/(^| )h-\[/);
+    expect(BOT_PAGE_MODAL.size.large, "the open editor gets at least half of the modal").toContain("(100dvh-96px)/2");
+    expect(BOT_PAGE_MODAL.bodyFade, "the body's bottom edge fades while more is below").toContain("mask-image");
     expect(BOT_PAGE_MODAL.size.medium, "content height, never a fixed tall box").not.toMatch(/(^| )h-\[/);
     // header, body and footer share the 24px side edge
     expect(BOT_PAGE_MODAL.header).toContain("px-6");
@@ -78,7 +82,8 @@ describe("bot page modals are larger (owner: we barely see anything)", () => {
 
   it("every sub-page of the bot page has a size: editors, lists and tables large, a few fields medium", () => {
     expect(Object.keys(SUBPAGE_SIZE).sort()).toEqual(Object.keys(SUBPAGE_META).sort());
-    for (const page of ["rules", "personality", "versions", "beforeActing", "folder", "routines"] as const) expect(SUBPAGE_SIZE[page], page).toBe("large");
+    for (const page of ["rules", "personality", "versions", "actsAlone", "advanced"] as const) expect(SUBPAGE_SIZE[page], page).toBe("large");
+    for (const page of ["beforeActing", "folder", "routines"] as const) expect(SUBPAGE_SIZE[page], page).toBe("wide");
     for (const page of ["model", "voice", "sharing"] as const) expect(SUBPAGE_SIZE[page], page).toBe("medium");
   });
 });

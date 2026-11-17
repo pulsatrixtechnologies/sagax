@@ -112,7 +112,7 @@ describe("classifyError", () => {
 
   it("does not call a tool's own words about authenticating or refreshing a sign-in", () => {
     for (const text of ["git: failed to authenticate with the remote, retrying", "the cache entry could not be refreshed", "Failed to authenticate to the proxy"]) {
-      expect(classifyError({ message: text }).reason, text).not.toBe("auth");
+      expect(classifyError({ text }).reason, text).not.toBe("auth");
     }
   });
 

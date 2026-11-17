@@ -88,7 +88,7 @@ describe("Apple apps setup in the app", () => {
   });
 
   it("opens a permission pane on the Mac by its anchor from the one map, never by a second list in the desktop app", async () => {
-    const openSettings = vi.fn(async () => true);
+    const openSettings = vi.fn(async (_anchor: string) => true);
     (window as Win).ogb = { platform: "darwin", macApps: { openSettings } };
     await openMacAppPermissionPane("calendars");
     await openMacAppPermissionPane("fullDiskAccess");

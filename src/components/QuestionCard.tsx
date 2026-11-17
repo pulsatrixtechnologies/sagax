@@ -19,6 +19,7 @@ import { pageTargetKeys } from "@/lib/page-target-copy";
 import {
   answerWithoutPreamble,
   formatQuestionAnswers,
+  isFormCard,
   MAX_CUSTOM_ANSWER,
   QUESTION_TITLE_MAX,
   questionAnswersByQuestion,
@@ -27,6 +28,7 @@ import {
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { ASK_SMALL_PILL, returnFocusToComposer } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
+import { QuestionForm } from "./QuestionForm";
 import {
   picksInAnswer,
   QuestionSheet,
@@ -206,6 +208,31 @@ export function QuestionCard({
   const settled = Boolean(card.answered) || sent !== null || skipped || card.expired === true;
   const single = questions.length === 1;
 
+  // #4490: a form or a checklist: rows with their controls, then the actions
+  if (isFormCard(questions)) {
+    const answer = skipped ? null : card.answeredText ?? sent;
+    const closed = skipped || (!answer && card.expired === true) || (!answer && Boolean(card.answered) && card.answered !== "answer");
+    return (
+      <QuestionForm
+        cardId={message.id}
+        title={card.title?.trim() || (bot ? t("question.card.named", { name: bot.name }) : t("question.card.title"))}
+        context={card.subtitle}
+        questions={questions}
+        settled={settled}
+        answer={answer}
+        closed={closed}
+        closedNote={skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : undefined}
+        answeredBy={closed ? undefined : answererName(card.answeredBy)}
+        embedded={embedded}
+        failed={failed}
+        readOnly={forOther}
+        onSend={deliver}
+        onDismiss={forOther || embedded || !card.requestId ? undefined : skipCard}
+        dismissLabel={t("waitingCard.skipAria")}
+      />
+    );
+  }
+
   if (settled) {
     const answer = skipped ? null : card.answeredText ?? sent;
     // A question nobody answered (the run ended, or it was closed) is not
@@ -297,6 +324,13 @@ export function QuestionCard({
     const answer = card.pageTargetChoice
       ? (answers[0]?.[0] ?? "").trim()
       : formatQuestionAnswers(questions, answers);
+    deliver(answer);
+  }
+
+  /** The answer text to the bot, the card settled at once (#4490: a form
+   * hands its own per-row answer here). */
+  function deliver(answer: string) {
+    if (settled || !card?.requestId) return;
     if (!answer) return;
     setSent(answer);
     setFailed(false);
@@ -356,14 +390,16 @@ export function QuestionCard({
   const showSend = !oneTap && (multi || !single);
   // #3471: skipped without an answer, never denied; on the pinned card the
   // control sits on the pinned card's own top row
-  const requestId = card.requestId;
-  const skip = !embedded && requestId
-    ? () => {
-      setSkippedHere(true);
-      dispatch({ type: "skipCard", threadId, requestId });
-      returnFocusToComposer();
-    }
-    : undefined;
+  const skip = !embedded && card.requestId ? skipCard : undefined;
+
+  /** #3471: skipped without an answer, never denied. */
+  function skipCard() {
+    const requestId = card?.requestId;
+    if (!requestId) return;
+    setSkippedHere(true);
+    dispatch({ type: "skipCard", threadId, requestId });
+    returnFocusToComposer();
+  }
 
   return (
     <QuestionSheet

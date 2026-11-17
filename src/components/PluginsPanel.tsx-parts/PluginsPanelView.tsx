@@ -192,7 +192,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // The breadcrumb: each page under the current one. A page opened from a
   // tab shows in that tab under Connect Apps' title: its first crumb is the
   // tab ("Installed"); Browse Bots too, from Discover (2026-10-28).
-  const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry, tab, items, entries, products.products, kind), onSelect: () => popTo(depth) }));
+  const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry, tab, items, entries, products.products, kind, orgMine.items ?? []), onSelect: () => popTo(depth) }));
   const skillsOn = skills !== null && skillsLibraryOn;
   // the console's products: the person's bots and the one write they all share
   const productBots = state.bots.filter((bot) => !bot.hidden && canEditBotField(state.config, bot, "products"));
@@ -228,6 +228,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
       }}
       consoleName={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
       vendorSkills={(vendorKey) => vendorSkillsOf(orgMine, vendorKey)}
+      orgItems={orgMine.items ?? []}
       productCtx={productCtx}
       trail={trail}
       entries={entries}
@@ -511,7 +512,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               consoleTitle={perspicaxOrg !== null ? t("connectApps.console.title", { org: perspicaxOrg.org.name }) : undefined}
               consoleHasExtras={scope === "me" && orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length > 0}
               consoleCount={scope === "me" ? orgCapabilitiesOfForms(orgMine, declarationForms(kind)).length : 0}
-              consoleExtras={scope === "me" ? <OrgCapabilitiesForMe key={orgRevision ?? ""} bare state={orgMine} forms={declarationForms(kind)} /> : undefined}
+              consoleExtras={scope === "me" ? <OrgCapabilitiesForMe key={orgRevision ?? ""} bare state={orgMine} forms={declarationForms(kind)} onOpen={(item) => push({ page: "orgItem", id: item.id })} /> : undefined}
               entryTrailer={entryTrailer}
               skillTrailer={skillTrailer}
               readOnlyReason={scope === "bot" && botView && !botView.canChange ? t("plugins.readOnly") : undefined}

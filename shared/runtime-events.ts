@@ -219,6 +219,9 @@ export type RuntimeEvent = RuntimeEventBase &
         /** #4238: a harness ask raised quiet (the start-up back-fill of a
          * teammate's exchanges): the card shows and waits, nothing rings. */
         quietAsk?: true;
+        /** #4490: the title a harness form or checklist was given (what is
+         * asked and by which routine); absent, the card's usual title. */
+        askTitle?: string;
         /** #2048: publish-target choice payload carried onto the question card. */
         pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;
         approvalScope?: "local-computer";

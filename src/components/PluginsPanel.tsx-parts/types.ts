@@ -54,6 +54,8 @@ export type Page =
   | { page: "connector" }
   /** #4185: one of the person's Perspicax products */
   | { page: "product"; id: string }
+  /** a plugin or skill the organization installed that is on for the person: its page, with Contents */
+  | { page: "orgItem"; id: string }
   /** a vendor the organization console offers: its products as one bundle (Perspicax #2071) */
   | { page: "vendor"; key: string };
 

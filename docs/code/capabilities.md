@@ -6,6 +6,64 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Updates of skills, plugins and connectors; a bot manages them (#4504)
+
+One service knows, for each installed skill, plugin and connector of a
+person, whether its source has a newer version, and updates one item or all
+of them (`server/capabilities/capability-updates.ts`, the three kinds in
+`capability-update-providers.ts`, wired in `server/index.ts`).
+
+- Sources: a plugin follows its marketplace (the existing background pull,
+  `MarketplaceBackgroundRefresh.runNow`, and `pluginUpdateAvailable`; notes
+  from the plugin's `CHANGELOG.md` section); a skill imported from GitHub
+  follows the commits on its folder (`latestFolderCommits`, with the
+  person's GitHub access); a command connector pinned to a package version
+  (`npx pkg@1.2.3`, `uvx pkg==1.2.3`) follows npm or PyPI. A remote
+  connector, an unpinned package and a hand-written skill have nothing to
+  update. A source out of reach changes nothing and shows no error.
+- Checks: past five minutes after start, then every six hours, and a read
+  of the list starts one when the last is older than 30 minutes (plugins
+  and skills: six hours); never during a turn, never awaited by a read.
+  GitHub: the check reads through the server's wrapper
+  (`githubSkillFetch`, without its bare retry), and keeps one budget per
+  credential really used (`githubBudgetKey`; no token is one budget for the
+  whole server). A rate limit (thrown `rate_limited`, a 429, or a 403 with
+  retry-after) pauses that budget until its reset, and a budget stops at 20
+  requests left in the hour, kept for the person's own imports. A source read with one person's access is known to
+  that person only. A source never reached is `updateUnknown` (no mark; an
+  update answers unknown).
+- Routes: `GET /api/me/capability-updates` (items and count) and `POST`
+  `{keys}` or `{all: true}` (one result per item: updated, current, or
+  failed with the reason; a failure keeps the installed version). The
+  session's person only, no admin; `apps.ownIntegrations` as for every own
+  change. The installed items of the lists the page reads carry
+  `updateKey`, `installedVersion`, `availableVersion`, `updateAvailable` and
+  `updateNotes` (and `updateUnknown`). A live frame `capability.updates`
+  (the count of the person's own GET) goes to that person only
+  (`capabilityUpdatesFrameAllowed` in `sseFrameFor`), and only when their
+  list changed.
+- What the organization declares (imposed or offered, a pinned version) is
+  listed with `organization` and `canUpdate: false`: its console decides.
+  A person's own item is always theirs to remove or turn off, whatever its
+  name (an offered or preset skill an organization package put on a bot
+  too). The organization's own item is switched by `PUT
+  /api/me/org-capabilities/:id`, whose one verdict is `orgCapabilityLock`
+  (imposed stays on); a bot replays that route
+  (`capabilities.organization`) and gets its answer.
+- A bot's hand: `capabilities.updates` (get lists, set updates),
+  `capabilities.organization` ({id or key, enabled}),
+  `bot.plugin` (`me: true` for the person's own plugin), `bot.skill`
+  (`remove: true`, `me: true`), `bot.skillImport` (`me: true`),
+  `connections.mcpServer` and `connections.mcpServerRemove`, and target
+  `all` on any bot key for every bot of the person speaking (never another
+  person's). The same routes as the page; no card of their own.
+- Tests: `server/capabilities/capability-updates.test.ts`,
+  `server/routes/capability-updates.test.ts`,
+  `server/settings-actions.capabilities.test.ts`,
+  `server/skills/skill-update.test.ts`, and the update fields in
+  `server/bots/bot-plugins.test.ts`, `server/skills/personal-skills.test.ts`,
+  `server/routes/bots-content.test.ts`.
+
 ## MCP after a cold cloud start (2026-11-04)
 
 Turn setup can preopen Perspicax before the person's cloud environment is
@@ -1062,7 +1120,7 @@ What comes from the organization console has its own section at the top of each 
 
 **Tabs, underlined, only those with content** (`PillTabs variant="line"`): a plugin has Overview, Contents, Skills . N, Connectors . N; a bundle Overview, Skills . N (only when the console names the vendor of a skill: `MemberOrgCapability.vendor`, never guessed from a name), Connectors . N; a skill Overview and Contents; a console product Overview and Tools . N (its `endpoints`). Overview (`OverviewColumns`) is the description in 14 px type, the categories as chips (every category the data has), "Connectors & tools" at the right (`ReachPanel`; the line "Can send data to other services" only when a connector is known to be remote: a plugin's server listing says so, a bundle's products have an address), then the quiet Details block. A person's or a bot's install links no skill or server row of its own, so its Skills and Connectors tabs read what the install holds (`contents.skills`, `declaredMcpServers`: names, no state).
 
-**Contents** (`FileExplorer`): a quiet pill "<name> <version> . current", a tree (folders fold) and the selected file: a README as formatted text (`ChatMarkdown`) with a Rendered | Source switch, any other text as the chat's `CodeBlock`; a binary file says it cannot be shown. It reads two read-only routes that list `{ files }` and read one file with `?path=` (the same readers a skill's files use, `server/plugins/plugin-files.ts`, `listFolderFiles(dir, true)`, `readSkillFolderFile`): `GET /api/me/plugins/:key/files` (the person's own install), `GET /api/bots/:id/plugins/:key/files` (who may use the bot), `GET /api/marketplaces/:name/plugins/:plugin/files` (the installation's, managers), `GET /api/me/installation-plugins/:key/files` (a plugin the installation installed, for a person who may use it: its marketplace is one they can see, an organization-wide one or their own) and, for a skill, the existing `/api/(me/)skills-library/:name/files`. ONE rule serves the list and the read of every files route (`folderFileHidden` in `server/skills/skill-person-edit.ts`): what the list leaves out, the read refuses. A part of a path that can hold a secret (the names `credentialLocation` in `server/safety/sensitive-path.ts` refuses: `.env*`, `*.pem`, `*.key`, credential, secret and token names, `.ssh`...), `.git`, `node_modules` and Sagax's pre-configuration copies are hidden in a plugin; a skill also hides every dotfile. A link anywhere in the path is refused (the real place must stay in the folder). A plugin read is text only and at most 512 KB (`PLUGIN_FILE_MAX_BYTES`): a binary is listed and never sent (415), a big file is 413. A download icon shows only where the app already exports the item (a skill's SKILL.md). Tests: `server/routes/bot-plugins.test.ts`.
+**Contents** (`FileExplorer`): a quiet pill "<name> <version> . current", a tree (folders fold) and the selected file: a README as formatted text (`ChatMarkdown`) with a Rendered | Source switch, any other text as the chat's `CodeBlock`; a binary file says it cannot be shown. It reads two read-only routes that list `{ files }` and read one file with `?path=` (the same readers a skill's files use, `server/plugins/plugin-files.ts`, `listFolderFiles(dir, true)`, `readSkillFolderFile`): `GET /api/me/plugins/:key/files` (the person's own install), `GET /api/bots/:id/plugins/:key/files` (who may use the bot), `GET /api/marketplaces/:name/plugins/:plugin/files` (the installation's, managers), `GET /api/me/installation-plugins/:key/files` (a plugin the installation installed, for a person who may use it: its marketplace is one they can see, an organization-wide one or their own), `GET /api/me/org-capabilities/:id/files` (a plugin or skill the organization installed, for a person it is on for: the folder their turns mount; the console's section rows open `OrgItemPage`, whose Contents tab calls it) and, for a skill, the existing `/api/(me/)skills-library/:name/files`. ONE rule serves the list and the read of every files route (`folderFileHidden` in `server/skills/skill-person-edit.ts`): what the list leaves out, the read refuses. A part of a path that can hold a secret (the names `credentialLocation` in `server/safety/sensitive-path.ts` refuses: `.env*`, `*.pem`, `*.key`, credential, secret and token names, `.ssh`...), `.git`, `node_modules` and Sagax's pre-configuration copies are hidden in a plugin; a skill also hides every dotfile. A link anywhere in the path is refused (the real place must stay in the folder). A plugin read is text only and at most 512 KB (`PLUGIN_FILE_MAX_BYTES`): a binary is listed and never sent (415), a big file is 413. A download icon shows only where the app already exports the item (a skill's SKILL.md). Tests: `server/routes/bot-plugins.test.ts`.
 
 **A failed update** is said calmly (`UpdateNotice`) on the row that failed when that row is on screen (Yours of its kind, matched by the item's `updateKey`, which the person's and the bots' plugin lists now carry); else it stays at the top of the window. Retry and close as before.
 
@@ -1074,4 +1132,4 @@ What comes from the organization console has its own section at the top of each 
 
 **One menu, one tooltip, one neutral tile** (review of e3cfa533bd): a detail page's "..." is `ItemTrailer`'s menu (the header carries `columns={false}`), the same one a row has; the state icon, the nudge button and a skill row's "shared" mark share `TipBubble`/`TipHost`; an item with no mark of its own is `NeutralTile`, one quiet tile with a generic glyph per kind (connector, skill, plugin, vendor), never a letter. The unfolding vendor row is gone: a vendor is a bundle row (Plugins) and its products are flat rows (Connectors). A row with a vendor chip is a container with ONE button over its area and the chip as its own button. The tree of Contents has the tree keys (Up, Down, Left, Right, Home, End, roving tab stop); the featured set has a pause control, 24 px dot targets and reads the reduced-motion setting live; closing a page returns focus to the row that opened it (`usePluginsPanelState`). A README loads an https image only (an http one is a link, a relative or local one its words).
 
-**Updates contract** (`src/lib/capability-updates.ts`, #4504): an item may carry `updateUnknown` (no mark, never counted) and `organizationId` (an organization row has no `updateKey`: it is joined by this id, never by its name); a result may be `unknown`, which the page says calmly ("its source could not be checked just now", `UpdateNotice`), never as a failure. The server side lands with the night train; the page is tested against the typed shape until it is on main.
+**Updates contract** (`src/lib/capability-updates.ts`, #4504): an item may carry `updateUnknown` (no mark, never counted) and `organizationId` (an organization row has no `updateKey`: it is joined by this id, never by its name); a result may be `unknown`, which the page says calmly ("its source could not be checked just now", `UpdateNotice`), never as a failure. The server side is on main (`server/capabilities/capability-updates.ts`, #4511); `src/lib/capability-updates.routes.test.ts` runs the page's hook and notices against the real routes and service (GET and POST `/api/me/capability-updates`, the `capability.updates` frame), not a stand-in.

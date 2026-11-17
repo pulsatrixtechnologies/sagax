@@ -408,3 +408,28 @@ describe("the file tree's keys and what a README may load", () => {
     expect(out).toContain("plain [link](https://x.example.test)");
   });
 });
+
+describe("a member reads an organization plugin's files (the console's section)", () => {
+  const item = { id: "oc-2", mount: "compliance", form: "plugin" as const, name: "Compliance Pack", description: "The organization's review rules", mode: "imposed" as const, enabled: true, state: "installed" as const, version: "0.9.4", on: true, canToggle: false };
+  it("a plugin that is installed and on for the person opens its page; one that is off, or a connector, does not", async () => {
+    const { OrgCapabilitiesForMe } = await import("./OrgCapabilitiesSection");
+    const open = vi.fn();
+    const state = { items: [item, { ...item, id: "oc-3", name: "Off one", on: false }, { ...item, id: "oc-4", name: "A server", form: "mcp" as const }], error: null, busy: null, toggle: vi.fn(), retry: vi.fn() } as never;
+    const view = await render(createElement(OrgCapabilitiesForMe as never, { bare: true, state, onOpen: open } as never));
+    expect([...view.querySelectorAll("[data-org-capability-open]")].map((button) => button.getAttribute("data-org-capability-open"))).toEqual(["oc-2"]);
+    await click(view.querySelector("[data-org-capability-open]"));
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: "oc-2" }));
+  });
+
+  it("its Contents tab reads the person's own route, not an empty tab", async () => {
+    api.mockImplementation(async (url: string) => (url.includes("path=") ? { kind: "text", text: "# Compliance" } : { files: [{ path: "README.md", kind: "text" }, { path: "skills/review/SKILL.md", kind: "text" }] }));
+    const { OrgItemPage } = await import("./OrgItemPage");
+    const view = await render(createElement(OrgItemPage, { item, consoleName: "Perspicax · Example Org", onBack: vi.fn() }));
+    expect(view.querySelectorAll("[data-plugins-detail-name]")).toHaveLength(1);
+    expect(view.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("from Perspicax · Example Org · 0.9.4 · Required by your organization");
+    await click(view.querySelector('[data-org-item-tab="contents"]'));
+    expect(api).toHaveBeenCalledWith("/api/me/org-capabilities/oc-2/files");
+    expect(view.querySelector("[data-file-rendered]")?.textContent).toContain("Compliance");
+    expect(view.querySelector('[data-file-row="skills"]')).not.toBeNull();
+  });
+});

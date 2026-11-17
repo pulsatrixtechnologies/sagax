@@ -11,6 +11,9 @@ import {
 import { appendDecision, decisionCall } from "../decision-log.ts";
 import { deliverableNotification } from "../notify.ts";
 import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
+import { cardRefusalText, nativeCardRuleBreak } from "../../shared/card-rules.ts";
+import { cardRefusalTurns } from "../approvals/card-refusal-turns.ts";
+import { formatQuestionAnswers, type AskQuestion } from "../../shared/ask-question.ts";
 import { questionNotificationWords } from "./question-notification-words.ts";
 
 /** #4219: the card fields an ask_choice event carries (never more). */
@@ -138,7 +141,21 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       // A harness ask (ask_choice) has this same reading in createChoiceCard,
       // and a Yes/No on "A, or B?" keeps its card on both (#2911,
       // fullAccessChoiceAnswer reads choiceOptionsFor).
-      if (!permission && asker && event.requestId && !guestDriven && !event.harnessAsk) {
+      // #4490: a badly made card is sent back below, never answered for the person
+      // #4490: an engine's own question that breaks the card rules is sent
+      // back once per turn with how to ask again; the next one of the same
+      // turn, or one that cannot be sent back, is shown as asked
+      const rawMismatch = event.sentBackFailed ? undefined : nativeChoiceMismatch(event, questions, permission);
+      const badCard = Boolean(rawMismatch?.startsWith("Card refused"));
+      const sendBackTo = rawMismatch && asker && event.requestId && !guestDriven && !event.harnessAsk
+        ? (event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId))
+        : undefined;
+      // the turn's number; with none, the request itself, so each new
+      // question still gets its one refusal
+      const generation = host.activeInternalGenerationByThread?.get?.(event.threadId);
+      const turnKey = generation ? `${event.threadId}:${generation}` : `${event.threadId}:request:${event.requestId}`;
+      const mismatch = badCard && !(sendBackTo && cardRefusalTurns.refuse(turnKey)) ? undefined : rawMismatch;
+      if (!permission && asker && event.requestId && !guestDriven && !event.harnessAsk && !badCard) {
         const single = questions?.length === 1 ? questions[0] : undefined;
         const choice = single
           ? { ...(single.header ? { title: single.header } : {}), question: single.question, options: single.options.map((option) => option.label) }
@@ -174,21 +191,24 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       // rule as ask_choice (shared/options-card.ts). The engine gets the
       // reason back and asks again with the alternatives as options; the
       // chat shows that it happened (nothing invisible).
-      const mismatch = nativeChoiceMismatch(event, questions, permission);
-      if (mismatch && asker && event.requestId && !guestDriven && !event.harnessAsk) {
-        const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
-        if (instance) {
+      if (mismatch && sendBackTo) {
+        const instance = sendBackTo;
+        {
           const requestId = event.requestId;
           void (async () => {
             const outcome = await instance.adapter
-              .respondToRequest(event.threadId, requestId, { behavior: "answer", message: `Sagax: not asked. ${mismatch}` })
+              .respondToRequest(event.threadId, requestId, { behavior: "answer", message: sentBackAnswer(mismatch, questions) })
               .catch(() => "unavailable" as const);
+            // #4490: a badly made card is sent back with how to ask again
+            const brokenRule = /^Card refused \(rule ([a-z-]+)/.exec(mismatch)?.[1];
             pushMessage({
               role: "bot", kind: "activity",
               tool: outcome === "answered"
-                ? { name: "Question sent back: its options did not match it (Yes / No on a pick between alternatives).", ok: true }
-                : { name: "A question with options that did not match it could not be sent back to the engine.", ok: false },
+                ? { name: brokenRule ? `Question sent back to the bot to ask again properly (${brokenRule}).` : "Question sent back: its options did not match it (Yes / No on a pick between alternatives).", ok: true }
+                : { name: brokenRule ? "A badly made question could not be sent back to the engine; it is shown as asked." : "A question with options that did not match it could not be sent back to the engine; it is shown as asked.", ok: false },
             });
+            // never a turn left with no card and no answer: shown as asked
+            if (outcome !== "answered") presentRequestOpened({ ...event, sentBackFailed: true }, ctx, host, s);
           })().catch(() => console.error("[approval] Could not send back a mismatched question."));
           return;
         }
@@ -203,7 +223,8 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
               ? "Local computer approval"
               : permission
                 ? "Approval needed"
-                : questionTitle(),
+                // #4490: a form's own title says what is asked and by which routine
+                : event.harnessAsk && typeof event.askTitle === "string" && event.askTitle.trim() ? event.askTitle.trim() : questionTitle(),
           subtitle: event.summary,
           options: event.choices?.length ? event.choices : permission ? ["Allow", "Deny"] : [],
           requestId: event.requestId,
@@ -424,13 +445,32 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
 export function nativeChoiceMismatch(event: any, questions: any[] | undefined, permission: boolean): string | undefined {
   if (permission) return undefined;
   if (questions) {
+    // #4490: one question per control, never a wall of text
+    const broken = nativeCardRuleBreak(questions.map((question: any) => ({
+      question: String(question?.question ?? ""),
+      options: (question?.options ?? []).map((option: any) => ({ label: String(option?.label ?? "") })),
+    })));
+    if (broken) return cardRefusalText(broken, "native");
     if (questions.length !== 1 || questions[0]?.multiSelect === true) return undefined;
     const single = questions[0];
     const options = (single.options ?? []).map((option: any) => String(option?.label ?? "")).filter(Boolean);
     return options.length >= 2 ? choiceQuestionMismatch(String(single.question ?? ""), options) : undefined;
   }
   const choices = Array.isArray(event.choices) ? event.choices.map(String).filter(Boolean) : [];
+  const broken = typeof event.summary === "string" && event.summary.trim()
+    ? nativeCardRuleBreak([{ question: event.summary, options: choices.map((label: string) => ({ label })) }])
+    : null;
+  if (broken) return cardRefusalText(broken, "native");
   return choices.length >= 2 ? choiceQuestionMismatch(String(event.summary ?? ""), choices) : undefined;
+}
+
+/** #4490: what the engine reads for a question sent back. A set answers its
+ * first question with the reason (an engine files a set's answer per
+ * question, so a flat text would reach none of them). */
+export function sentBackAnswer(reason: string, questions: readonly AskQuestion[] | undefined): string {
+  const text = `Sagax: not asked. ${reason}`;
+  if (!questions || questions.length < 2) return text;
+  return formatQuestionAnswers(questions, questions.map((_, index) => [index === 0 ? text : "Sagax: not asked (see the first answer)."]));
 }
 
 /** #3150: the language a question card's title is worded in: the language

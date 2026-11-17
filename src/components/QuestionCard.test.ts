@@ -159,14 +159,14 @@ describe("QuestionCard", () => {
     const question = { question: "Which article?", options: [{ label: "A new analytical piece on reasoning models and what they change" }, { label: "Chip race" }, { label: "Blackwell" }] };
     const markup = render(message({ questionRequest: { version: 1, questions: [question] } }));
     // the card: the bubble's fill, 16px corners and padding, no outline
-    expect(markup).toContain("rounded-2xl bg-card p-4");
+    expect(markup).toContain("rounded-2xl bg-card p-3"); // #4490: the reference bubble, 12px padding
     expect(markup).not.toContain("ring-1");
     expect(markup).not.toContain("divide-y");
     expect(markup).toMatch(/role="radio" aria-checked="false" aria-keyshortcuts="A" class=/);
     expect(markup).toMatch(/aria-keyshortcuts="D"/); // C is the last option, D is "Other"
     // the 22px key: a lighter square with a hairline
-    expect(markup).toMatch(/size-\[22px\][^"]*rounded-md border[^"]*border-ink\/\[0\.14\] bg-ink\/\[0\.06\] text-ink-secondary">A</);
-    expect(markup).toMatch(/break-words text-\[13\.5px\] leading-5 text-ink \[unicode-bidi:plaintext\]">A new analytical piece/);
+    expect(markup).toMatch(/size-6[^"]*rounded-lg border-\[0\.5px\][^"]*border-ink\/\[0\.14\] bg-ink\/\[0\.06\] text-ink-secondary">A</); // #4490: the reference's 24px key
+    expect(markup).toMatch(/break-words text-\[14px\] leading-5 text-ink \[unicode-bidi:plaintext\]">A new analytical piece/);
     // no filled buttons, no field until "Other" is picked
     expect(markup).not.toContain("bg-accent");
     expect(markup).not.toContain("<textarea");

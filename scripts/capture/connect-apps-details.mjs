@@ -139,6 +139,18 @@ try {
     await page.waitForSelector('[data-plugins-section="bundles"]', { timeout: 10_000 }).catch(() => {});
     await shot("90-discover-bundle-card");
     }
+    // an organization plugin that is on for the person: its page, Overview then Contents
+    if (scene("orgitem")) {
+      await open("&role=member");
+      await kind("plugins");
+      await page.locator("[data-org-capability-open]").first().click();
+      await page.waitForSelector("[data-org-item-page]");
+      await shot("95-org-plugin-overview");
+      await page.click('[data-org-item-tab="contents"]');
+      await page.waitForSelector("[data-file-explorer]");
+      await shot("96-org-plugin-contents");
+    }
+
     // the failed update, said on its row
     if (scene("failure")) {
     await open("&role=member&updates=1");

@@ -114,10 +114,10 @@ describe("OptionCard", () => {
   it("waits in the shared question card: bold title, the bubble's fill, lettered rows", () => {
     const markup = render({ title: "Pick a region", subtitle: "Where should the bucket live?", options: ["us-east-1", "eu-west-1"], requestId: "r1" });
     expect(markup).toContain('data-ask-card="pending"');
-    expect(markup).toContain("rounded-2xl bg-card p-4");
+    expect(markup).toContain("rounded-2xl bg-card p-3"); // #4490: the reference bubble, 12px padding
     expect(markup).not.toContain("text-accent-text");
     expect(markup).toMatch(/font-semibold[^"]*"><bdi dir="auto">Pick a region</);
-    expect(markup).toMatch(/size-\[22px\][^>]*>A</);
+    expect(markup).toMatch(/size-6[^>]*>A</); // #4490: the reference's 24px key
     expect(markup).toContain("eu-west-1");
   });
 

@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
 import { principalDir, type PersonCapabilities } from "../people/person-connections.ts";
 import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, readLibrarySkillFile, setLibrarySkillReviewState, updateLibrarySkill } from "./skill-library.ts";
+import type { FetchedSkill } from "./skill-fetch.ts";
+import type { GitHubSkillOrigin } from "../../shared/skill-import.ts";
+import { prepareSkillFolder } from "./skill-folder.ts";
 import {
   acceptLibrarySkillReview,
   afterLibrarySkillPersonSave,
@@ -64,11 +67,32 @@ export class PersonalSkills {
   }
 }
 
+/** #4504: a skill read from GitHub, in the shape the library stores (its
+ * SKILL.md, the files beside it, what was left out, where it came from). */
+export function libraryInputFromFetched(skill: FetchedSkill) {
+  const folder = prepareSkillFolder(skill.files);
+  if ("error" in folder) return folder;
+  return {
+    name: folder.parsed.name,
+    instructions: folder.skillMd,
+    source: skill.source,
+    warnings: folder.warnings,
+    files: folder.files,
+    skippedFiles: folder.skipped.map((file) => file.path),
+    ...(skill.github ? { github: skill.github } : {}),
+  };
+}
+
 export function createPersonalSkillRoutes(deps: {
   skills: PersonalSkills;
   person: (auth: RequestAuth) => string | null;
   enabled: () => boolean;
   bots: (person: string) => Array<{ id: string; name: string }>;
+  /** #4504: read a skill from GitHub with this person's own access (POST
+   * {source}: a link or owner/repo, as a bot's Import takes it). */
+  fetchSource?: (person: string, source: string) => Promise<{ skills: FetchedSkill[] } | { error: string }>;
+  /** #4504: an installed skill's update fields (updateKey, versions, notes). */
+  updateFields?: (skill: { name: string; importedAt: string; github?: GitHubSkillOrigin }) => Record<string, unknown>;
 }): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody, url }) => {
     const match = path.match(/^\/api\/me\/skills-library(?:\/([a-z0-9-]+)(?:\/(review|files))?)?$/);
@@ -89,6 +113,7 @@ export function createPersonalSkillRoutes(deps: {
         const bots = deps.bots(person);
         return json(res, 200, { skills: deps.skills.list(person).map((skill) => ({
           ...skill,
+          ...deps.updateFields?.(skill),
           version: null,
           // Links, not copies: every bot of this person that has not
           // unshared into a private shadow still reads this Me skill.
@@ -97,7 +122,26 @@ export function createPersonalSkillRoutes(deps: {
       }
       if (!name && method === "POST") {
         const input = await body();
-        if (typeof input?.text !== "string") return json(res, 400, { error: "text must be the SKILL.md contents" });
+        // #4504: a skill of the person's own from GitHub: it reaches all of their bots
+        if (typeof input?.source === "string" && deps.fetchSource) {
+          if (!input.source.trim() || input.source.length > 2000) return json(res, 400, { error: "source must be a GitHub or skills.sh link, or owner/repo" });
+          const fetched = await deps.fetchSource(person, input.source.trim());
+          if ("error" in fetched) return json(res, 422, { error: fetched.error });
+          const installed: unknown[] = [];
+          const errors: string[] = [];
+          for (const skill of fetched.skills) {
+            const prepared = libraryInputFromFetched(skill);
+            if ("error" in prepared) { errors.push(prepared.error); continue; }
+            const result = installLibrarySkill({ ...prepared, reviewState: "approved", root });
+            if ("error" in result) { errors.push(result.error); continue; }
+            deps.skills.reference(person, null, result.name);
+            afterLibrarySkillPersonSave(result.name, prepared.instructions, root);
+            installed.push(result);
+          }
+          if (!installed.length) return json(res, 422, { error: errors.join("; ") || "nothing importable found" });
+          return json(res, 201, { installed, errors });
+        }
+        if (typeof input?.text !== "string") return json(res, 400, { error: "text must be the SKILL.md contents, or source a GitHub link" });
         const parsed = parseSkillMd(input.text);
         if ("error" in parsed) return json(res, 400, { error: parsed.error });
         const result = installLibrarySkill({ name: parsed.name, instructions: input.text, source: "local-import", warnings: scanSkillText(input.text), reviewState: "approved", root });

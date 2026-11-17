@@ -60,6 +60,7 @@ import type { MarketplaceCredentialView } from "../../shared/github-credentials.
 import { applyPluginConfig, checkPluginConfig, readConfigValues, readPluginConfigFields, writeConfigValues, type PluginConfigField, type PluginConfigValue } from "../plugins/plugin-config.ts";
 import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "../plugins/plugin-metadata-cache.ts";
 import { withoutMacMetadata } from "../mac-metadata.ts";
+import { changelogNotes, pluginListedFields } from "../capabilities/capability-update-providers.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const BOT_ID = /^[\w-]{1,80}$/;
@@ -140,6 +141,11 @@ export interface MarketplaceListing {
     installedVersion?: string;
     /** the marketplace offers another version or other files (Install updates in place) */
     updateAvailable?: boolean;
+    /** #4504: an installed plugin's update key, what an update brings and
+     * its notes (the plugin's CHANGELOG section, when it ships one) */
+    updateKey?: string;
+    availableVersion?: string;
+    updateNotes?: string;
     /** absent for a plugin in another repository (read at install) */
     contents?: PluginContents;
   }>;
@@ -291,6 +297,9 @@ export interface BotPluginsOptions {
   };
   /** The installation's one marketplace list. */
   marketplaces: PluginMarketplaces;
+  /** #4504: the scope its update keys name: a bot (default) or the person
+   * (`me`, the personal store). */
+  updateScope?: "bot" | "me";
   git?: GitRunner;
   /** git environment for a clone without a credential of its own (and the
    * whole environment when `credentials` is absent): the acting person's
@@ -554,6 +563,16 @@ export class BotPlugins {
           if (entry.source.kind === "path" && !manifestOnly) {
             try { contents = readPluginContents(insideRoot(repo, entry.source.path)); } catch { contents = undefined; }
           }
+          let notes: string | undefined;
+          if (update && entry.source.kind === "path" && !manifestOnly) {
+            try { notes = changelogNotes(insideRoot(repo, entry.source.path), entry.version); } catch { notes = undefined; }
+          }
+          const me = this.options.updateScope === "me";
+          const listed = installed ? pluginListedFields({
+            scope: me ? "me" : "bot", target: me ? "me" : botId, id: `${entry.name}@${market.name}`, name: entry.name,
+            ...(installed.version ? { installedVersion: installed.version } : {}), ...(entry.version ? { version: entry.version } : {}),
+            ...(offered ? { offeredRevision: offered } : {}), updateAvailable: update, ...(notes ? { notes } : {}),
+          }) : {};
           return {
             name: entry.name,
             ...(entry.description ? { description: entry.description } : {}),
@@ -566,6 +585,7 @@ export class BotPlugins {
             installed: Boolean(installed),
             ...(installed?.version && installed.version !== entry.version ? { installedVersion: installed.version } : {}),
             ...(update ? { updateAvailable: true } : {}),
+            ...listed,
             external: entry.source.kind === "git",
             ...(contents ? { contents } : {}),
           };

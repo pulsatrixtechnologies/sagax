@@ -95,7 +95,10 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "engines/": "engine",
   "sections/sec_": "section",
   "plugins/": "plugin",
-  "installation-plugins/": "plugin",
+  // a plugin the installation installed (shared, read through the marketplace the person can see): not a thing a person owns
+  "installation-plugins/": "marketplace",
+  "installation-plugins/{marketplace}@": "marketplace",
+  "installation-plugins/{marketplace}%40": "marketplace",
   // the marketplace half of `name@marketplace`
   "plugins/{plugin}@": "marketplace",
   "plugins/{plugin}%40": "marketplace",

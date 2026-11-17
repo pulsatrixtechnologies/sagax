@@ -22,6 +22,8 @@ import { MessagesSetupView } from "../plugins/MessagesSetupView";
 import { MacAppSetupView, macAppTitle } from "../plugins/MacAppSetupView";
 import { CustomConnectorPage } from "../plugins/CustomConnectorPage";
 import { ProductDetailView } from "../plugins/ProductDetailView";
+import { OrgItemPage } from "../plugins/OrgItemPage";
+import type { MemberOrgCapability } from "@/lib/org-capabilities";
 import type { PersonProduct } from "@/lib/person-products";
 import { detailProps } from "./detailBuilders";
 import { pluginSourceLabel, skillReadOnlyReason } from "./helpers";
@@ -43,11 +45,14 @@ export function PluginsPanelSubpage({
   updateInfo,
   productCtx,
   itemUpdate,
+  orgItems,
   consoleName,
   vendorSkills,
 }: {
   /** #4504: the update a skill has, with its Update (running while it runs), for its page */
   itemUpdate?: (kind: UpdateKind, name: string, updateKey?: string) => { from?: string; to?: string; notes?: string; running: boolean; onUpdate?: () => void } | undefined;
+  /** what the organization offers or requires of the person (an item that is on opens its page) */
+  orgItems?: readonly MemberOrgCapability[];
   /** the console's name ("Perspicax · <organization>") for a bundle's grey line */
   consoleName?: string;
   /** the skills the console offers that go with a vendor (its Skills tab); none: no tab */
@@ -85,9 +90,11 @@ export function PluginsPanelSubpage({
   const botsForMissing = page.page === "botsFor" && !botsForEntry && mcp.servers !== null && shownMarketplaces !== null;
   // #4185: a product no longer served to the person leaves its page too.
   const productMissing = page.page === "product" && !products.products.some((entry) => entry.id === page.id);
+  // an organization item that is no longer on for the person leaves its page too
+  const orgItemMissing = page.page === "orgItem" && orgItems !== undefined && orgItems.length > 0 && !orgItems.some((entry) => entry.id === page.id && entry.on);
   useEffect(() => {
-    if (detailMissing || skillMissing || botsForMissing || productMissing) back();
-  }, [detailMissing, skillMissing, botsForMissing, productMissing, back]);
+    if (detailMissing || skillMissing || botsForMissing || productMissing || orgItemMissing) back();
+  }, [detailMissing, skillMissing, botsForMissing, productMissing, orgItemMissing, back]);
   // The GitHub page opened before the marketplaces answered: the GitHub
   // plugin's page, once it is known.
   const githubLate = page.page === "github" && githubKey !== null;
@@ -149,6 +156,10 @@ export function PluginsPanelSubpage({
   if (page.page === "product") {
     const product = products.products.find((entry) => entry.id === page.id);
     if (product) return <ProductDetailView key={product.id} product={product} onChanged={products.replace} onBack={back} trail={trail} />;
+  }
+  if (page.page === "orgItem") {
+    const item = orgItems?.find((entry) => entry.id === page.id);
+    if (item) return <OrgItemPage key={item.id} item={item} consoleName={consoleName} onBack={back} trail={trail} />;
   }
   if (page.page === "vendor" && productCtx) {
     const vendor = groupByVendor(products.products).find((entry) => entry.key === page.key);
@@ -217,7 +228,7 @@ export function PluginsPanelSubpage({
   return null;
 }
 
-export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = [], kind?: ConnectAppsKind): string {
+export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly PluginItem[], entries: InstalledEntry[], products: readonly PersonProduct[] = [], kind?: ConnectAppsKind, orgItems: readonly MemberOrgCapability[] = []): string {
   switch (entry.page) {
     // #4453: a page opened from Yours or Discover names its kind ("Plugins")
     case "main": return kind && (tab === "installed" || tab === "discover") ? connectAppsKindLabel(kind) : connectAppsTabLabel(tab);
@@ -233,6 +244,7 @@ export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly Plug
     case "connector": return t("connectApps.addCustomConnector");
     case "tailscale": return t("connectApps.tailscale.title");
     case "product": return products.find((product) => product.id === entry.id)?.name ?? t("connectApps.back");
+    case "orgItem": return orgItems.find((item) => item.id === entry.id)?.name ?? t("connectApps.back");
     case "vendor": return groupByVendor(products).find((vendor) => vendor.key === entry.key)?.name ?? t("connectApps.back");
   }
 }

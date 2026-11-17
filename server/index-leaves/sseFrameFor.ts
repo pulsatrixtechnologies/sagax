@@ -6,6 +6,7 @@ import { liveFramesNeedChannelFilter, sseFrameProjection } from "../rooms/channe
 import { botActFrameAllowed } from "../../shared/bot-act.ts";
 import { teamWorkFrameAllowed } from "../../shared/team-work.ts";
 import { achievementFrameAllowed } from "../achievements/achievements.ts";
+import { capabilityUpdatesFrameAllowed } from "../capabilities/capability-updates.ts";
 import { encodeSseDataFrame } from "../streams/sse-fanout.ts";
 import { notifyHeldFor } from "../notify.ts";
 import { dataFrameAllowed } from "../data/scope.ts";
@@ -49,6 +50,8 @@ function sseFrameFor(   client: SseClient,   seq: number,   payload: Record<stri
   }
   // a person's unlocks reach that person's streams only
   if (payload?.kind === "achievements" && !achievementFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
+  // #4504: a person's update count reaches that person's own streams only
+  if (!capabilityUpdatesFrameAllowed(payload ?? {}, client.viewerId, host.localPrincipalId())) return null;
   // a person's phone tool requests reach that person's own streams only
   if (payload?.kind === PHONE_TOOLS_FRAME && !phoneToolsFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
   // a person's device settings requests reach that person's own streams only (#1545)

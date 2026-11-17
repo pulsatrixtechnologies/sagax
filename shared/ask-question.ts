@@ -31,7 +31,24 @@ export const MAX_QUESTION_TEXT = 8_000;
  * text below. */
 export const QUESTION_TITLE_MAX = 160;
 const MAX_LABEL = 120;
-const MAX_DESCRIPTION = 400;
+/** #4490: a checklist item's text (a draft to post) rides as its
+ * description: the one limit of an item's text, in the tool and the parser. */
+export const MAX_DESCRIPTION = 600;
+/** #4490: a form row's answers to pick from (choice, multi). */
+export const FORM_MAX_OPTIONS = 8;
+/** #4490: a form holds up to this many rows (a time sheet's lines). */
+export const FORM_MAX_QUESTIONS = 12;
+/** #4490: a checklist's action buttons and their length. */
+export const MAX_ACTIONS = 3;
+/** #4490: a checklist's rows (its options). */
+export const MAX_ITEMS = 20;
+export const MAX_ACTION_LABEL = 40;
+
+/** #4490: the control a form row draws, one per kind of answer. */
+export const ANSWER_KINDS = ["choice", "multi", "yes_no", "duration", "time", "date", "number", "text", "long_text"] as const;
+export type AnswerKind = typeof ANSWER_KINDS[number];
+/** The kinds answered among options; the others take none. */
+export const CHOICE_KINDS: ReadonlySet<AnswerKind> = new Set(["choice", "multi", "yes_no"]);
 /** One free-text answer. Long enough for a sentence or two of context. */
 export const MAX_CUSTOM_ANSWER = 2000;
 
@@ -53,6 +70,15 @@ export interface AskQuestion {
   header?: string;
   multiSelect?: boolean;
   options: AskQuestionOption[];
+  /** #4490: the row's control in a form (ask_choice questions or items).
+   * Absent: an engine's own question, drawn as before. */
+  kind?: AnswerKind;
+  /** #4490: a form row the person may leave empty. */
+  optional?: true;
+  /** #4490: a checklist's rows the bot proposes checked (option ids or labels). */
+  checked?: string[];
+  /** #4490: a checklist's buttons; the one pressed is sent with the picks. */
+  actions?: string[];
   /** false when the provider can only take one of `options` back (an ACP
    * permission-style question answers with an option id, never text). The
    * card then offers no free-text "Other". Absent means free text is fine. */
@@ -144,15 +170,26 @@ function parseQuestion(value: unknown): AskQuestion | null {
     if (!option || seen.has(option.label)) continue;
     seen.add(option.label);
     options.push(option);
-    if (options.length === MAX_OPTIONS) break;
+    if (options.length === (Array.isArray(value.actions) ? MAX_ITEMS : MAX_OPTIONS)) break;
   }
   // A question with nothing to choose from is still answerable — the card
   // always offers free text — so an empty option list is kept, not dropped.
   const header = text(value.header, MAX_LABEL);
+  // #4490: a form row's kind, a checklist's proposed picks and buttons
+  const kind = typeof value.kind === "string" && (ANSWER_KINDS as readonly string[]).includes(value.kind) ? value.kind as AnswerKind : undefined;
+  const keys = new Set(options.map((option) => option.id ?? option.label));
+  const checked = Array.isArray(value.checked) ? value.checked.filter((entry): entry is string => typeof entry === "string" && keys.has(entry)) : [];
+  const actions = Array.isArray(value.actions)
+    ? [...new Set(value.actions.map((entry) => text(entry, MAX_ACTION_LABEL)).filter((entry): entry is string => Boolean(entry)))].slice(0, MAX_ACTIONS)
+    : [];
   return {
     question,
     ...(header ? { header } : {}),
     ...(value.multiSelect === true ? { multiSelect: true } : {}),
+    ...(kind ? { kind } : {}),
+    ...(value.optional === true ? { optional: true as const } : {}),
+    ...(checked.length ? { checked } : {}),
+    ...(actions.length ? { actions } : {}),
     options,
     // only meaningful beside options: with none, free text is the only answer
     ...(value.custom === false && options.length ? { custom: false as const } : {}),
@@ -161,14 +198,14 @@ function parseQuestion(value: unknown): AskQuestion | null {
 
 /** The questions inside an AskUserQuestion tool input, or null when the
  * payload is not one (a malformed call falls back to the ordinary card). */
-export function parseAskQuestions(input: unknown): AskQuestion[] | null {
+export function parseAskQuestions(input: unknown, limit: number = MAX_QUESTIONS): AskQuestion[] | null {
   if (!isRecord(input) || !Array.isArray(input.questions)) return null;
   const questions: AskQuestion[] = [];
   for (const raw of input.questions) {
     const question = parseQuestion(raw);
     if (!question) continue;
     questions.push(question);
-    if (questions.length === MAX_QUESTIONS) break;
+    if (questions.length === limit) break;
   }
   return questions.length ? questions : null;
 }
@@ -298,19 +335,42 @@ const JSON_ANSWERS_PREFIX = `${ANSWER_PREAMBLE}\n\nAnswers (JSON):\n`;
 export function formatQuestionAnswers(
   questions: readonly AskQuestion[],
   answers: readonly (readonly string[])[],
+  /** #4490: the checklist button pressed, sent as its own line */
+  action?: string,
 ): string {
   const pairs: [string, string][] = [];
   questions.forEach((question, index) => {
     const picked = (answers[index] ?? []).map((value) => value.trim()).filter(Boolean);
-    if (!picked.length) return;
-    pairs.push([question.question, picked.join(", ")]);
+    // a checklist sent with nothing checked says so: its button still counts
+    if (!picked.length && !(action && question.actions?.length)) return;
+    pairs.push([question.question, picked.length ? picked.join(", ") : NOTHING_PICKED]);
   });
+  if (action?.trim()) pairs.push([ACTION_QUESTION, action.trim()]);
   if (!pairs.length) return "";
   // Newlines can contain Q:/A: headers; JSON preserves them as answer text.
   if (pairs.some(pair => pair.some(value => /[\r\n]/.test(value)))) {
     return JSON_ANSWERS_PREFIX + JSON.stringify(pairs);
   }
   return `${ANSWER_PREAMBLE}\n\n${pairs.map(([question, answer]) => `Q: ${question}\nA: ${answer}`).join("\n\n")}`;
+}
+
+/** #4490: the line that carries a checklist's pressed button. */
+export const ACTION_QUESTION = "Action";
+/** #4490: a checklist sent with no row checked. */
+export const NOTHING_PICKED = "(none)";
+/** #4490: an optional form row the person left empty (not "not asked"). */
+export const LEFT_EMPTY = "(left empty)";
+
+/** #4490: a card drawn as rows with their controls (a form or a checklist)
+ * rather than an engine's own question set. */
+export function isFormCard(questions: readonly AskQuestion[]): boolean {
+  return questions.some((question) => question.kind !== undefined || Boolean(question.actions?.length));
+}
+
+/** #4490: the checklist button an answer was sent with, or undefined. */
+export function answeredAction(answer: string): string | undefined {
+  const value = questionAnswersByQuestion(answer, [{ question: ACTION_QUESTION, options: [] }, { question: "\u0000", options: [] }])[ACTION_QUESTION];
+  return value?.trim() || undefined;
 }
 
 /** The same answer with the model-facing lead-in removed, for the settled
@@ -332,8 +392,10 @@ export function visibleQuestionAnswer(answer: string, questions?: readonly AskQu
     const pairs = list
       .map((question) => [question.question, byQuestion[question.question]?.trim() ?? ""] as const)
       .filter(([, value]) => value);
-    if (pairs.length === 1) return pairs[0][1];
-    if (pairs.length > 1) return pairs.map(([question, value]) => `${question}\n${value}`).join("\n\n");
+    // #4490: a checklist's button pressed is said with the picks
+    const action = answeredAction(answer);
+    if (pairs.length === 1 && !action) return pairs[0][1];
+    if (pairs.length >= 1) return [...pairs, ...(action ? [[ACTION_QUESTION, action] as const] : [])].map(([question, value]) => `${question}\n${value}`).join("\n\n");
   }
   const body = answerWithoutPreamble(answer);
   const single = /^Q: [^\n]*\nA: ([\s\S]*)$/.exec(body);
@@ -343,7 +405,7 @@ export function visibleQuestionAnswer(answer: string, questions?: readonly AskQu
 
 /** Sized so a reply typed in a card is never cut; only a longer chat message
  * echoed back as free text (Cursor's skipped-question reason) is. */
-export const MAX_ANSWER_ECHO = ANSWER_PREAMBLE.length + MAX_QUESTIONS
+export const MAX_ANSWER_ECHO = ANSWER_PREAMBLE.length + FORM_MAX_QUESTIONS
   * ("\n\nQ: \nA: ".length + MAX_QUESTION_TEXT + MAX_OPTIONS * (MAX_LABEL + ", ".length) + MAX_CUSTOM_ANSWER);
 
 /** Cap a formatted answer for echoing back. An over-cap echo is cut back to

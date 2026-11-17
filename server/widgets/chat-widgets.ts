@@ -34,7 +34,7 @@ import {
   type PageTargetChoiceCardData,
   type PageTargetIntent,
 } from "../../shared/page-targets.ts";
-import type { AskQuestionOption } from "../../shared/ask-question.ts";
+import type { AskQuestion, AskQuestionOption } from "../../shared/ask-question.ts";
 import type { Message } from "../store.ts";
 import { askTextKey, closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
 import { resolveAddressee, roomPeopleLine, type RoomPerson } from "../rooms/room-ask-cards.ts";
@@ -179,6 +179,8 @@ export function createAgentCard(args: {
     /** #4205, #4219: what the card carries from its first frame (its key,
      * whether it holds, its addressee), so its notification reads them. */
     card?: { askKey?: string; noHold?: true; askTo?: AskAddressee };
+    /** #4490: a form's or a checklist's rows, each with its control. */
+    questions?: AskQuestion[];
   }): { messageId: string } | null;
   /** #4219: the conversation is a room: its people, whom a card can be
    * addressed to. `fromRun`: the card comes from a routine run whose
@@ -309,6 +311,8 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   const peer = args.peerOutcome;
   // an unkeyed ask is keyed by its words (#4233's text key)
   if (peer && !value.key) value.key = askTextKey(value.subtitle);
+  // #4490: a form in a room is a real card of the room, keyed by its words
+  if (value.questions && !value.key && args.room) value.key = askTextKey(value.subtitle);
   if (value.tell) {
     const key = value.key ?? askTextKey(value.subtitle);
     if (!peer) return { ok: true, messageId: "", told: true, note: TELL_IN_REPLY };
@@ -345,7 +349,9 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   const holds = (value.wait ?? !args.repeatingRun) && !(roomAsk && args.room?.fromRun);
   // #2901: Yes/No on "A, or B?" answers neither path; offer the two paths.
   const given = value.options;
-  value.options = choiceOptionsFor(value.subtitle, given);
+  // #4490: a form or a checklist carries its answers in its rows
+  const form = value.questions;
+  if (!form) value.options = choiceOptionsFor(value.subtitle, given);
   // #2911: two paths are a real decision, never a may-I, so Full access
   // keeps the card instead of taking the first path for the person.
   // #4205: so is a question raised as a decision or with a key.
@@ -358,7 +364,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   const keyed = { ...(askKey ? { askKey } : {}), ...(holds ? {} : { noHold: true as const }), ...(askTo ? { askTo } : {}) };
   // #4250 (S7): the person's usual answer first, and "Always do this for
   // this routine" after three identical answers
-  const learned = askKey && !inRoom && args.answerLearning ? learnCard(args.answerLearning, askKey, value) : {};
+  const learned = askKey && !inRoom && !form && args.answerLearning ? learnCard(args.answerLearning, askKey, value) : {};
   const addressed = askTo ? { addressedTo: askTo.name } : {};
   // #4219: in a room the bot reads whom it can address
   const roomPeopleResult = {
@@ -377,7 +383,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   if (askKey && (!from.from || roomAsk)) {
     const found = findKeyed(askKey);
     if (found) {
-      const { answerLearning: _before, ...replaced } = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(askTo ? { askTo } : {}) });
+      const { answerLearning: _before, ...replaced } = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}), ...(form ? { questions: form } : {}), ...(askTo ? { askTo } : {}) });
       const card = { ...replaced, ...learned };
       const patched = args.store.patchMessage(found.threadId, found.message.id, { card });
       if (patched) {
@@ -393,7 +399,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // its title as is, so the default one is worded in the conversation's
   // language, like a raised question card (#3158). The raised path keeps the
   // English default: raiseHarnessQuestion tells it apart from a given title.
-  const { key: _key, wait: _wait, decision: _decision, to: _to, tell: _tell, ...cardValue } = value;
+  const { key: _key, wait: _wait, decision: _decision, to: _to, tell: _tell, questions: _questions, ...cardValue } = value;
   const shownCard = input.title === undefined
     ? { ...cardValue, title: questionCardTitle(turnLanguage(lastPersonText(args.store.messagesFor(args.threadId)), args.personLanguage)) || cardValue.title }
     : cardValue;
@@ -413,6 +419,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
       question: value.subtitle,
       options: value.options,
       ...(questionOptions ? { questionOptions } : {}),
+      ...(form ? { questions: form } : {}),
       ...(Object.keys(keyed).length ? { card: keyed } : {}),
     });
     // Never a passive card here: nobody would see it, and the bot would say it showed one.
@@ -426,6 +433,9 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     args.authored?.(raised.messageId);
     return recordPeer({ ok: true, messageId: raised.messageId, waitsForPerson: true, ...addressed, ...roomPeopleResult, ...(holds ? {} : { holds: false as const }) });
   }
+  // #4490: a form or a checklist is answered row by row on a question card;
+  // a passive card could not carry its controls
+  if (form) return { ok: false, status: 409, error: QUESTION_NOT_RAISED };
   // a direct thread replays a bot row that carries `from` as another bot's line
   // #4475: the card is a bot's question (requestType), never the first-run
   // quiz a later message of the person puts away: a second card of the

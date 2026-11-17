@@ -68,13 +68,16 @@ export function githubAccessFailure(
   repo: string,
   credential: GithubCredential | null,
   context: "marketplace" | "skill" = "marketplace",
+  now: () => number = Date.now,
 ): GithubAccessFailure | null {
   const { status, headers } = response;
   if (status >= 200 && status < 300) return null;
   const remaining = headers.get("x-ratelimit-remaining");
-  if ((status === 403 || status === 429) && remaining === "0") {
+  const retryAfter = headers.get("retry-after");
+  // the primary limit (none left), or a secondary one that says retry-after
+  if ((status === 403 || status === 429) && (remaining === "0" || (retryAfter !== null && /^\d+$/.test(retryAfter)))) {
     const reset = Number(headers.get("x-ratelimit-reset"));
-    const resetAt = Number.isFinite(reset) && reset > 0 ? reset * 1000 : undefined;
+    const resetAt = remaining !== "0" && retryAfter ? now() + Number(retryAfter) * 1000 : Number.isFinite(reset) && reset > 0 ? reset * 1000 : undefined;
     const until = resetAt ? ` until ${new Date(resetAt).toISOString().slice(11, 16)} UTC` : "";
     return {
       code: "rate_limited", status: 429, fix: "wait", ...(resetAt ? { resetAt } : {}),
@@ -197,7 +200,7 @@ function hostOf(input: Parameters<typeof fetch>[0]): string {
 /** A fetch for skill imports: on GitHub's hosts it tries each credential in
  * turn until one is not refused (401, 403 or 404), and remembers the one
  * that worked for the rest of the import. Other hosts get no token. */
-export function githubCredentialFetch(credentials: readonly GithubCredential[], fetcher: typeof fetch = fetch, env: NodeJS.ProcessEnv = process.env): typeof fetch & { used(): GithubCredential | null } {
+export function githubCredentialFetch(credentials: readonly GithubCredential[], fetcher: typeof fetch = fetch, env: NodeJS.ProcessEnv = process.env, options: { bareRetry?: boolean } = {}): typeof fetch & { used(): GithubCredential | null } {
   let chosen: GithubCredential | null = null;
   const apiHost = hostOf(githubOrigins(env).api);
   const run = (async (input, init) => {
@@ -216,7 +219,9 @@ export function githubCredentialFetch(credentials: readonly GithubCredential[], 
       if (last) await last.body?.cancel().catch(() => undefined);
       last = response;
     }
-    // A public repository reads without a token, even a refused one.
+    // A public repository reads without a token, even a refused one (never
+    // for the update check, #4504: it would spend the shared budget).
+    if (options.bareRetry === false) return last!;
     const bare = await fetcher(input, init);
     if (bare.ok) {
       await last?.body?.cancel().catch(() => undefined);
@@ -240,18 +245,20 @@ export class GithubAccessError extends Error {
 
 /** The skill importer's fetch: credentials as above, and a refusal from
  * GitHub's API becomes its real cause instead of "GitHub API 404". */
-export function githubSkillFetch(credentials: readonly GithubCredential[], fetcher: typeof fetch = fetch, env: NodeJS.ProcessEnv = process.env): typeof fetch {
-  const inner = githubCredentialFetch(credentials, fetcher, env);
+export function githubSkillFetch(credentials: readonly GithubCredential[], fetcher: typeof fetch = fetch, env: NodeJS.ProcessEnv = process.env, options: { bareRetry?: boolean; now?: () => number } = {}): typeof fetch & { used(): GithubCredential | null } {
+  const inner = githubCredentialFetch(credentials, fetcher, env, options);
   const apiHost = hostOf(githubOrigins(env).api);
-  return async (input, init) => {
+  const run = (async (input, init) => {
     const response = await inner(input, init);
     const host = hostOf(input);
     if (response.ok || (host !== apiHost && host !== "api.github.com")) return response;
     const path = new URL(typeof input === "string" || input instanceof URL ? input : input.url).pathname;
     const repo = /^\/repos\/([^/]+)\/([^/]+)/.exec(path);
-    const failure = githubAccessFailure(response, repo ? `${decodeURIComponent(repo[1]!)}/${decodeURIComponent(repo[2]!)}` : "this repository", inner.used() ?? credentials[0] ?? null, "skill");
+    const failure = githubAccessFailure(response, repo ? `${decodeURIComponent(repo[1]!)}/${decodeURIComponent(repo[2]!)}` : "this repository", inner.used() ?? credentials[0] ?? null, "skill", options.now);
     if (!failure) return response;
     await response.body?.cancel().catch(() => undefined);
     throw new GithubAccessError(failure);
-  };
+  }) as typeof fetch & { used(): GithubCredential | null };
+  run.used = () => inner.used();
+  return run;
 }

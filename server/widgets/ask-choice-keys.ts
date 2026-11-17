@@ -7,6 +7,7 @@
 // conversation, keeps one card per item instead of one per run.
 import { createHash } from "node:crypto";
 import type { Message } from "../store.ts";
+import type { AskQuestion } from "../../shared/ask-question.ts";
 
 type Card = NonNullable<Message["card"]>;
 
@@ -189,8 +190,14 @@ export function raiseTextKeyedAsk<C extends { question: string; options: string[
   return Boolean(drawn);
 }
 
+/** #4490: a form row's control, dropped when a plain question replaces it. */
+function plainQuestion(question: AskQuestion): AskQuestion {
+  const { kind: _kind, optional: _optional, checked: _checked, actions: _actions, multiSelect: _multi, ...rest } = question;
+  return rest;
+}
+
 /** The pending card's new words: same card, same request, same place. */
-export function replacedAskCard(card: Card, next: { question: string; options: string[]; noHold: boolean; questionOptions?: Array<{ label: string; description?: string }>; askTo?: Card["askTo"] }): Card {
+export function replacedAskCard(card: Card, next: { question: string; options: string[]; noHold: boolean; questionOptions?: Array<{ label: string; description?: string }>; questions?: AskQuestion[]; askTo?: Card["askTo"] }): Card {
   const questionOptions = next.questionOptions ?? next.options.map((label) => ({ label }));
   const questions = card.questionRequest?.questions;
   const { noHold: _held, ...rest } = card;
@@ -201,8 +208,11 @@ export function replacedAskCard(card: Card, next: { question: string; options: s
     ...(next.noHold ? { noHold: true as const } : {}),
     // #4219: re-addressed to another person of the room
     ...(next.askTo ? { askTo: next.askTo } : {}),
-    ...(card.questionRequest && questions?.length
-      ? { questionRequest: { ...card.questionRequest, questions: [{ ...questions[0]!, question: next.question, options: questionOptions }] } }
-      : {}),
+    // #4490: a form's or a checklist's rows replace the old ones whole
+    ...(card.questionRequest && next.questions
+      ? { questionRequest: { ...card.questionRequest, questions: next.questions } }
+      : card.questionRequest && questions?.length
+        ? { questionRequest: { ...card.questionRequest, questions: [{ ...plainQuestion(questions[0]!), question: next.question, options: questionOptions }] } }
+        : {}),
   };
 }

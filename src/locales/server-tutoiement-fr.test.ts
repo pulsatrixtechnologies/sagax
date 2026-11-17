@@ -12,6 +12,8 @@ interface BabelNode {
   name?: string;
   callee?: BabelNode;
   key?: BabelNode;
+  object?: BabelNode;
+  property?: BabelNode;
   loc?: { start: { line: number } };
   quasis?: { value: { raw: string; cooked?: string | null } }[];
 }
@@ -101,6 +103,19 @@ function inWordSet(path: NodePath): boolean {
   return list?.node.type === "ArrayExpression" && call?.type === "NewExpression" && call.callee?.type === "Identifier" && call.callee.name === "Set";
 }
 
+/** True for a word list written as one text split into a Set
+ * (new Set(`a b c`.split(/\s+/)...)): words matched, never shown. */
+function inSplitWordSet(path: NodePath): boolean {
+  const member = path.parent;
+  if (member?.type !== "MemberExpression" || member.object !== path.node || member.property?.type !== "Identifier" || member.property.name !== "split") return false;
+  for (let current: NodePath | null = path.parentPath; current; current = current.parentPath) {
+    const node = current.node;
+    if (node.type === "NewExpression") return node.callee?.type === "Identifier" && node.callee.name === "Set";
+    if (node.type !== "MemberExpression" && node.type !== "CallExpression") return false;
+  }
+  return false;
+}
+
 /** True for the value of an { en, "pt-BR" } key: not French. */
 function otherLanguage(path: NodePath): boolean {
   const parent = path.parent;
@@ -134,7 +149,7 @@ function vouvoiementIn(file: string, code: string): string[] {
       check(String(path.node.value), path.node.loc?.start.line);
     },
     TemplateLiteral(path) {
-      if (feedsRegExp(path) || otherLanguage(path)) return;
+      if (feedsRegExp(path) || otherLanguage(path) || inSplitWordSet(path)) return;
       check((path.node.quasis ?? []).map((quasi) => quasi.value.cooked ?? quasi.value.raw).join(" "), path.node.loc?.start.line);
     },
     JSXText(path) {
@@ -155,6 +170,9 @@ it("the scanner flags « vous », « votre », « vos », « vôtre » and -ez v
   expect(vouvoiementIn("x.ts", `const a = "Allez chez toi, assez.";`)).toHaveLength(1);
   expect(vouvoiementIn("x.ts", `const a = "Marquer le rendez-vous comme fait"; const b = "[ée]cri(?:s|vez)";`)).toEqual([]);
   expect(vouvoiementIn("x.ts", `const a = new Set(["envoyez", "annulez"]);`)).toEqual([]);
+  // a word list written as one text split into a Set (server/feedback/anonymize.ts)
+  expect(vouvoiementIn("x.ts", "const a = new Set(`vos votre pouvez`.split(/\\s+/).filter(Boolean));")).toEqual([]);
+  expect(vouvoiementIn("x.ts", "const a = `vos mots`.split(' ');")).toHaveLength(1);
   expect(vouvoiementIn("x.ts", `const a = { en: "Rez", fr: "Créez", "pt-BR": "Crie uma vez" };`)).toHaveLength(1);
 });
 

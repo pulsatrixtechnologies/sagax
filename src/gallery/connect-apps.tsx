@@ -460,6 +460,11 @@ const GALLERY_PLUGIN_FILES: Record<string, string> = {
   "skills/review-checklist/SKILL.md": "---\nname: review-checklist\ndescription: The team's checklist, one item at a time\n---\n\nAsk the items one at a time.\n",
   "scripts/run-checks.sh": "#!/bin/sh\n# usage: run-checks.sh <base-branch>\nset -eu\ngit diff --stat \"$1\"...HEAD\n",
 };
+/** An organization plugin's files (Compliance Pack), for its page's Contents. */
+const GALLERY_ORG_FILES: Record<string, string> = {
+  "README.md": "# Compliance Pack\n\nThe organization's review rules.\n\n- Every change names its reviewer\n- Anything touching billing waits for a second look\n",
+  "skills/review-rules/SKILL.md": "---\nname: review-rules\ndescription: The review rules\n---\n\nName the reviewer first.\n",
+};
 const GALLERY_SKILL_FILES: Record<string, string> = {
   "notes/format.md": "# Format\n\nThree sections: what moved, what waits, what needs a decision.\n",
   "scripts/collect.py": "# gathers the week's threads\nprint('collecting')\n",
@@ -548,10 +553,10 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
       return json(galleryTailscale);
     }
     // what an item holds, read only (the Contents tab): a small invented set
-    const holds = /^\/api\/(?:marketplaces\/[^/]+\/plugins\/[^/]+|me\/plugins\/[^/]+|bots\/[^/]+\/plugins\/[^/]+|(?:me\/)?skills-library\/[^/]+)\/files$/.exec(url.pathname);
+    const holds = /^\/api\/(?:marketplaces\/[^/]+\/plugins\/[^/]+|me\/plugins\/[^/]+|me\/org-capabilities\/[^/]+|bots\/[^/]+\/plugins\/[^/]+|(?:me\/)?skills-library\/[^/]+)\/files$/.exec(url.pathname);
     if (holds && method === "GET") {
       const isSkill = url.pathname.includes("skills-library");
-      const set = isSkill ? GALLERY_SKILL_FILES : GALLERY_PLUGIN_FILES;
+      const set = isSkill ? GALLERY_SKILL_FILES : url.pathname.includes("org-capabilities") ? GALLERY_ORG_FILES : GALLERY_PLUGIN_FILES;
       const wanted = url.searchParams.get("path");
       if (!wanted) return json({ files: Object.entries(set).map(([path, text]) => ({ path, bytes: text.length, kind: "text" }))});
       const text = set[wanted] ?? (isSkill && wanted === "SKILL.md" ? "---\nname: weekly-summary\ndescription: Friday recap of my threads\n---\n\nRead the week's threads, then write a short recap: what moved, what waits, what needs a decision.\n" : undefined);

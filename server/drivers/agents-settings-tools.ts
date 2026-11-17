@@ -15,7 +15,7 @@ export const SETTINGS_TOOL_DEFINITIONS = [
         action: { type: "string", enum: ["list", "get", "set"] },
         family: { type: "string", description: "list: bot, thread, routine, group, section, rules, account, appearance, notifications, models, connections, credentials, server, organization, computer, device." },
         key: { type: "string", maxLength: 64, description: "From list, e.g. bot.approvalMode." },
-        target: { type: "string", maxLength: 900, description: "Id of the bot (several: a,b), conversation, routine, group, team, rule, engine or vault item; default you or this conversation." },
+        target: { type: "string", maxLength: 900, description: "Id of the bot (several: a,b; all: every bot of theirs), conversation, routine, group, team, rule, engine or vault item; default you or this conversation." },
         value: { description: "The new value (set)." },
         quote: { type: "string", maxLength: 600 },
       },

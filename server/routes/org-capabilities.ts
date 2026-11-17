@@ -24,6 +24,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import type { CapabilityMarketplacePolicy, LinkPostResult } from "../perspicax/perspicax-link.ts";
 import type { OrgCapabilityView } from "../org/org-capabilities.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
+import { sendPluginFiles } from "../plugins/plugin-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PX_CAPABILITIES_PATH = "/api/v1/pulsabot/capabilities";
@@ -59,6 +60,8 @@ export interface OrgCapabilityRouteDeps {
   isMember: (principalId: string) => boolean;
   activeFor: (view: OrgCapabilityView, principalId: string) => boolean;
   setChoice: (principalId: string, id: string, enabled: boolean) => void;
+  /** The installed folder of a plugin or skill the organization declared, for a person it is on for (what their turns mount); null: none. */
+  folderOf?: (principalId: string, id: string) => string | null;
   /** The policy Perspicax sends: undefined (older), null (not set). */
   policy: () => CapabilityMarketplacePolicy | null | undefined;
   /** cfg.organization.pluginMarketplaces, the historical local rule. */
@@ -163,17 +166,30 @@ export async function migrateMarketplaces(deps: Pick<OrgCapabilityRouteDeps, "ca
   return { ok: true, done: true, imported: entries.length };
 }
 
+/** #4504: the one verdict on a person's switch of an organization item:
+ * an imposed one stays on, one the organization turned off stays off; an
+ * offered one is the person's to turn on or off. The route answers it, and
+ * a bot (sagax_settings capabilities.organization) gets the same answer. */
+export function orgCapabilityLock(view: Pick<OrgCapabilityView, "mode" | "enabled">): "org_capability_imposed" | "org_capability_off" | null {
+  if (view.mode === "imposed") return "org_capability_imposed";
+  if (!view.enabled) return "org_capability_off";
+  return null;
+}
+
 function memberRow(view: OrgCapabilityView, on: boolean, member: boolean) {
   return {
     id: view.id, mount: view.mount, form: view.form, name: view.name, description: view.description,
     mode: view.mode, enabled: view.enabled, state: view.state, source: view.source,
     ...(view.transport ? { transport: view.transport } : {}), ...(view.version ? { version: view.version } : {}),
-    on, canToggle: view.mode === "offered" && view.enabled && member && view.state !== "flow",
+    on, canToggle: orgCapabilityLock(view) === null && member && view.state !== "flow",
   };
 }
 
+/** GET /api/me/org-capabilities/:id/files[?path=] */
+const ME_ORG_FILES = /^\/api\/me\/org-capabilities\/([^/]{1,200})\/files$/;
+
 export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHandler {
-  return async ({ req, res, path, method, auth, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
     const me = path === ME_ORG_CAPABILITIES_ROUTE || path.startsWith(`${ME_ORG_CAPABILITIES_ROUTE}/`);
     const org = path === ORG_CAPABILITIES_ROUTE || path.startsWith(`${ORG_CAPABILITIES_ROUTE}/`);
     if (!me && !org) return PASS;
@@ -188,6 +204,15 @@ export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHa
         const member = deps.isMember(person.principalId);
         return json(res, 200, { owner: deps.owner(), items: deps.views().filter((view) => view.state !== "flow").map((view) => memberRow(view, deps.activeFor(view, person.principalId), member)) });
       }
+      // what an organization plugin or skill holds, read only, for a person it is on for (the Contents tab of its page)
+      const own = ME_ORG_FILES.exec(path);
+      if (own && method === "GET") {
+        if (!person) return fail(401, "session_required");
+        const folder = deps.folderOf?.(person.principalId, decodeURIComponent(own[1]!)) ?? null;
+        if (!folder) return fail(404, "org_capability_unknown");
+        sendPluginFiles(res, json, folder, url.searchParams.get("path"));
+        return;
+      }
       const id = decodeURIComponent(path.slice(ME_ORG_CAPABILITIES_ROUTE.length + 1));
       if (method !== "PUT" || !id || id.includes("/")) return PASS;
       if (!person) return fail(401, "session_required");
@@ -196,8 +221,8 @@ export function createOrgCapabilityRoutes(deps: OrgCapabilityRouteDeps): RouteHa
       const view = deps.views().find((candidate) => candidate.id === id && candidate.state !== "flow");
       if (!view) return fail(404, "org_capability_unknown");
       if (!deps.isMember(person.principalId)) return fail(403, "org_capability_not_member");
-      if (view.mode === "imposed") return fail(409, "org_capability_imposed");
-      if (!view.enabled) return fail(409, "org_capability_off");
+      const lock = orgCapabilityLock(view);
+      if (lock) return fail(409, lock);
       deps.setChoice(person.principalId, view.id, body.enabled);
       return json(res, 200, { item: memberRow(view, deps.activeFor(view, person.principalId), true) });
     }

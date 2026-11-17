@@ -110,10 +110,12 @@ describe("ask_choice from a teammate's exchange (#4238)", () => {
     expect(w.recorded).toHaveLength(1);
   });
 
-  it("the tool offers tell and options stay required", () => {
+  it("the tool offers tell, and a single question still needs its options", () => {
     const schema = ASK_CHOICE_DEF.inputSchema as { properties: Record<string, unknown>; required: string[] };
     expect(schema.properties.tell).toBeDefined();
-    expect(schema.required).toEqual(["question", "options"]);
+    // #4490: a form or a checklist brings its own rows, so the schema asks only for
+    // the question; the parser still refuses a single question with no options
+    expect(schema.required).toEqual(["question"]);
     expect(parseAskChoiceInput({ question: "Which?" })).toMatchObject({ ok: false });
   });
 });

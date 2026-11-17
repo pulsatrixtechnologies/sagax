@@ -5,7 +5,7 @@
 // answer, its question whole.
 import { describe, expect, it, vi } from "vitest";
 
-import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../../shared/options-card.ts";
+import { ASK_CHOICE_TOOL, askChoiceRefusal, parseAskChoiceInput } from "../../shared/options-card.ts";
 import { postedCardWaits } from "../approvals/card-turn-handoff.ts";
 import { retireOpenQuestions } from "../approvals/retire-open-questions.ts";
 import { isPersistentQuestionCard } from "../../shared/ask-question.ts";
@@ -13,7 +13,7 @@ import { createOpenQuestionCard } from "../index-leaves/openQuestionCard.ts";
 import { createDeliverLateQuestionAnswer } from "../index-leaves/deliverLateQuestionAnswer.ts";
 import { promptWithReply, transcriptText } from "../messages/replies.ts";
 import { createAgentCard, type AgentCardStore } from "./chat-widgets.ts";
-import { AskKeyIndex, askTextKey, raiseTextKeyedAsk } from "./ask-choice-keys.ts";
+import { AskKeyIndex, askTextKey, raiseTextKeyedAsk, replacedAskCard } from "./ask-choice-keys.ts";
 import { callTool, type ToolCallContext } from "../drivers/agents-call.ts";
 import type { HarnessClient } from "../drivers/agents-client.ts";
 import { ASK_CHOICE_DEF } from "../drivers/agents-tools/extras.ts";
@@ -89,6 +89,9 @@ describe("ask_choice parses the decision form (#4205)", () => {
     const long = "The entry needs a decision about the hours logged during the migration. ".repeat(42);
     expect(long.length).toBeGreaterThan(3000);
     expect(parseAskChoiceInput({ question: long, options: ["Approve", "Refuse"] })).toMatchObject({ ok: true, value: { subtitle: long.trim() } });
+    // #4490: the bot's own unbroken block is a wall of text; in paragraphs it is kept
+    expect(askChoiceRefusal({ question: long, options: ["Approve", "Refuse"] })).toMatch(/wall-of-text/);
+    expect(askChoiceRefusal({ question: long.trim().split(". ").join(".\n\n"), options: ["Approve", "Refuse"] })).toBeNull();
   });
 });
 
@@ -348,5 +351,22 @@ describe("several cards in one turn, said per engine (#4205 review)", () => {
   it("the tool says several cards in one turn need wait false", () => {
     expect(ASK_CHOICE_DEF.description).toMatch(/only wait false cards can follow one another in one turn/);
     expect(ASK_CHOICE_DEF.inputSchema.properties.wait.description).toMatch(/the turn then ends with this call/);
+  });
+});
+
+// #4490: a keyed form replaces its rows whole; a plain question replacing a
+// form drops the rows' controls
+describe("a keyed form card replaced in place (#4490)", () => {
+  const formCard = {
+    title: "T", subtitle: "Context", options: [], requestId: "r1",
+    questionRequest: { version: 1 as const, questions: [{ question: "Drafts", kind: "multi" as const, multiSelect: true, options: [{ label: "A" }, { label: "B" }], actions: ["Post"] }] },
+  };
+  it("takes the new rows whole", () => {
+    const next = replacedAskCard(formCard, { question: "New context", options: [], noHold: false, questions: [{ question: "Done?", kind: "yes_no", options: [{ label: "Yes", id: "yes" }, { label: "No", id: "no" }] }] });
+    expect(next.questionRequest?.questions).toEqual([{ question: "Done?", kind: "yes_no", options: [{ label: "Yes", id: "yes" }, { label: "No", id: "no" }] }]);
+  });
+  it("drops a row's controls under a plain question", () => {
+    const next = replacedAskCard(formCard, { question: "Ship it?", options: ["Ship", "Hold"], noHold: false });
+    expect(next.questionRequest?.questions).toEqual([{ question: "Ship it?", options: [{ label: "Ship" }, { label: "Hold" }] }]);
   });
 });

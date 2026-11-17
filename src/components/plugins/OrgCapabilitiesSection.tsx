@@ -49,7 +49,7 @@ export function installWords(state: MemberOrgCapability["state"], enabled: boole
   return null;
 }
 
-function formWords(form: "plugin" | "skill" | "mcp"): string {
+export function formWords(form: "plugin" | "skill" | "mcp"): string {
   return t(`orgCapabilities.form.${form}` as never);
 }
 
@@ -103,7 +103,7 @@ export function vendorSkillsOf(state: OrgCapabilitiesForMeState, vendorKey: stri
 /** Me scope: the organization's capabilities for the person, with their
  * own switch on an offered one. `bare`: the rows alone, for the console's
  * section of Connect Apps, which has the title. */
-export function OrgCapabilitiesForMe({ forms, state: given, bare = false }: { forms?: readonly string[]; state?: OrgCapabilitiesForMeState; bare?: boolean } = {}) {
+export function OrgCapabilitiesForMe({ forms, state: given, bare = false, onOpen }: { forms?: readonly string[]; state?: OrgCapabilitiesForMeState; bare?: boolean; /** a plugin or skill that is on for the person opens its page (Contents) */ onOpen?: (item: MemberOrgCapability) => void } = {}) {
   const own = useOrgCapabilitiesForMe(given === undefined);
   const { items, error, busy, toggle, retry } = given ?? own;
   // #2104: a failure says what did not load and offers to try again (a bare
@@ -129,10 +129,19 @@ export function OrgCapabilitiesForMe({ forms, state: given, bare = false }: { fo
                 {item.form === "plugin" ? <Puzzle size={18} /> : item.form === "skill" ? <BookOpen size={18} /> : <Plug size={18} />}
               </span>
             )}
-            <span className="min-w-0 flex-1">
-              <span className="block break-words text-[13px] font-medium leading-[18px] text-ink">{item.name}</span>
-              <span className="block text-[12px] leading-4 text-ink-secondary" data-org-capability-origin="">{[bare ? t(item.mode === "imposed" ? "connectApps.origin.required" : "connectApps.origin.offered") : "", formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
-            </span>
+            {(() => {
+              const text = (
+                <>
+                  <span className="block break-words text-[13px] font-medium leading-[18px] text-ink">{item.name}</span>
+                  <span className="block text-[12px] leading-4 text-ink-secondary" data-org-capability-origin="">{[bare ? t(item.mode === "imposed" ? "connectApps.origin.required" : "connectApps.origin.offered") : "", formWords(item.form), item.version ? t("orgCapabilities.version", { version: item.version }) : "", state ?? ""].filter(Boolean).join(" \u00b7 ")}</span>
+                </>
+              );
+              // a plugin or skill that is installed and on for the person has a page: its files are theirs to read
+              const opens = onOpen && item.form !== "mcp" && item.on && item.state === "installed";
+              return opens
+                ? <button type="button" data-org-capability-open={item.id} aria-label={t("connectApps.openAria", { name: item.name })} onClick={() => onOpen(item)} className="min-w-0 flex-1 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">{text}</button>
+                : <span className="min-w-0 flex-1">{text}</span>;
+            })()}
             {!bare && <span className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink-secondary" data-org-capability-mode-chip="">{modeWords(item.mode)}</span>}
             {/* the same columns as every row's right side (state, switch, "..."), so the switches line up */}
             <span className={cn("flex shrink-0 items-center", bare && "gap-2")}>

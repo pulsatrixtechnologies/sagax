@@ -95,8 +95,11 @@ function level(samples: Float32Array): number {
   return Math.sqrt(sum / Math.max(1, samples.length));
 }
 
-/** The words a server refusal of the call carries, for the pill. */
+/** The words a server refusal of the call carries, for the pill. A sentence
+ * that already says why no call was placed is kept as the server wrote it
+ * (English or French). */
 export function realtimeRefusalText(code: string | undefined, fallback: string): string {
+  if (/^(?:No call was placed:|Aucun appel :)/.test(fallback)) return fallback;
   if (code === "realtime_key_refused") return "The realtime voice key was refused. Fix it in Settings > Voice.";
   if (code === "realtime_not_configured") return "No realtime voice is set up. Add an xAI key in Settings > Voice.";
   if (code === "realtime_unreachable") return "The realtime voice service did not answer. Call again in a moment.";

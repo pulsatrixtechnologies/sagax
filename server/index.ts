@@ -919,6 +919,7 @@ import { resolveMailSettings } from "./mail/mail-config.ts";
 import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts";
 import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
 import { createVoiceModeRoutes, isVoiceSocketPath, resolveVoiceKey, type VoiceModeDeps, type VoiceSpeaker } from "./voice/voice-mode.ts";
+import { soloGrokVoiceToken } from "./voice/grok-account-voice.ts";
 import { botSpeech, VOICE_MODE_STORAGE_KEY, VOICE_SERVER_ENGINE } from "../shared/voice-mode.ts";
 import { keyLast4 } from "./voice/voice-keys.ts";
 import { IMAGE_SERVER_ENGINE } from "../shared/image-generation.ts";
@@ -31479,6 +31480,19 @@ const voiceModeDeps: VoiceModeDeps = {
   // 2026-10-16 the organization's xAI key gives voice only to the
   // people Perspicax lists it for (an admin always).
   serverKeyAllowed: (speaker) => serverEngineAllowedFor(speaker.principalId, VOICE_SERVER_ENGINE),
+  // #4567: the person's own connected Grok account, before any API key.
+  // A disabled person has none. The token is never logged.
+  grokAccount: async (speaker) => {
+    if (speaker.disabled) return undefined;
+    if (IDENTITY.kind === "perspicax") {
+      if (!speaker.principalId || !engineLogins) return undefined;
+      const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(speaker.principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
+      const restore = (person: string, driver: LoginDriver, instance: string) => signInRecheck?.restore(person, driver, instance) ?? Promise.resolve(false);
+      const access = instanceId ? await engineLogins.grokLiveAccess(speaker.principalId, instanceId, restore) : undefined;
+      return access?.ok ? access.accessToken : undefined;
+    }
+    return soloGrokVoiceToken();
+  },
   resolveOwnKey: (sub) => {
     const person = IDENTITY.kind === "perspicax" ? principals.bySubject(IDENTITY.issuer, sub) : null;
     const owner = providerAccountOwner(person?.id);

@@ -304,9 +304,9 @@ export const FISH_VOICE_SERVER_ENGINE = "fishVoice";
 export type VoiceModeVia = "speaker-key" | "org-key" | "server";
 
 /** Where a key comes from (server/voice/voice-keys.ts, 2026-10-28): the person's
- * own voice key saved in Sagax (My voice keys), their own xAI key in
- * Perspicax, the organization's key, or a solo server's key. */
-export type VoiceKeySource = "voice-key" | "perspicax-key" | "org-key" | "server";
+ * connected Grok account, their own voice key saved in Sagax (My voice keys),
+ * their own xAI key in Perspicax, the organization's key, or a solo server's key. */
+export type VoiceKeySource = "grok-account" | "voice-key" | "perspicax-key" | "org-key" | "server";
 
 /** Why xAI failed a voice request, as the server sorted it
  * (server/tts/grok.ts grokVoiceFailure): the key was rejected (`key`), no

@@ -81,6 +81,7 @@ describe("the keys that may serve a voice, in order (server/voice/voice-keys.ts)
     expect(describeVoiceKey(MINE)).toBe("person's voice key ···6Rf8");
     expect(describeVoiceKey({ source: "org-key", last4: null })).toBe("organization's key");
     expect(describeVoiceKey({ source: "server", last4: "abcd" })).toBe("server's key ···abcd");
+    expect(describeVoiceKey({ source: "grok-account", last4: "4Dd" })).toBe("connected Grok account ···4Dd");
   });
 
   it("gives way to another provider on any failure, silently, and remembers a busy one only a minute (2026-10-29)", async () => {

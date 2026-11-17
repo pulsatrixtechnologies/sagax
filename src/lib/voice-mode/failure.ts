@@ -140,19 +140,28 @@ export type VoiceErrorNoteKey =
   | "voiceMode.micUnavailable"
   | "voiceMode.speechFailed"
   | "voiceMode.transcribeFailed"
+  | "voiceMode.noCall"
   | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other">}`
   | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other" | "down" | "voice">}.named`;
 
 /** The locale key naming a key by its source: "your voice key ···Wez8",
  * "your xAI key in Perspicax ···c0Je", "the organization's key". */
-export function voiceKeyLabelKey(source: VoiceKeySource): `voiceMode.key.${"voiceKey" | "perspicaxKey" | "orgKey" | "serverKey"}` {
-  return source === "voice-key" ? "voiceMode.key.voiceKey" : source === "perspicax-key" ? "voiceMode.key.perspicaxKey" : source === "org-key" ? "voiceMode.key.orgKey" : "voiceMode.key.serverKey";
+export function voiceKeyLabelKey(source: VoiceKeySource): `voiceMode.key.${"grokAccount" | "voiceKey" | "perspicaxKey" | "orgKey" | "serverKey"}` {
+  if (source === "grok-account") return "voiceMode.key.grokAccount";
+  if (source === "voice-key") return "voiceMode.key.voiceKey";
+  if (source === "perspicax-key") return "voiceMode.key.perspicaxKey";
+  if (source === "org-key") return "voiceMode.key.orgKey";
+  return "voiceMode.key.serverKey";
 }
 
 /** The locale key of what to do about a key of that source: add credits
  * or change it where it lives. */
-export function voiceKeyActionKey(source: VoiceKeySource): `voiceMode.keyAction.${"voiceKey" | "perspicaxKey" | "orgKey" | "serverKey"}` {
-  return source === "voice-key" ? "voiceMode.keyAction.voiceKey" : source === "perspicax-key" ? "voiceMode.keyAction.perspicaxKey" : source === "org-key" ? "voiceMode.keyAction.orgKey" : "voiceMode.keyAction.serverKey";
+export function voiceKeyActionKey(source: VoiceKeySource): `voiceMode.keyAction.${"grokAccount" | "voiceKey" | "perspicaxKey" | "orgKey" | "serverKey"}` {
+  if (source === "grok-account") return "voiceMode.keyAction.grokAccount";
+  if (source === "voice-key") return "voiceMode.keyAction.voiceKey";
+  if (source === "perspicax-key") return "voiceMode.keyAction.perspicaxKey";
+  if (source === "org-key") return "voiceMode.keyAction.orgKey";
+  return "voiceMode.keyAction.serverKey";
 }
 
 /** A key as the person reads it, through `t`: its source and its last four
@@ -190,6 +199,9 @@ export function voiceErrorNote(
 ): VoiceErrorNote {
   if (reason === "mic-denied") return { key: "voiceMode.micDenied", retry: true, clearsOnVoice: false };
   if (reason === "mic-unavailable") return { key: "voiceMode.micUnavailable", retry: true, clearsOnVoice: false };
+  if (cause instanceof VoiceProviderError && /^(?:No call was placed:|Aucun appel :)/.test(cause.message)) {
+    return { key: "voiceMode.noCall", params: { sentence: cause.message }, retry: false, clearsOnVoice: true };
+  }
   const key = cause instanceof VoiceProviderError ? cause.key : undefined;
   if (key && (kind === "quota" || kind === "key" || kind === "busy")) {
     return {

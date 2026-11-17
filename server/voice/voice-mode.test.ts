@@ -581,6 +581,55 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     const out = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });
     expect(out.body).toEqual({ provider: "xai", available: true, via: "server", key: { source: "server", last4: "t6Yb" }, keys: [{ source: "server", last4: "t6Yb" }], providers: { tts: ["xai"], stt: ["xai"] }, tts: "xai", stt: "xai" });
   });
+
+  const ACCOUNT = "grk-ACCOUNTfake1Aa2Bb3Cc4Dd";
+
+  it("tries the connected Grok account before any API key", async () => {
+    const out = await resolveVoiceKeys({
+      organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => true,
+      resolveOwnKey: async () => ({ ok: true, key: OWN_KEY, fingerprint: "fp" }), personalKey: () => MINE_KEY,
+      grokAccount: async () => ACCOUNT,
+    }, { principalId: "p-ada", sub: "sub-ada" });
+    expect(out.ok && out.keys.map((key) => key.source)).toEqual(["grok-account", "voice-key", "perspicax-key", "org-key"]);
+    expect(out.ok && out.keys[0]).toMatchObject({ via: "speaker-key", source: "grok-account", last4: "c4Dd", payerPrincipalId: "p-ada" });
+  });
+
+  it("speaks on the API key when the connected account is out of credits", async () => {
+    const { call, xai } = harness({ grokAccount: async () => ACCOUNT, ownKeys: { "sub-ada": OWN_KEY } });
+    xai.synthesize.mockImplementation(async (_text, _voice, key) => {
+      if (key === ACCOUNT) throw new Error(CREDITS);
+      return { bytes: new Uint8Array([1]), mime: "audio/mpeg" as const };
+    });
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak", body: { text: "Bonjour." } });
+    expect(out.status).toBe(200);
+    expect(xai.synthesize.mock.calls.map((args) => args[2])).toEqual([ACCOUNT, OWN_KEY]);
+    expect(JSON.stringify(out)).not.toContain(ACCOUNT);
+  });
+
+  it("says why in one line when the account and every API key are out of credits, and places no call", async () => {
+    const { call, xai } = harness({ grokAccount: async () => ACCOUNT, ownKeys: { "sub-ada": OWN_KEY } });
+    xai.synthesize.mockRejectedValue(new Error(CREDITS));
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=en", body: { text: "Bonjour." } });
+    expect(out.status).toBe(502);
+    expect(out.body.error).toBe("No call was placed: the connected Grok account is out of credits, and the xAI API key is out of credits too.");
+    expect(out.body.failure).toBe("quota");
+    expect(xai.synthesize).toHaveBeenCalledTimes(3);
+    expect(JSON.stringify(out.body)).not.toContain(ACCOUNT);
+    expect(leaks(out.body)).toBe(false);
+    const french = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=fr-CA", body: { text: "Bonjour.", language: "fr" } });
+    expect(french.body.error).toBe("Aucun appel : le compte Grok connecté n'a plus de crédit, et la clé API xAI non plus.");
+  });
+
+  it("a solo server tries the connected account, then its own key", async () => {
+    const { call } = harness({ organization: false, speaker: () => ({ principalId: "" }), grokAccount: async () => ACCOUNT });
+    const out = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });
+    expect(out.body).toMatchObject({
+      available: true, via: "speaker-key",
+      key: { source: "grok-account", last4: "c4Dd" },
+      keys: [{ source: "grok-account", last4: "c4Dd" }, { source: "server", last4: "t6Yb" }],
+    });
+    expect(JSON.stringify(out.body)).not.toContain(ACCOUNT);
+  });
 });
 
 describe("voice mode with OpenAI and ElevenLabs (2026-10-29)", () => {

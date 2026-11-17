@@ -1,10 +1,73 @@
 // xAI TTS runs on the harness with the xAI key (one key for bots on Grok and Grok voice since 2026-10-14).
+// A connected Grok account (subscription) speaks through the CLI voice host
+// instead: the same calls, a different host and one extra header. An API key
+// stays on api.x.ai. The choice is local to the call (withVoiceAuth).
+import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import { WebSocket as WsWebSocket } from "ws";
 import type { Audio, Voice } from "./elevenlabs.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 const API = (process.env.SAGAX_XAI_TTS_API || "https://api.x.ai/v1").replace(/\/+$/, "");
+/** Subscription voice. An API key is never sent here. */
+const GROK_ACCOUNT_HTTP = "https://cli-chat-proxy.grok.com/v1";
+const GROK_ACCOUNT_REALTIME = "wss://cli-chat-proxy.grok.com/v1/realtime";
+const GROK_ACCOUNT_HEADER = "xai-grok-cli";
+const LOOPBACK_HTTP = /^https?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
+const LOOPBACK_WS = /^wss?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
+
+/** `api-key`: api.x.ai, Bearer only. `grok-account`: the person's connected
+ * Grok account, on the CLI voice host, with the CLI token header. */
+export type VoiceAuthKind = "api-key" | "grok-account";
+
+const voiceAuth = new AsyncLocalStorage<VoiceAuthKind>();
+
+/** Run `fn` as an API key or as the connected Grok account. The sockets and
+ * fetches it starts keep that choice. The token itself stays the argument
+ * the caller already passes; this only picks the host and the header. */
+export function withVoiceAuth<T>(kind: VoiceAuthKind, fn: () => T): T {
+  return voiceAuth.run(kind, fn);
+}
+
+function accountVoice(): boolean {
+  return voiceAuth.getStore() === "grok-account";
+}
+
+/** The HTTP base for this call. A loopback override is tests only. */
+function httpBase(): string {
+  if (!accountVoice()) return API;
+  const override = process.env.SAGAX_GROK_ACCOUNT_VOICE_API?.trim() ?? "";
+  if (LOOPBACK_HTTP.test(override)) return override.replace(/\/+$/, "");
+  return GROK_ACCOUNT_HTTP;
+}
+
+function wsBase(): string {
+  return httpBase().replace(/^http/, "ws");
+}
+
+/** Where a realtime socket opens. A loopback URL is kept (a test, or the
+ * server's own loopback override). A connected account otherwise uses the
+ * CLI voice host and keeps the query the caller built. */
+export function realtimeSocketUrl(passed: string): string {
+  if (LOOPBACK_WS.test(passed)) return passed;
+  if (!accountVoice()) return passed;
+  const override = process.env.SAGAX_GROK_ACCOUNT_REALTIME_URL?.trim() ?? "";
+  if (LOOPBACK_WS.test(override)) return override;
+  try {
+    const given = new URL(passed);
+    const base = new URL(GROK_ACCOUNT_REALTIME);
+    base.search = given.search;
+    return base.toString();
+  } catch {
+    return GROK_ACCOUNT_REALTIME;
+  }
+}
+
+function socketHeaders(key: string): Record<string, string> {
+  const headers: Record<string, string> = { authorization: `Bearer ${key}` };
+  if (accountVoice()) headers["X-XAI-Token-Auth"] = GROK_ACCOUNT_HEADER;
+  return headers;
+}
 const voicesSchema = z.object({
   voices: z.array(z.object({
     voice_id: z.string().min(1),
@@ -137,8 +200,10 @@ async function readLimitedText(response: Response, max: number): Promise<string>
 
 async function request(path: string, init: RequestInit): Promise<Response> {
   let response: Response;
+  const headers = new Headers(init.headers);
+  if (accountVoice()) headers.set("x-xai-token-auth", GROK_ACCOUNT_HEADER);
   try {
-    response = await fetch(`${API}${path}`, { ...init, redirect: "error" });
+    response = await fetch(`${httpBase()}${path}`, { ...init, headers, redirect: "error" });
   } catch (error) {
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
       throw new Error("Grok voice timed out. Try again.");
@@ -362,7 +427,7 @@ export function openTranscriptionStream(
   // vocabulary biasing: the bot's and the person's names, the thread's
   // proper nouns (server/voice/voice-keyterms.ts)
   for (const term of options.keyterms ?? []) query.append("keyterm", term);
-  const url = `${API.replace(/^http/, "ws")}/stt?${query}`;
+  const url = `${wsBase()}/stt?${query}`;
   let socket: WebSocket;
   let closed = false;
   let ping: ReturnType<typeof setInterval> | null = null;
@@ -388,7 +453,7 @@ export function openTranscriptionStream(
     handlers.onClose();
   };
   try {
-    socket = new Socket(url, { headers: { authorization: `Bearer ${key}` } });
+    socket = new Socket(url, { headers: socketHeaders(key) });
   } catch {
     queueMicrotask(() => fail("Could not reach Grok voice. Check your connection."));
     return { ready, send() {}, finalize() {}, close() {} };
@@ -502,7 +567,7 @@ export function openSpeechStream(
   });
   if (options.voice) query.set("voice", options.voice);
   if (typeof options.speed === "number" && options.speed !== 1) query.set("speed", String(options.speed));
-  const url = `${API.replace(/^http/, "ws")}/tts?${query}`;
+  const url = `${wsBase()}/tts?${query}`;
   let socket: WebSocket;
   let closed = false;
   let ping: ReturnType<typeof setInterval> | null = null;
@@ -527,7 +592,7 @@ export function openSpeechStream(
     handlers.onClose();
   };
   try {
-    socket = new Socket(url, { headers: { authorization: `Bearer ${key}` } });
+    socket = new Socket(url, { headers: socketHeaders(key) });
   } catch {
     queueMicrotask(() => {
       handlers.onError("Could not reach Grok voice. Check your connection.");
@@ -602,7 +667,7 @@ export function openRealtimeSocket(key: string, url: string): {
   send(data: string): void;
   close(code?: number, reason?: string): void;
 } {
-  const socket = new WsWebSocket(url, { headers: { authorization: `Bearer ${key}` } });
+  const socket = new WsWebSocket(realtimeSocketUrl(url), { headers: socketHeaders(key) });
   const adapter = {
     get readyState() { return socket.readyState; },
     onopen: null as ((event: unknown) => void) | null,

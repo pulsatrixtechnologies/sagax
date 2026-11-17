@@ -173,6 +173,9 @@ describe("the key a voice failure is about (2026-10-28)", () => {
     expect(voiceErrorNote("speech-failed", "down", down, translate)).toEqual({ key: "voiceMode.provider.down", retry: false, clearsOnVoice: true });
     // an older server names no key: the plain line too
     expect(voiceErrorNote("speech-failed", "quota", new VoiceProviderError("x", "quota", 502), translate).key).toBe("voiceMode.provider.quota");
+    const both = "No call was placed: the connected Grok account is out of credits, and the xAI API key is out of credits too.";
+    const note = voiceErrorNote("speech-failed", "quota", new VoiceProviderError(both, "quota", 502, { key: { source: "grok-account", last4: "4Dd" } }), translate);
+    expect(t(note.key, note.params)).toBe(both);
   });
 
   it("says once that the voice went on over another key", () => {
@@ -183,7 +186,7 @@ describe("the key a voice failure is about (2026-10-28)", () => {
   });
 
   it("every key line exists in every language pack that has the family", () => {
-    for (const source of ["voice-key", "perspicax-key", "org-key", "server"] as const) {
+    for (const source of ["grok-account", "voice-key", "perspicax-key", "org-key", "server"] as const) {
       expect(en).toHaveProperty(voiceKeyLabelKey(source));
       expect(fr).toHaveProperty(voiceKeyLabelKey(source));
       expect(en).toHaveProperty(voiceKeyActionKey(source));

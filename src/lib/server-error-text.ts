@@ -2,7 +2,7 @@
 // French ones) is shown in the app's language instead. The server always
 // sends a stable `code`; the app translates by code, as for `no_engine`
 // (engine-error-text.ts). A code not listed keeps the server's sentence.
-import { t } from "@/lib/i18n";
+import { t, tFromServer } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 
 const BY_CODE: Readonly<Record<string, LocaleKey>> = {
@@ -77,6 +77,9 @@ const BY_CODE: Readonly<Record<string, LocaleKey>> = {
   no_version: "serverError.noVersion",
   nobody: "serverError.nobody",
   not_bot_owner: "serverError.notBotOwner",
+  // #4471: the gate keeps a person off a bot that is not theirs
+  bot_owner_only: "serverError.botOwnerOnly",
+  shared_browser_profile: "serverError.sharedBrowserProfile",
   not_github: "serverError.notGithub",
   not_installed: "serverError.notInstalled",
   not_interim: "serverError.notInterim",
@@ -214,6 +217,14 @@ export function serverErrorMessage(body: unknown): string | null {
   // (server/safety/misuse-guardrails.ts `reason`), never the whole list.
   const reason = (body as { reason?: unknown }).reason;
   if (code === "misuse_blocked" && typeof reason === "string" && Object.hasOwn(MISUSE_REASON, reason)) return t(MISUSE_REASON[reason]!);
+  // #4471: the gate's refusal of a route that is truly an administrator's
+  // (server/auth/admin-routes.ts) names why by key; an unknown key or none
+  // keeps the plain sentence.
+  if (code === "admin_route") {
+    const reasonKey = (body as { reasonKey?: unknown }).reasonKey;
+    const said = typeof reasonKey === "string" && reasonKey.startsWith("serverError.adminRoute.") ? tFromServer(reasonKey, undefined) : undefined;
+    return said ?? t("serverError.adminRoute");
+  }
   const key = typeof code === "string" && Object.hasOwn(BY_CODE, code) ? BY_CODE[code] : undefined;
   return key ? t(key) : null;
 }

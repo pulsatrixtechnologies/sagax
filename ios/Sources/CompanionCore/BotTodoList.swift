@@ -224,8 +224,8 @@ public enum BotTodoList {
     }
 
     /// A failed read (src/lib/server-route.ts `routeMissingOnServer`): an
-    /// older server answers "no route: ..." (404), or refuses a member with
-    /// "lacks the admin scope" (403). Neither is an error. Any other 404 is a
+    /// older server answers "no route: ..." (404), or refuses a member as
+    /// admin-only (403, APIError.isAdminOnly). Neither is an error. Any other 404 is a
     /// bot this person cannot reach: no tasks for them.
     public static func outcome(of error: Error) -> BotTodoLoad {
         guard case let .status(code, message) = error as? APIError else { return .failed }
@@ -248,7 +248,7 @@ public enum BotTodoList {
     public static func routeMissing(code: Int, message: String?) -> Bool {
         let text = message ?? ""
         if code == 404 { return text.hasPrefix("no route:") }
-        if code == 403 { return text.contains("lacks the admin scope") }
+        if code == 403 { return APIError.isAdminOnly(message: text) }
         return false
     }
 

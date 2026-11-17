@@ -52,8 +52,9 @@ async function serve(options: { control?: ControlState; hasComputer?: boolean; m
 }
 
 describe("computer teach route", () => {
-  it("is admin scope, like the rest of driving a bot's computer", () => {
-    expect(requiredScope("POST", "/api/bots/scout/computer/teach")).toBe("admin");
+  // #4471: the person's own (the handler's mayDrive decides who teaches)
+  it("is a person's route for the computer they may drive", () => {
+    expect(requiredScope("POST", "/api/bots/scout/computer/teach")).toBe("client");
   });
 
   it("records clicks with the window, keys, and typing without its characters", async () => {

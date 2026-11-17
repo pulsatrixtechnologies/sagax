@@ -136,6 +136,10 @@ describe("what the app may do", () => {
     ["POST", "/api/routine-runs/run_1/seen"],
     ["POST", "/api/bots/bot_123/secret-cards/msg_2/resume"],
     ["POST", "/api/bots/bot_123/secret-cards/msg_2/dismiss"],
+    // #4471: the phone's login request card
+    ["POST", "/api/bots/bot_123/vault-cards/msg_4/grant"],
+    ["POST", "/api/bots/bot_123/vault-cards/msg_4/dismiss"],
+    ["POST", "/api/bots/bot_123/vault-cards/msg_4/onepassword"],
     ["POST", "/api/bots/bot_123/sign-in-cards/msg_3/done"],
     ["POST", "/api/bots/bot_123/sign-in-cards/msg_3/cancel"],
     // #3471: a waiting question in words skipped from the phone

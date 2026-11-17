@@ -37,6 +37,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { clientRouteOwnerBot } from "./request-auth.ts";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { fillShape, memberRouteShapes, OWNED_KINDS, rowsBehindFeatures, type RouteShape, type Slot } from "../testing/authz-routes.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
@@ -299,6 +300,12 @@ const OWN_403_CODES = new Set([
   // the owner sets a bot's own model and notifications on the bot itself; an
   // override is for a bot shared with the person (shared/viewer-bot-overrides.ts)
   "owner_bot_settings",
+  // #4471: My Chrome is the Chrome of the computer the server runs on
+  "computer_owner_only",
+  // the meeting notetaker is an experiment the fixture leaves off
+  "meetings_disabled",
+  // a remote support session the fixture never opened
+  "remote_session_not_open",
 ]);
 /** Own probes whose 401 is a provider's answer to an empty key, not Sagax's. */
 const OWN_PROVIDER_401 = /^POST \/api\/me\/cloud-agent-providers\/\w+\/test$/;
@@ -511,6 +518,39 @@ posixOnly("authorization matrix: person and person, member and admin (2026-10-27
     }
     expect(failures).toEqual([]);
   }, 600_000);
+
+  // #4471: a route opened to members whose handler does not check the bot is
+  // the caller's (CLIENT_ALLOW `owner: "bot"`: SOUL.md file proposals, the
+  // send state's Fix, the bot's computer, a saved recipe...) refuses a person
+  // the bot is only shared with at use, and still lets its owner through.
+  // Skill history restore is kept to the owner by its handler.
+  it("#4471: a member route on someone else's bot stays its owner's, even shared at use", async () => {
+    const failures: string[] = [];
+    let probed = 0;
+    for (const shape of shapes) {
+      const k = key(shape);
+      const path = fillShape(shape, fillFrom(shared));
+      if (clientRouteOwnerBot(shape.method, path, FEATURES) !== shared.bot) continue;
+      probed += 1;
+      const body = shape.method === "GET" ? undefined : (BODIES[k]?.(a.things, shared) ?? {});
+      const got = await api(shape.method, path, a.auth, body);
+      rows.push({ phase: "shared-owner", method: shape.method, template: shape.template, path, status: got.status, code: got.body?.code });
+      if (got.status !== 403) failures.push(`${k}: ${got.status} for a person at use ${got.text.slice(0, 200)}`);
+      const owner = await api(shape.method, path, b.auth, body);
+      if (owner.status === 403 && /belongs to someone else/.test(owner.text)) failures.push(`${k}: the owner is refused`);
+    }
+    expect(probed).toBeGreaterThanOrEqual(8);
+    for (const [path, body] of [
+      [`/api/bots/${shared.bot}/soul/apply-file`, { expectedRevision: "x", fileText: "x" }],
+      [`/api/bots/${shared.bot}/soul/discard-file`, { expectedRevision: "x", fileText: "x" }],
+      [`/api/bots/${shared.bot}/send-state/fix`, { fix: "codex_native_mcp" }],
+      [`/api/bots/${shared.bot}/skills/zz-skill/history/restore`, { id: "x" }],
+    ] as const) {
+      const got = await api("POST", path, a.auth, body);
+      if (got.status !== 403) failures.push(`POST ${path}: ${got.status} for a person at use ${got.text.slice(0, 200)}`);
+    }
+    expect(failures).toEqual([]);
+  }, 300_000);
 
   it("webhooks: aimed only at one's own bots or a bot shared at run, never moved to another's", async () => {
     const mine = await api("POST", "/api/webhooks", a.auth, { name: "Ari hook", prompt: "x", botId: a.things.bot, runOn: "maus" });

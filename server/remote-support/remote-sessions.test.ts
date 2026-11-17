@@ -245,7 +245,7 @@ describe("pairing", () => {
     expect(paired.status).toBe(200);
     const denied = await call("/api/auth/pairing", { method: "POST", headers: remote("10.0.0.2", { authorization: `Bearer ${paired.body.token}` }), body: "{}" });
     expect(denied.status).toBe(403);
-    expect(denied.body.error).toContain("lacks the admin scope");
+    expect(denied.body.error).toContain("Only an administrator can do this");
     expect((await call("/api/bots", { headers: remote("10.0.0.2", { authorization: `Bearer ${paired.body.token}` }) })).status).toBe(200);
   });
 
@@ -498,7 +498,7 @@ describe("pairing", () => {
     for (const [method, path] of [["POST", "/api/cli-test"], ["POST", "/api/mcp/servers"], ["POST", "/api/local-computer/run"]] as const) {
       const r = await call(path, { method, headers: h(), body: method === "POST" ? "{}" : undefined });
       expect(r.status, `${method} ${path}`).toBe(403);
-      expect(r.body.error, `${method} ${path}`).toContain("admin scope");
+      expect(r.body.error, `${method} ${path}`).toContain("Only an administrator can do this");
     }
     // Webhooks are a bot feature its owner uses (client scope since 2026-10-22):
     // the scope gate lets the request through and the handler judges the body.

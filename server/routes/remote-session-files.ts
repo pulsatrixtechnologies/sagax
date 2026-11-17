@@ -45,7 +45,7 @@ export function createRemoteSessionFileRoutes(deps: {
     const record = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : null;
     if (!record || Object.keys(record).some((key) => key !== "path")) return json(res, 400, { error: "Send only the folder path." });
     const listed = await deps.sessions.listDir(principalId, match[1]!, match[2]!, record.path);
-    if ("error" in listed) return json(res, listed.status, { error: listed.error });
+    if ("error" in listed) return json(res, listed.status, { error: listed.error, ...(listed.status === 403 ? { code: "remote_session_not_open" } : {}) });
     return json(res, 200, listed.listing);
   };
 }

@@ -74,6 +74,16 @@ describe("what Settings > Usage asks the server", () => {
     expect(get.mock.calls.filter(([path]) => path.startsWith("/api/usage?mine=1&"))).toHaveLength(5);
   });
 
+  // #4471: the same refusal, worded by code on a server that classes every route
+  it("falls back too on the gate's admin_route refusal of an unknown route", async () => {
+    const get = vi.fn(async (path: string) => {
+      if (path.startsWith("/api/me/usage")) throw new ApiError("forbidden", 403, { error: "Only an administrator can do this on this server.", code: "admin_route" });
+      return summary(0, 0);
+    });
+    await loadPersonalUsage(NOW, get as never);
+    expect(get.mock.calls.filter(([path]) => path.startsWith("/api/usage?mine=1&"))).toHaveLength(5);
+  });
+
   it("says the server is too old when the fallback is refused too, and keeps other failures as failures", async () => {
     const refused = vi.fn(async (path: string) => {
       throw path.startsWith("/api/me/usage") ? new ApiError("not found", 404, { error: "not found" }) : new ApiError("forbidden", 403, { error: "usage.view" });

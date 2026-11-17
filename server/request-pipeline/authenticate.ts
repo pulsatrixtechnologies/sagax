@@ -6,7 +6,7 @@ import { achievementRequestEvents, roomPeopleCount } from "../achievements/achie
 import { canOnBot } from "../auth/authz.ts";
 import { IDP_REFRESH_WAIT_MS, settledWithin } from "../auth/idp-session.ts";
 import { isAccountEmail } from "../auth/principals.ts";
-import {clearSessionCookie, parseCookies, requestOrigin, requiredScope, resolveRequestAuth, routePermissions, secureTokenMatch, serializeSessionCookie} from "../auth/request-auth.ts";
+import {clearSessionCookie, clientRouteOwnerBot, parseCookies, requestOrigin, requiredScope, resolveRequestAuth, routePermissions, scopeRefusal, secureTokenMatch, serializeSessionCookie} from "../auth/request-auth.ts";
 import { cookieMaxAgeSeconds, isBotActSession } from "../auth/sessions.ts";
 import { memberBody, notFoundFor, pathSubject } from "../bots/bot-visibility.ts";
 import { sharedComputersEnabled } from "../config.ts";
@@ -71,7 +71,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
       json(res, 401, { error: gate.error, code: gate.code });
       return null;
     }
-    json(res, gate.status, gate.permission ? permissionRefusal(gate.permission) : { error: gate.error });
+    json(res, gate.status, gate.permission ? permissionRefusal(gate.permission) : { error: gate.error, ...(gate.code ? { code: gate.code } : {}), ...(gate.reasonKey ? { reasonKey: gate.reasonKey } : {}) });
     return null;
   }
   const auth = gate.auth;
@@ -153,7 +153,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
         // 2026-10-09: a route a permission opens (PERMISSION_ROUTES).
         const grants = needed === "admin" && scopes.includes("client") ? routePermissions(method, path, features) : null;
         if (!grants) {
-          json(res, 403, { error: `forbidden: this session lacks the ${needed} scope` });
+          json(res, 403, scopeRefusal(needed, method, path));
           return null;
         }
         if (!grants.some((key) => host.sessionPermits(auth.session, key))) {
@@ -199,6 +199,24 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
     // edit, a new or switched task) comes without its audience list or
     // the teammates they cannot see, whichever route answers.
     onJsonBody(res, (body) => memberBody(body, visible));
+  }
+  // #4471: a person's own route that acts on a bot its handler does not
+  // check (CLIENT_ALLOW `owner: "bot"`): only that bot's owner, someone
+  // granted edit on it, or an admin. A bot that does not exist is a 404; a
+  // bot the caller already sees (visibility passed above) but that is not
+  // theirs is a 403, as before this route was opened to members.
+  if (auth.kind === "session" && !auth.scopes.includes("admin")) {
+    const features = { sharedComputers: sharedComputersEnabled(host.cfg), orgPairing: host.IDENTITY.kind === "perspicax", orgDirectory: host.IDENTITY.kind === "perspicax", serverCatalogue: host.IDENTITY.kind !== "perspicax" };
+    const ownedBotId = clientRouteOwnerBot(method, path, features);
+    const ownedBot = ownedBotId ? host.store.bot(ownedBotId) : null;
+    if (ownedBotId && !ownedBot) {
+      json(res, 404, { error: "no such bot" });
+      return null;
+    }
+    if (ownedBot && !host.callerOwnsBot(auth, ownedBot)) {
+      json(res, 403, { error: "forbidden: this bot belongs to someone else", code: "bot_owner_only" });
+      return null;
+    }
   }
   // Perspicax #321: an archived temporary agent takes no more work. Its
   // conversations stay readable to whoever could read them until the purge.

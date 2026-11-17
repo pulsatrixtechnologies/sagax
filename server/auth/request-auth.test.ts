@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ADMIN_ONLY_PREFIX,
   BROWSER_SIGN_IN,
+  clientRouteOwnerBot,
   clearSessionCookie,
   capabilitiesForAuth,
   fromBrowser,
@@ -233,8 +235,10 @@ describe("scopes", () => {
       ["POST", "/api/bots/x/local-computer/join"], ["POST", "/api/bots/x/local-computer/screenshot"],
       ["GET", "/api/computers/boxes"], ["POST", "/api/computers/boxes/bx_23456789/delete"],
       ["POST", "/api/bots/x/skills"], ["PATCH", "/api/bots/x/skills/s"],
-      ["PATCH", "/api/bots/x/model"], ["GET", "/api/teams/scout"], ["POST", "/api/org-library/add"],
-      ["PUT", "/api/section-context"], ["GET", "/api/threads/t/events"],
+      // #4471: a bot's model (PATCH .../model) and a thread's events are the
+      // person's own now (server/auth/route-scopes.test.ts)
+      ["GET", "/api/teams/scout"], ["POST", "/api/org-library/add"],
+      ["PUT", "/api/section-context"],
       ["POST", "/api/mcp/servers"], ["PATCH", "/api/mcp/servers/x"], ["DELETE", "/api/mcp/servers/x"], ["POST", "/api/connectors/slack/authorize"],
       ["POST", "/api/bots/x/slack-management"], ["GET", "/api/bots/x/slack-management/extra"],
       ["PUT", "/api/config"], ["POST", "/api/auth/pairing"], ["GET", "/api/auth/sessions"], ["DELETE", "/api/auth/sessions/abc"],
@@ -281,7 +285,7 @@ describe("scopes", () => {
       ["POST", "/api/plugins/uninstall"], ["POST", "/api/bots/x/overview"],
       // the voice engine and the advanced panel stay admin for a session (the sidecar is the owner)
       ["PUT", "/api/tts/provider"], ["POST", "/api/bots/x/system-prompt"],
-      ["GET", "/api/bots/x/skills"], ["POST", "/api/bot-presets"], ["DELETE", "/api/bot-presets/p"], ["GET", "/api/bots/x/computer"],
+      ["GET", "/api/bots/x/skills"], ["POST", "/api/bot-presets"], ["DELETE", "/api/bot-presets/p"],
       ["DELETE", "/api/bots/x/history"], ["POST", "/api/bots/x/memory/open"],
       // the workspace routes take only these shapes
       ["POST", "/api/bots/x/workspace"], ["PUT", "/api/bots/x/workspace/download"],
@@ -531,10 +535,10 @@ describe("resolveRequestAuth", () => {
     expect(gate("GET", "/api/usage").auth?.kind).toBe("session");
     expect(gate("GET", "/api/usage.csv").auth?.kind).toBe("session");
     // a solo server (no orgDirectory) never opens it
-    expect(gate("GET", "/api/usage", {})).toMatchObject({ auth: null, error: "forbidden: this session lacks the admin scope" });
+    expect(gate("GET", "/api/usage", {})).toMatchObject({ auth: null, error: expect.stringContaining(ADMIN_ONLY_PREFIX), code: "admin_route" });
     // a route no permission opens keeps the scope refusal (2026-10-19: tool
     // grants change admin rights)
-    expect(gate("GET", "/api/tool-grants")).toMatchObject({ auth: null, error: "forbidden: this session lacks the admin scope" });
+    expect(gate("GET", "/api/tool-grants")).toMatchObject({ auth: null, error: expect.stringContaining(ADMIN_ONLY_PREFIX), code: "admin_route", reasonKey: "serverError.adminRoute.toolGrants" });
     expect(gate("GET", "/api/tool-grants").permission).toBeUndefined();
     held.add("engines.manage");
     expect(gate("PATCH", "/api/instances/codex").auth?.kind).toBe("session");
@@ -804,23 +808,23 @@ describe("resolveRequestAuth", () => {
     const token = pairedToken(["client"]);
     const denied = resolve({ host: "bots.example.com", authorization: `Bearer ${token}` }, "/api/auth/pairing", "POST");
     expect(denied.status).toBe(403);
-    expect(denied.error).toContain("lacks the admin scope");
+    expect(denied.error).toContain(ADMIN_ONLY_PREFIX);
     const mcpDenied = resolve(
       { host: "bots.example.com", authorization: `Bearer ${token}` },
       "/api/mcp/servers/github/test",
       "POST",
     );
     expect(mcpDenied.status).toBe(403);
-    expect(mcpDenied.error).toContain("lacks the admin scope");
+    expect(mcpDenied.error).toContain(ADMIN_ONLY_PREFIX);
     expect(resolve({ host: "bots.example.com", authorization: `Bearer ${token}` }, "/api/bots").auth?.kind).toBe("session");
     // #1786: POST leave reaches the handler; any other method stays admin.
     const leave = resolve({ host: "bots.example.com", authorization: `Bearer ${token}` }, "/api/groups/g-1/leave", "POST");
     expect(leave.auth?.kind).toBe("session");
-    expect(leave.error).not.toContain("lacks the admin scope");
+    expect(leave.error).not.toContain(ADMIN_ONLY_PREFIX);
     for (const method of ["GET", "PUT", "DELETE"] as const) {
       const refused = resolve({ host: "bots.example.com", authorization: `Bearer ${token}` }, "/api/groups/g-1/leave", method);
       expect(refused.status, method).toBe(403);
-      expect(refused.error, method).toContain("lacks the admin scope");
+      expect(refused.error, method).toContain(ADMIN_ONLY_PREFIX);
     }
   });
 
@@ -855,7 +859,7 @@ describe("resolveRequestAuth", () => {
       const denied = resolve({ ...headers, ...credential }, path, method);
       expect(denied.auth).toBeNull();
       expect(denied.status).toBe(403);
-      expect(denied.error).toContain("lacks the admin scope");
+      expect(denied.error).toContain(ADMIN_ONLY_PREFIX);
     }
     expect(resolve({ ...headers, authorization: `Bearer ${admin}` }, path, method).auth?.kind).toBe("session");
     expect(resolve(headers, path, method).auth).toBeNull();
@@ -986,8 +990,10 @@ describe("loopback trust: owner on one person's machine, service on a shared wor
     // a local process on the desktop without the app's own capability
     expect(check("POST", path, { desktopToken: "owner-token" }).auth).toBeNull();
     expect(check("POST", path, { desktopToken: "owner-token", headers: { "x-openmausbot-desktop-owner": "owner-token" } }).auth?.kind).toBe("loopback");
-    // a client session (not an admin) may not use it either
-    expect(requiredScope("POST", path)).toBe("admin");
+    // #4471: a person's session reaches it for their own bot (the gate checks
+    // the owner: clientRouteOwnerBot), never a bot shell or a worker
+    expect(requiredScope("POST", path)).toBe("client");
+    expect(clientRouteOwnerBot("POST", path)).toBe("bot-1");
     expect(serviceAllowed("POST", path)).toBe(false);
     expect(workerRelayAllowed("POST", path)).toBe(false);
   });
@@ -1172,7 +1178,8 @@ describe("organization sharing routes (SAGAX_IDENTITY=perspicax, slice 3)", () =
 
   it("lets the owner remove a grant by principal id at client scope", () => {
     expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/pr_00000000-0000-4000-8000-000000000001")).toBe("client");
-    expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/someone")).toBe("admin");
+    // #4471: any id form reaches the handler, which checks the owner
+    expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/someone")).toBe("client");
     expect(requiredScope("POST", "/api/bots/aurora/direct-grants")).toBe("client");
   });
 });

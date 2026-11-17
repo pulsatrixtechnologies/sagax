@@ -73,7 +73,7 @@ export function createMyChromeRoutes(deps: MyChromeRouteDeps): RouteHandler {
       // member, a phone) reads a quiet "not offered" status instead of a 403
       // in the console on every load; any change stays refused.
       if (action === "status") return json(res, 200, NOT_OFFERED);
-      return json(res, 403, { error: "Only the person at this computer (or an admin) can change My Chrome." });
+      return json(res, 403, { error: "Only the person at this computer (or an admin) can change My Chrome.", code: "computer_owner_only" });
     }
     const service = deps.service();
     let body: Record<string, unknown> = {};

@@ -3,9 +3,10 @@
 // ?bot=<id> lists the browser that bot uses now (its own, or its profile's).
 // POST /api/browser-sites/sign-out {profile | bot, site?} signs out of that
 // site, or of every site when `site` is absent; the person's own click, no
-// confirm step. Both are admin-scoped by default in server/request-auth.ts,
-// like the browser profiles themselves.
+// confirm step. #4471: client scope; `refusal` keeps a person to the browser
+// of their own bot, and a shared browser profile to an admin.
 import type { BrowserSitesTarget, SignedInSites } from "../browser-sites.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export type BrowserSitesRef = { profile: string } | { bot: string };
@@ -16,6 +17,9 @@ export interface BrowserSitesRouteDeps {
   target(ref: BrowserSitesRef): BrowserSitesTarget | { status: number; error: string };
   list(target: BrowserSitesTarget): Promise<SignedInSites>;
   signOut(target: BrowserSitesTarget, site: string | null): Promise<SignedInSites>;
+  /** Why this caller may not reach that browser (another person's bot, a
+   * profile several bots share), or null. Absent lets everyone through. */
+  refusal?(auth: RequestAuth, ref: BrowserSitesRef): { status: number; error: string; code?: string } | null;
 }
 
 const ID = /^[\w.-]{1,128}$/u;
@@ -32,10 +36,12 @@ function failure(error: unknown): string {
 }
 
 export function createBrowserSiteRoutes(deps: BrowserSitesRouteDeps): RouteHandler {
-  return async ({ req, res, url, path, method, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
     if (path === "/api/browser-sites" && method === "GET") {
       const which = ref({ profile: url.searchParams.get("profile") ?? undefined, bot: url.searchParams.get("bot") ?? undefined });
       if (!which) return json(res, 400, { error: "Name one browser profile or one bot." });
+      const refused = deps.refusal?.(auth, which);
+      if (refused) return json(res, refused.status, { error: refused.error, ...(refused.code ? { code: refused.code } : {}) });
       const target = deps.target(which);
       if ("error" in target) return json(res, target.status, { error: target.error });
       res.setHeader("cache-control", "no-store");
@@ -50,6 +56,8 @@ export function createBrowserSiteRoutes(deps: BrowserSitesRouteDeps): RouteHandl
     const which = body && typeof body === "object" ? ref(body) : null;
     if (!which) return json(res, 400, { error: "Name one browser profile or one bot." });
     if (body.site !== undefined && (typeof body.site !== "string" || !SITE.test(body.site))) return json(res, 400, { error: "site must be a listed site" });
+    const refused = deps.refusal?.(auth, which);
+    if (refused) return json(res, refused.status, { error: refused.error, ...(refused.code ? { code: refused.code } : {}) });
     const target = deps.target(which);
     if ("error" in target) return json(res, target.status, { error: target.error });
     try { return json(res, 200, await deps.signOut(target, body.site ?? null)); }

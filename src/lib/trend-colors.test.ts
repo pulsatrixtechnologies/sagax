@@ -2,14 +2,22 @@
 // person the three result colours of every skin must stay apart on their own. Measured here for every skin, as the
 // bar paints them: the skin's --trend-* step when it sets one, else the state's own token (never a hard-coded value).
 // Simulated with the Machado protan, deutan and tritan matrices; the distance is CIE76 delta E.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error a plain script module
 import { skinIds, skinTokens } from "../../scripts/check-skin-contrast.mjs";
 
-const css = readFileSync(join(process.cwd(), "src/styles.css"), "utf8");
+// Every file that holds a skin's colours, as the contrast check reads them: the base skins, then the tints, the
+// full-surface and duo-tone colours, the moods (sunset, nordic, cyberpunk) and the retro editions.
+const root = process.cwd();
+const editions = join(root, "src/styles/retro-editions");
+const css = [
+  readFileSync(join(root, "src/styles.css"), "utf8"),
+  ...["depth", "duo", "ambiance", "texture"].map((name) => readFileSync(join(root, `src/styles/skin-${name}.css`), "utf8")),
+  ...readdirSync(editions).filter((name) => name.endsWith(".css")).sort().map((name) => readFileSync(join(editions, name), "utf8")),
+].join("\n");
 const MATRIX = {
   normal: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
   protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],

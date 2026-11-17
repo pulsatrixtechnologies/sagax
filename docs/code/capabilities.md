@@ -110,22 +110,26 @@ copy. Margin per profile is printed by the wire-size tests.
 
 Use is counted on every engine under one id per tool, `<server>/<tool>`
 (`toolIdOf`, `stepToolId` in `shared/searched-tool-call.ts`): Claude Code's
-`mcp__<server>__<tool>`, the ACP engines' `<server>__<tool>`, the chat
-engines' `agents_<tool>`, Pi's gateway call, and the id an engine writes on
-the step when its title leaves the server out (`tool` of `item.started`:
-Codex, the chat engines). A renamed Sagax tool counts as its current name. A
-built-in tool and a finding tool (`search_tools`, `call_tool`, `use_tool`,
+`mcp__<server>__<tool>`, the ACP engines' `<server>__<tool>`, the agents
+tools of the chat engines and Muse Code (`agents_<tool>`), Pi's gateway
+call, and the id an engine writes on the step when its title leaves the
+server out (`tool` of `item.started`: Codex, the chat engines, Pi's own
+extension). A renamed Sagax tool counts as its current name. A built-in
+tool and a finding tool (`search_tools`, `call_tool`, `use_tool`,
 `tool_search`) are not counted; a call through one counts as the tool it
-runs. The journal is `server/activity/tool-use-counts.ts`.
+runs. The bus hands each call to `toolKeepSteps`; a call belongs to the
+engine turn that made it, bound to its bot and person by the dispatch
+(`toolKeepBindTurn`), so the members of a room never mix their use.
 
 The rule and its store are `server/tools/tool-keep.ts`, one file per bot and
 person (tool ids and integers only, removed with the bot). A session is one
-conversation until a compaction; a prompt is one turn started in it. A tool
+conversation of one bot and person until a compaction or a context renewal;
+a prompt is one turn started in it. A tool
 is left out when it went unused over 10 prompts across at least 2 sessions,
 or over 5 sessions, unless it is never pruned (the chat-turn core, approvals
 and cards, memory, the finding tools, the Perspicax bridge's core, what a
-routine run called, what the tool selection names, the live-call tools on a
-call). A bot with fewer than 2 sessions of its own evidence keeps the
+routine run called, what the tool selection, the session's prompt or a rule
+names, the live-call tools on a call). A bot with fewer than 2 sessions of its own evidence keeps the
 default listing. The verdict is decided at a session's first turn and kept
 for the whole session, so a conversation's tool list never changes under
 its prompt cache. It replaced the "20 calls, 12 most used" verdict and no

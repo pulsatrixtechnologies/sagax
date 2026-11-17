@@ -32,7 +32,7 @@ import { applyEngineCommandVariables } from "../vault/credential-command-env.ts"
 import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
 import { execCli, killCliTree, spawnCli } from "../procs.ts";
-import { SEARCH_CALL_TOOL, searchedToolCall } from "../../shared/searched-tool-call.ts";
+import { SEARCH_CALL_TOOL, agentsSearchedFromEnv, searchedToolCall } from "../../shared/searched-tool-call.ts";
 import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv } from "./spawn-contract.ts";
 import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources, type WarmResourceLease } from "../resources/warm-resources.ts";
 import { retireClosedWarmProcess } from "../resources/warm-process.ts";
@@ -65,6 +65,7 @@ import {
 } from "./local-inject.ts";
 import { cleanPiHomeMetadata, installPiKit, piKitDir } from "./pi-kit.ts";
 import { skipFailedPiExtension } from "./pi-extension-failures.ts";
+import { PI_TOOL_NAMES_FILE } from "./pi-send-events.ts";
 import type { PiActiveTurn, PiTurnHooks } from "./pi-turn-ctx.ts";
 import { createPiSendTurn } from "./pi-send-turn.ts";
 import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SERVER_KEY_ENV_PREFIX, writePiModelServers } from "./pi-model-servers.ts";
@@ -202,7 +203,7 @@ async function runPiStandby(input: {
   try {
     dir = mkdtempSync(join(tmpdir(), "omb-pi-mcp-"));
     const scopeReadyPath = input.config.toolScope !== undefined ? join(dir, "scope-ready.json") : undefined;
-    writeFileSync(join(dir, "mcp.json"), JSON.stringify({ ...input.config, scopeReadyPath, toolCachePath: join(dir, PI_TOOL_CACHE), toolCache: input.toolCache, warmPath: join(dir, PI_WARM), warm: input.warm }), { mode: 0o600 });
+    writeFileSync(join(dir, "mcp.json"), JSON.stringify({ ...input.config, scopeReadyPath, toolNamesPath: join(dir, PI_TOOL_NAMES_FILE), toolCachePath: join(dir, PI_TOOL_CACHE), toolCache: input.toolCache, warmPath: join(dir, PI_WARM), warm: input.warm }), { mode: 0o600 });
     child = spawnCli(input.cli, input.args, {
       stdio: ["pipe", "pipe", "pipe"],
       cwd: input.cwd,
@@ -655,7 +656,8 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
     // A searched catalog (the gate's search, the agents catalog in a compact
     // prompt) is reached through call_tool: the extension reads that call as
     // the tool it runs, for the tool scope and the card, as for a directory.
-    const searched = search !== undefined || (name === "agents" && turn.compactPrompt !== undefined);
+    // #4527 lot C: a cloud model's agents mount with a kept listing too
+    const searched = search !== undefined || (name === "agents" && (turn.compactPrompt !== undefined || agentsSearchedFromEnv((server as { env?: Record<string, string> }).env)));
     servers[name] = { ...stdio, ...(original.scope ? { scope: original.scope } : {}), ...(directory ? { directory: true } : {}), ...(searched ? { searched: true } : {}) };
   }
   return Object.keys(servers).length ? servers : null;

@@ -1,5 +1,6 @@
 /** Spawn (or adopt) the pi child for one turn (#1383). */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { PI_TOOL_NAMES_FILE } from "./pi-send-events.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { newId } from "../contracts.ts";
@@ -123,7 +124,7 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, optio
     mcpTempDir = ahead ? ahead.dir : mkdtempSync(join(tmpdir(), "omb-pi-mcp-"));
     if (toolScope !== undefined) scopeReadyPath = join(mcpTempDir, "scope-ready.json");
     try {
-      writeFileSync(join(mcpTempDir, "mcp.json"), JSON.stringify({ ...mcpConfig, scopeReadyPath, ...(turn.compactPrompt ? { toolCachePath: join(mcpTempDir, deps.toolCacheName), warmPath: join(mcpTempDir, deps.warmName) } : {}) }), { mode: 0o600 });
+      writeFileSync(join(mcpTempDir, "mcp.json"), JSON.stringify({ ...mcpConfig, scopeReadyPath, toolNamesPath: join(mcpTempDir, PI_TOOL_NAMES_FILE), ...(turn.compactPrompt ? { toolCachePath: join(mcpTempDir, deps.toolCacheName), warmPath: join(mcpTempDir, deps.warmName) } : {}) }), { mode: 0o600 });
     } catch (err) {
       // A failed write must not leave the temp dir behind — a partial file
       // could still hold the boat token / comms token.
@@ -232,6 +233,7 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, optio
     toolArgs: new Map(),
     mcpServerNames: Object.keys(mcpServers ?? {}),
     searchedServers: hooks.piSearchedServers(mcpServers),
+    ...(mcpTempDir ? { toolNamesPath: join(mcpTempDir, PI_TOOL_NAMES_FILE) } : {}),
     compactionObserved: false,
     responseWaiters: new Map(),
     steerSeq: 0,

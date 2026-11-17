@@ -178,6 +178,8 @@ export type PiPrepared = {
   toolArgs: Map<string, unknown>;
   mcpServerNames: string[];
   searchedServers: ReadonlySet<string>;
+  /** #4527: the extension's record of the upstream names it folded */
+  toolNamesPath?: string;
   compactionObserved: boolean;
   responseWaiters: Map<string, PiResponseWaiter>;
   steerSeq: number;

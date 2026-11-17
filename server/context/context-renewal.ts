@@ -29,6 +29,13 @@ export function contextRenewedNotice(engine: string): string {
   return `${engine}'s context filled up during this turn, so it went on in a fresh session that was given the conversation and the steps already done.`;
 }
 
+/** #4527: the Events lens line when an engine summarized the older part of
+ * its own session (Pi's compaction): the conversation's next turn counts as
+ * a new session for the tools its bot keeps listed. The chat shows nothing. */
+export function contextFoldedNotice(engine: string): string {
+  return `${engine} summarized the older part of this conversation to make room in its context.`;
+}
+
 /** The one row a person reads when even a fresh session filled up. No
  * command to type: sending again (Retry) starts fresh. Kept clear of the
  * words classifyError reads as a transient or account failure. */

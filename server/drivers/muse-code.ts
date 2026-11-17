@@ -29,6 +29,7 @@ import { parseProtocolAskQuestions, questionAnswersById, type ProtocolAskQuestio
 import type { EffortLevel } from "../../shared/wire.ts";
 import { promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt, type PromptSplitReceipt } from "./prompt-split.ts";
 import { turnStdioMcpServers } from "./turn-mcp.ts";
+import { agentsSearchedFromEnv, prefixedToolId } from "../../shared/searched-tool-call.ts";
 
 const DRIVER_KIND = "museCode";
 const PROVIDER_ID = "meta";
@@ -163,8 +164,14 @@ function parseArgs(args: string | undefined): Record<string, unknown> | undefine
   }
 }
 
-/** A tool item's title, one-line command and bounded input preview. */
-export function museToolStart(item: MuseItem): { title: string; summary?: string; input?: string } {
+/** The MCP servers a Muse Code session mounted, and the ones whose
+ * call_tool runs another tool (#4527). */
+export type MuseMounts = { names: readonly string[]; searched: ReadonlySet<string> };
+
+/** A tool item's title, one-line command and bounded input preview. #4527:
+ * a tool of a mounted server (`<server>_<tool>`) carries the id of the tool
+ * it runs (`tool`), a searched server's call_tool read as its target. */
+export function museToolStart(item: MuseItem, mounts?: MuseMounts): { title: string; summary?: string; input?: string; tool?: string } {
   const args = parseArgs(item.args);
   const title = item.kind === "subagent" ? item.objective || item.role || "Muse agent"
     : item.kind === "webSearch" ? "web_search"
@@ -172,7 +179,8 @@ export function museToolStart(item: MuseItem): { title: string; summary?: string
   const command = item.commandText ?? (typeof args?.command === "string" ? args.command : typeof args?.cmd === "string" ? args.cmd : undefined);
   const summary = command ? commandSummary({ command }) : undefined;
   const input = toolDetailPreview(args ?? item.args);
-  return { title, ...(summary ? { summary } : {}), ...(input ? { input } : {}) };
+  const tool = item.kind === "toolCall" && mounts ? prefixedToolId(item.tool, args, mounts.names, mounts.searched) : null;
+  return { title, ...(summary ? { summary } : {}), ...(input ? { input } : {}), ...(tool ? { tool } : {}) };
 }
 
 export function museToolOutput(item: MuseItem): { ok: boolean; output?: string } {
@@ -231,6 +239,8 @@ interface ThreadState {
   approvalMode?: string;
   active?: ActiveTurn;
   pending: Map<string, Pending>;
+  /** the session's mounted servers (#4527: a call's tool id) */
+  mounts?: MuseMounts;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -399,7 +409,7 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
           } else if (item.kind === "reasoning") {
             if (!seen) emit({ type: "item.started", threadId, turnId: active.turnId, itemId: item.itemId, itemType: "reasoning" });
           } else if (TOOL_KINDS.has(item.kind)) {
-            if (!seen) emit({ type: "item.started", threadId, turnId: active.turnId, itemId: item.itemId, itemType: "tool", ...museToolStart(item) });
+            if (!seen) emit({ type: "item.started", threadId, turnId: active.turnId, itemId: item.itemId, itemType: "tool", ...museToolStart(item, state.mounts) });
             if (!isRunning(item.status) && (!seen || isRunning(seen.status))) {
               emit({ type: "item.completed", threadId, turnId: active.turnId, itemId: item.itemId, itemType: "tool", ...museToolOutput(item) });
             }
@@ -525,6 +535,7 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
     const ensureSession = async (state: ThreadState, turn: SendTurnInput, turnId: string): Promise<{ text: string; rebuilt: boolean; started: boolean }> => {
       const cwd = turn.cwd ?? process.cwd();
       const servers = turnStdioMcpServers(turn);
+      state.mounts = { names: servers.map(server => server.name), searched: new Set(agentsSearchedFromEnv(turn.integrations?.agents?.env) ? ["agents"] : []) };
       const mcpServers = Object.fromEntries(servers.map(server => [server.name,
         { transport: "stdio", command: server.command, args: server.args, env: server.env, mode: "optional" }]));
       const approvalMode = museApprovalMode(turn.approvalMode);

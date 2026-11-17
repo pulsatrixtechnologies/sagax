@@ -87,7 +87,7 @@ afterAll(() => vi.unstubAllGlobals());
 
 describe("routine failure indicators", () => {
   it("counts unread failures on the Run logs tab and offers mark-all only while some are unread", () => {
-    expect(markupOf()).toMatch(/data-page-tab="logs"[^>]*>Run logs<span[^>]*>2<\/span>/);
+    expect(markupOf()).toMatch(/data-page-tab="logs"[^>]*>.*?Run logs<\/span><span[^>]*data-page-tab-badge[^>]*>2<\/span>/);
     fixture.state = { ...fixture.state!, routinesFocus: { section: "logs", nonce: 6 } };
     expect(markupOf()).toContain("data-logs-mark-all");
 
@@ -95,7 +95,7 @@ describe("routine failure indicators", () => {
       { ...failed, seenAt: 1 }, { ...missed, seenAt: 1 }, completed,
     ] };
     const read = markupOf();
-    expect(read).not.toMatch(/data-page-tab="logs"[^>]*>Run logs<span/);
+    expect(read).not.toContain("data-page-tab-badge");
     expect(read).not.toContain("data-logs-mark-all");
   });
 
@@ -215,12 +215,19 @@ describe("the Automations header (Owner, 2026-10-27: one row, secondary controls
     return html.slice(html.indexOf("<header"), html.indexOf("</header>"));
   }
 
-  it("puts New on the Routines heading of the Overview, and in the header on the other tabs", () => {
+  it("puts New routine in the page header on every tab, as Memory's New note, and nowhere else", () => {
+    const count = (html: string) => html.split("data-automations-create").length - 1;
     const overview = markupOf();
-    expect(overview.slice(overview.indexOf("<header"), overview.indexOf("</header>"))).not.toContain("data-automations-create");
-    expect(overview.slice(overview.indexOf("data-routines-table"))).toContain("data-automations-create");
+    expect(overview.slice(overview.indexOf("<header"), overview.indexOf("</header>"))).toContain("data-automations-create");
+    expect(count(overview)).toBe(1);
     fixture.state = { ...fixture.state!, routinesFocus: { section: "logs", nonce: 5 } };
     expect(header()).toContain("data-automations-create");
+    expect(count(markupOf())).toBe(1);
+  });
+
+  it("closes from an X at the right of the header's title line, like Memory", () => {
+    const html = header();
+    expect(html.slice(html.indexOf("data-page-actions"))).toContain("data-automations-close");
   });
 
   it("has no Team map button: it lives under the avatar menu's Tools", () => {

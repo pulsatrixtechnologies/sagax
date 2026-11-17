@@ -40,7 +40,7 @@ export type RoutinesPageProps = {
   fill?: boolean;
 };
 
-export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fill = false }: RoutinesPageProps) {
+export function useRoutinesPage({ onBack, onOpenRoom, embedded = false, fill = false }: RoutinesPageProps) {
   const confirm = useConfirm();
   const state = useStoreSelector(selectRoutinesPage, shallowEqual);
   const dispatch = useStoreDispatch();
@@ -392,7 +392,7 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   const pendingSlot = useMemo(() => quick && !quick.limitReset ? { at: quick.at, durationMinutes: quick.durationMinutes, kind: quick.kind } : null, [quick]);
 
   return {
-    onOpenRoom, embedded, fill,
+    onOpenRoom, onBack, embedded, fill,
     confirm, state, dispatch, capabilities, advanced, routinesOnly,
     newMenuRef, navMenuRef, filtersMenuRef, dragProps, noDragStyle, controlsShiftStyle,
     section, setSection, scheduleView, setScheduleView, scoped, viewDays, setViewDays,

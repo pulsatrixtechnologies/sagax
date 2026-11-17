@@ -8,7 +8,7 @@
 // it, sections with a 16px heading, rows that light on hover and a dashed
 // empty state. Under 60rem of header the labels of the segment and Filters
 // fold to their icons (a tooltip keeps the name).
-import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from "react";
 import { Check, ChevronRight, Menu, Search, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -37,6 +37,9 @@ export const PAGE_INDICATOR = "flex h-9 items-center gap-1 px-1.5 text-[12px] ta
 export const PAGE_FILTER_RESET = "self-start rounded-md text-[12px] text-accent hover:underline";
 /** The body's scroller and its centred column. */
 export const PAGE_SCROLL = "min-h-0 flex-1 overflow-y-auto";
+/** The Routines page's body (2026-11-17, owner: the content fits the full width): no centred column, the header's own
+ * 24 px side margins (16 px on a phone), whatever the window's width. */
+export const PAGE_FULL = "w-full space-y-8 px-6 py-6 max-sm:px-4";
 export const PAGE_COLUMN = "mx-auto w-full max-w-4xl space-y-4 p-4 sm:p-6";
 /** A row of a list: lights on hover. */
 export const PAGE_ROW = "flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-hover";
@@ -110,9 +113,9 @@ export function PageHeader({ name, icon: Icon, title, count, subtitle, section, 
   topbar?: boolean;
   /** A standalone window on macOS: clear the traffic lights. */
   inset?: boolean;
-  /** The header sits on the body's own column (the Routines page, 2026-11-17): the same left and right edges as
-   * the content under it at every width (a centred 1104 px column, a 16 px gutter on a phone). On a phone the
-   * title row sits under the drawer button, and the indicators and the menu take the button's row. */
+  /** A 16 px gutter on a phone (the Routines page, 2026-11-17): the title row sits under the drawer button, and
+   * the indicators and the menu take the button's row. From 640 px it is the standard header, the same edges as
+   * the Memory page's. */
   aligned?: boolean;
   primaryStyle?: CSSProperties;
   actionsStyle?: CSSProperties;
@@ -126,7 +129,7 @@ export function PageHeader({ name, icon: Icon, title, count, subtitle, section, 
       data-page-header=""
       className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/40 bg-app py-4 pr-6", inset ? "pl-[86px]" : aligned ? "relative px-6 max-sm:px-4 max-sm:pb-3 max-sm:pt-12" : "pl-6 max-sm:pl-12", rest.className)}
     >
-      <div className={aligned ? "mx-auto w-full max-w-[69rem]" : undefined}>
+      <div>
       <div className="flex items-start justify-between gap-3">
         <div {...titleProps} data-page-title="" className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -165,7 +168,9 @@ export function PageToggle({ pressed, onClick, children, ...rest }: { pressed: b
 export function PageSegment<T extends string | number>({ label, value, options, onChange, compact = false, disabled = false, ...rest }: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string; icon?: LucideIcon; title?: string; data?: DataAttributes }>;
+  options: ReadonlyArray<{ value: T; label: string; icon?: LucideIcon; title?: string; data?: DataAttributes;
+    /** A small count after the label (the Run log's unread problems). */
+    badge?: number; badgeLabel?: string; /** Pressing the count itself (its segment opens too). */ onBadge?: () => void }>;
   onChange: (next: T) => void;
   compact?: boolean;
   disabled?: boolean;
@@ -187,51 +192,6 @@ export function PageSegment<T extends string | number>({ label, value, options, 
               : cn("flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px]", on ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink")}>
             {Icon && <Icon size={compact ? 12 : 14} aria-hidden="true" />}
             <span className={cn(Icon && !compact && "@max-[60rem]/page-header:sr-only")}>{option.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** The page's tabs under its title (the reference's Cloud Agents page, 2026-11-17):
- * text pills, the chosen one filled; an optional small count after a label. */
-export function PageTabs<T extends string>({ label, value, options, onChange, ...rest }: {
-  label: string;
-  value: T;
-  options: ReadonlyArray<{ value: T; label: string; badge?: number; /** Pressing the count itself (the tab opens too): the Run log's opens on its problems. */ onBadge?: () => void; badgeLabel?: string }>;
-  onChange: (next: T) => void;
-} & DataAttributes) {
-  // One line, scrolling sideways when the pills do not fit; the chosen one is brought into view.
-  const listRef = useRef<HTMLDivElement>(null);
-  // A fade at the right edge says the row scrolls on.
-  const [more, setMore] = useState(false);
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const check = () => setMore(list.scrollLeft + list.clientWidth < list.scrollWidth - 1);
-    check();
-    list.addEventListener("scroll", check, { passive: true });
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(check);
-    observer?.observe(list);
-    return () => { list.removeEventListener("scroll", check); observer?.disconnect(); };
-  }, [options.length]);
-  useEffect(() => {
-    const list = listRef.current;
-    const chosen = list?.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (!list || !chosen) return;
-    // Scrolled only when the chosen pill is off screen: the first pill is never clipped on load.
-    if (chosen.offsetLeft < list.scrollLeft) list.scrollTo?.({ left: Math.max(0, chosen.offsetLeft - 8), behavior: "auto" });
-    else if (chosen.offsetLeft + chosen.offsetWidth > list.scrollLeft + list.clientWidth) list.scrollTo?.({ left: chosen.offsetLeft + chosen.offsetWidth - list.clientWidth + 8, behavior: "auto" });
-  }, [value]);
-  return (
-    <div {...rest} ref={listRef} role="tablist" aria-label={label} className={cn("relative flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto", more && "[mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)]")}>
-      {options.map((option) => {
-        const on = value === option.value;
-        return (
-          <button key={option.value} type="button" role="tab" aria-selected={on} data-page-tab={option.value} onClick={() => onChange(option.value)}
-            className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none", on ? "bg-ink/[0.08] font-medium text-ink" : "text-ink-secondary hover:text-ink")}>
-            {option.label}
             {option.badge ? <span data-page-tab-badge="" title={option.badgeLabel} onClick={option.onBadge} className="rounded-full bg-danger/10 px-1.5 text-[11px] leading-4 tabular-nums text-danger">{option.badge}</span> : null}
           </button>
         );

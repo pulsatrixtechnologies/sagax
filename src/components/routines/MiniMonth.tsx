@@ -58,7 +58,7 @@ export const MiniMonth = memo(function MiniMonth({ anchor, onSelect }: MiniMonth
   const dayLabel = cachedDateFormat(DAY_OPTIONS);
 
   return (
-    <section aria-label={t("routineCalendar.mini")} className="select-none px-3 py-3">
+    <section aria-label={t("routineCalendar.mini")} className="select-none py-3 pl-3 pr-6">
       <div className="mb-2 flex items-center justify-between px-1">
         <div className="text-[13px] font-semibold text-ink">{monthLabel}</div>
         <div className="flex items-center gap-0.5">

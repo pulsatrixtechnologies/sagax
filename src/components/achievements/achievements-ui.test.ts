@@ -470,8 +470,8 @@ describe("Automations and Achievements share their pieces", () => {
       expect(limitMenu, piece).toContain(piece);
       expect(achievements, piece).toContain(piece);
     }
-    // 2026-11-17: Automations has tabs under its title (PageTabs) where Achievements keeps its segment
-    expect(automations).toContain("<PageTabs");
+    // 2026-11-17: Automations has the same bordered segmented control under its title as Memory and Achievements
+    expect(automations).toContain("<PageSegment");
     expect(achievements).toContain("<PageSegment");
     expect(automationsHook).toContain("useDismissMenus(");
     expect(achievements).toContain("useDismissMenus(");

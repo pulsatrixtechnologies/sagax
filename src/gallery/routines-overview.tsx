@@ -1,7 +1,7 @@
 /** Isolated gallery for the Routines page (2026-11-17): the Overview tab with
  * its Runs figures and its table, on neutral fictional bots and routines; a
  * mocked fetch answers the page's reads so nothing connects. Not shipped.
- * ?tab=overview|logs|calendar &groupBy=none|bot|folder &period=day|week|month
+ * ?tab=overview|logs|calendar|webhooks &groupBy=none|bot|folder &period=day|week|month
  * &filters=1 (the Filters popover open) &empty=1 &quiet=1 (no failed run)
  * &width=<px> &height=<px> &lang=<code> &skin=<id> */
 import { StrictMode } from "react";
@@ -78,7 +78,7 @@ const state: AppState = {
   routineRuns: runs,
   routineFolders: { atlas: ["Clients", "Reports", "Archive"], boreas: ["Reports"] },
   routinesLoadState: "ready",
-  routinesFocus: { section: params.get("tab") === "logs" ? "logs" : "schedule", view: params.get("tab") === "calendar" ? "calendar" : "list", nonce: 1 },
+  routinesFocus: { section: params.get("tab") === "logs" ? "logs" : params.get("tab") === "webhooks" ? "webhooks" : "schedule", view: params.get("tab") === "calendar" ? "calendar" : "list", nonce: 1 },
   config: {
     ...initialState.config,
     viewer: { principalId: "pr_viewer", profileManagedBy: "perspicax", role: "admin" },

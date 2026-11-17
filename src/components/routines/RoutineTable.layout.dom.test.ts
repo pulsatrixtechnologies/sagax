@@ -63,7 +63,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 const noop = () => {};
 const mountPlain = async () => {
   await act(async () => {
-    root.render(createElement(RoutinesOverview, { routines, runs: [run], bots: bots as never, now: NOW, filtersMenu: null, newMenu: null, onOpen: noop, onOpenRun: noop, onRowMenu: noop, onFailedRuns: noop }));
+    root.render(createElement(RoutinesOverview, { routines, runs: [run], bots: bots as never, now: NOW, filtersMenu: null, onOpen: noop, onOpenRun: noop, onRowMenu: noop, onFailedRuns: noop }));
   });
 };
 

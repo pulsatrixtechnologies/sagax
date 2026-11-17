@@ -38,7 +38,7 @@ const mount = async (routines: Routine[], runs: RoutineRun[], extra: Record<stri
   await act(async () => {
     root.render(createElement(RoutinesOverview, {
       ...extra,
-      routines, runs, bots: bots as never, now: NOW, filtersMenu: createElement("span", { "data-filters": "" }), newMenu: createElement("span", { "data-new": "" }),
+      routines, runs, bots: bots as never, now: NOW, filtersMenu: createElement("span", { "data-filters": "" }),
       onOpen: (r: Routine) => { calls.push(`open:${r.id}`); },
       onOpenRun: (r: RoutineRun) => { calls.push(`run:${r.id}`); },
       onRowMenu: (r: Routine) => { calls.push(`menu:${r.id}`); },

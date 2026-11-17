@@ -214,7 +214,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
     details: [
       { label: t("connectApps.detail.source"), value: pluginSourceLabel(item.source) },
       { label: t("connectApps.detail.transport"), value: remote ? (server.type === "sse" ? "SSE" : "HTTP") : "stdio" },
-      { label: remote ? t("connectApps.detail.url") : t("connectApps.detail.command"), value: remote ? server.url : [server.command, ...server.args].join(" "), mono: true },
+      { label: remote ? t("connectApps.detail.url") : t("connectApps.detail.command"), value: remote ? server.url : [server.command, ...server.args].join(" ") },
       ...(count ? [{ label: t("connectApps.detail.tools"), value: count }] : []),
     ],
     children: (
@@ -312,7 +312,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
   // shows the name people read).
   const sourceDetails = [
     { label: t("connectApps.detail.id"), value: item.id, mono: true },
-    ...(market?.source && market.source !== marketplace ? [{ label: t("connectApps.detail.repository"), value: market.source, mono: true }] : []),
+    ...(market?.source && market.source !== marketplace ? [{ label: t("connectApps.detail.repository"), value: market.source }] : []),
   ];
   // Grok Bot's plugin page: Accounts, then Tools, first (2026-11-06, #2146).
   // Accounts: the connectors it brought, each with its sign-in state (the
@@ -373,7 +373,11 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
     ],
     connectors: [
       ...connectors.map((child) => ({ key: child.key, name: child.name, item: child, state: statusState(child.status, () => openItem(child)), word: connectorWord(child.status), onOpen: () => openItem(child) })),
-      ...heldServers.map((name) => ({ key: `declared:${name}`, name, item: { kind: "mcp" as const, name }, state: null })),
+      // the real mark when the app knows the connector (a row of its own, a shipped glyph), else the neutral tile
+      ...heldServers.map((name) => {
+        const known = items.find((candidate) => candidate.kind !== "skill" && candidate.kind !== "plugin" && candidate.name === name);
+        return { key: `declared:${name}`, name, item: known ?? { kind: "mcp" as const, name }, state: null };
+      }),
     ],
   };
   // For a bot the page is that bot's install: the card says what it brings,

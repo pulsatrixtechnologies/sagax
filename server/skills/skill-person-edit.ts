@@ -39,6 +39,7 @@ import {
   type SkillListing,
 } from "./skills.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
+import { credentialLocation } from "../safety/sensitive-path.ts";
 
 const SUPPORTING_TEXT_EXT = new Set([
   ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".csv", ".tsv",
@@ -147,6 +148,8 @@ export function listFolderFiles(directory: string | null, whole = false): SkillF
     }
     for (const name of names) {
       if (whole ? name === ".git" || name === "node_modules" : name.startsWith(".")) continue;
+      // whatever can hold a secret (.env*, *.pem, *.key, credentials, tokens, .ssh...) is never listed
+      if (credentialLocation(name)) continue;
       const absolute = join(dir, name);
       let stat;
       try {
@@ -324,6 +327,8 @@ export function readSkillFolderFile(
   relativePath: string,
 ): { kind: SkillFileKind; bytes: number; text?: string; buffer?: Buffer; contentType: string } | { error: string; status: number } {
   if (!directory) return { error: "the skill folder is missing", status: 404 };
+  // nor read, by any route: the names the app's own secret-path rules refuse
+  if (credentialLocation(relativePath)) return { error: "no such file", status: 404 };
   const absolute = safeRelativeFile(directory, relativePath);
   if (!absolute) return { error: "invalid file path", status: 400 };
   try {

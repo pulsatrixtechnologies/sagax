@@ -1,7 +1,7 @@
 // Small pieces the three Plugins views share: the icon, the status word and
 // the page header with its back arrow.
 import { useState, type ReactNode } from "react";
-import { BookOpen, Check, ChevronLeft, Puzzle, ServerCog, type LucideIcon } from "lucide-react";
+import { BookOpen, Check, ChevronLeft, Puzzle, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -101,12 +101,8 @@ export function PluginIcon({ item, className = "size-10", faviconSize }: { favic
     );
   }
   if (item.kind === "mcp" && !item.domain && !item.logo) {
-    if (glyph) return <GlyphTile glyph={glyph} className={className} />;
-    return (
-      <div className={cn("flex shrink-0 items-center justify-center rounded-xl bg-raised text-ink-secondary", className)}>
-        <ServerCog size={18} aria-hidden="true" />
-      </div>
-    );
+    // a shipped glyph when the app has one for it, else the one neutral tile (never the same generic glyph on every server)
+    return glyph ? <GlyphTile glyph={glyph} className={className} /> : <LetterTile name={item.name} className={className} />;
   }
   return <ServiceIcon key={item.logo ?? item.domain ?? ""} card={{ logo: item.logo ?? null, domain: item.domain ?? null, label: item.name }} glyph={glyph} faviconSize={faviconSize} className={cn("shrink-0", className)} />;
 }
@@ -166,7 +162,7 @@ export function PluginPageHeader({ title, trail, onBack, named = false }: {
   const crumbs = trail ?? [{ label: t("connectApps.title"), onSelect: onBack }];
   const from = crumbs[crumbs.length - 1]?.label;
   return (
-    <div className="relative flex h-12 shrink-0 items-center px-3 pr-14" data-plugins-page-bar data-breadcrumb="">
+    <div className={cn("relative flex shrink-0 items-center px-3 pr-14", named ? "h-10" : "h-12")} data-plugins-page-bar data-breadcrumb="">
       <button
         type="button"
         onClick={onBack}

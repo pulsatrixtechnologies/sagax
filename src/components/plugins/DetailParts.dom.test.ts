@@ -159,7 +159,8 @@ describe("the Connectors rows", () => {
     expect(view.querySelector('[data-detail-connector="connected"] [data-detail-connector-fix]')).toBeNull();
     expect(text("notAdded")).toContain("Not added");
     expect(text("notAdded")).toContain("Add");
-    expect(text("unknown")).toBe("Declared");
+    expect(text("unknown")).toContain("Declared");
+    expect(view.querySelector('[data-detail-connector="unknown"] button')).toBeNull();
   });
 });
 
@@ -257,5 +258,50 @@ describe("a skill's page (#4504)", () => {
     const details = view.querySelector("[data-plugin-details-block]")!.textContent!;
     expect(details).toContain("a1b2c3d → e4f5a6b");
     expect(details).toContain("Adds a Friday section");
+  });
+});
+
+describe("the plugin page is tight and has no orphan disclosure (coordinator's review of after-v8)", () => {
+  const item = { key: "plugin:kit@market", kind: "plugin" as const, id: "kit@market", name: "kit", description: "", category: "other" as const, installed: true, status: "connected" as const, action: null, source: "market" };
+  const page = async (props: Record<string, unknown> = {}) => {
+    const { PluginDetailView } = await import("./PluginDetailView");
+    return render(createElement(PluginDetailView, { item, displayName: "Kit", subtitle: "from market \u00b7 1.0.0 \u00b7 2 skills", busy: false, onBack: vi.fn(), details: [{ label: "Source", value: "market" }, { label: "Identifier", value: "kit@market", mono: true }, { label: "Repository", value: "acme/kit" }], ...props }));
+  };
+  it("the grey line is what is known, never the raw id; the id is in Details, in monospace, alone", async () => {
+    const view = await page();
+    expect(view.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("from market \u00b7 1.0.0 \u00b7 2 skills");
+    const mono = [...view.querySelectorAll("[data-plugin-details] dd")].filter((node) => node.className.includes("font-mono")).map((node) => node.textContent);
+    expect(mono).toEqual(["kit@market"]);
+    // the id of a page whose name people read is a row of Details too
+    expect(view.querySelector("[data-plugin-details]")?.textContent).toContain("kit@market");
+  });
+  it("shows what the page holds as labelled sections, never a lone disclosure row, and Details is not behind anything", async () => {
+    const view = await page({ more: createElement("section", { "data-test-more": "" }, "More content"), installState: [{ id: "everyone", label: "Installed for everyone", on: true }] });
+    expect(view.querySelector("details")).toBeNull();
+    expect(view.querySelector("[data-test-more]")).not.toBeNull();
+    expect(view.querySelector("[data-plugin-install-section]")?.textContent).toContain("Where it is installed");
+    expect(view.querySelector("[data-plugin-details-block]")).not.toBeNull();
+  });
+  it("Details is a compact list of pairs in two columns, label and value together", async () => {
+    const view = await page();
+    const list = view.querySelector("[data-plugin-details]")!;
+    expect(list.className).toContain("md:grid-cols-2");
+    expect(list.querySelector("dd")?.className).not.toContain("text-right");
+  });
+  it("the back bar is a short line and the content starts right under it", async () => {
+    const view = await page();
+    expect(view.querySelector("[data-plugins-page-bar]")?.className).toContain("h-10");
+    expect(view.querySelector("[data-plugins-detail]")?.className).toMatch(/\bpt-1\b/);
+    expect(view.querySelector("[data-plugins-detail]")?.className).not.toMatch(/\bpt-6\b/);
+  });
+  it("an update waiting is the button; the \"...\" carries no dot", async () => {
+    const view = await page({ onUpdate: vi.fn() });
+    expect(view.querySelector('[data-plugin-action="update"]')).not.toBeNull();
+    expect(view.querySelector("[data-plugin-update-dot]")).toBeNull();
+  });
+  it("a connector with no mark of its own is the one neutral tile, never the same generic glyph", async () => {
+    const { PluginIcon } = await import("./PluginParts");
+    const view = await render(createElement("div", null, createElement(PluginIcon, { item: { kind: "mcp", name: "review-notes" } }), createElement(PluginIcon, { item: { kind: "mcp", name: "ticket-search" } })));
+    expect([...view.querySelectorAll("[data-letter-tile]")].map((tile) => tile.textContent)).toEqual(["R", "T"]);
   });
 });

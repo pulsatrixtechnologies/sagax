@@ -21,7 +21,7 @@ import { PillTabs } from "../PillTabs";
 import type { RowState } from "./StateIcon";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
-import { ConnectorRows, DetailHeader, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, type ConnectorWord, type TreeFile } from "./DetailParts";
+import { ConnectorRows, DetailHeader, DetailLabel, DetailsBlock, FileExplorer, OverviewColumns, ReachPanel, SkillCards, type ConnectorWord, type TreeFile } from "./DetailParts";
 import { PLUGINS } from "./plugins-style";
 import { MENU_SURFACE, MenuGlyph, menuRow } from "@/components/menu-look";
 
@@ -152,12 +152,12 @@ export function PluginDetailView(props: PluginDetailProps) {
   return (
     <>
       <PluginPageHeader title={name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-8 pt-6 sm:px-[34px]" data-plugins-detail={item.key}>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-plugins-detail={item.key}>
         <DetailHeader
           icon={<PluginIcon item={icon ?? item} className="size-14 rounded-[14px]" />}
           name={name}
           isNew={isNew}
-          line={[technical, subtitle].filter(Boolean).join(" \u00b7 ")}
+          line={subtitle}
           actions={(
             <>
               {primaryAction}
@@ -171,7 +171,6 @@ export function PluginDetailView(props: PluginDetailProps) {
               <PluginActionsMenu
                 name={name}
                 busy={busy}
-                updateAvailable={Boolean(onUpdate)}
                 actions={[
                   onTest && { id: "test", icon: testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />, label: t("mcp.test"), onSelect: onTest },
                   onEdit && { id: "edit", icon: <Pencil size={13} />, label: t("connectApps.detail.edit"), onSelect: onEdit },
@@ -301,37 +300,30 @@ export function PluginDetailView(props: PluginDetailProps) {
           </PluginCard>
         )}
 
-        {(more || (installState && installState.length > 0)) && (
-          <details className="group" data-plugin-more>
-            <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 px-[14px] text-[13px] leading-5 text-ink [&::-webkit-details-marker]:hidden">
-              <span className="flex-1">{t("connectApps.detail.more")}</span>
-              <ChevronDown size={16} className="text-ink-secondary transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
-            </summary>
-            <div className="space-y-4 px-[14px] pb-2">
-              {installState && installState.length > 0 && (
-                <ul className="mt-1.5 flex flex-wrap gap-1.5" data-plugins-install-state>
-                  {installState.map((state) => (
-                    <li
-                      key={state.id}
-                      data-install-state={state.id}
-                      data-install-on={state.on ? "yes" : "no"}
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
-                        state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
-                      )}
-                    >
-                      <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
-                      {state.label}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {more}
-            </div>
-          </details>
+        {installState && installState.length > 0 && (
+          <section data-plugin-install-section="">
+            <DetailLabel>{t("connectApps.detail.installedWhere")}</DetailLabel>
+            <ul className="flex flex-wrap gap-1.5" data-plugins-install-state>
+              {installState.map((state) => (
+                <li
+                  key={state.id}
+                  data-install-state={state.id}
+                  data-install-on={state.on ? "yes" : "no"}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
+                    state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
+                  )}
+                >
+                  <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
+                  {state.label}
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
+        {more && <div className="space-y-4" data-plugin-more="">{more}</div>}
 
-        <DetailsBlock rows={details} />
+        <DetailsBlock rows={technical && !details.some((row) => row.value.includes(technical)) ? [...details, { label: t("connectApps.detail.id"), value: technical, mono: true }] : details} />
           </>
         )}
       </div>

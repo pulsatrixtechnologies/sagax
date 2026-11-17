@@ -177,7 +177,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
   return (
     <>
       <PluginPageHeader title={title} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-8 pt-6 sm:px-[34px]" data-plugins-skill={skill?.name ?? "new"}>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-plugins-skill={skill?.name ?? "new"}>
         <DetailHeader
           attrs={{ "data-skill-head": "" }}
           icon={<div className="flex size-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-ink/10 bg-card text-ink-secondary"><FileText size={20} aria-hidden="true" /></div>}

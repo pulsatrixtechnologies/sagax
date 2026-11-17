@@ -219,11 +219,12 @@ export function DetailsBlock({ rows, update, enabled, busy = false }: {
   return (
     <section data-plugin-details-block="" className="border-t-[0.5px] border-ink/10 pt-4">
       <h3 className="mb-1 text-[12px] leading-4 text-ink-secondary">{t("connectApps.detail.details")}</h3>
-      <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[12px] leading-4" data-plugin-details>
+      {/* a compact list: pairs, label then value close together, two columns of pairs at this width; only ids are monospace */}
+      <dl className="grid gap-x-8 text-[12px] leading-4 md:grid-cols-2" data-plugin-details>
         {rows.map((row) => (
-          <div key={row.label} className="contents">
-            <dt className="py-2 text-ink-tertiary">{row.label}</dt>
-            <dd className={cn("min-w-0 break-words py-2 text-right text-ink-secondary", row.mono && "font-mono text-[12px]")}>{row.value}</dd>
+          <div key={row.label} className={cn("flex min-w-0 gap-3 py-1.5", row.value.length > 56 && "md:col-span-2")}>
+            <dt className="w-[88px] shrink-0 text-ink-tertiary">{row.label}</dt>
+            <dd className={cn("min-w-0 flex-1 break-words text-ink-secondary", row.mono && "font-mono text-[12px]")}>{row.value}</dd>
           </div>
         ))}
       </dl>

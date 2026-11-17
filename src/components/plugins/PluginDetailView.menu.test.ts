@@ -51,10 +51,11 @@ describe("plugin detail menu", () => {
       onUpdate, onTest, onEdit: noop, onUninstall, details: [],
     })));
     expect(host.querySelector('[role="menu"]')).toBeNull();
-    // Update is the header's main action (the Customize page's shape), with a dot on "..."; it is not said twice in Details
+    // Update is the header's main action (the Customize page's shape), it is not said twice (no dot on "...", nothing in Details)
     expect(host.querySelector('[data-plugin-action="update"]')?.textContent).toBe("Update");
     expect(host.querySelector("[data-plugin-update-row]")).toBeNull();
-    expect(host.querySelector("[data-plugin-update-dot]")).not.toBeNull();
+    // the dot would repeat the Update button beside it: none
+    expect(host.querySelector("[data-plugin-update-dot]")).toBeNull();
     click(host.querySelector('[data-plugin-action="update"]'));
     expect(onUpdate).toHaveBeenCalledTimes(1);
     // Uninstall is in the one "..." menu (never a second pill)

@@ -148,7 +148,7 @@ describe("a plugin's page in its tab", () => {
     // the real mark, not the generic plugin piece
     expect(host.querySelector("[data-plugins-detail-head] img")).not.toBeNull();
     // the technical name and source as small metadata
-    expect(host.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("github · example/marketplace");
+    expect(host.querySelector("[data-plugins-detail-meta]")?.textContent).toBe("example/marketplace");
     const states = [...host.querySelectorAll("[data-install-state]")].map((node) => [node.getAttribute("data-install-state"), node.getAttribute("data-install-on")]);
     expect(states).toEqual([["everyone", "yes"], ["bot", "no"]]);
     expect(host.querySelector("[data-plugins-detail-head] [data-test-primary]")).not.toBeNull();

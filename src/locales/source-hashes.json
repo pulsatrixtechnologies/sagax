@@ -5779,7 +5779,6 @@
       "connectApps.count.connectorOne": "803a9f3cd13cee13213241d1750fd48c9048d748a66a1bc5d867794050bb72ba",
       "connectApps.count.skillMany": "c6c2928e3abbbdfaae0f5608b23b1a805b43a8d1daf54e1d307126ff01e80718",
       "connectApps.count.skillOne": "623e78b5bca41393286d3b34ba12d740b3dfc69c0d7c8af4db2229b7c3bc67de",
-      "connectApps.detail.more": "0ce9912277b46b39d0485bfcad4263ede908adea518239cce4583962da225595",
       "connectApps.detail.accounts": "8a7c8b67fe8bde8bb31f62db5896a1cd8c7bfa29ff7b86554a1ad2958c166e92",
       "connectApps.detail.accountsCount": "8a7c8b67fe8bde8bb31f62db5896a1cd8c7bfa29ff7b86554a1ad2958c166e92",
       "connectApps.detail.addAccount": "11802faf37075adb1cf4e70430fa895ec334b03bab8234431f1b3c22fe707aaf",
@@ -18937,7 +18936,8 @@
       "connectApps.files.binary": "4bd9cbe4a9e5bfe3673067a0778831aaaca2d33057a783d274968a5917d01243",
       "connectApps.files.download": "ffcb71adcd48161c673b156d4bbc303297838baec5212fb7bc27a4659bea794b",
       "connectApps.files.current": "97b0560280ed60a5a1eaa1bc45492543c8a986ad5a25b468c427eb83c3e88191",
-      "connectApps.files.updateWaiting": "a193f8190f8948ff1531e52bcffdb3a7e14e7b57694f3c53a1b7febba80a090d"
+      "connectApps.files.updateWaiting": "a193f8190f8948ff1531e52bcffdb3a7e14e7b57694f3c53a1b7febba80a090d",
+      "connectApps.detail.installedWhere": "58417ca1b02dc3b4df1fdbabcf8ff9dd7cf0ca8c89ac1d476645025cc0702b09"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

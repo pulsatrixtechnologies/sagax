@@ -3261,7 +3261,6 @@
   "connectApps.count.connectorOne": "1 connector",
   "connectApps.count.skillMany": "{count} skills",
   "connectApps.count.skillOne": "1 skill",
-  "connectApps.detail.more": "More about this plugin",
   "connectApps.detail.accounts": "Accounts",
   "connectApps.detail.accountsCount": "Accounts",
   "connectApps.detail.addAccount": "Add another account",
@@ -15200,5 +15199,6 @@
   "connectApps.files.binary": "This file cannot be shown here.",
   "connectApps.files.download": "Save the file",
   "connectApps.files.current": "current",
-  "connectApps.files.updateWaiting": "update available"
+  "connectApps.files.updateWaiting": "update available",
+  "connectApps.detail.installedWhere": "Where it is installed"
 }

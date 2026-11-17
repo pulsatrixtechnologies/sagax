@@ -86,6 +86,7 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "engines/": "engine",
   "sections/sec_": "section",
   "plugins/": "plugin",
+  "installation-plugins/": "plugin",
   // the marketplace half of `name@marketplace`
   "plugins/{plugin}@": "marketplace",
   "plugins/{plugin}%40": "marketplace",

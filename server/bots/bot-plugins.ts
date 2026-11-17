@@ -950,6 +950,20 @@ export class BotPlugins {
     return existsSync(dir) ? dir : null;
   }
 
+  /** The folder of a plugin the installation installed, to read its files, for a person who may use it: its marketplace is one they can see
+   * (an organization-wide one, or their own private one). Null: not installed, or not theirs. */
+  installationPluginDir(key: string, viewer?: MarketplaceViewer): string | null {
+    const at = key.indexOf("@");
+    const plugin = key.slice(0, at);
+    const market = key.slice(at + 1);
+    if (at <= 0 || !NAME.test(plugin) || !NAME.test(market)) return null;
+    const { marketplaces } = this.options;
+    if (!marketplaces.installed().some((entry) => entry.key === key)) return null;
+    if (typeof marketplaces.canAccess === "function" && !marketplaces.canAccess(market, viewer)) return null;
+    const dir = marketplaces.pluginDir(market, plugin);
+    return existsSync(dir) ? dir : null;
+  }
+
   /** Enabled plugin folders. Claude loads them with `--plugin-dir`. */
   pluginDirs(botId: string): string[] {
     if (!this.validId(botId)) return [];

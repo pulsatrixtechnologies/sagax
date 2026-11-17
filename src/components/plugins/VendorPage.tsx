@@ -42,7 +42,7 @@ export function VendorPage({ vendor, ctx, onBack, trail, consoleName, skills = [
   return (
     <>
       <PluginPageHeader title={vendor.name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-8 pt-6 sm:px-[34px]" data-vendor-page={vendor.key}>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-vendor-page={vendor.key}>
         <DetailHeader
           attrs={{ "data-vendor-head": "" }}
           icon={<ProductMark name={vendor.name} icon={vendor.icon ?? vendor.products.find((product) => product.icon)?.icon} className="size-14 rounded-[14px]" />}

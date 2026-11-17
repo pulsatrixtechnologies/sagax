@@ -107,7 +107,7 @@ export function ProductDetailView({ product, onChanged, onBack, trail }: {
   return (
     <>
       <PluginPageHeader title={product.name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-8 pt-6 sm:px-[34px]" data-person-product-page={product.id}>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-1 sm:px-[34px]" data-person-product-page={product.id}>
         <DetailHeader
           icon={<ProductMark name={product.name} icon={product.icon ?? product.group?.icon} className="size-14 rounded-[14px]" />}
           name={product.name}

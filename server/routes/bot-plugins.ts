@@ -18,6 +18,8 @@
 //   GET    /api/bots/:id/plugins/:key/files          { files: [{ path, bytes, kind }] }, the folder's files
 //   GET    /api/bots/:id/plugins/:key/files?path=x   { path, kind, text, bytes } for text, the bytes for an image or PDF
 //          (read only; "Me" reads its own plugins only: /api/me/plugins/:key/files)
+//   GET    /api/me/installation-plugins/:key/files[?path=]   the same for a plugin the installation installed, for a
+//          person who may use it (its marketplace is one they can see); never a file that can hold a secret
 //
 // Reads need use on the bot; every change needs its owner or manage (an
 // organization admin too). A refusal from the git host answers its real
@@ -57,6 +59,8 @@ export interface BotPluginRouteDeps<B extends { id: string }> {
 
 /** GET .../plugins/:key/files[?path=]: what one installed plugin holds, read only (the bot's use is enough). */
 const FILES_ROUTE = /^\/api\/bots\/([\w-]+)\/plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
+/** GET /api/me/installation-plugins/:key/files[?path=]: what a plugin the installation installed holds, for a person who may use it. */
+const INSTALLATION_FILES = /^\/api\/me\/installation-plugins\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})\/files$/;
 const ROUTE = /^\/api\/bots\/([\w-]+)\/plugins(?:\/(marketplaces|install)(?:\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:\/(update|credential))?)?|\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})(\/config)?)?$/;
 const CREDENTIAL = /^gt_[0-9a-f]{16}$/;
 /** undefined: none sent; null: not a credential id. */
@@ -209,6 +213,17 @@ export function createPersonalPluginRoutes(deps: Omit<BotPluginRouteDeps<{ id: s
   person: (auth: RequestAuth) => string | null;
 }): RouteHandler {
   return async (context) => {
+    const installed = INSTALLATION_FILES.exec(decodeURIComponent(context.path));
+    const method = context.req.method;
+    if (installed && method === "GET") {
+      const person = deps.person(context.auth);
+      if (!person) return context.json(context.res, 403, { error: "Sign in to manage your own capabilities.", code: "person_required" });
+      const folder = deps.plugins.installationPluginDir(installed[1]!, deps.viewer?.(context.auth) ?? { seesAll: true });
+      if (!folder) return context.json(context.res, 404, { error: "No plugin with that name.", code: "not_found" });
+      context.res.setHeader("cache-control", "private, no-store");
+      sendPluginFiles(context.res, context.json, folder, context.url.searchParams.get("path"));
+      return;
+    }
     if (!/^\/api\/me\/plugins(?:\/|$)/.test(context.path)) return PASS;
     const person = deps.person(context.auth);
     if (!person) return context.json(context.res, 403, { error: "Sign in to manage your own capabilities.", code: "person_required" });

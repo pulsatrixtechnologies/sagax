@@ -705,6 +705,24 @@ export async function createPermissionBroker(opts: {
   // never be answered — the "zombie card" in issue #211.
   let closed = false;
   let boundPath = opts.socketPaths[0] ?? "";
+  const begin = (ask: Ask, deliver: (fields: { behavior: AskBehavior; message?: string; source: AskResolutionSource; always?: boolean }) => void) => {
+    const finish = (behavior: AskBehavior, message: string | undefined, source: AskResolutionSource, always?: boolean) => {
+      if (!pending.delete(ask.id)) return;
+      clearTimeout(timer);
+      deliver({ behavior, message, source, ...(always ? { always: true } : {}) });
+      opts.onResolve({ ...ask, behavior, source });
+    };
+    const timer = setTimeout(
+      () =>
+        ask.kind === "question"
+          ? finish("answer", QUESTION_TIMEOUT_NOTE, "timeout")
+          : finish("deny", DENY_TIMEOUT_NOTE, "timeout"),
+      timeoutMs,
+    );
+    timer.unref?.();
+    pending.set(ask.id, { ask, finish });
+    opts.onAsk(ask);
+  };
   const connectionHandler = (conn: import("node:net").Socket) => {
     conn.on("error", () => {});
     // An ask carries the whole tool input (a Write's file content), so one
@@ -772,32 +790,17 @@ export async function createPermissionBroker(opts: {
           continue;
         }
         const ask: Ask = { id: askId, kind, tool: bridged?.unwrapped ? bridged.name : msg.tool ?? "tool", input: bridged?.unwrapped ? bridged.input : msg.input ?? {}, at: Date.now() };
-        const finish = (behavior: AskBehavior, message: string | undefined, source: AskResolutionSource, always?: boolean) => {
-          if (!pending.delete(askId)) return;
-          clearTimeout(timer);
+        // `always` rides to the proxy, which hands the CLI's own suggested
+        // permission rules back as updatedPermissions: Claude remembers
+        // the allow for the session, the harness remembers nothing.
+        // `source` travels with the answer too: a proxy that cannot tell
+        // the human's words from a timeout note would file the timeout
+        // note as the human's words.
+        begin(ask, (fields) => {
           try {
-            // `always` rides to the proxy, which hands the CLI's own suggested
-            // permission rules back as updatedPermissions: Claude remembers
-            // the allow for the session, the harness remembers nothing.
-            // `source` travels with the answer too: a proxy that cannot tell
-            // the human's words from a timeout note would file the timeout
-            // note as the human's words.
-            conn.write(
-              JSON.stringify({ t: "answer", id: askId, behavior, message, source, ...(always ? { always: true } : {}) }) + "\n",
-            );
+            conn.write(JSON.stringify({ t: "answer", id: askId, ...fields }) + "\n");
           } catch {}
-          opts.onResolve({ ...ask, behavior, source });
-        };
-        const timer = setTimeout(
-          () =>
-            kind === "question"
-              ? finish("answer", QUESTION_TIMEOUT_NOTE, "timeout")
-              : finish("deny", DENY_TIMEOUT_NOTE, "timeout"),
-          timeoutMs,
-        );
-        timer.unref?.();
-        pending.set(askId, { ask, finish });
-        opts.onAsk(ask);
+        });
       }
     });
   };
@@ -870,6 +873,30 @@ export async function createPermissionBroker(opts: {
       if (p.ask.kind === "question" ? behavior !== "answer" : behavior === "answer") return false;
       p.finish(behavior, message, "user", always && behavior === "allow");
       return true;
+    },
+    hostAsk(incoming: Ask) {
+      return new Promise<{ behavior: AskBehavior; message?: string; source: AskResolutionSource; always?: boolean }>((resolve) => {
+        if (closed || (opts.isActive && !opts.isActive())) {
+          resolve({ ...systemEndedReply(incoming.kind), source: "system" });
+          return;
+        }
+        if (pending.has(incoming.id)) {
+          resolve({ behavior: "deny", message: DUPLICATE_ASK_ID_NOTE, source: "system" });
+          return;
+        }
+        const bridged = incoming.kind === "permission" ? unwrapAgentsBridge(incoming.tool, incoming.input) : null;
+        if (bridged?.refused) {
+          resolve({ behavior: "deny", message: bridged.refused, source: "system" });
+          return;
+        }
+        const input = bridged?.unwrapped && bridged.input && typeof bridged.input === "object" && !Array.isArray(bridged.input)
+          ? bridged.input as Record<string, unknown>
+          : incoming.input;
+        begin(
+          bridged?.unwrapped ? { ...incoming, tool: bridged.name, input } : incoming,
+          (fields) => resolve(fields),
+        );
+      });
     },
     pause() {
       drain();

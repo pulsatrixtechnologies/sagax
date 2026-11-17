@@ -11,6 +11,7 @@ import { turnTrace } from "../turns/turn-trace.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { humanizeToolIds } from "../../shared/tool-display-name.ts";
 import { connectorReauthFailure, connectorReauthProblem } from "../../shared/connector-setup.ts";
+import { artifactDataConsentProblem } from "../../shared/artifact-data-consent.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -4982,8 +4983,13 @@ export class RoutineManager {
     this.finalWords.delete(run.id);
     run.attention = undefined;
     delete run.waitingOn;
+    // #4525: an unattended ArtifactData write the person never approved
+    // says so here, ahead of a vague STATUS failed line.
+    const consentDenied = [...(trouble?.unresolved.values() ?? [])]
+      .map((failure) => artifactDataConsentProblem(failure.output))
+      .find((line): line is string => Boolean(line));
     if (outcome.declared?.status === "failed") {
-      this.failRun(run, outcome.declared.reason.slice(0, 500));
+      this.failRun(run, (consentDenied ?? outcome.declared.reason).slice(0, 500));
       queueMicrotask(() => this.tickInBackground());
       return true;
     }
@@ -5031,6 +5037,12 @@ export class RoutineManager {
       if (reauth) {
         const line = connectorReauthProblem(reauth);
         if (!problems.includes(line)) problems.push(line);
+        continue;
+      }
+      // #4525: the consent denial is the run's problem from the first miss.
+      const consent = artifactDataConsentProblem(failure.output);
+      if (consent) {
+        if (!problems.includes(consent)) problems.push(consent);
         continue;
       }
       // Kept failing: one miss the bot moved past (a search with no match)

@@ -512,6 +512,7 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
           reachMeSelf: Boolean(host.reachMeTeams?.answersConnectorCall(event.threadId, event.mcpTool ?? event.tool, event.input)),
           ...(event.outbound === true ? { outbound: true } : {}),
           requiresExplicitApproval: event.requiresExplicitApproval,
+          consentDisclosure: event.consentDisclosure === true,
           sagaxGate: event.sagaxGate === true,
           ruleAllowed: Boolean(gateAllowKey && !strictCard && !guestDriven && !gateGrantBlocked && host.botForThread(asker.id, event.threadId)?.alwaysAllow?.includes(gateAllowKey)),
           providerToolAllowed: Boolean(toolAllowKey && host.botForThread(asker.id, event.threadId)?.alwaysAllow?.includes(toolAllowKey)),
@@ -695,6 +696,7 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
         ? autoVerdict(effectiveApprovalMode, event.tool, {
           customRule: { behavior: "allow", id: customDecision.rule.id },
           requiresExplicitApproval: event.requiresExplicitApproval,
+          consentDisclosure: event.consentDisclosure === true,
           sagaxGate: event.sagaxGate === true
         })
         : null;

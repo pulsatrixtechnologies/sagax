@@ -7,6 +7,7 @@ import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { ClaudeLimit } from "./limits.ts";
 import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 import type { ClaudeCostSnapshot } from "./cost.ts";
+import type { Ask, AskBehavior, AskResolutionSource } from "../claude-asks.ts";
 import type { ClaudeElicitations } from "./elicitation.ts";
 
 export type ClaudeChild = ChildProcessByStdio<Writable, Readable, Readable>;
@@ -46,6 +47,18 @@ export type ClaudePermissionBroker = {
   close: () => void;
   pause: () => void;
   answer: (id: string, behavior: "allow" | "deny" | "answer", message?: string, always?: boolean) => boolean;
+  /** In-process ask (stdio can_use_tool). Same card path as the socket. */
+  hostAsk: (ask: Ask) => Promise<{
+    behavior: AskBehavior;
+    message?: string;
+    source: AskResolutionSource;
+    always?: boolean;
+  }>;
+};
+
+/** can_use_tool frames from --permission-prompt-tool stdio (#4525). */
+export type ClaudeCanUseTool = {
+  frame(message: unknown): boolean;
 };
 
 /** How long after a native `result` the CLI gets to announce, with `init`,
@@ -93,6 +106,10 @@ export type ClaudeSession = {
   mcpNames?: string[];
   /** #1276: the servers whose catalog is searched (call_tool reads as its target) */
   searchedMounts: ReadonlySet<string>;
+  /** Pre-allowed names and artifact reads this process was launched with. */
+  permissionFacts?: { preallowed: readonly string[]; artifactReads: boolean };
+  /** stdio permission prompt (#4525). Absent only before the field existed. */
+  canUseTool?: ClaudeCanUseTool;
   /** the volatile half of the system prompt this process was launched
    * with (see SendTurnInput.systemVolatile). A later turn whose volatile
    * text differs delivers the difference in-turn rather than relaunching. */

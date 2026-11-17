@@ -3,7 +3,7 @@
 // The server writes the message text from the widget, sends it as a reply to
 // the widget row, and patches that row (a `message.patch` frame) when the
 // press settles it. Nothing is drawn optimistically here.
-import { api } from "@/state/store";
+import { api, type Message } from "@/state/store";
 import type { WidgetValues } from "../../../shared/widget";
 
 export interface WidgetPress {
@@ -23,7 +23,7 @@ export interface WidgetPress {
 }
 
 export type WidgetSendResult =
-  | { ok: true }
+  | { ok: true; message?: Message; queued?: boolean }
   /** `refused` is the server saying no, in the sentence `error`. Without it
    * the request got no answer at all, and the same `sendId` may be sent again. */
   | { ok: false; refused: boolean; error?: string };
@@ -33,7 +33,7 @@ export const newWidgetSendId = (): string => crypto.randomUUID();
 
 export async function sendWidgetAction(press: WidgetPress): Promise<WidgetSendResult> {
   try {
-    await api(`/api/bots/${press.botId}/messages`, {
+    const body = await api<{ message?: Message; queued?: boolean }>(`/api/bots/${press.botId}/messages`, {
       method: "POST",
       // no `text`: the server writes it from the widget and the pressed action
       body: JSON.stringify({
@@ -42,7 +42,9 @@ export async function sendWidgetAction(press: WidgetPress): Promise<WidgetSendRe
         widgetAction: { messageId: press.messageId, ref: press.ref, rev: press.rev, ...(press.values ? { values: press.values } : {}) },
       }),
     });
-    return { ok: true };
+    // #4489: the press is already the person's message. Hand that row back
+    // so the thread can show it as the card folds, not on a later frame.
+    return { ok: true, ...(body?.message ? { message: body.message } : {}), ...(body?.queued ? { queued: true } : {}) };
   } catch (error) {
     // api() throws an ApiError that carries the status when the server answered
     const refused = typeof (error as { status?: unknown } | null)?.status === "number";

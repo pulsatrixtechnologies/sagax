@@ -2,6 +2,7 @@
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
 import {bumpThreadUpdatedAt, optimisticMessageId, rewindThreadUpdatedAt, updateBot, withMascotMotion, type Message} from "./model";
+import { choiceContinuing, choiceWaitingAgain } from "./choice-continuing";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
 
@@ -96,9 +97,20 @@ export function reduceMessages(state: AppState, action: Action, _reduce: ReduceF
       const settle = (messages: Message[]) => messages.map((m) =>
         m.card?.requestId === action.requestId ? { ...m, card: { ...m.card, ...action.patch } } : m);
       const group = state.groups.find((g) => g.threadId === action.threadId);
-      if (group) return { ...state, groups: state.groups.map((g) => (g.id === group.id ? { ...g, messages: settle(g.messages) } : g)) };
-      const bot = state.bots.find((b) => b.threadId === action.threadId);
-      return bot ? updateBot(state, bot.id, (b) => ({ ...b, messages: settle(b.messages) })) : state;
+      const settled = group
+        ? { ...state, groups: state.groups.map((g) => (g.id === group.id ? { ...g, messages: settle(g.messages) } : g)) }
+        : (() => {
+            const host = state.bots.find((b) => b.threadId === action.threadId);
+            return host ? updateBot(state, host.id, (b) => ({ ...b, messages: settle(b.messages) })) : state;
+          })();
+      // #4489: the existing receipt stays in the thread, and the bot is
+      // working again. A failed send puts the card back to waiting.
+      const owner = state.bots.find((b) => b.threadId === action.threadId || b.tasks?.some((task) => task.threadId === action.threadId));
+      if (!owner) return settled;
+      const answered = action.patch.answered;
+      if (typeof answered === "string" && answered) return choiceContinuing(settled, owner.id, action.threadId);
+      if ("answered" in action.patch && !answered) return choiceWaitingAgain(settled, owner.id, action.threadId);
+      return settled;
     }
     case "messagePatched": {
       const bot = state.bots.find((b) => b.threadId === action.threadId);

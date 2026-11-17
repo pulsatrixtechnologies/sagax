@@ -476,10 +476,16 @@ export function PendingApprovalActions({
   const candidate = !durableRequest && !pending.message.card?.adminApproval ? pending.message.card?.customRuleCandidate : undefined;
   const decide = (behavior: "allow" | "deny", always = false, rememberCommand = false, rule?: "allow" | "deny", ruleScope?: "folder") => {
     onDecided?.(behavior);
+    const where = pending.threadId ?? threadId;
+    const requestId = pending.message.card?.approvalOrigin?.requestId ?? pending.requestId;
+    // #4489: the existing receipt (Allowed once, Routine confirmed, Declined)
+    // stays in the thread at the click. The pin drops it. A refused answer
+    // opens the card again.
+    dispatch({ type: "cardSettled", threadId: where, requestId, patch: { answered: behavior } });
     dispatch({
       type: "decideRequest",
-      threadId: pending.threadId ?? threadId,
-      requestId: pending.message.card?.approvalOrigin?.requestId ?? pending.requestId,
+      threadId: where,
+      requestId,
       behavior,
       message: behavior === "deny" ? "Denied by the user." : undefined,
       reviewedSha256: behavior === "allow" ? reviewedSha256 : undefined,
@@ -490,7 +496,10 @@ export function PendingApprovalActions({
       rememberCommand: rememberCommand || undefined,
       rule,
       ...(ruleScope ? { ruleScope } : {}),
-      ...(onDecideFailed ? { onError: () => onDecideFailed() } : {}),
+      onError: (_message, settledElsewhere) => {
+        if (!settledElsewhere) dispatch({ type: "cardSettled", threadId: where, requestId, patch: { answered: undefined } });
+        onDecideFailed?.();
+      },
     });
   };
 

@@ -7,7 +7,8 @@
 // docs/superpowers/specs/2026-10-13-chat-widgets-design.md
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { CircleAlert, X } from "lucide-react";
-import { useStore, type Message } from "@/state/store";
+import { optimisticUserMessage, useStore, type Message } from "@/state/store";
+import { useStoreGetter } from "@/state/store-selector";
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -59,6 +60,7 @@ export function WidgetMessage({ botId, threadId, message }: { botId: string; thr
 function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; threadId?: string; messageId: string; payload: WidgetPayload }) {
   const root = payload.root;
   const { flushBotPatches, dispatch } = useStore();
+  const getState = useStoreGetter();
   /** Settled by a press from this card: the line folds on the server's 2xx, ahead of the patch frame. */
   const [settledHere, setSettledHere] = useState<WidgetSettled>();
   /** The row has said it is settled since this card's last press. From then on its word is the only one, in
@@ -184,6 +186,22 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
       if (entry.tone) {
         // taken: fold now, from what was pressed and sent, without waiting on the patch frame (if the frame came first, it rules)
         setSettledHere({ ref, label: entry.label, tone: entry.tone, at: Date.now(), sendId, ...(sending ? { values: sending } : {}) });
+        // #4489: the press is the person's message (the choice, once). Draw
+        // that row as the card folds, and show the bot is working. A queued
+        // press has not started a turn, so the working line stays off.
+        const thread = threadId ?? getState().bots.find((candidate) => candidate.id === botId)?.threadId;
+        if (thread && result.message) dispatch({ type: "messageAdded", threadId: thread, message: result.message });
+        else if (thread && !result.queued) {
+          const owner = getState().bots.find((candidate) => candidate.id === botId);
+          if (owner && owner.threadId === thread && !owner.messages.some((row) => row.sendId === sendId)) {
+            dispatch({
+              type: "messageAdded",
+              threadId: thread,
+              message: optimisticUserMessage(entry.label, sendId, messageId, owner.activeLeafId),
+            });
+          }
+        }
+        if (thread && !result.queued) dispatch({ type: "choiceContinuing", botId, threadId: thread });
         return;
       }
       setPending(undefined);

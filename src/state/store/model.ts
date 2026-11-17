@@ -1712,7 +1712,7 @@ export type Action =
   // `threadId` is the thread the card was shown in; `groupId` when the card
   // is in a room: the message lives on the room's list, and the answer goes
   // to the room's thread
-  | { type: "answerCard"; botId: string; messageId: string; answer: string; threadId?: string; groupId?: string;
+  | { type: "answerCard"; botId: string; messageId: string; answer: string; threadId?: string; groupId?: string; sendId?: string;
       /** A terminal card: the destination the person picked (absent: the bot's). */
       terminalDestination?: import("../../../shared/terminal-request").TerminalDestinationPick;
       /** #3457: a choice card's switches, the watches kept on with its yes. */
@@ -1785,6 +1785,8 @@ export type Action =
   | { type: "markUnread"; botId: string }
   /** Play a one-shot mascot motion on a bot, as the appearance card's moves do. */
   | { type: "playMascotMotion"; botId: string; kind: Exclude<MausMotion, "none"> }
+  /** #4489: a button choice was taken. The working line comes on now. */
+  | { type: "choiceContinuing"; botId: string; threadId?: string }
   | { type: "botPatched"; bot: BotAnnouncement }
   | { type: "messageAdded"; threadId: string; message: Message }
   | { type: "messagePatched"; threadId: string; message: Message }

@@ -121,9 +121,13 @@ export function OptionCard({
   const answer = (text: string) => {
     if (!text.trim()) return;
     const picked = terminal ? terminalAnswerPick(terminal, terminalPick, text) : undefined;
+    // #4489: the first-run quiz hides on the click. The pick is the person's
+    // message, so it is drawn at once under this sendId.
+    const sendId = isFirstRunQuizCard(card) ? crypto.randomUUID() : undefined;
     dispatch({
       type: "answerCard", botId, threadId, messageId: message.id, answer: text.trim(), groupId,
       ...(picked ? { terminalDestination: picked } : {}),
+      ...(sendId ? { sendId } : {}),
     });
     if (card.requestId || card.proactiveProposal || chatAsk) returnFocusToComposer();
   };
